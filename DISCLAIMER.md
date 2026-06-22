@@ -99,9 +99,9 @@ Tylluan has documented security gaps. These are not bugs — they are known limi
 
 1. **No automatic kill switch:** If an agent misbehaves, you can trigger the localhost-only emergency kill endpoint (`POST /api/v1/admin/emergency-kill`) to stop all guilds and shutdown the kernel, or manually terminate the process (`taskkill /F /IM tylluan-nexus.exe` or `pkill tylluan-nexus`).
 
-2. **Optional per-guild access control (opt-in):** A role-based ACL (tokens mapped to reader/writer/admin roles) is available, but currently only applies to requests routed through the `tylluan_do` handler. Direct tool execution endpoints (`/api/v1/guilds/{name}/tools/{tool}`) bypass role checks.
+2. **Optional per-guild access control (opt-in):** A role-based ACL (tokens mapped to reader/writer/admin roles) is available, verifying permissions for all tool execution paths (both `tylluan_do` and direct guild endpoints).
 
-3. **Optional Docker sandbox (opt-in):** Bash and code guilds can be sandboxed in Docker, but this feature currently fails on Windows hosts due to a UNC path formatting bug (`\\?\` path prefix too many colons) in volume mounts.
+3. **Optional Docker sandbox (opt-in):** Bash and code guilds can be sandboxed in Docker (cross-platform Windows/Linux support). Note that appropriate dependencies must be present in the target container image.
 
 4. **Optional intent safety filter (opt-in):** Basic intent filtering (blocking dangerous commands like `rm -rf`, `DROP TABLE`, `format C:`) is available but must be enabled in `tylluan.toml`.
 
