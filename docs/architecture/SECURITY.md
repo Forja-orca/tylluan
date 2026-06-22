@@ -36,7 +36,7 @@ This combination is an unauthenticated LAN RCE. The kernel logs a warning and re
 
 ## Reporting Vulnerabilities
 
-Report security vulnerabilities via [GitHub Discussions](https://github.com/forja-orca/tylluan/discussions) using the Security category. See [SECURITY.md](../../SECURITY.md) for the full disclosure process.
+Report security vulnerabilities via **GitHub Private Vulnerability Reporting**: https://github.com/forja-orca/tylluan/security/advisories/new. See [SECURITY.md](../../SECURITY.md) for the full disclosure process.
 
 ## OWASP Top 10 for Agentic Applications (2026)
 

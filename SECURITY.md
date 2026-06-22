@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in Tylluan, **do not open a public issue**.
 
-Instead, report it via [GitHub Discussions](https://github.com/forja-orca/tylluan/discussions) using the **Security** category, or contact a maintainer directly.
+Instead, report it via **GitHub Private Vulnerability Reporting**: https://github.com/forja-orca/tylluan/security/advisories/new
 
 Include:
 - Description of the vulnerability
