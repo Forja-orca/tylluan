@@ -1,4 +1,4 @@
-﻿# Security Policy — Tylluan o3
+# Security Policy — Tylluan o3
 
 ## Threat Model
 
@@ -33,6 +33,8 @@ This combination is an unauthenticated LAN RCE. The kernel logs a warning and re
 | Guild isolation | ⚠️ Same user | Guilds share OS user with kernel |
 | Audit log | ✅ Active | All 5 sovereign tool calls logged to `data/audit.db` |
 | Input validation | ✅ | Intent strings sanitized before guild routing |
+| Docker Sandbox | ⚠️ Windows UNC path bug | `docker run` volume mounting fails on Windows hosts due to the UNC prefix (`\\?`) in canonicalized workspace paths. |
+| ACL Check | ⚠️ Direct endpoint bypass | Direct tool execution endpoints (`/api/v1/guilds/{name}/tools/{tool}`) do not perform role-based ACL checks, only verifying bearer token validity. |
 
 ## Reporting Vulnerabilities
 
@@ -45,15 +47,15 @@ Tylluan's posture against [OWASP ASI 2026](https://genai.owasp.org/resource/owas
 | Code | Risk | Tylluan Status |
 |------|------|----------------|
 | ASI01 | Agent Goal Hijack | ⚠️ No prompt injection filtering |
-| ASI02 | Tool Misuse | ⚠️ No guild sandboxing yet |
+| ASI02 | Tool Misuse | ✅ Opt-in Docker sandbox for bash/code guilds |
 | ASI03 | Identity Abuse | ⚠️ agent_id is self-reported |
 | ASI04 | Supply Chain | ✅ Guilds loaded from local disk only |
-| ASI05 | Code Execution | ⚠️ Bash/code guilds run unsandboxed |
+| ASI05 | Code Execution | ✅ Optional Docker sandbox for bash/code guilds |
 | ASI06 | Memory Poisoning | ⚠️ No content validation on tylluan_remember |
 | ASI07 | Insecure Inter-Agent | ✅ Localhost-only mitigates |
 | ASI08 | Cascading Failures | ✅ Supervisor with crash loop detection |
 | ASI09 | Trust Exploitation | ⚠️ No confidence warnings on tylluan_think |
-| ASI10 | Rogue Agents | ⚠️ No automatic kill switch |
+| ASI10 | Rogue Agents | ✅ Emergency kill switch (POST /api/v1/admin/emergency-kill) and per-guild kill |
 
 See [DISCLAIMER.md](../../DISCLAIMER.md) for operator responsibilities.
 
