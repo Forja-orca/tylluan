@@ -47,6 +47,21 @@ pub async fn guild_reset_backoff_handler(State(state): State<Arc<HttpState>>, Pa
 }
 
 pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((guild, tool)): Path<(String, String)>, Json(args): Json<serde_json::Value>) -> impl IntoResponse {
+    // ACL check: verify the caller's role has access to this guild
+    if let Ok(cfg_lock) = crate::config::TylluanConfig::load_cached() {
+        {   let cfg = cfg_lock.read().await;
+            let acl = &cfg.security.acl;
+            if !acl.roles.is_empty() {
+                let role = crate::transport::http::auth::current_acl_role();
+                if !crate::transport::http::auth::acl_can_access(&role, &guild, acl) {
+                    return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                        "error": format!("Role '{}' does not have access to guild '{}'", role, guild)
+                    }))).into_response();
+                }
+            }
+        }
+    }
+
     let req = CallToolRequestParam { name: tool.into(), arguments: args.as_object().cloned() };
     let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let _ = state.silva.touch_node(&format!("agent:{}", agent_id), agent_id, &format!("tool_call:{}", guild)).await;
