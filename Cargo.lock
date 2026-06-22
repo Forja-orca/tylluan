@@ -1151,131 +1151,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
-name = "forja-cli"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "ctrlc",
- "reqwest",
- "serde_json",
- "sysinfo 0.33.1",
- "tokio",
-]
-
-[[package]]
-name = "forja-common"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "forja-evals"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "forja-kernel",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "forja-gui"
-version = "3.0.0-rc.1"
-
-[[package]]
-name = "forja-kernel"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "chacha20poly1305",
- "chrono",
- "dashmap",
- "dirs",
- "dotenvy",
- "fastembed",
- "flate2",
- "forja-common",
- "futures-util",
- "hmac",
- "image",
- "mdns-sd",
- "memmap2",
- "ndarray",
- "notify",
- "ort",
- "parking_lot",
- "proptest",
- "rand 0.8.6",
- "reqwest",
- "rmcp",
- "rusqlite",
- "scraper",
- "serde",
- "serde_json",
- "sha2",
- "socket2 0.5.10",
- "subtle",
- "sysinfo 0.32.1",
- "tar",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
- "winapi",
-]
-
-[[package]]
-name = "forja-link"
-version = "3.0.0"
-dependencies = [
- "base64 0.22.1",
- "hmac",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "forja-proxy"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "bytes",
- "futures-util",
- "http-body-util",
- "hyper",
- "hyper-util",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite 0.26.2",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4323,6 +4198,131 @@ dependencies = [
  "rand 0.9.4",
  "sha1",
  "thiserror",
+]
+
+[[package]]
+name = "tylluan-cli"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ctrlc",
+ "reqwest",
+ "serde_json",
+ "sysinfo 0.33.1",
+ "tokio",
+]
+
+[[package]]
+name = "tylluan-common"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "tylluan-evals"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tylluan-kernel",
+]
+
+[[package]]
+name = "tylluan-gui"
+version = "3.0.0-rc.1"
+
+[[package]]
+name = "tylluan-kernel"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "chrono",
+ "dashmap",
+ "dirs",
+ "dotenvy",
+ "fastembed",
+ "flate2",
+ "futures-util",
+ "hmac",
+ "image",
+ "mdns-sd",
+ "memmap2",
+ "ndarray",
+ "notify",
+ "ort",
+ "parking_lot",
+ "proptest",
+ "rand 0.8.6",
+ "reqwest",
+ "rmcp",
+ "rusqlite",
+ "scraper",
+ "serde",
+ "serde_json",
+ "sha2",
+ "socket2 0.5.10",
+ "subtle",
+ "sysinfo 0.32.1",
+ "tar",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "tylluan-common",
+ "urlencoding",
+ "uuid",
+ "winapi",
+]
+
+[[package]]
+name = "tylluan-link"
+version = "3.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "hmac",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "tylluan-proxy"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
