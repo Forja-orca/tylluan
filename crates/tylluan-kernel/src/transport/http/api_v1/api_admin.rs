@@ -281,7 +281,6 @@ pub async fn admin_shutdown_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    // Check if request is from localhost / local loopback
     let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
     if !is_local {
         return (
@@ -294,6 +293,75 @@ pub async fn admin_shutdown_handler(
     state.cancel_token.cancel();
 
     (StatusCode::OK, Json(serde_json::json!({"status": "shutdown_initiated"}))).into_response()
+}
+
+/// Emergency kill: stop all guilds immediately without restart, then shutdown kernel.
+pub async fn admin_emergency_kill_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
+    if !is_local {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Emergency kill allowed only from localhost"})),
+        ).into_response();
+    }
+
+    tracing::warn!("🚨 EMERGENCY KILL requested. Killing all guilds and shutting down.");
+
+    let mut killed = 0;
+    if let Ok(statuses) = state.registry.status_all().await {
+        for gs in &statuses {
+            if let Err(e) = state.registry.kill_guild(&gs.name).await {
+                tracing::error!("Failed to kill guild {}: {}", gs.name, e);
+            } else {
+                killed += 1;
+            }
+        }
+    }
+
+    state.cancel_token.cancel();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "emergency_kill_complete",
+        "guilds_killed": killed
+    }))).into_response()
+}
+
+/// Kill a specific guild by name (for rogue agent mitigation).
+pub async fn admin_kill_guild_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: axum::http::HeaderMap,
+    Path(guild_name): Path<String>,
+) -> impl IntoResponse {
+    let host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let is_local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("[::1]");
+    if !is_local {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Admin actions allowed only from localhost"})),
+        ).into_response();
+    }
+
+    tracing::warn!("🛑 Kill requested for guild '{}'", guild_name);
+
+    match state.registry.kill_guild(&guild_name).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({
+            "status": "killed",
+            "guild": guild_name
+        }))).into_response(),
+        Err(e) => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": format!("Failed to kill guild '{}': {}", guild_name, e)
+        }))).into_response(),
+    }
 }
 
 // --- SESSIONS ---

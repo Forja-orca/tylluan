@@ -136,6 +136,9 @@ pub struct TylluanConfig {
     #[serde(default)]
     pub tunnel: TunnelConfig,
 
+    #[serde(default)]
+    pub security: SecurityConfig,
+
     /// Category-specific guild timeouts and low-memory mode.
     #[serde(default)]
     pub timeouts: GuildTimeoutsConfig,
@@ -592,6 +595,86 @@ impl Default for WslProxyConfig {
     }
 }
 
+// ─── Security Configuration (Sandbox + ACL) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityConfig {
+    #[serde(default)]
+    pub intent_filter: bool,
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
+    #[serde(default)]
+    pub acl: AclConfig,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            intent_filter: false,
+            sandbox: SandboxConfig::default(),
+            acl: AclConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_sandbox_image")]
+    pub image: String,
+    #[serde(default = "default_sandbox_memory")]
+    pub memory: String,
+    #[serde(default)]
+    pub network: bool,
+    #[serde(default = "default_sandbox_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            image: default_sandbox_image(),
+            memory: default_sandbox_memory(),
+            network: false,
+            timeout_secs: default_sandbox_timeout_secs(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AclConfig {
+    #[serde(default = "default_acl_default_role")]
+    pub default_role: String,
+    #[serde(default)]
+    pub roles: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub tokens: HashMap<String, String>,
+}
+
+impl Default for AclConfig {
+    fn default() -> Self {
+        Self {
+            default_role: default_acl_default_role(),
+            roles: HashMap::new(),
+            tokens: HashMap::new(),
+        }
+    }
+}
+
+/// Load sandbox config from global cache if enabled.
+pub fn load_sandbox_config() -> Option<SandboxConfig> {
+    if let Ok(cached) = TylluanConfig::load_cached() {
+        if let Ok(cfg) = cached.try_read() {
+            if cfg.security.sandbox.enabled {
+                return Some(cfg.security.sandbox.clone());
+            }
+        }
+    }
+    None
+}
+
 // ─── Defaults ───────────────────────────────────────────────────────
 
 fn default_host() -> String { "0.0.0.0".into() }
@@ -618,6 +701,10 @@ fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }
 fn default_mcp_heartbeat_ms() -> u64 { 8_000 }
+fn default_sandbox_image() -> String { "python:3.12-slim".to_string() }
+fn default_sandbox_memory() -> String { "512m".to_string() }
+fn default_sandbox_timeout_secs() -> u64 { 30 }
+fn default_acl_default_role() -> String { "admin".to_string() }
 
 /// Guild category for timeout assignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -644,6 +731,10 @@ impl GuildWeight {
 static CONFIG_CACHE: std::sync::OnceLock<Arc<RwLock<TylluanConfig>>> = std::sync::OnceLock::new();
 
 impl TylluanConfig {
+    pub fn security_intent_filter_enabled(&self) -> bool {
+        self.security.intent_filter
+    }
+
     /// Load config once and cache it. Returns cached config if already loaded.
     pub fn load_cached() -> anyhow::Result<Arc<RwLock<TylluanConfig>>> {
         if let Some(cached) = CONFIG_CACHE.get() {
