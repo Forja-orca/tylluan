@@ -605,6 +605,9 @@ pub struct SecurityConfig {
     pub sandbox: SandboxConfig,
     #[serde(default)]
     pub acl: AclConfig,
+    /// Enable SQLCipher encryption at rest. Reads key from TYLLUAN_DB_KEY env var.
+    #[serde(default)]
+    pub encrypt_at_rest: bool,
 }
 
 impl Default for SecurityConfig {
@@ -613,8 +616,31 @@ impl Default for SecurityConfig {
             intent_filter: false,
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
+            encrypt_at_rest: false,
         }
     }
+}
+
+/// Open a SQLite connection with optional encryption.
+/// If [security] encrypt_at_rest = true, applies PRAGMA key from TYLLUAN_DB_KEY env var.
+pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
+    let conn = rusqlite::Connection::open(path)?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
+
+    if let Ok(cfg_lock) = TylluanConfig::load_cached() {
+        if let Ok(cfg) = cfg_lock.try_read() {
+            if cfg.security.encrypt_at_rest {
+                if let Ok(key) = std::env::var("TYLLUAN_DB_KEY") {
+                    conn.pragma_update(None, "key", &key)?;
+                    tracing::info!("🔐 Database encryption enabled for {}", path.display());
+                } else {
+                    tracing::warn!("⚠️ encrypt_at_rest=true but TYLLUAN_DB_KEY env var not set — database NOT encrypted");
+                }
+            }
+        }
+    }
+
+    Ok(conn)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -31,8 +31,14 @@ decay_interval_secs = 300
 # SQLite WAL checkpoint interval (secs)
 checkpoint_interval_secs = 300
 
-# Security: Sandbox & Access Control
+# Security: Sandbox, Access Control & Encryption
 [security]
+# Block dangerous intents (rm -rf, DROP TABLE, fork bombs, etc.)
+# intent_filter = true
+# Encrypt SQLite databases at rest using SQLCipher (AES-256)
+# Requires TYLLUAN_DB_KEY environment variable with the encryption passphrase.
+# WARNING: If you enable this on an existing database, you must migrate it first.
+# encrypt_at_rest = false
 
 # Docker sandbox for bash/code guilds (opt-in, disabled by default)
 # When enabled, bash and code guilds run in an isolated Docker container
