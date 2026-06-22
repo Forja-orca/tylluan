@@ -1,0 +1,42 @@
+﻿[workspace]
+resolver = "2"
+members = [
+    "crates/tylluan-kernel",
+    "crates/tylluan-common",
+    "crates/tylluan-gui",
+    "crates/tylluan-cli",
+    "crates/tylluan-link",
+    "crates/tylluan-evals",
+    "crates/tylluan-proxy",
+]
+
+[workspace.package]
+version = "3.0.0"
+edition = "2024"
+authors = ["Tylluan Contributors"]
+license = "MIT"
+repository = "https://github.com/forja-orca/tylluan"
+description = "Sovereign Agentic Hub — Rust microkernel + Python guilds over MCP"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+anyhow = "1"
+thiserror = "2"
+toml = "0.8"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"        # thin LTO: ~30% smaller binary vs debug, <60s extra vs fat LTO
+codegen-units = 4   # parallel codegen — faster than 1, better than default 16 for size
+strip = true        # strip debug symbols → ~12-15 MB final binary
+panic = "abort"     # smaller binary, faster startup — no unwinding in production
+
+[profile.release-debug]
+inherits = "release"
+strip = false       # keep symbols for profiling — `cargo build --profile release-debug`
+debug = 1

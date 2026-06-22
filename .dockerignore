@@ -1,0 +1,45 @@
+# Build artifacts — largest offenders
+target/
+node_modules/
+dashboard/node_modules/
+dashboard/.next/
+
+# Dev data (DB, embeddings, PIDs)
+data/
+*.db
+*.pid
+
+# Models — mounted as volume at runtime, never baked in
+models/
+.fastembed_cache/
+
+# Scratch/test files
+scratch/
+coloquio_digest/
+
+# Secrets and local config
+.forja-token
+.env
+*.env.local
+.n8n-key
+C:/Users/
+
+# Research stack (separate compose)
+docker-research/
+
+# Tauri / GUI binaries
+crates/forja-gui/src-tauri/binaries/
+crates/forja-gui/src-tauri/target/
+
+# Logs
+*.log
+logs/
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.idea/
+*.swp

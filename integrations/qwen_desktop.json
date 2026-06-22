@@ -1,0 +1,9 @@
+﻿{
+  "mcpServers": {
+    "tylluan": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3030/sse",
+      "description": "TylluanNexus o3 — Sovereign cognitive kernel"
+    }
+  }
+}

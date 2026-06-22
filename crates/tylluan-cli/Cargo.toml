@@ -1,0 +1,15 @@
+﻿[package]
+name = "tylluan-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { version = "0.12", features = ["json"] }
+anyhow = { workspace = true }
+sysinfo = "0.33"
+ctrlc = "3"

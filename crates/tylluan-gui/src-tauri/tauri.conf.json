@@ -1,0 +1,42 @@
+﻿{
+  "productName": "TylluanNexus Cockpit",
+  "version": "3.0.0",
+  "identifier": "com.tylluanmcp.nexus.cockpit",
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://127.0.0.1:3030",
+    "beforeBuildCommand": "cd ..\\..\\..\\dashboard && npm run build",
+    "frontendDist": "../../../dashboard/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TylluanNexus o3 - System Control",
+        "width": 1280,
+        "height": 800,
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [],
+    "resources": []
+  },
+  "plugins": {
+    "updater": {
+      "active": false
+    }
+  }
+}

@@ -1,0 +1,203 @@
+# Build
+/target/
+/dist/
+
+# Runtime data (NEVER commit)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Model downloads (descargados por --download-models)
+/models/
+models-cache/
+
+# Auth tokens (NEVER commit)
+.tylluan-token
+
+# Runtime config (contains local paths, tokens — use tylluan.example.toml as template)
+tylluan.toml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Cache and Archives
+.fastembed_cache/
+*.tar.gz
+
+# Backup files
+*.bak
+
+# Test artifacts
+test_*.json
+data/test_stress/
+data/bench/
+data/uploads/
+data/reports/
+
+# Docker secondary instance data (separate SQLite DBs)
+data-docker/
+# Docker instance token (separate from native .tylluan-token)
+crates/tylluan-kernel/.tylluan-token-docker
+crates/tylluan-kernel/.tylluan-token-docker
+
+# Runtime registry state (rebuilt on each boot)
+registry.json
+registry.json.bak
+crates/tylluan-kernel/registry.json
+
+# Runtime data directories (databases, guild output, screenshots)
+crates/tylluan-kernel/data/
+shared/output/
+
+# Ad-hoc fix/test scripts and debug dumps (not part of the product)
+scripts/fix_server_structure.py
+*_dump.txt
+test_*.bat
+
+# Codex / CI worktrees
+target_codex_*/
+
+# Cargo home override (local .cargo/ in repo root)
+.cargo/
+
+# Claude Code memory and session state
+.claude/
+
+# Debug / diagnostic scripts (ad-hoc, not part of the product)
+debug_bridge.mjs
+diag_kernel.py
+bridge.bat
+bridge.mjs
+HANDOFF.md
+HONEST_STATE.md
+test_mcp.txt
+
+# Ad-hoc test scripts at repo root
+test_handshake*.py
+test_initialize.json
+
+# Stale root-level binaries (real output is target/debug/)
+tylluan-core.exe
+
+# MCP client override files (use integrations/ instead)
+.mcp.json
+mcp_cursor.json
+mcp-tylluan.json
+
+# Runtime log dumps at repo root
+kernel_live*.log
+tylluan_err.log
+err.log
+out.log
+stderr_dump.txt
+stdout_dump.txt
+
+# E2E test temp databases (created by cargo test)
+e2e_t*/
+gv2_t*/
+td/
+td2/
+*.db
+!crates/**/migrations/*.sql
+
+# Sovereign Backups - DO NOT COMMIT
+backups/
+
+# Debug / diagnostic dumps
+compile_errors*.txt
+debug_output*.txt
+debug_out*.txt
+replace_sandbox.cjs
+
+# External tools and configs (AI agents, MCP tooling)
+.agent-env/
+.workspace-agent/
+.playwright-mcp/
+
+# Build artifacts (Cargo target overrides)
+target_agent/
+
+# Repo-local scratch files
+scratch/
+*.output
+
+# Ad-hoc analysis and debugging scripts at repo root
+check_graph.py
+check_state.py
+test_kg.py
+test_kg_mcp.py
+scratchpad.md
+CONSOLIDATED_ANALYSIS_*.md
+knowledge-graph-canonical.png
+
+# Agent session artifacts
+.n8n-key
+cookie.txt
+target_test/
+
+# Secrets — never commit (M25 security pass)
+.tylluan-token
+**/.tylluan-token
+.env
+*.key
+.secrets/
+
+# Reverse engineering notes (pre-release analysis, not part of the product)
+ANALYSIS_FORJA_REVERSE_ENGINEERING.md
+
+# Federation tokens
+.tylluan-federation-token
+.tylluan-federation-token
+
+# Temp agent session files
+coloquio_msg.json
+mcp_tylluan_config.json
+
+# Internal-only directories (never in public repo)
+briefings/
+agents/
+skills/
+memory/
+consultancy_kit/
+
+# Internal benchmarks and tests
+bench_real_honest.py
+system_test.py
+research-comparison.json
+restore_drill.ps1
+
+# Large data files
+*.fjv1
+data/longmemeval_*.json
+data/idle_lab_results.tsv
+
+# Docker internal config
+docker-compose.secondary.yml
+tylluan.docker.toml
+
+# OpenCode IDE config
+.opencode/
+
+# Build artifacts from alternative targets
+target_antigravity/

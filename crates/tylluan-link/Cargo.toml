@@ -1,0 +1,19 @@
+﻿[package]
+name = "tylluan-link"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TylluanLink P2P — Sovereign peer-to-peer handshake and discovery"
+
+[dependencies]
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"

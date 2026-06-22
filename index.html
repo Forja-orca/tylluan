@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tylluan — Sovereign AI Agent Framework</title>
+  <meta name="description" content="A sovereign AI agent framework with persistent memory. Runs locally. Experimental. Built for 2026." />
+  <link rel="icon" type="image/jpeg" href="lechuza.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #09090b;
+      --surface:   #18181b;
+      --border:    #27272a;
+      --muted:     #71717a;
+      --text:      #fafafa;
+      --accent:    #f59e0b;
+      --accent-dim:#78350f;
+      --danger:    #dc2626;
+      --success:   #16a34a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: var(--accent); }
+
+    /* ---- nav ---- */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.01em;
+    }
+    .nav-brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+    .nav-links {
+      display: flex;
+      gap: 1.75rem;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 0.875rem;
+      color: var(--muted);
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #000;
+      transition: opacity 0.15s;
+    }
+    .nav-cta:hover { opacity: 0.85; color: #000; }
+
+    /* ---- hero ---- */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 8rem 2rem 6rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .hero img.logo {
+      width: 120px;
+      height: 120px;
+      border-radius: 24px;
+      object-fit: cover;
+      margin-bottom: 2rem;
+      box-shadow: 0 0 0 1px var(--border), 0 32px 64px rgba(0,0,0,0.6);
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero .tagline {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.6;
+      margin-bottom: 2.5rem;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .hero-badges {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .badge::before {
+      content: '';
+      display: block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    /* ---- sections ---- */
+    section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    .section-sub {
+      font-size: 1rem;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 580px;
+    }
+
+    /* ---- features ---- */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 3rem;
+    }
+    .feature-card {
+      background: var(--surface);
+      padding: 1.75rem;
+      transition: background 0.15s;
+    }
+    .feature-card:hover { background: #1c1c1f; }
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+    .feature-card h3 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .feature-card p {
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ---- arch ---- */
+    .arch-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem;
+      margin-top: 3rem;
+      overflow-x: auto;
+    }
+    .arch-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      margin-bottom: 1px;
+      flex-wrap: wrap;
+    }
+    .arch-box {
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      text-align: center;
+      min-width: 120px;
+    }
+    .arch-box.kernel {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .arch-box.guild {
+      background: #1c1c1f;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .arch-box.tool {
+      background: #0f0f0f;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+    .arch-arrow {
+      color: var(--border);
+      font-size: 1.2rem;
+      padding: 0 0.25rem;
+    }
+    .arch-label {
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .arch-clients {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .arch-client {
+      font-size: 0.75rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ---- security ---- */
+    .security-callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--danger);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin-top: 2.5rem;
+    }
+    .security-callout h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--danger);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .security-callout p {
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+    .security-item {
+      background: var(--surface);
+      padding: 1.25rem 1.5rem;
+    }
+    .security-item h4 {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+    .security-item p {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ---- quick-start ---- */
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+      overflow-x: auto;
+    }
+    .code-block pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      line-height: 1.7;
+      color: #d4d4d4;
+      white-space: pre;
+    }
+    .code-comment { color: var(--muted); }
+    .code-cmd { color: var(--text); }
+    .code-accent { color: var(--accent); }
+    .code-key { color: #9cdcfe; }
+    .code-str { color: #ce9178; }
+
+    /* ---- owasp ---- */
+    .owasp-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+      font-size: 0.8125rem;
+    }
+    .owasp-table th {
+      text-align: left;
+      padding: 0.65rem 1rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+    }
+    .owasp-table td {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    .owasp-table tr:last-child td { border-bottom: none; }
+    .risk-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .risk-high { background: #7f1d1d; color: #fca5a5; }
+    .risk-medium { background: #78350f; color: #fcd34d; }
+    .risk-critical { background: #dc2626; color: #fff; }
+
+    /* ---- footer ---- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .footer-left {
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+    .footer-left a { color: var(--muted); }
+    .footer-left a:hover { color: var(--text); }
+    .footer-links {
+      display: flex;
+      gap: 1.25rem;
+      list-style: none;
+    }
+    .footer-links a {
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    /* ---- divider ---- */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* ---- responsive ---- */
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .hero { padding: 5rem 1.5rem 4rem; }
+      .arch-diagram { padding: 1.5rem; }
+      section { padding: 3.5rem 1.5rem; }
+    }
+
+    /* ---- scrollbar ---- */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ---- tweakers (hidden by default) ---- */
+    .tweaks-toggle {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+      z-index: 200;
+    }
+    .tweaks-toggle:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <img src="lechuza.jpg" alt="Tylluan logo" />
+    <span>Tylluan</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="#quickstart">Quick Start</a></li>
+    <li><a href="#docs">Docs</a></li>
+  </ul>
+  <a href="https://github.com/tylluan/tylluan" class="nav-cta">View on GitHub</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <img class="logo" src="lechuza.jpg" alt="Tylluan — the owl that weaves knowledge" />
+  <h1>Sovereign AI Agents<br />with <span>Persistent Memory</span></h1>
+  <p class="tagline">
+    Tylluan is an open-source agent framework that remembers. 
+    A Rust kernel orchestrates specialized Python guilds — web search, code execution, memory — 
+    connected via MCP. Runs 100% locally. Built for researchers and builders who need 
+    agents that don't forget.
+  </p>
+  <div class="hero-actions">
+    <a href="#quickstart" class="btn btn-primary">Get Started</a>
+    <a href="https://github.com/tylluan/tylluan" class="btn btn-secondary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+  <div class="hero-badges">
+    <span class="badge">MIT License</span>
+    <span class="badge">Rust + Python</span>
+    <span class="badge">MCP Compatible</span>
+    <span class="badge">Local-first</span>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- FEATURES -->
+<section id="features">
+  <p class="section-label">What Tylluan does</p>
+  <h2 class="section-title">Agents that remember<br />what you taught them</h2>
+  <p class="section-sub">
+    Unlike stateless chat interfaces, Tylluan agents accumulate knowledge over time 
+    using embeddings and a knowledge graph. They're specialized, observable, and run 
+    entirely on your hardware.
+  </p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <span class="feature-icon">🧠</span>
+      <h3>Persistent Memory</h3>
+      <p>Memories stored via BGE-M3 embeddings + graph traversal (SilvaDB). 
+         Recall what the agent learned last month. No RAG pipeline to manage.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">⚙️</span>
+      <h3>34 Specialized Guilds</h3>
+      <p>Python subprocesses for web research, code execution, file operations, 
+         embedding generation, inter-agent messaging, and more. Each isolated.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔌</span>
+      <h3>MCP Compatible</h3>
+      <p>Exposes sovereign tools via Model Context Protocol — SSE and HTTP Streamable. 
+         Connect Claude Desktop, Claude Code, Cursor, or any MCP client.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🦉</span>
+      <h3>Sovereign Tools</h3>
+      <p>tylluan_do (execute), tylluan_remember (store), tylluan_recall (retrieve), 
+         tylluan_think (analyze), tylluan_graph (navigate). Five primitives, infinitely composable.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔒</span>
+      <h3>Security by Design</h3>
+      <p>Localhost-only by default. Bearer token auth. Audit logging. 
+         OWASP ASI01–ASI10 threat model documented. No cloud dependencies in the critical path.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📊</span>
+      <h3>Observable</h3>
+      <p>Every operation logged to audit.db. Graph stats via API. 
+         Health endpoint. The dashboard shows guild status and memory topology.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <p class="section-label">How it works</p>
+  <h2 class="section-title">Simple architecture,<br />serious capabilities</h2>
+  <p class="section-sub">
+    A Rust kernel on your machine. Python guilds as isolated subprocesses. 
+    MCP as the protocol. Nothing leaves your box unless you decide it should.
+  </p>
+
+  <div class="arch-diagram">
+    <div class="arch-clients">
+      <span class="arch-client">Claude Desktop</span>
+      <span class="arch-client">Claude Code</span>
+      <span class="arch-client">Cursor</span>
+      <span class="arch-client">Cline</span>
+      <span class="arch-client">+any MCP</span>
+    </div>
+
+    <div class="arch-row">
+      <div class="arch-box tool">MCP Client</div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box kernel">Tylluan Kernel<br /><small>Rust / tokio / axum</small></div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box tool">MCP Response</div>
+    </div>
+
+    <div class="arch-label">5 sovereign tools via MCP</div>
+
+    <div class="arch-row">
+      <div class="arch-box guild">🌐 web_research</div>
+      <div class="arch-box guild">💻 code_exec</div>
+      <div class="arch-box guild">🧠 silva (memory)</div>
+      <div class="arch-box guild">💬 coloquio (chat)</div>
+      <div class="arch-box guild">🔍 deep_search</div>
+      <div class="arch-box guild" style="color: var(--muted);">+ 29 more</div>
+    </div>
+
+    <div class="arch-label">34 Python guilds — isolated subprocesses</div>
+
+    <div class="arch-row">
+      <div class="arch-box tool">audit.db</div>
+      <div class="arch-box tool">coloquio_digest.db</div>
+      <div class="arch-box tool">SilvaDB (graph)</div>
+      <div class="arch-box tool">BGE-M3 embeddings</div>
+    </div>
+
+    <div class="arch-label">Persistent state — all local</div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECURITY -->
+<section id="security">
+  <p class="section-label">Security model</p>
+  <h2 class="section-title">Honest about the risks.<br />Transparent about the gaps.</h2>
+  <p class="section-sub">
+    Tylluan is an experimental lab framework. It executes real code on your machine. 
+    We document every risk — we don't hide them behind marketing.
+  </p>
+
+  <div class="security-callout">
+    <h4>⚠ Experimental Lab Software</h4>
+    <p>
+      <strong>Tylluan is not a product.</strong> It is a research framework that executes real shell commands 
+      on your machine. Misconfiguration can expose your system. The operator — you — bears final 
+      responsibility for security. Always review guild code before enabling it. Never expose Tylluan 
+      to untrusted networks. See <a href="DISCLAIMER.md" style="color: var(--accent)">DISCLAIMER.md</a> 
+      and <a href="SECURITY.md" style="color: var(--accent)">Security Model</a> for the full picture.
+    </p>
+  </div>
+
+  <div class="security-grid">
+    <div class="security-item">
+      <h4>✅ Localhost-only by default</h4>
+      <p>Binds to 127.0.0.1. No network exposure without deliberate config change.</p>
+    </div>
+    <div class="security-item">
+      <h4>✅ Bearer token authentication</h4>
+      <p>MCP endpoint requires auth token. Configurable, rotatable.</p>
+    </div>
+    <div class="security-item">
+      <h4>✅ Guild subprocess isolation</h4>
+      <p>Each guild runs in its own Python subprocess. Failure doesn't corrupt the kernel.</p>
+    </div>
+    <div class="security-item">
+      <h4>✅ Audit logging</h4>
+      <p>Every operation recorded in audit.db with timestamp, tool, guild, and author_id.</p>
+    </div>
+    <div class="security-item">
+      <h4>⚠ No kill switch (yet)</h4>
+      <p>If an agent misbehaves, manual taskkill required. Roadmap item.</p>
+    </div>
+    <div class="security-item">
+      <h4>⚠ No code execution sandbox</h4>
+      <p>Bash guild and code guild run with operator's full permissions. Sandbox planned.</p>
+    </div>
+    <div class="security-item">
+      <h4>⚠ No encryption at rest</h4>
+      <p>audit.db, memories, and inter-agent messages stored in plaintext.</p>
+    </div>
+    <div class="security-item">
+      <h4>⚠ author_id is self-reported</h4>
+      <p>No cryptographic verification of agent identity. Spoofable with bearer token.</p>
+    </div>
+  </div>
+
+  <p class="section-label" style="margin-top: 3rem;">OWASP Top 10 Agentic Applications</p>
+  <table class="owasp-table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Risk</th>
+        <th>Tylluan status</th>
+        <th>Severity</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="risk-tag risk-critical">ASI01</span></td>
+        <td>Agent Goal Hijack</td>
+        <td>No intent sanitization. Review audit.db.</td>
+        <td><span class="risk-tag risk-high">HIGH</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-critical">ASI02</span></td>
+        <td>Tool Misuse</td>
+        <td>No per-guild ACL. Any client can invoke any guild.</td>
+        <td><span class="risk-tag risk-high">HIGH</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-medium">ASI03</span></td>
+        <td>Identity Abuse</td>
+        <td>author_id self-reported, spoofable with token.</td>
+        <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-high">ASI04</span></td>
+        <td>Supply Chain</td>
+        <td>No guild code signing. Review guild code before use.</td>
+        <td><span class="risk-tag risk-high">HIGH</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-critical">ASI05</span></td>
+        <td>Code Execution</td>
+        <td>No sandbox. Bash/code guild run with user permissions. Sandbox planned.</td>
+        <td><span class="risk-tag risk-critical">CRITICAL</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-high">ASI06</span></td>
+        <td>Memory Poisoning</td>
+        <td>No integrity verification of stored memories.</td>
+        <td><span class="risk-tag risk-high">HIGH</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-medium">ASI07</span></td>
+        <td>Insecure Inter-Agent</td>
+        <td>Coloquio not network-exposed but plaintext at rest.</td>
+        <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-medium">ASI08</span></td>
+        <td>Cascading Failures</td>
+        <td>No resource limits per guild. Monitor audit.db.</td>
+        <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-medium">ASI09</span></td>
+        <td>Trust Exploitation</td>
+        <td>No confidence scoring on tylluan_think output.</td>
+        <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      </tr>
+      <tr>
+        <td><span class="risk-tag risk-high">ASI10</span></td>
+        <td>Rogue Agents</td>
+        <td>No token revocation without restart. No automatic kill switch.</td>
+        <td><span class="risk-tag risk-high">HIGH</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="divider" />
+
+<!-- QUICK START -->
+<section id="quickstart">
+  <p class="section-label">Get started</p>
+  <h2 class="section-title">Zero to hello world<br />in 15 minutes</h2>
+  <p class="section-sub">
+    Prerequisites: Rust 1.75+, Python 3.11+, Git. 
+    Everything else is included.
+  </p>
+
+  <div class="code-block">
+<pre><span class="code-comment"># 1. Clone the clean release branch</span>
+<span class="code-cmd">git clone https://github.com/tylluan/tylluan.git</span>
+<span class="code-cmd">cd tylluan</span>
+
+<span class="code-comment"># 2. Build the kernel</span>
+<span class="code-cmd">cargo build -p tylluan-kernel</span>
+
+<span class="code-comment"># 3. Configure (change bearer_token!)</span>
+<span class="code-cmd">cp tylluan.example.toml tylluan.toml</span>
+<span class="code-cmd">$EDITOR tylluan.toml</span>
+
+<span class="code-comment"># 4. Start Tylluan</span>
+<span class="code-cmd">./tylluan-mcp.sh</span>   <span class="code-comment"># Linux/Mac</span>
+<span class="code-cmd">.\tylluan-mcp.bat</span>   <span class="code-comment"># Windows</span>
+
+<span class="code-comment"># 5. Verify it's running</span>
+<span class="code-cmd">curl http://127.0.0.1:3030/health</span>
+<span class="code-comment"># {"status":"ok","version":"1.0.0"}</span>
+
+<span class="code-comment"># 6. Connect your MCP client (Claude Desktop example)</span>
+<span class="code-comment"># Add to ~/.config/claude/claude_desktop_config.json:</span>
+<span class="code-str">{
+  "mcpServers": {
+    "tylluan": {
+      "url": "http://127.0.0.1:3030/sse"
+    }
+  }
+}</span>
+
+<span class="code-comment"># 7. First command via MCP client:</span>
+<span class="code-accent">Use tylluan_remember that Tylluan is my agent framework</span>
+<span class="code-accent">Use tylluan_recall to find memories about Tylluan</span></pre>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- DOCS -->
+<section id="docs">
+  <p class="section-label">Documentation</p>
+  <h2 class="section-title">Read before you run</h2>
+  <p class="section-sub" style="margin-bottom: 2rem;">
+    Tylluan is experimental. These documents exist so you understand exactly what 
+    you're deploying before you deploy it.
+  </p>
+
+  <div class="features-grid" style="margin-top: 0;">
+    <div class="feature-card">
+      <span class="feature-icon">⚠️</span>
+      <h3><a href="DISCLAIMER.md">DISCLAIMER.md</a></h3>
+      <p>Legal terms, known security gaps, configuration warnings, AI agent responsibilities.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔒</span>
+      <h3><a href="SECURITY.md">Security Model</a></h3>
+      <p>OWASP ASI01-10 mapping, threat model, security invariants, incident response.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🚀</span>
+      <h3><a href="docs/H4_QUICKSTART.md">QUICKSTART.md</a></h3>
+      <p>Step-by-step from zero to running. Config JSON for Claude Desktop, Code, Cursor, Cline, LM Studio.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🤝</span>
+      <h3><a href="docs/H2_CONTRIBUTING.md">CONTRIBUTING.md</a></h3>
+      <p>Dev setup, code style, PR checklist, what never goes in a PR, Conventional Commits.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📜</span>
+      <h3><a href="docs/H3_CODE_OF_CONDUCT.md">CODE_OF_CONDUCT.md</a></h3>
+      <p>Contributor Covenant 2.1 + AI Contributor Special Provision (humans responsible for their agents).</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-left">
+    Tylluan &copy; 2026 — MIT License &nbsp;|&nbsp; 
+    An <a href="docs/H3_CODE_OF_CONDUCT.md">AI agent + human collaboration</a>
+  </div>
+  <ul class="footer-links">
+    <li><a href="DISCLAIMER.md">Disclaimer</a></li>
+    <li><a href="SECURITY.md">Security</a></li>
+    <li><a href="docs/H2_CONTRIBUTING.md">Contributing</a></li>
+    <li><a href="https://github.com/tylluan/tylluan/discussions">Discussions</a></li>
+  </ul>
+</footer>
+
+<!-- Tweaks toggle (hidden, for future variations) -->
+<button class="tweaks-toggle" title="Design variations" aria-label="Design variations">⊞</button>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+﻿[package]
+name = "tylluan-gui"
+version = "3.0.0-rc.1"
+edition = "2021"
+authors = ["TylluanMCP Contributors"]
+license = "MIT"
+
+[dependencies]
+# Tauri and kernel linkages will be added in src-tauri
