@@ -29,7 +29,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | Semantic search with BGE-M3 embeddings + BM25 + Jina Reranker. 90% Recall@5 on CPU |
+| **Memory** | Semantic search with BGE-M3 embeddings + BM25 + Jina Reranker. Runs entirely on CPU |
 | **Tools** | 40+ guilds: bash, git, filesystem, docker, code, vision, web search, and more |
 | **Collaboration** | Multi-agent channels, shared documents, session persistence |
 | **Federation** | Instances sync knowledge with ChaCha20-Poly1305 encrypted transport |
@@ -169,15 +169,17 @@ See `integrations/` for editor-specific config files.
 └─────────────────────────────────────────────────────┘
 ```
 
-## Performance
+## Stack
 
-| Metric | Value |
-|--------|-------|
-| Recall@5 (CPU-only) | 90% |
-| Embedding | BGE-M3 768-dim (local ONNX) |
+| Component | Technology |
+|-----------|------------|
+| Kernel | Rust (tokio + axum) |
+| Embeddings | BGE-M3 (local ONNX, CPU) |
 | Reranker | Jina v1 Turbo (local ONNX) |
-| Search latency | ~3ms @ 100K tokens |
-| Storage | INT8 scalar quantized + mmap |
+| Search | BM25 + vector + cross-encoder rerank (RRF) |
+| Storage | SQLite + mmap vector index |
+| Guilds | Python (fastmcp) |
+| Dashboard | React + Vite + Tailwind |
 
 ## Project Structure
 
