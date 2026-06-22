@@ -1,4 +1,4 @@
-﻿# Tylluan — Disclaimer and Terms of Use
+# Tylluan — Disclaimer and Terms of Use
 
 **Version:** 1.0-draft  
 **Date:** 2026-06-22  
@@ -73,14 +73,15 @@ Tylluan is designed with security defaults, but no software is completely secure
 - Requires bearer token authentication for MCP access
 - Runs guilds as isolated subprocesses
 - Logs all operations to `audit.db`
+- Provides a localhost-only emergency kill switch endpoint (`POST /api/v1/admin/emergency-kill`)
 
 ### What Tylluan does NOT do by default:
 - It does NOT encrypt data at rest
-- It does NOT sandbox code execution beyond subprocess isolation
+- It does NOT sandbox code execution by default (opt-in Docker sandbox is available)
 - It does NOT verify the identity of calling agents (only the bearer token)
-- It does NOT have an automatic kill switch
 - It does NOT have rate limiting
-- It does NOT have per-guild access control
+- It does NOT have per-guild access control enabled by default (opt-in role-based ACL is available)
+- It does NOT enable the natural language intent safety filter by default (opt-in intent_filter is available)
 
 ### You are responsible for:
 - Protecting the bearer token as you would protect any high-value secret
@@ -96,19 +97,19 @@ Tylluan is designed with security defaults, but no software is completely secure
 
 Tylluan has documented security gaps. These are not bugs — they are known limitations that require operator attention:
 
-1. **No kill switch:** If an agent misbehaves, you must manually terminate the process (`taskkill /F /IM tylluan-nexus.exe` or `pkill tylluan-nexus`)
+1. **No automatic kill switch:** If an agent misbehaves, you can trigger the localhost-only emergency kill endpoint (`POST /api/v1/admin/emergency-kill`) to stop all guilds and shutdown the kernel, or manually terminate the process (`taskkill /F /IM tylluan-nexus.exe` or `pkill tylluan-nexus`).
 
-2. **No per-guild access control:** Any authenticated MCP client can invoke any enabled guild
+2. **Optional per-guild access control (opt-in):** A role-based ACL (tokens mapped to reader/writer/admin roles) is available, but currently only applies to requests routed through the `tylluan_do` handler. Direct tool execution endpoints (`/api/v1/guilds/{name}/tools/{tool}`) bypass role checks.
 
-3. **No code execution sandbox:** Bash and code guilds execute with the operator's full user permissions
+3. **Optional Docker sandbox (opt-in):** Bash and code guilds can be sandboxed in Docker, but this feature currently fails on Windows hosts due to a UNC path formatting bug (`\\?\` path prefix too many colons) in volume mounts.
 
-4. **No intent verification:** Natural-language intents are translated to commands without safety checking
+4. **Optional intent safety filter (opt-in):** Basic intent filtering (blocking dangerous commands like `rm -rf`, `DROP TABLE`, `format C:`) is available but must be enabled in `tylluan.toml`.
 
-5. **No encryption at rest:** Memories, audit logs, and inter-agent messages are stored in plaintext
+5. **No encryption at rest:** Memories, audit logs, and inter-agent messages are stored in plaintext.
 
-6. **No agent identity verification:** MCP `author_id` is self-reported and can be spoofed by anyone with the bearer token
+6. **No agent identity verification:** MCP `author_id` is self-reported and can be spoofed by anyone with the bearer token.
 
-7. **No rate limiting:** A compromised or buggy MCP client could flood the system with requests
+7. **No rate limiting:** A compromised or buggy MCP client could flood the system with requests.
 
 ---
 

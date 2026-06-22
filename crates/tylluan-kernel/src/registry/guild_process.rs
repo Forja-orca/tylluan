@@ -242,7 +242,10 @@ GuildLauncher::Python { module_path } => {
                     && let Some(sb) = crate::config::load_sandbox_config()
                 {
                     info!("🐳 Sandbox: guild '{}' running in Docker container '{}'", self.name, sb.image);
-                    let volume_bind = format!("{}:/workspace:ro", workspace_root.display());
+                    // Strip Windows UNC prefix (\\?\) that canonicalize() adds — Docker doesn't understand it
+                    let ws_path = workspace_root.display().to_string();
+                    let ws_clean = ws_path.strip_prefix(r"\\?\").unwrap_or(&ws_path);
+                    let volume_bind = format!("{}:/workspace:ro", ws_clean);
                     let mut docker_cmd = Command::new("docker");
                     docker_cmd.args([
                         "run", "--rm",
