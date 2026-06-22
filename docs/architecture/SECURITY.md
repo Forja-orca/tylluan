@@ -33,8 +33,8 @@ This combination is an unauthenticated LAN RCE. The kernel logs a warning and re
 | Guild isolation | ⚠️ Same user | Guilds share OS user with kernel |
 | Audit log | ✅ Active | All 5 sovereign tool calls logged to `data/audit.db` |
 | Input validation | ✅ | Intent strings sanitized before guild routing |
-| Docker Sandbox | ⚠️ Windows UNC path bug | `docker run` volume mounting fails on Windows hosts due to the UNC prefix (`\\?`) in canonicalized workspace paths. |
-| ACL Check | ⚠️ Direct endpoint bypass | Direct tool execution endpoints (`/api/v1/guilds/{name}/tools/{tool}`) do not perform role-based ACL checks, only verifying bearer token validity. |
+| Docker Sandbox | ✅ Active | Windows UNC path prefix (`\\?`) is automatically stripped for cross-platform support. |
+| ACL Check | ✅ Active | Full role-based validation applied to both `tylluan_do` and direct guild tool routes. |
 
 ## Reporting Vulnerabilities
 
