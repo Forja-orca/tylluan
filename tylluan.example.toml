@@ -31,6 +31,37 @@ decay_interval_secs = 300
 # SQLite WAL checkpoint interval (secs)
 checkpoint_interval_secs = 300
 
+# Security: Sandbox & Access Control
+[security]
+
+# Docker sandbox for bash/code guilds (opt-in, disabled by default)
+# When enabled, bash and code guilds run in an isolated Docker container
+# instead of directly on the host system.
+[security.sandbox]
+enabled = false
+image = "python:3.12-slim"
+memory = "512m"
+network = false
+timeout_secs = 30
+
+# Per-Guild ACL (optional, opt-in)
+# When configured, restricts which guilds each token/role can access.
+# If this section is absent or empty, all guilds are accessible (backwards-compatible).
+[security.acl]
+# default_role applies to the bearer token when not listed in [security.acl.tokens]
+default_role = "admin"
+
+# Define roles and their allowed guilds
+[security.acl.roles]
+reader = ["knowledge", "coloquio", "monitor", "websearch"]
+writer = ["knowledge", "coloquio", "monitor", "websearch", "filesystem", "git", "code_analysis"]
+admin = ["*"]
+
+# Map specific tokens to roles (use in place of or alongside default_role)
+# [security.acl.tokens]
+# "my-reader-token-here" = "reader"
+# "my-writer-token-here" = "writer"
+
 # External MCP Servers (Standard MCP protocol)
 # [[external_mcp]]
 # name = "postgresql"

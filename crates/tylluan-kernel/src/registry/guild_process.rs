@@ -214,6 +214,22 @@ impl GuildProcess {
         }
 
         // Stdio guild: build Command and spawn subprocess
+        // Find the actual repo root where guilds/ lives.
+        // When the kernel runs from crates/tylluan-kernel/, guilds_dir may point
+        // there (tylluan.toml found first), but guilds/ is at the repo root.
+        let workspace_root = {
+            let mut root = guilds_dir.canonicalize()
+                .unwrap_or_else(|_| guilds_dir.clone());
+            for _ in 0..4 {
+                if root.join("guilds").exists() { break; }
+                match root.parent() {
+                    Some(p) => root = p.to_path_buf(),
+                    None => { root = guilds_dir.clone(); break; }
+                }
+            }
+            root
+        };
+
         let command = match &self.launcher {
 GuildLauncher::Python { module_path } => {
                 let python = find_python().await.map_err(|e| {
@@ -221,33 +237,36 @@ GuildLauncher::Python { module_path } => {
                     e
                 })?;
                 
-                let mut cmd = Command::new(&python);
-
-                // Find the actual repo root where guilds/ lives.
-                // When the kernel runs from crates/tylluan-kernel/, guilds_dir may point
-                // there (tylluan.toml found first), but guilds/ is at the repo root.
-                let workspace_root = {
-                    let mut root = guilds_dir.canonicalize()
-                        .unwrap_or_else(|_| guilds_dir.clone());
-                    for _ in 0..4 {
-                        if root.join("guilds").exists() { break; }
-                        match root.parent() {
-                            Some(p) => root = p.to_path_buf(),
-                            None => { root = guilds_dir.clone(); break; }
-                        }
-                    }
-                    root
-                };
-
-                info!("🛠️ Pre-Spawn: Preparing guild '{}' with python: '{}' -m {} (workspace: {})", self.name, python, module_path, workspace_root.display());
-                cmd.arg("-m")
-                   .arg(module_path)
-                   .current_dir(&workspace_root);
-
-                // Set PYTHONPATH to the repo root so guilds/ package is importable
-                cmd.env("PYTHONPATH", workspace_root.to_string_lossy().as_ref());
-                cmd.env("PYTHONUNBUFFERED", "1");
-                cmd
+                // S1: Docker sandbox for bash/code guilds
+                if (self.name == "bash" || self.name == "code")
+                    && let Some(sb) = crate::config::load_sandbox_config()
+                {
+                    info!("🐳 Sandbox: guild '{}' running in Docker container '{}'", self.name, sb.image);
+                    let volume_bind = format!("{}:/workspace:ro", workspace_root.display());
+                    let mut docker_cmd = Command::new("docker");
+                    docker_cmd.args([
+                        "run", "--rm",
+                        "--network", if sb.network { "bridge" } else { "none" },
+                        "--memory", sb.memory.as_str(),
+                        "--pids-limit", "100",
+                        "-v", volume_bind.as_str(),
+                        "-w", "/workspace",
+                        "-e", "PYTHONPATH=/workspace",
+                        "-e", "PYTHONUNBUFFERED=1",
+                        sb.image.as_str(),
+                        "python", "-m", module_path.as_str(),
+                    ]);
+                    docker_cmd
+                } else {
+                    let mut cmd = Command::new(&python);
+                    info!("🛠️ Pre-Spawn: Preparing guild '{}' with python: '{}' -m {} (workspace: {})", self.name, python, module_path, workspace_root.display());
+                    cmd.arg("-m")
+                       .arg(module_path)
+                       .current_dir(&workspace_root);
+                    cmd.env("PYTHONPATH", workspace_root.to_string_lossy().as_ref());
+                    cmd.env("PYTHONUNBUFFERED", "1");
+                    cmd
+                }
             }
             GuildLauncher::External { command, args, cwd, env } => {
                 info!("🛠️ Pre-Spawn: Preparing external guild '{}' using command: '{}'", self.name, command);

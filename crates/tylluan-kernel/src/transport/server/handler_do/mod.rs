@@ -52,6 +52,21 @@ pub async fn handle_tylluan_do(
         return Ok(error_result("tylluan_do requires a non-empty 'intent' argument."));
     }
 
+    if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
+        let cfg = config_lock.read().await;
+        if cfg.security.intent_filter {
+            if let Some(reason) = check_dangerous_intent(&intent) {
+                tracing::warn!("⚠️ Intent blocked by safety filter: '{}' — reason: {}", intent, reason);
+                return Ok(error_result(&format!(
+                    "Intent blocked by safety filter: {}. \
+                     If this is intentional, disable the filter with [security] intent_filter = false in tylluan.toml, \
+                     or use guild='bash' to bypass the router.",
+                    reason
+                )));
+            }
+        }
+    }
+
     // Deterministic node/nodo prefix — Agent Node Router, bypasses semantic matcher
     if let Some(node_intent) = crate::memory::agent_nodes::parse_node_intent(intent.trim()) {
         use crate::memory::agent_nodes::NodeIntent;
@@ -284,6 +299,24 @@ pub async fn handle_tylluan_do(
         Ok((name, trace)) => (name, trace),
         Err(err_result) => return Ok(err_result),
     };
+
+    // S2: Per-Guild ACL check — verify the request's role has access to this guild
+    if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
+        let cfg = config_lock.read().await;
+        let acl = &cfg.security.acl;
+        if !acl.roles.is_empty() || !acl.tokens.is_empty() {
+            let role = crate::transport::http::auth::current_acl_role();
+            if !crate::transport::http::auth::acl_can_access(&role, &guild_name, acl) {
+                let msg = format!(
+                    "ACCESS_DENIED: role '{}' does not have access to guild '{}'. \
+                     Contact your administrator to update [security.acl] in tylluan.toml.",
+                    role, guild_name
+                );
+                warn!("{}", msg);
+                return Ok(error_result(&msg));
+            }
+        }
+    }
 
     if let Err(e) = server.registry.write().await.ensure_guild_running(&guild_name).await {
         penalize_lesson(&intent, server.silva.clone());
@@ -1266,4 +1299,41 @@ mod tests {
         assert!(intent.is_empty());
         assert!(preview.is_empty());
     }
+}
+
+/// Opt-in safety filter for dangerous intents.
+/// Returns Some(reason) if the intent matches a dangerous pattern.
+fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
+    let lower = intent.to_lowercase();
+
+    static PATTERNS: &[(&str, &str)] = &[
+        ("rm -rf /", "recursive deletion of root filesystem"),
+        ("rm -rf ~", "recursive deletion of home directory"),
+        ("rm -rf .", "recursive deletion of current directory"),
+        ("mkfs", "filesystem formatting"),
+        ("format c:", "disk formatting"),
+        ("format d:", "disk formatting"),
+        (":(){:|:&};:", "fork bomb"),
+        ("dd if=/dev/zero", "disk overwrite"),
+        ("dd if=/dev/random", "disk overwrite"),
+        ("> /dev/sda", "raw disk write"),
+        ("chmod -r 777 /", "recursive permission change on root"),
+        ("drop table", "SQL table deletion"),
+        ("drop database", "SQL database deletion"),
+        ("truncate table", "SQL table truncation"),
+        ("delete from", "SQL mass deletion"),
+        ("shutdown /s", "system shutdown"),
+        ("shutdown -h now", "system shutdown"),
+        ("reboot", "system reboot"),
+        ("init 0", "system halt"),
+        (":(){ :|:& };:", "fork bomb"),
+    ];
+
+    for (pattern, reason) in PATTERNS {
+        if lower.contains(pattern) {
+            return Some(reason);
+        }
+    }
+
+    None
 }
