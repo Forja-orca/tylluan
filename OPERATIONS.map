@@ -1,0 +1,83 @@
+╔══════════════════════════════════════════════════════════════╗
+║  Tylluan — OPERATIONS MAP v1                                 ║
+║  How things FLOW. What happens when you DO things.           ║
+╚══════════════════════════════════════════════════════════════╝
+
+┌─ REQUEST FLOW: tylluan_do("list files in guilds/") ─────────┐
+│                                                              │
+│  Client                                                      │
+│    │ POST /messages or GET /sse (MCP call_tool)             │
+│    ▼                                                         │
+│  transport/http/mod.rs → auth.rs (bearer check)             │
+│    ▼                                                         │
+│  transport/server/handlers.rs                                │
+│    │ handle_kernel_tool("tylluan_do", args)                  │
+│    ▼                                                         │
+│  handler_do/routing.rs                                       │
+│    │ 1. anchor_fast_path (keyword match, <1ms)              │
+│    │ 2. BM25 scoring against catalog trigger_phrases        │
+│    │ 3. pick best guild + best tool                         │
+│    ▼                                                         │
+│  registry/actor.rs → guild subprocess                       │
+│    ▼                                                         │
+│  guilds/builders/plugins/filesystem.py                       │
+│    │ file_list(path="guilds/")                              │
+│    ▼                                                         │
+│  Result → MCP response → Client                            │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ MEMORY FLOW ───────────────────────────────────────────────┐
+│                                                              │
+│  WRITE: tylluan_remember(content) → handler_remember.rs     │
+│    embed BGE-M3 → SilvaDB node → auto_link edges → IVF     │
+│                                                              │
+│  READ: tylluan_recall(query) → handler_recall.rs            │
+│    embed → BM25 + vector → RRF fusion → Jina rerank → top N│
+│                                                              │
+│  REASON: tylluan_think(query) → handler_think.rs            │
+│    recall → BFS graph traversal → clusters → hub → analysis│
+│                                                              │
+│  GRAPH: tylluan_graph(command) → handler_graph.rs           │
+│    add_triple | query_path | list_neighbors | stats | ppr   │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ GUILD LIFECYCLE ───────────────────────────────────────────┐
+│                                                              │
+│  BOOT:  tylluan.toml always_on → spawn → MCP handshake     │
+│  LAZY:  first intent match → spawn → wait handshake → exec │
+│  CRASH: supervisor detects → retry (max N) → FAILED if loop│
+│  IDLE:  idle_suspend_secs → stop → respawn on next match   │
+│                                                              │
+│  Routing: router/catalog.rs (trigger_phrases per guild)     │
+│  Adding:  1) .py in guilds/ 2) descriptor in catalog.rs    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ COMMON OPERATIONS ────────────────────────────────────────┐
+│                                                              │
+│  BUILD:   cargo build -p tylluan-kernel                     │
+│  CHECK:   cargo check -p tylluan-kernel                     │
+│  TEST:    cargo test -p tylluan-kernel --lib                │
+│  LINT:    cargo clippy -p tylluan-kernel -- -D warnings     │
+│  FORMAT:  cargo fmt -p tylluan-kernel                       │
+│  START:   ./tylluan-mcp.bat (Win) or ./tylluan-mcp.sh      │
+│  HEALTH:  curl http://127.0.0.1:3030/health                │
+│  GUILDS:  curl http://127.0.0.1:3030/api/v1/guilds         │
+│  STOP:    Ctrl+C or taskkill /IM tylluan-nexus.exe /F       │
+│                                                              │
+│  TEST ROUTING:                                               │
+│    curl -X POST http://127.0.0.1:3030/api/v1/do \          │
+│      -H "Content-Type: application/json" \                  │
+│      -d '{"intent":"your intent"}'                          │
+│                                                              │
+│  MEMORY STATS (via MCP):                                     │
+│    tylluan_graph(command="stats")                            │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ ERROR RECOVERY ────────────────────────────────────────────┐
+│                                                              │
+│  "guild crash loop"  → check .py exists + pip deps + timeout│
+│  "routing miss"      → adjust catalog.rs trigger_phrases    │
+│  "502 from proxy"    → kernel not running, restart          │
+│  "sqlite locked"     → two kernels running, kill all+restart│
+│  "connection refused"→ use 127.0.0.1 not localhost          │
+└─────────────────────────────────────────────────────────────┘

@@ -1,0 +1,21 @@
+﻿[package]
+name = "tylluan-proxy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TylluanNexus Hot-Reload Proxy Gateway"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+hyper = { version = "1", features = ["full"] }
+http-body-util = "0.1"
+hyper-util = { version = "0.1", features = ["client", "server-auto"] }
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
+bytes = "1"
+

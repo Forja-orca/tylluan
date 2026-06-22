@@ -1,0 +1,212 @@
+╔══════════════════════════════════════════════════════════════╗
+║  Tylluan — PROJECT MAP v1                                    ║
+║  Sovereign cognitive substrate for AI agents.                ║
+║  Read once → situate. Read twice → navigate. Read thrice → own. ║
+╚══════════════════════════════════════════════════════════════╝
+
+┌─ IDENTITY ──────────────────────────────────────────────────┐
+│ Binary:    tylluan-nexus (kernel) + tylluan-proxy (gateway) │
+│ Port:      :3030 (proxy, fixed) → :303X (kernel, dynamic)  │
+│ Config:    tylluan.toml (copy from tylluan.example.toml)    │
+│ Auth:      .tylluan-token (bearer, auto-generated, gitignored)│
+│ Data:      data/*.db (sqlite) — gitignored, created on boot │
+│ License:   MIT                                               │
+│ Language:  Rust kernel + Python guilds + React dashboard     │
+│ Tests:     cargo test -p tylluan-kernel --lib                │
+│ Build:     cargo build -p tylluan-kernel                     │
+│ Start:     ./tylluan-mcp.bat (Win) or ./tylluan-mcp.sh (Unix)│
+│ Health:    curl http://127.0.0.1:3030/health                 │
+│ MCP:       SSE at /sse │ HTTP Streamable at /messages        │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ WHAT IT DOES (one diagram) ────────────────────────────────┐
+│                                                              │
+│  ANY MCP CLIENT                                              │
+│  (Claude, Cursor, VS Code, LM Studio, custom)               │
+│       │                                                      │
+│       │ SSE or HTTP Streamable                               │
+│       ▼                                                      │
+│  ┌─────────────┐     ┌──────────────┐     ┌──────────────┐ │
+│  │  5 TOOLS    │────▶│   KERNEL     │────▶│   GUILDS     │ │
+│  │             │     │              │     │              │ │
+│  │ tylluan_do  │     │ Router       │     │ bash.py      │ │
+│  │ tylluan_remember  │ SilvaDB     │     │ git.py       │ │
+│  │ tylluan_recall    │ Registry    │     │ filesystem   │ │
+│  │ tylluan_think     │ Security    │     │ code.py      │ │
+│  │ tylluan_graph     │ Audit       │     │ vision.py    │ │
+│  │             │     │              │     │ +30 more     │ │
+│  └─────────────┘     └──────────────┘     └──────────────┘ │
+│                              │                               │
+│                       ┌──────▼──────┐                       │
+│                       │  SilvaDB    │                       │
+│                       │  Memory +   │                       │
+│                       │  Graph +    │                       │
+│                       │  Vectors    │                       │
+│                       └─────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ CRATE MAP ─────────────────────────────────────────────────┐
+│                                                              │
+│  Cargo.toml (workspace root)                                 │
+│  ├─ tylluan-kernel   THE kernel. All logic lives here.      │
+│  ├─ tylluan-proxy    Zero-downtime gateway (:3030)          │
+│  ├─ tylluan-common   Shared types: TylluanError, TylluanResult│
+│  ├─ tylluan-cli      Interactive REPL (optional)            │
+│  ├─ tylluan-link     Federation protocol                    │
+│  ├─ tylluan-gui      Tauri desktop app (experimental)       │
+│  └─ tylluan-evals    Benchmark suite (LongMemEval, BeamScale)│
+│                                                              │
+│  95% of changes happen in tylluan-kernel.                    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ KERNEL INTERNALS (crates/tylluan-kernel/src/) ─────────────┐
+│                                                              │
+│  ENTRY                                                       │
+│    main.rs          startup, config load, guild spawn        │
+│    config.rs        TylluanConfig, toml parsing, defaults    │
+│    setup.rs         database init, model download            │
+│                                                              │
+│  TRANSPORT (how clients talk to the kernel)                  │
+│    transport/http/                                           │
+│      mod.rs         axum router, TylluanState, all routes    │
+│      auth.rs        bearer token middleware                  │
+│      sse.rs         SSE transport for MCP                    │
+│      api_v1.rs      40+ REST endpoints                      │
+│      api_v1/        per-domain handlers (coloquio, silva,    │
+│                     guilds, memory, admin, monitor, etc.)    │
+│    transport/server/                                         │
+│      mod.rs         TylluanServer — MCP tool handler         │
+│      tools.rs       all_tools() → 5 sovereign tools          │
+│      handlers.rs    handle_kernel_tool() dispatcher          │
+│      handler_do/    tylluan_do pipeline:                     │
+│        routing.rs     intent → guild (BM25+anchor scoring)   │
+│        embedding.rs   semantic similarity via BGE-M3         │
+│        timeout.rs     CPU-safe execution timeouts            │
+│      handler_recall.rs   memory search (BM25+vector+rerank) │
+│      handler_remember.rs memory write                        │
+│      handler_think.rs    graph reasoning                     │
+│      handler_graph.rs    direct graph ops                    │
+│                                                              │
+│  MEMORY (where knowledge lives)                              │
+│    memory/                                                   │
+│      silva/         SilvaDB: graph + vectors + search        │
+│        nodes.rs       node CRUD                              │
+│        edges.rs       relationship management                │
+│        search.rs      hybrid retrieval (BM25+vector+RRF)     │
+│        graph.rs       traversal, PPR, path queries           │
+│        anchors.rs     routing anchor corpus                  │
+│        schema.rs      database migrations                    │
+│      hybrid.rs      BM25 + vector fusion                     │
+│      coloquio.rs    multi-agent channels                     │
+│      mailbox.rs     async agent-to-agent messaging           │
+│      identity.rs    agent profiles and context               │
+│      idle_lab.rs    background parameter optimization        │
+│      dream_cycle.rs background knowledge enrichment          │
+│      graph_rag.rs   cluster-aware retrieval                  │
+│      ivf_index.rs   IVF vector index                         │
+│      louvain.rs     community detection                      │
+│                                                              │
+│  REGISTRY (guild lifecycle)                                  │
+│    registry/                                                 │
+│      mod.rs         GuildRegistry, spawn, stop               │
+│      supervisor.rs  crash loop detection, restart policy     │
+│      actor.rs       message passing to guild processes       │
+│      tools.rs       guild tool registration                  │
+│      proxy.rs       MCP proxy for external servers           │
+│                                                              │
+│  ROUTER (intent → guild mapping)                             │
+│    router/                                                   │
+│      catalog.rs     builtin_catalog() — all guild descriptors│
+│      matcher.rs     BM25 scoring + anchor fast path          │
+│      embeddings.rs  BGE-M3 ONNX embedding engine             │
+│                                                              │
+│  SECURITY                                                    │
+│    security/                                                 │
+│      guard.rs       startup safety checks                    │
+│      circuit_breaker.rs  failure threshold detection         │
+│      rate_limiter.rs     per-IP request limiting             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ GUILD SYSTEM (guilds/) ────────────────────────────────────┐
+│                                                              │
+│  Each guild = standalone Python subprocess using fastmcp.    │
+│  Kernel spawns them, routes intents, collects results.       │
+│                                                              │
+│  builders/plugins/    DO things                              │
+│    bash.py            shell commands (⚠️ unsandboxed)        │
+│    filesystem.py      file read/write/list                   │
+│    git.py             version control ops                    │
+│    code.py            code execution (⚠️ unsandboxed)        │
+│    docker.py          container management                   │
+│    database.py        SQL operations                         │
+│    formatter.py       code formatting                        │
+│                                                              │
+│  scholars/plugins/    ANALYZE things                         │
+│    knowledge.py       knowledge graph queries                │
+│    deep_analysis.py   long-running analysis                  │
+│    ingest.py          document ingestion to memory           │
+│    pdf.py             PDF text extraction                    │
+│    code_analysis.py   AST and code structure                 │
+│                                                              │
+│  core/                SYSTEM services                        │
+│    coloquio.py        agent communication channels           │
+│    vision.py          SmolVLM2 image analysis (ONNX, CPU)   │
+│    websearch.py       web search                             │
+│    deep_web_research.py  DuckDuckGo multi-page research     │
+│    mcp_bridge.py      proxy to external MCP servers          │
+│                                                              │
+│  wardens/plugins/     GUARD quality                          │
+│    audit.py           operation logging                      │
+│    biome_warden.py    code quality enforcement               │
+│                                                              │
+│  watchers/plugins/    MONITOR health                         │
+│    monitor.py         guild health checks                    │
+│    system_metrics.py  CPU/RAM/disk monitoring                │
+│                                                              │
+│  Routing:  router/catalog.rs has trigger_phrases per guild   │
+│  Adding:   1) create .py in guilds/ 2) add to catalog.rs    │
+│  Config:   tylluan.toml [guilds.core] always_on list         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ MCP CLIENT CONNECTION ─────────────────────────────────────┐
+│                                                              │
+│  SSE (most clients):                                         │
+│    url: http://127.0.0.1:3030/sse                           │
+│                                                              │
+│  HTTP Streamable:                                            │
+│    url: http://127.0.0.1:3030/messages                      │
+│                                                              │
+│  Claude Desktop: {"mcpServers":{"tylluan":{"url":"…/sse"}}} │
+│  Claude Code:    claude mcp add tylluan sse http://…/sse    │
+│  Cursor:         Settings > MCP > Add > SSE > …/sse         │
+│                                                              │
+│  ⚠️ Always use 127.0.0.1, never localhost (IPv6 trap)       │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ FILE LAYOUT ───────────────────────────────────────────────┐
+│                                                              │
+│  tylluan/                                                    │
+│  ├── crates/              Rust source (7 crates)            │
+│  ├── guilds/              Python guild source                │
+│  ├── dashboard/           React dashboard (Vite+Tailwind)   │
+│  ├── docs/                Architecture docs                  │
+│  ├── integrations/        MCP client config examples         │
+│  ├── tests/               E2E and integration tests          │
+│  ├── scripts/             Build and maintenance scripts      │
+│  ├── installers/          Platform-specific installers        │
+│  ├── tylluan.example.toml Safe default config                │
+│  ├── Cargo.toml           Workspace manifest                 │
+│  ├── Dockerfile           Container build                    │
+│  ├── docker-compose.yml   Container orchestration            │
+│  └── pyproject.toml       Python project config              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ SAFETY ────────────────────────────────────────────────────┐
+│  ✋ NEVER host=0.0.0.0 + dev_mode=true (unauthenticated RCE)│
+│  ✋ NEVER run as root/Administrator                          │
+│  ✋ NEVER commit .tylluan-token                              │
+│  ✋ NEVER reduce timeouts below defaults (CPU inference)     │
+│  ✋ NEVER hardcode guild paths (use catalog.rs)              │
+│  See: SECURITY_MODEL in docs/architecture/SECURITY.md       │
+│  See: DISCLAIMER.md for operator responsibilities            │
+└─────────────────────────────────────────────────────────────┘

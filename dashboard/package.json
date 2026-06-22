@@ -1,0 +1,42 @@
+﻿{
+  "name": "tylluannexus-dashboard-o3",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "graphology": "^0.26.0",
+    "graphology-layout": "^0.6.1",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "lucide-react": "^1.14.0",
+    "react-dom": "^19.2.5",
+    "react-force-graph": "^1.48.2",
+    "react-force-graph-2d": "^1.29.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~6.0.2",
+    "vite": "^5.4.11",
+    "vite-plugin-node-polyfills": "^0.26.0"
+  }
+}

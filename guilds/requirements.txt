@@ -1,0 +1,17 @@
+# ForjaNexus Guild Dependencies
+# ──────────────────────────────────────────────────────────────────────────────
+# Install with:
+#   pip install -r guilds/requirements.txt
+#
+# For vision + PDF support:
+#   pip install -r guilds/requirements.txt -r guilds/requirements-optional.txt
+#
+# For browser guild: also run after pip install:
+#   playwright install chromium
+
+# ── Core — required for ALL guilds ────────────────────────────────────────────
+mcp>=1.27.0
+fastmcp>=3.2.4
+
+# ── System guilds: system_metrics, monitor ────────────────────────────────────
+psutil>=5.9.0
