@@ -328,6 +328,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/autoresearch/evaluate", post(autoresearch_evaluate_handler))
         .route("/api/v1/skill", get(skill_handler))
         .route("/api/v1/admin/shutdown", post(admin_shutdown_handler))
+        .route("/api/v1/admin/emergency-kill", post(admin_emergency_kill_handler))
+        .route("/api/v1/admin/kill-guild/{name}", post(admin_kill_guild_handler))
         .route("/api/v1/canvas/ws", get(canvas_ws_handler))
         .route("/api/v1/canvas/{channel}/nodes", post(canvas_create_node_handler))
         // M23-Fractal: tool discovery endpoint
