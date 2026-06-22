@@ -40,7 +40,9 @@ tower-http = { version = "0.6", features = ["cors", "trace", "fs", "compression-
 parking_lot = "0.12"
 chrono = "0.4"
 
-# SQLite
+# SQLite — default: bundled (no encryption)
+# For encryption at rest, change "bundled" to "bundled-sqlcipher" and install OpenSSL dev headers.
+# Then set [security] encrypt_at_rest = true and TYLLUAN_DB_KEY env var.
 rusqlite = { version = "0.33", features = ["bundled", "vtab", "trace"] }
 
 # Config
