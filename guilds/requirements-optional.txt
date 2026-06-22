@@ -1,0 +1,30 @@
+# ForjaNexus Optional Guild Dependencies
+# ──────────────────────────────────────────────────────────────────────────────
+# These packages are only needed for specific guilds.
+# Install the ones you need:
+#
+#   pip install Pillow pypdf          # vision (lightweight) + pdf
+#   pip install transformers torch    # vision (full SmolVLM2 — ~2 GB download)
+#   pip install playwright && playwright install chromium  # browser
+
+# ── Knowledge guild (GLiNER — improves triple extraction quality) ─────────────
+# Without gliner, knowledge.py uses a regex fallback (works, lower precision).
+# With gliner, uses a pretrained NER model (~150 MB download on first use).
+# gliner>=1.0.0
+
+# ── PDF guild ─────────────────────────────────────────────────────────────────
+pypdf>=4.0.0
+pdfplumber>=0.11.0
+
+# ── Vision guild (image analysis) ─────────────────────────────────────────────
+Pillow>=10.0.0
+
+# ── Vision guild (SmolVLM2 — heavy, CPU inference, ~2 GB model download) ──────
+# transformers>=4.40.0
+# torch>=2.0.0          # CPU-only: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# ── Browser guild ─────────────────────────────────────────────────────────────
+# playwright>=1.40.0    # after install run: playwright install chromium
+
+# ── Web search guild ──────────────────────────────────────────────────────────
+# duckduckgo_search>=6.0.0

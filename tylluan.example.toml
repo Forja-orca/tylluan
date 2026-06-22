@@ -1,0 +1,39 @@
+﻿# TylluanNexus o3 Sovereign Configuration Example
+# Copy this to tylluan.toml and customize it.
+
+[nexus]
+host = "127.0.0.1"
+port = 3000
+transport = ["stdio", "http"]
+
+# Security timeouts for tool execution and handshakes
+[nexus.timeouts]
+handshake_secs = 30
+tool_call_secs = 120
+lazy_load_timeout_secs = 180
+
+[memory]
+db_path = "data/tylluan.db"
+# Max vector search results before partitioning
+vector_limit = 5000
+
+[guilds.core]
+# Always spawned on startup
+always_on = ["bash", "filesystem"]
+# Seconds before an idle lazy guild is considered for suspension
+idle_suspend_secs = 3600
+
+[performance]
+# Reindexing interval (secs) - 600s recommended for low-RAM hardware
+reindex_interval_secs = 600
+# Node weight decay interval (secs)
+decay_interval_secs = 300
+# SQLite WAL checkpoint interval (secs)
+checkpoint_interval_secs = 300
+
+# External MCP Servers (Standard MCP protocol)
+# [[external_mcp]]
+# name = "postgresql"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"]
+# timeout_ms = 10000

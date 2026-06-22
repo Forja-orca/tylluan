@@ -1,0 +1,96 @@
+﻿# =============================================================================
+# TylluanNexus o3 — Docker Compose (Unified Multi-service Stack)
+# =============================================================================
+# Usage:
+#   docker compose up -d            # start all (kernel + searxng + crawl4ai)
+#   docker compose logs -f kernel   # watch kernel logs
+#   docker compose down             # stop
+#
+# First run — download AI models into ./models/:
+#   docker compose run --rm kernel --download-models
+# =============================================================================
+
+services:
+
+  # ── SearXNG ────────────────────────────────────────────────────────────────
+  searxng:
+    image: searxng/searxng:latest
+    container_name: tylluan-searxng
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:32700:8080'
+    volumes:
+      - ./docker-research/searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: 'http://localhost:32700/'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tylluan-net
+
+  # ── Crawl4AI ───────────────────────────────────────────────────────────────
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: tylluan-crawl4ai
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:32701:11235'
+    volumes:
+      - ./docker-research/crawl4ai-data:/data:rw
+    environment:
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      MAX_CONCURRENT_TASKS: '3'
+      CRAWL4AI_MAX_WORKERS: '2'
+      ANONYMIZED_TELEMETRY: 'false'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    shm_size: '64mb'
+    networks:
+      - tylluan-net
+
+  # ── Kernel ─────────────────────────────────────────────────────────────────
+  kernel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tylluannexus:3.0
+    container_name: tylluan-kernel
+    ports:
+      - "127.0.0.1:3030:3030"
+    volumes:
+      - ./models:/home/tylluan/models          # AI model weights (user-provided)
+      - ./data:/home/tylluan/data              # SQLite DB + embeddings
+      - ./tylluan.docker.toml:/home/tylluan/tylluan.toml:ro
+    environment:
+      RUST_LOG: info
+      RUST_BACKTRACE: 1
+      TYLLUAN_DEVICE: ${TYLLUAN_DEVICE:-cpu}
+      SEARXNG_URL: http://searxng:8080
+      CRAWL4AI_URL: http://crawl4ai:11235
+    depends_on:
+      searxng:
+        condition: service_healthy
+      crawl4ai:
+        condition: service_healthy
+    networks:
+      - tylluan-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+networks:
+  tylluan-net:
+    driver: bridge

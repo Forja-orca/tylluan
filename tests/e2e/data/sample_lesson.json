@@ -1,0 +1,10 @@
+﻿{
+  "type": "lesson_proposal",
+  "topic": "Autonomous Guild Management in TylluanNexus o3",
+  "content": "The sovereign architecture of TylluanNexus o3 facilitates autonomous guild orchestration. Each guild operates in a dedicated subprocess, communicating via JSON-RPC over stdio. The Rust Kernel monitors these processes, ensuring self-healing through automated restarts when a heartbeat failure is detected.",
+  "metadata": {
+    "source": "e2e-harness-v1",
+    "version": "1.0",
+    "test_id": "P2-FLUX-VALIDATION"
+  }
+}

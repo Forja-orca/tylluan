@@ -1,0 +1,9 @@
+﻿# Configuration for OpenClaw / Hermes Agent
+# TylluanNexus must be running: .\tylluan-mcp.bat
+# NEVER use --host 0.0.0.0 with dev_mode=true (LAN RCE risk)
+
+mcp:
+  servers:
+    - name: "tylluan"
+      url: "http://127.0.0.1:3030/sse"
+      type: "sse"

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground overflow-hidden font-sans;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(0, 242, 254, 0.05) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(160, 31, 233, 0.05) 0px, transparent 50%);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-glass border border-glass-border backdrop-blur-md rounded-2xl shadow-2xl;
+  }
+  
+  .glass-card {
+    @apply bg-white/5 border border-white/10 backdrop-blur-sm rounded-xl transition-all duration-300;
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+  }
+
+  /* Custom Scrollbar for OS look */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20;
+  }
+}
+
+#root {
+  @apply w-full h-screen;
+}
+
+.react-flow__node {
+  @apply !border-none !bg-transparent !p-0;
+}

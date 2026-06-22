@@ -1,0 +1,18 @@
+﻿{
+  "name": "TylluanNexus Sovereign Hub",
+  "short_name": "TylluanNexus",
+  "description": "Sovereign AI Control Center — Private, Agentic, Autonomous",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0a0c",
+  "theme_color": "#00f2fe",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "orientation": "any"
+}

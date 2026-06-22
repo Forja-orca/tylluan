@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tylluan | Sovereign Control Center</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="manifest" href="/public/manifest.json">
+    <meta name="theme-color" content="#00f2fe"> <!-- Standard theme color -->
+    <link rel="apple-touch-icon" href="/public/favicon.svg">
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="glass-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">[F]</span>
+                <h1>Tylluan</h1>
+            </div>
+            <nav>
+                <a href="#dashboard" class="nav-item active">[01] Dashboard</a>
+                <a href="#guilds-manager" class="nav-item">[02] Guilds</a>
+                <a href="#config" class="nav-item">[03] Config</a>
+                <a href="#memory" class="nav-item">[04] Memory</a>
+                <a href="#security" class="nav-item">[05] Audit</a>
+            </nav>
+            <div class="status-badge" id="kernel-status">
+                <span class="pulse green"></span>
+                <span>KERNEL ONLINE</span>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="content">
+            <header>
+                <h2>> SYSTEM_CONTROL</h2>
+                <div class="header-actions">
+                    <button id="btn-diagnose" class="btn-micro">SCAN</button>
+                    <button id="btn-optimize" class="btn-micro">REPAIR</button>
+                    <button id="auth-check" class="btn-micro">AUTH</button>
+                    <span id="version-label" style="color: var(--text-dim); font-size: 0.75rem;">v3.0.0</span>
+                </div>
+            </header>
+
+            <section id="dashboard" class="view">
+                <!-- Sovereign Intelligence -->
+                <div class="card intelligence-card">
+                    <div class="card-header">
+                        <h3>> LONG_TERM_MEMORY</h3>
+                        <span class="badge badge-glow">ACTIVE</span>
+                    </div>
+                    <div id="intelligence-insights" class="intelligence-grid">
+                        <div class="insight-placeholder">Loading memory nodes...</div>
+                    </div>
+                </div>
+
+                <!-- Sovereign Vision Console -->
+                <div class="card vision-card">
+                    <div class="card-header">
+                        <h3>> VISION_ANALYZER</h3>
+                        <div class="badge glow">MOONDREAM</div>
+                    </div>
+                    <div class="vision-dropzone" id="vision-dropzone">
+                        <div class="drop-icon">[+]</div>
+                        <p>Drop image or click to analyze</p>
+                        <input type="file" id="vision-input" accept="image/*" class="hidden">
+                    </div>
+                    <div id="vision-preview" class="vision-preview hidden">
+                        <img id="img-preview" src="" alt="Preview">
+                        <div class="vision-overlay">
+                            <input type="text" id="vision-prompt" placeholder="What do you want to know?" value="Describe this image in detail.">
+                            <button class="btn-glow" id="btn-analyze-vision">ANALYZE</button>
+                        </div>
+                    </div>
+                    <div id="vision-result" class="vision-result hidden"></div>
+                </div>
+
+                <!-- Metrics Grid -->
+                <div class="metrics-grid">
+                    <div class="card metric-card">
+                        <h3>> CPU_LOAD</h3>
+                        <canvas id="cpuChart"></canvas>
+                        <div class="metric-value"><span id="cpu-val">0</span>%</div>
+                    </div>
+                    <div class="card metric-card">
+                        <h3>> MEMORY</h3>
+                        <canvas id="ramChart"></canvas>
+                        <div class="metric-value"><span id="ram-val">0</span>MB</div>
+                    </div>
+                    <!-- Sovereign Portability Panel -->
+                    <div class="card portability-card info-card">
+                        <div class="card-header">
+                            <h3>> BRAIN_EXPORT</h3>
+                            <button id="btn-export-brain" class="btn-micro btn-glow">EXPORT</button>
+                        </div>
+                        <div class="stats-list">
+                            <div class="stat-item"><span>Brain Size:</span> <b id="stat-brain-size">-</b></div>
+                            <div class="stat-item"><span>Last Export:</span> <small id="stat-last-export">-</small></div>
+                            <div class="stat-item"><span>Status:</span> <b id="stat-portability">READY</b></div>
+                        </div>
+                        <div class="progress-container">
+                            <div id="export-progress" class="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Tool Search -->
+                <div class="search-section glass-card">
+                    <input type="text" id="tool-search" placeholder="> Search tools (bash, browser, postgres, etc.)..." spellcheck="false">
+                </div>
+
+                <!-- Guilds / Tools List -->
+                <div class="card guild-card">
+                    <h3>> ACTIVE_GUILDS</h3>
+                    <div id="guild-list-container">
+                        <!-- Items injected via JS -->
+                        <div class="stat-loading">Loading guilds...</div>
+                    </div>
+                </div>
+
+                <!-- Terminal -->
+                <div class="card terminal-card">
+                    <div class="card-header">
+                        <h3>> TERMINAL</h3>
+                        <div class="badge badge-glow">KERNEL</div>
+                    </div>
+                    <div id="terminal-output" class="terminal-output">
+                        <div class="log-line system">Ready for commands...</div>
+                    </div>
+                    <div class="terminal-input-wrapper">
+                        <span class="prompt">$</span>
+                        <input type="text" id="bash-input" placeholder="Enter command..." spellcheck="false">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Guilds Manager -->
+            <section id="guilds-manager" class="view hidden">
+                <div class="card editor-card">
+                    <div class="card-header">
+                        <h3>> GUILD_MANAGER</h3>
+                        <button class="btn-micro" onclick="app.loadGuildsManager()">REFRESH</button>
+                    </div>
+                    <p class="hint">Manage active guilds. Only 4 are active by default (toaster-friendly).</p>
+                    <div id="guilds-manager-list" class="guilds-list">
+                        <div class="stat-loading">Loading guilds...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Memory Graph -->
+            <section id="memory" class="view hidden">
+                <div class="card graph-card">
+                    <div class="card-header">
+                        <h3>> SILVA_GRAPH</h3>
+                        <div class="actions">
+                            <button class="btn-micro" onclick="app.loadSilvaGraph()">RENDER</button>
+                            <button class="btn-micro" onclick="app.exportKnowledge()">EXPORT</button>
+                        </div>
+                    </div>
+                    <div id="silva-graph-container" class="graph-viewport">
+                        <svg id="silva-svg" width="100%" height="100%"></svg>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Security Audit -->
+            <section id="security" class="view hidden">
+                <div class="card audit-card">
+                    <div class="card-header">
+                        <h3>> SECURITY_AUDIT</h3>
+                        <div class="badge glow">MONITORING</div>
+                    </div>
+                    <div id="audit-log" class="log-content active">
+                        <div class="log-line system">Scanning for security events...</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="config" class="view hidden">
+                <!-- WSL Proxy Configuration -->
+                <div class="card editor-card">
+                    <div class="card-header">
+                        <h3>> WSL_PROXY</h3>
+                        <button class="btn-glow" id="btn-save-wsl">SAVE</button>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Enable WSL Proxy</label>
+                            <select id="wsl-enabled">
+                                <option value="false">Disabled</option>
+                                <option value="true">Enabled</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Auto-detect WSL</label>
+                            <select id="wsl-auto-detect">
+                                <option value="true">Auto-detect</option>
+                                <option value="false">Manual</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Fallback Port</label>
+                            <input type="number" id="wsl-fallback-port" value="3031" min="1024" max="65535">
+                        </div>
+                    </div>
+                    <div id="wsl-status" class="status-indicator"></div>
+                </div>
+
+                <!-- Inference Providers Configuration -->
+                <div class="card editor-card">
+                    <div class="card-header">
+                        <h3>> INFERENCE_PROVIDERS</h3>
+                        <button class="btn-glow" id="btn-add-provider">ADD</button>
+                    </div>
+                    <div id="providers-list" class="providers-list">
+                        <div class="stat-loading">Loading providers...</div>
+                    </div>
+                    <p class="hint">Changes require kernel restart.</p>
+                </div>
+
+                <!-- Raw TOML Editor -->
+                <div class="card editor-card">
+                    <div class="card-header">
+                        <h3>> CONFIG_EDITOR</h3>
+                        <div class="actions">
+                            <button class="btn-secondary" id="btn-load-config">LOAD</button>
+                            <button class="btn-glow" id="btn-save-config">SAVE</button>
+                        </div>
+                    </div>
+                    <textarea id="config-editor" spellcheck="false" title="tylluan.toml editor" placeholder="Loading config..."></textarea>
+                    <p class="hint">Save will restart some services.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Sovereign Intelligence Console -->
+    <div class="log-container glass-card">
+        <div class="log-header">
+            <div class="log-tabs">
+                <button class="tab-btn active" data-tab="log-content">LOGS</button>
+                <button class="tab-btn" data-tab="thought-content">REASONING</button>
+            </div>
+            <span class="badge online" id="stream-status">SSE ACTIVE</span>
+        </div>
+        <div id="log-content" class="log-content active">
+            <div class="log-line system">Waiting for kernel stream...</div>
+        </div>
+        <div id="thought-content" class="thought-content">
+            <div class="thought-card">
+                <div class="thought-text">Loading reasoning engine...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <span class="logo-icon">[*]</span>
+            <h3>> ACCESS_CONTROL</h3>
+            <p>Enter your Master Token to access the kernel.</p>
+            <input type="password" id="login-token" placeholder="Master Token" spellcheck="false">
+            <div class="modal-actions">
+                <button id="btn-login" class="btn-glow">AUTHENTICATE</button>
+            </div>
+            <p id="login-error" class="error-text hidden">Invalid token or connection error.</p>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

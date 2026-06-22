@@ -1,0 +1,10 @@
+﻿{
+  "mcp_servers": {
+    "tylluan": {
+      "url": "http://127.0.0.1:3030/sse",
+      "timeout": 300,
+      "connect_timeout": 60,
+      "enabled": true
+    }
+  }
+}
