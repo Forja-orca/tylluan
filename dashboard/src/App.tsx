@@ -209,7 +209,7 @@ function App() {
               </div>
             </div>
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-white uppercase">TylluanNexus <span className="text-emerald-400">o3</span></h1>
+              <h1 className="text-sm font-bold tracking-tight text-white uppercase">Tylluan</h1>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
                 <span>Kernel Dashboard v3.0</span>
                 <span className="opacity-50">·</span>
