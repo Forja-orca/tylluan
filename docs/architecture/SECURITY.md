@@ -35,6 +35,7 @@ This combination is an unauthenticated LAN RCE. The kernel logs a warning and re
 | Input validation | ✅ | Intent strings sanitized before guild routing |
 | Docker Sandbox | ✅ Active | Windows UNC path prefix (`\\?`) is automatically stripped for cross-platform support. |
 | ACL Check | ✅ Active | Full role-based validation applied to both `tylluan_do` and direct guild tool routes. |
+| Encryption at Rest | ❌ Inactive | `open_db` is implemented in `config.rs` but not utilized in the codebase; databases are still opened via direct `Connection::open` in plaintext. |
 
 ## Reporting Vulnerabilities
 
