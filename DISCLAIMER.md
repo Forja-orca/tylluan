@@ -79,7 +79,7 @@ Tylluan is designed with security defaults, but no software is completely secure
 - It does NOT encrypt data at rest
 - It does NOT sandbox code execution by default (opt-in Docker sandbox is available)
 - It does NOT verify the identity of calling agents (only the bearer token)
-- It does NOT have rate limiting
+- It has basic rate limiting (60 calls/min per session) but no advanced throttling
 - It does NOT have per-guild access control enabled by default (opt-in role-based ACL is available)
 - It does NOT enable the natural language intent safety filter by default (opt-in intent_filter is available)
 
@@ -109,7 +109,7 @@ Tylluan has documented security gaps. These are not bugs — they are known limi
 
 6. **No agent identity verification:** MCP `author_id` is self-reported and can be spoofed by anyone with the bearer token.
 
-7. **No rate limiting:** A compromised or buggy MCP client could flood the system with requests.
+7. **Basic rate limiting only:** A default limit of 60 calls/minute per session exists, but no advanced throttling or per-guild rate controls.
 
 ---
 
