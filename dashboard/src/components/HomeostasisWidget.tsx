@@ -78,7 +78,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Homeostasis del Sistema</span>
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-100 tracking-tight">TylluanNexus o3 Cortex</h3>
+            <h3 className="text-lg font-black text-slate-100 tracking-tight">Tylluan Cortex</h3>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm mt-1">
               Indicador unificado de la integridad del hub local. Monitorea guilds, bases de datos y fallos en tiempo real.
             </p>

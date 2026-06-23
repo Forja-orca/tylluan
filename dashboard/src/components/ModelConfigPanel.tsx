@@ -256,7 +256,7 @@ export function ModelConfigPanel({ bridge }: Props) {
             </div>
             
             <p className="text-sm text-slate-300 leading-relaxed">
-              La aceleración por hardware se ha configurado a <span className="font-mono text-cyan-400 font-semibold">{selectedDevice}</span>. Para cargar los Execution Providers adecuados y aplicar los cambios, el Kernel de TylluanNexus debe reiniciarse.
+              La aceleración por hardware se ha configurado a <span className="font-mono text-cyan-400 font-semibold">{selectedDevice}</span>. Para cargar los Execution Providers adecuados y aplicar los cambios, el Kernel de Tylluan debe reiniciarse.
             </p>
 
             <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-xs text-slate-400 font-mono">
