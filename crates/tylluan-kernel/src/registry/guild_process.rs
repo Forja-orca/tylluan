@@ -493,7 +493,7 @@ impl GuildRegistry {
 
     /// Initialize metrics database for persistence.
     pub fn init_metrics_db(&mut self, db_path: &str) -> Result<()> {
-        let conn = Connection::open(db_path)?;
+        let conn = crate::config::open_db(std::path::Path::new(db_path))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS guild_metrics (
                 name TEXT PRIMARY KEY,

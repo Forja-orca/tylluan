@@ -11,8 +11,8 @@ pub struct JournalDb {
 }
 
 impl JournalDb {
-    pub fn open(db_path: &str) -> rusqlite::Result<Self> {
-        let conn = Connection::open(db_path)?;
+    pub fn open(db_path: &str) -> anyhow::Result<Self> {
+        let conn = crate::config::open_db(std::path::Path::new(db_path))?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA synchronous=NORMAL;

@@ -38,8 +38,10 @@ impl CurriculumLearner {
             std::fs::create_dir_all(parent).ok();
         }
 
-        let conn = Connection::open(db_path)?;
-        conn.execute_batch("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;")?;
+        let conn = crate::config::open_db(std::path::Path::new(db_path))
+            .map_err(|e| rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(1), Some(e.to_string())
+            ))?;
 
         let learner = Self { conn, min_samples };
         learner.init_schema()?;

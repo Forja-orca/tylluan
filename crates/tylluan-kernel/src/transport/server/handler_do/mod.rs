@@ -801,7 +801,7 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("audit mkdir: {}", e))?;
     }
-    let conn = Connection::open(db_path).map_err(|e| format!("audit open: {}", e))?;
+    let conn = crate::config::open_db(db_path).map_err(|e| format!("audit open: {}", e))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
