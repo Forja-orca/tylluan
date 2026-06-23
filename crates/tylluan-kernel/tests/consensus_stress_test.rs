@@ -10,7 +10,7 @@ use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::consensus::ConsensusEngine;
 use tylluan_kernel::router::embeddings::EmbeddingEngine;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::sync::Arc;
 use std::time::{Instant, Duration};
 use tracing::{info, warn};
@@ -19,8 +19,11 @@ use tracing::{info, warn};
 async fn test_consensus_hardening_stress() -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
     
-    // 1. Environment Setup (Absolute paths to project root)
-    let root_dir = std::path::PathBuf::from(r"e:\TylluanMCPo3");
+    // 1. Environment Setup (Derive project root from crate manifest dir)
+    let root_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()
+        .parent().unwrap()
+        .to_path_buf();
     let data_dir = root_dir.join("data").join("test_stress");
     std::fs::create_dir_all(&data_dir).ok();
     
@@ -44,13 +47,31 @@ async fn test_consensus_hardening_stress() -> Result<()> {
     info!("🚀 Consensus Hardening: Hub Ready with BGE-M3 (Stable Mode)");
 
 
-    // 2. Load Generated Data
+    // 2. Load or Generate Stress Test Data
     let run_payload_path = root_dir.join("tests").join("scratch").join("stress_payload.json");
 
-    let payload_str = std::fs::read_to_string(&run_payload_path)
-        .context(format!("Payload not found at {:?}", run_payload_path))?;
-
-    let test_data: serde_json::Value = serde_json::from_str(&payload_str)?;
+    let test_data: serde_json::Value = match std::fs::read_to_string(&run_payload_path) {
+        Ok(s) => serde_json::from_str(&s)?,
+        Err(_) => {
+            info!("📄 stress_payload.json not found — generating 500 synthetic items");
+            let agents = ["overseer", "doctor", "architect", "nodo", "qwen",
+                          "minimax", "claude", "gpt", "gemini", "deepseek",
+                          "tylluan", "coloquio", "bash", "git", "monitor"];
+            let topics = [
+                "coordination", "architecture", "security", "testing",
+                "deployment", "monitoring", "memory", "consensus",
+                "routing", "embeddings", "guilds", "pipeline",
+                "dashboard", "auth", "synthesis",
+            ];
+            let items: Vec<serde_json::Value> = (0..500).map(|i| {
+                let agent = agents[i % agents.len()];
+                let topic = topics[i % topics.len()];
+                let content = format!("lesson: {} {} — iteration {}", agent, topic, i);
+                serde_json::json!({"agent": agent, "payload": {"content": content}})
+            }).collect();
+            serde_json::Value::Array(items)
+        }
+    };
     let items = test_data.as_array().unwrap();
 
     // 3. Phase 1: Mass Injection (Simulating Hub polling)

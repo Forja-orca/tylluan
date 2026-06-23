@@ -19,13 +19,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 22 for dashboard build
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 
-# Layer dependencies separately for cache efficiency
+# Layer Rust dependencies separately for cache efficiency
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
+# Copy dashboard and build it BEFORE cargo build (build.rs checks dist/ → no-op)
+COPY dashboard/ ./dashboard/
+RUN cd dashboard && npm install && npm run build
+
 # Build only tylluan-kernel (no GUI, no evals)
+# build.rs finds dist/ already present and skips rebuild
 RUN cargo build --release --locked -p tylluan-kernel
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
@@ -59,6 +69,7 @@ RUN python3 -m venv /opt/tylluan-venv \
     && ldconfig /usr/local/lib/
 
 COPY --from=builder /build/target/release/tylluan-nexus /usr/local/bin/tylluan-nexus
+COPY --from=builder /build/dashboard/dist /home/tylluan/dashboard/dist
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 
 # Copy Python guilds
