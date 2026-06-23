@@ -42,19 +42,6 @@ mod security_tests {
         )
     }
 
-    async fn test_server() -> TylluanServer {
-        use crate::router::catalog::builtin_catalog;
-        let matcher = GuildMatcher::new(builtin_catalog());
-        TylluanServer::new(
-            test_registry(),
-            Arc::new(matcher),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
-            Arc::new(SilvaDB::in_memory().await.unwrap()),
-            Arc::new(Mailbox::in_memory().await.unwrap()),
-            Arc::new(crate::doctor::Doctor::new()),
-        )
-    }
-
     #[tokio::test]
     async fn test_security_blocks_dangerous_from_http_channel() {
         let server = test_server().await;

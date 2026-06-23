@@ -727,7 +727,9 @@ function KnowledgeTab({ channelId }: { channelId: string }) {
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   useEffect(() => {
-    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
+    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030`
+      : window.location.port === '5174' ? `${window.location.hostname}:3033`
+      : window.location.host;
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
     setWsStatus('connecting');
     const ws = new WebSocket(wsUrl);

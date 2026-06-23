@@ -15,22 +15,23 @@ export default defineConfig({
     }),
   ],
   server: {
+    port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3030',
+        target: 'http://127.0.0.1:3033',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:3030',
+        target: 'http://127.0.0.1:3033',
         changeOrigin: true,
       },
       '/sse': {
-        target: 'http://127.0.0.1:3030',
+        target: 'http://127.0.0.1:3033',
         changeOrigin: true,
         ws: true,
       },
       '/messages': {
-        target: 'http://127.0.0.1:3030',
+        target: 'http://127.0.0.1:3033',
         changeOrigin: true,
       },
     },
