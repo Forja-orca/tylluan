@@ -94,6 +94,10 @@ cp tylluan.example.toml tylluan.toml
 
 ### 4. Start
 
+> **Note:** The first boot downloads the BGE-M3 embedding model (~560 MB). This takes a few minutes. Subsequent starts are instant.
+
+
+
 ```bash
 # Windows
 .\tylluan-mcp.bat
@@ -106,7 +110,7 @@ cp tylluan.example.toml tylluan.toml
 
 ```bash
 curl http://127.0.0.1:3030/health
-# {"status":"ok","version":"3.0.0"}
+# {"status":"ok","version":"0.1.0"}
 ```
 
 ### 6. Connect your MCP client
@@ -152,6 +156,8 @@ See `integrations/` for editor-specific config files.
 </details>
 
 > **⚠️** Always use `127.0.0.1`, never `localhost` (IPv6 resolution trap on Windows).
+>
+> **Auth:** If `dev_mode = false` (default), the kernel generates a bearer token in `.tylluan-token` on first boot. Append it to the SSE URL: `http://127.0.0.1:3030/sse?token=YOUR_TOKEN`. In dev mode, no token is needed.
 
 ---
 
@@ -225,6 +231,21 @@ Key defaults (do not change without understanding the implications):
 - `dev_mode = false` — auth enabled
 - **Never** set `host = "0.0.0.0"` with `dev_mode = true`
 
+## Examples
+
+```bash
+# Memory basics: remember, recall, think
+python examples/01_memory_basics.py --port 3033
+
+# Multi-agent communication via coloquio
+python examples/02_multi_agent_coloquio.py --port 3033
+
+# Knowledge graph exploration
+python examples/03_knowledge_graph.py --port 3033
+```
+
+See [examples/](examples/) for full source code.
+
 ## Documentation
 
 | Document | Purpose |
@@ -233,6 +254,7 @@ Key defaults (do not change without understanding the implications):
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards (humans + AI) |
 | [AI_POLICY.md](AI_POLICY.md) | Rules for AI-generated contributions |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Detailed setup guide |
+| [ROADMAP.md](ROADMAP.md) | What's planned for v0.2, v0.3, v1.0 |
 
 ## Star History
 
