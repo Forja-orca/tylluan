@@ -223,6 +223,10 @@ Key defaults (do not change without understanding the implications):
 | [AI_POLICY.md](AI_POLICY.md) | Rules for AI-generated contributions |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Detailed setup guide |
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Forja-orca/tylluan&type=Date)](https://star-history.com/#Forja-orca/tylluan&Date)
+
 ## License
 
 [MIT](LICENSE) — use it, fork it, build on it.
