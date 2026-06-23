@@ -1,7 +1,6 @@
 ﻿use rmcp::{Error as McpError, model::*};
 use tracing::{info, warn};
 use chrono;
-use rusqlite::Connection;
 
 use crate::registry::proxy::error_result;
 use super::utils::{extract_path_from_intent, extract_url_from_intent, extract_command_from_intent};
@@ -1303,7 +1302,7 @@ mod tests {
 
 /// Opt-in safety filter for dangerous intents.
 /// Returns Some(reason) if the intent matches a dangerous pattern.
-fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
+pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
     let lower = intent.to_lowercase();
 
     static PATTERNS: &[(&str, &str)] = &[
