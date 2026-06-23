@@ -236,7 +236,7 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
           </div>
           <h3 className="text-sm font-bold text-slate-300 uppercase">No External MCP Servers</h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
-            Connect public HTTP endpoints or local command-line tools to extend TylluanNexus capabilities.
+            Connect public HTTP endpoints or local command-line tools to extend Tylluan capabilities.
           </p>
           <button
             onClick={() => setIsModalOpen(true)}

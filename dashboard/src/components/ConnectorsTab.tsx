@@ -118,7 +118,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
   const cursorConfig = `{
   "mcpServers": {
-    "tylluannexus": {
+    "tylluan": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/client-cli"],
       "env": {
@@ -131,7 +131,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
   const clineConfig = `{
   "mcpServers": {
-    "tylluannexus": {
+    "tylluan": {
       "command": "node",
       "args": ["C:/Users/YOUR_USER/.gemini/tylluan/mcp/tylluan_mcp_client.js"],
       "disabled": false,
@@ -142,7 +142,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
 
   const claudeConfig = `{
   "mcpServers": {
-    "tylluannexus": {
+    "tylluan": {
       "command": "npx",
       "args": [
         "-y",
@@ -188,7 +188,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             </div>
           </div>
           <p className="text-sm text-slate-400 max-w-xl">
-            TylluanNexus acts as a Sovereign MCP Hub. External client LLMs connect via standard MCP or REST APIs.
+            Tylluan acts as a Sovereign MCP Hub. External client LLMs connect via standard MCP or REST APIs.
             The client LLM discovers capabilities dynamically via Prompts & Resources, keeping contexts light.
           </p>
         </div>
@@ -594,7 +594,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-white tracking-tight">VS Code (Cline / Roo Code) Configuration</h3>
-                    <p className="text-xs text-slate-400">Add TylluanNexus as a custom MCP server inside Cline or Roo Code extension settings.</p>
+                    <p className="text-xs text-slate-400">Add Tylluan as a custom MCP server inside Cline or Roo Code extension settings.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -628,7 +628,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-white tracking-tight">Claude Desktop Integration</h3>
-                    <p className="text-xs text-slate-400">Integrate TylluanNexus into the official Anthropic Claude Desktop client.</p>
+                    <p className="text-xs text-slate-400">Integrate Tylluan into the official Anthropic Claude Desktop client.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -653,7 +653,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-white tracking-tight">Custom REST Client / Script Integration</h3>
-                    <p className="text-xs text-slate-400">Call TylluanNexus directly via HTTP REST API from custom shell scripts, Python programs, or fetch calls.</p>
+                    <p className="text-xs text-slate-400">Call Tylluan directly via HTTP REST API from custom shell scripts, Python programs, or fetch calls.</p>
                   </div>
 
                   <div className="space-y-2">
