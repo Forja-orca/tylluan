@@ -378,7 +378,23 @@ pub async fn handle_tylluan_do(
     // Coloquio: extract structured params from intent BEFORE validation so channel_id
     // is populated when required_args check runs.
     if guild_name == "coloquio" {
-        let (channel_id, content_or_name, tool_hint) = parse_coloquio_intent(&intent);
+        let (mut channel_id, content_or_name, tool_hint) = parse_coloquio_intent(&intent);
+
+        // Fallback: if parser couldn't extract channel_id but intent has recognizable structure,
+        // try splitting on first colon — text before is channel, text after is message.
+        if channel_id.is_none() && intent.contains(':') {
+            let parts: Vec<&str> = intent.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                let before_words: Vec<&str> = parts[0].split_whitespace().collect();
+                if let Some(last_word) = before_words.last() {
+                    let candidate = last_word.trim().to_lowercase();
+                    if candidate.len() >= 2 && candidate != "coloquio" && candidate != "canal" {
+                        channel_id = Some(candidate);
+                    }
+                }
+            }
+        }
+
         tool_name = match tool_hint {
             "post" => "post_to_channel",
             "read" => "read_channel",
