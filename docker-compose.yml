@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # TylluanNexus o3 — Docker Compose (Unified Multi-service Stack)
 # =============================================================================
 # Usage:
@@ -18,7 +18,7 @@ services:
     container_name: tylluan-searxng
     restart: unless-stopped
     ports:
-      - '127.0.0.1:32700:8080'
+      - '127.0.0.1:32800:8080'
     volumes:
       - ./docker-research/searxng:/etc/searxng:rw
     environment:
@@ -38,7 +38,7 @@ services:
     container_name: tylluan-crawl4ai
     restart: unless-stopped
     ports:
-      - '127.0.0.1:32701:11235'
+      - '127.0.0.1:32801:11235'
     volumes:
       - ./docker-research/crawl4ai-data:/data:rw
     environment:
@@ -65,7 +65,7 @@ services:
     image: tylluannexus:3.0
     container_name: tylluan-kernel
     ports:
-      - "127.0.0.1:3030:3030"
+      - "127.0.0.1:3033:3030"
     volumes:
       - ./models:/home/tylluan/models          # AI model weights (user-provided)
       - ./data:/home/tylluan/data              # SQLite DB + embeddings

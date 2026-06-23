@@ -1,4 +1,4 @@
-use tracing::info;
+use tracing::{info, warn};
 
 #[cfg(target_os = "windows")]
 pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Result<()> {
