@@ -35,6 +35,17 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 | **Federation** | Instances sync knowledge with ChaCha20-Poly1305 encrypted transport |
 | **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
 
+### Dashboard
+
+<p align="center">
+  <img src="assets/screenshots/overview.png" alt="Overview" width="45%">
+  <img src="assets/screenshots/guilds.png" alt="Guilds" width="45%">
+</p>
+<p align="center">
+  <img src="assets/screenshots/knowledge_graph.png" alt="Knowledge Graph" width="45%">
+  <img src="assets/screenshots/coloquio.png" alt="Coloquio" width="45%">
+</p>
+
 ### 5 Sovereign Tools
 
 Every MCP client sees exactly these tools — nothing more, nothing less:
