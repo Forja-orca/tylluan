@@ -1,16 +1,32 @@
 @echo off
-REM Tylluan ? Start kernel + proxy
+REM Tylluan - Start kernel + proxy
 REM Usage: .\tylluan-mcp.bat
 
 cd /d "%~dp0"
 
-REM Activate Python venv if available
-if exist ".venv\Scripts\activate.bat" call .venv\Scripts\activate.bat
+rem ?? Bootstrap: crear venv y sincronizar deps en primer arranque ??????????????
+if not exist "%~dp0.venv\Scripts\python.exe" (
+    echo [Tylluan] Primera ejecucion: creando entorno virtual Python...
+    python -m venv "%~dp0.venv"
+    if errorlevel 1 (
+        echo [Tylluan] ERROR: python no encontrado en PATH. Instala Python 3.12+
+        pause
+        exit /b 1
+    )
+)
+echo [Tylluan] Sincronizando dependencias Python...
+"%~dp0.venv\Scripts\pip" install -e "%~dp0" --quiet --no-warn-script-location
+if errorlevel 1 (
+    echo [Tylluan] ERROR: fallo la instalacion de dependencias
+    pause
+    exit /b 1
+)
+rem ?????????????????????????????????????????????????????????????????????????????
 
 REM Copy config if needed
 if not exist "tylluan.toml" (
     if exist "tylluan.example.toml" (
-        echo No tylluan.toml found ? copying from tylluan.example.toml
+        echo No tylluan.toml found - copying from tylluan.example.toml
         copy tylluan.example.toml tylluan.toml
     )
 )
