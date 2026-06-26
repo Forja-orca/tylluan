@@ -70,12 +70,14 @@ services:
       - ./models:/home/tylluan/models          # AI model weights (user-provided)
       - ./data:/home/tylluan/data              # SQLite DB + embeddings
       - ./tylluan.docker.toml:/home/tylluan/tylluan.toml:ro
+      - tylluan_fastembed_cache:/home/tylluan/.fastembed_cache
     environment:
       RUST_LOG: info
       RUST_BACKTRACE: 1
       TYLLUAN_DEVICE: ${TYLLUAN_DEVICE:-cpu}
       SEARXNG_URL: http://searxng:8080
       CRAWL4AI_URL: http://crawl4ai:11235
+      TYLLUAN_TOKEN: ${TYLLUAN_TOKEN}
     depends_on:
       searxng:
         condition: service_healthy
@@ -89,8 +91,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 180s
+      start_period: 300s
 
 networks:
   tylluan-net:
     driver: bridge
+
+volumes:
+  tylluan_fastembed_cache:
+    driver: local

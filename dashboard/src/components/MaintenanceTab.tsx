@@ -25,12 +25,13 @@ interface MaintenanceStatus {
 }
 
 export function MaintenanceTab({ bridge, notify }: Props) {
-  const { sysStatus } = useNexus();
+  const { sysStatus, setToken } = useNexus();
   const [loading, setLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<MaintenanceStatus | null>(null);
   const [lastOp, setLastOp] = useState<{ action: string; time: string } | null>(null);
   const [probe, setProbe] = useState<any>(null);
   const [metricsHistory, setMetricsHistory] = useState<MetricsHistory | null>(null);
+  const [tokenInput, setTokenInput] = useState(() => localStorage.getItem('tylluan_token') || '');
 
   const loadStatus = useCallback(async () => {
     if (!bridge) return;
@@ -348,21 +349,31 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             title="API management token"
             placeholder="Bearer token"
             id="nexus-token-input"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const input = e.currentTarget as HTMLInputElement;
-                document.cookie = `nexus_token=${input.value}; path=/`;
-                window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: input.value }));
+                setToken(tokenInput);
+                notify('Token actualizado, reconectando...', 'info');
+                setTimeout(() => window.location.reload(), 800);
               }
             }}
             className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-slate-300"
           />
-          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token actualizado', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => {
+              setToken(tokenInput);
+              notify('Token actualizado, reconectando...', 'info');
+              setTimeout(() => window.location.reload(), 800);
+            }}
+            className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors"
+          >
             Save Token
           </button>
         </div>
         <div className="mt-3 text-[10px] text-slate-600">
-          Presiona Enter para guardar. Token usado para APIs protegidas del kernel.
+          Presiona Enter o haz clic en Guardar para actualizar. Esto reconectará el dashboard de forma segura al kernel de Tylluan.
         </div>
       </div>
     </div>

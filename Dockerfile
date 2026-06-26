@@ -63,7 +63,7 @@ RUN python3 -m venv /opt/tylluan-venv \
         "pyyaml>=6.0.0" \
         "psutil>=6.0.0" \
         "onnxruntime>=1.20.0" \
-    && ONNX_LIB=$(find /opt/tylluan-venv -name 'libonnxruntime.so.*' ! -type l | head -1) \
+    && ONNX_LIB=$(/opt/tylluan-venv/bin/python -c "import onnxruntime, pathlib, os; so = [f for f in pathlib.Path(onnxruntime.__file__).parent.rglob('libonnxruntime*.so*') if not os.path.islink(f)][0]; print(so)") \
     && cp "$ONNX_LIB" /usr/local/lib/ \
     && ln -sf "/usr/local/lib/$(basename $ONNX_LIB)" /usr/local/lib/libonnxruntime.so \
     && ldconfig /usr/local/lib/
