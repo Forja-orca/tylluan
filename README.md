@@ -161,6 +161,19 @@ See `integrations/` for editor-specific config files.
 
 ---
 
+## Status: v0.2.0
+
+| Milestone | Descripción | Estado |
+|-----------|-------------|--------|
+| **M2** | BGE-M3 1024-dim nativo — hybrid search real | ✅ Completo |
+| **M1** | Memory Decay & Salience — half-life exponencial en SilvaDB | ✅ Completo |
+| **Docker** | Entry point de producción en :3033 | ✅ Operativo |
+| **M4** | rmcp Migration — eliminar custom server code | ⏳ Siguiente |
+| **M6** | Dual-Level Retrieval (LightRAG pattern) | ⏳ |
+| **M7** | Single-Binary + release público | ⏳ Último |
+
+---
+
 ## Architecture
 
 ```
