@@ -1417,7 +1417,7 @@ async fn run_night_consolidation_loop(
             let mut decayed = 0usize;
             for node in &nodes {
                 if node.weight < 0.5 && node.node_type != "identity" && node.node_type != "agent_summary" {
-                    let _ = silva.decay_node(&node.id, 0.92).await;
+                    let _ = silva.decay_node(&node.id, 43200).await;
                     decayed += 1;
                 }
             }

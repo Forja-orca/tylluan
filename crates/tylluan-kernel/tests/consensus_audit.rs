@@ -126,9 +126,9 @@ async fn test_consensus_hallucination_rejected() {
         conn.execute("UPDATE nodes SET topic_key = 'math', conflicted = 1, weight = 1.0 WHERE id IN ('truth_node', 'hallucination')", []).unwrap();
     }
 
-    // Apply decay to both (simulate time passing)
-    silva.decay_node("truth_node", 0.8).await.unwrap();
-    silva.decay_node("hallucination", 0.8).await.unwrap();
+    // Apply decay to both (simulate time passing — 30 days)
+    silva.decay_node("truth_node", 2592000).await.unwrap();
+    silva.decay_node("hallucination", 2592000).await.unwrap();
 
     // Run consensus - hallucination should lose badly
     let _ = engine.consolidate(Some("math")).await.unwrap();
