@@ -7,16 +7,26 @@
 ┌─ IDENTITY ──────────────────────────────────────────────────┐
 │ Binary:    tylluan-nexus (kernel) + tylluan-proxy (gateway) │
 │ Port:      :3030 (proxy, fixed) → :303X (kernel, dynamic)  │
-│ Config:    tylluan.toml (copy from tylluan.example.toml)    │
-│ Auth:      .tylluan-token (bearer, auto-generated, gitignored)│
+│            Docker: :3033 externo → :3030 interno            │
+│ Config:    tylluan.toml (gitignored) │ tylluan.example.toml │
+│            tylluan.docker.toml (Docker, dev_mode=false)     │
+│ Auth:      .tylluan-token (bearer, gitignored)              │
+│            Docker: TYLLUAN_TOKEN desde .env (gitignored)    │
 │ Data:      data/*.db (sqlite) — gitignored, created on boot │
-│ License:   MIT                                               │
+│ License:   MIT (Forja usa AGPL — nunca mezclar)             │
 │ Language:  Rust kernel + Python guilds + React dashboard     │
-│ Tests:     cargo test -p tylluan-kernel --lib                │
-│ Build:     cargo build -p tylluan-kernel                     │
-│ Start:     ./tylluan-mcp.bat (Win) or ./tylluan-mcp.sh (Unix)│
-│ Health:    curl http://127.0.0.1:3030/health                 │
+│ Tests:     384 tests │ cargo test -p tylluan-kernel --lib   │
+│ Build:     cargo build -p tylluan-kernel                    │
+│ Start:     .\tylluan-mcp.bat (nativo)                       │
+│            docker compose up kernel -d (Docker)             │
+│ Health:    curl http://127.0.0.1:3030/health (nativo)       │
+│            curl http://127.0.0.1:3033/health (Docker)       │
+│ Dashboard: npm run dev → http://localhost:5174 (⚠️ NO 5173) │
+│            Docker: http://127.0.0.1:3033/                   │
 │ MCP:       SSE at /sse │ HTTP Streamable at /messages        │
+│                                                              │
+│ ⚠️  CRÍTICO: vector_dimensions = 1024 SIEMPRE. NUNCA 768.  │
+│    BGE-M3 bug heredado de Forja — Tylluan empieza limpio.   │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ WHAT IT DOES (one diagram) ────────────────────────────────┐
@@ -201,12 +211,49 @@
 │  └── pyproject.toml       Python project config              │
 └─────────────────────────────────────────────────────────────┘
 
+┌─ DOCKER ────────────────────────────────────────────────────┐
+│  Entry point de producción (sin conflicto con Forja :3030)  │
+│  docker compose up kernel -d        arrancar                 │
+│  docker compose logs kernel --tail=30  ver estado           │
+│  docker compose build kernel --no-cache  rebuild            │
+│  Volumes:                                                    │
+│    tylluan_fastembed_cache → BGE-M3 persiste (1.1GB)        │
+│  ⚠️  NUNCA TYLLUAN_TOKEN literal en docker-compose.yml      │
+│  ⚠️  NUNCA host=0.0.0.0 + dev_mode=true                     │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ DASHBOARD TOKEN (problema conocido) ───────────────────────┐
+│  localStorage es por origen. Token en :5174 ≠ en :3033.     │
+│  Para Docker (:3033): F12 → Console:                        │
+│    localStorage.setItem('tylluan_token', '<val>')            │
+│    location.reload()                                         │
+│  Para dev (:5174): proxy Vite maneja routing automático.    │
+│  ⚠️  NO crear .env.local con VITE_NEXUS_URL absoluta        │
+│      (rompe proxy → CORS cross-origin failures)              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ MILESTONES (2026-06-26) ───────────────────────────────────┐
+│  M2 BGE-M3 1024-dim        ✅ commit 371b97a (Haiku)        │
+│  Docker production :3033   ✅ health OK                      │
+│  Dashboard token auth      ⏳ verificar con localStorage fix │
+│  M1 Memory Decay/Salience  ⏳ siguiente                      │
+│  M4 rmcp Migration         ⏳                                │
+│  M6 Dual-Level Retrieval   ⏳                                │
+│  M7 Single-Binary release  ⏳ último                         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ MIRROR PRINCIPLE ──────────────────────────────────────────┐
+│  Tylluan = laboratorio. Forja = producción.                  │
+│  Flujo: probar en Tylluan → curar → portar a Forja          │
+│  Nunca al revés. Nunca copy-paste — adaptar limpio.          │
+└─────────────────────────────────────────────────────────────┘
+
 ┌─ SAFETY ────────────────────────────────────────────────────┐
-│  ✋ NEVER host=0.0.0.0 + dev_mode=true (unauthenticated RCE)│
-│  ✋ NEVER run as root/Administrator                          │
-│  ✋ NEVER commit .tylluan-token                              │
-│  ✋ NEVER reduce timeouts below defaults (CPU inference)     │
-│  ✋ NEVER hardcode guild paths (use catalog.rs)              │
-│  See: SECURITY_MODEL in docs/architecture/SECURITY.md       │
-│  See: DISCLAIMER.md for operator responsibilities            │
+│  ✋ NUNCA vector_dimensions = 768 (bug heredado Forja)       │
+│  ✋ NUNCA host=0.0.0.0 + dev_mode=true (LAN RCE)            │
+│  ✋ NUNCA token en archivos trackeados                       │
+│  ✋ NUNCA iniciar procesos via Bash (AV Windows)             │
+│  ✋ NUNCA tocar E:\ForjaMCPo3 desde este repo               │
+│  ✋ NUNCA git push sin autorización de José                  │
+│  ✋ NUNCA reducir timeouts (CPU inference, no cloud)         │
 └─────────────────────────────────────────────────────────────┘

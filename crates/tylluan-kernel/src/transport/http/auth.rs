@@ -1,4 +1,4 @@
-﻿use axum::{
+use axum::{
     Json,
     extract::{Request, State},
     http::{StatusCode, HeaderMap},
@@ -76,44 +76,47 @@ pub async fn bearer_auth_middleware(
         {
             true
         }
-        // 2. Token in Query
-        else if let Some(expected) = &state.auth_token {
-            query.split('&').any(|pair| {
-                if let Some((k, v)) = pair.split_once('=') {
-                    (k == "token" || k == "Authorization") && ExecutionGuard::secure_compare(v, expected)
-                } else {
-                    false
-                }
-            })
-        }
-        // 3. Dev Mode Bypass
+        // 2. Dev Mode Bypass
         else if state.dev_mode.unwrap_or(false) {
             true
         }
-        // 4. Bearer Token
-        else {
-            let expected_token = match &state.auth_token {
-                Some(t) => Some(t.as_str()),
-                None => None,
+        // 3. Token Authentication (Header or Query)
+        else if let Some(expected) = &state.auth_token {
+            // A. Check Bearer Token in Authorization Header
+            let auth_header = headers
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            
+            let has_valid_bearer = if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
+                ExecutionGuard::secure_compare(bearer, expected)
+                    || state.oauth.validate_bearer(bearer)
+            } else {
+                false
             };
-            match expected_token {
-                Some(token) => {
-                    let auth_header = headers
-                        .get("authorization")
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or("");
-                    if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
-                        ExecutionGuard::secure_compare(bearer, token)
-                            || state.oauth.validate_bearer(bearer)
+
+            // B. Check Token in Query String (with URL decoding to support / and +)
+            let has_valid_query = query.split('&').any(|pair| {
+                if let Some((k, v)) = pair.split_once('=') {
+                    if k == "token" || k == "Authorization" {
+                        if let Ok(decoded) = urlencoding::decode(v) {
+                            ExecutionGuard::secure_compare(&decoded, expected)
+                        } else {
+                            ExecutionGuard::secure_compare(v, expected)
+                        }
                     } else {
                         false
                     }
-                }
-                None => {
-                    warn!("🚫 AUTH_FAILURE: No Master Token configured and dev_mode is false.");
+                } else {
                     false
                 }
-            }
+            });
+
+            has_valid_bearer || has_valid_query
+        }
+        else {
+            warn!("🚫 AUTH_FAILURE: No Master Token configured and dev_mode is false.");
+            false
         }
     };
 
