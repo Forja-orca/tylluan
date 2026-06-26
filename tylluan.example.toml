@@ -14,6 +14,10 @@ lazy_load_timeout_secs = 180
 
 [memory]
 db_path = "data/tylluan.db"
+embedding_model = "bge-m3"
+# CRITICAL: BGE-M3 nativo es 1024 dimensiones. NUNCA cambiar a 768.
+# 768 es el bug heredado de ForjaMCPo3 (Matryoshka reduction). Tylluan arranca limpio.
+vector_dimensions = 1024
 # Max vector search results before partitioning
 vector_limit = 5000
 
