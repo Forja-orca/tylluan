@@ -708,7 +708,7 @@ fn default_port() -> u16 { 3030 }
 fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
 fn default_embedding_model() -> String { "Nomic-Embed-v2".into() }
-fn default_dimensions() -> u32 { 768 }
+fn default_dimensions() -> u32 { 1024 }
 fn default_vision_model_path() -> String { "HuggingFaceTB/SmolVLM2-256M-Instruct".into() }
 fn default_tui_enabled() -> bool { true }
 fn default_refresh_ms() -> u64 { 1000 }
@@ -908,7 +908,7 @@ mod tests {
     fn test_default_config() {
         let config = TylluanConfig::default();
         assert_eq!(config.nexus.port, 3030);
-        assert_eq!(config.memory.vector_dimensions, 768); // Nomic Embed v2
+        assert_eq!(config.memory.vector_dimensions, 1024); // BGE-M3 nativo
         assert_eq!(config.guilds.core.always_on, vec!["bash", "memory", "filesystem"]);
         assert_eq!(config.guilds.core.lazy_load_timeout_secs, 300);
     }
