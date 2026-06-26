@@ -82,10 +82,7 @@ impl EmbeddingEngine {
         let mut vector = embeddings.into_iter().next()
             .context("No embedding returned")?;
 
-        // Matryoshka Reduction: If Nomic, truncate to 768 for better HDD/Toaster performance
-        if (self.model_type == "nomic" || self.model_type == "bge-m3") && vector.len() > 768 {
-            vector.truncate(768);
-        }
+        // BGE-M3 produces 1024-dim vectors natively — no truncation needed
 
         // L2 Normalization (FastEmbed might already do it, but we strictly enforce for Cosine Similarity)
         let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -203,7 +200,6 @@ mod tests {
         let vector = engine.embed("Hello, TylluanNexus sovereignty").expect("Inference failed");
         
         println!("Vector dimension: {}", vector.len());
-        // For BGE it's 768, for Nomic truncated it's 768.
-        assert_eq!(vector.len(), 768, "Should produce 768-dim vectors");
+        assert_eq!(vector.len(), 1024, "BGE-M3 should produce 1024-dim vectors");
     }
 }
