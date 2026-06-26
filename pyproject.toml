@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "tylluan-guilds"
 version = "3.0.0a1"
 description = "Python tool guilds for the TylluanNexus Sovereign Agentic Hub"
@@ -19,7 +19,9 @@ dependencies = [
     "tree-sitter>=0.23.0",
     "tree-sitter-python>=0.23.0",
     "tree-sitter-rust>=0.24.0",
-    "scrapling>=0.2.97",
+    "scrapling>=0.2",
+    "requests>=2.28",
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]
