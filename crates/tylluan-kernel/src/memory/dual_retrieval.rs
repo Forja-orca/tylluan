@@ -18,7 +18,7 @@ pub async fn dual_retrieve(
 
     let seed_ids: Vec<String> = low_level
         .iter()
-        .filter(|(_, s)| *s > 0.5)
+        .take(3)
         .map(|(n, _)| n.id.clone())
         .collect();
 
