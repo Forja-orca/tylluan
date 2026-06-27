@@ -776,6 +776,23 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // IVF staleness watcher: rebuild every 6h if graph has grown >10% since last build
+    {
+        let silva_ivf = silva.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(6 * 3600));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                match silva_ivf.consolidate_ivf_index().await {
+                    Ok(r) if !r.skipped => info!("🔬 IVF periodic rebuild: {} centroids in {}ms", r.n_centroids, r.elapsed_ms),
+                    Ok(_) => {},
+                    Err(e) => warn!("🔬 IVF periodic rebuild failed: {}", e),
+                }
+            }
+        });
+    }
+
     // Shared health signal: false → /health returns warming_up, true → ok
     let health_ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 

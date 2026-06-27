@@ -479,11 +479,34 @@ impl super::SilvaDB {
             let fjv1_exists = self.mmap_path.as_ref().map(|p| p.exists()).unwrap_or(false);
 
             if centroid_count > 0 && fjv1_exists {
-                return Ok(IvfBuildResult {
-                    n_centroids: centroid_count as usize,
-                    elapsed_ms: start.elapsed().as_millis() as u64,
-                    skipped: true,
-                });
+                let current_embeddings: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM node_embeddings",
+                    [],
+                    |r| r.get(0),
+                ).unwrap_or(0);
+                let last_build_count: i64 = conn.query_row(
+                    "SELECT CAST(value AS INTEGER) FROM silva_kv WHERE key = 'ivf_last_build_count'",
+                    [],
+                    |r| r.get(0),
+                ).unwrap_or(0);
+
+                let is_stale = last_build_count == 0
+                    || current_embeddings > last_build_count + (last_build_count / 10);
+
+                if !is_stale {
+                    return Ok(IvfBuildResult {
+                        n_centroids: centroid_count as usize,
+                        elapsed_ms: start.elapsed().as_millis() as u64,
+                        skipped: true,
+                    });
+                }
+
+                info!("🔬 IVF stale: {} embeddings vs {} at last build — forcing rebuild",
+                      current_embeddings, last_build_count);
+                let _ = conn.execute("DELETE FROM cluster_centroids", []);
+                if let Some(ref p) = self.mmap_path {
+                    let _ = std::fs::remove_file(p);
+                }
             }
 
             if fjv1_exists {
@@ -492,7 +515,7 @@ impl super::SilvaDB {
 
             // 2. Load all embeddings
             let mut stmt = conn.prepare(
-                "SELECT node_id, embedding FROM node_embeddings LIMIT 10000"
+                "SELECT node_id, embedding FROM node_embeddings LIMIT 100000"
             )?;
             let rows = stmt.query_map([], |row| {
                 let id: String = row.get(0)?;
@@ -549,6 +572,11 @@ impl super::SilvaDB {
             let elapsed_ms = start.elapsed().as_millis() as u64;
             info!("🔬 IVF Autobuild complete: {} centroids from {} vectors in {}ms",
                   n_centroids, vectors.len(), elapsed_ms);
+
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO silva_kv (key, value) VALUES ('ivf_last_build_count', ?1)",
+                params![vectors.len().to_string()],
+            );
 
             // 5. Create .fjv1 mmap file and populate in-memory store + IVF searcher
             if let Some(ref mmap_path) = self.mmap_path {
