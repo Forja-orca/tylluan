@@ -44,6 +44,16 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const [chatWidth, setChatWidth] = useState(650);
   const [compactMode, setCompactMode] = useState(false);
 
+  // M9 autonomous mode state
+  const [session, setSession] = useState<any>(null);
+  const [sessionStats, setSessionStats] = useState<Record<string, any>>({});
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(['haiku', 'antigravity']);
+  const [sessionDuration, setSessionDuration] = useState(3600);
+  const [sessionMaxResponses, setSessionMaxResponses] = useState(10);
+  const [sessionTask, setSessionTask] = useState('');
+  const [isSubmittingSession, setIsSubmittingSession] = useState(false);
+
   const isAtBottom = useRef(true);
   const lastChRef = useRef<string | null>(null);
   const lastCntRef = useRef(0);
@@ -261,6 +271,28 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     return () => clearInterval(interval);
   }, []);
 
+  // Poll autonomous session status and stats
+  useEffect(() => {
+    if (!bridge) return;
+    const fetchSession = async () => {
+      try {
+        const res = await bridge.fetch('/api/v1/agents/session');
+        if (res && res.active) {
+          setSession(res);
+          const statsRes = await bridge.fetch('/api/v1/agents/session/stats');
+          if (statsRes) setSessionStats(statsRes);
+        } else {
+          setSession(null);
+        }
+      } catch {
+        setSession(null);
+      }
+    };
+    fetchSession();
+    const interval = setInterval(fetchSession, 5000);
+    return () => clearInterval(interval);
+  }, [bridge]);
+
   useEffect(() => {
     if (!selectedId) return;
     if (selectedId !== lastChRef.current || (messages.length > lastCntRef.current && isAtBottom.current)) {
@@ -374,6 +406,19 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
               Todo leído
             </button>
           )}
+          <button
+            onClick={() => setShowSessionModal(true)}
+            className={cn(
+              "flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer mr-1.5 select-none",
+              session?.active 
+                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20" 
+                : "bg-slate-800/40 border-slate-700 text-slate-400 hover:bg-slate-700/40"
+            )}
+            title={session?.active ? "Configuración Modo Autónomo (Activo)" : "Activar Modo Autónomo"}
+          >
+            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", session?.active ? "bg-emerald-400 animate-pulse" : "bg-slate-500")} />
+            {session?.active ? "AUTÓNOMO" : "MANUAL"}
+          </button>
           <button onClick={() => setShowCanvas(v => !v)}
             className={cn('p-1.5 rounded-lg border transition-all mr-1.5 cursor-pointer', showCanvas ? 'border-violet-500/40 bg-violet-500/10 text-violet-400' : 'border-slate-700 text-slate-500 hover:text-slate-300')}
             title="Lienzo Blackboard">
@@ -481,6 +526,217 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
           />
         )}
       </div>
+      {/* Session Modal */}
+      {showSessionModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#161a23] border border-slate-700/80 rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-4 py-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/40">
+              <h3 className="text-sm font-semibold text-slate-100">
+                {session?.active ? "Sesión autónoma activa" : "Activar modo autónomo"}
+              </h3>
+              <button 
+                onClick={() => setShowSessionModal(false)}
+                className="text-slate-400 hover:text-slate-200 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4 text-xs text-slate-300">
+              {session?.active ? (
+                // Active Session Panel
+                <div className="space-y-4">
+                  <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Tiempo restante:</span>
+                      <span className="font-semibold text-slate-100">
+                        {(() => {
+                          const now = Math.floor(Date.now() / 1000);
+                          const remaining = Math.max(0, session.expires_at - now);
+                          const mins = Math.floor(remaining / 60);
+                          const secs = remaining % 60;
+                          return `${mins}m ${secs}s`;
+                        })()}
+                      </span>
+                    </div>
+                    {session.task && (
+                      <div className="text-slate-400">
+                        <span className="block mb-1">Directiva de tarea:</span>
+                        <div className="bg-slate-950 p-2 rounded text-slate-300 italic border border-slate-900">
+                          {session.task}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Consumo de Respuestas</span>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {session.agents.map((agent: string) => {
+                        const agentStats = sessionStats[agent] || { responses: 0, limit: session.max_responses };
+                        const percent = Math.min(100, (agentStats.responses / agentStats.limit) * 100);
+                        return (
+                          <div key={agent} className="bg-slate-900/40 p-2.5 rounded border border-slate-800/80 flex items-center justify-between">
+                            <div className="flex flex-col gap-1 flex-1 mr-4">
+                              <div className="flex justify-between text-[11px]">
+                                <span className="font-medium text-slate-200">@{agent}</span>
+                                <span className="text-slate-400">{agentStats.responses} / {agentStats.limit}</span>
+                              </div>
+                              <div className="w-full bg-slate-950 h-1 rounded-full overflow-hidden">
+                                <div className="bg-indigo-500 h-full rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                              </div>
+                            </div>
+                            <span className={cn(
+                              "w-1.5 h-1.5 rounded-full shrink-0",
+                              agentStats.responses >= agentStats.limit ? "bg-red-400" : "bg-emerald-400"
+                            )} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      onClick={async () => {
+                        if (!bridge) return;
+                        try {
+                          await bridge.fetch('/api/v1/agents/session/stop', { method: 'POST' });
+                          setSession(null);
+                          setShowSessionModal(false);
+                        } catch {}
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                    >
+                      DETENER AHORA
+                    </button>
+                    <button
+                      onClick={() => setShowSessionModal(false)}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Inactive Session (Activation Form)
+                <div className="space-y-4">
+                  {/* Select Agents */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Agentes Activos</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['haiku', 'antigravity', 'qwen', 'opencode'].map(agent => (
+                        <label 
+                          key={agent} 
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-lg border cursor-pointer select-none transition-all",
+                            selectedAgents.includes(agent)
+                              ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300"
+                              : "bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-800/40"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAgents.includes(agent)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedAgents([...selectedAgents, agent]);
+                              } else {
+                                setSelectedAgents(selectedAgents.filter(a => a !== agent));
+                              }
+                            }}
+                            className="rounded border-slate-700 text-indigo-500 focus:ring-0 focus:ring-offset-0 bg-slate-950"
+                          />
+                          <span className="font-medium">@{agent}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* TTL Duration */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Duración Máxima</label>
+                    <select
+                      value={sessionDuration}
+                      onChange={(e) => setSessionDuration(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-slate-700"
+                    >
+                      <option value={1800}>30 Minutos</option>
+                      <option value={3600}>1 Hora</option>
+                      <option value={7200}>2 Horas</option>
+                    </select>
+                  </div>
+
+                  {/* Limit responses */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Límite por Agente</label>
+                    <select
+                      value={sessionMaxResponses}
+                      onChange={(e) => setSessionMaxResponses(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-slate-700"
+                    >
+                      <option value={5}>5 respuestas</option>
+                      <option value={10}>10 respuestas</option>
+                      <option value={20}>20 respuestas</option>
+                      <option value={999999}>Sin límite</option>
+                    </select>
+                  </div>
+
+                  {/* Task Directive */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Directiva / Tarea de Sesión</label>
+                    <textarea
+                      value={sessionTask}
+                      onChange={(e) => setSessionTask(e.target.value)}
+                      placeholder="Ej: revisad M9 y proponed mejoras..."
+                      className="w-full h-16 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-slate-700 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      onClick={async () => {
+                        if (!bridge || selectedAgents.length === 0 || isSubmittingSession) return;
+                        setIsSubmittingSession(true);
+                        try {
+                          const res = await bridge.fetch('/api/v1/agents/session/start', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                              agents: selectedAgents,
+                              task: sessionTask,
+                              ttl_secs: sessionDuration,
+                              max_responses: sessionMaxResponses
+                            })
+                          });
+                          if (res) {
+                            setSession(res);
+                            setShowSessionModal(false);
+                          }
+                        } catch {} finally {
+                          setIsSubmittingSession(false);
+                        }
+                      }}
+                      disabled={selectedAgents.length === 0 || isSubmittingSession}
+                      className={cn(
+                        "bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer",
+                        (selectedAgents.length === 0 || isSubmittingSession) && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {isSubmittingSession ? "Activando..." : "ACTIVAR"}
+                    </button>
+                    <button
+                      onClick={() => setShowSessionModal(false)}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
