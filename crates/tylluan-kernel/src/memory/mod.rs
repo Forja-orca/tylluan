@@ -27,6 +27,7 @@ pub mod triple_extractor;
 pub mod coloquio;
 pub mod jobs;
 pub mod dream_cycle;
+pub mod dual_retrieval;
 pub mod auto_link;
 pub mod idle_lab;
 pub mod autoresearch;
