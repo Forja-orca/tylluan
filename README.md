@@ -29,7 +29,8 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | Semantic search with BGE-M3 embeddings + BM25 + Jina Reranker. Runs entirely on CPU |
+| **Memory** | Dual-level retrieval (LightRAG pattern): entity-level BGE-M3 vector search + graph-expansion with degree centrality. Runs entirely on CPU |
+| **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
 | **Tools** | 40+ guilds: bash, git, filesystem, docker, code, vision, web search, and more |
 | **Collaboration** | Multi-agent channels, shared documents, session persistence |
 | **Federation** | Instances sync knowledge with ChaCha20-Poly1305 encrypted transport |
@@ -52,7 +53,7 @@ Every MCP client sees exactly these tools — nothing more, nothing less:
 
 ```
 tylluan_do        Route tasks to guilds via natural language
-tylluan_recall    Search long-term memory (BM25 + vector + rerank)
+tylluan_recall    Search long-term memory — dual-level (entity + graph) or standard
 tylluan_remember  Store knowledge persistently in the graph
 tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations (triples, paths, PageRank)
@@ -165,12 +166,12 @@ See `integrations/` for editor-specific config files.
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
-| **M2** | BGE-M3 1024-dim nativo — hybrid search real | ✅ Completo |
-| **M1** | Memory Decay & Salience — half-life exponencial en SilvaDB | ✅ Completo |
-| **Docker** | Entry point de producción en :3033 | ✅ Operativo |
-| **M4** | rmcp Migration — eliminar custom server code | ⏳ Siguiente |
-| **M6** | Dual-Level Retrieval (LightRAG pattern) | ⏳ |
-| **M7** | Single-Binary + release público | ⏳ Último |
+| **M2** | BGE-M3 1024-dim nativo — 1024-dim hybrid search, Matryoshka fix | ✅ Completo |
+| **M1** | Memory Decay & Salience — half-life exponencial T½=14d en SilvaDB | ✅ Completo |
+| **Docker** | Entry point de producción en :3033, BGE-M3 cache persistente | ✅ Operativo |
+| **M4** | rmcp integration — ServerHandler + stdio transport via rmcp crate | ✅ Completo |
+| **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ Completo |
+| **M7** | Single-Binary + release público | ⏳ Siguiente |
 
 ---
 
@@ -190,12 +191,13 @@ See `integrations/` for editor-specific config files.
 ┌──────────────▼──────────────────────────────────────┐
 │        tylluan-kernel (dynamic port)                 │
 │                                                      │
-│  ┌────────┐  ┌──────────┐  ┌────────────────────┐  │
-│  │ Router │  │ SilvaDB  │  │ Guild Registry     │  │
-│  │ BGE-M3 │  │ Memory + │  │ 40+ Python tools   │  │
-│  │ + BM25 │  │ Graph +  │  │ via fastmcp        │  │
-│  │        │  │ Vectors  │  │                    │  │
-│  └────────┘  └──────────┘  └────────────────────┘  │
+│  ┌──────────────┐  ┌───────────────────┐  ┌──────────────────┐  │
+│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry   │  │
+│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python tools │  │
+│  │ BGE-M3 1024  │  │ IVF vectors       │  │ via fastmcp      │  │
+│  │ BM25 + Graph │  │ Knowledge graph   │  │                  │  │
+│  │ centrality   │  │ Salience decay    │  │                  │  │
+│  └──────────────┘  └───────────────────┘  └──────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -206,7 +208,7 @@ See `integrations/` for editor-specific config files.
 | Kernel | Rust (tokio + axum) |
 | Embeddings | BGE-M3 (local ONNX, CPU) |
 | Reranker | Jina v1 Turbo (local ONNX) |
-| Search | BM25 + vector + cross-encoder rerank (RRF) |
+| Search | Dual-level: entity BM25 + BGE-M3 vector + graph expansion + degree centrality + cross-encoder rerank |
 | Storage | SQLite + mmap vector index |
 | Guilds | Python (fastmcp) |
 | Dashboard | React + Vite + Tailwind |

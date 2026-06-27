@@ -232,14 +232,14 @@
 │      (rompe proxy → CORS cross-origin failures)              │
 └─────────────────────────────────────────────────────────────┘
 
-┌─ MILESTONES (2026-06-26) ───────────────────────────────────┐
+┌─ MILESTONES (2026-06-27) ───────────────────────────────────┐
 │  M2 BGE-M3 1024-dim        ✅ commit 371b97a (Haiku)        │
 │  Docker production :3033   ✅ health OK                      │
 │  Dashboard token auth      ✅ fixed (localStorage + URL decode)│
-│  M1 Memory Decay/Salience  ✅ (scheduler + decay logic)      │
-│  M4 rmcp Migration         ✅ M4-B (custom HTTP is intentional)│
-│  M6 Dual-Level Retrieval   ⏳ siguiente (LightRAG pattern)   │
-│  M7 Single-Binary release  ⏳ último                         │
+│  M1 Memory Decay/Salience  ✅ T½=14d, scheduler, prune<0.15  │
+│  M4 rmcp Migration         ✅ ServerHandler+stdio via rmcp   │
+│  M6 Dual-Level Retrieval   ✅ dual_retrieval.rs e4e7959+401dc3f│
+│  M7 Single-Binary release  ⏳ siguiente                      │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ MIRROR PRINCIPLE ──────────────────────────────────────────┐
