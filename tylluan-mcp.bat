@@ -1,5 +1,5 @@
 @echo off
-REM Tylluan - Start kernel + proxy
+REM Tylluan - Start kernel
 REM Usage: .\tylluan-mcp.bat
 
 cd /d "%~dp0"
@@ -45,15 +45,8 @@ if exist "dashboard\package.json" (
 REM Build kernel if needed
 if not exist "target\release\tylluan-nexus.exe" (
     echo Building tylluan-kernel...
-    cargo build --release -p tylluan-kernel -p tylluan-proxy
+    cargo build --release -p tylluan-kernel
 )
-
-REM Start proxy
-echo Starting tylluan-proxy on :3030...
-start /B target\release\tylluan-proxy.exe
-
-REM Small delay
-timeout /t 2 /nobreak >nul
 
 REM Start kernel (foreground)
 echo Starting tylluan-nexus...

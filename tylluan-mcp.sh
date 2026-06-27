@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tylluan — Start kernel + proxy
+# Tylluan — Start kernel (single binary)
 # Usage: ./tylluan-mcp.sh
 
 set -e
@@ -20,24 +20,12 @@ fi
 
 # Build if binary doesn't exist
 KERNEL="target/release/tylluan-nexus"
-PROXY="target/release/tylluan-proxy"
 if [ ! -f "$KERNEL" ]; then
     echo "Building tylluan-kernel (release)..."
-    cargo build --release -p tylluan-kernel -p tylluan-proxy
+    cargo build --release -p tylluan-kernel
 fi
-
-# Start proxy in background
-echo "Starting tylluan-proxy on :3030..."
-$PROXY &
-PROXY_PID=$!
-
-# Small delay for proxy to bind
-sleep 1
 
 # Start kernel in foreground
 echo "Starting tylluan-nexus..."
 cd crates/tylluan-kernel
 ../../$KERNEL
-
-# Cleanup proxy on exit
-kill $PROXY_PID 2>/dev/null
