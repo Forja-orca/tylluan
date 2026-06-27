@@ -1,4 +1,4 @@
-﻿//! Node CRUD, embeddings, state mutations, and listing operations.
+//! Node CRUD, embeddings, state mutations, and listing operations.
 //! M17-4: Drift Guard — summary/synthesis/agent_summary cannot be created
 //! through the public API. Internal modules (graph_rag, consensus, agent_memory)
 //! use allow_drift=true to bypass.
@@ -480,7 +480,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT DISTINCT source FROM edges GROUP BY source, type HAVING COUNT(DISTINCT target) > 1"
+                "SELECT DISTINCT source FROM edges WHERE type != 'related_to' GROUP BY source, type HAVING COUNT(DISTINCT target) > 1"
             )?;
             let ids: Vec<String> = stmt.query_map([], |r| r.get(0))?
                 .filter_map(|r| r.ok()).collect();
