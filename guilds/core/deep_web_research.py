@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Deep Web Research Guild — Multi-source web research without API keys.
 
 Uses:
@@ -93,7 +93,10 @@ async def web_search(
         intent: Natural language search intent.
     """
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
 
         ddgs = DDGS()
         results = list(
