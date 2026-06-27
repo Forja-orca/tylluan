@@ -498,35 +498,49 @@ if let Some(ref mut s) = stmt {
     let query_embedding = server.matcher.engine()
         .and_then(|e| e.embed(&effective_query).ok());
 
-    // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
-    let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
-    let mut candidates = server.silva
-        .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool)
-        .await.unwrap_or_default();
-
-    if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
-        for doc in hybrid {
-            let is_dup = candidates.iter().any(|(n, _)| jaccard_similarity(&n.content, &doc.content) > 0.85);
-            if !is_dup {
-                candidates.push((GraphNode {
-                    id: format!("hybrid:{}", doc.id),
-                    node_type: "memory_document".into(),
-                    content: doc.content,
-                    metadata: doc.metadata,
-                    weight: 1.0,
-                    protected: false,
-                    conflicted: false,
-                    topic_key: None,
-                    created_at: None,
-                    updated_at: None,
-                    last_touched: chrono::Utc::now(),
-                    valid_from: None,
-                    valid_until: None,
-                    shareable: false,
-                }, doc.score));
-            }
+    // M6: Dual-level retrieval (LightRAG pattern) — opt-in via mode="dual"
+    let mut candidates = if mode == "dual" {
+        match crate::memory::dual_retrieval::dual_retrieve(
+            &server.silva, &effective_query, query_embedding.as_deref(), limit * 3,
+        ).await {
+            Ok(r) => r.merged,
+            Err(_) => vec![],
         }
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    } else {
+        vec![]
+    };
+
+    if candidates.is_empty() {
+        // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
+        let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
+        candidates = server.silva
+            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool)
+            .await.unwrap_or_default();
+
+        if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
+            for doc in hybrid {
+                let is_dup = candidates.iter().any(|(n, _)| jaccard_similarity(&n.content, &doc.content) > 0.85);
+                if !is_dup {
+                    candidates.push((GraphNode {
+                        id: format!("hybrid:{}", doc.id),
+                        node_type: "memory_document".into(),
+                        content: doc.content,
+                        metadata: doc.metadata,
+                        weight: 1.0,
+                        protected: false,
+                        conflicted: false,
+                        topic_key: None,
+                        created_at: None,
+                        updated_at: None,
+                        last_touched: chrono::Utc::now(),
+                        valid_from: None,
+                        valid_until: None,
+                        shareable: false,
+                    }, doc.score));
+                }
+            }
+            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        }
     }
 
     // Stage 2: Jina cross-encoder rerank on top-50 candidates (if available)
