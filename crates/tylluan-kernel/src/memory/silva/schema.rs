@@ -41,7 +41,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 8;
+            const SCHEMA_VERSION: i32 = 9;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -85,6 +85,16 @@ impl super::SilvaDB {
             if schema_version < 8 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN salience_score REAL NOT NULL DEFAULT 1.0", []);
                 tracing::info!("🌲 SilvaDB: added salience_score column");
+            }
+            if schema_version < 9 {
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS silva_kv (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                     );"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added silva_kv table (v9)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;
