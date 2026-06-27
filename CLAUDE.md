@@ -41,9 +41,9 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
-| **M2** | Hybrid Search v2 — BGE-M3 1024-dim nativo | P0 — PRIMERO |
-| **M1** | Memory Decay & Salience — half-life en SilvaDB | Siguiente |
-| **M4** | rmcp Migration — eliminar ~60% server.rs custom | Siguiente |
+| **M2** | Hybrid Search v2 — BGE-M3 1024-dim nativo | ✅ Listo |
+| **M1** | Memory Decay & Salience — half-life en SilvaDB | ✅ Listo |
+| **M4** | rmcp Migration — sse.rs custom + stdio/server = rmcp | ✅ Listo (M4-B) |
 | **M6** | Dual-Level Retrieval — LightRAG pattern | Siguiente |
 | **M7** | Single-Binary Packaging — polish final + release | Último |
 

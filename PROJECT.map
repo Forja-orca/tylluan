@@ -235,10 +235,10 @@
 ┌─ MILESTONES (2026-06-26) ───────────────────────────────────┐
 │  M2 BGE-M3 1024-dim        ✅ commit 371b97a (Haiku)        │
 │  Docker production :3033   ✅ health OK                      │
-│  Dashboard token auth      ⏳ verificar con localStorage fix │
-│  M1 Memory Decay/Salience  ⏳ siguiente                      │
-│  M4 rmcp Migration         ⏳                                │
-│  M6 Dual-Level Retrieval   ⏳                                │
+│  Dashboard token auth      ✅ fixed (localStorage + URL decode)│
+│  M1 Memory Decay/Salience  ✅ (scheduler + decay logic)      │
+│  M4 rmcp Migration         ✅ M4-B (custom HTTP is intentional)│
+│  M6 Dual-Level Retrieval   ⏳ siguiente (LightRAG pattern)   │
 │  M7 Single-Binary release  ⏳ último                         │
 └─────────────────────────────────────────────────────────────┘
 
