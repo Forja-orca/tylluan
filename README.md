@@ -74,7 +74,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 ```bash
 git clone https://github.com/Forja-orca/tylluan.git
 cd tylluan
-cargo build --release -p tylluan-kernel -p tylluan-proxy
+cargo build --release -p tylluan-kernel
 ```
 
 ### 2. Set up Python guilds
@@ -171,7 +171,7 @@ See `integrations/` for editor-specific config files.
 | **Docker** | Entry point de producción en :3033, BGE-M3 cache persistente | ✅ Operativo |
 | **M4** | rmcp integration — ServerHandler + stdio transport via rmcp crate | ✅ Completo |
 | **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ Completo |
-| **M7** | Single-Binary + release público | ⏳ Siguiente |
+| **M7** | Single-Binary + release público | ✅ Completo |
 
 ---
 
@@ -184,20 +184,15 @@ See `integrations/` for editor-specific config files.
 └──────────────┬──────────────────────────────────────┘
                │ SSE / HTTP Streamable
 ┌──────────────▼──────────────────────────────────────┐
-│         tylluan-proxy (:3030)                        │
-│       Zero-downtime gateway                          │
-└──────────────┬──────────────────────────────────────┘
-               │
-┌──────────────▼──────────────────────────────────────┐
-│        tylluan-kernel (dynamic port)                 │
+│         tylluan-nexus (:3030)                        │
 │                                                      │
-│  ┌──────────────┐  ┌───────────────────┐  ┌──────────────────┐  │
-│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry   │  │
-│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python tools │  │
-│  │ BGE-M3 1024  │  │ IVF vectors       │  │ via fastmcp      │  │
-│  │ BM25 + Graph │  │ Knowledge graph   │  │                  │  │
-│  │ centrality   │  │ Salience decay    │  │                  │  │
-│  └──────────────┘  └───────────────────┘  └──────────────────┘  │
+│  ┌──────────────┐  ┌───────────────────┐  ┌─────────────────┐ │
+│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry  │ │
+│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python tools│ │
+│  │ BGE-M3 1024  │  │ IVF vectors       │  │ via fastmcp     │ │
+│  │ BM25 + Graph │  │ Knowledge graph   │  │                 │ │
+│  │ centrality   │  │ Salience decay    │  │                 │ │
+│  └──────────────┘  └───────────────────┘  └─────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -219,7 +214,7 @@ See `integrations/` for editor-specific config files.
 tylluan/
 ├── crates/
 │   ├── tylluan-kernel/    Core kernel (memory, routing, guilds, security)
-│   ├── tylluan-proxy/     Zero-downtime reverse proxy
+
 │   ├── tylluan-common/    Shared types and errors
 │   └── tylluan-evals/     Benchmarks (LongMemEval, BeamScale)
 ├── guilds/                Python tool plugins (fastmcp)
