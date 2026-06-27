@@ -15,12 +15,19 @@ enum Suite {
     BeamScale { questions: usize, use_embedding: bool },
 }
 
-fn parse_args() -> Suite {
+enum CliMode {
+    Suite(Suite),
+    GenerateOracle { db_path: String, output: String },
+}
+
+fn parse_args() -> CliMode {
     let args: Vec<String> = std::env::args().collect();
     let mut suite = "synthetic".to_string();
     let mut limit: usize = 50;
     let mut db_path = "data/silva.db".to_string();
     let mut use_reranker = false;
+    let mut generate_oracle = false;
+    let mut oracle_output = "data/idle_lab_oracle.json".to_string();
 
     let mut i = 1;
     while i < args.len() {
@@ -46,12 +53,25 @@ fn parse_args() -> Suite {
             "--reranker" | "-r" => {
                 use_reranker = true;
             }
+            "--generate-oracle" => {
+                generate_oracle = true;
+            }
+            "--oracle-output" => {
+                if i + 1 < args.len() {
+                    oracle_output = args[i + 1].clone();
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
     }
 
-    match suite.as_str() {
+    if generate_oracle {
+        return CliMode::GenerateOracle { db_path, output: oracle_output };
+    }
+
+    let suite = match suite.as_str() {
         "real" | "r" => Suite::Real { db_path },
         "autolink" | "al" => Suite::AutoLink { db_path },
         "longmemeval" | "lme" => {
@@ -61,12 +81,11 @@ fn parse_args() -> Suite {
                 Suite::LongMemEval { limit }
             }
         }
-        // beam: FTS5-only, fast (~2-3 min, 5 questions per tier)
         "beam" => Suite::BeamScale { questions: limit.min(10), use_embedding: false },
-        // beam-emb: with BGE-M3, slow (~30 min, 3 questions per tier)
         "beam-emb" => Suite::BeamScale { questions: limit.min(3), use_embedding: true },
         _ => Suite::Synthetic,
-    }
+    };
+    CliMode::Suite(suite)
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -78,7 +97,17 @@ async fn main() {
     println!("  ╚═══════════════════════════════════════════╝");
     println!();
 
-    let suite = parse_args();
+    let mode = parse_args();
+
+    match &mode {
+        CliMode::GenerateOracle { db_path, output } => {
+            println!("  Mode: GENERATE IDLELAB ORACLE");
+            println!();
+            runner::generate_oracle(db_path, std::path::Path::new(output)).await;
+            return;
+        }
+        _ => {}
+    }
 
     println!("  Loading embedding engine (fastembed BGE-M3)...");
     let engine = match tylluan_kernel::router::embeddings::EmbeddingEngine::load("models/bge-m3") {
@@ -91,6 +120,11 @@ async fn main() {
             println!("  Falling back to FTS5-only search");
             None
         }
+    };
+
+    let suite = match mode {
+        CliMode::Suite(s) => s,
+        _ => unreachable!(),
     };
 
     match suite {

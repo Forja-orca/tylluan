@@ -1,4 +1,5 @@
-﻿use std::time::Instant;
+﻿use std::path::Path;
+use std::time::Instant;
 
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::router::embeddings::EmbeddingEngine;
@@ -244,4 +245,43 @@ pub async fn run_auto_link(db_path: &str) {
     println!("  Topic links:         {}", report.topic_edges);
     println!("  Orphan links:        {}", report.orphan_edges);
     println!();
+}
+
+/// Generate an IdleLab oracle file by sampling 20 real nodes from SilvaDB.
+/// Each oracle pair: query = first 80 chars of node content, expected_id = node.id.
+/// Writes JSON to `output_path`.
+pub async fn generate_oracle(db_path: &str, output_path: &Path) {
+    println!("  Opening SilvaDB: {}", db_path);
+    let db = SilvaDB::open(db_path).expect("Failed to open SilvaDB");
+    db.init().await.expect("Failed to init schema");
+
+    let nodes = match db.get_nodes_by_types(
+        &["episode", "document", "agent_memory", "code_entity", "experience", "concept"],
+        20,
+    ).await {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            println!("  ERROR: failed to sample nodes: {}", e);
+            return;
+        }
+    };
+
+    println!("  Sampled {} nodes", nodes.len());
+
+    let oracle: Vec<tylluan_kernel::memory::idle_lab_oracle::OraclePair> = nodes.iter()
+        .filter(|n| n.content.len() >= 20)
+        .map(|n| tylluan_kernel::memory::idle_lab_oracle::OraclePair {
+            query: n.content.chars().take(80).collect(),
+            expected_id: n.id.clone(),
+        })
+        .collect();
+
+    let json = serde_json::to_string_pretty(&oracle).expect("serialize oracle");
+    if let Err(e) = std::fs::write(output_path, &json) {
+        println!("  ERROR writing oracle to {}: {}", output_path.display(), e);
+        return;
+    }
+
+    println!("  Wrote {} oracle pairs to {}", oracle.len(), output_path.display());
+    println!("  Done.");
 }

@@ -31,6 +31,7 @@ pub mod api_collective;
 pub mod api_ops;
 pub mod api_canvas;
 pub mod api_journal;
+pub mod api_agents;
 
 pub use api_guilds::*;
 pub use api_admin::*;
@@ -45,6 +46,7 @@ pub use api_collective::*;
 pub use api_ops::*;
 pub use api_canvas::*;
 pub use api_journal::*;
+pub use api_agents::*;
 
 
 /// Returns 503 with a JSON error body if `state.server` is None (kernel not yet initialized).
@@ -346,6 +348,12 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/journal", get(journal_list))
         .route("/api/v1/journal/{agent_id}/checkin", post(journal_checkin))
         .route("/api/v1/journal/{agent_id}/recover", get(journal_recover))
+        // M9 Autonomous Mode — Agent Registry
+        .route("/api/v1/agents/session/start", post(agent_session_start_handler))
+        .route("/api/v1/agents/session/stop", post(agent_session_stop_handler))
+        .route("/api/v1/agents/session", get(agent_session_list_handler))
+        .route("/api/v1/agents/stats", get(agent_stats_handler))
+        .route("/api/v1/agents/heartbeat", post(agent_heartbeat_handler))
 }
 
 // --- HANDLERS ---

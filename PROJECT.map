@@ -15,7 +15,7 @@
 │ Data:      data/*.db (sqlite) — gitignored, created on boot │
 │ License:   MIT (Forja usa AGPL — nunca mezclar)             │
 │ Language:  Rust kernel + Python guilds + React dashboard     │
-│ Tests:     384 tests │ cargo test -p tylluan-kernel --lib   │
+│ Tests:     234 tests │ cargo test -p tylluan-kernel --lib   │
 │ Build:     cargo build -p tylluan-kernel                    │
 │ Start:     .\tylluan-mcp.bat (nativo)                       │
 │            docker compose up kernel -d (Docker)             │
@@ -111,6 +111,7 @@
 │      mailbox.rs     async agent-to-agent messaging           │
 │      identity.rs    agent profiles and context               │
 │      idle_lab.rs    background parameter optimization        │
+│      idle_lab_oracle.rs  dynamic oracle (JSON + fallback)   │
 │      dream_cycle.rs background knowledge enrichment          │
 │      graph_rag.rs   cluster-aware retrieval                  │
 │      ivf_index.rs   IVF vector index                         │
@@ -240,6 +241,7 @@
 │  M4 rmcp Migration         ✅ ServerHandler+stdio via rmcp   │
 │  M6 Dual-Level Retrieval   ✅ dual_retrieval.rs e4e7959+401dc3f│
 │  M7 Single-Binary release  ✅ be8d6a8 (OpenCode)             │
+│  M8-B Dynamic Oracle       ✅ idle_lab_oracle.rs + generador │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ MIRROR PRINCIPLE ──────────────────────────────────────────┐

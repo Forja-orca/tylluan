@@ -88,6 +88,7 @@ async fn test_state() -> Arc<HttpState> {
         node_router,
         health_ready: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         journal: Arc::new(tylluan_kernel::transport::http::api_v1::api_journal::JournalDb::open(":memory:").unwrap()),
+        agent_registry: tylluan_kernel::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
     })
 }
 

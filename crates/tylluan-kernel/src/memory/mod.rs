@@ -30,6 +30,7 @@ pub mod dream_cycle;
 pub mod dual_retrieval;
 pub mod auto_link;
 pub mod idle_lab;
+pub mod idle_lab_oracle;
 pub mod autoresearch;
 pub mod mmap_store;
 pub mod ivf_index;
