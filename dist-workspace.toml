@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/tylluan-kernel"]
+
+[dist]
+cargo-dist-version = "0.28.0"
+rust-toolchain-version = "1.82.0"
+ci = ["github"]
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+]
+installers = ["shell", "powershell"]
+tap = "Forja-orca/homebrew-tylluan"
+publish-jobs = ["homebrew"]
+pr-run-mode = "plan"
