@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use dashmap::DashMap;
 
@@ -61,6 +62,110 @@ impl Clone for WorkContract {
     }
 }
 
+// --- SQL persistence layer --------------------------------------------------
+
+pub struct ContractDb {
+    conn: Arc<std::sync::Mutex<rusqlite::Connection>>,
+}
+
+impl ContractDb {
+    pub fn open(db_path: &str) -> anyhow::Result<Self> {
+        let conn = crate::config::open_db(std::path::Path::new(db_path))?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             CREATE TABLE IF NOT EXISTS work_contracts (
+                 id               TEXT PRIMARY KEY,
+                 task             TEXT NOT NULL,
+                 budget           INTEGER NOT NULL,
+                 budget_remaining INTEGER NOT NULL,
+                 team             TEXT NOT NULL,
+                 consolidator     TEXT NOT NULL,
+                 channel_id       TEXT NOT NULL,
+                 status           TEXT NOT NULL,
+                 created_at       INTEGER NOT NULL,
+                 deliveries       TEXT NOT NULL DEFAULT '[]',
+                 votes            TEXT NOT NULL DEFAULT '[]',
+                 extensions       INTEGER NOT NULL DEFAULT 0
+             );",
+        )?;
+        Ok(Self { conn: Arc::new(std::sync::Mutex::new(conn)) })
+    }
+
+    pub fn persist(&self, c: &WorkContract) -> rusqlite::Result<()> {
+        let remaining = c.budget_remaining.load(Ordering::Acquire);
+        let team_json = serde_json::to_string(&c.team).unwrap_or_else(|_| "[]".into());
+        let deliveries_json = serde_json::to_string(&c.deliveries).unwrap_or_else(|_| "[]".into());
+        let votes_json = serde_json::to_string(&c.votes).unwrap_or_else(|_| "[]".into());
+        self.conn.lock().expect("contracts db mutex poisoned").execute(
+            "INSERT INTO work_contracts(
+                 id,task,budget,budget_remaining,team,consolidator,
+                 channel_id,status,created_at,deliveries,votes,extensions)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+             ON CONFLICT(id) DO UPDATE SET
+                 budget_remaining=excluded.budget_remaining,
+                 status=excluded.status,
+                 deliveries=excluded.deliveries,
+                 votes=excluded.votes,
+                 extensions=excluded.extensions",
+            params![
+                c.id, c.task, c.budget, remaining,
+                team_json, c.consolidator, c.channel_id, c.status,
+                c.created_at as i64, deliveries_json, votes_json, c.extensions
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_active(&self) -> rusqlite::Result<Vec<WorkContract>> {
+        let conn = self.conn.lock().expect("contracts db mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id,task,budget,budget_remaining,team,consolidator,
+                    channel_id,status,created_at,deliveries,votes,extensions
+             FROM work_contracts WHERE status NOT IN ('done')",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i32>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, i32>(11)?,
+            ))
+        })?;
+
+        let mut out = vec![];
+        for row in rows {
+            let (id, task, budget, remaining, team_j, consolidator,
+                 channel_id, status, created_at, del_j, votes_j, extensions) = row?;
+            out.push(WorkContract {
+                id,
+                task,
+                budget,
+                budget_remaining: AtomicI64::new(remaining),
+                team: serde_json::from_str(&team_j).unwrap_or_default(),
+                consolidator,
+                channel_id,
+                status,
+                created_at: created_at as u64,
+                deliveries: serde_json::from_str(&del_j).unwrap_or_default(),
+                votes: serde_json::from_str(&votes_j).unwrap_or_default(),
+                extensions,
+            });
+        }
+        Ok(out)
+    }
+}
+
+// --- Request/response types -------------------------------------------------
+
 #[derive(Deserialize)]
 pub struct CreateContractRequest {
     pub task: String,
@@ -94,6 +199,8 @@ pub struct CloseRequest {
     pub summary: String,
 }
 
+// --- In-memory registry (DashMap cache over SQLite) -------------------------
+
 #[derive(Clone)]
 pub struct ContractRegistry {
     pub contracts: Arc<DashMap<String, WorkContract>>,
@@ -101,15 +208,15 @@ pub struct ContractRegistry {
 
 impl ContractRegistry {
     pub fn new() -> Self {
-        Self {
-            contracts: Arc::new(DashMap::new()),
-        }
+        Self { contracts: Arc::new(DashMap::new()) }
     }
 }
 
 fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
+
+// --- Handlers ---------------------------------------------------------------
 
 pub async fn contract_create_handler(
     State(state): State<Arc<HttpState>>,
@@ -134,6 +241,10 @@ pub async fn contract_create_handler(
     let remaining = contract.budget_remaining.load(Ordering::Acquire);
     let status = contract.status.clone();
     state.contract_registry.contracts.insert(id.clone(), contract);
+
+    if let Some(c) = state.contract_registry.contracts.get(&id) {
+        let _ = state.contract_db.persist(&*c);
+    }
 
     (
         StatusCode::CREATED,
@@ -166,6 +277,7 @@ pub async fn contract_tick_handler(
                 "ts": now_unix()
             }));
         }
+        let _ = state.contract_db.persist(&*entry);
         return (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -180,6 +292,7 @@ pub async fn contract_tick_handler(
         entry.status = "in_progress".to_string();
     }
 
+    let _ = state.contract_db.persist(&*entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -248,6 +361,7 @@ pub async fn contract_deliver_handler(
     let team_count = entry.team.len();
     let all_delivered = delivered_count >= team_count;
 
+    let _ = state.contract_db.persist(&*entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -297,6 +411,7 @@ pub async fn contract_vote_handler(
             "extensions": entry.extensions,
             "ts": now_unix()
         }));
+        let _ = state.contract_db.persist(&*entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -306,6 +421,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else if majority {
+        let _ = state.contract_db.persist(&*entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -314,6 +430,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else {
+        let _ = state.contract_db.persist(&*entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -350,6 +467,7 @@ pub async fn contract_close_handler(
         "ts": now_unix()
     }));
 
+    let _ = state.contract_db.persist(&*entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -612,5 +730,64 @@ mod tests {
 
         assert_eq!(entry.extensions, 2);
         assert_eq!(entry.status, "blocked");
+    }
+
+    #[test]
+    fn test_contract_db_roundtrip() {
+        let db = ContractDb::open(":memory:").expect("in-memory db");
+        let c = WorkContract {
+            id: "bwc-rt-01".into(),
+            task: "roundtrip test".into(),
+            budget: 5,
+            budget_remaining: AtomicI64::new(3),
+            team: vec!["alpha".into(), "beta".into()],
+            consolidator: "alpha".into(),
+            channel_id: "chan-rt".into(),
+            status: "in_progress".into(),
+            created_at: 2000,
+            deliveries: vec![ContractDelivery {
+                agent_id: "beta".into(),
+                summary: "done".into(),
+                delivered_at: 2001,
+            }],
+            votes: vec![],
+            extensions: 0,
+        };
+        db.persist(&c).expect("persist");
+        let loaded = db.load_active().expect("load_active");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, "bwc-rt-01");
+        assert_eq!(loaded[0].budget_remaining.load(Ordering::Acquire), 3);
+        assert_eq!(loaded[0].team.len(), 2);
+        assert_eq!(loaded[0].deliveries.len(), 1);
+    }
+
+    #[test]
+    fn test_contract_db_done_excluded() {
+        let db = ContractDb::open(":memory:").expect("in-memory db");
+        let mut c = WorkContract {
+            id: "bwc-done-01".into(),
+            task: "finished".into(),
+            budget: 5,
+            budget_remaining: AtomicI64::new(0),
+            team: vec!["alice".into()],
+            consolidator: "alice".into(),
+            channel_id: "chan-x".into(),
+            status: "done".into(),
+            created_at: 3000,
+            deliveries: vec![],
+            votes: vec![],
+            extensions: 0,
+        };
+        db.persist(&c).expect("persist done");
+        let loaded = db.load_active().expect("load_active");
+        assert_eq!(loaded.len(), 0, "done contracts must not be loaded");
+
+        c.status = "in_progress".into();
+        c.id = "bwc-active-01".into();
+        c.budget_remaining.store(3, Ordering::Release);
+        db.persist(&c).expect("persist active");
+        let loaded2 = db.load_active().expect("load_active 2");
+        assert_eq!(loaded2.len(), 1);
     }
 }
