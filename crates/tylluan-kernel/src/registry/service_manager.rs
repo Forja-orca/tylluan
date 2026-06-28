@@ -1,4 +1,4 @@
-﻿//! # Auxiliary Service Manager
+//! # Auxiliary Service Manager
 //!
 //! Manages non-MCP background processes (e.g., Browser, Cron runners, Proxies).
 //! These services are defined in `tylluan.toml` under the `[services]` section.
@@ -254,9 +254,16 @@ mod tests {
         let manager = ServiceManager::new();
         let mut configs = HashMap::new();
         
+        let cmd = if cfg!(target_os = "windows") { "cmd".to_string() } else { "sh".to_string() };
+        let args = if cfg!(target_os = "windows") {
+            vec!["/c".to_string(), "echo hello".to_string()]
+        } else {
+            vec!["-c".to_string(), "echo hello".to_string()]
+        };
+
         configs.insert("test-service".to_string(), ServiceConfig {
-            command: Some("cmd".to_string()), // Use 'cmd' on Windows
-            args: Some(vec!["/c".to_string(), "echo hello".to_string()]),
+            command: Some(cmd),
+            args: Some(args),
             always_on: true,
             url: None,
             env: None,
