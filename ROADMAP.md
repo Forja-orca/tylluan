@@ -26,13 +26,14 @@ What's NOT included:
 **Goal:** Get real users, real feedback, real benchmarks.
 
 Planned:
-- [ ] Published benchmarks with reproducible methodology
-- [ ] 3+ end-to-end examples in `examples/`
-- [ ] GitHub Discussions active with community engagement
-- [ ] Automated security tests (intent filter, ACL, rate limiter)
+- [x] Published benchmarks with reproducible methodology (`benchmarks/run.py`)
+- [x] 3+ end-to-end examples in `examples/` (5 examples including autonomous chain and BWC demo)
+- [x] GitHub Discussions active with community engagement (Discussion #2 live)
+- [x] Dashboard screenshots from Tylluan's own kernel (not ForjaMCPo3)
+- [x] Fix all compiler warnings (0 warnings as of v0.2.0)
+- [x] M10 Bounded Work Contracts — finite multi-agent coordination protocol
+- [ ] Automated security tests in CI (intent filter, ACL, rate limiter)
 - [ ] Complete SQLCipher integration across all database modules
-- [ ] Dashboard screenshots from Tylluan's own kernel (not ForjaMCPo3)
-- [ ] Fix all compiler warnings
 - [ ] First external contributor PR merged
 
 Success criteria:
