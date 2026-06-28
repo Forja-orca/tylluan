@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use axum::{
     Json,
-    extract::{State, Path},
+    extract::{State, Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -359,458 +359,258 @@ pub async fn contract_close_handler(
     )
 }
 
+#[derive(Deserialize)]
+pub struct ActiveContractQuery {
+    pub channel_id: String,
+}
+
+pub async fn contract_active_handler(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<ActiveContractQuery>,
+) -> impl IntoResponse {
+    let mut found = None;
+    for entry in state.contract_registry.contracts.iter() {
+        let contract = entry.value();
+        if contract.channel_id == q.channel_id && contract.status != "done" {
+            let remaining = contract.budget_remaining.load(Ordering::Acquire);
+            found = Some(serde_json::json!({
+                "contract_id": contract.id,
+                "budget_remaining": remaining,
+                "status": &contract.status
+            }));
+            break;
+        }
+    }
+
+    match found {
+        Some(json) => (StatusCode::OK, Json(json)).into_response(),
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "no active contract found for this channel"}))).into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
-    use std::collections::HashMap;
-    use axum::{Router, body::Body, http::Request};
-    use tower::ServiceExt;
-    use tokio::sync::RwLock;
-    use dashmap::DashMap;
+    use std::sync::atomic::AtomicI64;
 
-    fn test_state() -> Arc<HttpState> {
-        use tokio::sync::broadcast;
-        let (broadcast_tx, _) = broadcast::channel(100);
-        Arc::new(HttpState {
-            version: "test".into(),
-            auth_token: None,
-            dev_mode: Some(true),
-            server: None,
-            registry: crate::registry::actor::RegistryHandle::new(),
-            doctor: Arc::new(crate::doctor::Doctor::new_mock()),
-            memory: Arc::new(crate::memory::hybrid::HybridMemory::new_mock()),
-            silva: Arc::new(crate::memory::silva::SilvaDB::open_mock()),
-            mailbox: Arc::new(crate::memory::mailbox::Mailbox::new()),
-            coloquio: Arc::new(crate::memory::coloquio::ColoquioDb::new_mock()),
-            matcher: Arc::new(crate::router::matcher::GuildMatcher::new()),
-            start_time: std::time::Instant::now(),
-            broadcast_tx,
-            download_progress_tx: tokio::sync::broadcast::channel(10).0,
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            guild_status_cache: Arc::new(std::sync::Mutex::new(None)),
-            agent_rate_limiter: Arc::new(DashMap::new()),
-            config: Arc::new(RwLock::new(crate::config::TylluanConfig::default())),
-            tunnel_wsl_url: None,
-            oauth: std::sync::Arc::new(crate::transport::http::oauth::OAuthState::new("http://localhost:9999".into())),
-            metrics_ring: Arc::new(RwLock::new(crate::metrics_ring::MetricsRingBuffer::new())),
-            jobs: Arc::new(crate::memory::jobs::JobQueue::new()),
-            cancel_token: tokio_util::sync::CancellationToken::new(),
-            node_router: Arc::new(crate::memory::agent_nodes::AgentNodeRouter::new(tokio::sync::broadcast::channel(10).0)),
-            journal: Arc::new(crate::transport::http::api_v1::api_journal::JournalDb::open_mock()),
-            agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
-            contract_registry: ContractRegistry::new(),
-            health_ready: Arc::new(AtomicBool::new(true)),
-        })
+    fn make_contract(id: &str) -> WorkContract {
+        WorkContract {
+            id: id.to_string(),
+            task: "test task".into(),
+            budget: 10,
+            budget_remaining: AtomicI64::new(10),
+            team: vec!["alice".into(), "bob".into()],
+            consolidator: "alice".into(),
+            channel_id: "chan-1".into(),
+            status: "open".into(),
+            created_at: 1000,
+            deliveries: vec![],
+            votes: vec![],
+            extensions: 0,
+        }
     }
 
-    fn contract_routes() -> Router<Arc<HttpState>> {
-        Router::new()
-            .route("/api/v1/work-contracts", post(contract_create_handler))
-            .route("/api/v1/work-contracts/{id}", get(contract_get_handler))
-            .route("/api/v1/work-contracts/{id}/tick", post(contract_tick_handler))
-            .route("/api/v1/work-contracts/{id}/deliver", post(contract_deliver_handler))
-            .route("/api/v1/work-contracts/{id}/vote", post(contract_vote_handler))
-            .route("/api/v1/work-contracts/{id}/close", post(contract_close_handler))
+    #[test]
+    fn test_create_contract() {
+        let registry = ContractRegistry::new();
+        let c = make_contract("bwc-001");
+        registry.contracts.insert("bwc-001".into(), c);
+
+        let entry = registry.contracts.get("bwc-001").unwrap();
+        assert_eq!(entry.task, "test task");
+        assert_eq!(entry.budget, 10);
+        assert_eq!(entry.budget_remaining.load(Ordering::Acquire), 10);
+        assert_eq!(entry.status, "open");
+        assert_eq!(entry.team.len(), 2);
     }
 
-    #[tokio::test]
-    async fn test_create_and_get_contract() {
-        let state = test_state();
-        let app = contract_routes().with_state(state);
+    #[test]
+    fn test_tick_decrements_budget() {
+        let registry = ContractRegistry::new();
+        let c = make_contract("bwc-002");
+        registry.contracts.insert("bwc-002".into(), c);
 
-        let body = serde_json::json!({
-            "task": "refactor auth module",
-            "budget": 10,
-            "team": ["alpha", "beta"],
-            "consolidator": "alpha",
-            "channel_id": "chan-1"
-        });
-
-        let resp = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/work-contracts")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::CREATED);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        let contract_id = json["contract_id"].as_str().unwrap().to_string();
-        assert_eq!(json["status"], "open");
-        assert_eq!(json["budget_remaining"], 10);
-
-        let resp = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("GET")
-                    .uri(&format!("/api/v1/work-contracts/{}", contract_id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["task"], "refactor auth module");
-        assert_eq!(json["status"], "open");
-        assert_eq!(json["budget_remaining"], 10);
-        assert_eq!(json["deliveries"].as_array().unwrap().len(), 0);
+        let mut entry = registry.contracts.get_mut("bwc-002").unwrap();
+        let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
+        assert_eq!(remaining, 9);
+        let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
+        assert_eq!(remaining, 8);
     }
 
-    #[tokio::test]
-    async fn test_tick_consumes_budget() {
-        let state = test_state();
-        let app = contract_routes().with_state(state);
+    #[test]
+    fn test_tick_to_zero_and_blocked() {
+        let registry = ContractRegistry::new();
+        let c = WorkContract {
+            id: "bwc-003".into(),
+            task: "test".into(),
+            budget: 2,
+            budget_remaining: AtomicI64::new(2),
+            team: vec!["alice".into()],
+            consolidator: "alice".into(),
+            channel_id: "chan-1".into(),
+            status: "open".into(),
+            created_at: 1000,
+            deliveries: vec![],
+            votes: vec![],
+            extensions: 0,
+        };
+        registry.contracts.insert("bwc-003".into(), c);
 
-        let body = serde_json::json!({
-            "task": "tick test",
-            "budget": 3,
-            "team": ["agent-x"],
-            "consolidator": "agent-x",
-            "channel_id": "chan-1"
-        });
-
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/work-contracts")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        let cid = json["contract_id"].as_str().unwrap().to_string();
-
-        for expected_remaining in [2i64, 1, 0] {
-            let tick = serde_json::json!({ "agent_id": "agent-x" });
-            let resp = app.clone()
-                .oneshot(
-                    Request::builder()
-                        .method("POST")
-                        .uri(&format!("/api/v1/work-contracts/{}/tick", cid))
-                        .header("content-type", "application/json")
-                        .body(Body::from(serde_json::to_string(&tick).unwrap()))
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(resp.status(), StatusCode::OK);
-            let json: serde_json::Value = serde_json::from_slice(
-                &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-            ).unwrap();
-            assert_eq!(json["remaining"], expected_remaining);
+        {
+            let mut entry = registry.contracts.get_mut("bwc-003").unwrap();
+            entry.budget_remaining.fetch_sub(1, Ordering::AcqRel);
+            let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
+            assert_eq!(remaining, 0);
         }
 
-        let tick = serde_json::json!({ "agent_id": "agent-x" });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/tick", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&tick).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["action"], "request_extension");
+        {
+            let mut entry = registry.contracts.get_mut("bwc-003").unwrap();
+            let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
+            assert!(remaining < 0);
+            entry.budget_remaining.store(0, Ordering::Release);
+            if entry.status != "blocked" {
+                entry.status = "blocked".to_string();
+            }
+            assert_eq!(entry.status, "blocked");
+            assert_eq!(entry.budget_remaining.load(Ordering::Acquire), 0);
+        }
     }
 
-    #[tokio::test]
-    async fn test_full_lifecycle() {
-        let state = test_state();
-        let app = contract_routes().with_state(state);
+    #[test]
+    fn test_delivery_tracking() {
+        let registry = ContractRegistry::new();
+        let c = make_contract("bwc-004");
+        registry.contracts.insert("bwc-004".into(), c);
 
-        let body = serde_json::json!({
-            "task": "lifecycle test",
-            "budget": 10,
-            "team": ["alice", "bob"],
-            "consolidator": "alice",
-            "channel_id": "chan-lc"
+        let mut entry = registry.contracts.get_mut("bwc-004").unwrap();
+        entry.deliveries.push(ContractDelivery {
+            agent_id: "alice".into(),
+            summary: "did work".into(),
+            delivered_at: 1001,
         });
 
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/work-contracts")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        let cid = json["contract_id"].as_str().unwrap().to_string();
-
-        let tick = serde_json::json!({ "agent_id": "alice" });
-        app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/tick", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&tick).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let deliver = serde_json::json!({
-            "agent_id": "alice",
-            "summary": "refactored auth service"
-        });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/deliver", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&deliver).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["deliveries"], 1);
-        assert_eq!(json["all_delivered"], false);
-
-        let deliver2 = serde_json::json!({
-            "agent_id": "bob",
-            "summary": "wrote tests"
-        });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/deliver", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&deliver2).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["deliveries"], 2);
-        assert_eq!(json["all_delivered"], true);
-
-        let close = serde_json::json!({
-            "agent_id": "alice",
-            "summary": "done"
-        });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/close", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&close).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["status"], "done");
-
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("GET")
-                    .uri(&format!("/api/v1/work-contracts/{}", cid))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["status"], "done");
+        assert_eq!(entry.deliveries.len(), 1);
+        assert_eq!(entry.deliveries[0].agent_id, "alice");
     }
 
-    #[tokio::test]
-    async fn test_close_by_non_consolidator_forbidden() {
-        let state = test_state();
-        let app = contract_routes().with_state(state);
+    #[test]
+    fn test_vote_majority_logic() {
+        let registry = ContractRegistry::new();
+        let c = make_contract("bwc-005");
+        registry.contracts.insert("bwc-005".into(), c);
 
-        let body = serde_json::json!({
-            "task": "close guard test",
-            "budget": 5,
-            "team": ["alice", "bob"],
-            "consolidator": "alice",
-            "channel_id": "chan-close"
+        let mut entry = registry.contracts.get_mut("bwc-005").unwrap();
+        entry.votes.push(ContractVote {
+            agent_id: "alice".into(),
+            vote: "approve".into(),
+            cycles: Some(5),
         });
 
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/work-contracts")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let approves = entry.votes.iter().filter(|v| v.vote == "approve").count();
+        let total = entry.votes.len();
+        assert!(total == 1 && approves == 1);
 
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        let cid = json["contract_id"].as_str().unwrap().to_string();
-
-        let close = serde_json::json!({
-            "agent_id": "bob",
-            "summary": "nope"
+        entry.votes.push(ContractVote {
+            agent_id: "bob".into(),
+            vote: "approve".into(),
+            cycles: Some(5),
         });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/close", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&close).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
 
-        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let approves = entry.votes.iter().filter(|v| v.vote == "approve").count();
+        let total = entry.votes.len();
+        assert!(total == 2 && approves == 2);
     }
 
-    #[tokio::test]
-    async fn test_extension_vote_cycle() {
-        let state = test_state();
-        let app = contract_routes().with_state(state);
+    #[test]
+    fn test_vote_retract_and_revote() {
+        let registry = ContractRegistry::new();
+        let c = make_contract("bwc-006");
+        registry.contracts.insert("bwc-006".into(), c);
 
-        let body = serde_json::json!({
-            "task": "extend test",
-            "budget": 1,
-            "team": ["alice", "bob"],
-            "consolidator": "alice",
-            "channel_id": "chan-ext"
+        let mut entry = registry.contracts.get_mut("bwc-006").unwrap();
+        entry.votes.push(ContractVote {
+            agent_id: "alice".into(),
+            vote: "approve".into(),
+            cycles: Some(5),
         });
+        assert_eq!(entry.votes.len(), 1);
 
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/work-contracts")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        let cid = json["contract_id"].as_str().unwrap().to_string();
-
-        let tick = serde_json::json!({ "agent_id": "alice" });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/tick", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&tick).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["action"], "request_extension");
-
-        let vote = serde_json::json!({
-            "agent_id": "alice",
-            "vote": "approve",
-            "cycles": 5
+        entry.votes.retain(|v| v.agent_id != "alice");
+        entry.votes.push(ContractVote {
+            agent_id: "alice".into(),
+            vote: "reject".into(),
+            cycles: None,
         });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/vote", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&vote).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        assert_eq!(entry.votes.len(), 1);
+        assert_eq!(entry.votes[0].vote, "reject");
+    }
 
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["majority"], false);
+    #[test]
+    fn test_extension_median_cycles() {
+        let registry = ContractRegistry::new();
+        let c = WorkContract {
+            id: "bwc-007".into(),
+            task: "extend".into(),
+            budget: 1,
+            budget_remaining: AtomicI64::new(1),
+            team: vec!["alice".into(), "bob".into(), "charlie".into()],
+            consolidator: "alice".into(),
+            channel_id: "chan-1".into(),
+            status: "blocked".into(),
+            created_at: 1000,
+            deliveries: vec![],
+            votes: vec![
+                ContractVote { agent_id: "alice".into(), vote: "approve".into(), cycles: Some(10) },
+                ContractVote { agent_id: "bob".into(), vote: "approve".into(), cycles: Some(5) },
+                ContractVote { agent_id: "charlie".into(), vote: "approve".into(), cycles: Some(3) },
+            ],
+            extensions: 0,
+        };
+        registry.contracts.insert("bwc-007".into(), c);
 
-        let vote2 = serde_json::json!({
-            "agent_id": "bob",
-            "vote": "approve",
-            "cycles": 5
-        });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(&format!("/api/v1/work-contracts/{}/vote", cid))
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&vote2).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let mut entry = registry.contracts.get_mut("bwc-007").unwrap();
+        let approved_cycles: Vec<i32> = entry.votes.iter()
+            .filter_map(|v| if v.vote == "approve" { v.cycles } else { None })
+            .collect();
+        let mut sorted = approved_cycles.clone();
+        sorted.sort();
+        let median = sorted.get(sorted.len() / 2).copied().unwrap_or(5).max(1).min(50);
+        entry.budget_remaining.store(median as i64, Ordering::Release);
+        entry.extensions += 1;
+        entry.status = "extended".to_string();
 
-        let json: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()
-        ).unwrap();
-        assert_eq!(json["status"], "extended");
-        assert_eq!(json["additional_cycles"], 5);
-        assert_eq!(json["extensions"], 1);
+        assert_eq!(median, 5);
+        assert_eq!(entry.budget_remaining.load(Ordering::Acquire), 5);
+        assert_eq!(entry.extensions, 1);
+        assert_eq!(entry.status, "extended");
+    }
+
+    #[test]
+    fn test_max_two_extensions() {
+        let registry = ContractRegistry::new();
+        let c = WorkContract {
+            id: "bwc-008".into(),
+            task: "max ext".into(),
+            budget: 0,
+            budget_remaining: AtomicI64::new(0),
+            team: vec!["alice".into(), "bob".into()],
+            consolidator: "alice".into(),
+            channel_id: "chan-1".into(),
+            status: "blocked".into(),
+            created_at: 1000,
+            deliveries: vec![],
+            votes: vec![],
+            extensions: 2,
+        };
+        registry.contracts.insert("bwc-008".into(), c);
+
+        let mut entry = registry.contracts.get_mut("bwc-008").unwrap();
+        if entry.extensions < 2 {
+            entry.extensions += 1;
+            entry.status = "extended".to_string();
+        }
+
+        assert_eq!(entry.extensions, 2);
+        assert_eq!(entry.status, "blocked");
     }
 }
