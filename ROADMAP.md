@@ -32,7 +32,7 @@ Planned:
 - [x] Dashboard screenshots from Tylluan's own kernel (not ForjaMCPo3)
 - [x] Fix all compiler warnings (0 warnings as of v0.2.0)
 - [x] M10 Bounded Work Contracts — finite multi-agent coordination protocol
-- [ ] Automated security tests in CI (intent filter, ACL, rate limiter)
+- [x] Automated security tests in CI (intent filter, ACL, rate limiter) — 30 tests in `security_audit.rs`
 - [ ] Complete SQLCipher integration across all database modules
 - [ ] First external contributor PR merged
 
