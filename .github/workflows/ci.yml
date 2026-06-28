@@ -20,6 +20,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+
       - run: cargo check -p tylluan-kernel
       - run: cargo test -p tylluan-kernel --lib
       - run: cargo clippy -p tylluan-kernel -- -D warnings
@@ -80,6 +81,11 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+
+      - name: Generate DB Encryption Key for CI
+        run: |
+          # Generate a safe 64-character hex key (32 bytes) for SQLCipher tests
+          echo "TYLLUAN_DB_KEY=$(openssl rand -hex 32)" >> $GITHUB_ENV
       - name: Run security audit tests
         run: |
           cargo test -p tylluan-kernel --test security_audit

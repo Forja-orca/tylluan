@@ -42,7 +42,7 @@ chrono = "0.4"
 
 # SQLite — default: bundled (no encryption)
 # For encryption at rest, change "bundled" to "bundled-sqlcipher" and install OpenSSL dev headers.
-# Then set [security] encrypt_at_rest = true and TYLLUAN_DB_KEY env var.
+# Then set [security] encrypt_at_rest = true and TYLLUAN_DB_KEY env var (64-character hex string).
 rusqlite = { version = "0.33", features = ["bundled", "vtab", "trace"] }
 
 # Config
@@ -98,6 +98,13 @@ minimal = []
 
 # Development helpers
 semantic = []
+
+# Encryption at rest via SQLCipher (AES-256).
+# Bundles SQLCipher + OpenSSL from source — no system deps needed on Linux/macOS/ARM/Docker.
+# Windows native: not supported (use Docker Desktop instead).
+# Build with: cargo build --features encryption
+# Then set [security] encrypt_at_rest = true and TYLLUAN_DB_KEY env var (64-char hex).
+encryption = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
 
 # GPU: CUDA execution provider (NVIDIA). Build with `--features cuda`.
 # Runtime requires a CUDA-enabled onnxruntime.dll (ORT_DYLIB_PATH) + CUDA 12.x + cuDNN 9 in PATH.
