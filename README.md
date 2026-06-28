@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="v0.3.0">
+  <img src="https://img.shields.io/badge/version-0.4.0-blue.svg" alt="v0.4.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -73,104 +73,83 @@ Every push runs 5 jobs: Rust build+test (250 lib tests, 8 integration suites) + 
 
 ## Quick Start
 
-### Prerequisites
+> **The honest toll:** First boot downloads the BGE-M3 embedding model (~560 MB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant and fully offline.
 
-- [Rust](https://rustup.rs/) 1.82+
-- [Python](https://python.org/) 3.12+
-- Node.js 20+ with pnpm (for dashboard only)
+### Step 1 — Install
 
-### 1. Clone and build
-
+**Linux / macOS:**
 ```bash
-git clone https://github.com/Forja-orca/tylluan.git
-cd tylluan
-cargo build --release -p tylluan-kernel
+curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | sh
 ```
 
-### 2. Set up Python guilds
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
+```
 
+No Rust, no Python, no Node required. The script downloads the pre-compiled binary for your OS and arch.
+
+<details>
+<summary>Build from source (contributors)</summary>
+
+Requires Rust 1.82+, Python 3.12+:
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+git clone https://github.com/Forja-orca/tylluan.git && cd tylluan
+cargo build --release -p tylluan-kernel
+python -m venv .venv && source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r guilds/requirements.txt
 ```
+</details>
 
-### 3. Configure
-
-```bash
-cp tylluan.example.toml tylluan.toml
-# Defaults are safe: localhost only, auth enabled
-```
-
-### 4. Start
-
-> **Note:** The first boot downloads the BGE-M3 embedding model (~560 MB). This takes a few minutes. Subsequent starts are instant.
+### Step 2 — Start
 
 ```bash
-# Windows
-.\tylluan-mcp.bat
-
-# Linux / Mac
-./tylluan-mcp.sh
+tylluan-nexus        # Linux / macOS
+tylluan-nexus.exe    # Windows
 ```
 
-### 5. Verify
+Config is generated automatically on first run. BGE-M3 downloads with a progress bar on first boot (1–5 min, then never again):
+
+```
+Downloading BGE-M3 embedding model... [##########] 560 MB
+✓ Tylluan v0.4.0 running at http://127.0.0.1:3000
+```
+
+### Step 3 — Connect your IDE
 
 ```bash
-curl http://127.0.0.1:3000/health
-# {"status":"ok","version":"0.3.0"}
+tylluan-nexus connect cursor      # writes .cursor/mcp.json
+tylluan-nexus connect vscode      # writes .vscode/mcp.json
+tylluan-nexus connect claude      # runs: claude mcp add --transport sse tylluan ...
+tylluan-nexus connect zed         # writes ~/.config/zed/settings.json
 ```
 
-### 6. Connect your MCP client
-
-<details>
-<summary><strong>Claude Desktop</strong></summary>
-
-Add to `claude_desktop_config.json`:
+Or add manually to any MCP client:
 ```json
-{
-  "mcpServers": {
-    "tylluan": {
-      "url": "http://127.0.0.1:3000/sse"
-    }
-  }
-}
+{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3000/sse" } } }
 ```
-</details>
-
-<details>
-<summary><strong>Claude Code</strong></summary>
-
-```bash
-claude mcp add tylluan sse http://127.0.0.1:3000/sse
-```
-</details>
-
-<details>
-<summary><strong>Cursor / VS Code / Cline / Windsurf</strong></summary>
-
-Add to your MCP settings:
-```json
-{
-  "mcpServers": {
-    "tylluan": {
-      "url": "http://127.0.0.1:3000/sse"
-    }
-  }
-}
-```
-
-See `integrations/` for editor-specific config files.
-</details>
 
 > **⚠️** Always use `127.0.0.1`, never `localhost` (IPv6 resolution trap on Windows).
 >
-> **Auth:** If `dev_mode = false` (default), the kernel generates a bearer token in `.tylluan-token` on first boot. Append it to the SSE URL: `http://127.0.0.1:3000/sse?token=YOUR_TOKEN`. In dev mode, no token is needed.
+> **Auth:** If `dev_mode = false` (default), a bearer token is generated in `.tylluan-token` on first boot. Pass it as `?token=YOUR_TOKEN` on the SSE URL. In dev mode, no token is needed.
 
 ---
 
-## Status: v0.3.0
+### Advanced: Python guilds (optional)
+
+The base binary runs without Python. Install guilds to enable bash execution, vision, web search, and 40+ more tools:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Linux/Mac — or .venv\Scripts\activate on Windows
+pip install -r guilds/requirements.txt
+```
+
+Restart `tylluan-nexus` — guilds are detected automatically.
+
+---
+
+## Status: v0.4.0
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
