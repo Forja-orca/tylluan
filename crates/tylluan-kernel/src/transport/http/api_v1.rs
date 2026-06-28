@@ -358,6 +358,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/agents/heartbeat", post(agent_heartbeat_handler))
         // M10 Bounded Work Contracts
         .route("/api/v1/work-contracts", post(contract_create_handler))
+        .route("/api/v1/work-contracts/active", get(contract_active_handler))
         .route("/api/v1/work-contracts/{id}", get(contract_get_handler))
         .route("/api/v1/work-contracts/{id}/tick", post(contract_tick_handler))
         .route("/api/v1/work-contracts/{id}/deliver", post(contract_deliver_handler))
