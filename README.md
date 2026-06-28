@@ -15,6 +15,8 @@
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
   <img src="https://img.shields.io/badge/cloud-none-brightgreen.svg" alt="No Cloud">
+  <a href="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml"><img src="https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="deny.toml"><img src="https://img.shields.io/badge/license%20audit-deny.toml-blue.svg" alt="License audit"></a>
 </p>
 
 ---
@@ -58,6 +60,12 @@ tylluan_remember  Store knowledge persistently in the graph
 tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations (triples, paths, PageRank)
 ```
+
+### CI / Security
+
+[![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
+
+Every push runs: `cargo build` + `cargo test` + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`), and 7 security audit test suites. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
