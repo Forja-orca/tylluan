@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Sequential Thinking Guild — Reasoning and chain-of-thought.
 
 This guild provides tools for advanced reasoning, chain-of-thought analysis,

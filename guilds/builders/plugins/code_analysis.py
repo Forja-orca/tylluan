@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Code Analysis Guild — Advanced static analysis.
 Provides tools for multi-language code analysis, codebase searching, and context extraction.
 """

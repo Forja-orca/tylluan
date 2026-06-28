@@ -1,4 +1,4 @@
-﻿"""Coloquio guild — read and write group chat channels in TylluanNexus."""
+"""Coloquio guild — read and write group chat channels in TylluanNexus."""
 import json
 import re
 import urllib.request

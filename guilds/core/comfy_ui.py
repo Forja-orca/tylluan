@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus ComfyUI Guild — Cinematic AI video + image generation.
 
 Architecture:

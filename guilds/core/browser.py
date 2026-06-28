@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Browser Guild — Local browser automation using Edge/Chrome CDP.
 
 Uses the browser's remote debugging protocol to control the browser

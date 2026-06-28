@@ -1,5 +1,3 @@
-use tracing::info;
-
 #[cfg(target_os = "windows")]
 pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Result<()> {
     use winapi::um::jobapi2::{CreateJobObjectW, SetInformationJobObject, AssignProcessToJobObject};
@@ -12,6 +10,7 @@ pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Re
     use winapi::um::handleapi::CloseHandle;
     use std::ptr::null_mut;
     use sysinfo::{System, ProcessesToUpdate};
+    use tracing::info;
 
     let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::All, true);
@@ -93,6 +92,7 @@ pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Re
 
 #[cfg(not(target_os = "windows"))]
 pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Result<()> {
+    use tracing::warn;
     warn!("🛡️ Process isolation not supported on this OS (Guild '{}')", guild_name);
     Ok(())
 }

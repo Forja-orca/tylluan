@@ -1,4 +1,4 @@
-﻿"""
+"""
 SilvaDB utilities for Python guilds — direct node insertion.
 M17-4 Drift Guard: summary/synthesis/agent_summary blocked from guild paths.
 """

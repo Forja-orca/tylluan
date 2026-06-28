@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Database Guild — SQLite operations without external services.
 
 This guild provides:
