@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "tylluan-gui-backend"
 version = "3.0.0"
 edition = "2021"
