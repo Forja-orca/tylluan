@@ -63,7 +63,7 @@ Out of scope (v0.4.0):
 **Goal:** Connect Tylluan instances across networks without manual IP configuration.
 
 Planned:
-- [ ] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`
+- [x] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`; `GET /api/v1/federation/identity` returns node_id + public_key
 - [ ] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting
 - [ ] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
 - [ ] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks

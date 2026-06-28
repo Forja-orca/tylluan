@@ -790,3 +790,15 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
         }
     });
 }
+
+pub async fn federation_identity(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "node_id": state.node_identity.node_id(),
+            "public_key": state.node_identity.public_key_hex(),
+            "tylluan_version": env!("CARGO_PKG_VERSION"),
+        })),
+    )
+}
+

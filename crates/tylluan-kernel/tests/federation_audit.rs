@@ -77,6 +77,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(PeerDb::open(":memory:").unwrap()),
+        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_http_{}", std::process::id()))).unwrap()),
     })
 }
 

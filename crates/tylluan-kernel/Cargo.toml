@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 tylluan-common = { path = "../tylluan-common" }
+tylluan_link = { path = "../tylluan-link", package = "tylluan-link" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -119,4 +120,5 @@ guild_knowledge_test = []
 
 [dev-dependencies]
 proptest = "1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 

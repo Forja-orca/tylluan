@@ -1,4 +1,4 @@
-﻿//! blackboard_e2e.rs — Integration tests for Blackboard Protocol
+//! blackboard_e2e.rs — Integration tests for Blackboard Protocol
 //! Validates @pending / @context / @completed prefix workflows end-to-end.
 //! Uses same test_state() / build_test_app() pattern as pipeline_tests.rs.
 
@@ -86,6 +86,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
+        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_bb_{}", std::process::id()))).unwrap()),
     })
 }
 
