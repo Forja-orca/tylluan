@@ -66,7 +66,7 @@ Planned:
 - [x] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`; `GET /api/v1/federation/identity` returns node_id + public_key
 - [x] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting. Auto-fetch peer pubkey on approval. Backwards compat: skip verify if pubkey not yet stored
 - [x] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
-- [ ] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks
+- [x] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks (external_address populated on approval via M12-C auto-fetch)
 - [ ] M12-E — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without central registry
 - [ ] M12-F — Integration tests: `tests/mesh_audit.rs` covering keypair generation, signature verification, autodiscovery
 
