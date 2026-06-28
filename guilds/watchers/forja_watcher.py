@@ -114,19 +114,19 @@ class ForjaWatcher(ABC):
             await self._post(extension_msg)
             return
 
+        # M10: Atomic tick on the contract BEFORE calling respond() to prevent parallel TOCTOU budget burn
+        if contract_id:
+            ticked = await self._tick_contract(contract_id)
+            if not ticked:
+                log.error("[%s] Failed to tick contract budget (likely exhausted during parallel check). Aborting response.", self.agent_id)
+                return
+
         self._last_turn = turn
         response = await self.respond(content, event)
         if response:
             # M10: Prefix warning if budget is running low
             if remaining is not None and remaining < 3:
                 response = f"[WARNING: Conversational budget running low. Remaining: {remaining}] {response}"
-            
-            # M10: Atomic tick on the contract before publishing
-            if contract_id:
-                ticked = await self._tick_contract(contract_id)
-                if not ticked:
-                    log.error("[%s] Failed to tick contract budget. Aborting response.", self.agent_id)
-                    return
             await self._post(response)
 
     # ── helper calls ────────────────────────────────────────────────────────
