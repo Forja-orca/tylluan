@@ -65,6 +65,7 @@ pub struct HttpState {
     pub contract_db: Arc<crate::transport::http::api_v1::api_contracts::ContractDb>,
     pub peer_db: Arc<crate::federation::PeerDb>,
     pub health_ready: Arc<AtomicBool>,
+    pub node_identity: Arc<tylluan_link::identity::NodeIdentity>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -304,6 +305,7 @@ pub async fn start_http_server_with_download(
     jobs: Arc<crate::memory::jobs::JobQueue>,
     cancel_token: tokio_util::sync::CancellationToken,
     health_ready: Arc<AtomicBool>,
+    node_identity: Arc<tylluan_link::identity::NodeIdentity>,
 ) -> anyhow::Result<()> {
     use tokio::sync::broadcast;
 
@@ -371,6 +373,7 @@ pub async fn start_http_server_with_download(
                 .expect("peers.db init failed")
         ),
         health_ready,
+        node_identity,
     });
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.

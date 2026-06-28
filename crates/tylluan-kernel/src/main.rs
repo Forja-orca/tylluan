@@ -351,6 +351,20 @@ async fn main() -> anyhow::Result<()> {
         info!("Resumed {} pending jobs from previous session", resumed);
     }
 
+    // ─── Initialize Cryptographic Node Identity (M12-A) ───────────
+    let identity_path = data_dir.join("identity.key");
+    info!("🔑 Loading cryptographic node identity: {}", identity_path.display());
+    let node_identity = match tylluan_link::identity::NodeIdentity::load_or_create(&identity_path) {
+        Ok(id) => {
+            info!("🔑 Node public key (Ed25519): {}", id.public_key_hex());
+            Arc::new(id)
+        }
+        Err(e) => {
+            error!("❌ [FATAL] Node identity key is corrupted or inaccessible: {}. Boot aborted.", e);
+            std::process::exit(1);
+        }
+    };
+
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
     let mailbox_name = if prefix.contains("test") { format!("{}_mailbox.db", prefix) } else { "mailbox.db".to_string() };
 
@@ -848,7 +862,7 @@ async fn main() -> anyhow::Result<()> {
         let cancel_token_clone = cancel_token.clone();
         let health_for_http = health_ready.clone();
         tokio::spawn(async move {
-            if let Err(e) = transport::http::start_http_server_with_download(&host, port, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http).await {
+            if let Err(e) = transport::http::start_http_server_with_download(&host, port, http_token.clone(), config.nexus.dev_mode, Some(server_clone), registry_for_http.clone(), download_clone, tunnel_wsl_url, coloquio.clone(), jobs_for_http, cancel_token_clone, health_for_http, node_identity.clone()).await {
                 error!("❌ Universal Gateway: HTTP server error: {}", e);
             }
         });
