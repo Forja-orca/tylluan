@@ -173,7 +173,7 @@ def bench_memory_recall(kernel: str, token, n: int) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Tylluan benchmark suite")
-    parser.add_argument("--kernel", default="http://127.0.0.1:3033")
+    parser.add_argument("--kernel", default="http://127.0.0.1:3000")
     parser.add_argument("--token", default=None)
     parser.add_argument("--http-n", type=int, default=100, help="HTTP baseline requests")
     parser.add_argument("--post-n", type=int, default=50, help="Coloquio post samples")
