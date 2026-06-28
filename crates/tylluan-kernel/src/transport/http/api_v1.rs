@@ -304,6 +304,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/federation/sync/export", get(federation_sync_export))
         .route("/api/v1/federation/sync/pull", post(federation_sync_pull))
         .route("/api/v1/federation/sync/both", post(federation_sync_both))
+        // M11-C: Provenance query
+        .route("/api/v1/federation/nodes", get(federation_nodes_query))
         .route("/api/v1/federation/sharing/disable", post(federation_sharing_disable))
         .route("/api/v1/federation/sharing/enable", post(federation_sharing_enable))
         .route("/api/v1/federation/sharing/status", get(federation_sharing_status))

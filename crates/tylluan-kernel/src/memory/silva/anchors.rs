@@ -146,12 +146,14 @@ impl super::SilvaDB {
         })
     }
 
-    /// Get all nodes with shareable = true (used by federation sync push).
+    /// Get all shareable local nodes (excludes nodes received from federation to prevent echo loops).
     pub async fn get_shareable_nodes(&self) -> Result<Vec<GraphNode>> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes WHERE shareable = 1"
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                 FROM nodes
+                 WHERE shareable = 1 AND federation_source IS NULL"
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(GraphNode {
@@ -176,6 +178,48 @@ impl super::SilvaDB {
                 results.push(node);
             }
             Ok(results)
+        })
+    }
+
+    /// Query nodes by federation provenance.
+    /// - `source = Some("local")` or `source = None` → nodes with `federation_source IS NULL`
+    /// - `source = Some("peer-name")` → nodes received from that specific peer
+    pub async fn get_nodes_by_source(&self, source: Option<&str>, limit: usize) -> Result<Vec<GraphNode>> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let nodes: Vec<GraphNode> = if source.is_none() || source == Some("local") {
+                let mut stmt = conn.prepare(
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                     FROM nodes WHERE federation_source IS NULL LIMIT ?1"
+                )?;
+                stmt.query_map(rusqlite::params![limit as i64], |row| {
+                    Ok(GraphNode {
+                        id: row.get(0)?, node_type: row.get(1)?, content: row.get(2)?,
+                        metadata: row.get(3)?, weight: row.get(4)?,
+                        protected: row.get::<_, i32>(5)? != 0, conflicted: row.get::<_, i32>(6)? != 0,
+                        topic_key: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
+                        valid_from: row.get(10)?, valid_until: row.get(11)?,
+                        shareable: row.get::<_, i32>(12)? != 0, last_touched: Utc::now(),
+                    })
+                })?.flatten().collect()
+            } else {
+                let peer = source.unwrap();
+                let mut stmt = conn.prepare(
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                     FROM nodes WHERE federation_source = ?1 LIMIT ?2"
+                )?;
+                stmt.query_map(rusqlite::params![peer, limit as i64], |row| {
+                    Ok(GraphNode {
+                        id: row.get(0)?, node_type: row.get(1)?, content: row.get(2)?,
+                        metadata: row.get(3)?, weight: row.get(4)?,
+                        protected: row.get::<_, i32>(5)? != 0, conflicted: row.get::<_, i32>(6)? != 0,
+                        topic_key: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
+                        valid_from: row.get(10)?, valid_until: row.get(11)?,
+                        shareable: row.get::<_, i32>(12)? != 0, last_touched: Utc::now(),
+                    })
+                })?.flatten().collect()
+            };
+            Ok(nodes)
         })
     }
 

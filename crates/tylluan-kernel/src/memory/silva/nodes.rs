@@ -71,10 +71,9 @@ impl super::SilvaDB {
             );
         }
 
+        let parsed_meta = serde_json::from_str::<serde_json::Value>(metadata).ok();
         let topic_key: Option<String> = if metadata.trim().starts_with('{') {
-            serde_json::from_str::<serde_json::Value>(metadata)
-                .ok()
-                .and_then(|v| v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s))))
+            parsed_meta.as_ref().and_then(|v| v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s))))
         } else {
             if metadata.trim().starts_with('"') {
                 if let Ok(s) = serde_json::from_str::<String>(metadata) {
@@ -84,12 +83,16 @@ impl super::SilvaDB {
                 } else { None }
             } else { None }
         };
+        // Extract federation_source from metadata to store in the proper SQL column (M11-C)
+        let federation_source: Option<String> = parsed_meta
+            .as_ref()
+            .and_then(|v| v.get("federation_source").and_then(|s| s.as_str().map(String::from)));
 
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             conn.execute(
-                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_until, shareable)
-                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, 0)
+                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_until, shareable, federation_source)
+                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, 0, ?7)
                  ON CONFLICT(id) DO UPDATE SET
                     content = excluded.content,
                     metadata = excluded.metadata,
@@ -101,8 +104,9 @@ impl super::SilvaDB {
                     topic_key = COALESCE(excluded.topic_key, nodes.topic_key),
                     valid_until = COALESCE(excluded.valid_until, nodes.valid_until),
                     shareable = excluded.shareable,
+                    federation_source = COALESCE(excluded.federation_source, nodes.federation_source),
                     updated_at = CURRENT_TIMESTAMP",
-                params![id, node_type, content, metadata, topic_key, valid_until],
+                params![id, node_type, content, metadata, topic_key, valid_until, federation_source],
             )?;
             Ok::<(), anyhow::Error>(())
         })?;
