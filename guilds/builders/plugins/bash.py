@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Bash Guild — Secure shell command execution.
 
 This guild provides the `bash_execute` tool, which runs shell commands

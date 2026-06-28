@@ -25,20 +25,16 @@ jobs:
       - run: cargo clippy -p tylluan-kernel -- -D warnings
 
   rust-security-audit:
-    name: Rust — cargo-audit + cargo-deny
+    name: Rust — cargo-deny (licenses + advisories + bans)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-      - name: Advisory scan
-        run: cargo audit
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
-      - name: License + advisory compliance
+      - name: License, advisory, and ban compliance
         run: cargo deny check
 
   python-lint-test:
@@ -68,8 +64,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm ci
-      - run: npm run lint
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
 
   e2e-security-tests:
     name: Rust — security audit tests

@@ -1,4 +1,4 @@
-﻿"""Scrapling Web Guild — sovereign web scraping using Scrapling library.
+"""Scrapling Web Guild — sovereign web scraping using Scrapling library.
 
 Scraping adaptativo que escala de una URL a crawls completos.
 Usa Scrapling (BSD-3, D4Vinci/Scrapling) con fallback a requests+BeautifulSoup.

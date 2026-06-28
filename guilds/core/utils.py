@@ -1,4 +1,4 @@
-﻿"""
+"""
 Shared utilities for TylluanNexus Guilds.
 
 This module provides common functionality used across multiple guilds:

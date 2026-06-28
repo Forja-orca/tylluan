@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Watcher Guild — System Monitoring.
 
 Provides real-time system metrics (CPU, Memory, Disk, Network)

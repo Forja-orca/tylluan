@@ -4,7 +4,9 @@
 //! the kernel at wsl_bridge_port → kernel_port.
 //! On non-Windows: no-op (future: rathole sidecar).
 
+#[cfg(target_os = "windows")]
 use anyhow::Result;
+#[cfg(target_os = "windows")]
 use tracing::{info, warn};
 use crate::config::TunnelConfig;
 

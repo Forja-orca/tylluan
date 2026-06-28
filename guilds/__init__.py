@@ -1,4 +1,4 @@
-﻿"""TylluanNexus Python Guilds — Tool implementations for the Sovereign Agentic Hub."""
+"""TylluanNexus Python Guilds — Tool implementations for the Sovereign Agentic Hub."""
 
 __version__ = "3.0.0a1"
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Git Guild — Fast access to repository operations.
 
 This guild provides tools to interact with Git repositories locally,

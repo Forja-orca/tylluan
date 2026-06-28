@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Ingest Guild — File ingestion pipeline.
 
 Processes files and creates nodes in SilvaDB.

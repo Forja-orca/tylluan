@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Sandbox Guild — Ephemeral Docker execution.
 
 Executes commands and scripts in fully isolated containers. Each invocation

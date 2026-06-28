@@ -4,9 +4,11 @@ End-to-end tests for Unified Memory Bridge.
 This tests the IPC between Python guilds and kernel SilvaDB.
 """
 
-import pytest
 import os
 import sys
+
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from guilds.core.memory_bridge import MemoryBridge, get_bridge

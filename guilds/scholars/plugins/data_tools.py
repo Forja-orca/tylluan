@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Scholar Guild — Data Tools.
 
 Provides tools for manipulating and querying common data formats:

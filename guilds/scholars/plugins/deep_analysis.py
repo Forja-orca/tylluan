@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Deep Analysis Guild — Advanced project-wide code understanding.
 
 This guild provides:

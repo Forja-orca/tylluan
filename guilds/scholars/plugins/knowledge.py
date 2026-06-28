@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Knowledge Guild — Automatic knowledge graph triple extraction.
 
 This guild provides a tool to extract subject-predicate-object triples

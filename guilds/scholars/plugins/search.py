@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Search Guild — Local content search without API keys.
 
 This guild provides:

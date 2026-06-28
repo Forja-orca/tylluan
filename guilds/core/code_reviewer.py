@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Code Reviewer Guild — Static analysis and refactoring suggestions.
 
 This guild provides:

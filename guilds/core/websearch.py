@@ -1,4 +1,4 @@
-﻿"""Web Search guild — SearXNG meta-search for autonomous agent research."""
+"""Web Search guild — SearXNG meta-search for autonomous agent research."""
 import json
 import urllib.parse
 import urllib.request

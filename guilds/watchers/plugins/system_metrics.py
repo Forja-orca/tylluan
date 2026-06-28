@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus System Metrics Guild — Local system monitoring tools.
 
 Provides tools to get system metrics (CPU, memory, disk) without external dependencies.

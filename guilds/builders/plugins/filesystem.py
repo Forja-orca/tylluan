@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Filesystem Guild — Local file I/O operations.
 
 Provides tools for reading, writing, searching, and listing files
