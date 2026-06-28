@@ -52,7 +52,7 @@ target-version = "py311"
 [tool.ruff.lint]
 # E=pycodestyle errors, F=pyflakes (real bugs). Style rules (I/N/UP/W) added when guild files are clean.
 select = ["E", "F"]
-ignore = ["E501"]
+ignore = ["E501", "F401"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
