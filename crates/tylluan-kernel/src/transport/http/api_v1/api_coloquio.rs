@@ -159,11 +159,14 @@ pub async fn coloquio_post_message(
             }
 
             // Broadcast message via SSE for real-time dashboard update (M17-4)
+            // content is included so watchers can detect @mentions without polling
             let _ = state.broadcast_tx.send(serde_json::json!({
                 "type": "coloquio:new_turn",
                 "channel_id": id,
                 "msg_id": msg.msg_id,
                 "author_id": msg.author_id,
+                "content": msg.content,
+                "role": msg.role,
                 "turn": msg.turn,
                 "ts": chrono::Utc::now().timestamp_millis()
             }));
