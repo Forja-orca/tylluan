@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use tracing::{info, warn};
 use chrono;
 
@@ -1139,7 +1139,7 @@ mod tests {
 
     #[test]
     fn test_parse_coloquio_lee_el_with_limit_offset() {
-        let (cid, content, hint) = parse_coloquio_intent("lee el coloquio mision-activa offset 140 limit 30");
+        let (cid, _content, hint) = parse_coloquio_intent("lee el coloquio mision-activa offset 140 limit 30");
         assert_eq!(cid.as_deref(), Some("mision-activa"));
         assert_eq!(hint, "read");
     }

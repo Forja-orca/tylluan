@@ -1,4 +1,4 @@
-﻿use anyhow::{Result, Context};
+use anyhow::{Result, Context};
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Mutex;
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_mark_done() {
         let q = test_queue();
-        let id = q.enqueue("done_test", &serde_json::json!({})).unwrap();
+        let _id = q.enqueue("done_test", &serde_json::json!({})).unwrap();
         let job = q.claim_next("done_test").unwrap().unwrap();
         q.mark_done(&job.id).unwrap();
 
