@@ -487,12 +487,12 @@ fn build_router(state: Arc<HttpState>) -> Router {
         ));
 
     // 3. Assemble and Static Assets
-    // NOTE: ServeDir with a fallback(ServeFile) intercepts ALL unmatched routes including
-    // /api/* before the Axum router can process them. We use a smart fallback handler instead
-    // that only serves index.html for non-API paths (SPA client-side routing).
+    // IMPORTANT: In Axum, .fallback_service() overwrites .fallback(). Using both means the
+    // last one wins. We use only .fallback() with smart routing:
+    //   - /api/* routes that weren't matched → 404 (never index.html, would hide auth errors)
+    //   - Real static assets (JS/CSS) → read from disk via ServeDir tower service
+    //   - SPA client-side routes → index.html
     let static_dir = find_workspace_root().join("dashboard/dist");
-    let static_dir_clone = static_dir.clone();
-    let static_service = tower_http::services::ServeDir::new(&static_dir);
 
     Router::new()
         .merge(public_routes)
@@ -500,29 +500,68 @@ fn build_router(state: Arc<HttpState>) -> Router {
         // index.html never cached — assets use content-hash and can cache forever
         .route("/", axum::routing::get(serve_index))
         .route("/index.html", axum::routing::get(serve_index))
-        .fallback(move |req: axum::extract::Request| {
-            let path = req.uri().path().to_owned();
-            let static_dir_inner = static_dir_clone.clone();
-            async move {
-                // API routes that weren't matched by registered handlers → 404 JSON
-                // (never serve index.html for /api/* — that would hide auth errors)
-                if path.starts_with("/api/") || path.starts_with("/health") || path.starts_with("/discovery") {
-                    return axum::http::StatusCode::NOT_FOUND.into_response();
+        .fallback_service(
+            tower::service_fn(move |req: axum::extract::Request| {
+                let path = req.uri().path().to_owned();
+                let static_dir_inner = static_dir.clone();
+                async move {
+                    // API routes not matched by registered handlers → 404
+                    // (never fall through to index.html, that would hide auth errors)
+                    if path.starts_with("/api/") {
+                        let resp = axum::http::Response::builder()
+                            .status(404)
+                            .header("Content-Type", "application/json")
+                            .body(axum::body::Body::from("{\"error\":\"not_found\"}"))
+                            .unwrap();
+                        return Ok::<_, std::convert::Infallible>(resp);
+                    }
+                    // Static assets (JS/CSS/fonts) — serve from disk
+                    let file_path = static_dir_inner.join(path.trim_start_matches('/'));
+                    if file_path.is_file() {
+                        if let Ok(bytes) = tokio::fs::read(&file_path).await {
+                            let mime = match file_path.extension().and_then(|e| e.to_str()) {
+                                Some("js")   => "application/javascript; charset=utf-8",
+                                Some("css")  => "text/css; charset=utf-8",
+                                Some("html") => "text/html; charset=utf-8",
+                                Some("svg")  => "image/svg+xml",
+                                Some("png")  => "image/png",
+                                Some("ico")  => "image/x-icon",
+                                Some("woff2")=> "font/woff2",
+                                Some("woff") => "font/woff",
+                                _            => "application/octet-stream",
+                            };
+                            let resp = axum::http::Response::builder()
+                                .status(200)
+                                .header("Content-Type", mime)
+                                .header("Cache-Control", "public, max-age=31536000, immutable")
+                                .body(axum::body::Body::from(bytes))
+                                .unwrap();
+                            return Ok(resp);
+                        }
+                    }
+                    // SPA client-side routes → index.html
+                    let index_path = static_dir_inner.join("index.html");
+                    match tokio::fs::read(&index_path).await {
+                        Ok(bytes) => {
+                            let resp = axum::http::Response::builder()
+                                .status(200)
+                                .header("Content-Type", "text/html; charset=utf-8")
+                                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                                .body(axum::body::Body::from(bytes))
+                                .unwrap();
+                            Ok(resp)
+                        }
+                        Err(_) => {
+                            let resp = axum::http::Response::builder()
+                                .status(404)
+                                .body(axum::body::Body::empty())
+                                .unwrap();
+                            Ok(resp)
+                        }
+                    }
                 }
-                // For SPA client-side routes, serve index.html
-                let index_path = static_dir_inner.join("index.html");
-                match tokio::fs::read(&index_path).await {
-                    Ok(bytes) => axum::response::Response::builder()
-                        .status(200)
-                        .header("Content-Type", "text/html; charset=utf-8")
-                        .header("Cache-Control", "no-cache, no-store, must-revalidate")
-                        .body(axum::body::Body::from(bytes))
-                        .unwrap_or_else(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()),
-                    Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
-                }
-            }
-        })
-        .fallback_service(static_service)
+            })
+        )
         .layer(tower_http::compression::CompressionLayer::new())
         .layer(cors)
         .layer(middleware::from_fn(force_utf8_middleware))
