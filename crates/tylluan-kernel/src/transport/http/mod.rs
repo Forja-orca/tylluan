@@ -66,6 +66,7 @@ pub struct HttpState {
     pub peer_db: Arc<crate::federation::PeerDb>,
     pub health_ready: Arc<AtomicBool>,
     pub node_identity: Arc<tylluan_link::identity::NodeIdentity>,
+    pub nat_cache: Arc<tokio::sync::RwLock<Option<tylluan_link::nat::ExternalAddr>>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -374,6 +375,7 @@ pub async fn start_http_server_with_download(
         ),
         health_ready,
         node_identity,
+        nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
     });
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.

@@ -78,6 +78,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(PeerDb::open(":memory:").unwrap()),
         node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_http_{}", std::process::id()))).unwrap()),
+        nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
     })
 }
 
@@ -93,6 +94,7 @@ async fn test_peer_db_roundtrip() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
 
     peer_db.insert(&peer).unwrap();
@@ -118,6 +120,7 @@ async fn test_peer_approval_required() {
         approved: false, // NOT approved
         added_at: 0,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
     state.peer_db.insert(&unapproved).unwrap();
     state.config.write().await.federation_peers.push(unapproved);
@@ -147,6 +150,7 @@ async fn test_shared_secret_separate_from_auth() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
 
     let data = b"confidential payload";
@@ -172,6 +176,7 @@ async fn test_provenance_tagged_on_receive() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
     state.config.write().await.federation_peers.push(peer.clone());
@@ -238,6 +243,7 @@ async fn test_no_echo_loop() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
     state.config.write().await.federation_peers.push(peer);

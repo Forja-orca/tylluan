@@ -189,6 +189,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(PeerDb::open(":memory:").unwrap()),
         node_identity,
+        nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
     })
 }
 

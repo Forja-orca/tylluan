@@ -93,6 +93,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
         node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_pipe_{}", std::process::id()))).unwrap()),
+        nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
     })
 }
 

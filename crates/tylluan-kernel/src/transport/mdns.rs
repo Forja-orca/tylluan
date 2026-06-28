@@ -113,6 +113,7 @@ pub fn start_mdns_discovery(
                         last_sync: None,
                         approved: false, // requires human approval + token before any sync
                         ed25519_pubkey: String::new(),
+                        external_address: String::new(),
                     });
                     info!("🔍 mDNS: Discovered peer '{}' — PENDING APPROVAL (set token + approve before sync)", peer_name);
                     if let Some(ref path_buf) = config_path
