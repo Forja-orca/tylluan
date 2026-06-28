@@ -54,6 +54,9 @@ target-version = "py311"
 select = ["E", "F"]
 ignore = ["E501", "F401"]
 
+[tool.ruff.lint.per-file-ignores]
+"guilds/**" = ["F401", "F841", "E402", "E401", "F541", "E722"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests/python"]
