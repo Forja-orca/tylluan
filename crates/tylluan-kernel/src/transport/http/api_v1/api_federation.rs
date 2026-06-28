@@ -498,6 +498,35 @@ pub async fn federation_sync_both(
     }))).into_response()
 }
 
+// ── M11-C: Provenance query endpoint ─────────────────────────────────────────
+
+/// GET /api/v1/federation/nodes?source={peer_name|local}&limit=N
+pub async fn federation_nodes_query(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let source = params.get("source").map(|s| s.as_str());
+    let limit: usize = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(200);
+    match state.silva.get_nodes_by_source(source, limit).await {
+        Ok(nodes) => {
+            let items: Vec<serde_json::Value> = nodes.iter().map(|n| serde_json::json!({
+                "id": n.id,
+                "node_type": n.node_type,
+                "content": n.content,
+                "weight": n.weight,
+                "shareable": n.shareable,
+                "topic_key": n.topic_key,
+            })).collect();
+            (StatusCode::OK, Json(serde_json::json!({
+                "source": source.unwrap_or("local"),
+                "count": items.len(),
+                "nodes": items,
+            }))).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 // ── Sharing policy ───────────────────────────────────────────────────────────
 
 pub async fn federation_sharing_disable(State(state): State<Arc<HttpState>>) -> impl IntoResponse {

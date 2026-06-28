@@ -41,7 +41,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 9;
+            const SCHEMA_VERSION: i32 = 10;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -95,6 +95,17 @@ impl super::SilvaDB {
                      );"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added silva_kv table (v9)");
+            }
+            if schema_version < 10 {
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN federation_source TEXT", []);
+                // Backfill from metadata JSON for nodes already tagged via the old approach
+                conn.execute_batch(
+                    "UPDATE nodes
+                     SET federation_source = json_extract(metadata, '$.federation_source')
+                     WHERE federation_source IS NULL
+                       AND json_extract(metadata, '$.federation_source') IS NOT NULL;"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added federation_source column + backfill (v10)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;
