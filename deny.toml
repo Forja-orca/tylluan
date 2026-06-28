@@ -32,6 +32,43 @@ exceptions = []
 multiple-versions = "deny"
 wildcards = "deny"
 highlight = "versions"
+# Transitive duplicates from fastembed/rmcp/mdns-sd/rusqlite/rand ecosystem.
+# These cannot be unified without upstream changes — pin only the oldest extras.
+skip = [
+    # base64: spm_precompiled→fastembed pulls 0.13, rmcp pulls 0.21; axum/reqwest own 0.22
+    { name = "base64", version = "=0.13.1" },
+    { name = "base64", version = "=0.21.7" },
+    # foldhash: rusqlite→hashlink pulls 0.1.5; safetensors→fastembed owns 0.2
+    { name = "foldhash", version = "=0.1.5" },
+    # getrandom: rand 0.8 → 0.2; ring/webpki ecosystem → 0.3; latest is 0.4
+    { name = "getrandom", version = "=0.2.17" },
+    { name = "getrandom", version = "=0.3.4" },
+    # hashbrown: four versions from rusqlite / fastembed / axum / tokio ecosystems
+    { name = "hashbrown", version = "=0.14.5" },
+    { name = "hashbrown", version = "=0.15.5" },
+    { name = "hashbrown", version = "=0.16.1" },
+    # nom: various parsers still on 7.x
+    { name = "nom", version = "=7.1.3" },
+    # quick-error: rusqlite pulls 1.x, newer deps use 2.x
+    { name = "quick-error", version = "=1.2.3" },
+    # rand ecosystem: rand 0.8 / rand_chacha 0.3 / rand_core 0.6 from older fastembed deps
+    { name = "rand", version = "=0.8.6" },
+    { name = "rand_chacha", version = "=0.3.1" },
+    { name = "rand_core", version = "=0.6.4" },
+    # smallvec: mdns-sd pulls 1.x; newer deps use 2.x alpha
+    { name = "smallvec", version = "=1.15.2" },
+    # socket2: tokio 1.x brought in 0.5; hyper/h2 now on 0.6
+    { name = "socket2", version = "=0.5.10" },
+    # webpki-roots: rustls 0.22 pulled 0.26; rustls 0.23 ships 1.x
+    { name = "webpki-roots", version = "=0.26.11" },
+    # windows-* family: multiple Windows SDK vintages from transitive deps
+    { name = "windows-result", version = "=0.1.2" },
+    { name = "windows-sys", version = "=0.52.0" },
+    { name = "windows-sys", version = "=0.59.0" },
+    { name = "windows-sys", version = "=0.60.2" },
+    { name = "windows-targets", version = "=0.52.6" },
+    { name = "windows_x86_64_msvc", version = "=0.52.6" },
+]
 
 [sources]
 unknown-git = "deny"
