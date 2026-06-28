@@ -32,6 +32,7 @@ pub mod api_ops;
 pub mod api_canvas;
 pub mod api_journal;
 pub mod api_agents;
+pub mod api_contracts;
 
 pub use api_guilds::*;
 pub use api_admin::*;
@@ -47,6 +48,7 @@ pub use api_ops::*;
 pub use api_canvas::*;
 pub use api_journal::*;
 pub use api_agents::*;
+pub use api_contracts::*;
 
 
 /// Returns 503 with a JSON error body if `state.server` is None (kernel not yet initialized).
@@ -354,6 +356,13 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/agents/session", get(agent_session_list_handler))
         .route("/api/v1/agents/stats", get(agent_stats_handler))
         .route("/api/v1/agents/heartbeat", post(agent_heartbeat_handler))
+        // M10 Bounded Work Contracts
+        .route("/api/v1/work-contracts", post(contract_create_handler))
+        .route("/api/v1/work-contracts/{id}", get(contract_get_handler))
+        .route("/api/v1/work-contracts/{id}/tick", post(contract_tick_handler))
+        .route("/api/v1/work-contracts/{id}/deliver", post(contract_deliver_handler))
+        .route("/api/v1/work-contracts/{id}/vote", post(contract_vote_handler))
+        .route("/api/v1/work-contracts/{id}/close", post(contract_close_handler))
 }
 
 // --- HANDLERS ---
