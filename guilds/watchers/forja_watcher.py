@@ -102,12 +102,64 @@ class ForjaWatcher(ABC):
         if gate != "open":
             log.info("[%s] Gate cerrado (%s) — ignorando turno %d", self.agent_id, gate, turn)
             return
+        
+        # M10: Bounded Work Contract Check
+        contract_info = await self._check_contract_budget()
+        remaining = contract_info.get("remaining")
+        contract_id = contract_info.get("contract_id")
+
+        if remaining is not None and remaining <= 0:
+            log.warning("[%s] Bounded Work Contract budget exhausted (remaining=0). Posting extension request.", self.agent_id)
+            extension_msg = f"[SOLICITUD-EXTENSIÓN: +5 ciclos. Razón: El presupuesto de turnos para @{self.agent_id} se ha agotado. Requiere aprobación humana o consenso del equipo.]"
+            await self._post(extension_msg)
+            return
+
         self._last_turn = turn
         response = await self.respond(content, event)
         if response:
+            # M10: Prefix warning if budget is running low
+            if remaining is not None and remaining < 3:
+                response = f"[WARNING: Conversational budget running low. Remaining: {remaining}] {response}"
+            
+            # M10: Atomic tick on the contract before publishing
+            if contract_id:
+                ticked = await self._tick_contract(contract_id)
+                if not ticked:
+                    log.error("[%s] Failed to tick contract budget. Aborting response.", self.agent_id)
+                    return
             await self._post(response)
 
     # ── helper calls ────────────────────────────────────────────────────────
+
+    async def _check_contract_budget(self) -> dict:
+        """Consults the kernel for any active work contracts on the channel."""
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.get(f"{FORJA_BASE}/api/v1/work-contracts/active?channel_id={self.channel_id}")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "contract_id": data.get("contract_id"),
+                        "remaining": data.get("budget_remaining")
+                    }
+        except Exception as e:
+            log.debug("[%s] Active contract lookup skipped/failed (Kernel M10 endpoints may be offline): %s", self.agent_id, e)
+        return {"contract_id": None, "remaining": None}
+
+    async def _tick_contract(self, contract_id: str) -> bool:
+        """Atomically decrements the budget of the work contract."""
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.post(f"{FORJA_BASE}/api/v1/work-contracts/{contract_id}/tick")
+                if r.status_code == 200:
+                    return True
+                elif r.status_code == 403:
+                    log.warning("[%s] Tick rejected: budget is 0 or contract is closed.", self.agent_id)
+                    return False
+        except Exception as e:
+            log.error("[%s] Error ticking contract %s: %s", self.agent_id, contract_id, e)
+        # Default to True as fallback if endpoints are not fully deployed yet to prevent deadlock
+        return True
 
     async def _is_session_active(self) -> bool:
         try:
