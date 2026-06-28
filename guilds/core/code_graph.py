@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Code-Graph Guild v1 — Static analysis code topology extractor.
 
 Analyzes Python and Rust code using tree-sitter, extracts structure,

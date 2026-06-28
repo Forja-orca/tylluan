@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sovereign Security Configuration for TylluanNexus Guilds.
 Centralizes exclusion patterns and safety constants.
 """

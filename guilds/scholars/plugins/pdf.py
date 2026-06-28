@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Scholar Guild — PDF Tools.
 
 Provides tools for extracting text, metadata, and merging PDF documents

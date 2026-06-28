@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Vision Guild — Sovereign Multimodal Analysis (SmolVLM2 ONNX Edition).
 
 Preprocessing: PIL + numpy only. No torch, no torchvision. Python 3.14 compatible.

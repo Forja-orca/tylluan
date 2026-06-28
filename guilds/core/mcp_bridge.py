@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus MCP Bridge Guild — TylluanNexus as MCP client.
 
 Connects to external MCP servers (other TylluanNexus kernels, Browser Use,

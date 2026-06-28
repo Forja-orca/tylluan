@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Docker Guild — Container lifecycle management.
 
 This guild provides tools to list, run, and monitor Docker containers.

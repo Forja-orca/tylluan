@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Audit Guild — Local audit logging and security monitoring.
 
 This guild provides tools for logging tool calls, tracking security events,

@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus n8n Bridge Guild — Workflow automation via n8n REST API.
 
 Complements the external_mcp n8n connection (which proxies MCP tools) with

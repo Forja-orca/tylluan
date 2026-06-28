@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Builder Guild — Code Formatter.
 
 Provides tools for formatting code in multiple languages using

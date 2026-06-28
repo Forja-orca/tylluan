@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Code Guild — Local code analysis without external services.
 
 This guild provides:
