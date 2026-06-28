@@ -31,7 +31,7 @@ exceptions = []
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
-highlight = "versions"
+highlight = "all"
 # Transitive duplicates from fastembed/rmcp/mdns-sd/rusqlite/rand ecosystem.
 # These cannot be unified without upstream changes — pin only the oldest extras.
 skip = [
