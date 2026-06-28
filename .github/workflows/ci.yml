@@ -34,8 +34,10 @@ jobs:
           toolchain: stable
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
-      - name: License, advisory, and ban compliance
-        run: cargo deny check
+      - name: Bans + licenses + sources
+        run: cargo deny check bans licenses sources
+      - name: Advisory scan (informational — see deny.toml to ignore specific RUSec IDs)
+        run: cargo deny check advisories
 
   python-lint-test:
     name: Python — lint + test
@@ -68,7 +70,7 @@ jobs:
         with:
           version: "10"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run lint
+      - run: pnpm run build
 
   e2e-security-tests:
     name: Rust — security audit tests

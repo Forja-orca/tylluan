@@ -91,7 +91,7 @@ pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Re
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Result<()> {
+pub fn isolate_guild_process(guild_name: &str, _cpu_limit_pct: u32) -> anyhow::Result<()> {
     use tracing::warn;
     warn!("🛡️ Process isolation not supported on this OS (Guild '{}')", guild_name);
     Ok(())
