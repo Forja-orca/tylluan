@@ -4308,7 +4308,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4321,7 +4321,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-common"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -4332,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-evals"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -4348,7 +4348,7 @@ version = "3.0.0-rc.1"
 
 [[package]]
 name = "tylluan-kernel"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4402,7 +4402,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-link"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
