@@ -126,6 +126,22 @@ fn test_acl_empty_config_allows_nonexistent_role() {
     assert!(!acl_can_access("nonexistent", "bash", &acl), "nonexistent role with empty ACL should be denied");
 }
 
+#[test]
+fn test_acl_default_role_applied_to_unknown_token() {
+    let mut roles = HashMap::new();
+    roles.insert("reader".to_string(), vec!["knowledge".to_string()]);
+    let acl = AclConfig {
+        default_role: "reader".to_string(),
+        roles,
+        tokens: HashMap::new(),
+    };
+    // Unknown token falls back to default_role="reader"
+    // acl_can_access uses role name directly; default_role is applied upstream.
+    // Verify reader role blocks bash and allows knowledge.
+    assert!(!acl_can_access("reader", "bash", &acl), "default reader cannot use bash");
+    assert!(acl_can_access("reader", "knowledge", &acl), "default reader can use knowledge");
+}
+
 // ── S1c: Rate Limiter ──────────────────────────────────────────
 
 #[test]
@@ -164,6 +180,32 @@ fn test_rate_limiter_60_calls_then_blocked() {
     }
     let result = limiter.check_and_record("burst-test");
     assert!(result.is_err(), "61st call should be rate-limited");
+}
+
+#[test]
+fn test_rate_limiter_none_uses_default_limit() {
+    // RateLimiter::new(None) → DEFAULT_MAX_CALLS = 60 per 60s window
+    let limiter = RateLimiter::new(None);
+    for i in 0..60 {
+        assert!(
+            limiter.check_and_record("default-session").is_ok(),
+            "call {} within default limit should pass", i + 1
+        );
+    }
+    assert!(
+        limiter.check_and_record("default-session").is_err(),
+        "61st call should exceed default limit of 60"
+    );
+}
+
+#[test]
+fn test_intent_filter_empty_input_safe() {
+    assert!(check_dangerous_intent("").is_none(), "empty input should not trigger filter");
+}
+
+#[test]
+fn test_intent_filter_whitespace_only_safe() {
+    assert!(check_dangerous_intent("   ").is_none(), "whitespace-only input should not trigger filter");
 }
 
 // ── S1d: Kill Switch ───────────────────────────────────────────
