@@ -118,7 +118,7 @@ cp tylluan.example.toml tylluan.toml
 ### 5. Verify
 
 ```bash
-curl http://127.0.0.1:3030/health
+curl http://127.0.0.1:3000/health
 # {"status":"ok","version":"0.1.0"}
 ```
 
@@ -132,7 +132,7 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "tylluan": {
-      "url": "http://127.0.0.1:3030/sse"
+      "url": "http://127.0.0.1:3000/sse"
     }
   }
 }
@@ -143,7 +143,7 @@ Add to `claude_desktop_config.json`:
 <summary><strong>Claude Code</strong></summary>
 
 ```bash
-claude mcp add tylluan sse http://127.0.0.1:3030/sse
+claude mcp add tylluan sse http://127.0.0.1:3000/sse
 ```
 </details>
 
@@ -155,7 +155,7 @@ Add to your MCP settings:
 {
   "mcpServers": {
     "tylluan": {
-      "url": "http://127.0.0.1:3030/sse"
+      "url": "http://127.0.0.1:3000/sse"
     }
   }
 }
@@ -166,7 +166,7 @@ See `integrations/` for editor-specific config files.
 
 > **⚠️** Always use `127.0.0.1`, never `localhost` (IPv6 resolution trap on Windows).
 >
-> **Auth:** If `dev_mode = false` (default), the kernel generates a bearer token in `.tylluan-token` on first boot. Append it to the SSE URL: `http://127.0.0.1:3030/sse?token=YOUR_TOKEN`. In dev mode, no token is needed.
+> **Auth:** If `dev_mode = false` (default), the kernel generates a bearer token in `.tylluan-token` on first boot. Append it to the SSE URL: `http://127.0.0.1:3000/sse?token=YOUR_TOKEN`. In dev mode, no token is needed.
 
 ---
 
@@ -176,10 +176,11 @@ See `integrations/` for editor-specific config files.
 |-----------|-------------|--------|
 | **M2** | BGE-M3 1024-dim nativo — 1024-dim hybrid search, Matryoshka fix | ✅ Completo |
 | **M1** | Memory Decay & Salience — half-life exponencial T½=14d en SilvaDB | ✅ Completo |
-| **Docker** | Entry point de producción en :3033, BGE-M3 cache persistente | ✅ Operativo |
+| **Docker** | Entry point de producción en :3000, BGE-M3 cache persistente | ✅ Operativo |
 | **M4** | rmcp integration — ServerHandler + stdio transport via rmcp crate | ✅ Completo |
 | **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ Completo |
 | **M7** | Single-Binary + release público | ✅ Completo |
+| **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ Completo |
 
 ---
 
@@ -192,7 +193,7 @@ See `integrations/` for editor-specific config files.
 └──────────────┬──────────────────────────────────────┘
                │ SSE / HTTP Streamable
 ┌──────────────▼──────────────────────────────────────┐
-│         tylluan-nexus (:3030)                        │
+│         tylluan-nexus (:3000)                        │
 │                                                      │
 │  ┌──────────────┐  ┌───────────────────┐  ┌─────────────────┐ │
 │  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry  │ │
@@ -253,13 +254,19 @@ Key defaults (do not change without understanding the implications):
 
 ```bash
 # Memory basics: remember, recall, think
-python examples/01_memory_basics.py --port 3033
+python examples/01_memory_basics.py --port 3000
 
 # Multi-agent communication via coloquio
-python examples/02_multi_agent_coloquio.py --port 3033
+python examples/02_multi_agent_coloquio.py --port 3000
 
 # Knowledge graph exploration
-python examples/03_knowledge_graph.py --port 3033
+python examples/03_knowledge_graph.py --port 3000
+
+# Autonomous multi-hop chain — no orchestrator, no API keys needed
+python examples/multi_model_coloquio/run.py --kernel http://127.0.0.1:3000
+
+# Bounded Work Contract — 3 agents, shared budget, finite iterations (M10)
+python examples/bounded_work_contract/run.py --kernel http://127.0.0.1:3000
 ```
 
 See [examples/](examples/) for full source code.
