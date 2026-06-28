@@ -1,62 +1,87 @@
 name: Release
 
-permissions:
-  contents: write
-
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  dist:
+  build:
     name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
+            runner: ubuntu-latest
+            suffix: ""
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            suffix: ""
           - target: x86_64-pc-windows-msvc
-            os: windows-2022
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-22.04
-          - target: x86_64-apple-darwin
-            os: macos-13
+            runner: windows-latest
+            suffix: ".exe"
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: "1.82.0"
-          targets: ${{ matrix.target }}
+          toolchain: stable
+          target: ${{ matrix.target }}
 
-      - name: Install cross-linker (aarch64 only)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build
+      - name: Build tylluan-nexus (release)
         run: cargo build --release -p tylluan-kernel --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Build tylluan-cli (release)
+        run: cargo build --release -p tylluan-cli --target ${{ matrix.target }}
+
+      - name: Prepare artifacts
+        shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf tylluan-${{ github.ref_name }}-${{ matrix.target }}.tar.gz tylluan-nexus
-          mv *.tar.gz ${{ github.workspace }}/
+          SUFFIX="${{ matrix.suffix }}"
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/tylluan-nexus$SUFFIX dist/
+          cp target/${{ matrix.target }}/release/tylluan-cli$SUFFIX dist/
+          cp README.md dist/
+          cp LICENSE dist/
 
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tylluan-${{ matrix.target }}
+          path: dist/
+
+  release:
+    name: Create Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Package and checksum
+        shell: bash
         run: |
-          cd target\${{ matrix.target }}\release
-          Compress-Archive -Path tylluan-nexus.exe -DestinationPath "${{ github.workspace }}\tylluan-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          set -e
+          for dir in tylluan-*; do
+            platform="${dir#tylluan-}"
+            archive="tylluan-${platform}.tar.gz"
+            cd "$dir"
+            sha256sum tylluan-nexus* tylluan-cli* > checksums.txt
+            tar czf "../$archive" .
+            cd ..
+          done
 
-      - name: Upload to release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            tylluan-*.tar.gz
-            tylluan-*.zip
+          files: tylluan-*.tar.gz
+          generate_release_notes: true
