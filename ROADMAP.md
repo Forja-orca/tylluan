@@ -43,14 +43,26 @@ Success criteria:
 
 ## v0.3.0 — Federation
 
-**Goal:** Connect multiple Tylluan instances securely.
+**Status:** Complete.
 
-Planned:
-- [ ] Real federation protocol (not just crypto primitives)
-- [ ] NAT traversal (Libp2p or WireGuard)
-- [ ] Asymmetric cryptography (Ed25519) for node signing
-- [ ] Peer discovery (DHT or bootstrap nodes)
-- [ ] Cross-instance memory sharing with provenance tracking
+**Goal:** Connect multiple Tylluan instances securely over LAN/VPN.
+
+Delivered:
+- [x] SQLite peer persistence (`data/peers.db`) — replaces fragile TOML storage (M11-A)
+- [x] `auth_token` / `shared_secret` split — HTTP bearer auth and ChaCha20 key are separate fields (M11-A)
+- [x] Push sync: `POST /api/v1/federation/sync` — encrypt and push local nodes to all approved peers (M11-A)
+- [x] Pull sync: `GET /api/v1/federation/sync/export` + `POST /api/v1/federation/sync/pull?peer=N` (M11-B)
+- [x] Bidirectional sync: `POST /api/v1/federation/sync/both?peer=N` — push then pull in one call (M11-B)
+- [x] Node provenance: `federation_source TEXT` column in `silva_nodes` — local vs. received nodes distinguishable at SQL level (M11-C)
+- [x] Echo-loop prevention: `get_shareable_nodes()` filters `federation_source IS NULL` — received nodes are never re-exported by default (M11-C)
+- [x] Provenance query: `GET /api/v1/federation/nodes?source={peer|local}` (M11-C)
+- [x] Scheduled auto-sync: background `tokio::spawn` loop driven by `[federation] auto_sync_interval_secs` and `auto_sync_mode` (M11-D)
+- [x] Integration test suite: `tests/federation_audit.rs` — 6 tests covering DB, approval gate, token isolation, provenance, echo-loop, auto-sync disable (M11-E)
+
+Out of scope (v0.4.0):
+- NAT traversal (Libp2p or WireGuard)
+- Asymmetric cryptography (Ed25519) for node signing
+- DHT peer discovery
 
 ## v1.0.0 — Production Ready
 
