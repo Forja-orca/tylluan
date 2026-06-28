@@ -1,4 +1,4 @@
-﻿//! Pipeline Integration Tests — cross-tool flows and invariant checks
+//! Pipeline Integration Tests — cross-tool flows and invariant checks
 //! Tests the full HTTP → MCP → handler chain in-memory
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
@@ -92,6 +92,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
+        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_pipe_{}", std::process::id()))).unwrap()),
     })
 }
 

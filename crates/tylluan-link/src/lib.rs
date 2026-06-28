@@ -1,6 +1,8 @@
-﻿//! # TylluanLink P2P — Sovereign Peer-to-Peer Connection
+//! # TylluanLink P2P — Sovereign Peer-to-Peer Connection
 //!
 //! TCP-based P2P with HMAC-SHA256 challenge-response handshake.
+
+pub mod identity;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{Hmac, Mac};
