@@ -120,7 +120,9 @@ fn build_binding_request(tx_id: [u8; 12]) -> Vec<u8> {
 }
 
 fn crc32_fingerprint(msg: &[u8]) -> u32 {
-    const CRC32_POLY: u32 = 0x04C1_1DB7;
+    // Reflected form of IEEE 802.3 CRC-32 polynomial (0x04C11DB7 → 0xEDB88320)
+    // for bit-reflected (LSB-first) implementation
+    const CRC32_POLY: u32 = 0xEDB8_8320;
     let mut crc = !0u32;
     for &byte in msg {
         crc ^= byte as u32;
@@ -280,6 +282,42 @@ mod tests {
         let (ip, port) = parse_binding_response(&buf, &tx_id).unwrap();
         assert_eq!(ip, "203.0.113.42".parse::<IpAddr>().unwrap());
         assert_eq!(port, 12345);
+    }
+
+    #[test]
+    fn test_crc32_fingerprint_known_value() {
+        // Standard IEEE CRC32 reflected (zlib) XOR'd with 0x5354554E
+        let msg = [0u8; 20];
+        let fp = crc32_fingerprint(&msg);
+        // Verified: zlib.crc32([0;20]) ^ 0x5354554E = 0x5c81cec3
+        assert_eq!(fp, 0x5c81cec3);
+    }
+
+    #[test]
+    fn test_parse_response_txid_mismatch() {
+        let sent_txid = [0xABu8; 12];
+        let mut buf = vec![0u8; 20];
+        buf[0..2].copy_from_slice(&BINDING_RESPONSE.to_be_bytes());
+        buf[4..8].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
+        // Response has zero txid, sent non-zero → mismatch
+        let result = parse_binding_response(&buf, &sent_txid);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("transaction ID mismatch"));
+    }
+
+    #[test]
+    fn test_parse_response_missing_xor_attribute() {
+        let tx_id = [0u8; 12];
+        let mut buf = vec![0u8; 20];
+        buf[0..2].copy_from_slice(&BINDING_RESPONSE.to_be_bytes());
+        let msg_len = 0u16;
+        buf[2..4].copy_from_slice(&msg_len.to_be_bytes());
+        buf[4..8].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
+        buf[8..20].copy_from_slice(&tx_id);
+        // No attributes → no XOR-MAPPED-ADDRESS found
+        let result = parse_binding_response(&buf, &tx_id);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no XOR-MAPPED-ADDRESS"));
     }
 
     #[tokio::test]

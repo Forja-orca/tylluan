@@ -68,7 +68,7 @@ Planned:
 - [x] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
 - [x] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks (external_address populated on approval via M12-C auto-fetch)
 - [ ] M12-E — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without central registry
-- [ ] M12-F — Integration tests: `tests/mesh_audit.rs` covering keypair generation, signature verification, autodiscovery
+- [x] M12-F — Integration tests: `tests/mesh_audit.rs` (10 tests) + `tests/federation_audit.rs` (6 tests) + `crates/tylluan-link/src/nat.rs` (8 tests). Covers keypair, signature, envelope, STUN RFC 5389 (CRC32, txid mismatch, missing attribute, IPv4 XOR), NAT HTTP endpoint, mDNS startup, federation sync
 
 Out of scope (v0.5.0):
 - Gossip protocol for eventual consistency across large meshes

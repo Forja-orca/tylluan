@@ -247,3 +247,37 @@ async fn test_federation_identity_endpoint() {
     assert_eq!(json["node_id"].as_str().unwrap(), expected_node_id);
     assert!(json["tylluan_version"].as_str().is_some());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_nat_external_address_http_endpoint() {
+    let state = mesh_test_state().await;
+
+    // Prime the nat_cache with a known value
+    {
+        let mut cache = state.nat_cache.write().await;
+        *cache = Some(tylluan_link::nat::ExternalAddr {
+            ip: "203.0.113.42".parse().unwrap(),
+            port: 12345,
+            stun_server: "test-stun:3478".to_string(),
+        });
+    }
+
+    let app = api_v1_routes().with_state(state);
+
+    // Test with cache hit
+    let request = Request::builder()
+        .uri("/api/v1/nat/external-address")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json["external_ip"], "203.0.113.42");
+    assert_eq!(json["external_port"], 12345);
+    assert_eq!(json["stun_server"], "test-stun:3478");
+    assert_eq!(json["cached"], true);
+}
