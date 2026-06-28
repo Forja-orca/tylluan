@@ -139,7 +139,7 @@ class ForjaWatcher(ABC):
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(
-                    f"{FORJA_BASE}/api/v1/coloquio/channels/{self.channel_id}/messages",
+                    f"{FORJA_BASE}/api/v1/coloquio/channels/{self.channel_id}/post",
                     json={"content": message, "author_id": self.agent_id, "role": "agent"},
                 )
         except Exception as exc:
