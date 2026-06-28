@@ -62,6 +62,7 @@ pub struct HttpState {
     pub journal: Arc<crate::transport::http::api_v1::api_journal::JournalDb>,
     pub agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry,
     pub contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry,
+    pub contract_db: Arc<crate::transport::http::api_v1::api_contracts::ContractDb>,
     pub health_ready: Arc<AtomicBool>,
 }
 
@@ -360,8 +361,19 @@ pub async fn start_http_server_with_download(
         ),
         agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
         contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry::new(),
+        contract_db: Arc::new(
+            crate::transport::http::api_v1::api_contracts::ContractDb::open("./data/contracts.db")
+                .expect("contracts.db init failed")
+        ),
         health_ready,
     });
+
+    // Bootstrap work contracts from SQLite into the in-memory registry.
+    if let Ok(active) = state.contract_db.load_active() {
+        for c in active {
+            state.contract_registry.contracts.insert(c.id.clone(), c);
+        }
+    }
 
     // Spawn background sampler — fills the ring every 5 seconds.
     crate::metrics_ring::spawn_metrics_sampler(metrics_ring, registry_handle);
