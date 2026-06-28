@@ -1,8 +1,8 @@
 [advisories]
 vulnerability = "deny"
 unmaintained = "all"
-notice = "all"
-yanked = "all"
+notice = "warn"
+yanked = "warn"
 ignore = []
 
 [licenses]
