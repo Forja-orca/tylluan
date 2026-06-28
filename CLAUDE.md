@@ -45,7 +45,9 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 | **M10/M11** | Work Contracts + Federación completa | ✅ v0.3.0 |
 | **Encryption** | SQLCipher AES-256 cifrado en reposo | ✅ v0.3.0 |
 | **CI** | Pipeline 5 jobs: build+test, cargo-deny, Python lint, Dashboard, security audits | ✅ Verde (250 lib tests + 14 integration) |
-| **M12** | Mesh networking — Ed25519, DHT, NAT traversal | Siguiente v0.4.0 |
+| **M12-A** | Ed25519 node identity | ✅ v0.3.0 |
+| **M12-B** | Node signing federation | ✅ v0.3.0 |
+| **M12-C** | STUN NAT traversal (hole-punch) | 🔜 Diseño listo, esperando implementación |
 
 ---
 

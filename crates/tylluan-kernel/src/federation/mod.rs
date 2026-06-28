@@ -25,6 +25,10 @@ pub struct FederationPeer {
     /// Ed25519 public key (hex) fetched from peer's /api/v1/federation/identity on approval.
     #[serde(default)]
     pub ed25519_pubkey: String,
+    /// External IP:port discovered via STUN, used for hole-punching direct connections.
+    /// Format: "ip:port" e.g. "203.0.113.5:3001". Empty string means unknown.
+    #[serde(default)]
+    pub external_address: String,
 }
 
 impl FederationPeer {
@@ -59,11 +63,13 @@ impl PeerDb {
                  approved      INTEGER NOT NULL DEFAULT 0,
                  last_sync     INTEGER,
                  added_at      INTEGER NOT NULL,
-                 ed25519_pubkey TEXT NOT NULL DEFAULT ''
-             );",
+                  ed25519_pubkey TEXT NOT NULL DEFAULT '',
+                  external_address TEXT NOT NULL DEFAULT ''
+              );",
         )?;
-        // Safe migration: add column if it doesn't exist yet (existing databases)
+        // Safe migrations: add columns if they don't exist yet (existing databases)
         let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN ed25519_pubkey TEXT NOT NULL DEFAULT '';");
+        let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN external_address TEXT NOT NULL DEFAULT '';");
         Ok(Self { conn: Arc::new(std::sync::Mutex::new(conn)) })
     }
 
@@ -77,17 +83,19 @@ impl PeerDb {
                 .as_secs() as i64
         };
         self.conn.lock().expect("peers db mutex").execute(
-            "INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
-             ON CONFLICT(name) DO UPDATE SET
-                 url=excluded.url,
-                 auth_token=excluded.auth_token,
-                 shared_secret=excluded.shared_secret,
-                 approved=excluded.approved,
-                 ed25519_pubkey=excluded.ed25519_pubkey",
+             "INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address)
+              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+              ON CONFLICT(name) DO UPDATE SET
+                  url=excluded.url,
+                  auth_token=excluded.auth_token,
+                  shared_secret=excluded.shared_secret,
+                  approved=excluded.approved,
+                  ed25519_pubkey=excluded.ed25519_pubkey,
+                  external_address=excluded.external_address",
             params![
                 peer.name, peer.url, peer.auth_token, peer.shared_secret,
-                peer.approved as i64, peer.last_sync, added_at, peer.ed25519_pubkey
+                peer.approved as i64, peer.last_sync, added_at, peer.ed25519_pubkey,
+                peer.external_address
             ],
         )?;
         Ok(())
@@ -116,6 +124,14 @@ impl PeerDb {
         Ok(n > 0)
     }
 
+    pub fn update_external_address(&self, name: &str, addr: &str) -> rusqlite::Result<bool> {
+        let n = self.conn.lock().expect("peers db mutex").execute(
+            "UPDATE federation_peers SET external_address=?2 WHERE name=?1",
+            params![name, addr],
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn update_ed25519_pubkey(&self, name: &str, pubkey: &str) -> rusqlite::Result<bool> {
         let n = self.conn.lock().expect("peers db mutex").execute(
             "UPDATE federation_peers SET ed25519_pubkey=?2 WHERE name=?1",
@@ -135,7 +151,7 @@ impl PeerDb {
     pub fn load_all(&self) -> rusqlite::Result<Vec<FederationPeer>> {
         let conn = self.conn.lock().expect("peers db mutex");
         let mut stmt = conn.prepare(
-            "SELECT name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey
+            "SELECT name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address
              FROM federation_peers",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -148,6 +164,7 @@ impl PeerDb {
                 last_sync: row.get(5)?,
                 added_at: row.get::<_, i64>(6)? as u64,
                 ed25519_pubkey: row.get::<_, String>(7).unwrap_or_default(),
+                external_address: row.get::<_, String>(8).unwrap_or_default(),
             })
         })?;
         rows.collect()
@@ -224,6 +241,7 @@ mod tests {
             approved: true,
             added_at: 0,
             ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         assert_eq!(peer.encryption_key(), "auth-tok", "empty shared_secret falls back to auth_token");
     }
@@ -239,6 +257,7 @@ mod tests {
             approved: true,
             added_at: 0,
             ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         assert_eq!(peer.encryption_key(), "my-secret");
     }
@@ -255,6 +274,7 @@ mod tests {
             approved: true,
             added_at: 1000,
             ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         db.insert(&peer).expect("insert");
         let loaded = db.load_all().expect("load_all");
@@ -272,6 +292,7 @@ mod tests {
             name: "bob".into(), url: "http://bob:3000".into(),
             auth_token: "tok-bob".into(), shared_secret: "".into(),
             last_sync: None, approved: false, added_at: 0, ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         db.insert(&peer).expect("insert");
         assert!(db.remove("bob").expect("remove"));
@@ -286,6 +307,7 @@ mod tests {
             name: "carol".into(), url: "http://carol:3000".into(),
             auth_token: "old-tok".into(), shared_secret: "".into(),
             last_sync: None, approved: false, added_at: 0, ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         db.insert(&peer).expect("insert");
         let found = db.update_approved("carol", "new-tok", Some("new-secret"), true)
@@ -304,6 +326,7 @@ mod tests {
             name: "dave".into(), url: "http://dave:3000".into(),
             auth_token: "tok-dave".into(), shared_secret: "".into(),
             last_sync: None, approved: true, added_at: 0, ed25519_pubkey: "".into(),
+            external_address: "".into(),
         };
         db.insert(&peer).expect("insert");
         db.update_last_sync("dave", 9999).expect("update_last_sync");

@@ -156,6 +156,9 @@ pub struct TylluanConfig {
 
     #[serde(default)]
     pub federation: FederationConfig,
+
+    #[serde(default)]
+    pub nat: NatConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +176,38 @@ impl Default for FederationConfig {
         Self {
             auto_sync_interval_secs: 3600,
             auto_sync_mode: "push".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatConfig {
+    /// STUN servers to try for NAT traversal (ordered: first success wins).
+    #[serde(default = "default_stun_servers")]
+    pub stun_servers: Vec<String>,
+    /// Timeout per STUN attempt in seconds.
+    #[serde(default = "default_stun_timeout")]
+    pub stun_timeout_secs: u64,
+    /// Number of retries per server before trying the next.
+    #[serde(default = "default_stun_retries")]
+    pub stun_retries: u32,
+}
+
+fn default_stun_servers() -> Vec<String> {
+    vec![
+        "stun.l.google.com:19302".to_string(),
+        "stun.cloudflare.com:3478".to_string(),
+    ]
+}
+fn default_stun_timeout() -> u64 { 5 }
+fn default_stun_retries() -> u32 { 2 }
+
+impl Default for NatConfig {
+    fn default() -> Self {
+        Self {
+            stun_servers: default_stun_servers(),
+            stun_timeout_secs: default_stun_timeout(),
+            stun_retries: default_stun_retries(),
         }
     }
 }
