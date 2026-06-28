@@ -15,7 +15,7 @@
 │ Data:      data/*.db (sqlite) — gitignored, created on boot │
 │ License:   MIT (Forja usa AGPL — nunca mezclar)             │
 │ Language:  Rust kernel + Python guilds + React dashboard     │
-│ Tests:     234 tests │ cargo test -p tylluan-kernel --lib   │
+│ Tests:     431 tests (250 kernel lib + 13 link lib + 168 integration) │ cargo test  │
 │ Build:     cargo build -p tylluan-kernel                    │
 │ Start:     .\tylluan-mcp.bat (nativo)                       │
 │            docker compose up kernel -d (Docker)             │
