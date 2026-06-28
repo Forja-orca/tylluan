@@ -115,6 +115,91 @@ impl NodeIdentity {
     }
 }
 
+// --- M12-B: Signed federation envelopes ---------------------------------------
+
+use ed25519_dalek::Verifier;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SignedEnvelope {
+    pub node: serde_json::Value,
+    pub signature: String,
+    pub signer_pubkey: String,
+    pub timestamp: i64,
+}
+
+/// Sign a node for federation sync.
+/// Message: canonical_json(node) + "|" + timestamp + "|" + signer_pubkey
+pub fn sign_node(
+    identity: &NodeIdentity,
+    node: &serde_json::Value,
+) -> anyhow::Result<SignedEnvelope> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let pubkey = identity.public_key_hex().to_string();
+    let canonical = serde_json::to_string(node)?;
+    let message = format!("{}|{}|{}", canonical, timestamp, pubkey);
+    let sig = identity.sign(message.as_bytes());
+    Ok(SignedEnvelope {
+        node: node.clone(),
+        signature: hex::encode(sig.to_bytes()),
+        signer_pubkey: pubkey,
+        timestamp,
+    })
+}
+
+/// Verify a signed envelope against a trusted public key.
+/// Returns Ok(()) if signature is valid and timestamp is within 300s of now.
+pub fn verify_envelope(
+    envelope: &SignedEnvelope,
+    trusted_pubkey_hex: &str,
+) -> anyhow::Result<()> {
+    // Anti-replay: ±300s window
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let diff = (envelope.timestamp - now).abs();
+    if diff > 300 {
+        anyhow::bail!(
+            "envelope timestamp {} is outside ±300s window (diff={}s)",
+            envelope.timestamp, diff
+        );
+    }
+
+    // Verify signer matches the trusted peer
+    if envelope.signer_pubkey != trusted_pubkey_hex {
+        anyhow::bail!(
+            "signer pubkey {} does not match trusted peer pubkey {}",
+            envelope.signer_pubkey, trusted_pubkey_hex
+        );
+    }
+
+    let canonical = serde_json::to_string(&envelope.node)?;
+    let message = format!("{}|{}|{}", canonical, envelope.timestamp, envelope.signer_pubkey);
+
+    let pubkey_bytes = hex::decode(&envelope.signer_pubkey)?;
+    if pubkey_bytes.len() != 32 {
+        anyhow::bail!("invalid pubkey length");
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&pubkey_bytes);
+    let verifying_key = VerifyingKey::from_bytes(&arr)?;
+
+    let sig_bytes = hex::decode(&envelope.signature)?;
+    if sig_bytes.len() != 64 {
+        anyhow::bail!("invalid signature length");
+    }
+    let mut sig_arr = [0u8; 64];
+    sig_arr.copy_from_slice(&sig_bytes);
+    let signature = Signature::from_bytes(&sig_arr);
+
+    verifying_key
+        .verify(message.as_bytes(), &signature)
+        .map_err(|e| anyhow::anyhow!("signature verification failed: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +236,32 @@ mod tests {
         use ed25519_dalek::Verifier;
         let result = identity.verifying_key().verify(msg, &sig);
         assert!(result.is_ok(), "signature should verify");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_sign_and_verify_envelope() {
+        let dir = std::env::temp_dir().join(format!("tylluan_id_test_env_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("identity.key");
+
+        let identity = NodeIdentity::load_or_create(&path).expect("should generate");
+        let node = serde_json::json!({"id": "test-1", "content": "hello", "weight": 1.0});
+
+        let envelope = sign_node(&identity, &node).expect("should sign");
+        let result = verify_envelope(&envelope, identity.public_key_hex());
+        assert!(result.is_ok(), "verify should pass: {:?}", result.err());
+
+        // Wrong pubkey should fail
+        let wrong = verify_envelope(&envelope, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert!(wrong.is_err(), "wrong pubkey should fail");
+
+        // Tampered node should fail
+        let mut tampered = envelope.clone();
+        tampered.node = serde_json::json!({"id": "tampered"});
+        let bad = verify_envelope(&tampered, identity.public_key_hex());
+        assert!(bad.is_err(), "tampered node should fail");
 
         let _ = fs::remove_dir_all(&dir);
     }
