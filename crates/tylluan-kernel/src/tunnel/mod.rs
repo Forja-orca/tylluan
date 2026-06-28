@@ -12,6 +12,7 @@ use crate::config::TunnelConfig;
 
 pub struct TunnelManager {
     config: TunnelConfig,
+    #[allow(dead_code)]
     kernel_port: u16,
     wsl_bridge_active: bool,
     windows_ip: Option<String>,
@@ -166,6 +167,7 @@ impl TunnelManager {
     }
 
     #[cfg(not(target_os = "windows"))]
+    #[allow(dead_code)]
     fn detect_windows_lan_ip() -> Option<String> {
         None
     }
