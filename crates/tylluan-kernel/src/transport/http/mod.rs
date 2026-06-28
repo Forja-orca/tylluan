@@ -1,4 +1,4 @@
-﻿//! # TylluanNexus HTTP Gateway
+//! # TylluanNexus HTTP Gateway
 //!
 //! Provides SSE, JSON-RPC (MCP), and Management API (V1).
 //! Orchestrates routing using modular sub-routers.
@@ -487,9 +487,12 @@ fn build_router(state: Arc<HttpState>) -> Router {
         ));
 
     // 3. Assemble and Static Assets
+    // NOTE: ServeDir with a fallback(ServeFile) intercepts ALL unmatched routes including
+    // /api/* before the Axum router can process them. We use a smart fallback handler instead
+    // that only serves index.html for non-API paths (SPA client-side routing).
     let static_dir = find_workspace_root().join("dashboard/dist");
-    let static_service = tower_http::services::ServeDir::new(&static_dir)
-        .fallback(tower_http::services::ServeFile::new(static_dir.join("index.html")));
+    let static_dir_clone = static_dir.clone();
+    let static_service = tower_http::services::ServeDir::new(&static_dir);
 
     Router::new()
         .merge(public_routes)
@@ -497,6 +500,28 @@ fn build_router(state: Arc<HttpState>) -> Router {
         // index.html never cached — assets use content-hash and can cache forever
         .route("/", axum::routing::get(serve_index))
         .route("/index.html", axum::routing::get(serve_index))
+        .fallback(move |req: axum::extract::Request| {
+            let path = req.uri().path().to_owned();
+            let static_dir_inner = static_dir_clone.clone();
+            async move {
+                // API routes that weren't matched by registered handlers → 404 JSON
+                // (never serve index.html for /api/* — that would hide auth errors)
+                if path.starts_with("/api/") || path.starts_with("/health") || path.starts_with("/discovery") {
+                    return axum::http::StatusCode::NOT_FOUND.into_response();
+                }
+                // For SPA client-side routes, serve index.html
+                let index_path = static_dir_inner.join("index.html");
+                match tokio::fs::read(&index_path).await {
+                    Ok(bytes) => axum::response::Response::builder()
+                        .status(200)
+                        .header("Content-Type", "text/html; charset=utf-8")
+                        .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                        .body(axum::body::Body::from(bytes))
+                        .unwrap_or_else(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+                    Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
+                }
+            }
+        })
         .fallback_service(static_service)
         .layer(tower_http::compression::CompressionLayer::new())
         .layer(cors)
@@ -504,6 +529,7 @@ fn build_router(state: Arc<HttpState>) -> Router {
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(state)
 }
+
 
 async fn serve_index() -> impl IntoResponse {
     let index_path = find_workspace_root().join("dashboard/dist/index.html");
