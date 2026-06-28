@@ -61,6 +61,7 @@ pub struct HttpState {
     pub node_router: Arc<crate::memory::agent_nodes::AgentNodeRouter>,
     pub journal: Arc<crate::transport::http::api_v1::api_journal::JournalDb>,
     pub agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry,
+    pub contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry,
     pub health_ready: Arc<AtomicBool>,
 }
 
@@ -358,6 +359,7 @@ pub async fn start_http_server_with_download(
                 .expect("journal.db init failed")
         ),
         agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
+        contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         health_ready,
     });
 
