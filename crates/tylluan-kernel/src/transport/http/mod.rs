@@ -63,6 +63,7 @@ pub struct HttpState {
     pub agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry,
     pub contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry,
     pub contract_db: Arc<crate::transport::http::api_v1::api_contracts::ContractDb>,
+    pub peer_db: Arc<crate::federation::PeerDb>,
     pub health_ready: Arc<AtomicBool>,
 }
 
@@ -365,8 +366,27 @@ pub async fn start_http_server_with_download(
             crate::transport::http::api_v1::api_contracts::ContractDb::open("./data/contracts.db")
                 .expect("contracts.db init failed")
         ),
+        peer_db: Arc::new(
+            crate::federation::PeerDb::open("./data/peers.db")
+                .expect("peers.db init failed")
+        ),
         health_ready,
     });
+
+    // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
+    {
+        let db_peers = state.peer_db.load_all().unwrap_or_default();
+        if db_peers.is_empty() {
+            // One-time migration: copy any TOML-seeded peers into DB
+            let toml_peers = state.config.read().await.federation_peers.clone();
+            for p in &toml_peers {
+                let _ = state.peer_db.insert(p);
+            }
+        }
+        // DB is now the source of truth — sync into in-memory config
+        let authoritative = state.peer_db.load_all().unwrap_or_default();
+        state.config.write().await.federation_peers = authoritative;
+    }
 
     // Bootstrap work contracts from SQLite into the in-memory registry.
     if let Ok(active) = state.contract_db.load_active() {

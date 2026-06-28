@@ -4,18 +4,141 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Nonce,
 };
 use rand::RngCore;
+use rusqlite::params;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationPeer {
     pub name: String,
     pub url: String,
-    pub token: String,
+    /// HTTP bearer token used to authenticate TO this peer (and FROM this peer on receive).
+    #[serde(alias = "token")]
+    pub auth_token: String,
+    /// ChaCha20-Poly1305 encryption key. Defaults to auth_token when empty (backwards compat).
+    #[serde(default)]
+    pub shared_secret: String,
     pub last_sync: Option<i64>,
-    /// Must be explicitly set to true by a human before sync is allowed.
-    /// mDNS auto-discovered peers start as false.
     #[serde(default)]
     pub approved: bool,
+    #[serde(default)]
+    pub added_at: u64,
 }
+
+impl FederationPeer {
+    /// Key used for ChaCha20-Poly1305 payload encryption.
+    /// Uses shared_secret when set; falls back to auth_token for backwards compat.
+    pub fn encryption_key(&self) -> &str {
+        if self.shared_secret.is_empty() {
+            &self.auth_token
+        } else {
+            &self.shared_secret
+        }
+    }
+}
+
+// --- SQL persistence layer --------------------------------------------------
+
+pub struct PeerDb {
+    conn: Arc<std::sync::Mutex<rusqlite::Connection>>,
+}
+
+impl PeerDb {
+    pub fn open(db_path: &str) -> anyhow::Result<Self> {
+        let conn = crate::config::open_db(std::path::Path::new(db_path))?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             CREATE TABLE IF NOT EXISTS federation_peers (
+                 name          TEXT PRIMARY KEY,
+                 url           TEXT NOT NULL,
+                 auth_token    TEXT NOT NULL,
+                 shared_secret TEXT NOT NULL DEFAULT '',
+                 approved      INTEGER NOT NULL DEFAULT 0,
+                 last_sync     INTEGER,
+                 added_at      INTEGER NOT NULL
+             );",
+        )?;
+        Ok(Self { conn: Arc::new(std::sync::Mutex::new(conn)) })
+    }
+
+    pub fn insert(&self, peer: &FederationPeer) -> rusqlite::Result<()> {
+        let added_at = if peer.added_at > 0 {
+            peer.added_at as i64
+        } else {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        };
+        self.conn.lock().expect("peers db mutex").execute(
+            "INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,last_sync,added_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(name) DO UPDATE SET
+                 url=excluded.url,
+                 auth_token=excluded.auth_token,
+                 shared_secret=excluded.shared_secret,
+                 approved=excluded.approved",
+            params![
+                peer.name, peer.url, peer.auth_token, peer.shared_secret,
+                peer.approved as i64, peer.last_sync, added_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove(&self, name: &str) -> rusqlite::Result<bool> {
+        let n = self.conn.lock().expect("peers db mutex").execute(
+            "DELETE FROM federation_peers WHERE name=?1",
+            params![name],
+        )?;
+        Ok(n > 0)
+    }
+
+    pub fn update_approved(
+        &self,
+        name: &str,
+        auth_token: &str,
+        shared_secret: Option<&str>,
+        approved: bool,
+    ) -> rusqlite::Result<bool> {
+        let secret = shared_secret.unwrap_or("");
+        let n = self.conn.lock().expect("peers db mutex").execute(
+            "UPDATE federation_peers SET auth_token=?2, shared_secret=?3, approved=?4 WHERE name=?1",
+            params![name, auth_token, secret, approved as i64],
+        )?;
+        Ok(n > 0)
+    }
+
+    pub fn update_last_sync(&self, name: &str, ts: i64) -> rusqlite::Result<()> {
+        self.conn.lock().expect("peers db mutex").execute(
+            "UPDATE federation_peers SET last_sync=?2 WHERE name=?1",
+            params![name, ts],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_all(&self) -> rusqlite::Result<Vec<FederationPeer>> {
+        let conn = self.conn.lock().expect("peers db mutex");
+        let mut stmt = conn.prepare(
+            "SELECT name,url,auth_token,shared_secret,approved,last_sync,added_at
+             FROM federation_peers",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(FederationPeer {
+                name: row.get(0)?,
+                url: row.get(1)?,
+                auth_token: row.get(2)?,
+                shared_secret: row.get(3)?,
+                approved: row.get::<_, i64>(4)? != 0,
+                last_sync: row.get(5)?,
+                added_at: row.get::<_, i64>(6)? as u64,
+            })
+        })?;
+        rows.collect()
+    }
+}
+
+// --- Crypto -----------------------------------------------------------------
 
 /// Encrypts payload with ChaCha20-Poly1305. Key = first 32 bytes of SHA-256(shared_secret).
 pub fn encrypt_payload(data: &[u8], shared_secret: &str) -> anyhow::Result<Vec<u8>> {
@@ -72,5 +195,100 @@ mod tests {
         let e1 = encrypt_payload(data, "key").unwrap();
         let e2 = encrypt_payload(data, "key").unwrap();
         assert_ne!(e1, e2);
+    }
+
+    #[test]
+    fn test_encryption_key_fallback() {
+        let peer = FederationPeer {
+            name: "test".into(),
+            url: "http://x".into(),
+            auth_token: "auth-tok".into(),
+            shared_secret: "".into(),
+            last_sync: None,
+            approved: true,
+            added_at: 0,
+        };
+        assert_eq!(peer.encryption_key(), "auth-tok", "empty shared_secret falls back to auth_token");
+    }
+
+    #[test]
+    fn test_encryption_key_uses_shared_secret() {
+        let peer = FederationPeer {
+            name: "test".into(),
+            url: "http://x".into(),
+            auth_token: "auth-tok".into(),
+            shared_secret: "my-secret".into(),
+            last_sync: None,
+            approved: true,
+            added_at: 0,
+        };
+        assert_eq!(peer.encryption_key(), "my-secret");
+    }
+
+    #[test]
+    fn test_peer_db_roundtrip() {
+        let db = PeerDb::open(":memory:").expect("in-memory db");
+        let peer = FederationPeer {
+            name: "alice".into(),
+            url: "http://alice:3000".into(),
+            auth_token: "tok-alice".into(),
+            shared_secret: "secret-alice".into(),
+            last_sync: None,
+            approved: true,
+            added_at: 1000,
+        };
+        db.insert(&peer).expect("insert");
+        let loaded = db.load_all().expect("load_all");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "alice");
+        assert_eq!(loaded[0].auth_token, "tok-alice");
+        assert_eq!(loaded[0].shared_secret, "secret-alice");
+        assert!(loaded[0].approved);
+    }
+
+    #[test]
+    fn test_peer_db_remove() {
+        let db = PeerDb::open(":memory:").expect("in-memory db");
+        let peer = FederationPeer {
+            name: "bob".into(), url: "http://bob:3000".into(),
+            auth_token: "tok-bob".into(), shared_secret: "".into(),
+            last_sync: None, approved: false, added_at: 0,
+        };
+        db.insert(&peer).expect("insert");
+        assert!(db.remove("bob").expect("remove"));
+        assert!(!db.remove("bob").expect("remove again"));
+        assert_eq!(db.load_all().expect("load").len(), 0);
+    }
+
+    #[test]
+    fn test_peer_db_update_approved() {
+        let db = PeerDb::open(":memory:").expect("in-memory db");
+        let peer = FederationPeer {
+            name: "carol".into(), url: "http://carol:3000".into(),
+            auth_token: "old-tok".into(), shared_secret: "".into(),
+            last_sync: None, approved: false, added_at: 0,
+        };
+        db.insert(&peer).expect("insert");
+        let found = db.update_approved("carol", "new-tok", Some("new-secret"), true)
+            .expect("update");
+        assert!(found);
+        let loaded = db.load_all().expect("load");
+        assert_eq!(loaded[0].auth_token, "new-tok");
+        assert_eq!(loaded[0].shared_secret, "new-secret");
+        assert!(loaded[0].approved);
+    }
+
+    #[test]
+    fn test_peer_db_last_sync() {
+        let db = PeerDb::open(":memory:").expect("in-memory db");
+        let peer = FederationPeer {
+            name: "dave".into(), url: "http://dave:3000".into(),
+            auth_token: "tok-dave".into(), shared_secret: "".into(),
+            last_sync: None, approved: true, added_at: 0,
+        };
+        db.insert(&peer).expect("insert");
+        db.update_last_sync("dave", 9999).expect("update_last_sync");
+        let loaded = db.load_all().expect("load");
+        assert_eq!(loaded[0].last_sync, Some(9999));
     }
 }
