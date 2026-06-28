@@ -105,7 +105,7 @@ Tylluan has documented security gaps. These are not bugs — they are known limi
 
 4. **Optional intent safety filter (opt-in):** Basic intent filtering (blocking dangerous commands like `rm -rf`, `DROP TABLE`, `format C:`) is available but must be enabled in `tylluan.toml`.
 
-5. **Optional Encryption at Rest (opt-in):** SQLCipher support is implemented via `open_db` in `config.rs`, but the codebase currently still calls `Connection::open` directly in other database modules (memories, audit logs, mailbox). Full encryption requires updating those calls to use `open_db` and compiling with the `bundled-sqlcipher` Cargo feature.
+5. **Encryption at Rest (opt-in):** SQLCipher AES-256 is available via `--features encryption` and `encrypt_at_rest = true`. All 4 database modules (silva, mailbox, audit, federation) are wired with `PRAGMA hexkey`. Default builds use plain SQLite (no encryption).
 
 6. **No agent identity verification:** MCP `author_id` is self-reported and can be spoofed by anyone with the bearer token.
 

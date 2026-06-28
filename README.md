@@ -37,6 +37,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 | **Tools** | 40+ guilds: bash, git, filesystem, docker, code, vision, web search, and more |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync over LAN/VPN — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
+| **Encryption** | AES-256 at rest via SQLCipher (feature-gated: `cargo build --features encryption`, `PRAGMA hexkey`, no SQL injection vector) |
 | **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
 
 ### Dashboard
@@ -66,7 +67,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs: `cargo build` + `cargo test` (250 lib tests, 8 integration suites: security, guard, foundation, consensus, semantic_consensus, guild_integration, dashboard_api, federation_audit) + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`). See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (250 lib tests, 8 integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green as of v0.3.0. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -187,6 +188,7 @@ See `integrations/` for editor-specific config files.
 | **M11-C** | Node provenance — `federation_source` SQL column, echo-loop prevention, `/federation/nodes` query | ✅ |
 | **M11-D** | Scheduled auto-sync — background tokio loop, configurable interval and mode | ✅ |
 | **M11-E** | Federation integration tests — `federation_audit.rs` (6 tests) | ✅ |
+| **Encryption** | SQLCipher AES-256 at rest — `PRAGMA hexkey`, 4 DB modules, `--features encryption` | ✅ |
 
 ---
 

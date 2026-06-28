@@ -1,25 +1,17 @@
 # Tylluan Roadmap
 
-## v0.1.0 — Alpha Release (current)
+## v0.1.0 — Alpha Release
 
-**Status:** Published. Research laboratory.
+**Status:** Published. Historical baseline.
 
-What's included:
+What was included:
 - Rust kernel (tokio + axum) with 5 sovereign MCP tools
 - 47 Python guilds (bash, git, filesystem, code, vision, web search, and more)
 - Persistent memory with BGE-M3 embeddings + BM25 + Jina Reranker
 - Knowledge graph (SilvaDB) with entity extraction and clustering
 - React dashboard with real-time monitoring
 - Security primitives: rate limiter, circuit breaker, execution guard
-- Opt-in security: Docker sandbox, per-guild ACL, intent filter, SQLCipher encryption
 - MCP native (SSE + HTTP Streamable) — works with Claude, Cursor, VS Code, LM Studio
-- Docker support (verified clean boot)
-
-What's NOT included:
-- Community validation (0 external users)
-- Independent benchmarks
-- Production hardening
-- Federation protocol
 
 ## v0.2.0 — Community Validation
 
@@ -33,7 +25,7 @@ Planned:
 - [x] Fix all compiler warnings (0 warnings as of v0.2.0)
 - [x] M10 Bounded Work Contracts — finite multi-agent coordination protocol
 - [x] Automated security tests in CI (intent filter, ACL, rate limiter) — 30 tests in `security_audit.rs`
-- [ ] Complete SQLCipher integration across all database modules
+- [x] SQLCipher encryption at rest — AES-256 via `bundled-sqlcipher-vendored-openssl`, feature-gated (`cargo build --features encryption`), wired across silva, mailbox, audit, and federation DBs with `PRAGMA hexkey` (no SQL injection vector)
 - [ ] First external contributor PR merged
 
 Success criteria:

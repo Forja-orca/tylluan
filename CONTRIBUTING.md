@@ -14,7 +14,7 @@ Thank you for your interest in contributing. Tylluan is built by humans and AI a
 1. Fork the repository
 2. Create a branch (`git checkout -b feat/your-feature`)
 3. Make your changes with tests
-4. Run `cargo check -p tylluan-kernel` and `cargo test -p tylluan-kernel --lib`
+4. Run `cargo check -p tylluan-kernel` and `cargo test -p tylluan-kernel --lib` (add `--features encryption` to verify SQLCipher build)
 5. Run `cargo clippy -p tylluan-kernel -- -D warnings`
 6. Submit a pull request with a clear description
 
