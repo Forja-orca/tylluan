@@ -395,6 +395,9 @@ pub async fn start_http_server_with_download(
         }
     }
 
+    // Spawn background federation auto-sync loop task
+    crate::transport::http::api_v1::api_federation::spawn_auto_sync(state.clone());
+
     // Spawn background sampler — fills the ring every 5 seconds.
     crate::metrics_ring::spawn_metrics_sampler(metrics_ring, registry_handle);
 
