@@ -1,4 +1,4 @@
-﻿//! Configuration system for TylluanNexus.
+//! Configuration system for TylluanNexus.
 //!
 //! Reads from `tylluan.toml` in the current directory or the default config path.
 //! Auto-generates a random auth token on first run if none is set.
@@ -153,6 +153,28 @@ pub struct TylluanConfig {
 
     #[serde(default)]
     pub mdns: MdnsConfig,
+
+    #[serde(default)]
+    pub federation: FederationConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationConfig {
+    #[serde(default = "default_auto_sync_interval")]
+    pub auto_sync_interval_secs: u64,
+    #[serde(default = "default_auto_sync_mode")]
+    pub auto_sync_mode: String,
+}
+fn default_auto_sync_interval() -> u64 { 3600 }
+fn default_auto_sync_mode() -> String { "push".to_string() }
+
+impl Default for FederationConfig {
+    fn default() -> Self {
+        Self {
+            auto_sync_interval_secs: 3600,
+            auto_sync_mode: "push".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
