@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     Json,
     extract::{State, Path, Query},
     http::StatusCode,
@@ -160,7 +160,7 @@ pub async fn coloquio_post_message(
 
             // Broadcast message via SSE for real-time dashboard update (M17-4)
             // content is included so watchers can detect @mentions without polling
-            let sse_payload = serde_json::json!({
+            let _ = state.broadcast_tx.send(serde_json::json!({
                 "type": "coloquio:new_turn",
                 "channel_id": id,
                 "msg_id": msg.msg_id,
@@ -169,11 +169,7 @@ pub async fn coloquio_post_message(
                 "role": msg.role,
                 "turn": msg.turn,
                 "ts": chrono::Utc::now().timestamp_millis()
-            });
-            match state.broadcast_tx.send(sse_payload) {
-                Ok(num) => tracing::info!("📣 [Coloquio SSE] Event sent successfully to {} receivers", num),
-                Err(e) => tracing::error!("❌ [Coloquio SSE] Failed to send event to broadcast: {:?}", e),
-            }
+            }));
 
             // @mention bridge: deliver a mailbox notification to each mentioned
             // agent so it appears in their `tylluan_recall @inbox` without having
