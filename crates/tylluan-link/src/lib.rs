@@ -3,6 +3,7 @@
 //! TCP-based P2P with HMAC-SHA256 challenge-response handshake.
 
 pub mod identity;
+pub mod nat;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{Hmac, Mac};

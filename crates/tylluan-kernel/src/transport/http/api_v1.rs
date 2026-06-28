@@ -307,6 +307,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // M11-C: Provenance query
         .route("/api/v1/federation/identity", get(federation_identity))
         .route("/api/v1/federation/nodes", get(federation_nodes_query))
+        // M12-C: NAT traversal
+        .route("/api/v1/nat/external-address", get(nat_external_address))
+        .route("/api/v1/federation/ping", get(federation_ping))
         .route("/api/v1/federation/sharing/disable", post(federation_sharing_disable))
         .route("/api/v1/federation/sharing/enable", post(federation_sharing_enable))
         .route("/api/v1/federation/sharing/status", get(federation_sharing_status))

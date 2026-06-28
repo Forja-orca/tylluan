@@ -96,6 +96,7 @@ pub async fn federation_add_peer(
         approved: true,
         added_at: now_secs() as u64,
         ed25519_pubkey: String::new(),
+        external_address: String::new(),
     };
 
     if let Err(e) = state.peer_db.insert(&peer) {
@@ -141,13 +142,21 @@ pub async fn federation_approve_peer(
                 match client.get(&identity_url).bearer_auth(&peer.auth_token).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(body) = resp.json::<serde_json::Value>().await {
+                            // M12-B: fetch Ed25519 public key
                             if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str()) {
                                 if !pubkey.is_empty() {
                                     let _ = state.peer_db.update_ed25519_pubkey(&name, pubkey);
                                     tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
-                                    reload_peers_cache(&state).await;
                                 }
                             }
+                            // M12-C: fetch external address for hole-punching
+                            if let Some(addr) = body.get("external_address").and_then(|v| v.as_str()) {
+                                if !addr.is_empty() {
+                                    let _ = state.peer_db.update_external_address(&name, addr);
+                                    tracing::info!("🌐 Auto-fetched external address for peer '{}': {}", name, addr);
+                                }
+                            }
+                            reload_peers_cache(&state).await;
                         }
                     }
                     Ok(resp) => tracing::warn!("⛔ Identity fetch for '{}' returned {}", name, resp.status()),
@@ -206,7 +215,7 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
             Ok(enc) => enc,
             Err(e) => { tracing::error!("Federation encrypt failed for '{}': {}", peer.name, e); continue; }
         };
-        let sync_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
+        let sync_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
         let resp = client
             .post(&sync_url)
             .bearer_auth(&peer.auth_token)
@@ -414,8 +423,8 @@ pub async fn federation_sync_pull(
         None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("Approved peer '{}' not found", peer_name)}))).into_response(),
     };
 
-    let export_url = format!("{}/api/v1/federation/sync/export", peer.url.trim_end_matches('/'));
     let client = reqwest::Client::new();
+    let export_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/export").await;
 
     let resp = match client.get(&export_url).bearer_auth(&peer.auth_token).send().await {
         Ok(r) if r.status().is_success() => r,
@@ -526,9 +535,9 @@ pub async fn federation_sync_both(
             }
         }
         if let Ok(plain) = serde_json::to_vec(&envelopes) {
-            if let Ok(enc) = crate::federation::encrypt_payload(&plain, peer.encryption_key()) {
-                let push_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
-                matches!(
+                if let Ok(enc) = crate::federation::encrypt_payload(&plain, peer.encryption_key()) {
+                    let push_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
+                    matches!(
                     client.post(&push_url).bearer_auth(&peer.auth_token)
                         .header("content-type", "application/octet-stream")
                         .body(enc).send().await,
@@ -540,7 +549,7 @@ pub async fn federation_sync_both(
 
     // Pull: peer's /export → local SilvaDB
     let mut pulled = 0u64;
-    let export_url = format!("{}/api/v1/federation/sync/export", peer.url.trim_end_matches('/'));
+    let export_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/export").await;
     if let Ok(r) = client.get(&export_url).bearer_auth(&peer.auth_token).send().await {
         if r.status().is_success() {
             if let Ok(enc_bytes) = r.bytes().await {
@@ -663,6 +672,15 @@ pub async fn silva_set_shareable_handler(
     }
 }
 
+// ── M12-C: Hole-punch ping health check ──────────────────────────────────────
+
+/// GET /api/v1/federation/ping
+/// Lightweight endpoint used by peers to test if a direct hole-punched connection works.
+/// Returns 200 OK with minimal body so peers can verify connectivity before attempting sync.
+pub async fn federation_ping() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "pong"})))
+}
+
 // ── SLO + routing anchors (unchanged) ────────────────────────────────────────
 
 pub async fn slo_summary_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
@@ -726,6 +744,46 @@ pub async fn routing_anchors_seed(
     Json(serde_json::json!({"inserted": inserted, "errors": errors})).into_response()
 }
 
+// ── M12-C: Hole-punch helper ────────────────────────────────────────────────
+
+/// Given a peer and a path, returns the best URL to use for sync.
+/// If the peer has an external_address (STUN-discovered) and a ping succeeds,
+/// returns the hole-punched URL. Otherwise falls back to the configured URL.
+async fn peer_url_for_sync(
+    peer: &crate::federation::FederationPeer,
+    client: &reqwest::Client,
+    path: &str,
+) -> String {
+    let configured_url = format!("{}{}", peer.url.trim_end_matches('/'), path);
+
+    if peer.external_address.is_empty() {
+        return configured_url;
+    }
+
+    let ping_url = format!("http://{}/api/v1/federation/ping", peer.external_address);
+    match client
+        .get(&ping_url)
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            tracing::debug!(
+                "🌐 Hole-punch success for '{}': {} → {} via external address",
+                peer.name, configured_url, ping_url
+            );
+            format!("http://{}{}", peer.external_address, path)
+        }
+        _ => {
+            tracing::debug!(
+                "🌐 Hole-punch skipped for '{}': external address {} unreachable, using configured URL",
+                peer.name, peer.external_address
+            );
+            configured_url
+        }
+    }
+}
+
 // ── M11-D: Scheduled Auto-Sync Helpers ──────────────────────────────────────
 
 async fn push_to_peer_internal(
@@ -735,7 +793,7 @@ async fn push_to_peer_internal(
     plain_body: &[u8],
 ) -> anyhow::Result<()> {
     let encrypted = crate::federation::encrypt_payload(plain_body, peer.encryption_key())?;
-    let sync_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
+    let sync_url = peer_url_for_sync(peer, client, "/api/v1/federation/sync/receive").await;
     let resp = client
         .post(&sync_url)
         .bearer_auth(&peer.auth_token)
@@ -757,7 +815,7 @@ async fn pull_from_peer_internal(
     peer: &crate::federation::FederationPeer,
     client: &reqwest::Client,
 ) -> anyhow::Result<usize> {
-    let export_url = format!("{}/api/v1/federation/sync/export", peer.url.trim_end_matches('/'));
+    let export_url = peer_url_for_sync(peer, client, "/api/v1/federation/sync/export").await;
     let resp = client
         .get(&export_url)
         .bearer_auth(&peer.auth_token)
@@ -898,13 +956,68 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
 }
 
 pub async fn federation_identity(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    let external_address = {
+        let cache = state.nat_cache.read().await;
+        cache.as_ref().map(|a| format!("{}:{}", a.ip, a.port))
+    };
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "node_id": state.node_identity.node_id(),
             "public_key": state.node_identity.public_key_hex(),
             "tylluan_version": env!("CARGO_PKG_VERSION"),
+            "external_address": external_address,
         })),
     )
+}
+
+// ── M12-C: NAT Traversal ──────────────────────────────────────────────────────
+
+/// GET /api/v1/nat/external-address
+/// Returns the detected external IP:port via STUN, or a cached result.
+pub async fn nat_external_address(
+    State(state): State<Arc<HttpState>>,
+) -> impl IntoResponse {
+    let cached = state.nat_cache.read().await;
+    if let Some(ref addr) = *cached {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "external_ip": addr.ip.to_string(),
+                "external_port": addr.port,
+                "stun_server": addr.stun_server,
+                "cached": true,
+            })),
+        ).into_response();
+    }
+    drop(cached);
+
+    let config = tylluan_link::nat::NatConfig {
+        stun_servers: state.config.read().await.nat.stun_servers.clone(),
+        stun_timeout_secs: state.config.read().await.nat.stun_timeout_secs,
+        stun_retries: state.config.read().await.nat.stun_retries,
+    };
+
+    match tylluan_link::nat::discover_external_addr(&config).await {
+        Ok(addr) => {
+            let mut cache = state.nat_cache.write().await;
+            *cache = Some(addr.clone());
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "external_ip": addr.ip.to_string(),
+                    "external_port": addr.port,
+                    "stun_server": addr.stun_server,
+                    "cached": false,
+                })),
+            ).into_response()
+        }
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": format!("NAT discovery failed: {e}"),
+            })),
+        ).into_response(),
+    }
 }
 

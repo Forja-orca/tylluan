@@ -365,6 +365,19 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // ─── M12-C: Boot-time NAT external address discovery ──────────
+    {
+        let nat_config = tylluan_link::nat::NatConfig {
+            stun_servers: config.nat.stun_servers.clone(),
+            stun_timeout_secs: config.nat.stun_timeout_secs,
+            stun_retries: config.nat.stun_retries,
+        };
+        match tylluan_link::nat::discover_external_addr(&nat_config).await {
+            Ok(addr) => info!("🌐 NAT external IP: {}:{} (via {})", addr.ip, addr.port, addr.stun_server),
+            Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
+        }
+    }
+
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
     let mailbox_name = if prefix.contains("test") { format!("{}_mailbox.db", prefix) } else { "mailbox.db".to_string() };
 
