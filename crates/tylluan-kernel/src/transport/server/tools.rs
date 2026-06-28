@@ -1,4 +1,4 @@
-﻿use crate::registry::tools::RiskLevel;
+use crate::registry::tools::RiskLevel;
 use super::types::{TylluanTool, ToolCategory};
 
 // @CONTRACT: SOVEREIGN-TOOLS (CONTRACT-01)
@@ -444,7 +444,6 @@ impl super::TylluanServer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::transport::server::TylluanServer;
 
     #[test]
