@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "tylluan-cli"
 version.workspace = true
 edition.workspace = true

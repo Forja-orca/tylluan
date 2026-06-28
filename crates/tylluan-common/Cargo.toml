@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "tylluan-common"
 version.workspace = true
 edition.workspace = true
