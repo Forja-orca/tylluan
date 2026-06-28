@@ -193,6 +193,37 @@ async fn mesh_test_state() -> Arc<HttpState> {
     })
 }
 
+// ─── mDNS Discovery test ─────────────────────────────────────────────────────
+
+#[test]
+fn test_mdns_discovery_startup_does_not_panic() {
+    let mut config = TylluanConfig::default();
+    config.mdns.discover = true;
+    let config_arc = Arc::new(RwLock::new(config));
+
+    // start_mdns_discovery spawns a thread; if the mDNS daemon fails to bind
+    // (UDP multicast unavailable in CI/test), it logs an error and returns —
+    // it never panics.
+    tylluan_kernel::transport::mdns::start_mdns_discovery(0, config_arc, None);
+
+    // Give the thread a moment to attempt daemon creation
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    // If we reach here without panic, the test passes.
+}
+
+// ─── NatConfig accessibility test ─────────────────────────────────────────────
+
+#[test]
+fn test_nat_config_is_accessible_from_tylluan_config() {
+    let config = TylluanConfig::default();
+    // Verify NatConfig exists and has default values via TylluanConfig.nat
+    assert!(!config.nat.stun_servers.is_empty(), "stun_servers should have defaults");
+    let _ = config.nat.stun_timeout_secs;
+    let _ = config.nat.stun_retries;
+}
+
+// ─── HTTP endpoint test ───────────────────────────────────────────────────────
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_federation_identity_endpoint() {
     let state = mesh_test_state().await;
