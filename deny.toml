@@ -1,10 +1,8 @@
 [advisories]
-db-url = "https://github.com/rustsec/advisory-db"
-db-path = "~/.cargo/advisory-db"
 vulnerability = "deny"
-unmaintained = "warn"
-notice = "warn"
-yanked = "warn"
+unmaintained = "all"
+notice = "all"
+yanked = "all"
 ignore = []
 
 [licenses]

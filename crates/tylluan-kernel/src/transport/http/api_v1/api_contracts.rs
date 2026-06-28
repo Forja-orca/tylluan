@@ -548,7 +548,7 @@ mod tests {
         let c = make_contract("bwc-002");
         registry.contracts.insert("bwc-002".into(), c);
 
-        let mut entry = registry.contracts.get_mut("bwc-002").unwrap();
+        let entry = registry.contracts.get_mut("bwc-002").unwrap();
         let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
         assert_eq!(remaining, 9);
         let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
@@ -575,7 +575,7 @@ mod tests {
         registry.contracts.insert("bwc-003".into(), c);
 
         {
-            let mut entry = registry.contracts.get_mut("bwc-003").unwrap();
+            let entry = registry.contracts.get_mut("bwc-003").unwrap();
             entry.budget_remaining.fetch_sub(1, Ordering::AcqRel);
             let remaining = entry.budget_remaining.fetch_sub(1, Ordering::AcqRel) - 1;
             assert_eq!(remaining, 0);
