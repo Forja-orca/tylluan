@@ -1,4 +1,4 @@
-# Tylluan v0.2.0 — Claude Code Instructions
+# Tylluan v0.3.0 — Claude Code Instructions
 
 ## 🔴 REGLA FUNDACIONAL (LEER PRIMERO)
 
@@ -7,7 +7,7 @@
 ```
 ForjaMCPo3 (E:\ForjaMCPo3)  ←  framework interno privado del equipo
         ↓ sustrato cognitivo
-Tylluan v0.2.0 (E:\tylluan)  ←  producto público, este repo
+Tylluan v0.3.0 (E:\tylluan)  ←  producto público, este repo
 ```
 
 **NUNCA tocar `E:\ForjaMCPo3` desde este workspace.**
@@ -37,28 +37,15 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ---
 
-## Milestones Tylluan v0.2.0
+## Milestones Tylluan v0.3.0
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
-| **M2** | Hybrid Search v2 — BGE-M3 1024-dim nativo | ✅ Listo |
-| **M1** | Memory Decay & Salience — half-life en SilvaDB | ✅ Listo |
-| **M4** | rmcp Migration — sse.rs custom + stdio/server = rmcp | ✅ Listo (M4-B) |
-| **M6** | Dual-Level Retrieval — LightRAG pattern | Siguiente |
-| **M7** | Single-Binary Packaging — polish final + release | Último |
-
-**M2 es bloqueante para todo lo demás.** Si `vector_dimensions = 768` en producción, todos los embeddings son incompatibles desde el primer nodo.
-
----
-
-## P0 — BGE-M3 Dimension Fix (M2)
-
-El bug heredado de Forja: `embeddings.rs` truncaba BGE-M3 de 1024 → 768 por compatibilidad con SilvaDB existente. Tylluan empieza limpio — **1024 desde el primer nodo**.
-
-Archivos clave:
-- `tylluan.toml`: `vector_dimensions = 1024` ✅ (ya corregido)
-- `crates/tylluan-kernel/src/router/embeddings.rs`: verificar que NO hay truncación a 768
-- `crates/tylluan-kernel/src/db/schema.rs`: verificar que `VECTOR(1024)` en CREATE TABLE
+| **M1-M7** | Memoria, embeddings, retrievals, kernel | ✅ v0.1.0 |
+| **M10/M11** | Work Contracts + Federación completa | ✅ v0.3.0 |
+| **Encryption** | SQLCipher AES-256 cifrado en reposo | ✅ v0.3.0 |
+| **CI** | Pipeline 5 jobs: build+test, cargo-deny, Python lint, Dashboard, security audits | ✅ Verde (250 lib tests + 14 integration) |
+| **M12** | Mesh networking — Ed25519, DHT, NAT traversal | Siguiente v0.4.0 |
 
 ---
 
