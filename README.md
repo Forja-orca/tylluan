@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="v0.3.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -27,22 +28,22 @@
 
 ## What is Tylluan?
 
-A local Rust kernel that gives AI agents **persistent memory**, a **knowledge graph**, and **real tool execution** — all running on your machine with zero cloud dependencies.
+A local Rust kernel that gives AI agents **persistent memory**, a **knowledge graph**, **real tool execution**, and **federated peer sync** — all running on your machine with zero cloud dependencies.
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | Dual-level retrieval (LightRAG pattern): entity-level BGE-M3 vector search + graph-expansion with degree centrality. Runs entirely on CPU |
+| **Memory** | Dual-level retrieval (LightRAG pattern): entity-level BGE-M3 vector search + graph expansion with degree centrality. Runs entirely on CPU |
 | **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
 | **Tools** | 40+ guilds: bash, git, filesystem, docker, code, vision, web search, and more |
-| **Collaboration** | Multi-agent channels, shared documents, session persistence |
-| **Federation** | Instances sync knowledge with ChaCha20-Poly1305 encrypted transport |
+| **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
+| **Federation** | Peer-to-peer knowledge sync over LAN/VPN — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
 
 ### Dashboard
 
 <p align="center">
   <img src="assets/screenshots/overview.png" alt="Overview — system health and kernel pulse" width="45%">
-  <img src="assets/screenshots/guilds.png" alt="Guilds — 33 registered, 13 running" width="45%">
+  <img src="assets/screenshots/guilds.png" alt="Guilds — registered and running" width="45%">
 </p>
 <p align="center">
   <img src="assets/screenshots/knowledge_graph.png" alt="Knowledge Graph — SilvaDB visualizer" width="45%">
@@ -65,7 +66,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs: `cargo build` + `cargo test` + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`), and 7 security audit test suites. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs: `cargo build` + `cargo test` (250+ lib tests, 8 integration suites including `federation_audit`) + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`). See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -105,8 +106,6 @@ cp tylluan.example.toml tylluan.toml
 
 > **Note:** The first boot downloads the BGE-M3 embedding model (~560 MB). This takes a few minutes. Subsequent starts are instant.
 
-
-
 ```bash
 # Windows
 .\tylluan-mcp.bat
@@ -119,7 +118,7 @@ cp tylluan.example.toml tylluan.toml
 
 ```bash
 curl http://127.0.0.1:3000/health
-# {"status":"ok","version":"0.1.0"}
+# {"status":"ok","version":"0.3.0"}
 ```
 
 ### 6. Connect your MCP client
@@ -170,17 +169,24 @@ See `integrations/` for editor-specific config files.
 
 ---
 
-## Status: v0.2.0
+## Status: v0.3.0
 
-| Milestone | Descripción | Estado |
+| Milestone | Description | Status |
 |-----------|-------------|--------|
-| **M2** | BGE-M3 1024-dim nativo — 1024-dim hybrid search, Matryoshka fix | ✅ Completo |
-| **M1** | Memory Decay & Salience — half-life exponencial T½=14d en SilvaDB | ✅ Completo |
-| **Docker** | Entry point de producción en :3000, BGE-M3 cache persistente | ✅ Operativo |
-| **M4** | rmcp integration — ServerHandler + stdio transport via rmcp crate | ✅ Completo |
-| **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ Completo |
-| **M7** | Single-Binary + release público | ✅ Completo |
-| **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ Completo |
+| **M2** | BGE-M3 1024-dim native — hybrid search, Matryoshka fix | ✅ |
+| **M1** | Memory Decay & Salience — half-life exponential T½=14d | ✅ |
+| **Docker** | Production entry point at :3000, BGE-M3 persistent cache | ✅ |
+| **M4** | rmcp integration — ServerHandler + stdio transport | ✅ |
+| **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ |
+| **M7** | Single-binary + public release | ✅ |
+| **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ |
+| **M10-B** | SQL persistence for contracts — survive kernel restarts | ✅ |
+| **Security CI** | 30 automated security tests — intent filter, ACL, rate limiter | ✅ |
+| **M11-A** | Federation peer DB — SQLite `peers.db`, `auth_token`/`shared_secret` split | ✅ |
+| **M11-B** | Pull sync — `/sync/export`, `/sync/pull`, `/sync/both` | ✅ |
+| **M11-C** | Node provenance — `federation_source` SQL column, echo-loop prevention, `/federation/nodes` query | ✅ |
+| **M11-D** | Scheduled auto-sync — background tokio loop, configurable interval and mode | ✅ |
+| **M11-E** | Federation integration tests — `federation_audit.rs` (6 tests) | ✅ |
 
 ---
 
@@ -195,14 +201,24 @@ See `integrations/` for editor-specific config files.
 ┌──────────────▼──────────────────────────────────────┐
 │         tylluan-nexus (:3000)                        │
 │                                                      │
-│  ┌──────────────┐  ┌───────────────────┐  ┌─────────────────┐ │
-│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry  │ │
-│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python tools│ │
-│  │ BGE-M3 1024  │  │ IVF vectors       │  │ via fastmcp     │ │
-│  │ BM25 + Graph │  │ Knowledge graph   │  │                 │ │
-│  │ centrality   │  │ Salience decay    │  │                 │ │
-│  └──────────────┘  └───────────────────┘  └─────────────────┘ │
+│  ┌──────────────┐  ┌───────────────────┐  ┌───────────────┐  │
+│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry│  │
+│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python    │  │
+│  │ BGE-M3 1024  │  │ IVF vectors       │  │ tools (MCP)   │  │
+│  │ BM25 + Graph │  │ Knowledge graph   │  │               │  │
+│  │ centrality   │  │ Salience decay    │  │               │  │
+│  └──────────────┘  └───────────────────┘  └───────────────┘  │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ Federation Layer                              │   │
+│  │ peers.db · ChaCha20 encrypted · provenance  │   │
+│  │ push / pull / auto-sync · echo-loop safe    │   │
+│  └──────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
+               │ ChaCha20-Poly1305 encrypted
+        ┌──────▼──────┐
+        │  Peer nodes │  (LAN / VPN)
+        └─────────────┘
 ```
 
 ## Stack
@@ -213,7 +229,8 @@ See `integrations/` for editor-specific config files.
 | Embeddings | BGE-M3 (local ONNX, CPU) |
 | Reranker | Jina v1 Turbo (local ONNX) |
 | Search | Dual-level: entity BM25 + BGE-M3 vector + graph expansion + degree centrality + cross-encoder rerank |
-| Storage | SQLite + mmap vector index |
+| Storage | SQLite WAL + mmap vector index |
+| Federation | SQLite `peers.db` + ChaCha20-Poly1305 (per-peer keys) |
 | Guilds | Python (fastmcp) |
 | Dashboard | React + Vite + Tailwind |
 
@@ -222,8 +239,7 @@ See `integrations/` for editor-specific config files.
 ```
 tylluan/
 ├── crates/
-│   ├── tylluan-kernel/    Core kernel (memory, routing, guilds, security)
-
+│   ├── tylluan-kernel/    Core kernel (memory, routing, guilds, federation, security)
 │   ├── tylluan-common/    Shared types and errors
 │   └── tylluan-evals/     Benchmarks (LongMemEval, BeamScale)
 ├── guilds/                Python tool plugins (fastmcp)
@@ -236,6 +252,36 @@ tylluan/
 ├── integrations/          MCP client config examples
 └── tests/                 E2E and integration tests
 ```
+
+## Federation
+
+Connect multiple Tylluan instances so they share knowledge securely:
+
+```toml
+# tylluan.toml
+[federation]
+auto_sync_interval_secs = 3600  # 0 = disabled
+auto_sync_mode = "both"         # "push" | "pull" | "both"
+```
+
+```bash
+# Add a peer
+curl -X POST http://127.0.0.1:3000/api/v1/federation/peers \
+  -H "Content-Type: application/json" \
+  -d '{"name":"node-b","url":"http://192.168.1.10:3000","auth_token":"...","shared_secret":"..."}'
+
+# Push local knowledge to all approved peers
+curl -X POST http://127.0.0.1:3000/api/v1/federation/sync
+
+# Pull from a specific peer
+curl -X POST "http://127.0.0.1:3000/api/v1/federation/sync/pull?peer=node-b"
+
+# Query provenance — which nodes came from which peer?
+curl "http://127.0.0.1:3000/api/v1/federation/nodes?source=node-b"
+curl "http://127.0.0.1:3000/api/v1/federation/nodes?source=local"
+```
+
+Security invariants: unapproved peers are never synced; protected nodes are never exported; received nodes carry `federation_source` provenance and are excluded from outbound sync by default (echo-loop prevention).
 
 ## Security
 
@@ -265,7 +311,7 @@ python examples/03_knowledge_graph.py --port 3000
 # Autonomous multi-hop chain — no orchestrator, no API keys needed
 python examples/multi_model_coloquio/run.py --kernel http://127.0.0.1:3000
 
-# Bounded Work Contract — 3 agents, shared budget, finite iterations (M10)
+# Bounded Work Contract — 3 agents, shared budget, finite iterations
 python examples/bounded_work_contract/run.py --kernel http://127.0.0.1:3000
 ```
 
@@ -279,7 +325,8 @@ See [examples/](examples/) for full source code.
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards (humans + AI) |
 | [AI_POLICY.md](AI_POLICY.md) | Rules for AI-generated contributions |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Detailed setup guide |
-| [ROADMAP.md](ROADMAP.md) | What's planned for v0.2, v0.3, v1.0 |
+| [ROADMAP.md](ROADMAP.md) | Versioned roadmap — v0.2, v0.3 done, v1.0 planned |
+| [docs/architecture/FEDERATION_V3.md](docs/architecture/FEDERATION_V3.md) | Federation protocol spec |
 
 ## Star History
 
