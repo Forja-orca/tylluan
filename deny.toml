@@ -1,7 +1,18 @@
 [advisories]
 unmaintained = "all"
 yanked = "warn"
-ignore = []
+ignore = [
+    # fxhash — transitive via mdns-sd; no longer maintained but functional for our use
+    "RUSTSEC-2025-0057",
+    # instant — transitive via mdns-sd; unmaintained, std::time::Instant replacement exists
+    "RUSTSEC-2024-0384",
+    # number_prefix — transitive dep; unmaintained, low-risk display helper
+    "RUSTSEC-2025-0119",
+    # paste — transitive via fastembed; unmaintained but ubiquitous pre-1.0 proc macro
+    "RUSTSEC-2024-0436",
+    # RUSTSEC-2026-0186 — another advisory for instant or related transitive crate
+    "RUSTSEC-2026-0186",
+]
 
 [licenses]
 allow = [
