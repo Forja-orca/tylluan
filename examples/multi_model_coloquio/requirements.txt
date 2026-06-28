@@ -1,0 +1,4 @@
+# All imports in run.py are stdlib — no packages required for echo mode.
+# For LLM mode (--llm-url), the endpoint must be running separately.
+# To use the ForjaWatcher base class from guilds/watchers/, install:
+# httpx>=0.27
