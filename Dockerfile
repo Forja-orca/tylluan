@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     libsqlite3-dev \
+    perl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 for dashboard build
@@ -36,7 +37,7 @@ RUN cd dashboard && npm install && npm run build
 
 # Build only tylluan-kernel (no GUI, no evals)
 # build.rs finds dist/ already present and skips rebuild
-RUN cargo build --release --locked -p tylluan-kernel
+RUN cargo build --release --locked -p tylluan-kernel --features encryption
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
@@ -76,8 +77,11 @@ COPY --from=builder /usr/local/lib/ /usr/local/lib/
 COPY guilds/ /opt/tylluan/guilds/
 
 # Config, data, and models directories — models is a VOLUME (user-provided)
+# Generate a local .encryption_key file secure with 600 permissions
 RUN mkdir -p /home/tylluan/data /home/tylluan/models \
     && ln -s /opt/tylluan/guilds /home/tylluan/guilds \
+    && openssl rand -hex 32 > /home/tylluan/.encryption_key \
+    && chmod 600 /home/tylluan/.encryption_key \
     && chown -R tylluan:tylluan /home/tylluan /opt/tylluan
 
 COPY tylluan.docker.toml /home/tylluan/tylluan.toml

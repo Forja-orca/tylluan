@@ -40,9 +40,11 @@ checkpoint_interval_secs = 300
 # Block dangerous intents (rm -rf, DROP TABLE, fork bombs, etc.)
 # intent_filter = true
 # Encrypt SQLite databases at rest using SQLCipher (AES-256)
-# Requires TYLLUAN_DB_KEY environment variable with the encryption passphrase.
+# Requires TYLLUAN_DB_KEY environment variable (containing a 64-character hex key) or configured directly.
 # WARNING: If you enable this on an existing database, you must migrate it first.
-# encrypt_at_rest = false
+encrypt_at_rest = false
+# 64-character hex key (32 bytes) for SQLCipher hexkey. Only hex chars allowed for safety.
+# encryption_key_hex = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
 # Docker sandbox for bash/code guilds (opt-in, disabled by default)
 # When enabled, bash and code guilds run in an isolated Docker container

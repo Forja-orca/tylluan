@@ -643,25 +643,68 @@ impl Default for SecurityConfig {
     }
 }
 
-/// Open a SQLite connection with optional encryption.
-/// If [security] encrypt_at_rest = true, applies PRAGMA key from TYLLUAN_DB_KEY env var.
+/// Open a SQLite connection with optional SQLCipher encryption.
+/// If [security] encrypt_at_rest = true, reads TYLLUAN_DB_KEY from env.
+/// The key MUST be a 64-character lowercase hex string (32 bytes).
+/// Generate with: openssl rand -hex 32
+///
+/// Encryption requires the `encryption` Cargo feature:
+///   cargo build --features encryption
+///
+/// Security note: uses PRAGMA hexkey (not PRAGMA key) — hexkey only accepts
+/// [0-9a-f] so string interpolation cannot produce SQL injection.
+/// The key is applied BEFORE any other PRAGMA to avoid reading an encrypted
+/// DB with WAL mode before it is unlocked.
 pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
 
+    // Encryption key MUST be the very first operation on the connection.
+    // Applying PRAGMA journal_mode=WAL before the key would fail on an
+    // already-encrypted database.
     if let Ok(cfg_lock) = TylluanConfig::load_cached() {
         if let Ok(cfg) = cfg_lock.try_read() {
             if cfg.security.encrypt_at_rest {
-                if let Ok(key) = std::env::var("TYLLUAN_DB_KEY") {
-                    conn.pragma_update(None, "key", &key)?;
-                    tracing::info!("🔐 Database encryption enabled for {}", path.display());
-                } else {
-                    tracing::warn!("⚠️ encrypt_at_rest=true but TYLLUAN_DB_KEY env var not set — database NOT encrypted");
+                #[cfg(feature = "encryption")]
+                {
+                    match std::env::var("TYLLUAN_DB_KEY") {
+                        Ok(key_hex) => {
+                            if !key_hex.chars().all(|c| c.is_ascii_hexdigit()) || key_hex.len() != 64 {
+                                return Err(anyhow::anyhow!(
+                                    "TYLLUAN_DB_KEY must be a 64-character hex string \
+                                     (generate with: openssl rand -hex 32)"
+                                ));
+                            }
+                            conn.pragma_update(None, "hexkey", &key_hex)?;
+                            // Verify the key is correct before proceeding
+                            conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
+                                .map_err(|_| anyhow::anyhow!(
+                                    "Encryption key rejected for {}: wrong TYLLUAN_DB_KEY or \
+                                     database was not encrypted with SQLCipher",
+                                    path.display()
+                                ))?;
+                            tracing::info!("🔐 SQLCipher encryption active: {}", path.display());
+                        }
+                        Err(_) => {
+                            tracing::warn!(
+                                "⚠️ encrypt_at_rest=true but TYLLUAN_DB_KEY not set \
+                                 — {} is NOT encrypted",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+                #[cfg(not(feature = "encryption"))]
+                {
+                    tracing::error!(
+                        "encrypt_at_rest=true but binary was not compiled with encryption support. \
+                         Rebuild with: cargo build --features encryption"
+                    );
                 }
             }
         }
     }
 
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
     Ok(conn)
 }
 
