@@ -1,10 +1,10 @@
-﻿//! # Sovereign Constants
+//! # Sovereign Constants
 //!
 //! Centralized repository of the "Laws" that power TylluanNexus o3.
 //! Shared across kernel, common, and tests.
 
-/// The universal key for the Master Token Tunnel.
-/// Access to dangerous tools (bash, filesystem) requires this token.
+// The universal key for the Master Token Tunnel.
+// Access to dangerous tools (bash, filesystem) requires this token.
 // Security: MASTER_TOKEN removed from source code. 
 // Use TYLLUAN_TOKEN environment variable for authenticated tool access.
 
