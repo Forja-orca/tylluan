@@ -53,7 +53,7 @@ fn test_identity_sign_and_verify() {
 
     // Valid signature verifies
     {
-        use ed25519_dalek::Verifier as _;
+        use ed25519_dalek::Verifier;
         identity.verifying_key().verify(message, &sig)
             .expect("valid signature must verify against own public key");
 

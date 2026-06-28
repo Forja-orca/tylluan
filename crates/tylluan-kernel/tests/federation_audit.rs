@@ -92,6 +92,7 @@ async fn test_peer_db_roundtrip() {
         last_sync: None,
         approved: true,
         added_at: 0,
+        ed25519_pubkey: String::new(),
     };
 
     peer_db.insert(&peer).unwrap();
@@ -116,6 +117,7 @@ async fn test_peer_approval_required() {
         last_sync: None,
         approved: false, // NOT approved
         added_at: 0,
+        ed25519_pubkey: String::new(),
     };
     state.peer_db.insert(&unapproved).unwrap();
     state.config.write().await.federation_peers.push(unapproved);
@@ -144,6 +146,7 @@ async fn test_shared_secret_separate_from_auth() {
         last_sync: None,
         approved: true,
         added_at: 0,
+        ed25519_pubkey: String::new(),
     };
 
     let data = b"confidential payload";
@@ -168,30 +171,32 @@ async fn test_provenance_tagged_on_receive() {
         last_sync: None,
         approved: true,
         added_at: 0,
+        ed25519_pubkey: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
     state.config.write().await.federation_peers.push(peer.clone());
 
-    let nodes = serde_json::json!([
-        {
-            "id": "provenance-node",
-            "node_type": "document",
-            "content": "federated content",
-            "metadata": "{}",
-            "weight": 1.0,
-            "protected": false,
-            "conflicted": false,
-            "topic_key": null,
-            "created_at": null,
-            "updated_at": null,
-            "last_touched": "2026-06-28T12:00:00Z",
-            "valid_from": null,
-            "valid_until": null,
-            "shareable": true
-        }
-    ]);
+    let node_val = serde_json::json!({
+        "id": "provenance-node",
+        "node_type": "document",
+        "content": "federated content",
+        "metadata": "{}",
+        "weight": 1.0,
+        "protected": false,
+        "conflicted": false,
+        "topic_key": null,
+        "created_at": null,
+        "updated_at": null,
+        "last_touched": "2026-06-28T12:00:00Z",
+        "valid_from": null,
+        "valid_until": null,
+        "shareable": true
+    });
 
-    let plain_json = serde_json::to_vec(&nodes).unwrap();
+    // Sign the node before sending (M12-B)
+    let envelope = tylluan_link::identity::sign_node(&state.node_identity, &node_val).unwrap();
+    let envelopes = vec![envelope];
+    let plain_json = serde_json::to_vec(&envelopes).unwrap();
     let encrypted = tylluan_kernel::federation::encrypt_payload(&plain_json, peer.encryption_key()).unwrap();
 
     let app = api_v1_routes().with_state(state.clone());
@@ -232,6 +237,7 @@ async fn test_no_echo_loop() {
         last_sync: None,
         approved: true,
         added_at: 0,
+        ed25519_pubkey: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
     state.config.write().await.federation_peers.push(peer);
@@ -249,11 +255,11 @@ async fn test_no_echo_loop() {
 
     let body_bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap().to_vec();
     let decrypted = tylluan_kernel::federation::decrypt_payload(&body_bytes, "requester-secret").unwrap();
-    let exported_nodes: Vec<serde_json::Value> = serde_json::from_slice(&decrypted).unwrap();
+    let exported_envelopes: Vec<tylluan_link::identity::SignedEnvelope> = serde_json::from_slice(&decrypted).unwrap();
 
     // Verify it only exported the local node, skipping the federated one (prevent echo loop)
-    assert_eq!(exported_nodes.len(), 1);
-    assert_eq!(exported_nodes[0]["id"].as_str().unwrap(), "local-node");
+    assert_eq!(exported_envelopes.len(), 1);
+    assert_eq!(exported_envelopes[0].node["id"].as_str().unwrap(), "local-node");
 }
 
 #[tokio::test(flavor = "multi_thread")]
