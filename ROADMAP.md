@@ -64,6 +64,25 @@ Out of scope (v0.4.0):
 - Asymmetric cryptography (Ed25519) for node signing
 - DHT peer discovery
 
+## v0.4.0 — Mesh
+
+**Status:** In progress.
+
+**Goal:** Connect Tylluan instances across networks without manual IP configuration.
+
+Planned:
+- [ ] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`
+- [ ] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting
+- [ ] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
+- [ ] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks
+- [ ] M12-E — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without central registry
+- [ ] M12-F — Integration tests: `tests/mesh_audit.rs` covering keypair generation, signature verification, autodiscovery
+
+Out of scope (v0.5.0):
+- Gossip protocol for eventual consistency across large meshes
+- Encrypted transport overlay (WireGuard or Noise Protocol)
+- Cross-datacenter federation with latency-aware routing
+
 ## v1.0.0 — Production Ready
 
 **Goal:** Safe to deploy in real environments.
