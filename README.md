@@ -117,17 +117,20 @@ Downloading BGE-M3 embedding model... [##########] 560 MB
 
 ### Step 3 — Connect your IDE
 
-```bash
-tylluan-nexus connect cursor      # writes .cursor/mcp.json
-tylluan-nexus connect vscode      # writes .vscode/mcp.json
-tylluan-nexus connect claude      # runs: claude mcp add --transport sse tylluan ...
-tylluan-nexus connect zed         # writes ~/.config/zed/settings.json
-```
+Add to your MCP client config (works with any SSE-capable client):
 
-Or add manually to any MCP client:
 ```json
 { "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3000/sse" } } }
 ```
+
+| Client | Config file |
+|--------|-------------|
+| **Cursor** | `~/.cursor/mcp.json` |
+| **VS Code** | `.vscode/mcp.json` in your workspace |
+| **Claude Desktop** | `claude_desktop_config.json` |
+| **Zed** | `~/.config/zed/settings.json` under `"context_servers"` |
+
+For **Claude Code CLI**: `claude mcp add --transport sse tylluan http://127.0.0.1:3000/sse`
 
 > **⚠️** Always use `127.0.0.1`, never `localhost` (IPv6 resolution trap on Windows).
 >
