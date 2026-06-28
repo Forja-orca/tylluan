@@ -93,6 +93,8 @@ async fn test_state() -> Arc<HttpState> {
         journal: Arc::new(tylluan_kernel::transport::http::api_v1::api_journal::JournalDb::open(":memory:").unwrap()),
         agent_registry: tylluan_kernel::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
+        contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
+        peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
     })
 }
 

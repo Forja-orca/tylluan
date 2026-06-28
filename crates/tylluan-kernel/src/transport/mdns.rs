@@ -107,7 +107,9 @@ pub fn start_mdns_discovery(
                     cfg.federation_peers.push(FederationPeer {
                         name: peer_name.clone(),
                         url,
-                        token: String::new(), // no shared secret — must be set manually before sync
+                        auth_token: String::new(),
+                        shared_secret: String::new(),
+                        added_at: 0,
                         last_sync: None,
                         approved: false, // requires human approval + token before any sync
                     });
