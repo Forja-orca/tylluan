@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 
 import httpx
 
-FORJA_BASE = os.getenv("FORJA_URL", "http://127.0.0.1:3030")
+FORJA_BASE = os.getenv("FORJA_URL", "http://127.0.0.1:3033")
 log = logging.getLogger(__name__)
 
 
