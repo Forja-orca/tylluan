@@ -66,7 +66,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs: `cargo build` + `cargo test` (250+ lib tests, 8 integration suites including `federation_audit`) + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`). See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs: `cargo build` + `cargo test` (250 lib tests, 8 integration suites: security, guard, foundation, consensus, semantic_consensus, guild_integration, dashboard_api, federation_audit) + `cargo clippy`, Python lint (ruff), dashboard lint (eslint), CVE scanning (`cargo audit`), license compliance (`cargo deny`). See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 

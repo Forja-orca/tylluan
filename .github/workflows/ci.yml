@@ -88,3 +88,4 @@ jobs:
           cargo test -p tylluan-kernel --test semantic_consensus_audit
           cargo test -p tylluan-kernel --test guild_integration_audit
           cargo test -p tylluan-kernel --test dashboard_api_audit
+          cargo test -p tylluan-kernel --test federation_audit
