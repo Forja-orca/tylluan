@@ -1,7 +1,7 @@
 ﻿use axum::{
     Json,
-    extract::{State, Path},
-    http::StatusCode,
+    extract::{State, Path, Query},
+    http::{StatusCode, HeaderMap, header},
     response::IntoResponse,
 };
 use std::sync::Arc;
@@ -65,9 +65,11 @@ pub async fn federation_add_peer(State(state): State<Arc<HttpState>>, Json(req):
     let peer = crate::federation::FederationPeer {
         name: req.name.clone(),
         url: req.url.clone(),
-        token: req.token.clone(),
+        auth_token: req.token.clone(),
+        shared_secret: String::new(),
         last_sync: None,
-        approved: true, // manual registration = human approved
+        approved: true,
+        added_at: 0,
     };
 
     {
@@ -116,7 +118,7 @@ pub async fn federation_approve_peer(
     {
         let mut config = state.config.write().await;
         if let Some(peer) = config.federation_peers.iter_mut().find(|p| p.name == name) {
-            peer.token = req.token.clone();
+            peer.auth_token = req.token.clone();
             peer.approved = true;
             found = true;
         } else {
@@ -164,7 +166,7 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
         }
 
         // Encrypt payload with ChaCha20-Poly1305 using shared token as key
-        let encrypted = match crate::federation::encrypt_payload(&plain_body, &peer.token) {
+        let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
             Ok(enc) => enc,
             Err(e) => {
                 tracing::error!("Federation encrypt failed for peer '{}': {}", peer.name, e);
@@ -175,7 +177,7 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
         let sync_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
         let resp = client
             .post(&sync_url)
-            .bearer_auth(&peer.token)
+            .bearer_auth(&peer.auth_token)
             .header("content-type", "application/octet-stream")
             .body(encrypted)
             .send()
@@ -225,7 +227,7 @@ pub async fn federation_sync_receive(
     let matched_peer = {
         let config = state.config.read().await;
         config.federation_peers.iter()
-            .find(|p| p.approved && p.token == bearer)
+            .find(|p| p.approved && p.auth_token == bearer)
             .cloned()
     };
 
@@ -238,7 +240,7 @@ pub async fn federation_sync_receive(
     };
 
     // Decrypt payload with ChaCha20-Poly1305
-    let plain = match crate::federation::decrypt_payload(&body, &peer.token) {
+    let plain = match crate::federation::decrypt_payload(&body, peer.encryption_key()) {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Federation decrypt failed from peer '{}': {}", peer.name, e);
@@ -401,4 +403,293 @@ pub async fn routing_anchors_seed(
         }
     }
     Json(serde_json::json!({"inserted": inserted, "errors": errors})).into_response()
+}
+
+// ── M11-B: Pull Sync ──────────────────────────────────────────────────────────
+
+/// GET /api/v1/federation/sync/export
+/// Returns ChaCha20-encrypted shareable nodes for the authenticated peer.
+/// Peer is identified by bearer token matching an approved peer's auth_token.
+pub async fn federation_sync_export(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let bearer = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("")
+        .to_string();
+
+    if bearer.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Missing Authorization header"}))).into_response();
+    }
+
+    let peer = {
+        let config = state.config.read().await;
+        config.federation_peers.iter()
+            .find(|p| p.approved && p.auth_token == bearer)
+            .cloned()
+    };
+
+    let peer = match peer {
+        Some(p) => p,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response(),
+    };
+
+    let include_received = params.get("include_received").map(|v| v == "true").unwrap_or(false);
+
+    let nodes = match state.silva.get_shareable_nodes().await {
+        Ok(n) => n,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Failed to get shareable nodes: {e}")}))).into_response(),
+    };
+
+    let nodes_for_export: Vec<serde_json::Value> = if include_received {
+        nodes.iter().map(|n| serde_json::json!(n)).collect()
+    } else {
+        nodes.iter()
+            .filter(|n| {
+                let meta: serde_json::Value = serde_json::from_str(&n.metadata).unwrap_or_default();
+                meta.get("federation_source").is_none()
+            })
+            .map(|n| serde_json::json!(n))
+            .collect()
+    };
+
+    let plain_body = serde_json::to_vec(&nodes_for_export).unwrap_or_default();
+    let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
+        Ok(e) => e,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Encryption failed: {e}")}))).into_response(),
+    };
+
+    (
+        StatusCode::OK,
+        [("content-type", "application/octet-stream")],
+        encrypted,
+    ).into_response()
+}
+
+/// POST /api/v1/federation/sync/pull?peer={name}
+/// Fetches shareable nodes from the named peer's /export endpoint,
+/// decrypts with the peer's shared_secret, and upserts into local SilvaDB.
+pub async fn federation_sync_pull(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let peer_name = match params.get("peer") {
+        Some(n) => n,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing 'peer' query parameter"}))).into_response(),
+    };
+
+    let peer = {
+        let config = state.config.read().await;
+        config.federation_peers.iter()
+            .find(|p| p.name == *peer_name && p.approved)
+            .cloned()
+    };
+
+    let peer = match peer {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("Approved peer '{}' not found", peer_name)}))).into_response(),
+    };
+
+    let export_url = format!("{}/api/v1/federation/sync/export", peer.url.trim_end_matches('/'));
+    let client = reqwest::Client::new();
+
+    let resp = match client
+        .get(&export_url)
+        .bearer_auth(&peer.auth_token)
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+                "error": format!("Peer responded with {status}: {body}")
+            }))).into_response();
+        }
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+            "error": format!("Failed to connect to peer '{}': {e}", peer.name)
+        }))).into_response(),
+    };
+
+    let encrypted = match resp.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+            "error": format!("Failed to read response from peer: {e}")
+        }))).into_response(),
+    };
+
+    let plain = match crate::federation::decrypt_payload(&encrypted, peer.encryption_key()) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+            "error": format!("Decryption failed: {e}")
+        }))).into_response(),
+    };
+
+    let nodes: Vec<serde_json::Value> = match serde_json::from_slice(&plain) {
+        Ok(n) => n,
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+            "error": format!("Invalid JSON from peer: {e}")
+        }))).into_response(),
+    };
+
+    let mut received = 0u64;
+    let mut skipped = 0u64;
+
+    for node_val in &nodes {
+        let node_id = node_val["id"].as_str().unwrap_or("");
+        let node_type = node_val["node_type"].as_str().unwrap_or("entity");
+        let content = node_val["content"].as_str().unwrap_or("");
+        let mut meta: serde_json::Value = node_val.get("metadata")
+            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
+            .unwrap_or(serde_json::json!({}));
+
+        if let serde_json::Value::Object(ref mut map) = meta {
+            map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
+        }
+        let meta_str = serde_json::to_string(&meta).unwrap_or_default();
+
+        let is_protected = node_val.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+        if is_protected {
+            skipped += 1;
+            continue;
+        }
+
+        match state.silva.upsert_node(node_id, node_type, content, &meta_str).await {
+            Ok(_) => received += 1,
+            Err(_) => skipped += 1,
+        }
+    }
+
+    // Update last_sync
+    {
+        let mut config = state.config.write().await;
+        if let Some(p) = config.federation_peers.iter_mut().find(|p| p.name == peer.name) {
+            p.last_sync = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+        }
+    }
+    let config_read = state.config.read().await;
+    let _ = crate::config::persist_federation_peers(&config_read, std::path::Path::new("tylluan.toml"));
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "received": received,
+        "skipped": skipped,
+        "total": nodes.len(),
+        "peer": peer.name,
+    }))).into_response()
+}
+
+/// POST /api/v1/federation/sync/both?peer={name}
+/// Push to named peer, then pull from them — full bidirectional sync.
+pub async fn federation_sync_both(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let peer_name = match params.get("peer") {
+        Some(n) => n,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing 'peer' query parameter"}))).into_response(),
+    };
+
+    let peer = {
+        let config = state.config.read().await;
+        config.federation_peers.iter()
+            .find(|p| p.name == *peer_name && p.approved)
+            .cloned()
+    };
+
+    let peer = match peer {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("Approved peer '{}' not found", peer_name)}))).into_response(),
+    };
+
+    // Push step: encrypt shareable nodes and POST to peer's /sync/receive
+    let shareable_nodes = match state.silva.get_shareable_nodes().await {
+        Ok(n) => n,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Failed to get shareable nodes: {e}")}))).into_response(),
+    };
+
+    let nodes_for_export: Vec<serde_json::Value> = shareable_nodes.iter()
+        .filter(|n| {
+            let meta: serde_json::Value = serde_json::from_str(&n.metadata).unwrap_or_default();
+            meta.get("federation_source").is_none()
+        })
+        .map(|n| serde_json::json!(n))
+        .collect();
+
+    let plain_body = serde_json::to_vec(&nodes_for_export).unwrap_or_default();
+    let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
+        Ok(e) => e,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Encryption failed: {e}")}))).into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let push_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
+    let push_result = client
+        .post(&push_url)
+        .bearer_auth(&peer.auth_token)
+        .header("content-type", "application/octet-stream")
+        .body(encrypted)
+        .send()
+        .await;
+
+    let push_ok = match &push_result {
+        Ok(r) if r.status().is_success() => true,
+        _ => false,
+    };
+
+    // Pull step: fetch from peer's export
+    let export_url = format!("{}/api/v1/federation/sync/export", peer.url.trim_end_matches('/'));
+    let pull_result = client
+        .get(&export_url)
+        .bearer_auth(&peer.auth_token)
+        .send()
+        .await;
+
+    let mut pulled = 0u64;
+    if let Ok(r) = pull_result
+        && r.status().is_success()
+    {
+        if let Ok(encrypted_bytes) = r.bytes().await {
+            if let Ok(plain) = crate::federation::decrypt_payload(&encrypted_bytes, peer.encryption_key()) {
+                if let Ok(nodes) = serde_json::from_slice::<Vec<serde_json::Value>>(&plain) {
+                    for node_val in &nodes {
+                        let node_id = node_val["id"].as_str().unwrap_or("");
+                        let node_type = node_val["node_type"].as_str().unwrap_or("entity");
+                        let content = node_val["content"].as_str().unwrap_or("");
+                        let mut meta: serde_json::Value = node_val.get("metadata")
+                            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
+                            .unwrap_or(serde_json::json!({}));
+                        if let serde_json::Value::Object(ref mut map) = meta {
+                            map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
+                        }
+                        let meta_str = serde_json::to_string(&meta).unwrap_or_default();
+                        let is_protected = node_val.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+                        if !is_protected && state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                            pulled += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Update last_sync
+    {
+        let mut config = state.config.write().await;
+        if let Some(p) = config.federation_peers.iter_mut().find(|p| p.name == peer.name) {
+            p.last_sync = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+        }
+    }
+    let config_read = state.config.read().await;
+    let _ = crate::config::persist_federation_peers(&config_read, std::path::Path::new("tylluan.toml"));
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "peer": peer.name,
+        "push_succeeded": push_ok,
+        "pulled_nodes": pulled,
+    }))).into_response()
 }
