@@ -95,6 +95,7 @@ pub async fn federation_add_peer(
         last_sync: None,
         approved: true,
         added_at: now_secs() as u64,
+        ed25519_pubkey: String::new(),
     };
 
     if let Err(e) = state.peer_db.insert(&peer) {
@@ -133,6 +134,27 @@ pub async fn federation_approve_peer(
     match state.peer_db.update_approved(&name, &req.auth_token, secret, true) {
         Ok(true) => {
             reload_peers_cache(&state).await;
+            // M12-B: auto-fetch peer's Ed25519 identity pubkey
+            if let Some(peer) = state.config.read().await.federation_peers.iter().find(|p| p.name == name).cloned() {
+                let identity_url = format!("{}/api/v1/federation/identity", peer.url.trim_end_matches('/'));
+                let client = reqwest::Client::new();
+                match client.get(&identity_url).bearer_auth(&peer.auth_token).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        if let Ok(body) = resp.json::<serde_json::Value>().await {
+                            if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str()) {
+                                if !pubkey.is_empty() {
+                                    let _ = state.peer_db.update_ed25519_pubkey(&name, pubkey);
+                                    tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
+                                    reload_peers_cache(&state).await;
+                                }
+                            }
+                        }
+                    }
+                    Ok(resp) => tracing::warn!("⛔ Identity fetch for '{}' returned {}", name, resp.status()),
+                    Err(e) => tracing::warn!("⛔ Identity fetch for '{}' failed: {e}", name),
+                }
+            }
+
             tracing::info!("✅ Federation peer '{}' approved by operator", name);
             (StatusCode::OK, Json(serde_json::json!({"status": "approved", "name": name}))).into_response()
         }
@@ -163,7 +185,15 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
         })
         .collect();
 
-    let plain_body = serde_json::to_vec(&local_nodes).unwrap_or_default();
+    // M12-B: sign each node
+    let mut envelopes = Vec::with_capacity(local_nodes.len());
+    for node in &local_nodes {
+        let node_json = serde_json::to_value(node).unwrap_or_default();
+        if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
+            envelopes.push(e);
+        }
+    }
+    let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
     let mut synced_count = 0;
     let client = reqwest::Client::new();
 
@@ -240,23 +270,45 @@ pub async fn federation_sync_receive(
         }
     };
 
-    let nodes: Vec<crate::memory::silva::GraphNode> = match serde_json::from_slice(&plain) {
-        Ok(n) => n,
+    let envelopes: Vec<tylluan_link::identity::SignedEnvelope> = match serde_json::from_slice(&plain) {
+        Ok(e) => e,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("Invalid JSON: {e}")}))).into_response(),
     };
 
     let mut received = 0;
     let mut skipped = 0;
+    let mut verified = 0;
+    let has_pubkey = !peer.ed25519_pubkey.is_empty();
 
-    for node in &nodes {
-        if node.protected { skipped += 1; continue; }
-        // Tag with provenance in metadata
-        let mut meta: serde_json::Value = serde_json::from_str(&node.metadata).unwrap_or_default();
+    for envelope in &envelopes {
+        // M12-B: verify signature if peer has a pubkey on record
+        if has_pubkey {
+            match tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+                Ok(()) => verified += 1,
+                Err(e) => {
+                    tracing::warn!("⛔ Federation: signature verification failed from '{}': {e}", peer.name);
+                    skipped += 1;
+                    continue;
+                }
+            }
+        }
+
+        let node_id = envelope.node.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let node_type = envelope.node.get("node_type").and_then(|v| v.as_str()).unwrap_or("entity");
+        let content = envelope.node.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        if is_protected { skipped += 1; continue; }
+
+        let mut meta: serde_json::Value = envelope.node.get("metadata")
+            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
+            .unwrap_or(serde_json::json!({}));
         if let serde_json::Value::Object(ref mut map) = meta {
             map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
         }
         let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-        if state.silva.upsert_node(&node.id, &node.node_type, &node.content, &meta_str).await.is_ok() {
+
+        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
             received += 1;
         } else {
             skipped += 1;
@@ -266,14 +318,15 @@ pub async fn federation_sync_receive(
     (StatusCode::OK, Json(serde_json::json!({
         "received": received,
         "skipped": skipped,
-        "total": nodes.len(),
+        "verified": verified,
+        "total": envelopes.len(),
     }))).into_response()
 }
 
 // ── M11-B: Pull sync ─────────────────────────────────────────────────────────
 
 /// GET /api/v1/federation/sync/export
-/// Returns ChaCha20-encrypted shareable nodes for the authenticated peer.
+/// Returns ChaCha20-encrypted signed envelopes for the authenticated peer.
 pub async fn federation_sync_export(
     State(state): State<Arc<HttpState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -320,7 +373,17 @@ pub async fn federation_sync_export(
             .collect()
     };
 
-    let plain_body = serde_json::to_vec(&nodes_for_export).unwrap_or_default();
+    // M12-B: sign each node before encrypting
+    let mut envelopes = Vec::with_capacity(nodes_for_export.len());
+    for node in &nodes_for_export {
+        let node_json = serde_json::to_value(node).unwrap_or_default();
+        match tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
+            Ok(envelope) => envelopes.push(envelope),
+            Err(e) => tracing::warn!("Failed to sign node '{}': {e}", node.id),
+        }
+    }
+
+    let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
     let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
         Ok(e) => e,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Encryption failed: {e}")}))).into_response(),
@@ -374,20 +437,30 @@ pub async fn federation_sync_pull(
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("Decryption failed: {e}")}))).into_response(),
     };
 
-    let nodes: Vec<serde_json::Value> = match serde_json::from_slice(&plain) {
-        Ok(n) => n,
+    let envelopes: Vec<tylluan_link::identity::SignedEnvelope> = match serde_json::from_slice(&plain) {
+        Ok(e) => e,
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("Invalid JSON from peer: {e}")}))).into_response(),
     };
 
     let (mut received, mut skipped) = (0u64, 0u64);
-    for node_val in &nodes {
-        let is_protected = node_val.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+    let has_pubkey = !peer.ed25519_pubkey.is_empty();
+
+    for envelope in &envelopes {
+        if has_pubkey {
+            if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+                tracing::warn!("⛔ Pull: sig verify failed from '{}': {e}", peer.name);
+                skipped += 1;
+                continue;
+            }
+        }
+
+        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
         if is_protected { skipped += 1; continue; }
 
-        let node_id = node_val["id"].as_str().unwrap_or("");
-        let node_type = node_val["node_type"].as_str().unwrap_or("entity");
-        let content = node_val["content"].as_str().unwrap_or("");
-        let mut meta: serde_json::Value = node_val.get("metadata")
+        let node_id = envelope.node["id"].as_str().unwrap_or("");
+        let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
+        let content = envelope.node["content"].as_str().unwrap_or("");
+        let mut meta: serde_json::Value = envelope.node.get("metadata")
             .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
             .unwrap_or(serde_json::json!({}));
         if let serde_json::Value::Object(ref mut map) = meta {
@@ -407,7 +480,7 @@ pub async fn federation_sync_pull(
     (StatusCode::OK, Json(serde_json::json!({
         "received": received,
         "skipped": skipped,
-        "total": nodes.len(),
+        "total": envelopes.len(),
         "peer": peer.name,
     }))).into_response()
 }
@@ -444,7 +517,15 @@ pub async fn federation_sync_both(
                 meta.get("federation_source").is_none()
             })
             .collect();
-        if let Ok(plain) = serde_json::to_vec(&local_nodes) {
+        // M12-B: sign each node
+        let mut envelopes = Vec::with_capacity(local_nodes.len());
+        for node in &local_nodes {
+            let node_json = serde_json::to_value(node).unwrap_or_default();
+            if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
+                envelopes.push(e);
+            }
+        }
+        if let Ok(plain) = serde_json::to_vec(&envelopes) {
             if let Ok(enc) = crate::federation::encrypt_payload(&plain, peer.encryption_key()) {
                 let push_url = format!("{}/api/v1/federation/sync/receive", peer.url.trim_end_matches('/'));
                 matches!(
@@ -464,14 +545,21 @@ pub async fn federation_sync_both(
         if r.status().is_success() {
             if let Ok(enc_bytes) = r.bytes().await {
                 if let Ok(plain) = crate::federation::decrypt_payload(&enc_bytes, peer.encryption_key()) {
-                    if let Ok(nodes) = serde_json::from_slice::<Vec<serde_json::Value>>(&plain) {
-                        for node_val in &nodes {
-                            let is_protected = node_val.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if let Ok(envelopes) = serde_json::from_slice::<Vec<tylluan_link::identity::SignedEnvelope>>(&plain) {
+                        let has_pubkey = !peer.ed25519_pubkey.is_empty();
+                        for envelope in &envelopes {
+                            if has_pubkey {
+                                if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+                                    tracing::warn!("⛔ Both sync: sig verify failed from '{}': {e}", peer.name);
+                                    continue;
+                                }
+                            }
+                            let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
                             if is_protected { continue; }
-                            let node_id = node_val["id"].as_str().unwrap_or("");
-                            let node_type = node_val["node_type"].as_str().unwrap_or("entity");
-                            let content = node_val["content"].as_str().unwrap_or("");
-                            let mut meta: serde_json::Value = node_val.get("metadata")
+                            let node_id = envelope.node["id"].as_str().unwrap_or("");
+                            let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
+                            let content = envelope.node["content"].as_str().unwrap_or("");
+                            let mut meta: serde_json::Value = envelope.node.get("metadata")
                                 .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
                                 .unwrap_or(serde_json::json!({}));
                             if let serde_json::Value::Object(ref mut map) = meta {
@@ -682,14 +770,24 @@ async fn pull_from_peer_internal(
 
     let encrypted = resp.bytes().await?.to_vec();
     let plain = crate::federation::decrypt_payload(&encrypted, peer.encryption_key())?;
-    let nodes: Vec<serde_json::Value> = serde_json::from_slice(&plain)?;
+    let envelopes: Vec<tylluan_link::identity::SignedEnvelope> = serde_json::from_slice(&plain)?;
 
     let mut received = 0;
-    for node_val in &nodes {
-        let node_id = node_val["id"].as_str().unwrap_or("");
-        let node_type = node_val["node_type"].as_str().unwrap_or("entity");
-        let content = node_val["content"].as_str().unwrap_or("");
-        let mut meta: serde_json::Value = node_val.get("metadata")
+    let has_pubkey = !peer.ed25519_pubkey.is_empty();
+
+    for envelope in &envelopes {
+        // M12-B: verify signature if peer has a pubkey on record
+        if has_pubkey {
+            if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+                tracing::warn!("⛔ Pull internal: sig verify failed from '{}': {e}", peer.name);
+                continue;
+            }
+        }
+
+        let node_id = envelope.node["id"].as_str().unwrap_or("");
+        let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
+        let content = envelope.node["content"].as_str().unwrap_or("");
+        let mut meta: serde_json::Value = envelope.node.get("metadata")
             .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
             .unwrap_or(serde_json::json!({}));
 
@@ -698,7 +796,7 @@ async fn pull_from_peer_internal(
         }
         let meta_str = serde_json::to_string(&meta).unwrap_or_default();
 
-        let is_protected = node_val.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
         if is_protected {
             continue;
         }
@@ -756,7 +854,15 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                             meta.get("federation_source").is_none()
                         })
                         .collect();
-                    serde_json::to_vec(&local_nodes).unwrap_or_default()
+                    // M12-B: sign each node
+                    let mut envelopes = Vec::with_capacity(local_nodes.len());
+                    for node in &local_nodes {
+                        let node_json = serde_json::to_value(node).unwrap_or_default();
+                        if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
+                            envelopes.push(e);
+                        }
+                    }
+                    serde_json::to_vec(&envelopes).unwrap_or_default()
                 } else {
                     Vec::new()
                 }

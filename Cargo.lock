@@ -4359,6 +4359,7 @@ dependencies = [
  "dashmap",
  "dirs",
  "dotenvy",
+ "ed25519-dalek",
  "fastembed",
  "flate2",
  "futures-util",
