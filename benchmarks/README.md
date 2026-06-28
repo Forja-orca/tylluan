@@ -38,24 +38,20 @@ Results are saved to `benchmarks/results/<timestamp>.json`.
 - **CPU-only**: BGE-M3 and Jina run on CPU. Expect 2-8s for memory_write on typical hardware.
 - **Percentiles reported**: p50, p95, p99 across N samples.
 
-## Reference numbers (baseline, i7-12700K, Windows 11, no GPU)
+## Reference numbers
 
+No pre-published numbers. Hardware varies too much to be meaningful.
+
+Run the suite yourself and submit your results to
+[GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions) —
+that is how the community baseline gets built.
+
+```bash
+python benchmarks/run.py --out benchmarks/results/my_machine.json
 ```
-Benchmark                        p50     p95     p99
-----------------------------------------------------
-http_baseline_ms               0.4ms   0.7ms   1.1ms
-coloquio_post_ms               2.1ms   3.8ms   6.2ms
-memory_write_ms             2840.0ms  3200ms  3800ms   (BGE-M3 CPU)
-memory_recall_ms              180.0ms  240ms   310ms
-kernel_rss_mb                 142.0 MB
-```
 
-## Reproducing these numbers
-
-1. Clone the repo and build: `cargo build -p tylluan-kernel`
-2. Start: `tylluan.bat`
-3. Run: `python benchmarks/run.py --out benchmarks/results/your_machine.json`
-4. Share your results in [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions)
+The JSON output includes platform, CPU count, and kernel version so results
+are attributable to specific hardware.
 
 ## Sharing your results
 
