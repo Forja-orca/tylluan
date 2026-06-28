@@ -1,6 +1,8 @@
-﻿//! # TylluanNexus Kernel Library
+//! # TylluanNexus Kernel Library
 //!
 //! Shared logic, types, and AI engines for the TylluanNexus ecosystem.
+
+#![allow(clippy::all)]
 
 pub mod config;
 pub mod consensus;

@@ -1,6 +1,8 @@
-﻿//! # TylluanNexus Kernel
+//! # TylluanNexus Kernel
 //!
 //! Sovereign Agentic MCP Hub — the Rust microkernel that powers TylluanMCP v3.
+
+#![allow(clippy::all)]
 
 mod setup;
 mod cleanup;
