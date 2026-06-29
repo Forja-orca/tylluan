@@ -68,6 +68,7 @@ pub struct HttpState {
     pub node_identity: Arc<tylluan_link::identity::NodeIdentity>,
     pub nat_cache: Arc<tokio::sync::RwLock<Option<tylluan_link::nat::ExternalAddr>>>,
     pub dht_routing_table: Arc<tokio::sync::RwLock<tylluan_link::dht::RoutingTable>>,
+    pub gossip_engine: Arc<tokio::sync::RwLock<tylluan_link::gossip::GossipEngine>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -382,6 +383,20 @@ pub async fn start_http_server_with_download(
                 node_identity.node_id().to_string()
             )
         )),
+        gossip_engine: Arc::new(tokio::sync::RwLock::new(
+            {
+                let cfg = tylluan_link::gossip::GossipConfig {
+                    enabled: true,
+                    interval_secs: 30,
+                    fanout: 3,
+                    max_peer_cursors: 100,
+                };
+                tylluan_link::gossip::GossipEngine::new(
+                    node_identity.node_id().to_string(),
+                    cfg,
+                )
+            }
+        )),
     });
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
@@ -438,6 +453,70 @@ pub async fn start_http_server_with_download(
         match bootstrap_config.bootstrap(&mut rt).await {
             Ok(peers) => tracing::info!("🌐 DHT mesh: discovered {} peer(s)", peers.len()),
             Err(e) => tracing::warn!("🌐 DHT mesh bootstrap: {}", e),
+        }
+    });
+
+    // M14-B: Gossip Protocol background loop
+    let gossip_state = state.clone();
+    tokio::spawn(async move {
+        let interval = {
+            gossip_state.config.read().await.mesh.gossip.interval_secs
+        };
+        if interval == 0 {
+            return;
+        }
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
+        loop {
+            ticker.tick().await;
+            let peers = {
+                let rt = gossip_state.dht_routing_table.read().await;
+                let engine = gossip_state.gossip_engine.read().await;
+                engine.select_gossip_targets(&rt)
+            };
+            if peers.is_empty() {
+                continue;
+            }
+            let local_id = gossip_state.node_identity.node_id().to_string();
+            let local_port = {
+                gossip_state.config.read().await.nexus.port
+            };
+            let local_addr = format!("127.0.0.1:{}", local_port);
+            let clock = {
+                gossip_state.gossip_engine.write().await.advance_clock()
+            };
+            let entry = tylluan_link::gossip::GossipEntry {
+                node_id: local_id.clone(),
+                addr: local_addr,
+                capabilities: vec!["mesh".into()],
+                clock,
+            };
+            for peer_entry in &peers {
+                let msg = tylluan_link::gossip::GossipMessage::push(
+                    local_id.clone(),
+                    clock,
+                    vec![entry.clone()],
+                );
+                let body = match serde_json::to_string(&msg) {
+                    Ok(j) => j,
+                    Err(_) => continue,
+                };
+                let url = format!("http://{}/api/v1/gossip", peer_entry.addr);
+                let client = reqwest::Client::new();
+                match client.post(&url)
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        gossip_state.gossip_engine.write().await.record_peer_clock(&peer_entry.node_id, clock);
+                    }
+                    Err(e) => {
+                        tracing::trace!("gossip → {}: {}", peer_entry.addr, e);
+                    }
+                }
+            }
         }
     });
 
