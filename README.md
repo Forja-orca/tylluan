@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh 
 irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 ```
 
-Downloads `tylluan-nexus` + `tylluan-cli` to `~/.tylluan/bin/` and adds them to your PATH.
+Downloads `tylluan-nexus` + `tylluan-cli` to `~/.tylluan/bin/` and adds them to your PATH. **Open a new terminal before continuing.**
 
 ### Step 2 — Start (5 seconds)
 
@@ -100,6 +100,12 @@ On first boot, BGE-M3 downloads with a progress bar (1–5 min, one-time):
 ```
 Downloading BGE-M3 embedding model... [##########] 560 MB
 ✅ Tylluan v0.4.0 running at http://127.0.0.1:3030
+```
+
+Verify it's up before connecting:
+
+```bash
+curl -s http://127.0.0.1:3030/health
 ```
 
 > **Auth:** A bearer token is auto-generated at `.tylluan-token` on first boot. Dev mode (`--dev`) skips auth — never use on a network that isn't your own.
