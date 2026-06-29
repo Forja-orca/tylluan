@@ -1,4 +1,4 @@
-# Tylluan v0.3.0 — Claude Code Instructions
+# Tylluan v0.5.0 — Claude Code Instructions
 
 ## 🔴 REGLA FUNDACIONAL (LEER PRIMERO)
 
@@ -7,7 +7,7 @@
 ```
 ForjaMCPo3 (E:\ForjaMCPo3)  ←  framework interno privado del equipo
         ↓ sustrato cognitivo
-Tylluan v0.3.0 (E:\tylluan)  ←  producto público, este repo
+Tylluan v0.5.0 (E:\tylluan)  ←  producto público, este repo
 ```
 
 **NUNCA tocar `E:\ForjaMCPo3` desde este workspace.**
@@ -20,9 +20,10 @@ Tylluan v0.3.0 (E:\tylluan)  ←  producto público, este repo
 **Platform:** Windows 11 + Claude Code. Bash tool disponible solo para operaciones read-only.
 Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía Bash.
 
-**Kernel:** `tylluan-nexus.exe` + `tylluan-proxy.exe` vía `.\tylluan-mcp.bat`
-**Dashboard:** `cd dashboard && npm run dev` → `http://localhost:5173`
+**Kernel (instalado):** `tylluan-cli start`
+**Kernel (desde source):** `cargo run -p tylluan-cli -- start`
 **Health check:** `curl http://127.0.0.1:3030/health`
+**Dashboard:** `cd dashboard && pnpm dev` → `http://localhost:5173`
 
 ---
 
@@ -31,25 +32,35 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 1. **5 sovereign tools:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024` en `tylluan.toml`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
-4. **Proxy + Kernel:** `tylluan-proxy` en `:3030` (fijo) + `tylluan-nexus` en puerto dinámico.
+4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente (sin proxy en Tylluan — a diferencia de Forja).
 5. **AGPL soberanía:** sin dependencias cloud en el critical path.
 6. **n8n es OPCIONAL** — `n8n_bridge` en lazy, nunca en always_on.
 
 ---
 
-## Milestones Tylluan v0.4.0 — Mesh
+## Milestones entregados
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
 | **M1-M7** | Memoria, embeddings, retrievals, kernel | ✅ v0.1.0 |
 | **M10/M11** | Work Contracts + Federación completa | ✅ v0.3.0 |
 | **Encryption** | SQLCipher AES-256 cifrado en reposo | ✅ v0.3.0 |
-| **CI** | Pipeline 5 jobs | ✅ 431 tests (250 kernel lib + 13 link lib + 168 integration) |
-| **M12-A** | Ed25519 node identity | ✅ v0.4.0 |
-| **M12-B** | Node signing federation | ✅ v0.4.0 |
-| **M12-C** | STUN NAT traversal (hole-punch) | ✅ v0.4.0 |
-| **M12-D** | mDNS LAN autodiscovery | ✅ v0.4.0 |
-| **M12-F** | Integration tests (mesh) | ✅ v0.4.0 |
+| **Docker** | Imagen de producción en `:3030`, caché BGE-M3 persistente | ✅ v0.4.0 |
+| **Security CI** | 30 tests automatizados — intent filter, ACL, rate limiter | ✅ v0.4.0 |
+| **CI** | Pipeline 5 jobs | ✅ 352 tests |
+| **M12** | Ed25519 identity · STUN NAT · mDNS LAN · node signing | ✅ v0.4.0 |
+| **M13** | Binary releases (3 targets) · install scripts · `tylluan-cli` | ✅ v0.4.0 |
+| **M14-A** | DHT Kademlia routing table · Ed25519 XOR metric · mainline bootstrap · 23 tests | ✅ v0.5.0 |
+
+## v0.5.0 — Mesh Fabric (en curso)
+
+| Milestone | Descripción | Estado |
+|-----------|-------------|--------|
+| **M14-A** | DHT Kademlia | ✅ |
+| **M14-B** | Gossip protocol — epidemic knowledge dissemination | 🔜 |
+| **M14-C** | Noise Protocol transport overlay | 🔜 |
+| **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
+| **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
 
 ---
 
@@ -57,23 +68,18 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 | Agente | Runtime | Rol en Tylluan |
 |--------|---------|----------------|
-| **Claude Code Haiku** | Este workspace | Tech lead Tylluan — contexto, planes, prompts profesionales |
-| **OpenCode (DeepSeek)** | VS Code extension | Implementación Rust — crates/tylluan-kernel/ |
+| **Claude Code Sonnet** | `E:\ForjaMCPo3` | Tech lead global — contexto, planes, prompts |
+| **OpenCode (DeepSeek V3 Flash)** | VS Code extension | Implementación Rust — crates/ |
 | **Antigravity** | Browser + MCP | Research web, auditoría MCP desde cliente |
-| **Hermes** | WSL/terminal | Testing, validación, scripts |
 | **Qwen Desktop** | App escritorio | Research masivo, auditoría vía SSE MCP |
-
-**Claude Code Haiku** en este workspace mantiene el contexto de Tylluan y orquesta la flota.
-**Claude Code Sonnet** en `E:\ForjaMCPo3` mantiene el contexto global del stack — Tech Lead general.
 
 ---
 
 ## MCP — Conexión a Forja
 
-Este workspace Claude Code tiene acceso a Forja vía MCP (`.claude/settings.json`):
+Este workspace tiene acceso a Forja vía MCP (`.claude/settings.json`):
 - Coloquio para comunicación entre agentes
 - Memoria compartida del equipo
-- Herramientas de investigación y búsqueda
 
 Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 
@@ -86,19 +92,10 @@ Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 | `crates/tylluan-kernel/src/transport/server.rs` | Sovereign tools + `all_tools()` |
 | `crates/tylluan-kernel/src/router/embeddings.rs` | BGE-M3 — verificar sin truncación a 768 |
 | `crates/tylluan-kernel/src/db/schema.rs` | Schema SilvaDB — debe ser VECTOR(1024) |
+| `crates/tylluan-link/src/dht/` | DHT Kademlia — M14-A |
 | `guilds/core/` | Python guilds (fastmcp) |
 | `tylluan.toml` | Config runtime |
 | `dashboard/` | React dashboard |
-
----
-
-## Arranque del Kernel
-
-```bat
-.\tylluan-mcp.bat
-```
-
-Verificar: `curl http://127.0.0.1:3030/health`
 
 ---
 
@@ -109,3 +106,4 @@ Verificar: `curl http://127.0.0.1:3030/health`
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (untracked)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
 - NUNCA tocar `E:\ForjaMCPo3` desde aquí — son workspaces separados
+- NUNCA reducir timeouts en tests de DHT — BGE-M3 en CPU tarda 2-8s por embedding
