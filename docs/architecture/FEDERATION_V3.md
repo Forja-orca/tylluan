@@ -1,6 +1,11 @@
 # Federation v0.3.0 — Spec
 
-## Current State (v0.2.0 baseline)
+> **Implementation status (2026-06-30):** All items in this spec are fully implemented as of v0.3.0.
+> M12 (Ed25519 identity, STUN NAT, mDNS, node signing) was delivered in v0.4.0.
+> M14-A (DHT Kademlia routing table, mainline BitTorrent bootstrap) was delivered in v0.5.0.
+> The "v0.4.0 out-of-scope" items below are now complete. This document is the design record for M11.
+
+## Baseline at start of v0.3.0 work (v0.2.0 baseline)
 
 | Component | Status |
 |-----------|--------|
@@ -13,9 +18,13 @@
 | Node provenance tracking | ❌ Missing |
 | Scheduled auto-sync | ❌ Missing |
 
-## What v0.3.0 Is NOT
+## What v0.3.0 Was NOT (now delivered)
 
-The ROADMAP lists NAT traversal (Libp2p/WireGuard), Ed25519 asymmetric signing, and DHT peer discovery. These are v0.4.0. v0.3.0 makes federation **work reliably** on LAN/VPN. v0.4.0 makes it work on the internet without a shared secret.
+The ROADMAP listed NAT traversal, Ed25519 asymmetric signing, and DHT peer discovery as out-of-scope for v0.3.0. These were delivered in:
+- **v0.4.0 (M12):** Ed25519 node identity + signing, STUN NAT traversal, mDNS LAN autodiscovery
+- **v0.5.0 (M14-A):** DHT Kademlia routing table, mainline BitTorrent DHT bootstrap
+
+v0.3.0 made federation **work reliably on LAN/VPN**. v0.4.0+ made it work on the internet.
 
 ---
 
