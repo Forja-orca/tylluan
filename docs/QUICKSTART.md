@@ -22,11 +22,11 @@ The binary is at `target/release/tylluan-nexus` (or `target/release/tylluan-nexu
 ## Start
 
 ```bash
-# Binary directly
-target/release/tylluan-nexus
-
-# Or via CLI (auto-finds the binary)
+# Via CLI (recommended — handles PATH, port, flags)
 cargo run -p tylluan-cli -- start
+
+# Or binary directly
+target/release/tylluan-nexus
 ```
 
 Config `tylluan.toml` is auto-generated on first run, but you can pre-configure:
@@ -72,7 +72,7 @@ source .venv/bin/activate
 pip install -r guilds/requirements.txt
 ```
 
-Then restart `tylluan-nexus`. Guilds appear as tools under `tylluan_do`.
+Then restart with `tylluan-cli start` (or `cargo run -p tylluan-cli -- start` from source). Guilds appear as tools under `tylluan_do`.
 
 ---
 
@@ -106,7 +106,7 @@ tylluan-cli
 
 ### BGE-M3 download fails
 
-- The model is ~560 MB. Ensure stable internet for the first boot.
+- The model is ~2.2 GB. Ensure stable internet for the first boot (5–15 min on a typical connection).
 - On slow connections, pre-download: `tylluan-cli download-models`
 - Cached at `~/.cache/fastembed/` — it survives reinstalls.
 
