@@ -12,6 +12,8 @@ ignore = [
     "RUSTSEC-2024-0436",
     # RUSTSEC-2026-0186 — another advisory for instant or related transitive crate
     "RUSTSEC-2026-0186",
+    # RUSTSEC-2026-0189 — DNS rebinding in rmcp Streamable HTTP transport; Tylluan uses SSE only, not Streamable HTTP
+    "RUSTSEC-2026-0189",
 ]
 
 [licenses]
