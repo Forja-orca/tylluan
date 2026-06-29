@@ -82,18 +82,6 @@ impl RoutingTable {
         }
     }
 
-    fn xor_distance(a: &str, b: &str) -> Result<[u8; 32], ()> {
-        let a_bytes = hex::decode(a).map_err(|_| ())?;
-        let b_bytes = hex::decode(b).map_err(|_| ())?;
-        if a_bytes.len() != 16 || b_bytes.len() != 16 {
-            return Err(());
-        }
-        let mut dist = [0u8; 32];
-        let hash_input = [&a_bytes[..], &b_bytes[..]].concat();
-        let hash = Sha256::digest(&hash_input);
-        dist.copy_from_slice(&hash);
-        Ok(dist)
-    }
 
     fn bucket_index(local: &str, target: &str) -> usize {
         let a_bytes = hex::decode(local).unwrap_or_default();
