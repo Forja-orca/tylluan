@@ -149,8 +149,10 @@ Add to any SSE-capable MCP client:
 | **M4** | rmcp integration — ServerHandler + stdio transport | ✅ |
 | **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ |
 | **M7** | Single-binary + public release | ✅ |
+| **Docker** | Production image at `:3030`, BGE-M3 persistent cache volume | ✅ |
 | **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ |
 | **M10-B** | SQL persistence for contracts — survive kernel restarts | ✅ |
+| **Security CI** | 30 automated security tests — intent filter, ACL, rate limiter, impersonation | ✅ |
 | **M11-A** | Federation peer DB — SQLite `peers.db`, `auth_token`/`shared_secret` split | ✅ |
 | **M11-B** | Pull sync — `/sync/export`, `/sync/pull`, `/sync/both` | ✅ |
 | **M11-C** | Node provenance — `federation_source` SQL column, echo-loop prevention, `/federation/nodes` query | ✅ |
