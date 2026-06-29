@@ -223,6 +223,8 @@ pub struct MeshConfig {
     pub mainline_dht_enabled: bool,
     #[serde(default)]
     pub seed_nodes: Vec<String>,
+    #[serde(default)]
+    pub gossip: GossipConfig,
 }
 fn default_mesh_bootstrap_enabled() -> bool { true }
 fn default_mainline_dht_enabled() -> bool { true }
@@ -233,7 +235,27 @@ impl Default for MeshConfig {
             bootstrap_enabled: true,
             mainline_dht_enabled: true,
             seed_nodes: Vec::new(),
+            gossip: GossipConfig::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GossipConfig {
+    #[serde(default = "default_gossip_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_gossip_interval")]
+    pub interval_secs: u64,
+    #[serde(default = "default_gossip_fanout")]
+    pub fanout: usize,
+}
+fn default_gossip_enabled() -> bool { true }
+fn default_gossip_interval() -> u64 { 30 }
+fn default_gossip_fanout() -> usize { 3 }
+
+impl Default for GossipConfig {
+    fn default() -> Self {
+        Self { enabled: true, interval_secs: 30, fanout: 3 }
     }
 }
 
