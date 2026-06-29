@@ -33,6 +33,7 @@ pub mod api_canvas;
 pub mod api_journal;
 pub mod api_agents;
 pub mod api_contracts;
+pub mod api_mesh;
 
 pub use api_guilds::*;
 pub use api_admin::*;
@@ -49,6 +50,7 @@ pub use api_canvas::*;
 pub use api_journal::*;
 pub use api_agents::*;
 pub use api_contracts::*;
+pub use api_mesh::*;
 
 
 /// Returns 503 with a JSON error body if `state.server` is None (kernel not yet initialized).
@@ -374,6 +376,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/work-contracts/{id}/deliver", post(contract_deliver_handler))
         .route("/api/v1/work-contracts/{id}/vote", post(contract_vote_handler))
         .route("/api/v1/work-contracts/{id}/close", post(contract_close_handler))
+        // M14-A: Mesh DHT peer discovery
+        .route("/api/v1/mesh/peers", get(mesh_peers_handler))
+        .route("/api/v1/mesh/refresh", post(mesh_refresh_handler))
 }
 
 // --- HANDLERS ---
