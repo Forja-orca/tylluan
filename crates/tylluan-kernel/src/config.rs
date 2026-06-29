@@ -1011,7 +1011,13 @@ impl TylluanConfig {
         }
 
         info!("✅ New Master Token saved to .tylluan-token");
-        info!("💡 TIP: Add this token to your Dashboard or set it as TYLLUAN_TOKEN env var.");
+        eprintln!();
+        eprintln!("🔐 A new auth token has been generated:");
+        eprintln!("   File: {}/.tylluan-token", std::env::current_dir().unwrap_or_default().display());
+        eprintln!("   Token: {}", new_token);
+        eprintln!("   Use it in your MCP client config:");
+        eprintln!("   {{ \"mcpServers\": {{ \"tylluan\": {{ \"type\": \"sse\", \"url\": \"http://127.0.0.1:3030/sse?token={}\" }} }} }}", new_token);
+        eprintln!();
 
         Ok(Some(new_token))
     }

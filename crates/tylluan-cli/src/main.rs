@@ -4,6 +4,8 @@ use std::process::Command;
 use std::path::PathBuf;
 use sysinfo::System;
 
+const DEFAULT_PORT: u16 = 3030;
+
 #[derive(Parser)]
 #[command(name = "tylluan")]
 #[command(about = "Sovereign Agentic Hub CLI — Manage your TylluanNexus o3 hub", long_about = None)]
@@ -94,15 +96,16 @@ async fn main() -> Result<()> {
         }
         Commands::Status => {
             println!("🔍 Checking hub status...");
-            // Simple ping to health endpoint
-            let client = reqwest::Client::new();
-            match client.get("http://127.0.0.1:3000/health").send().await {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()?;
+            let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+            match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
                     println!("✅ Hub is OPERATIONAL (v{})", json["version"]);
-                    println!("📊 Uptime: {}s", json["uptime_seconds"]);
                 }
-                _ => println!("❌ Hub is OFFLINE or unreachable on port 3000."),
+                _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{})", DEFAULT_PORT),
             }
         }
         Commands::Logs { follow } => {
@@ -183,15 +186,44 @@ fn resolve_url(url: Option<String>, host: Option<String>) -> Result<String> {
 }
 
 fn find_kernel_exe() -> Result<PathBuf> {
-    // Strategy: Look in current dir, then target/release
-    let names = vec!["tylluan-nexus.exe", "tylluan-nexus"];
-    let paths = vec![
-        PathBuf::from("."),
-        PathBuf::from("target/release"),
-        PathBuf::from("target/debug"),
-    ];
+    let names = ["tylluan-nexus.exe", "tylluan-nexus"];
 
-    for path in paths {
+    // 1. Same directory as the CLI (install.sh/install.ps1 place both here)
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(dir) = current_exe.parent() {
+            for name in &names {
+                let full = dir.join(name);
+                if full.exists() {
+                    return Ok(full);
+                }
+            }
+        }
+    }
+
+    // 2. ~/.tylluan/bin/ (install script install path)
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        let install_dir = PathBuf::from(home).join(".tylluan").join("bin");
+        for name in &names {
+            let full = install_dir.join(name);
+            if full.exists() {
+                return Ok(full);
+            }
+        }
+    }
+
+    // 3. Search PATH
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            for name in &names {
+                if dir.join(name).exists() {
+                    return Ok(PathBuf::from(name));
+                }
+            }
+        }
+    }
+
+    // 4. Dev/build paths
+    for path in &[PathBuf::from("."), PathBuf::from("target/release"), PathBuf::from("target/debug")] {
         for name in &names {
             let full = path.join(name);
             if full.exists() {
@@ -200,17 +232,9 @@ fn find_kernel_exe() -> Result<PathBuf> {
         }
     }
 
-    // Try to find it in the same directory as the CLI
-    if let Ok(current_exe) = std::env::current_exe()
-        && let Some(dir) = current_exe.parent()
-    {
-        for name in &names {
-            let full = dir.join(name);
-            if full.exists() {
-                return Ok(full);
-            }
-        }
-    }
-
-    Err(anyhow::anyhow!("Could not find tylluan-nexus binary. Ensure you have built the kernel first."))
+    Err(anyhow::anyhow!(
+        "Could not find tylluan-nexus binary.\n\
+         After installation: Make sure ~/.tylluan/bin/ is in your PATH and open a NEW terminal.\n\
+         Build from source: cargo build --release -p tylluan-kernel"
+    ))
 }

@@ -40,7 +40,7 @@ impl EmbeddingEngine {
 
         let eps = build_execution_providers(device);
         let options = TextInitOptions::new(model_name)
-            .with_show_download_progress(false)
+            .with_show_download_progress(true)
             .with_execution_providers(eps);
 
         let model = TextEmbedding::try_new(options)
