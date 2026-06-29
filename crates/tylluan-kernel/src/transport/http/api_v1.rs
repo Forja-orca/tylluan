@@ -379,6 +379,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // M14-A: Mesh DHT peer discovery
         .route("/api/v1/mesh/peers", get(mesh_peers_handler))
         .route("/api/v1/mesh/refresh", post(mesh_refresh_handler))
+        // M14-B: Gossip Protocol — peer knowledge exchange
+        .route("/api/v1/gossip", post(gossip_handler))
 }
 
 // --- HANDLERS ---
@@ -1643,4 +1645,33 @@ async fn nodes_unregister_handler(
 ) -> impl IntoResponse {
     state.node_router.unregister(&agent_id).await;
     (StatusCode::OK, Json(serde_json::json!({ "status": "unregistered", "agent_id": agent_id })))
+}
+
+// ─── M14-B: Gossip Protocol ──────────────────────────────────────────────
+
+async fn gossip_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Record sender's clock so we don't re-send known entries
+    if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str()) {
+        if let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
+            state.gossip_engine.write().await.record_peer_clock(sender_id, clock);
+        }
+    }
+    // Accept any incoming gossip entries into routing table
+    if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
+        for entry in entries {
+            if let (Some(node_id), Some(addr)) = (
+                entry.get("node_id").and_then(|v| v.as_str()),
+                entry.get("addr").and_then(|v| v.as_str()),
+            ) {
+                if let Ok(addr) = addr.parse::<std::net::SocketAddr>() {
+                    let mut rt = state.dht_routing_table.write().await;
+                    rt.insert(&node_id.to_string(), addr, vec!["mesh".into()]);
+                }
+            }
+        }
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
 }
