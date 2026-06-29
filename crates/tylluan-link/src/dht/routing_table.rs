@@ -155,7 +155,7 @@ impl RoutingTable {
                     })
             })
             .collect();
-        peers.sort_by(|a, b| b.last_seen_unix.cmp(&a.last_seen_unix));
+        peers.sort_by_key(|p| std::cmp::Reverse(p.last_seen_unix));
         peers.dedup_by(|a, b| a.node_id == b.node_id);
         peers
     }
