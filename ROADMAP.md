@@ -58,22 +58,32 @@ Out of scope (v0.4.0):
 
 ## v0.4.0 — Mesh
 
-**Status:** In progress.
+**Status:** Complete.
 
 **Goal:** Connect Tylluan instances across networks without manual IP configuration.
 
-Planned:
+Delivered:
 - [x] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`; `GET /api/v1/federation/identity` returns node_id + public_key
 - [x] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting. Auto-fetch peer pubkey on approval. Backwards compat: skip verify if pubkey not yet stored
 - [x] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
 - [x] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks (external_address populated on approval via M12-C auto-fetch)
-- [ ] M12-E — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without central registry
 - [x] M12-F — Integration tests: `tests/mesh_audit.rs` (10 tests) + `tests/federation_audit.rs` (6 tests) + `crates/tylluan-link/src/nat.rs` (8 tests). Covers keypair, signature, envelope, STUN RFC 5389 (CRC32, txid mismatch, missing attribute, IPv4 XOR), NAT HTTP endpoint, mDNS startup, federation sync
+- [x] M13 — Onboarding: pre-compiled binaries via GitHub Actions (linux-x64, mac-arm64, win-x64), `install.sh` + `install.ps1` one-line installers, `tylluan-cli` management binary, README rewritten to 3-step Quick Start
 
-Out of scope (v0.5.0):
-- Gossip protocol for eventual consistency across large meshes
-- Encrypted transport overlay (WireGuard or Noise Protocol)
-- Cross-datacenter federation with latency-aware routing
+## v0.5.0 — Mesh Fabric
+
+**Goal:** True WAN peer discovery and resilient multi-node knowledge fabric without central coordination.
+
+Planned:
+- [ ] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. Nodes announce themselves and resolve peers by node_id. Bootstrap via a small set of well-known seed nodes.
+- [ ] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
+- [ ] M14-C — Encrypted transport overlay: Noise Protocol (or WireGuard) for peer-to-peer channels. Removes reliance on ChaCha20-Poly1305 at the application layer for mesh traffic.
+- [ ] M14-D — Cross-datacenter federation: latency-aware routing, regional clusters, configurable sync priority by node proximity.
+- [ ] M14-E — Mesh integration tests: multi-node test harness with simulated network partitions and recovery.
+
+Out of scope (v1.0.0):
+- External security audit of the mesh layer
+- Formal Byzantine fault tolerance guarantees
 
 ## v1.0.0 — Production Ready
 
