@@ -73,7 +73,7 @@ Every push runs 5 jobs: Rust build+test (250 lib tests, 8 integration suites) + 
 
 ## Quick Start
 
-> **The honest toll:** First boot downloads the BGE-M3 embedding model (~560 MB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant.
+> **The honest toll:** First boot downloads the BGE-M3 embedding model (~2.2 GB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant.
 
 ### Step 1 — Install (30 seconds)
 
@@ -95,11 +95,11 @@ Downloads `tylluan-nexus` + `tylluan-cli` to `~/.tylluan/bin/` and adds them to 
 tylluan-cli start
 ```
 
-On first boot, BGE-M3 downloads with a progress bar (1–5 min, one-time):
+On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical connection, one-time):
 
 ```
-Downloading BGE-M3 embedding model... [##########] 560 MB
-✅ Tylluan v0.4.0 running at http://127.0.0.1:3030
+Downloading BGE-M3 embedding model... [##########] 2.2 GB
+✅ Tylluan v0.5.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before connecting:
