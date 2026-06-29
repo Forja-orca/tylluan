@@ -67,6 +67,7 @@ pub struct HttpState {
     pub health_ready: Arc<AtomicBool>,
     pub node_identity: Arc<tylluan_link::identity::NodeIdentity>,
     pub nat_cache: Arc<tokio::sync::RwLock<Option<tylluan_link::nat::ExternalAddr>>>,
+    pub dht_routing_table: Arc<tokio::sync::RwLock<tylluan_link::dht::RoutingTable>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -374,8 +375,13 @@ pub async fn start_http_server_with_download(
                 .expect("peers.db init failed")
         ),
         health_ready,
-        node_identity,
+        node_identity: node_identity.clone(),
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
+        dht_routing_table: Arc::new(tokio::sync::RwLock::new(
+            tylluan_link::dht::RoutingTable::new(
+                node_identity.node_id().to_string()
+            )
+        )),
     });
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
@@ -402,6 +408,38 @@ pub async fn start_http_server_with_download(
 
     // Spawn background federation auto-sync loop task
     crate::transport::http::api_v1::api_federation::spawn_auto_sync(state.clone());
+
+    // M14-A: DHT mesh bootstrap — async background task
+    let dht_state = state.clone();
+    tokio::spawn(async move {
+        let enabled = dht_state.config.read().await.mesh.bootstrap_enabled;
+        if !enabled {
+            return;
+        }
+        let use_mainline = dht_state.config.read().await.mesh.mainline_dht_enabled;
+        let use_mdns = {
+            let cfg = dht_state.config.read().await;
+            cfg.mdns.advertise || cfg.mdns.discover
+        };
+        let seed_nodes = dht_state.config.read().await.mesh.seed_nodes.clone();
+        let listen_port = dht_state.config.read().await.nexus.port;
+
+        let bootstrap_config = tylluan_link::dht::BootstrapConfig {
+            local_node_id: dht_state.node_identity.node_id().to_string(),
+            local_addr: "0.0.0.0:0".parse().unwrap(),
+            use_mdns,
+            use_mainline,
+            seed_nodes,
+            dht_peers_path: std::path::PathBuf::from("data/dht_peers.json"),
+            listen_port,
+        };
+
+        let mut rt = dht_state.dht_routing_table.write().await;
+        match bootstrap_config.bootstrap(&mut rt).await {
+            Ok(peers) => tracing::info!("🌐 DHT mesh: discovered {} peer(s)", peers.len()),
+            Err(e) => tracing::warn!("🌐 DHT mesh bootstrap: {}", e),
+        }
+    });
 
     // Spawn background sampler — fills the ring every 5 seconds.
     crate::metrics_ring::spawn_metrics_sampler(metrics_ring, registry_handle);
