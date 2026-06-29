@@ -190,6 +190,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
         peer_db: Arc::new(PeerDb::open(":memory:").unwrap()),
         node_identity,
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
+        dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
     })
 }
 

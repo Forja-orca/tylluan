@@ -62,8 +62,18 @@ impl KBucket {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn is_full(&self) -> bool {
         self.entries.len() >= K
+    }
+}
+
+impl Default for KBucket {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
