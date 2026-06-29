@@ -324,9 +324,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let token = auth_token_opt.clone();
-    if let Some(ref t) = token
+    if let Some(ref _t) = token
         && !is_stdio {
-            info!("🔐 Auth: Master Token is active ({})", if t.len() > 8 { format!("{}...", &t[..8]) } else { t.to_string() });
+            eprintln!("🔐 Auth: Master Token is active (see .tylluan-token for the full key)");
         }
 
     // Capture binary downloads channel for the TUI and SSE
@@ -1047,9 +1047,10 @@ async fn main() -> anyhow::Result<()> {
 
     info!("✅ TylluanNexus Kernel operational.");
     if !is_stdio {
-        eprintln!("  [OK] Kernel operational — http://{}:{}", config.nexus.host, config.nexus.port);
-        eprintln!("  [OK] Health: http://{}:{}/health", config.nexus.host, config.nexus.port);
-        eprintln!("  [OK] Discovery: http://{}:{}/discovery", config.nexus.host, config.nexus.port);
+        let display_host = if config.nexus.host == "0.0.0.0" { "127.0.0.1" } else { &config.nexus.host };
+        eprintln!("  [OK] Kernel operational — http://{}:{}", display_host, config.nexus.port);
+        eprintln!("  [OK] Health: http://{}:{}/health", display_host, config.nexus.port);
+        eprintln!("  [OK] Discovery: http://{}:{}/discovery", display_host, config.nexus.port);
         if config.nexus.dev_mode {
             eprintln!("  [!] dev_mode=true — authentication disabled");
         }
