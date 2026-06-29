@@ -75,7 +75,7 @@ Delivered:
 **Goal:** True WAN peer discovery and resilient multi-node knowledge fabric without central coordination.
 
 Planned:
-- [ ] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. Nodes announce themselves and resolve peers by node_id. Bootstrap via a small set of well-known seed nodes.
+- [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests.
 - [ ] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
 - [ ] M14-C — Encrypted transport overlay: Noise Protocol (or WireGuard) for peer-to-peer channels. Removes reliance on ChaCha20-Poly1305 at the application layer for mesh traffic.
 - [ ] M14-D — Cross-datacenter federation: latency-aware routing, regional clusters, configurable sync priority by node proximity.

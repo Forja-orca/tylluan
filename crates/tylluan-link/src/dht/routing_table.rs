@@ -1,4 +1,3 @@
-use sha2::{Sha256, Digest};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -172,6 +171,7 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Sha256, Digest};
 
     fn node_id_from_hex(hex_str: &str) -> String {
         let hash = Sha256::digest(hex_str.as_bytes());
