@@ -155,6 +155,9 @@ pub struct TylluanConfig {
     pub mdns: MdnsConfig,
 
     #[serde(default)]
+    pub mesh: MeshConfig,
+
+    #[serde(default)]
     pub federation: FederationConfig,
 
     #[serde(default)]
@@ -208,6 +211,28 @@ impl Default for NatConfig {
             stun_servers: default_stun_servers(),
             stun_timeout_secs: default_stun_timeout(),
             stun_retries: default_stun_retries(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshConfig {
+    #[serde(default = "default_mesh_bootstrap_enabled")]
+    pub bootstrap_enabled: bool,
+    #[serde(default = "default_mainline_dht_enabled")]
+    pub mainline_dht_enabled: bool,
+    #[serde(default)]
+    pub seed_nodes: Vec<String>,
+}
+fn default_mesh_bootstrap_enabled() -> bool { true }
+fn default_mainline_dht_enabled() -> bool { true }
+
+impl Default for MeshConfig {
+    fn default() -> Self {
+        Self {
+            bootstrap_enabled: true,
+            mainline_dht_enabled: true,
+            seed_nodes: Vec::new(),
         }
     }
 }
