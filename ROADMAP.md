@@ -78,12 +78,40 @@ Planned:
 - [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests.
 - [x] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
 - [x] M14-C — Encrypted transport overlay: Noise Protocol XK (TCP sessions) + NK (HTTP payloads) wired to federation sync endpoints. Ed25519→X25519 key conversion, ChaCha20-Poly1305 AEAD, async length-prefixed framing.
-- [ ] M14-D — Cross-datacenter federation: latency-aware routing, regional clusters, configurable sync priority by node proximity.
 - [ ] M14-E — Mesh integration tests: multi-node test harness with simulated network partitions and recovery.
 
 Out of scope (v1.0.0):
 - External security audit of the mesh layer
 - Formal Byzantine fault tolerance guarantees
+
+## v0.6.0 — Portable Foundation (north star: toaster-friendly, USB-portable)
+
+**Goal:** Verify and solidify portability. Same binary serves a doctor on a Raspberry Pi and an architect on a server cluster — different `tylluan.toml`, same code.
+
+North star use case: a doctor in rural Africa carries Tylluan on a USB stick, runs it on different machines across villages, maintains memories and tools offline, and syncs with colleagues when LAN is available. When back in the city with access to better hardware or cloud inference clients (Claude Code, Cursor, Codex), connects them to the same Tylluan — all accumulated knowledge available.
+
+- [ ] P1 — Write the foundational invariant: document "toaster-friendly, USB-portable, offline-first" in CLAUDE.md, README, ROADMAP. Without this written, any agent can drift without knowing it.
+- [ ] P2 — Gossip configurable: connect `fanout`, `timeout`, `interval` from `tylluan.toml` to `GossipEngine` init. Unify the two `GossipConfig` structs (tylluan-link vs kernel). Without this, Gossip fails on slow satellite connections.
+- [ ] P3 — `embedding_model = "none"` config flag: explicit graceful degradation to BM25-only mode. Doctor chooses: "light" (no download) or "full" (BGE-M3 2.2 GB).
+- [ ] P4 — ARM64 build: add `aarch64-unknown-linux-gnu` to CI release matrix. Without this, Raspberry Pi 4 cannot install Tylluan.
+
+## M14-D — Cross-Datacenter Federation (deferred, context preserved)
+
+**Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational north star (doctor use case). Revisit when v0.6.0 portable foundation is solid.
+
+**What was designed (2026-06-30 coloquio, T50-T66):**
+- Latency-aware routing between regional clusters
+- RTT metric: ICMP pre-handshake (Option A — simple, sufficient for 2-cluster minimal)
+- Remote guild execution channels over Noise XK (prerequisite: guild proxy protocol)
+- Configurable sync priority by node proximity
+- Antigravity designed `trait MeshTransport: Send { send/recv }` — sits above `NoiseSession`, compatible with in-memory mock for M14-E tests
+
+**Why deferred:**
+- The doctor use case requires 5-10 peers max — mDNS (M12-D) + Gossip (M14-B) already solve peer discovery at that scale
+- "Cross-datacenter" is enterprise language. The foundational invariant is USB-portable, not cloud-native
+- Build the portable foundation first (v0.6.0), then scale up (M14-D as v0.7.0 or v1.0)
+
+**Prerequisite when revisiting:** M14-E test harness must exist first — latency routing cannot be validated without multi-node fault injection.
 
 ## v1.0.0 — Production Ready
 
