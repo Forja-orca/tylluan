@@ -203,10 +203,18 @@ pub fn verify_envelope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn tmp_dir(label: &str) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+    }
 
     #[test]
     fn test_generate_and_load() {
-        let dir = std::env::temp_dir().join(format!("tylluan_id_test_{}", std::process::id()));
+        let dir = tmp_dir("id_test");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
 
@@ -225,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_sign_and_verify() {
-        let dir = std::env::temp_dir().join(format!("tylluan_id_test_sign_{}", std::process::id()));
+        let dir = tmp_dir("id_test_sign");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
 
@@ -242,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_sign_and_verify_envelope() {
-        let dir = std::env::temp_dir().join(format!("tylluan_id_test_env_{}", std::process::id()));
+        let dir = tmp_dir("id_test_env");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
 
@@ -268,7 +276,7 @@ mod tests {
 
     #[test]
     fn test_corrupted_file_fails() {
-        let dir = std::env::temp_dir().join(format!("tylluan_id_test_corrupt_{}", std::process::id()));
+        let dir = tmp_dir("id_test_corrupt");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
 
