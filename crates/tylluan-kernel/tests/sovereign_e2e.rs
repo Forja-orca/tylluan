@@ -3,6 +3,9 @@
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::api_v1::mcp_handler;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 use tylluan_kernel::transport::http::HttpState;
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::registry::guild_process::GuildRegistry;
@@ -95,9 +98,13 @@ async fn test_state() -> Arc<HttpState> {
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
-        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_test_sov_{}", std::process::id()))).unwrap()),
+        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_sov_{}", TEST_COUNTER.fetch_add(1, Ordering::Relaxed)))).unwrap()),
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
         dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
+        gossip_engine: Arc::new(tokio::sync::RwLock::new(tylluan_link::gossip::GossipEngine::new(
+            "test-node".to_string(),
+            tylluan_link::gossip::GossipConfig::default(),
+        ))),
     })
 }
 

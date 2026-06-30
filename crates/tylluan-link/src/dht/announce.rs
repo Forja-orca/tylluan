@@ -125,9 +125,17 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn tmp_dir(label: &str) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+    }
 
     fn test_identity() -> NodeIdentity {
-        let dir = std::env::temp_dir().join(format!("tylluan_announce_test_{}", std::process::id()));
+        let dir = tmp_dir("announce_test");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
         NodeIdentity::load_or_create(&path).expect("should generate")

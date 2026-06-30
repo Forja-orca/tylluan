@@ -233,9 +233,17 @@ mod tests {
     use crate::dht::routing_table::RoutingTable;
     use crate::identity::NodeIdentity;
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn tmp_dir(label: &str) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+    }
 
     fn test_identity() -> NodeIdentity {
-        let dir = std::env::temp_dir().join(format!("tylluan_bootstrap_test_{}", std::process::id()));
+        let dir = tmp_dir("bootstrap_test");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("identity.key");
         NodeIdentity::load_or_create(&path).expect("should generate")
@@ -243,15 +251,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_persistence_roundtrip() {
-        let dir = std::env::temp_dir().join(format!("tylluan_dht_persist_{}", std::process::id()));
+        let dir = tmp_dir("dht_persist");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("dht_peers.json");
 
         let identity = test_identity();
         let mut rt = RoutingTable::new(identity.node_id().to_string());
 
+        let peer_path = tmp_dir("dht_test_p2");
         let peer_id = crate::identity::NodeIdentity::load_or_create(
-            &std::env::temp_dir().join(format!("tylluan_dht_test_p2_{}", std::process::id()))
+            &peer_path
         ).expect("should generate").node_id().to_string();
 
         rt.insert(
@@ -279,9 +288,7 @@ mod tests {
         let identity = test_identity();
         let mut rt = RoutingTable::new(identity.node_id().to_string());
         let config = BootstrapConfig {
-            dht_peers_path: std::env::temp_dir()
-                .join(format!("tylluan_boot_empty_{}", std::process::id()))
-                .join("dht_peers.json"),
+            dht_peers_path: tmp_dir("boot_empty").join("dht_peers.json"),
             ..Default::default()
         };
         let peers = config.bootstrap(&mut rt).await.expect("bootstrap should not fail");
