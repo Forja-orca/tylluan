@@ -1681,8 +1681,8 @@ async fn gossip_handler(
                 }
             }
 
-            // Symmetric response: push back our latest entries
-            let response_entries = state.gossip_engine.read().await.entries_since(0);
+            // Symmetric response: only send entries newer than what the sender already knows
+            let response_entries = state.gossip_engine.read().await.entries_since(sender_clock);
             (StatusCode::OK, Json(serde_json::json!({
                 "status": "ok",
                 "entries": response_entries,

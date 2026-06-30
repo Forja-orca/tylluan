@@ -51,13 +51,14 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 | **M12** | Ed25519 identity · STUN NAT · mDNS LAN · node signing | ✅ v0.4.0 |
 | **M13** | Binary releases (3 targets) · install scripts · `tylluan-cli` | ✅ v0.4.0 |
 | **M14-A** | DHT Kademlia routing table · Ed25519 XOR metric · mainline bootstrap · 23 tests | ✅ v0.5.0 |
+| **M14-B** | Gossip protocol · symmetric push-pull · LRU store · anti-entropy cursors | ✅ v0.5.0 |
 
 ## v0.5.0 — Mesh Fabric (en curso)
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
 | **M14-A** | DHT Kademlia | ✅ |
-| **M14-B** | Gossip protocol — epidemic knowledge dissemination | 🔜 |
+| **M14-C** | Noise Protocol transport overlay | 🔜 |
 | **M14-C** | Noise Protocol transport overlay | 🔜 |
 | **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
 | **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
