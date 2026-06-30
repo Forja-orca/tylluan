@@ -101,6 +101,27 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 - [x] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile). Dashboard shows active profile chip (Portable·BM25 / Clinic·BGE-Small / Server·BGE-M3).
 - [x] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `main.rs:1235` via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
 
+## v0.7.0 — Intelligence Foundation
+
+**Goal:** Smarter retrieval, faster discovery, solid test infrastructure. Everything in this milestone serves the north star directly — the doctor's offline knowledge base gets meaningfully better, guild setup gets simpler, and the mesh gets testable for the first time.
+
+**Research basis:** research-tylluan coloquio (T1-T13), Antigravity cycle 1, Qwen3.7 engineering review.
+
+**Execution order (approved by research team 2026-07-01):**
+
+- [ ] M6-minimal — Deterministic Simulation Testing (DST) foundation: `turmoil`-based virtual network harness, `MeshTransport` trait wired to in-memory mock. 2-3 nodes, basic Gossip partition/recovery tests. Prerequisite for validating all mesh milestones. (~2 days)
+- [ ] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. Detect `.py` files with fastmcp header. Zero-config for new guilds. Also includes mxbai-edge-colbert reranker swap (Jina 280M → mxbai 109M, ~500MB RAM reduction, RPi4-friendly). (~1 day)
+- [ ] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. No separate dashboard process required. One binary, one `tylluan.toml`, done. (~0.5 days)
+- [ ] Contextual Retrieval: prepend document context to each chunk before embedding (Anthropic 2024 pattern). Offline fallback: filename + Markdown heading hierarchy as local heuristic, zero CPU cost. ~15-49% retrieval improvement. (~1 day)
+- [ ] M1 — Memory Decay: exponential half-life weight decay on nodes (`weight * 0.5^(hours/half_life)`), configurable `decay_half_life_hours` in `tylluan.toml`. Protected nodes exempt. Background loop every 10 min alongside existing reindex loop. (~1.5 days)
+
+**v0.8.0 backlog (do not start before v0.7.0 is complete):**
+- M2 — Hybrid Search v2: multi-signal RRF (semantic + BM25 + entity boosting)
+- M6-full — Fault injection, network partitions, recovery simulation
+- M6 — Dual-Level LightRAG retrieval (depends on M2 for solid vector foundation)
+- Batch embedding pipeline (embed in batches, not one-by-one)
+- HNSW index via `instant-distance` (before 500k nodes)
+
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
 **Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational north star (doctor use case). Revisit when v0.6.0 portable foundation is solid.
