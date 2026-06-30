@@ -37,7 +37,14 @@ pub struct GossipState {
     pub local_clock: u64,
     pub peer_cursors: HashMap<String, u64>,
     pub entries: HashMap<String, GossipEntry>,
+    #[serde(default = "default_max_entries")]
+    pub max_entries: usize,
+    #[serde(default = "default_max_peer_cursors")]
+    pub max_peer_cursors: usize,
 }
+
+fn default_max_entries() -> usize { DEFAULT_MAX_ENTRIES }
+fn default_max_peer_cursors() -> usize { DEFAULT_MAX_PEER_CURSORS }
 
 impl GossipState {
     pub fn new(local_node_id: String) -> Self {
@@ -46,6 +53,19 @@ impl GossipState {
             local_clock: 0,
             peer_cursors: HashMap::new(),
             entries: HashMap::new(),
+            max_entries: DEFAULT_MAX_ENTRIES,
+            max_peer_cursors: DEFAULT_MAX_PEER_CURSORS,
+        }
+    }
+
+    pub fn new_with_limits(local_node_id: String, max_entries: usize, max_peer_cursors: usize) -> Self {
+        Self {
+            local_node_id,
+            local_clock: 0,
+            peer_cursors: HashMap::new(),
+            entries: HashMap::new(),
+            max_entries,
+            max_peer_cursors,
         }
     }
 
@@ -55,8 +75,17 @@ impl GossipState {
     }
 
     pub fn update_cursor(&mut self, peer_id: &str, clock: u64) {
-        if self.peer_cursors.len() >= DEFAULT_MAX_PEER_CURSORS {
-            self.peer_cursors.clear();
+        if self.peer_cursors.len() >= self.max_peer_cursors
+            && !self.peer_cursors.contains_key(peer_id)
+        {
+            // Evict the peer with the lowest cursor (least recently synced)
+            if let Some(oldest) = self.peer_cursors
+                .iter()
+                .min_by_key(|(_, c)| *c)
+                .map(|(k, _)| k.clone())
+            {
+                self.peer_cursors.remove(&oldest);
+            }
         }
         self.peer_cursors
             .entry(peer_id.to_string())
@@ -87,8 +116,17 @@ impl GossipState {
     }
 
     pub fn store_entry(&mut self, entry: GossipEntry) {
-        if self.entries.len() >= DEFAULT_MAX_ENTRIES {
-            self.entries.clear();
+        if self.entries.len() >= self.max_entries
+            && !self.entries.contains_key(&entry.node_id)
+        {
+            // Evict the entry with the lowest clock (oldest known state)
+            if let Some(oldest) = self.entries
+                .iter()
+                .min_by_key(|(_, e)| e.clock)
+                .map(|(k, _)| k.clone())
+            {
+                self.entries.remove(&oldest);
+            }
         }
         self.entries
             .entry(entry.node_id.clone())
@@ -154,10 +192,12 @@ pub struct GossipEngine {
 
 impl GossipEngine {
     pub fn new(local_node_id: String, config: GossipConfig) -> Self {
-        Self {
-            state: GossipState::new(local_node_id),
-            config,
-        }
+        let state = GossipState::new_with_limits(
+            local_node_id,
+            config.max_entries,
+            config.max_peer_cursors,
+        );
+        Self { state, config }
     }
 
     pub fn select_gossip_targets(&self, routing_table: &RoutingTable) -> Vec<crate::dht::KBucketEntry> {
