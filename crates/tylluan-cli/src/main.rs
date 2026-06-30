@@ -189,13 +189,13 @@ fn find_kernel_exe() -> Result<PathBuf> {
     let names = ["tylluan-nexus.exe", "tylluan-nexus"];
 
     // 1. Same directory as the CLI (install.sh/install.ps1 place both here)
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(dir) = current_exe.parent() {
-            for name in &names {
-                let full = dir.join(name);
-                if full.exists() {
-                    return Ok(full);
-                }
+    if let Ok(current_exe) = std::env::current_exe()
+        && let Some(dir) = current_exe.parent()
+    {
+        for name in &names {
+            let full = dir.join(name);
+            if full.exists() {
+                return Ok(full);
             }
         }
     }
