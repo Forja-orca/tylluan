@@ -44,7 +44,7 @@ chrono = "0.4"
 # SQLite — default: bundled (no encryption)
 # For encryption at rest, change "bundled" to "bundled-sqlcipher" and install OpenSSL dev headers.
 # Then set [security] encrypt_at_rest = true and TYLLUAN_DB_KEY env var (64-character hex string).
-rusqlite = { version = "0.33", features = ["bundled", "vtab", "trace"] }
+rusqlite = { version = "0.33", default-features = false, features = ["bundled", "vtab", "trace"] }
 
 # Config
 dirs = "6"
