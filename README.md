@@ -30,6 +30,8 @@
 
 A local Rust kernel that gives AI agents **persistent memory**, a **knowledge graph**, **real tool execution**, and **federated peer sync** — all running on your machine with zero cloud dependencies.
 
+**Design north star:** A doctor in rural Africa carries Tylluan on a USB stick, runs it on different machines across villages, works offline, and syncs with colleagues whenever LAN is available. When back in the city with access to better hardware or cloud inference clients (Claude Code, Cursor, Codex), connects them to the same Tylluan — all accumulated knowledge available. One binary, different `tylluan.toml` — toaster to datacenter.
+
 | Capability | Details |
 |------------|---------|
 | **Memory** | Dual-level retrieval (LightRAG pattern): entity-level BGE-M3 vector search + graph expansion with degree centrality. Runs entirely on CPU |

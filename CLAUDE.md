@@ -100,6 +100,24 @@ Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 
 ---
 
+## 🧭 North Star — Invariante Fundacional (leer antes de proponer cualquier feature)
+
+**Caso de uso fundacional:** Un médico en África rural lleva Tylluan en un USB. Lo ejecuta en máquinas distintas de distintos pueblos. Mantiene sus memorias, sus herramientas y las de su equipo IA **sin conexión a internet**. Cuando tiene LAN (clínica con 3 ordenadores), sincroniza con colegas automáticamente. Cuando vuelve a la ciudad y tiene acceso a hardware mejor o clientes cloud (Claude Code, Cursor, Codex), los conecta a su Tylluan local — todo el material recopilado disponible.
+
+**Filtro de decisión para cualquier nueva feature:** ¿Puede el mismo componente servir al médico (5-10 peers, CPU modesta, sin internet) Y al arquitecto (100+ peers, servidor, datacenter) **sin bifurcar el código** — solo diferente `tylluan.toml`? Si no, el diseño está mal, no el scope.
+
+**Invariantes derivados:**
+- **Toaster-friendly:** debe funcionar en Raspberry Pi 4 (4GB RAM) y hardware de 10 años
+- **USB-portable:** el bundle completo (binario + DB + modelo opcional) cabe y arranca desde un USB
+- **Offline-first:** el kernel arranca y opera sin internet. La sync es oportunista, no requerida
+- **Sin bifurcación de código:** un solo binario, configuración distinta por entorno
+
+**Historial de deriva detectada (2026-06-30, coloquio T58-T67):**
+- M14-D "cross-datacenter federation" → diferido (fuera del north star). Ver sección M14-D en ROADMAP.md.
+- El médico con 5-10 peers no necesita DHT a escala BitTorrent — pero DHT arranca en vacío sin coste, por lo que no se elimina.
+
+---
+
 ## Reglas críticas
 
 - NUNCA `vector_dimensions = 768` — rompe todos los embeddings
