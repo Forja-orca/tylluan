@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `5148f21` · All 5 jobs green as of 2026-06-30.
+**Commit:** `pending` · All 5 jobs green as of 2026-06-30.
 
 ---
 
@@ -36,11 +36,12 @@
 - Ed25519 node identity + node signing (M12) — mesh-ready keypairs
 - STUN NAT traversal + mDNS LAN autodiscovery (M12)
 - DHT Kademlia: 256 K-buckets, Ed25519 XOR metric, mainline BitTorrent DHT bootstrap (M14-A)
+- Gossip protocol: symmetric push-pull, LRU entry store (configurable max), anti-entropy cursor tracking, JSON persistence (M14-B)
 - OAuth 2.0 + PKCE local server
 - ChaCha20-Poly1305 encryption for federation payloads; optional SQLCipher for DB at rest
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
-- **454 tests passing** (250 kernel lib + 174 kernel integration + 30 link lib)
+- **491 tests passing** (250 kernel lib + 174 kernel integration + 37 link lib + 30 gossip)
 
 ### Binary distribution (M13)
 - Pre-compiled releases for linux-x64, mac-arm64, win-x64
@@ -80,7 +81,7 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-B through M14-E (gossip, Noise Protocol, cross-datacenter, test harness) not yet implemented
+- M14-C through M14-E (Noise Protocol, cross-datacenter, test harness) not yet implemented
 
 ---
 

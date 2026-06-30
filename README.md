@@ -162,7 +162,8 @@ Add to any SSE-capable MCP client:
 | **M12 Mesh** | Ed25519 identity · STUN NAT · mDNS LAN · node signing · integration tests | ✅ |
 | **M13 Onboarding** | Binary releases (3 targets) · install scripts · `tylluan-cli` · README 3-step | ✅ |
 | **M14-A DHT** | Kademlia routing table (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap · 23 tests | ✅ |
-| **M14-B** | Gossip protocol — epidemic knowledge dissemination | 🔜 |
+| **M14-B Gossip** | Symmetric push-pull exchange · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
+| **M14-C** | Encrypted transport overlay — Noise Protocol | 🔜 |
 | **M14-C** | Encrypted transport overlay — Noise Protocol | 🔜 |
 | **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
 | **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
