@@ -52,7 +52,7 @@ notify = "7"
 tokio-util = "0.7"
 
 # Semantic embeddings — Sovereign Inference (FastEmbed / ONNX)
-fastembed = { version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-native-tls", "image-models"] }
+fastembed = { version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls", "image-models"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "directml"] }
 
 # High-performance vector math
