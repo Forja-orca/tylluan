@@ -13,7 +13,8 @@ import {
   Shield,
   Zap,
   Info,
-  User
+  User,
+  RefreshCw
 } from 'lucide-react';
 import type {
   GoldenSignals,
@@ -47,6 +48,7 @@ interface OverviewTabProps {
   healthDetailed: any | null;
   sysStatus: any | null;
   events: NexusEvent[];
+  notify?: (msg: string, type?: 'info' | 'error') => void;
 }
 
 export function OverviewTab({ 
@@ -60,9 +62,10 @@ export function OverviewTab({
   memoryStats,
   healthDetailed,
   sysStatus,
-  events
+  events,
+  notify
 }: OverviewTabProps) {
-  const { interoception } = useNexus();
+  const { interoception, reindexState } = useNexus();
   const [liveMetrics, setLiveMetrics] = useState<{
     totalCalls: number; successRate: number; avgLatency: number;
     activeAgents: number; broadcastsLastHour: number; graphNodes: number;
@@ -75,6 +78,30 @@ export function OverviewTab({
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
   const [showHeartbeats, setShowHeartbeats] = useState(false);
+  const [reindexingPending, setReindexingPending] = useState(false);
+
+  const handleReindex = async () => {
+    if (!bridge || reindexState?.running || reindexingPending) return;
+    setReindexingPending(true);
+    try {
+      const res = await bridge.fetchRaw('/api/v1/memory/reindex', { method: 'POST' });
+      if (res && res.status === 'skipped') {
+        notify?.('BM25-only mode, nothing to reindex', 'info');
+      } else if (res && res.status === 'started') {
+        notify?.(`Reindexing started. Stale nodes: ${res.stale}, Total: ${res.total}`, 'info');
+      } else {
+        notify?.('Reindexing task triggered', 'info');
+      }
+    } catch (e: any) {
+      if (e && e.message && e.message.includes('503')) {
+        notify?.('Embedding model not downloaded yet. Run tylluan download-models.', 'error');
+      } else {
+        notify?.('Failed to trigger reindexing: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+      }
+    } finally {
+      setReindexingPending(false);
+    }
+  };
   useEffect(() => {
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
@@ -300,6 +327,43 @@ export function OverviewTab({
             Uptime: {Math.floor(sysStatus.uptime_secs / 60)}m
           </span>
           {getProfileBadge()}
+          <button
+            type="button"
+            onClick={handleReindex}
+            disabled={reindexState?.running || reindexingPending}
+            className={`text-xs px-2.5 py-1 rounded-full border font-mono font-bold uppercase transition-all flex items-center gap-1.5 ${
+              reindexState?.running
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 cursor-not-allowed'
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-650 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
+          >
+            <RefreshCw className={`w-3 h-3 ${reindexState?.running || reindexingPending ? 'animate-spin' : ''}`} />
+            {reindexState?.running ? 'Reindexing...' : 'Reindex'}
+          </button>
+        </div>
+      )}
+
+      {/* Reindex Progress Bar */}
+      {reindexState?.running && (
+        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-2 animate-in slide-in-from-top duration-300">
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-amber-400 font-bold uppercase tracking-wider">
+              {reindexState.stale === 0 ? 'Verifying embeddings...' : 'Reindexing embeddings'}
+            </span>
+            <span className="text-slate-400 font-bold">
+              {reindexState.stale === 0 ? '' : `${reindexState.done} / ${reindexState.stale} nodes`}
+            </span>
+          </div>
+          <div className="h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700/50">
+            <div
+              className={`h-full bg-amber-400 rounded-full transition-all duration-300 ${
+                reindexState.stale === 0 ? 'w-full animate-pulse' : ''
+              }`}
+              style={{
+                width: reindexState.stale === 0 ? '100%' : `${((reindexState.done / reindexState.stale) * 100).toFixed(1)}%`
+              }}
+            />
+          </div>
         </div>
       )}
       <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden group">
