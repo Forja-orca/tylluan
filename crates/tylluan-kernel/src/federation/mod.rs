@@ -6,6 +6,7 @@ use chacha20poly1305::{
 use rand::RngCore;
 use rusqlite::params;
 use std::sync::Arc;
+use tylluan_link::identity::NodeIdentity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationPeer {
@@ -200,6 +201,37 @@ pub fn decrypt_payload(data: &[u8], shared_secret: &str) -> anyhow::Result<Vec<u
     cipher
         .decrypt(nonce, &data[12..])
         .map_err(|e| anyhow::anyhow!("decrypt failed: {e}"))
+}
+
+// --- Crypto dispatch: Noise NK when pubkey available, ChaCha20 fallback ----------
+
+/// Encrypt payload using best available crypto.
+/// Uses Noise NK when this peer knows the target's Ed25519 pubkey (forward secrecy),
+/// falls back to ChaCha20-Poly1305 with shared_secret for legacy peers.
+pub fn encrypt_for_peer(
+    data: &[u8],
+    identity: &NodeIdentity,
+    peer: &FederationPeer,
+) -> anyhow::Result<Vec<u8>> {
+    if !peer.ed25519_pubkey.is_empty() {
+        tylluan_link::noise::noise_encrypt_payload(data, identity, &peer.ed25519_pubkey)
+    } else {
+        encrypt_payload(data, peer.encryption_key())
+    }
+}
+
+/// Decrypt payload using best available crypto.
+/// Matches the encryption method used by the sender.
+pub fn decrypt_from_peer(
+    data: &[u8],
+    identity: &NodeIdentity,
+    peer: &FederationPeer,
+) -> anyhow::Result<Vec<u8>> {
+    if !peer.ed25519_pubkey.is_empty() {
+        tylluan_link::noise::noise_decrypt_payload(data, identity, &peer.ed25519_pubkey)
+    } else {
+        decrypt_payload(data, peer.encryption_key())
+    }
 }
 
 #[cfg(test)]
