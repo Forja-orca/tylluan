@@ -79,6 +79,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               healthDetailed={props.healthDetailed}
               sysStatus={props.sysStatus}
               events={props.events}
+              notify={props.notify}
             />
             {/* Team Pulse Widget */}
             <TeamPulseWidget bridge={props.bridge} />

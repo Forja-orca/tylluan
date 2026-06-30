@@ -27,6 +27,7 @@ interface NexusContextType {
   healthDetailed: any | null;
   sysStatus: any | null;
   agentProfiles: AgentProfile[];
+  reindexState: { running: boolean; done: number; stale: number; total: number } | null;
   bridge: NexusBridge | null;
   setToken: (token: string) => void;
   refreshData: () => Promise<void>;
@@ -56,6 +57,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [healthDetailed, setHealthDetailed] = useState<any | null>(null);
   const [sysStatus, setSysStatus] = useState<any | null>(null);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
+  const [reindexState, setReindexState] = useState<{ running: boolean; done: number; stale: number; total: number } | null>(null);
   const bridgeRef = useRef<NexusBridge | null>(null);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,6 +169,14 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           refreshData();
           refreshGraph(true); // Auto-refresh graph with clustering after maintenance
         }
+        if (ev.type === 'reindex_started') {
+          setReindexState({ running: true, done: 0, stale: (ev as any).stale || 0, total: (ev as any).total || 0 });
+        } else if (ev.type === 'reindex_progress') {
+          setReindexState(prev => prev ? { ...prev, done: (ev as any).done || 0 } : null);
+        } else if (ev.type === 'reindex_finished') {
+          setReindexState(null);
+          refreshData();
+        }
       },
       (status) => {
         setOnline(status);
@@ -212,7 +222,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       online, events, guilds, stats, memoryStats, approvals, sessions, graph,
       loading, error,
       goldenSignals, guildsUtilization, memoryRetention, sloSummary,
-      interoception, healthDetailed, sysStatus, agentProfiles,
+      interoception, healthDetailed, sysStatus, agentProfiles, reindexState,
       bridge: bridgeRef.current, setToken, refreshData, refreshGraph, clearLogs
     }}>
       {children}

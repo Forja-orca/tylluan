@@ -39,7 +39,7 @@ function fixDoubleEncoding(str: string): string {
 }
 
 export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
-  const { events, sysStatus, interoception } = useNexus();
+  const { events, sysStatus, interoception, reindexState } = useNexus();
   const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('graph');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GraphNode[]>([]);
@@ -59,6 +59,30 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   // --- Recent Sidebar State ---
   const [showRecentSidebar, setShowRecentSidebar] = useState(false);
   const [recentNodes, setRecentNodes] = useState<GraphNode[]>([]);
+  const [reindexingPending, setReindexingPending] = useState(false);
+
+  const handleReindex = async () => {
+    if (!bridge || reindexState?.running || reindexingPending) return;
+    setReindexingPending(true);
+    try {
+      const res = await bridge.fetchRaw('/api/v1/memory/reindex', { method: 'POST' });
+      if (res && res.status === 'skipped') {
+        notify?.('BM25-only mode, nothing to reindex', 'info');
+      } else if (res && res.status === 'started') {
+        notify?.(`Reindexing started. Stale nodes: ${res.stale}, Total: ${res.total}`, 'info');
+      } else {
+        notify?.('Reindexing task triggered', 'info');
+      }
+    } catch (e: any) {
+      if (e && e.message && e.message.includes('503')) {
+        notify?.('Embedding model not downloaded yet. Run tylluan download-models.', 'error');
+      } else {
+        notify?.('Failed to trigger reindexing: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+      }
+    } finally {
+      setReindexingPending(false);
+    }
+  };
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
@@ -242,11 +266,22 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               );
             } else if (!loaded) {
               return (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-amber-300 text-xs shrink-0">
-                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Model {model} not loaded yet</span>. Searches use BM25 fallback. Run <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-400 font-mono text-[10px]">tylluan download-models</code> to enable semantic search.
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start justify-between gap-3 text-amber-300 text-xs shrink-0">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Model {model} not loaded yet</span>. Searches use BM25 fallback. Run <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-400 font-mono text-[10px]">tylluan download-models</code> to enable semantic search.
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleReindex}
+                    disabled={reindexState?.running || reindexingPending}
+                    className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded text-[10px] font-bold border border-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center gap-1"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${reindexState?.running || reindexingPending ? 'animate-spin' : ''}`} />
+                    {reindexState?.running ? 'Reindexing...' : 'Run reindex'}
+                  </button>
                 </div>
               );
             }
