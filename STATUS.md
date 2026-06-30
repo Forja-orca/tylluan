@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `99b877d` · All 5 jobs green as of 2026-06-30.
+**Commit:** `5148f21` · All 5 jobs green as of 2026-06-30.
 
 ---
 
@@ -40,7 +40,7 @@
 - ChaCha20-Poly1305 encryption for federation payloads; optional SQLCipher for DB at rest
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
-- **352 tests passing** (250 kernel lib + 13 link lib + ~89 integration)
+- **454 tests passing** (250 kernel lib + 174 kernel integration + 30 link lib)
 
 ### Binary distribution (M13)
 - Pre-compiled releases for linux-x64, mac-arm64, win-x64
