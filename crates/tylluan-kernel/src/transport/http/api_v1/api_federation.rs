@@ -211,7 +211,7 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
             tracing::warn!("⛔ Federation: skipping unapproved peer '{}'", peer.name);
             continue;
         }
-        let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
+        let encrypted = match crate::federation::encrypt_for_peer(&plain_body, &state.node_identity, &peer) {
             Ok(enc) => enc,
             Err(e) => { tracing::error!("Federation encrypt failed for '{}': {}", peer.name, e); continue; }
         };
@@ -271,7 +271,7 @@ pub async fn federation_sync_receive(
         }
     };
 
-    let plain = match crate::federation::decrypt_payload(&body, peer.encryption_key()) {
+    let plain = match crate::federation::decrypt_from_peer(&body, &state.node_identity, &peer) {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Federation decrypt failed from '{}': {}", peer.name, e);
@@ -393,7 +393,7 @@ pub async fn federation_sync_export(
     }
 
     let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
-    let encrypted = match crate::federation::encrypt_payload(&plain_body, peer.encryption_key()) {
+    let encrypted = match crate::federation::encrypt_for_peer(&plain_body, &state.node_identity, &peer) {
         Ok(e) => e,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Encryption failed: {e}")}))).into_response(),
     };
@@ -441,7 +441,7 @@ pub async fn federation_sync_pull(
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("Failed to read response: {e}")}))).into_response(),
     };
 
-    let plain = match crate::federation::decrypt_payload(&encrypted, peer.encryption_key()) {
+    let plain = match crate::federation::decrypt_from_peer(&encrypted, &state.node_identity, &peer) {
         Ok(p) => p,
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("Decryption failed: {e}")}))).into_response(),
     };
@@ -535,7 +535,7 @@ pub async fn federation_sync_both(
             }
         }
         if let Ok(plain) = serde_json::to_vec(&envelopes) {
-                if let Ok(enc) = crate::federation::encrypt_payload(&plain, peer.encryption_key()) {
+                if let Ok(enc) = crate::federation::encrypt_for_peer(&plain, &state.node_identity, &peer) {
                     let push_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
                     matches!(
                     client.post(&push_url).bearer_auth(&peer.auth_token)
@@ -553,7 +553,7 @@ pub async fn federation_sync_both(
     if let Ok(r) = client.get(&export_url).bearer_auth(&peer.auth_token).send().await {
         if r.status().is_success() {
             if let Ok(enc_bytes) = r.bytes().await {
-                if let Ok(plain) = crate::federation::decrypt_payload(&enc_bytes, peer.encryption_key()) {
+                if let Ok(plain) = crate::federation::decrypt_from_peer(&enc_bytes, &state.node_identity, &peer) {
                     if let Ok(envelopes) = serde_json::from_slice::<Vec<tylluan_link::identity::SignedEnvelope>>(&plain) {
                         let has_pubkey = !peer.ed25519_pubkey.is_empty();
                         for envelope in &envelopes {
@@ -792,7 +792,7 @@ async fn push_to_peer_internal(
     client: &reqwest::Client,
     plain_body: &[u8],
 ) -> anyhow::Result<()> {
-    let encrypted = crate::federation::encrypt_payload(plain_body, peer.encryption_key())?;
+    let encrypted = crate::federation::encrypt_for_peer(plain_body, &state.node_identity, peer)?;
     let sync_url = peer_url_for_sync(peer, client, "/api/v1/federation/sync/receive").await;
     let resp = client
         .post(&sync_url)
@@ -827,7 +827,7 @@ async fn pull_from_peer_internal(
     }
 
     let encrypted = resp.bytes().await?.to_vec();
-    let plain = crate::federation::decrypt_payload(&encrypted, peer.encryption_key())?;
+    let plain = crate::federation::decrypt_from_peer(&encrypted, &state.node_identity, peer)?;
     let envelopes: Vec<tylluan_link::identity::SignedEnvelope> = serde_json::from_slice(&plain)?;
 
     let mut received = 0;
