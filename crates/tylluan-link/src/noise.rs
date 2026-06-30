@@ -1,9 +1,10 @@
 //! # Noise Protocol — Encrypted Transport Overlay (M14-C)
 //!
-//! Replaces HMAC-SHA256 challenge-response with Noise XK pattern:
-//! - XK: initiator knows responder's static public key
-//! - Ephemeral X25519 keys for perfect forward secrecy
-//! - ChaCha20-Poly1305 AEAD for transport encryption
+//! Two modes:
+//! - XK (3-message handshake): bidirectional session over TCP (start_p2p_listener/noise_accept)
+//! - NK (1-message handshake): stateless encrypt/decrypt for HTTP payloads (noise_encrypt_payload/noise_decrypt_payload)
+//!
+//! Both use Ed25519→X25519 key conversion and ChaCha20-Poly1305 AEAD.
 
 use crate::identity::NodeIdentity;
 use sha2::{Sha256, Digest};
@@ -33,6 +34,83 @@ pub fn ed25519_secret_to_x25519(sk: &SigningKey) -> [u8; 32] {
 /// Derive Tylluan node_id (SHA-256[:16] of Ed25519 pubkey) from raw pubkey bytes.
 fn node_id_from_ed25519_bytes(pubkey: &[u8; 32]) -> String {
     hex::encode(&Sha256::digest(pubkey)[..16])
+}
+
+// ─── Stateless NK payload encryption (for HTTP federation) ──────────────
+
+const NK_PARAMS: &str = "Noise_NK_25519_ChaChaPoly_BLAKE2s";
+
+/// Encrypt a payload for a peer whose Ed25519 public key we know.
+/// Uses Noise NK pattern: 1-message handshake with ephemeral key exchange + AEAD.
+/// Output format: [ephemeral_x25519_pubkey (32 bytes) + AEAD ciphertext].
+/// Provides forward secrecy: ephemeral key is generated fresh each call.
+pub fn noise_encrypt_payload(
+    data: &[u8],
+    identity: &NodeIdentity,
+    peer_pubkey_hex: &str,
+) -> anyhow::Result<Vec<u8>> {
+    let peer_ed = hex::decode(peer_pubkey_hex)
+        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {}", e))?;
+    if peer_ed.len() != 32 {
+        anyhow::bail!("peer pubkey must be 32 bytes");
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&peer_ed);
+    let peer_pk = VerifyingKey::from_bytes(&arr)
+        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {}", e))?;
+    let peer_x_pub = ed25519_pub_to_x25519(&peer_pk);
+
+    let my_sk = ed25519_secret_to_x25519(identity.signing_key());
+    let params: snow::params::NoiseParams = NK_PARAMS.parse()
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+
+    let mut initiator: HandshakeState = Builder::new(params)
+        .local_private_key(&my_sk)
+        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .remote_public_key(&peer_x_pub)
+        .map_err(|e| anyhow::anyhow!("Noise remote key: {}", e))?
+        .build_initiator()
+        .map_err(|e| anyhow::anyhow!("Noise NK initiator: {}", e))?;
+
+    let mut buf = vec![0u8; data.len() + 100];
+    let n = initiator.write_message(data, &mut buf)
+        .map_err(|e| anyhow::anyhow!("Noise NK encrypt: {}", e))?;
+    buf.truncate(n);
+    Ok(buf)
+}
+
+/// Decrypt a payload encrypted by `noise_encrypt_payload`.
+/// Uses Noise NK pattern: reads ephemeral public key, derives shared key, decrypts.
+pub fn noise_decrypt_payload(
+    data: &[u8],
+    identity: &NodeIdentity,
+    peer_pubkey_hex: &str,
+) -> anyhow::Result<Vec<u8>> {
+    let peer_ed = hex::decode(peer_pubkey_hex)
+        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {}", e))?;
+    if peer_ed.len() != 32 {
+        anyhow::bail!("peer pubkey must be 32 bytes");
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&peer_ed);
+    let _peer_pk = VerifyingKey::from_bytes(&arr)
+        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {}", e))?;
+
+    let my_sk = ed25519_secret_to_x25519(identity.signing_key());
+    let params: snow::params::NoiseParams = NK_PARAMS.parse()
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+
+    let mut responder: HandshakeState = Builder::new(params)
+        .local_private_key(&my_sk)
+        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .build_responder()
+        .map_err(|e| anyhow::anyhow!("Noise NK responder: {}", e))?;
+
+    let mut buf = vec![0u8; data.len() + 100];
+    let n = responder.read_message(data, &mut buf)
+        .map_err(|e| anyhow::anyhow!("Noise NK decrypt: {}", e))?;
+    buf.truncate(n);
+    Ok(buf)
 }
 
 /// AEAD-encrypted session over Noise Protocol TransportState.
@@ -354,5 +432,44 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&server_dir);
         let _ = std::fs::remove_dir_all(&client_dir);
+    }
+
+    #[test]
+    fn test_noise_nk_encrypt_decrypt_roundtrip() {
+        let (alice, alice_dir) = make_identity("nk_a");
+        let (bob, bob_dir) = make_identity("nk_b");
+        let bob_pubkey = bob.public_key_hex().to_string();
+        let msg = b"hello nk federation payload";
+
+        // Alice encrypts for Bob
+        let encrypted = noise_encrypt_payload(msg, &alice, &bob_pubkey)
+            .expect("NK encrypt should succeed");
+        assert!(encrypted.len() > 32, "output should include eph key (32) + AEAD ciphertext");
+
+        // Bob decrypts from Alice
+        let decrypted = noise_decrypt_payload(&encrypted, &bob, alice.public_key_hex())
+            .expect("NK decrypt should succeed");
+        assert_eq!(&decrypted, msg, "NK roundtrip should match");
+
+        let _ = std::fs::remove_dir_all(&alice_dir);
+        let _ = std::fs::remove_dir_all(&bob_dir);
+    }
+
+    #[test]
+    fn test_noise_nk_wrong_key_fails() {
+        let (alice, alice_dir) = make_identity("nk_w_a");
+        let (bob, bob_dir) = make_identity("nk_w_b");
+        let (eve, eve_dir) = make_identity("nk_w_e");
+        let bob_pubkey = bob.public_key_hex().to_string();
+
+        let encrypted = noise_encrypt_payload(b"secret", &alice, &bob_pubkey).unwrap();
+
+        // Eve tries to decrypt (wrong identity)
+        let result = noise_decrypt_payload(&encrypted, &eve, alice.public_key_hex());
+        assert!(result.is_err(), "wrong receiver key should fail to decrypt");
+
+        let _ = std::fs::remove_dir_all(&alice_dir);
+        let _ = std::fs::remove_dir_all(&bob_dir);
+        let _ = std::fs::remove_dir_all(&eve_dir);
     }
 }

@@ -67,7 +67,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (250 lib tests, 8 integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (293 lib tests, 8 integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -163,7 +163,7 @@ Add to any SSE-capable MCP client:
 | **M13 Onboarding** | Binary releases (3 targets) · install scripts · `tylluan-cli` · README 3-step | ✅ |
 | **M14-A DHT** | Kademlia routing table (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap · 23 tests | ✅ |
 | **M14-B Gossip** | Symmetric push-pull exchange · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
-| **M14-C Noise** | XK handshake · Ed25519→X25519 · ChaCha20-Poly1305 AEAD · async framing | ✅ |
+| **M14-C Noise** | XK handshake · NK HTTP payload encryption · Ed25519→X25519 · wired to federation sync endpoints | ✅ |
 | **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
 | **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
 

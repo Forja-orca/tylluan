@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `pending` · All 5 jobs green as of 2026-06-30 (M14-C in progress).
+**Commit:** `5103842` · All 5 jobs green as of 2026-06-30.
 
 ---
 
@@ -42,7 +42,7 @@
 - ChaCha20-Poly1305 encryption for federation payloads; optional SQLCipher for DB at rest
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
-- **291 lib tests passing** (250 kernel + 41 link) · integration suite requires live kernel
+- **293 lib tests passing** (250 kernel + 43 link) · integration suite requires live kernel
 
 ### Binary distribution (M13)
 - Pre-compiled releases for linux-x64, mac-arm64, win-x64
@@ -83,7 +83,7 @@
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
 - M14-D through M14-E (cross-datacenter routing, mesh test harness) not yet implemented
-- Noise transport (M14-C) implemented at library level but not yet wired to production guild/federation HTTP endpoints
+- Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
 
 ---
 
