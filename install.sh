@@ -11,11 +11,17 @@ ARCH=$(uname -m)
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 case "$OS" in
-  linux)  TARGET="x86_64-unknown-linux-gnu"    ;;
+  linux)
+    case "$ARCH" in
+      aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
+      x86_64)        TARGET="x86_64-unknown-linux-gnu" ;;
+      *)             err "unsupported Linux arch: $ARCH" ;;
+    esac
+    ;;
   darwin)
     case "$ARCH" in
       arm64|aarch64) TARGET="aarch64-apple-darwin" ;;
-      x86_64)        TARGET="aarch64-apple-darwin" ;;
+      x86_64)        TARGET="x86_64-apple-darwin" ;;
       *)             err "unsupported macOS arch: $ARCH" ;;
     esac
     ;;

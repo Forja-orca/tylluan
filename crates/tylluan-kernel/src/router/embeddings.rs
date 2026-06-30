@@ -66,9 +66,13 @@ impl EmbeddingEngine {
         Ok(())
     }
 
-    /// Find the default model directory.
-    pub fn default_model_path() -> Option<String> {
-        Some("models/bge-m3".to_string())
+    /// Resolve model path from config string.
+    /// Returns None if `embedding_model` is "none" or empty (BM25-only mode).
+    pub fn model_path_from_config(embedding_model: &str) -> Option<String> {
+        if embedding_model.is_empty() || embedding_model == "none" {
+            return None;
+        }
+        Some(format!("models/{}", embedding_model))
     }
 
     /// Embed a text string into a vector.
@@ -188,8 +192,11 @@ mod tests {
 
     #[test]
     fn test_model_path() {
-        let path = EmbeddingEngine::default_model_path();
+        let path = EmbeddingEngine::model_path_from_config("bge-m3");
         println!("Effective model path: {:?}", path);
+        assert!(path.is_some());
+        let none_path = EmbeddingEngine::model_path_from_config("none");
+        assert!(none_path.is_none());
     }
 
     #[test]

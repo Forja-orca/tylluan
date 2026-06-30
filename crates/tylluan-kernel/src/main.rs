@@ -490,14 +490,16 @@ async fn main() -> anyhow::Result<()> {
 
     let mut matcher = GuildMatcher::new(builtin_catalog());
     let _always_on = config.guilds.core.always_on.clone();
-    if let Some(path) = EmbeddingEngine::default_model_path() {
-        let is_nomic = path.contains("nomic");
+    if let Some(path) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
+        let is_nomic = path.to_lowercase().contains("nomic");
         info!("🧠 Pre-loading {} embedding model: {}",
             if is_nomic { "Nomic Embed v2" } else { "BGE-M3" }, path);
         let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, &config.inference.device));
         if is_nomic {
             info!("✅ Sovereign AI: Nomic Embed v2 (768-dim, lazy loading ready)");
         }
+    } else {
+        info!("🧠 Embedding model disabled — using BM25-only retrieval");
     }
     let matcher = matcher.with_curriculum(curriculum.clone());
     // Create shared HormoneSystem before Arc-wrapping so both matcher and server share the same instance
@@ -1070,6 +1072,7 @@ async fn main() -> anyhow::Result<()> {
         let silva_warmup = silva.clone();
         let matcher_warmup = matcher.clone();
         let workspace_for_seed = workspace_root.clone();
+        let embedding_model = config.memory.embedding_model.clone();
         tokio::spawn(async move {
             // ── Phase 1: upsert seed corpus (no engine needed) ────────
             let seed_path = workspace_for_seed.join("data").join("routing_anchors_seed.jsonl");
@@ -1097,24 +1100,30 @@ async fn main() -> anyhow::Result<()> {
             }
 
             // ── Phase 2: wait for BGE-M3, then reembed missing nodes ──
-            let mut engine_arc: Option<Arc<tylluan_kernel::router::embeddings::EmbeddingEngine>> = None;
-            for attempt in 0..90u32 {
-                if let Some(arc) = matcher_warmup.engine_arc() {
-                    engine_arc = Some(arc.clone());
-                    break;
+            let no_embedding = embedding_model == "none"
+                || embedding_model.is_empty();
+            if no_embedding {
+                info!("🌱 Embedding model disabled — skipping anchor warmup");
+            } else {
+                let mut engine_arc: Option<Arc<tylluan_kernel::router::embeddings::EmbeddingEngine>> = None;
+                for attempt in 0..90u32 {
+                    if let Some(arc) = matcher_warmup.engine_arc() {
+                        engine_arc = Some(arc.clone());
+                        break;
+                    }
+                    if attempt % 15 == 0 && attempt > 0 {
+                        info!("🌱 Anchor warmup: waiting for BGE-M3... ({}s elapsed)", attempt * 2);
+                    }
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                 }
-                if attempt % 15 == 0 && attempt > 0 {
-                    info!("🌱 Anchor warmup: waiting for BGE-M3... ({}s elapsed)", attempt * 2);
-                }
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
-            match engine_arc {
-                None => warn!("⚠️ Anchor warmup: BGE-M3 not available after 3min — anchor routing degraded"),
-                Some(engine) => {
-                    match silva_warmup.reembed_anchors(&engine).await {
-                        Ok(0) => info!("🌱 Routing anchors: all embeddings present"),
-                        Ok(n) => info!("🌱 Routing anchors warmed: {} embeddings generated", n),
-                        Err(e) => warn!("⚠️ Anchor reembed failed: {}", e),
+                match engine_arc {
+                    None => warn!("⚠️ Anchor warmup: BGE-M3 not available after 3min — anchor routing degraded"),
+                    Some(engine) => {
+                        match silva_warmup.reembed_anchors(&engine).await {
+                            Ok(0) => info!("🌱 Routing anchors: all embeddings present"),
+                            Ok(n) => info!("🌱 Routing anchors warmed: {} embeddings generated", n),
+                            Err(e) => warn!("⚠️ Anchor reembed failed: {}", e),
+                        }
                     }
                 }
             }
