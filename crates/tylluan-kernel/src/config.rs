@@ -250,15 +250,28 @@ pub struct GossipConfig {
     pub fanout: usize,
     #[serde(default = "default_gossip_max_entries")]
     pub max_entries: usize,
+    #[serde(default = "default_gossip_max_peer_cursors")]
+    pub max_peer_cursors: usize,
+    #[serde(default = "default_gossip_timeout_secs")]
+    pub timeout_secs: u64,
 }
 fn default_gossip_enabled() -> bool { true }
 fn default_gossip_interval() -> u64 { 30 }
 fn default_gossip_fanout() -> usize { 3 }
 fn default_gossip_max_entries() -> usize { 1000 }
+fn default_gossip_max_peer_cursors() -> usize { 100 }
+fn default_gossip_timeout_secs() -> u64 { 5 }
 
 impl Default for GossipConfig {
     fn default() -> Self {
-        Self { enabled: true, interval_secs: 30, fanout: 3, max_entries: 1000 }
+        Self {
+            enabled: true,
+            interval_secs: 30,
+            fanout: 3,
+            max_entries: 1000,
+            max_peer_cursors: 100,
+            timeout_secs: 5,
+        }
     }
 }
 
