@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-06-30 (v0.6.0 release)
+> Last updated: 2026-07-01 (v0.6.1 release)
 
 ## CI
 
@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `c0efa8b` · All 5 jobs green as of 2026-06-30.
+**Commit:** `d363b92` · All 5 jobs green as of 2026-07-01.
 
 ---
 
 ## Version
 
-**v0.6.0** — Portable Foundation release (M14-B Gossip + M14-C Noise + ARM64 + BM25-only mode).
+**v0.6.1** — Model Portability release (P5 config-driven embeddings + P6 install profiles + P7 reindex endpoint).
 
 ---
 
@@ -27,9 +27,10 @@
 
 ### Kernel (Rust)
 - `tylluan-nexus` binary: tokio + axum HTTP server, MCP over SSE and HTTP Streamable
-- `tylluan-cli` binary: `start / stop / status / logs / connect / download-models`
+- `tylluan-cli` binary: `start / stop / status / logs / connect / download-models / install --profile=portable|clinic|server` (P6)
 - 5 sovereign MCP tools: `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
-- SQLite-backed persistent memory (SilvaDB) with BGE-M3 embeddings + BM25 hybrid search + Jina Reranker; `embedding_model = "none"` for zero-download BM25-only mode
+- SQLite-backed persistent memory (SilvaDB) with configurable embeddings (bge-m3/bge-small/nomic/none) + BM25 hybrid search + Jina Reranker; `embedding_model = "none"` for zero-download BM25-only mode; `vector_dimensions` derived dynamically from model (P5)
+- `POST /api/v1/memory/reindex` — manual embedding reindex trigger with SSE progress events (`reindex_started/progress/finished`) and 200ms CPU throttle (P7)
 - Knowledge graph: entity extraction, triple storage, semantic clustering
 - Security layer: rate limiter, circuit breaker, execution guard, per-guild ACL, intent filter (30 automated security tests)
 - Federation: SQLite peer persistence, push/pull/bidirectional sync, provenance tracking, echo-loop prevention, auto-sync background task
@@ -62,6 +63,9 @@
 ### Dashboard
 - React + Vite dashboard in `dashboard/`; builds clean via pnpm
 - Real-time monitoring, guild status, knowledge graph viewer
+- Profile chip (Portable·BM25 / Clinic·BGE-Small / Server·BGE-M3) in Overview (P6 UX)
+- Reindex button + amber progress bar driven by SSE events (P7 UX)
+- Dynamic BM25 banners with context-specific instructions per profile (P6 UX)
 
 ### Integrations
 - MCP client configs in `integrations/` for: Claude Desktop, Claude Code, Cursor, VS Code, LM Studio (SSE), Qwen Desktop, Antigravity
