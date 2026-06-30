@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `pending` · All 5 jobs green as of 2026-06-30.
+**Commit:** `pending` · All 5 jobs green as of 2026-06-30 (M14-C in progress).
 
 ---
 
@@ -37,11 +37,12 @@
 - STUN NAT traversal + mDNS LAN autodiscovery (M12)
 - DHT Kademlia: 256 K-buckets, Ed25519 XOR metric, mainline BitTorrent DHT bootstrap (M14-A)
 - Gossip protocol: symmetric push-pull, LRU entry store (configurable max), anti-entropy cursor tracking, JSON persistence (M14-B)
+- Noise Protocol XK encrypted transport: Ed25519→X25519 key conversion, 3-message handshake, ChaCha20-Poly1305 AEAD, length-prefixed async framing (M14-C)
 - OAuth 2.0 + PKCE local server
 - ChaCha20-Poly1305 encryption for federation payloads; optional SQLCipher for DB at rest
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
-- **491 tests passing** (250 kernel lib + 174 kernel integration + 37 link lib + 30 gossip)
+- **291 lib tests passing** (250 kernel + 41 link) · integration suite requires live kernel
 
 ### Binary distribution (M13)
 - Pre-compiled releases for linux-x64, mac-arm64, win-x64
@@ -81,7 +82,8 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-C through M14-E (Noise Protocol, cross-datacenter, test harness) not yet implemented
+- M14-D through M14-E (cross-datacenter routing, mesh test harness) not yet implemented
+- Noise transport (M14-C) implemented at library level but not yet wired to production guild/federation HTTP endpoints
 
 ---
 
