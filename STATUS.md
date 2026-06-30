@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-06-30
+> Last updated: 2026-06-30 (v0.6.0 release)
 
 ## CI
 
@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `5103842` · All 5 jobs green as of 2026-06-30.
+**Commit:** `c0efa8b` · All 5 jobs green as of 2026-06-30.
 
 ---
 
 ## Version
 
-**v0.5.0** — Mesh Fabric release (M14-A DHT Kademlia delivered).
+**v0.6.0** — Portable Foundation release (M14-B Gossip + M14-C Noise + ARM64 + BM25-only mode).
 
 ---
 
@@ -29,7 +29,7 @@
 - `tylluan-nexus` binary: tokio + axum HTTP server, MCP over SSE and HTTP Streamable
 - `tylluan-cli` binary: `start / stop / status / logs / connect / download-models`
 - 5 sovereign MCP tools: `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
-- SQLite-backed persistent memory (SilvaDB) with BGE-M3 embeddings + BM25 hybrid search + Jina Reranker
+- SQLite-backed persistent memory (SilvaDB) with BGE-M3 embeddings + BM25 hybrid search + Jina Reranker; `embedding_model = "none"` for zero-download BM25-only mode
 - Knowledge graph: entity extraction, triple storage, semantic clustering
 - Security layer: rate limiter, circuit breaker, execution guard, per-guild ACL, intent filter (30 automated security tests)
 - Federation: SQLite peer persistence, push/pull/bidirectional sync, provenance tracking, echo-loop prevention, auto-sync background task
@@ -43,9 +43,14 @@
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
 - **293 lib tests passing** (250 kernel + 43 link) · integration suite requires live kernel
+- Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
-### Binary distribution (M13)
-- Pre-compiled releases for linux-x64, mac-arm64, win-x64
+### Binary distribution (M13 + v0.6.0)
+- Pre-compiled releases for 4 targets:
+  - `x86_64-unknown-linux-gnu`
+  - `aarch64-unknown-linux-gnu` (Raspberry Pi 4+ — new in v0.6.0)
+  - `aarch64-apple-darwin` (Apple Silicon)
+  - `x86_64-pc-windows-msvc`
 - `install.sh` / `install.ps1` — curl-pipe and irm-pipe installers
 - Installs to `~/.tylluan/bin/`, adds to PATH, prints MCP config + token hint
 
