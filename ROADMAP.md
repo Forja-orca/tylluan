@@ -76,8 +76,8 @@ Delivered:
 
 Planned:
 - [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests.
-- [ ] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
-- [ ] M14-C — Encrypted transport overlay: Noise Protocol (or WireGuard) for peer-to-peer channels. Removes reliance on ChaCha20-Poly1305 at the application layer for mesh traffic.
+- [x] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
+- [x] M14-C — Encrypted transport overlay: Noise Protocol XK (TCP sessions) + NK (HTTP payloads) wired to federation sync endpoints. Ed25519→X25519 key conversion, ChaCha20-Poly1305 AEAD, async length-prefixed framing.
 - [ ] M14-D — Cross-datacenter federation: latency-aware routing, regional clusters, configurable sync priority by node proximity.
 - [ ] M14-E — Mesh integration tests: multi-node test harness with simulated network partitions and recovery.
 
