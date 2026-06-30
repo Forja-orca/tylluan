@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="v0.5.0">
+  <img src="https://img.shields.io/badge/version-0.6.0-blue.svg" alt="v0.6.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -75,7 +75,16 @@ Every push runs 5 jobs: Rust build+test (293 lib tests, 8 integration suites) + 
 
 ## Quick Start
 
-> **The honest toll:** First boot downloads the BGE-M3 embedding model (~2.2 GB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant.
+> **The honest toll:** First boot downloads the BGE-M3 embedding model (~2.2 GB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant. Use `embedding_model = "none"` in `tylluan.toml` for zero-download BM25-only mode.
+
+**Supported platforms (v0.6.0):**
+
+| Platform | Binary |
+|----------|--------|
+| Linux x86_64 | `tylluan-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 (Raspberry Pi 4+) | `tylluan-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS Apple Silicon | `tylluan-aarch64-apple-darwin.tar.gz` |
+| Windows x86_64 | `tylluan-x86_64-pc-windows-msvc.tar.gz` |
 
 ### Step 1 — Install (30 seconds)
 
@@ -101,7 +110,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.5.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.6.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before connecting:
@@ -142,7 +151,7 @@ Add to any SSE-capable MCP client:
 
 ---
 
-## Status: v0.5.0 (Mesh Fabric)
+## Status: v0.6.0 (Portable Foundation)
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
@@ -162,10 +171,11 @@ Add to any SSE-capable MCP client:
 | **M11-E** | Federation integration tests — `federation_audit.rs` (6 tests) | ✅ |
 | **Encryption** | SQLCipher AES-256 at rest — `PRAGMA hexkey`, 4 DB modules, `--features encryption` | ✅ |
 | **M12 Mesh** | Ed25519 identity · STUN NAT · mDNS LAN · node signing · integration tests | ✅ |
-| **M13 Onboarding** | Binary releases (3 targets) · install scripts · `tylluan-cli` · README 3-step | ✅ |
+| **M13 Onboarding** | Binary releases · install scripts · `tylluan-cli` · README 3-step | ✅ |
 | **M14-A DHT** | Kademlia routing table (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap · 23 tests | ✅ |
 | **M14-B Gossip** | Symmetric push-pull exchange · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
 | **M14-C Noise** | XK handshake · NK HTTP payload encryption · Ed25519→X25519 · wired to federation sync endpoints | ✅ |
+| **v0.6.0 Portable** | `embedding_model = "none"` (BM25-only, zero download) · ARM64 Linux (Raspberry Pi 4) · north star invariant documented | ✅ |
 | **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
 | **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
 
