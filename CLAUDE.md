@@ -58,8 +58,8 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
 | **M14-A** | DHT Kademlia | ✅ |
-| **M14-C** | Noise Protocol transport overlay | 🔜 |
-| **M14-C** | Noise Protocol transport overlay | 🔜 |
+| **M14-B** | Gossip protocol · symmetric push-pull · LRU store | ✅ |
+| **M14-C** | Noise XK transport · Ed25519→X25519 · ChaCha20-Poly1305 | ✅ |
 | **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
 | **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
 
