@@ -329,6 +329,20 @@ pub async fn start_http_server_with_download(
     // ─── Metrics Ring Buffer ─────────────────────────────────────────────────
     let metrics_ring = Arc::new(RwLock::new(crate::metrics_ring::MetricsRingBuffer::new()));
 
+    // Read gossip config from TOML (not hardcoded) for engine init
+    let mesh_gossip_kernel = {
+        let config_lock = crate::config::TylluanConfig::load_cached()
+            .unwrap_or_else(|_| Arc::new(RwLock::new(crate::config::TylluanConfig::default())));
+        config_lock.read().await.mesh.gossip.clone()
+    };
+    let gossip_cfg = tylluan_link::gossip::GossipConfig {
+        enabled: mesh_gossip_kernel.enabled,
+        interval_secs: mesh_gossip_kernel.interval_secs,
+        fanout: mesh_gossip_kernel.fanout,
+        max_peer_cursors: mesh_gossip_kernel.max_peer_cursors,
+        max_entries: mesh_gossip_kernel.max_entries,
+    };
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -384,19 +398,10 @@ pub async fn start_http_server_with_download(
             )
         )),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
-            {
-                let cfg = tylluan_link::gossip::GossipConfig {
-                    enabled: true,
-                    interval_secs: 30,
-                    fanout: 3,
-                    max_peer_cursors: 100,
-                    max_entries: 1000,
-                };
-                tylluan_link::gossip::GossipEngine::new(
-                    node_identity.node_id().to_string(),
-                    cfg,
-                )
-            }
+            tylluan_link::gossip::GossipEngine::new(
+                node_identity.node_id().to_string(),
+                gossip_cfg.clone(),
+            )
         )),
     });
 
@@ -466,6 +471,9 @@ pub async fn start_http_server_with_download(
             gossip_state.config.read().await.mesh.gossip.interval_secs
         };
         if interval == 0 { return; }
+        let gossip_timeout = {
+            gossip_state.config.read().await.mesh.gossip.timeout_secs
+        };
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
         loop {
             ticker.tick().await;
@@ -510,7 +518,7 @@ pub async fn start_http_server_with_download(
                 match client.post(&url)
                     .header("Content-Type", "application/json")
                     .body(body)
-                    .timeout(std::time::Duration::from_secs(5))
+                    .timeout(std::time::Duration::from_secs(gossip_timeout))
                     .send()
                     .await
                 {
@@ -552,7 +560,7 @@ pub async fn start_http_server_with_download(
                 match client.post(&url)
                     .header("Content-Type", "application/json")
                     .body(body)
-                    .timeout(std::time::Duration::from_secs(5))
+                    .timeout(std::time::Duration::from_secs(gossip_timeout))
                     .send()
                     .await
                 {
