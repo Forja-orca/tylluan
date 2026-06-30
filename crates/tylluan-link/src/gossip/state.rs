@@ -1,17 +1,22 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::Duration;
 use crate::dht::RoutingTable;
+use super::message::GossipEntry;
+use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_GOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 pub const DEFAULT_FANOUT: usize = 3;
 pub const DEFAULT_MAX_PEER_CURSORS: usize = 100;
+pub const DEFAULT_MAX_ENTRIES: usize = 1000;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipConfig {
     pub enabled: bool,
     pub interval_secs: u64,
     pub fanout: usize,
     pub max_peer_cursors: usize,
+    pub max_entries: usize,
 }
 
 impl Default for GossipConfig {
@@ -21,15 +26,17 @@ impl Default for GossipConfig {
             interval_secs: DEFAULT_GOSSIP_INTERVAL.as_secs(),
             fanout: DEFAULT_FANOUT,
             max_peer_cursors: DEFAULT_MAX_PEER_CURSORS,
+            max_entries: DEFAULT_MAX_ENTRIES,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipState {
     pub local_node_id: String,
     pub local_clock: u64,
     pub peer_cursors: HashMap<String, u64>,
+    pub entries: HashMap<String, GossipEntry>,
 }
 
 impl GossipState {
@@ -38,6 +45,7 @@ impl GossipState {
             local_node_id,
             local_clock: 0,
             peer_cursors: HashMap::new(),
+            entries: HashMap::new(),
         }
     }
 
@@ -77,6 +85,66 @@ impl GossipState {
         candidates.truncate(fanout);
         candidates
     }
+
+    pub fn store_entry(&mut self, entry: GossipEntry) {
+        if self.entries.len() >= DEFAULT_MAX_ENTRIES {
+            self.entries.clear();
+        }
+        self.entries
+            .entry(entry.node_id.clone())
+            .and_modify(|e| {
+                if entry.clock > e.clock {
+                    *e = entry.clone();
+                }
+            })
+            .or_insert(entry);
+    }
+
+    pub fn store_entries(&mut self, entries: &[GossipEntry]) {
+        for e in entries {
+            self.store_entry(e.clone());
+        }
+    }
+
+    pub fn entries_since(&self, cursor: u64) -> Vec<GossipEntry> {
+        self.entries
+            .values()
+            .filter(|e| e.clock > cursor)
+            .cloned()
+            .collect()
+    }
+
+    pub fn all_entries(&self) -> Vec<GossipEntry> {
+        self.entries.values().cloned().collect()
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
+        GossipEntry {
+            node_id: self.local_node_id.clone(),
+            addr: addr.to_string(),
+            capabilities,
+            clock: self.local_clock,
+        }
+    }
+
+    pub fn save_to(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    pub fn load_from(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let json = std::fs::read_to_string(path)?;
+        let state: Self = serde_json::from_str(&json)?;
+        Ok(state)
+    }
 }
 
 pub struct GossipEngine {
@@ -103,6 +171,18 @@ impl GossipEngine {
     pub fn advance_clock(&mut self) -> u64 {
         self.state.tick()
     }
+
+    pub fn store_entries(&mut self, entries: &[GossipEntry]) {
+        self.state.store_entries(entries);
+    }
+
+    pub fn entries_since(&self, cursor: u64) -> Vec<GossipEntry> {
+        self.state.entries_since(cursor)
+    }
+
+    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
+        self.state.local_entry(addr, capabilities)
+    }
 }
 
 #[cfg(test)]
@@ -114,6 +194,15 @@ mod tests {
         use sha2::{Sha256, Digest};
         let hash = Sha256::digest(input);
         hex::encode(&hash[..16])
+    }
+
+    fn make_entry(node_id: &str, clock: u64) -> GossipEntry {
+        GossipEntry {
+            node_id: node_id.to_string(),
+            addr: format!("127.0.0.1:{}", 3000 + clock),
+            capabilities: vec!["mesh".into()],
+            clock,
+        }
     }
 
     #[test]
@@ -160,5 +249,89 @@ mod tests {
         let engine = GossipEngine::new("local".into(), GossipConfig::default());
         assert_eq!(engine.state.local_node_id, "local");
         assert_eq!(engine.config.fanout, 3);
+    }
+
+    #[test]
+    fn test_store_and_retrieve_entry() {
+        let mut state = GossipState::new("local".into());
+        let entry = make_entry("peer1", 1);
+        state.store_entry(entry.clone());
+        assert_eq!(state.entry_count(), 1);
+        let all = state.all_entries();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].node_id, "peer1");
+    }
+
+    #[test]
+    fn test_store_update_overwrites_if_newer() {
+        let mut state = GossipState::new("local".into());
+        state.store_entry(make_entry("peer1", 1));
+        state.store_entry(make_entry("peer1", 5));
+        assert_eq!(state.entry_count(), 1);
+        assert_eq!(state.all_entries()[0].clock, 5);
+    }
+
+    #[test]
+    fn test_store_entry_older_clock_ignored() {
+        let mut state = GossipState::new("local".into());
+        state.store_entry(make_entry("peer1", 5));
+        state.store_entry(make_entry("peer1", 3));
+        assert_eq!(state.all_entries()[0].clock, 5);
+    }
+
+    #[test]
+    fn test_entries_since() {
+        let mut state = GossipState::new("local".into());
+        state.store_entry(make_entry("peer1", 1));
+        state.store_entry(make_entry("peer2", 3));
+        state.store_entry(make_entry("peer3", 5));
+
+        let after_2 = state.entries_since(2);
+        assert_eq!(after_2.len(), 2);
+        assert!(after_2.iter().all(|e| e.clock > 2));
+
+        let after_5 = state.entries_since(5);
+        assert!(after_5.is_empty());
+    }
+
+    #[test]
+    fn test_local_entry() {
+        let mut state = GossipState::new("node42".into());
+        state.tick();
+        let entry = state.local_entry("1.2.3.4:3030", vec!["mesh".into()]);
+        assert_eq!(entry.node_id, "node42");
+        assert_eq!(entry.addr, "1.2.3.4:3030");
+        assert_eq!(entry.clock, 1);
+    }
+
+    #[test]
+    fn test_save_and_load_roundtrip() {
+        let dir = std::env::temp_dir().join("tylluan_gossip_test_saveload");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("gossip_state.json");
+
+        let mut state = GossipState::new("node_save".into());
+        state.tick();
+        state.update_cursor("peer_x", 7);
+        state.store_entry(make_entry("peer_y", 3));
+        state.save_to(&path).unwrap();
+
+        let loaded = GossipState::load_from(&path).unwrap();
+        assert_eq!(loaded.local_node_id, "node_save");
+        assert_eq!(loaded.local_clock, 1);
+        assert_eq!(loaded.last_known("peer_x"), 7);
+        assert_eq!(loaded.entry_count(), 1);
+        assert_eq!(loaded.all_entries()[0].clock, 3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_engine_store_and_entries_since() {
+        let mut engine = GossipEngine::new("local".into(), GossipConfig::default());
+        let entries = vec![make_entry("a", 1), make_entry("b", 5)];
+        engine.store_entries(&entries);
+        assert_eq!(engine.entries_since(2).len(), 1);
+        assert_eq!(engine.entries_since(0).len(), 2);
     }
 }

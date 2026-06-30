@@ -390,6 +390,7 @@ pub async fn start_http_server_with_download(
                     interval_secs: 30,
                     fanout: 3,
                     max_peer_cursors: 100,
+                    max_entries: 1000,
                 };
                 tylluan_link::gossip::GossipEngine::new(
                     node_identity.node_id().to_string(),
@@ -459,12 +460,12 @@ pub async fn start_http_server_with_download(
     // M14-B: Gossip Protocol background loop
     let gossip_state = state.clone();
     tokio::spawn(async move {
+        let enabled = gossip_state.config.read().await.mesh.gossip.enabled;
+        if !enabled { return; }
         let interval = {
             gossip_state.config.read().await.mesh.gossip.interval_secs
         };
-        if interval == 0 {
-            return;
-        }
+        if interval == 0 { return; }
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
         loop {
             ticker.tick().await;
@@ -484,19 +485,23 @@ pub async fn start_http_server_with_download(
             let clock = {
                 gossip_state.gossip_engine.write().await.advance_clock()
             };
-            let entry = tylluan_link::gossip::GossipEntry {
+            let local_entry = tylluan_link::gossip::GossipEntry {
                 node_id: local_id.clone(),
                 addr: local_addr,
                 capabilities: vec!["mesh".into()],
                 clock,
             };
+            // Store our own entry so it's available for Pull responses
+            gossip_state.gossip_engine.write().await.store_entries(&[local_entry.clone()]);
+
             for peer_entry in &peers {
-                let msg = tylluan_link::gossip::GossipMessage::push(
+                // Phase 1: Push our entry
+                let push_msg = tylluan_link::gossip::GossipMessage::push(
                     local_id.clone(),
                     clock,
-                    vec![entry.clone()],
+                    vec![local_entry.clone()],
                 );
-                let body = match serde_json::to_string(&msg) {
+                let body = match serde_json::to_string(&push_msg) {
                     Ok(j) => j,
                     Err(_) => continue,
                 };
@@ -509,11 +514,70 @@ pub async fn start_http_server_with_download(
                     .send()
                     .await
                 {
-                    Ok(_) => {
+                    Ok(resp) => {
                         gossip_state.gossip_engine.write().await.record_peer_clock(&peer_entry.node_id, clock);
+                        // Process any entries pushed back in the response
+                        if let Ok(body) = resp.text().await {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
+                                if let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
+                                    let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
+                                        .iter()
+                                        .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                                        .collect();
+                                    if !parsed.is_empty() {
+                                        gossip_state.gossip_engine.write().await.store_entries(&parsed);
+                                        // Also insert into routing table
+                                        for e in &parsed {
+                                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                                                gossip_state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
-                        tracing::trace!("gossip → {}: {}", peer_entry.addr, e);
+                        tracing::trace!("gossip push → {}: {}", peer_entry.addr, e);
+                    }
+                }
+
+                // Phase 2: Pull entries we might have missed
+                let cursor = gossip_state.gossip_engine.read().await.state.last_known(&peer_entry.node_id);
+                let pull_msg = tylluan_link::gossip::GossipMessage::pull(local_id.clone(), cursor);
+                let body = match serde_json::to_string(&pull_msg) {
+                    Ok(j) => j,
+                    Err(_) => continue,
+                };
+                match client.post(&url)
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .send()
+                    .await
+                {
+                    Ok(resp) => {
+                        if let Ok(body) = resp.text().await {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
+                                if let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
+                                    let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
+                                        .iter()
+                                        .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                                        .collect();
+                                    if !parsed.is_empty() {
+                                        gossip_state.gossip_engine.write().await.store_entries(&parsed);
+                                        for e in &parsed {
+                                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                                                gossip_state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::trace!("gossip pull → {}: {}", peer_entry.addr, e);
                     }
                 }
             }

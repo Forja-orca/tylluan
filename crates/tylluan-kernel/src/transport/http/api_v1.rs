@@ -1653,25 +1653,96 @@ async fn gossip_handler(
     State(state): State<Arc<HttpState>>,
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    // Record sender's clock so we don't re-send known entries
-    if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str()) {
-        if let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
-            state.gossip_engine.write().await.record_peer_clock(sender_id, clock);
-        }
-    }
-    // Accept any incoming gossip entries into routing table
-    if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
-        for entry in entries {
-            if let (Some(node_id), Some(addr)) = (
-                entry.get("node_id").and_then(|v| v.as_str()),
-                entry.get("addr").and_then(|v| v.as_str()),
-            ) {
-                if let Ok(addr) = addr.parse::<std::net::SocketAddr>() {
-                    let mut rt = state.dht_routing_table.write().await;
-                    rt.insert(&node_id.to_string(), addr, vec!["mesh".into()]);
+    let msg_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+    match msg_type {
+        "Push" => {
+            let sender_id = payload.get("sender_id").and_then(|v| v.as_str()).unwrap_or("");
+            let sender_clock = payload.get("sender_clock").and_then(|v| v.as_u64()).unwrap_or(0);
+
+            // Record sender's clock
+            if !sender_id.is_empty() {
+                state.gossip_engine.write().await.record_peer_clock(sender_id, sender_clock);
+            }
+
+            // Accept incoming entries
+            if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
+                let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
+                    .iter()
+                    .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                    .collect();
+                if !parsed.is_empty() {
+                    state.gossip_engine.write().await.store_entries(&parsed);
+                    for e in &parsed {
+                        if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                        }
+                    }
                 }
             }
+
+            // Symmetric response: push back our latest entries
+            let response_entries = state.gossip_engine.read().await.entries_since(0);
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "ok",
+                "entries": response_entries,
+            })))
+        }
+        "Pull" => {
+            let cursor = payload.get("cursor").and_then(|v| v.as_u64()).unwrap_or(0);
+            let sender_id = payload.get("sender_id").and_then(|v| v.as_str()).unwrap_or("");
+
+            // Record that this peer is catching up
+            if !sender_id.is_empty() {
+                state.gossip_engine.write().await.record_peer_clock(sender_id, cursor);
+            }
+
+            // Return all entries since their cursor
+            let response_entries = state.gossip_engine.read().await.entries_since(cursor);
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "ok",
+                "entries": response_entries,
+            })))
+        }
+        "PullResponse" => {
+            if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
+                let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
+                    .iter()
+                    .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                    .collect();
+                if !parsed.is_empty() {
+                    state.gossip_engine.write().await.store_entries(&parsed);
+                    for e in &parsed {
+                        if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                        }
+                    }
+                }
+            }
+            (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
+        }
+        _ => {
+            // Legacy plain push (no type tag) — keep backward compat
+            if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str()) {
+                if let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
+                    state.gossip_engine.write().await.record_peer_clock(sender_id, clock);
+                }
+            }
+            if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
+                let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
+                    .iter()
+                    .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                    .collect();
+                if !parsed.is_empty() {
+                    state.gossip_engine.write().await.store_entries(&parsed);
+                    for e in &parsed {
+                        if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                        }
+                    }
+                }
+            }
+            (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
         }
     }
-    (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
 }
