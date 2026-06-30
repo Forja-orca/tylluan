@@ -56,26 +56,80 @@ pub async fn memory_retention_handler(State(state): State<Arc<HttpState>>) -> im
 pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let silva = state.silva.clone();
     let broadcast = state.broadcast_tx.clone();
-    
+
+    let maybe_engine = state.matcher.engine_arc().cloned();
+    let engine = match maybe_engine {
+        Some(e) => e,
+        None => {
+            // Check if model is configured but not loaded
+            let config = state.config.read().await;
+            if config.memory.embedding_model == "none" || config.memory.embedding_model.is_empty() {
+                return (StatusCode::OK, Json(serde_json::json!({
+                    "status": "skipped",
+                    "reason": "BM25-only mode, no embeddings to reindex"
+                }))).into_response();
+            }
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "error": "embedding engine not loaded yet"
+            }))).into_response();
+        }
+    };
+
+    let model_id = engine.engine_id();
+    let model_hash = engine.engine_hash();
+    let total = silva.node_count().await.unwrap_or(0);
+    let stale_nodes = silva.get_stale_embeddings(&model_id, model_hash.as_deref()).await.unwrap_or_default();
+    let stale_count = stale_nodes.len();
+
     tokio::spawn(async move {
         let _ = broadcast.send(serde_json::json!({
-            "type": "maintenance_started",
-            "task": "reindex",
+            "type": "reindex_started",
+            "stale": stale_count,
+            "total": total,
             "ts": chrono::Utc::now().timestamp_millis()
         }));
-        
-        let _ = silva.detect_communities().await;
-        let _ = silva.checkpoint().await;
-        
+
+        let mut done = 0usize;
+        for node_id in &stale_nodes {
+            if let Ok(Some(node)) = silva.get_node(node_id).await {
+                let _ = engine.embed(&node.content).map(|vector| {
+                    let sid = silva.clone();
+                    let nid = node_id.clone();
+                    let mid = model_id.clone();
+                    let mhash = model_hash.clone();
+                    tokio::spawn(async move {
+                        let _ = sid.save_embedding(&nid, &vector, &mid, mhash.as_deref()).await;
+                    });
+                });
+            }
+            done += 1;
+            if done % 10 == 0 {
+                let _ = broadcast.send(serde_json::json!({
+                    "type": "reindex_progress",
+                    "done": done,
+                    "stale": stale_count,
+                    "total": total,
+                    "ts": chrono::Utc::now().timestamp_millis()
+                }));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
         let _ = broadcast.send(serde_json::json!({
-            "type": "maintenance_finished",
-            "task": "reindex",
+            "type": "reindex_finished",
+            "indexed": done,
+            "stale": stale_count,
+            "total": total,
             "ok": true,
             "ts": chrono::Utc::now().timestamp_millis()
         }));
     });
-    
-    (StatusCode::ACCEPTED, Json(serde_json::json!({"status": "started", "task": "reindex"})))
+
+    (StatusCode::ACCEPTED, Json(serde_json::json!({
+        "status": "started",
+        "stale": stale_count,
+        "total": total
+    }))).into_response()
 }
 
 pub async fn agent_memories_handler(
