@@ -6,6 +6,7 @@
 //! - ChaCha20-Poly1305 AEAD for transport encryption
 
 use crate::identity::NodeIdentity;
+use sha2::{Sha256, Digest};
 use snow::{Builder, HandshakeState, TransportState};
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -20,11 +21,18 @@ pub fn ed25519_pub_to_x25519(pk: &VerifyingKey) -> [u8; 32] {
 }
 
 pub fn ed25519_secret_to_x25519(sk: &SigningKey) -> [u8; 32] {
+    // to_scalar_bytes() returns SHA-512(seed)[0..32] without X25519 clamping.
+    // Apply RFC 7748 §5 clamping explicitly before use as a Curve25519 scalar.
     let mut scalar = sk.to_scalar_bytes();
-    scalar[0] &= 248;
-    scalar[31] &= 127;
-    scalar[31] |= 64;
+    scalar[0] &= 248;   // clear bits 0-2
+    scalar[31] &= 127;  // clear bit 7
+    scalar[31] |= 64;   // set bit 6
     scalar
+}
+
+/// Derive Tylluan node_id (SHA-256[:16] of Ed25519 pubkey) from raw pubkey bytes.
+fn node_id_from_ed25519_bytes(pubkey: &[u8; 32]) -> String {
+    hex::encode(&Sha256::digest(pubkey)[..16])
 }
 
 /// AEAD-encrypted session over Noise Protocol TransportState.
@@ -71,9 +79,7 @@ impl NoiseSession {
         let mut len_buf = [0u8; 2];
         io.read_exact(&mut len_buf).await?;
         let frame_len = u16::from_be_bytes(len_buf) as usize;
-        if frame_len > 65535 || frame_len == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid Noise frame length"));
-        }
+        validate_frame_len(frame_len)?;
         let mut frame = vec![0u8; frame_len];
         io.read_exact(&mut frame).await?;
         let mut out = vec![0u8; frame_len + 16];
@@ -82,6 +88,13 @@ impl NoiseSession {
         out.truncate(n);
         Ok(out)
     }
+}
+
+fn validate_frame_len(frame_len: usize) -> std::io::Result<()> {
+    if frame_len == 0 {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid Noise frame length"));
+    }
+    Ok(())
 }
 
 /// A fully established Noise-encrypted connection.
@@ -138,16 +151,23 @@ pub async fn noise_accept(
     responder.read_message(&msg, &mut _payload)
         .map_err(|e| anyhow::anyhow!("Noise read msg3: {} (len={})", e, msg_len))?;
 
+    // Extract initiator's X25519 static key before consuming handshake state.
+    // In XK the responder learns the initiator's static key during msg3.
+    // We use its hex as a stable peer identifier (cannot reconstruct Ed25519 from X25519).
+    let peer_id = responder
+        .get_remote_static()
+        .map(hex::encode)
+        .unwrap_or_else(|| "noise-peer".to_string());
+
     let state = responder.into_transport_mode()
         .map_err(|e| anyhow::anyhow!("Noise transport mode: {}", e))?;
 
-    let peer_id = "noise-peer".to_string();
-
-    info!("Noise handshake accepted from {}", stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0))));
+    let peer_addr = stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0)));
+    info!("Noise handshake accepted from {} (peer_id: {})", peer_addr, peer_id);
     Ok(NoisedPipe {
         session: NoiseSession::new(state),
         peer_id,
-        peer_addr: stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0))),
+        peer_addr,
     })
 }
 
@@ -212,11 +232,15 @@ pub async fn noise_connect(
     let state = initiator.into_transport_mode()
         .map_err(|e| anyhow::anyhow!("Noise transport mode: {}", e))?;
 
-    info!("Noise handshake completed with peer at {}", stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0))));
+    // Compute peer node_id the same way NodeIdentity does: SHA-256(ed25519_pubkey)[:16].
+    let peer_id = node_id_from_ed25519_bytes(&arr);
+
+    let peer_addr = stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0)));
+    info!("Noise handshake completed with {} (peer_id: {})", peer_addr, peer_id);
     Ok(NoisedPipe {
         session: NoiseSession::new(state),
-        peer_id: "noise-peer".to_string(),
-        peer_addr: stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0))),
+        peer_id,
+        peer_addr,
     })
 }
 
@@ -226,38 +250,48 @@ mod tests {
     use tokio::net::TcpListener;
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    fn make_identity(label: &str) -> NodeIdentity {
-        let dir = std::env::temp_dir().join(format!("noise_test_{}_{}", label, std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+    static NOISE_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn make_identity(label: &str) -> (NodeIdentity, std::path::PathBuf) {
+        let id = NOISE_TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("tylluan_noise_{}_{}", label, id));
+        std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("identity.key");
         let identity = NodeIdentity::load_or_create(&path).expect("should create identity");
-        identity
-    }
-
-    fn cleanup(label: &str) {
-        let dir = std::env::temp_dir().join(format!("noise_test_{}_{}", label, std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        (identity, dir)
     }
 
     #[test]
-    fn test_key_conversion() {
+    fn test_key_conversion_clamping() {
         let sk = SigningKey::generate(&mut OsRng);
         let pk = sk.verifying_key();
         let x_pub = ed25519_pub_to_x25519(&pk);
         let x_sec = ed25519_secret_to_x25519(&sk);
         assert_eq!(x_pub.len(), 32);
         assert_eq!(x_sec.len(), 32);
-        assert_eq!(x_sec[0] & 248, x_sec[0], "bits 0-2 must be 0");
-        assert_eq!(x_sec[31] & 128, 0, "bit 255 must be 0");
-        assert_ne!(x_sec[31] & 64, 0, "bit 254 must be 1");
+        // Verify clamping invariants (RFC 7748 §5)
+        assert_eq!(x_sec[0] & 0b111, 0, "low 3 bits of byte[0] must be 0");
+        assert_eq!(x_sec[31] & 0b1000_0000, 0, "high bit of byte[31] must be 0");
+        assert_ne!(x_sec[31] & 0b0100_0000, 0, "second-highest bit of byte[31] must be 1");
+    }
+
+    #[test]
+    fn test_node_id_from_ed25519_bytes_is_32_hex_chars() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let arr = sk.verifying_key().to_bytes();
+        let node_id = node_id_from_ed25519_bytes(&arr);
+        assert_eq!(node_id.len(), 32, "node_id must be 32 hex chars (16 bytes)");
+        assert!(node_id.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[tokio::test]
     async fn test_noise_handshake_roundtrip() {
-        let server_id = make_identity("hs_s");
-        let client_id = make_identity("hs_c");
+        let (server_id, server_dir) = make_identity("hs_s");
+        let (client_id, client_dir) = make_identity("hs_c");
         let server_pubkey_hex = server_id.public_key_hex().to_string();
+        let expected_server_node_id = server_id.node_id().to_string();
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -273,16 +307,21 @@ mod tests {
         });
 
         let (server_pipe, client_pipe) = tokio::join!(server_task, client_task);
-        let _ = (server_pipe.unwrap(), client_pipe.unwrap());
+        let client_pipe = client_pipe.unwrap();
+        let _ = server_pipe.unwrap();
 
-        cleanup("hs_s");
-        cleanup("hs_c");
+        // noise_connect knows the remote Ed25519 pubkey → peer_id is the real node_id
+        assert_eq!(client_pipe.peer_id, expected_server_node_id,
+            "client should identify server by its real node_id");
+
+        let _ = std::fs::remove_dir_all(&server_dir);
+        let _ = std::fs::remove_dir_all(&client_dir);
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_roundtrip() {
-        let server_id = make_identity("enc_s");
-        let client_id = make_identity("enc_c");
+        let (server_id, server_dir) = make_identity("enc_s");
+        let (client_id, client_dir) = make_identity("enc_c");
         let server_pubkey_hex = server_id.public_key_hex().to_string();
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -294,10 +333,8 @@ mod tests {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut pipe = noise_accept(&mut stream, &server_id).await.unwrap();
             let (mut read_half, mut write_half) = stream.into_split();
-            // Receive encrypted message from client
             let received = pipe.session.async_decrypt_read(&mut read_half).await.unwrap();
             assert_eq!(&received, msg, "server received correct plaintext");
-            // Encrypt and send response back
             pipe.session.async_encrypt_write(&mut write_half, b"pong").await.unwrap();
             pipe
         });
@@ -306,9 +343,7 @@ mod tests {
             let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
             let mut pipe = noise_connect(&mut stream, &client_id, &server_pubkey_hex).await.unwrap();
             let (mut read_half, mut write_half) = stream.into_split();
-            // Send encrypted message to server
             pipe.session.async_encrypt_write(&mut write_half, msg).await.unwrap();
-            // Receive encrypted response
             let response = pipe.session.async_decrypt_read(&mut read_half).await.unwrap();
             assert_eq!(response, b"pong", "client received correct response");
             pipe
@@ -317,7 +352,7 @@ mod tests {
         let (server_result, client_result) = tokio::join!(server_task, client_task);
         let _ = (server_result.unwrap(), client_result.unwrap());
 
-        cleanup("enc_s");
-        cleanup("enc_c");
+        let _ = std::fs::remove_dir_all(&server_dir);
+        let _ = std::fs::remove_dir_all(&client_dir);
     }
 }
