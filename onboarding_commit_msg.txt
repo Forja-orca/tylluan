@@ -1,0 +1,18 @@
+fix(onboarding): 5 code-level UX gaps for new users
+
+#1 find_kernel_exe() never searched ~/.tylluan/bin/ nor PATH
+- Installed users got "build from source" error on tylluan-cli start
+- Now: CLI dir -> ~/.tylluan/bin -> PATH -> dev paths, actionable error msg
+
+#2 tylluan-cli status hardcoded port 3000 instead of 3030
+- Now uses DEFAULT_PORT=3030 (matches kernel default)
+
+#3 BGE-M3 download progress silently suppressed
+- with_show_download_progress(false) -> true (2.2GB needed a progress bar)
+
+#4 Auth token hidden from user
+- Printed to stderr on first generation (full token + MCP config snippet)
+- Startup banner says "see .tylluan-token" instead of truncated 8 chars
+
+#5 Startup URL shows 0.0.0.0:3030 (not clickable)
+- Normalizes to 127.0.0.1:3030 for terminal output
