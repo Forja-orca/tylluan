@@ -39,7 +39,7 @@ function fixDoubleEncoding(str: string): string {
 }
 
 export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
-  const { events } = useNexus();
+  const { events, sysStatus } = useNexus();
   const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('graph');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GraphNode[]>([]);
@@ -227,6 +227,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col space-y-4 animate-in fade-in duration-300">
+          {sysStatus && !sysStatus.embeddings_loaded && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-amber-300 text-xs shrink-0">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Búsqueda de Texto (BM25-only) activa</span>: El kernel se está ejecutando sin embeddings locales (BGE-M3 no cargado o desactivado). Las consultas en la base de conocimientos se realizarán mediante búsqueda de texto por coincidencia de palabras clave en lugar de proximidad semántica.
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-4">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (
