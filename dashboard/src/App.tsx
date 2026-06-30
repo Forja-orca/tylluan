@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard,
   Cpu,
@@ -211,7 +211,9 @@ function App() {
             <div>
               <h1 className="text-sm font-bold tracking-tight text-white uppercase">Tylluan</h1>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                <span>Kernel Dashboard v3.0</span>
+                <span className="text-slate-400 font-bold">v0.6.0</span>
+                <span className="opacity-50">·</span>
+                <span className="text-slate-500">Portable Foundation</span>
                 <span className="opacity-50">·</span>
                 <span className={online ? "text-emerald-500/80" : "text-red-500/80"}>{online ? 'Sovereign' : 'Offline'}</span>
               </div>
@@ -379,14 +381,14 @@ function App() {
           
           <div className="mt-auto p-4 border-t border-slate-800 bg-slate-900/20">
              <div className="flex items-center gap-3 mb-3">
-               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">o3</div>
+               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">v0.6</div>
                <div className="overflow-hidden">
-                 <p className="text-[10px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
-                 <p className="text-[9px] text-slate-500 font-mono truncate">ID: 0x4F...7A</p>
+                 <p className="text-[10px] font-bold text-slate-300 uppercase truncate">Tylluan Hub</p>
+                 <p className="text-[9px] text-slate-500 font-mono truncate">v0.6.0 (Portable)</p>
                </div>
              </div>
              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 w-3/4 animate-pulse" />
+                <div className="h-full bg-emerald-500 w-full animate-pulse" />
              </div>
           </div>
         </aside>
@@ -406,6 +408,20 @@ function App() {
           {/* Consolidated Tab Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-500">Loading module...</div>}>
             <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab') ? "overflow-y-auto p-6" : "p-6")}>
+              {!online && (
+                <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-500/20 flex flex-col md:flex-row md:items-center justify-between gap-4 text-red-200 animate-pulse shrink-0">
+                  <div className="flex items-start md:items-center gap-3">
+                    <WifiOff className="w-5 h-5 text-red-400 shrink-0 mt-0.5 md:mt-0" />
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">Kernel Conexión Offline</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">El microkernel local de Tylluan en 127.0.0.1:3030 no está respondiendo. Ejecuta <code className="bg-slate-950 px-1.5 py-0.5 rounded text-red-300 font-mono text-[10px]">tylluan-cli start</code> localmente para restablecer la comunicación.</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] font-mono font-bold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 shrink-0 w-fit">
+                    PORTABLE FOUNDATION v0.6.0
+                  </div>
+                </div>
+              )}
               {activeTab === 'overview' && (
                 <ErrorBoundary>
                   <OverviewConsolidated
@@ -432,6 +448,7 @@ function App() {
                     bridge={bridge}
                     notify={notify}
                     memoryStats={memoryStats}
+                    online={online}
                   />
                 </ErrorBoundary>
               )}
@@ -448,6 +465,7 @@ function App() {
                     bridge={bridge}
                     notify={notify}
                     events={events}
+                    online={online}
                   />
                 </ErrorBoundary>
               )}
@@ -458,6 +476,7 @@ function App() {
                     notify={notify}
                     events={events}
                     onClearLogs={clearLogs}
+                    online={online}
                   />
                 </ErrorBoundary>
               )}
