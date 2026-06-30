@@ -39,7 +39,7 @@ function fixDoubleEncoding(str: string): string {
 }
 
 export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
-  const { events, sysStatus } = useNexus();
+  const { events, sysStatus, interoception } = useNexus();
   const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('graph');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GraphNode[]>([]);
@@ -227,14 +227,31 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col space-y-4 animate-in fade-in duration-300">
-          {sysStatus && !sysStatus.embeddings_loaded && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-amber-300 text-xs shrink-0">
-              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Búsqueda de Texto (BM25-only) activa</span>: El kernel se está ejecutando sin embeddings locales (BGE-M3 no cargado o desactivado). Las consultas en la base de conocimientos se realizarán mediante búsqueda de texto por coincidencia de palabras clave en lugar de proximidad semántica.
-              </div>
-            </div>
-          )}
+          {(() => {
+            const model = sysStatus?.embedding_model || interoception?.capabilities?.embedding_model || "none";
+            const loaded = sysStatus?.embeddings_loaded ?? interoception?.capabilities?.embeddings_loaded ?? false;
+
+            if (model === "none") {
+              return (
+                <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 flex items-start gap-3 text-slate-300 text-xs shrink-0">
+                  <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-200">Running in Portable mode</span> — BM25 full-text search active. Semantic search unavailable. To enable: set <code className="bg-slate-950 px-1 py-0.5 rounded text-emerald-400 font-mono text-[10px]">embedding_model = "bge-small"</code> in <code className="bg-slate-950 px-1 py-0.5 rounded text-slate-400 font-mono text-[10px]">tylluan.toml</code> and restart.
+                  </div>
+                </div>
+              );
+            } else if (!loaded) {
+              return (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-amber-300 text-xs shrink-0">
+                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Model {model} not loaded yet</span>. Searches use BM25 fallback. Run <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-400 font-mono text-[10px]">tylluan download-models</code> to enable semantic search.
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div className="flex items-center justify-between gap-4">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (

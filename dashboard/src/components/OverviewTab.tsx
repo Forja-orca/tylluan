@@ -28,7 +28,7 @@ import type {
   CollectivePulse,
   Interoception
 } from '../lib/nexus-bridge';
-import type { MemoryStats } from '../hooks/useNexus';
+import { useNexus, type MemoryStats } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
 import { HomeostasisWidget } from './HomeostasisWidget';
@@ -62,6 +62,7 @@ export function OverviewTab({
   sysStatus,
   events
 }: OverviewTabProps) {
+  const { interoception } = useNexus();
   const [liveMetrics, setLiveMetrics] = useState<{
     totalCalls: number; successRate: number; avgLatency: number;
     activeAgents: number; broadcastsLastHour: number; graphNodes: number;
@@ -181,6 +182,41 @@ export function OverviewTab({
     return styles[Math.abs(hash) % styles.length];
   };
 
+  const getProfileBadge = () => {
+    const model = sysStatus?.embedding_model || interoception?.capabilities?.embedding_model || "none";
+    const loaded = sysStatus?.embeddings_loaded ?? interoception?.capabilities?.embeddings_loaded ?? false;
+    
+    let label = "Portable · BM25";
+    let style = "bg-slate-800 text-slate-400 border-slate-700/80";
+    
+    if (model === "bge-small") {
+      label = "Clinic · BGE-Small";
+      style = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+    } else if (model === "bge-m3") {
+      label = "Server · BGE-M3";
+      style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+    } else if (model && model !== "none") {
+      label = `Custom · ${model}`;
+      style = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    }
+
+    const showWarning = !loaded && model !== "none";
+
+    return (
+      <span className={`text-xs px-2.5 py-1 rounded-full border font-mono font-medium flex items-center gap-1.5 ${style}`}>
+        {label}
+        {showWarning && (
+          <span 
+            className="cursor-help text-red-400"
+            title="Model not downloaded yet — run: tylluan download-models"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 animate-pulse inline" />
+          </span>
+        )}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Homeostasis Hero Widget */}
@@ -263,11 +299,7 @@ export function OverviewTab({
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
             Uptime: {Math.floor(sysStatus.uptime_secs / 60)}m
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
-            ? 'bg-blue-500/20 text-blue-300'
-            : 'bg-amber-500/20 text-amber-400'}`}>
-            Embeddings: {sysStatus.embeddings_loaded ? 'BGE-M3' : 'FTS5 fallback'}
-          </span>
+          {getProfileBadge()}
         </div>
       )}
       <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden group">

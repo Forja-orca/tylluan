@@ -22,7 +22,8 @@ import {
   Plug,
   Beaker,
   Bell,
-  Link2
+  Link2,
+  RefreshCw
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -216,6 +217,15 @@ function App() {
                 <span className="text-slate-500">Portable Foundation</span>
                 <span className="opacity-50">·</span>
                 <span className={online ? "text-emerald-500/80" : "text-red-500/80"}>{online ? 'Sovereign' : 'Offline'}</span>
+                {(sysStatus?.loading_model || (interoception?.capabilities as any)?.loading_model) && (
+                  <>
+                    <span className="opacity-50">·</span>
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Loading {sysStatus?.embedding_model || interoception?.capabilities?.embedding_model || "model"}...
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
