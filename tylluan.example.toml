@@ -14,12 +14,28 @@ lazy_load_timeout_secs = 180
 
 [memory]
 db_path = "data/tylluan.db"
+# embedding_model options:
+#   "bge-m3"  — full quality, ~2.2 GB download, requires 4 GB+ RAM (default)
+#   "none"    — BM25 text search only, zero download, works on any hardware
+# Tip: use "none" on first boot or low-RAM devices, upgrade later with tylluan-cli download-models
 embedding_model = "bge-m3"
-# CRITICAL: BGE-M3 nativo es 1024 dimensiones. NUNCA cambiar a 768.
-# 768 es el bug heredado de ForjaMCPo3 (Matryoshka reduction). Tylluan arranca limpio.
+# CRITICAL: BGE-M3 is native 1024-dim. NEVER change to 768.
 vector_dimensions = 1024
 # Max vector search results before partitioning
 vector_limit = 5000
+
+[mesh.gossip]
+# Peer knowledge synchronisation over the mesh.
+# Tune for your network profile:
+#   Doctor on satellite link:   fanout=1, timeout_secs=60, interval_secs=300
+#   LAN clinic (3-10 nodes):    fanout=3, timeout_secs=30, interval_secs=60  (defaults)
+#   Server cluster (100+ nodes):fanout=8, timeout_secs=5,  interval_secs=10
+enabled = true
+interval_secs = 30
+fanout = 3
+max_entries = 1000
+max_peer_cursors = 100
+timeout_secs = 30
 
 [guilds.core]
 # Always spawned on startup
