@@ -1,0 +1,10 @@
+feat(noise): Noise Protocol XK encrypted transport overlay (M14-C)
+
+- Add snow = "0.10" dependency to tylluan-link
+- New noise.rs module: NoiseSession, noise_accept(), noise_connect()
+- Noise_XK_25519_ChaChaPoly_BLAKE2s pattern with Ed25519 → X25519 key conversion
+- 3-message handshake with length-prefixed TCP framing
+- async_encrypt_write / async_decrypt_read for AEAD transport
+- Tests: key conversion, handshake roundtrip, cross-session encrypt/decrypt
+- NodeIdentity::signing_key() public getter added
+- 290 tests passing (40 link + 250 kernel)

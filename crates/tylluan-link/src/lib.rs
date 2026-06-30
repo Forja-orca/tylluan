@@ -6,6 +6,7 @@ pub mod dht;
 pub mod gossip;
 pub mod identity;
 pub mod nat;
+pub mod noise;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{Hmac, Mac};
