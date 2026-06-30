@@ -113,6 +113,10 @@ impl NodeIdentity {
     pub fn verifying_key(&self) -> &VerifyingKey {
         &self.verifying_key
     }
+
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
+    }
 }
 
 // --- M12-B: Signed federation envelopes ---------------------------------------
