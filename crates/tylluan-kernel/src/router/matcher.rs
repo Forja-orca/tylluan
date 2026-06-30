@@ -192,8 +192,9 @@ impl GuildMatcher {
     pub fn load_model_with_device(&mut self, allowed_guilds: Option<&[String]>, device: &InferenceDevice) -> anyhow::Result<()> {
         use anyhow::Context;
 
-        let model_path = EmbeddingEngine::default_model_path()
+        let model_path = EmbeddingEngine::model_path_from_config("bge-m3")
             .context("No ONNX model found. FastEmbed auto-downloads BGE-M3 (models/bge-m3/)")?;
+
 
         let engine = EmbeddingEngine::load_with_device(&model_path, device)?;
         let engine_arc = Arc::new(engine);
