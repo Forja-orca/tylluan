@@ -2,9 +2,14 @@
 //!
 //! Provides text-to-vector embeddings for semantic search using FastEmbed (ONNX).
 //!
-//! ## Current Status
+//! ## Supported Models
 //!
-//! **Sovereign Mode**: Uses fastembed with BGE-M3 (multilingual, 100+ languages).
+//! | Config value       | Model                          | Dim  | Size  |
+//! |--------------------|--------------------------------|------|-------|
+//! | `bge-m3` (default) | BAAI/bge-m3                    | 1024 | ~1.2G |
+//! | `bge-small`        | BAAI/bge-small-en-v1.5         | 384  | ~67M  |
+//! | `minilm`           | all-MiniLM-L6-v2               | 384  | ~90M  |
+//! | `nomic-embed-text` | nomic-ai/nomic-embed-text-v1.5 | 768  | ~274M |
 
 use anyhow::{Result, Context, anyhow};
 use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch};
@@ -16,48 +21,106 @@ use crate::config::InferenceDevice;
 pub struct EmbeddingEngine {
     model: Mutex<TextEmbedding>,
     model_type: String,
+    dimension: u32,
+}
+
+/// Resolve fastembed model enum from config string.
+pub fn resolve_model(embedding_model: &str) -> EmbeddingModel {
+    let lower = embedding_model.to_lowercase();
+    if lower.contains("nomic") {
+        EmbeddingModel::NomicEmbedTextV15
+    } else if lower.contains("minilm") {
+        EmbeddingModel::AllMiniLML6V2
+    } else if lower.contains("bge-small") {
+        EmbeddingModel::BGESmallENV15
+    } else if lower.contains("bge") {
+        EmbeddingModel::BGEM3
+    } else {
+        EmbeddingModel::BGEM3
+    }
+}
+
+/// Resolve output vector dimension from config string.
+pub fn resolve_dimension(embedding_model: &str) -> u32 {
+    if embedding_model.is_empty() || embedding_model == "none" {
+        return 0;
+    }
+    let lower = embedding_model.to_lowercase();
+    if lower.contains("bge-m3") || lower == "bge" {
+        1024
+    } else if lower.contains("nomic") {
+        768
+    } else if lower.contains("minilm") || lower.contains("bge-small") {
+        384
+    } else {
+        1024
+    }
+}
+
+/// Human-readable model name for logs.
+fn model_display_name(embedding_model: &str) -> &'static str {
+    let lower = embedding_model.to_lowercase();
+    if lower.contains("bge-m3") {
+        "BGE-M3"
+    } else if lower.contains("bge-small") {
+        "BGE-Small"
+    } else if lower.contains("bge") {
+        "BGE"
+    } else if lower.contains("minilm") {
+        "MiniLM-L6-v2"
+    } else if lower.contains("nomic") {
+        "Nomic-Embed-v1.5"
+    } else {
+        "BGE-M3"
+    }
+}
+
+/// Model type string for engine_id().
+fn resolve_model_type(embedding_model: &str) -> String {
+    let lower = embedding_model.to_lowercase();
+    if lower.contains("bge-m3") {
+        "bge-m3"
+    } else if lower.contains("bge-small") {
+        "bge-small"
+    } else if lower.contains("bge") {
+        "bge"
+    } else if lower.contains("minilm") {
+        "minilm"
+    } else if lower.contains("nomic") {
+        "nomic"
+    } else {
+        "bge-m3"
+    }.to_string()
 }
 
 impl EmbeddingEngine {
     /// Initialize the embedding engine using fastembed.
-    pub fn load(model_dir: &str) -> Result<Self> {
-        Self::load_with_device(model_dir, &InferenceDevice::Cpu)
+    pub fn load(model_name: &str) -> Result<Self> {
+        Self::load_with_device(model_name, &InferenceDevice::Cpu)
     }
 
     /// Initialize with an explicit execution device (cpu / directml / cuda).
-    pub fn load_with_device(model_dir: &str, device: &InferenceDevice) -> Result<Self> {
-        info!("🧠 Loading Sovereign AI engine (FastEmbed v5) hint: {} device: {:?}", model_dir, device);
-
-        let model_name = if model_dir.contains("bge-m3") || model_dir.contains("m3") {
-            EmbeddingModel::BGEM3
-        } else if model_dir.contains("bge") {
-            EmbeddingModel::BGEBaseENV15
-        } else if model_dir.contains("nomic") {
-            EmbeddingModel::NomicEmbedTextV15
-        } else {
-            EmbeddingModel::BGEM3
-        };
+    pub fn load_with_device(model_name: &str, device: &InferenceDevice) -> Result<Self> {
+        let model = resolve_model(model_name);
+        let dimension = resolve_dimension(model_name);
+        let model_label = model_display_name(model_name);
+        info!("🧠 Loading {} engine (FastEmbed v5) dim:{} device:{:?}", model_label, dimension, device);
 
         let eps = build_execution_providers(device);
-        let options = TextInitOptions::new(model_name)
+        let options = TextInitOptions::new(model)
             .with_show_download_progress(true)
             .with_execution_providers(eps);
 
-        let model = TextEmbedding::try_new(options)
+        let text_model = TextEmbedding::try_new(options)
             .map_err(|e| anyhow!("FastEmbed init failed: {:?}", e))?;
 
-        let model_type = if model_dir.contains("bge-m3") || model_dir.contains("m3") || (!model_dir.contains("bge") && !model_dir.contains("nomic")) {
-            "bge-m3".to_string()
-        } else if model_dir.contains("bge") {
-            "bge".to_string()
-        } else {
-            "nomic".to_string()
-        };
-        info!("🧠 Sovereign {} engine ready (ONNX)", model_type.to_uppercase());
+        let model_type = resolve_model_type(model_name);
+        info!("🧠 {} engine ready (ONNX)", model_type.to_uppercase());
 
         Ok(Self {
-            model: Mutex::new(model),
+            model: Mutex::new(text_model),
             model_type,
+            dimension,
         })
     }
 
@@ -73,6 +136,11 @@ impl EmbeddingEngine {
             return None;
         }
         Some(format!("models/{}", embedding_model))
+    }
+
+    /// Get the output vector dimension for this engine.
+    pub fn dimension(&self) -> u32 {
+        self.dimension
     }
 
     /// Embed a text string into a vector.
@@ -193,20 +261,35 @@ mod tests {
     #[test]
     fn test_model_path() {
         let path = EmbeddingEngine::model_path_from_config("bge-m3");
-        println!("Effective model path: {:?}", path);
         assert!(path.is_some());
         let none_path = EmbeddingEngine::model_path_from_config("none");
         assert!(none_path.is_none());
     }
 
     #[test]
+    fn test_resolve_dimension() {
+        assert_eq!(resolve_dimension("bge-m3"), 1024);
+        assert_eq!(resolve_dimension("bge-small"), 384);
+        assert_eq!(resolve_dimension("minilm"), 384);
+        assert_eq!(resolve_dimension("nomic-embed-text"), 768);
+        assert_eq!(resolve_dimension("none"), 0);
+        assert_eq!(resolve_dimension(""), 0);
+    }
+
+    #[test]
     #[ignore]
-    fn test_real_inference() {
-        let path = "models/bge-m3".to_string();
-        let engine = EmbeddingEngine::load(&path).expect("Failed to load engine");
+    fn test_real_inference_bge_m3() {
+        let engine = EmbeddingEngine::load("bge-m3").expect("Failed to load engine");
         let vector = engine.embed("Hello, TylluanNexus sovereignty").expect("Inference failed");
-        
-        println!("Vector dimension: {}", vector.len());
         assert_eq!(vector.len(), 1024, "BGE-M3 should produce 1024-dim vectors");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_inference_minilm() {
+        let engine = EmbeddingEngine::load("minilm").expect("Failed to load engine");
+        let vector = engine.embed("Hello from portable mode").expect("Inference failed");
+        assert_eq!(vector.len(), 384, "MiniLM should produce 384-dim vectors");
+        assert_eq!(engine.dimension(), 384);
     }
 }
