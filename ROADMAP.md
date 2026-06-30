@@ -98,7 +98,7 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 ## v0.6.1 — Model Portability (backlog)
 
 - [x] P5 — Config-driven embedding model: `bge-m3` (1024), `nomic-embed-text` (768), `bge-small`/`minilm` (384), `none` (BM25-only). `resolve_model()` / `resolve_dimension()` in embeddings.rs. `vector_dimensions` is now derived dynamically from the model.
-- [ ] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile).
+- [x] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile). Dashboard shows active profile chip (Portable·BM25 / Clinic·BGE-Small / Server·BGE-M3).
 - [ ] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `main.rs:1235` via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
 
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
