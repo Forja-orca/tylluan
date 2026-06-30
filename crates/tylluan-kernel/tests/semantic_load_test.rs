@@ -33,12 +33,9 @@ async fn test_real_semantic_load() -> anyhow::Result<()> {
     silva.init().await?;
     mailbox.init().await?;
 
-    let model_path = EmbeddingEngine::default_model_path()
-        .context("No BGE-M3 model found. Set TYLLUAN_MODEL_PATH or ensure models/bge-m3 exists")?;
-    
-    let start_load = Instant::now();
-    let engine = EmbeddingEngine::load(&model_path)?;
-    info!("⏱️ Model Load Time: {:?}", start_load.elapsed());
+    let engine = EmbeddingEngine::load("bge-m3")
+        .context("Failed to load BGE-M3 embedding model")?;
+    info!("⏱️ Model Load Time: <inline>");
 
     // 2. Generate 50 realistic agricultural/industrial lessons
     let mut lessons = Vec::new();

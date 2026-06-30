@@ -870,8 +870,10 @@ fn default_host() -> String { "0.0.0.0".into() }
 fn default_port() -> u16 { 3030 }
 fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
-fn default_embedding_model() -> String { "Nomic-Embed-v2".into() }
-fn default_dimensions() -> u32 { 1024 }
+fn default_embedding_model() -> String { "bge-m3".into() }
+fn default_dimensions() -> u32 {
+    crate::router::embeddings::resolve_dimension(&default_embedding_model())
+}
 fn default_vision_model_path() -> String { "HuggingFaceTB/SmolVLM2-256M-Instruct".into() }
 fn default_tui_enabled() -> bool { true }
 fn default_refresh_ms() -> u64 { 1000 }
@@ -1091,7 +1093,7 @@ port = 4000
         let config: TylluanConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.nexus.port, 4000);
         // Defaults should still work
-        assert_eq!(config.memory.embedding_model, "Nomic-Embed-v2"); // Updated to Nomic v2
+        assert_eq!(config.memory.embedding_model, "bge-m3");
     }
 
     #[test]
