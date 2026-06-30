@@ -84,6 +84,7 @@ jobs:
         run: |
           set -e
           for dir in tylluan-*; do
+            [ -d "$dir" ] || continue
             platform="${dir#tylluan-}"
             archive="tylluan-${platform}.tar.gz"
             cd "$dir"
