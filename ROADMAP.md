@@ -95,6 +95,12 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 - [ ] P3 — `embedding_model = "none"` config flag: explicit graceful degradation to BM25-only mode. Doctor chooses: "light" (no download) or "full" (BGE-M3 2.2 GB).
 - [ ] P4 — ARM64 build: add `aarch64-unknown-linux-gnu` to CI release matrix. Without this, Raspberry Pi 4 cannot install Tylluan.
 
+## v0.6.1 — Model Portability (backlog)
+
+- [x] P5 — Config-driven embedding model: `bge-m3` (1024), `nomic-embed-text` (768), `bge-small`/`minilm` (384), `none` (BM25-only). `resolve_model()` / `resolve_dimension()` in embeddings.rs. `vector_dimensions` is now derived dynamically from the model.
+- [ ] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile).
+- [ ] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `main.rs:1235` via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
+
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
 **Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational north star (doctor use case). Revisit when v0.6.0 portable foundation is solid.
