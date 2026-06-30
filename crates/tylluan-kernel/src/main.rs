@@ -490,14 +490,10 @@ async fn main() -> anyhow::Result<()> {
 
     let mut matcher = GuildMatcher::new(builtin_catalog());
     let _always_on = config.guilds.core.always_on.clone();
-    if let Some(path) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
-        let is_nomic = path.to_lowercase().contains("nomic");
-        info!("🧠 Pre-loading {} embedding model: {}",
-            if is_nomic { "Nomic Embed v2" } else { "BGE-M3" }, path);
-        let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, &config.inference.device));
-        if is_nomic {
-            info!("✅ Sovereign AI: Nomic Embed v2 (768-dim, lazy loading ready)");
-        }
+    if let Some(_path) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
+        let model_name = &config.memory.embedding_model;
+        info!("🧠 Pre-loading embedding model: {}", model_name);
+        let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device));
     } else {
         info!("🧠 Embedding model disabled — using BM25-only retrieval");
     }
