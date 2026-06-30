@@ -4,9 +4,13 @@
 
 use tylluan_link::identity::NodeIdentity;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn tmp_identity_path(tag: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("tylluan_mesh_audit_{}_{}.key", tag, std::process::id()))
+    let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tylluan_mesh_{}_{}.key", tag, id))
 }
 
 // ─── Unit-level identity tests ───────────────────────────────────────────────
@@ -191,6 +195,10 @@ async fn mesh_test_state() -> Arc<HttpState> {
         node_identity,
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
         dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
+        gossip_engine: Arc::new(tokio::sync::RwLock::new(tylluan_link::gossip::GossipEngine::new(
+            "test-node".to_string(),
+            tylluan_link::gossip::GossipConfig::default(),
+        ))),
     })
 }
 
