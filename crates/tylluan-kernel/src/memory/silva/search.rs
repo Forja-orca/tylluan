@@ -186,6 +186,7 @@ impl super::SilvaDB {
         query: &str,
         query_embedding: Option<&[f32]>,
         limit: usize,
+        type_filter: Option<&str>,
     ) -> Result<Vec<(GraphNode, f32)>> {
         // Reciprocal Rank Fusion (RRF): score(d) = Σ 1/(k + rank)
         // k=60 is the standard constant (Cormack et al. 2009).
@@ -242,6 +243,12 @@ impl super::SilvaDB {
         }
 
         let mut final_results: Vec<(GraphNode, f32)> = rrf_scores.into_values().collect();
+
+        // Apply post-RRF type filter if provided
+        if let Some(filter) = type_filter {
+            final_results.retain(|(node, _)| node.node_type.to_lowercase() == filter.to_lowercase());
+        }
+
         final_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         final_results.truncate(limit);
 
@@ -257,7 +264,7 @@ impl super::SilvaDB {
         limit: usize,
         reranker: &crate::router::embeddings::RerankEngine,
     ) -> Result<Vec<(GraphNode, f32)>> {
-        let candidates = self.search_hybrid(query, query_embedding, (limit * 4).min(20)).await?;
+        let candidates = self.search_hybrid(query, query_embedding, (limit * 4).min(20), None).await?;
         if candidates.is_empty() { return Ok(candidates); }
         let docs: Vec<&str> = candidates.iter().map(|(n, _)| n.content.as_str()).collect();
         let ranked = reranker.rerank(query, &docs).unwrap_or_else(|_| {

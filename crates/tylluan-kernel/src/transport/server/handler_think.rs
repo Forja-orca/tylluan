@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use serde_json;
 use chrono;
 use std::collections::{HashMap, HashSet};
@@ -25,7 +25,7 @@ pub async fn handle_tylluan_think(
     let nodes_with_scores = if let Some(ref reranker) = server.reranker {
         server.silva.search_hybrid_reranked(&query, embedding.as_deref(), 20, reranker).await
     } else {
-        server.silva.search_hybrid(&query, embedding.as_deref(), 20).await
+        server.silva.search_hybrid(&query, embedding.as_deref(), 20, None).await
     }.unwrap_or_default();
     
     let mut nodes: Vec<GraphNode> = nodes_with_scores.iter().map(|(n, _)| n.clone()).collect();

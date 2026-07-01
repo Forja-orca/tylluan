@@ -284,7 +284,7 @@ async fn test_silva() -> SilvaDB {
         
         // Hybrid search: query "consensus" (text match) + semantic match
         let query_emb = vec![0.95_f32, 0.05, 0.0];
-        let results = db.search_hybrid("consensus", Some(&query_emb), 5).await.unwrap();
+        let results = db.search_hybrid("consensus", Some(&query_emb), 5, None).await.unwrap();
         
         assert!(!results.is_empty());
         assert_eq!(results[0].0.id, "n1");
@@ -888,7 +888,7 @@ async fn test_entity_boost_in_hybrid_search() {
     db.upsert_node("ent1", "entity", "Tokio async runtime for Rust", "{}").await.unwrap();
     db.upsert_node("lesson1", "lesson", "Tokio is the async runtime we use in this project", "{}").await.unwrap();
 
-    let results = db.search_hybrid("Tokio runtime", None, 5).await.unwrap();
+    let results = db.search_hybrid("Tokio runtime", None, 5, None).await.unwrap();
     assert!(!results.is_empty(), "hybrid search must return results for 'Tokio runtime'");
     let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
     assert!(ids.contains(&"ent1") || ids.contains(&"lesson1"), "at least one matching node must appear");
@@ -978,6 +978,27 @@ async fn test_search_hybrid_with_graph_traversal() {
     });
 
     // Búsqueda híbrida con embedding
-    let results = db.search_hybrid("Tokio async", Some(&emb), 5).await.unwrap();
+    let results = db.search_hybrid("Tokio async", Some(&emb), 5, None).await.unwrap();
     assert!(!results.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_hybrid_with_type_filter() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "episodic", "Mensaje de coloquio episódico de testeo", "{}").await.unwrap();
+    db.upsert_node("n2", "lesson", "Lección de testeo general", "{}").await.unwrap();
+
+    // 1. Filtrar por 'episodic'
+    let results_epi = db.search_hybrid("testeo", None, 5, Some("episodic")).await.unwrap();
+    assert!(!results_epi.is_empty());
+    let ids: Vec<&str> = results_epi.iter().map(|(n, _)| n.id.as_str()).collect();
+    assert!(ids.contains(&"n1"));
+    assert!(!ids.contains(&"n2"));
+
+    // 2. Filtrar por 'lesson'
+    let results_les = db.search_hybrid("testeo", None, 5, Some("lesson")).await.unwrap();
+    assert!(!results_les.is_empty());
+    let ids_les: Vec<&str> = results_les.iter().map(|(n, _)| n.id.as_str()).collect();
+    assert!(!ids_les.contains(&"n1"));
+    assert!(ids_les.contains(&"n2"));
 }
