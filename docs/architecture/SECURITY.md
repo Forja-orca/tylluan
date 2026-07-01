@@ -19,8 +19,8 @@ dev_mode = true     # auth disabled
 This combination is an unauthenticated LAN RCE. The kernel logs a warning and refuses to start if both are set.
 
 ### Token management
-- Bearer token lives in `crates/tylluan-kernel/.tylluan-token` (`.gitignore`d)
-- Backup: `C:\Users\USERNAME\.TYLLUAN\SECRETS`
+- Bearer token lives in `.tylluan-token` at the project root (`.gitignore`d) for source builds; `~/.tylluan/.tylluan-token` for binary installs
+- Backup: copy manually to a secure location outside the repo (e.g. `~/.tylluan/secrets`)
 - Never write the token value in tracked files
 - Rotate via `POST /api/v1/admin/rotate-token`
 

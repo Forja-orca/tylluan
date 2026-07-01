@@ -1,7 +1,10 @@
-﻿# 🔄 Zero-Downtime Hot-Reload Swap (tylluan-proxy & kernel)
+﻿# Zero-Downtime Hot-Reload Swap — ARCHIVED DESIGN
 
-Este documento contiene la especificación, diseño y estado del sistema de **recarga en caliente sin caídas (Zero-Downtime Hot-Reload)** para Tylluan o3. 
-Since agents do not have access to each other's local memory (`brain`), this file acts as the definitive shared record for the entire fleet.
+> **⚠️ ARCHIVED — NOT IMPLEMENTED.** This document describes a proxy-based zero-downtime restart design that was considered but not built. Tylluan does **not** have a `tylluan-proxy` binary or `active_port.json`. The kernel (`tylluan-nexus`) binds directly to `:3030`. Clients reconnect via SSE retry on restart. This file is kept for historical context only.
+
+---
+
+Este documento contiene la especificación y diseño del sistema de **recarga en caliente sin caídas (Zero-Downtime Hot-Reload)** — un diseño alternativo que no se implementó.
 
 ---
 

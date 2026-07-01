@@ -1,6 +1,6 @@
-﻿# Tylluan o3 — Architecture Blueprints
+﻿# Tylluan — Architecture Blueprints
 
-> Technical schematics only. No prose. Generated 2026-06-18.
+> Technical schematics only. No prose. Updated 2026-07-02.
 
 ---
 
@@ -19,23 +19,23 @@
         │             │            │             │             │
         ▼             ▼            ▼             ▼             ▼
 ┌───────────────────────────────────────────────────────────────────┐
-│                    tylluan-proxy :3030                               │
-│              Zero-Downtime Gateway (Rust)                         │
+│                    tylluan-nexus :3030   (direct binding, no proxy)                               │
+│              Kernel — Rust · tokio · axum                         │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │  GET /sse ──► SSE transport                                 │  │
 │  │  POST /messages ──► HTTP Streamable MCP                     │  │
-│  │  POST /api/v1/* ──► REST passthrough                        │  │
-│  │  GET / ──► Dashboard static (prod)                          │  │
+│  │  POST /api/v1/* ──► REST API                        │  │
+│  │  GET / ──► Dashboard (bundled via rust-embed)                          │  │
 │  └─────────────────────────┬───────────────────────────────────┘  │
-│                            │ reverse proxy                        │
+│                            │ (no reverse proxy)                   │
 │                            ▼                                      │
-│              tylluan :303X (dynamic port)                     │
-│              active_port.json                                     │
+│              tylluan-nexus (single process)                     │
+│              (no active_port.json needed)                                     │
 └───────────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────────────────────────────────────┐
-│                    tylluan KERNEL                              │
+│                    TYLLUAN-NEXUS KERNEL                              │
 │                    (Rust · tokio · axum)                           │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -395,11 +395,6 @@ CLIENT                    PROXY :3030              KERNEL :303X
        ├── tracing (structured logging)
        └── chrono, uuid, anyhow, thiserror
 
-  tylluan-proxy ◀─── gateway binary (tylluan-proxy.exe)
-       │
-       ├── hyper + hyper-util
-       └── tokio
-
   tylluan-cli ◀─── CLI tool
   tylluan-gui ◀─── Tauri desktop (spike)
   tylluan-link ◀─── federation library
@@ -528,7 +523,6 @@ CLIENT                    PROXY :3030              KERNEL :303X
   │   │       ├── router/        # Semantic intent routing
   │   │       ├── federation/    # Peer sync protocol
   │   │       └── doctor/        # Self-diagnostics
-  │   ├── tylluan-proxy/           # Zero-downtime gateway
   │   ├── tylluan-cli/             # CLI interface
   │   ├── tylluan-gui/             # Tauri desktop (spike)
   │   ├── tylluan-link/            # Federation library
@@ -536,7 +530,7 @@ CLIENT                    PROXY :3030              KERNEL :303X
   │   └── tylluan-common/          # Shared types
   ├── guilds/
   │   └── core/                  # 34 Python guild scripts (fastmcp)
-  ├── dashboard_v3/              # React + Vite + Sigma.js
+  ├── dashboard/                 # React + Vite (bundled via --features bundled-dashboard)
   │   └── src/ (44 files)
   ├── data/                      # Runtime databases
   │   ├── tylluan.db               # HybridMemory

@@ -1,6 +1,8 @@
-# Tasks Checklist — Zero-Downtime Hot-Reload Swap
+# Tasks Checklist — Zero-Downtime Hot-Reload Swap (ARCHIVED)
 
-Checklist de las tareas completadas para la integración del proxy de recarga en caliente:
+> **⚠️ ARCHIVED — NOT IMPLEMENTED.** This proxy architecture was designed but not built. The `tylluan-proxy` crate does not exist. See HOT_RELOAD_SWAP.md for context.
+
+Checklist histórica de las tareas de diseño del proxy de recarga en caliente (nunca implementadas):
 
 - [x] Crear el crate `crates/tylluan-proxy` y definir sus dependencias de Hyper 1.0 y Tokio en `Cargo.toml`.
 - [x] Desarrollar la lógica de proxy inverso con soporte de WebSockets y túnel de sockets TCP en `crates/tylluan-proxy/src/main.rs`.

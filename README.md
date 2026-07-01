@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.9.0-blue.svg" alt="v0.9.0">
+  <img src="https://img.shields.io/badge/version-0.10.0-blue.svg" alt="v0.10.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -34,7 +34,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + **LinearRAG local graph traversal (PageRank)**. Entity boost ×1.25 post-RRF |
+| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + **LinearRAG local graph traversal (PageRank + degree penalty)**. Entity boost ×1.25 post-RRF |
 | **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` (HNSW) for large datasets (threshold >=12k nodes) |
 | **Agent Persona** | Agents have `persona` + `preferences` stored in Core Memory (always available, not retrieved on demand) |
 | **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes — agents remember what was discussed |
@@ -73,7 +73,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (**316 lib tests**, multiple integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (**342 total tests** — 273 kernel lib + 67 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -114,7 +114,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.9.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.10.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before continuing:
@@ -183,14 +183,13 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 
 ---
 
-## Status: v0.9.0 (Graph-Augmented Local RAG)
+## Status: v0.10.0 — current release · v0.11.0-dev in progress
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
 | **M1** | Memory decay — half-life exponential T½=14d, type-specific rates | ✅ |
 | **M2** | Hybrid Search v2 — BM25 + FTS5 + BGE-M3 vector + RRF + entity boost ×1.25 | ✅ |
 | **M3** | Guild auto-discovery — scan `guilds/` at startup, zero manual registration | ✅ |
-| **M4** | rmcp integration — ServerHandler + stdio transport | ✅ |
 | **M7** | Single binary — `--features bundled-dashboard` embeds React at compile time | ✅ |
 | **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ |
 | **Security CI** | 30 automated security tests — intent filter, ACL, rate limiter, impersonation | ✅ |
@@ -199,14 +198,14 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M12 Mesh** | Ed25519 identity · STUN NAT · mDNS LAN · node signing | ✅ |
 | **M13 Onboarding** | Binary releases for 4 platforms · install scripts · `tylluan-cli` | ✅ |
 | **M14-A DHT** | Kademlia routing (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap | ✅ |
-| **M14-B Gossip** | Symmetric push-pull · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
+| **M14-B Gossip** | Symmetric push-pull · LRU entry store · anti-entropy cursor · HardwareCaps in GossipEntry | ✅ |
 | **M14-C Noise** | XK handshake · NK HTTP encryption · Ed25519→X25519 · wired to federation sync | ✅ |
-| **v0.6.0 Portable** | `embedding_model = "none"` (BM25-only) · ARM64 (RPi4) · portability invariant | ✅ |
-| **v0.6.1 Models** | Config-driven embedding model · install profiles (portable/clinic/server) · reindex SSE | ✅ |
-| **v0.7.0 Intelligence** | Guild auto-discovery · single binary · contextual retrieval · memory decay | ✅ |
-| **v0.8.0 Self-Aware** | Core Memory (persona/preferences) · episodic flywheel · BM25 FTS5 · DST harness | ✅ |
-| **v0.9.0 Graph RAG** | LinearRAG local graph traversal · batch embeddings · HNSW index via instant-distance | ✅ |
-| **M14-E** | Mesh test harness — fault injection, partition, recovery (turmoil) | 🔜 v1.0.0 |
+| **v0.6–v0.9** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LinearRAG · episodic search | ✅ |
+| **v0.10.0** | Retrieval quality benchmark · degree-bias fix (penalty not boost) · ADR-004 M14-D spec · fault DST | ✅ |
+| **M6-full** | `PartitionableTransport<T>` (5 fault modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
+| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.11.0-dev |
+| **M14-D Phase 2–4** | `DispatchRouter` · `GuildDispatchRequest/Response` · fallback + circuit breaker | 🔜 v0.11.0 |
+| **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
 
