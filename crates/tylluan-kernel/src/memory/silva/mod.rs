@@ -26,6 +26,7 @@ pub mod nodes;
 pub mod search;
 pub mod anchors;
 pub mod autolink;
+pub mod hnsw;
 pub mod maintenance;
 pub mod schema;
 pub mod sharing;
@@ -98,6 +99,8 @@ pub struct SilvaDB {
     pub(crate) ivf_searcher: Arc<RwLock<Option<crate::memory::ivf_index::IVFSearcher>>>,
     /// Path to the .fjv1 mmap file (derived from SQLite db_path)
     pub(crate) mmap_path: Option<PathBuf>,
+    /// HNSW index for approximate nearest neighbor search (built at >= 12k nodes)
+    pub(crate) hnsw: tokio::sync::RwLock<Option<crate::memory::silva::hnsw::HnswIndex>>,
 }
 
 impl SilvaDB {
@@ -126,6 +129,7 @@ impl SilvaDB {
             mmap_store: Arc::new(RwLock::new(None)),
             ivf_searcher: Arc::new(RwLock::new(None)),
             mmap_path: Some(mmap_path),
+            hnsw: tokio::sync::RwLock::new(None),
         };
         Ok(db)
     }
@@ -139,6 +143,7 @@ impl SilvaDB {
         })?;
         self.init_schema().await?;
         self.load_mmap_store().await;
+        self.load_hnsw_from_db().await;
         Ok(())
     }
 
@@ -174,6 +179,7 @@ impl SilvaDB {
             mmap_store: Arc::new(RwLock::new(None)),
             ivf_searcher: Arc::new(RwLock::new(None)),
             mmap_path: None,
+            hnsw: tokio::sync::RwLock::new(None),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {
@@ -201,6 +207,97 @@ impl SilvaDB {
             let _: i64 = conn.query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
             Ok::<(), anyhow::Error>(())
         })?;
+        Ok(())
+    }
+
+    /// Load the HNSW index from the hnsw_index table.
+    /// Silently returns None if no index is stored or count < threshold.
+    pub async fn load_hnsw_from_db(&self) {
+        let result: Option<crate::memory::silva::hnsw::HnswIndex> = tokio::task::block_in_place(|| -> Option<crate::memory::silva::hnsw::HnswIndex> {
+            let conn = self.conn.blocking_lock();
+            let row: (Vec<u8>, i32) = conn.query_row(
+                "SELECT index_blob, node_count FROM hnsw_index WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ).ok()?;
+            if (row.1 as usize) < crate::memory::silva::hnsw::HNSW_THRESHOLD {
+                return None;
+            }
+            crate::memory::silva::hnsw::deserialize_hnsw_rebuild(&row.0).ok()
+        });
+        if let Some(state) = result {
+            *self.hnsw.write().await = Some(state);
+            tracing::info!("🌲 HNSW index loaded from DB");
+        }
+    }
+
+    /// Serialize and save the current HNSW index to the hnsw_index table.
+    pub async fn save_hnsw_to_db(&self) -> Result<()> {
+        let state = self.hnsw.read().await;
+        let Some(ref state) = *state else {
+            return Ok(());
+        };
+        let bytes = crate::memory::silva::hnsw::serialize_hnsw_data(state)?;
+        let node_count = state.node_ids.len() as i32;
+        let _ = state;
+
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.execute(
+                "INSERT OR REPLACE INTO hnsw_index(id, index_blob, node_count, built_at) VALUES(1, ?1, ?2, datetime('now'))",
+                rusqlite::params![bytes, node_count],
+            )?;
+            Ok::<(), anyhow::Error>(())
+        })?;
+        tracing::info!("🌲 HNSW index saved to DB ({} nodes)", node_count);
+        Ok(())
+    }
+
+    /// Rebuild the HNSW index if the embedding count >= threshold and no index exists.
+    pub async fn rebuild_hnsw_if_needed(&self) -> Result<()> {
+        {
+            let guard = self.hnsw.read().await;
+            if guard.is_some() {
+                return Ok(());
+            }
+        }
+
+        let count: i64 = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.query_row("SELECT COUNT(*) FROM node_embeddings", [], |row| row.get(0))
+                .unwrap_or(0)
+        });
+
+        if (count as usize) < crate::memory::silva::hnsw::HNSW_THRESHOLD {
+            return Ok(());
+        }
+
+        let entries: Vec<(String, Vec<u8>)> = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn
+                .prepare("SELECT node_id, embedding FROM node_embeddings ORDER BY rowid DESC")
+                .ok()?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let id: String = row.get(0)?;
+                    let blob: Vec<u8> = row.get(1)?;
+                    Ok((id, blob))
+                })
+                .ok()?;
+            let mut result = Vec::new();
+            for row in rows.flatten() {
+                result.push(row);
+            }
+            Some(result)
+        })
+        .unwrap_or_default();
+
+        if let Some(state) = crate::memory::silva::hnsw::build_hnsw(entries) {
+            *self.hnsw.write().await = Some(state);
+            self.save_hnsw_to_db().await?;
+            tracing::info!("🌲 HNSW index rebuilt with {} nodes", count);
+        }
+
         Ok(())
     }
 
