@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** [488b68f](https://github.com/Forja-orca/tylluan/commit/488b68f0a04944b0b1bc67a7b8e5c82e3650228e) · 270 tests (217 kernel + 53 link) green as of 2026-07-01.
+**Commit:** [488b68f](https://github.com/Forja-orca/tylluan/commit/488b68f0a04944b0b1bc67a7b8e5c82e3650228e) · 270 kernel + 53 link + 1 evals = **324 total** green as of 2026-07-01.
 
 ---
 
