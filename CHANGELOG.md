@@ -10,6 +10,13 @@ All notable changes to Tylluan are documented here.
 
 ### Added
 
+- **M14-D Phase 3 — GuildDispatchRequest/Response + Noise NK handler**
+  - `GuildDispatchRequest { guild, tool, args, request_id, sender_id, timeout_secs }` — Serde serialize/deserialize.
+  - `GuildDispatchResponse { request_id, success, result, error, executor_id, duration_ms }`.
+  - `send/receive_dispatch_request` and `send/receive_dispatch_response`: serialize → `noise_encrypt_payload` → `transport.send()` (Noise NK over `dyn MeshTransport`).
+  - `POST /api/v1/guilds/dispatch/execute` endpoint: receives `GuildDispatchRequest`, calls `state.registry.call_tool()`, returns `GuildDispatchResponse` with executor node ID and wall-clock duration.
+  - CONTRACT-01 preserved: all routing remains transparent inside `tylluan_do`.
+
 - **M14-D Phase 2 — DispatchRouter**
   - `crates/tylluan-link/src/dispatch.rs`: `DispatchRouter` + `DispatchDecision` enum.
   - Scoring: `(1 - load_avg) × (1000 / max(1, latency_ms)) × gpu_multiplier`.
