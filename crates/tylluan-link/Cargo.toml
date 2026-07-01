@@ -20,6 +20,8 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 hex = "0.4"
+async-trait = "0.1"
+thiserror = "2"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 snow = "0.10"
 
