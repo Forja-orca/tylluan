@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use crate::dht::RoutingTable;
-use super::message::GossipEntry;
+use crate::transport::{MeshTransport, TransportError};
+use super::message::{GossipEntry, GossipMessage};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_GOSSIP_INTERVAL: Duration = Duration::from_secs(30);
@@ -36,6 +37,8 @@ pub struct GossipState {
     pub local_node_id: String,
     pub local_clock: u64,
     pub peer_cursors: HashMap<String, u64>,
+    #[serde(default)]
+    pub seen_by_peers: HashMap<String, u64>,
     pub entries: HashMap<String, GossipEntry>,
     #[serde(default = "default_max_entries")]
     pub max_entries: usize,
@@ -52,6 +55,7 @@ impl GossipState {
             local_node_id,
             local_clock: 0,
             peer_cursors: HashMap::new(),
+            seen_by_peers: HashMap::new(),
             entries: HashMap::new(),
             max_entries: DEFAULT_MAX_ENTRIES,
             max_peer_cursors: DEFAULT_MAX_PEER_CURSORS,
@@ -63,6 +67,7 @@ impl GossipState {
             local_node_id,
             local_clock: 0,
             peer_cursors: HashMap::new(),
+            seen_by_peers: HashMap::new(),
             entries: HashMap::new(),
             max_entries,
             max_peer_cursors,
@@ -169,6 +174,17 @@ impl GossipState {
         }
     }
 
+    pub fn seen_by(&self, peer_id: &str) -> u64 {
+        self.seen_by_peers.get(peer_id).copied().unwrap_or(0)
+    }
+
+    pub fn record_seen_by(&mut self, peer_id: &str, clock: u64) {
+        self.seen_by_peers
+            .entry(peer_id.to_string())
+            .and_modify(|c| *c = (*c).max(clock))
+            .or_insert(clock);
+    }
+
     pub fn save_to(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -222,6 +238,77 @@ impl GossipEngine {
 
     pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
         self.state.local_entry(addr, capabilities)
+    }
+
+    pub async fn perform_sync<T: MeshTransport + ?Sized>(
+        &mut self,
+        transport: &mut T,
+        peer_id: &str,
+    ) -> Result<(), TransportError>
+    {
+        let cursor = self.state.last_known(peer_id);
+        let pull = GossipMessage::pull(self.state.local_node_id.clone(), cursor);
+        let data = serde_json::to_vec(&pull)
+            .map_err(|e| TransportError::Serialize(e.to_string()))?;
+        transport.send(&data).await?;
+
+        let resp = transport.receive().await?;
+        let msg: GossipMessage = serde_json::from_slice(&resp)
+            .map_err(|e| TransportError::Deserialize(e.to_string()))?;
+        let entries = match msg {
+            GossipMessage::PullResponse { entries } => entries,
+            _ => {
+                return Err(TransportError::Protocol("expected PullResponse".into()));
+            }
+        };
+
+        if let Some(max_clock) = entries.iter().map(|e| e.clock).max() {
+            self.state.update_cursor(peer_id, max_clock);
+        }
+        self.state.store_entries(&entries);
+
+        let their_cursor = self.state.seen_by(peer_id);
+        let our_entries = self.state.entries_since(their_cursor);
+        if !our_entries.is_empty() {
+            let push = GossipMessage::push(
+                self.state.local_node_id.clone(),
+                self.state.local_clock,
+                our_entries,
+            );
+            let data = serde_json::to_vec(&push)
+                .map_err(|e| TransportError::Serialize(e.to_string()))?;
+            transport.send(&data).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn handle_incoming_message<T: MeshTransport + ?Sized>(
+        &mut self,
+        transport: &mut T,
+        _peer_id: &str,
+        msg: &GossipMessage,
+    ) -> Result<(), TransportError>
+    {
+        match msg {
+            GossipMessage::Pull { sender_id, cursor } => {
+                let entries = self.state.entries_since(*cursor);
+                self.state.record_seen_by(sender_id, *cursor);
+                let resp = GossipMessage::pull_response(entries);
+                let data = serde_json::to_vec(&resp)
+                    .map_err(|e| TransportError::Serialize(e.to_string()))?;
+                transport.send(&data).await?;
+                Ok(())
+            }
+            GossipMessage::Push { sender_id, sender_clock, entries } => {
+                self.state.store_entries(entries);
+                self.state.update_cursor(sender_id, *sender_clock);
+                Ok(())
+            }
+            GossipMessage::PullResponse { .. } => {
+                Err(TransportError::Protocol("unexpected PullResponse — initiator already processed".into()))
+            }
+        }
     }
 }
 
