@@ -109,7 +109,7 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 
 **Execution order (approved by research team 2026-07-01):**
 
-- [ ] M6-minimal — Deterministic Simulation Testing (DST) foundation: `turmoil`-based virtual network harness, `MeshTransport` trait wired to in-memory mock. 2-3 nodes, basic Gossip partition/recovery tests. Prerequisite for validating all mesh milestones. (~2 days)
+- [x] M6-minimal — Deterministic Simulation Testing (DST) foundation: `MeshTransport` trait + `InMemoryTransport` (mpsc-based) + `TcpTransport` (length-prefixed). `GossipEngine::perform_sync/handle_incoming_message` generic over transport. 4 integration tests. Prerequisite for validating all mesh milestones.
 - [ ] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. Detect `.py` files with fastmcp header. Zero-config for new guilds. Also includes mxbai-edge-colbert reranker swap (Jina 280M → mxbai 109M, ~500MB RAM reduction, RPi4-friendly). (~1 day)
 - [ ] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. No separate dashboard process required. One binary, one `tylluan.toml`, done. (~0.5 days)
 - [ ] Contextual Retrieval: prepend document context to each chunk before embedding (Anthropic 2024 pattern). Offline fallback: filename + Markdown heading hierarchy as local heuristic, zero CPU cost. ~15-49% retrieval improvement. (~1 day)
