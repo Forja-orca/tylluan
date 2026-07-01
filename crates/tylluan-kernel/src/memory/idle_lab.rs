@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use tracing::{info, warn};
@@ -218,6 +218,7 @@ impl IdleLab {
                 &pair.query,
                 embedding.as_deref(),
                 pool_size,
+                None,
             ).await {
                 Ok(r) => r,
                 Err(e) => { warn!("IdleLab search error: {}", e); continue; }

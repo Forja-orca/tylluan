@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use tracing::{info, warn};
 use crate::registry::proxy::error_result;
 use crate::registry::tools::RiskLevel;
@@ -46,7 +46,7 @@ impl super::TylluanServer {
         }
 
         synthesis.push_str("\nLECCIONES HISTORICAS:\n");
-        if let Ok(results) = self.silva.search_hybrid(query, embedding.as_deref(), 5).await {
+        if let Ok(results) = self.silva.search_hybrid(query, embedding.as_deref(), 5, None).await {
             for (node, score) in results { synthesis.push_str(&format!("  * {} (score: {:.2})\n", node.content, score)); }
         }
 
