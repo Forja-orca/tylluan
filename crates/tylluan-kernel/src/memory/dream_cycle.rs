@@ -43,20 +43,21 @@ impl DreamCycle {
         let silva = Arc::clone(&self.silva);
         let interval_secs = (config.silva.decay_interval_hours * 3600) as u64;
         let prune_threshold = config.silva.decay_prune_threshold;
+        let half_life = config.silva.decay_half_life_hours;
 
         tokio::spawn(async move {
             info!("🌙 Decay background scheduler started (interval={}s, prune_threshold={})", interval_secs, prune_threshold);
             loop {
                 tokio::time::sleep(Duration::from_secs(interval_secs)).await;
-                if let Err(e) = Self::run_decay_cycle(&silva, prune_threshold).await {
+                if let Err(e) = Self::run_decay_cycle(&silva, prune_threshold, half_life).await {
                     warn!("🌙 Decay cycle error: {}", e);
                 }
             }
         });
     }
 
-    async fn run_decay_cycle(silva: &Arc<SilvaDB>, prune_threshold: f64) -> Result<(), anyhow::Error> {
-        let decayed = silva.apply_decay().await?;
+    async fn run_decay_cycle(silva: &Arc<SilvaDB>, prune_threshold: f64, half_life: u64) -> Result<(), anyhow::Error> {
+        let decayed = silva.apply_decay(half_life).await?;
         let pruned = silva.prune_by_salience(prune_threshold).await?;
         if decayed > 0 || pruned > 0 {
             info!("🌙 Decay cycle: {} affected, {} pruned (salience < {})", decayed, pruned, prune_threshold);

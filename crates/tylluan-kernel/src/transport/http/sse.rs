@@ -297,6 +297,7 @@ pub fn spawn_heartbeat(
     silva: Arc<crate::memory::silva::SilvaDB>,
     decay_enabled: bool,
     decay_interval_secs: u64,
+    decay_half_life_hours: u64,
     registry: Arc<crate::registry::actor::RegistryHandle>,
     matcher: Arc<crate::router::matcher::GuildMatcher>,
 
@@ -343,7 +344,7 @@ pub fn spawn_heartbeat(
                 let silva_clone = silva.clone();
                 let broadcast_clone = broadcast_tx.clone();
                 tokio::spawn(async move {
-                    if let Ok(affected) = silva_clone.apply_decay().await {
+                    if let Ok(affected) = silva_clone.apply_decay(decay_half_life_hours).await {
                         if affected > 0 {
                             tracing::info!("🌲 Biological decay: {} nodes affected", affected);
                             let _ = broadcast_clone.send(serde_json::json!({
