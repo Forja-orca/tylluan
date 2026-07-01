@@ -41,7 +41,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 10;
+            const SCHEMA_VERSION: i32 = 11;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -106,6 +106,20 @@ impl super::SilvaDB {
                        AND json_extract(metadata, '$.federation_source') IS NOT NULL;"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added federation_source column + backfill (v10)");
+            }
+            if schema_version < 11 {
+                conn.execute_batch(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+                        id UNINDEXED,
+                        content,
+                        metadata,
+                        content=nodes,
+                        content_rowid=rowid,
+                        tokenize='porter unicode61'
+                    );"
+                )?;
+                conn.execute("INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')", [])?;
+                tracing::info!("🌲 SilvaDB: created nodes_fts FTS5 table + backfill (v11)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;

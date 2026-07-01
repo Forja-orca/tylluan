@@ -175,6 +175,14 @@ impl super::SilvaDB {
                 .or_insert((node, rrf));
         }
 
+        // Entity boost: entity/concept nodes get +25% score (more relevant for knowledge graph)
+        for entry in rrf_scores.values_mut() {
+            let nt = entry.0.node_type.to_lowercase();
+            if nt == "entity" || nt == "concept" || nt.starts_with("entity_") {
+                entry.1 *= 1.25;
+            }
+        }
+
         // Temporal validity penalty: expired nodes lose 90% of their score
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
@@ -211,24 +219,108 @@ impl super::SilvaDB {
             .collect())
     }
 
+    fn map_node_row(row: &rusqlite::Row) -> rusqlite::Result<GraphNode> {
+        Ok(GraphNode {
+            id: row.get(0)?,
+            node_type: row.get(1)?,
+            content: row.get(2)?,
+            metadata: row.get(3)?,
+            weight: row.get(4)?,
+            protected: row.get::<_, i32>(5)? != 0,
+            conflicted: row.get::<_, i32>(6)? != 0,
+            topic_key: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+            valid_from: row.get(10)?,
+            valid_until: row.get(11)?,
+            shareable: row.get::<_, i32>(12)? != 0,
+            last_touched: Utc::now(),
+        })
+    }
+
+    fn sanitize_fts_query(query: &str) -> String {
+        let sanitized: String = query.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '\'')
+            .collect();
+        let terms: Vec<String> = sanitized.split_whitespace()
+            .filter(|w| !w.is_empty())
+            .map(|w| format!("\"{}\"", w))
+            .collect();
+        if terms.is_empty() { String::new() } else { terms.join(" AND ") }
+    }
+
     pub async fn search(
         &self,
         query: &str,
         max_results: usize,
         types: Option<&[&str]>,
     ) -> Result<Vec<GraphNode>> {
-        let pattern = format!("%{}%", query.to_lowercase());
-        
+        let fts_query = Self::sanitize_fts_query(query);
+
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
 
+            // Try FTS5 BM25 first, fallback to LIKE
+            let results = (|| -> Result<Vec<GraphNode>> {
+                if fts_query.is_empty() { return Ok(Vec::new()); }
+                let (sql, has_types) = if let Some(type_filter) = types {
+                    let placeholders: Vec<String> = type_filter.iter()
+                        .enumerate()
+                        .map(|(i, _)| format!("?{}", i + 2))
+                        .collect();
+                    let type_clause = placeholders.join(",");
+                    (format!(
+                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable
+                         FROM nodes_fts f
+                         JOIN nodes n ON n.rowid = f.rowid
+                         WHERE nodes_fts MATCH ?1
+                           AND n.type IN ({})
+                         ORDER BY bm25(nodes_fts, 10.0, 5.0, 5.0)
+                         LIMIT {}",
+                        type_clause, max_results
+                    ), true)
+                } else {
+                    (format!(
+                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable
+                         FROM nodes_fts f
+                         JOIN nodes n ON n.rowid = f.rowid
+                         WHERE nodes_fts MATCH ?1
+                         ORDER BY bm25(nodes_fts, 10.0, 5.0, 5.0)
+                         LIMIT {}",
+                        max_results
+                    ), false)
+                };
+
+                let mut stmt = conn.prepare(&sql)?;
+                let results = if has_types {
+                    let type_filter = types.unwrap();
+                    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+                    param_values.push(Box::new(fts_query));
+                    for t in type_filter {
+                        param_values.push(Box::new(t.to_string()));
+                    }
+                    let refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+                    let rows = stmt.query_map(refs.as_slice(), Self::map_node_row)?;
+                    rows.filter_map(|r| r.ok()).collect()
+                } else {
+                    let rows = stmt.query_map(params![fts_query], Self::map_node_row)?;
+                    rows.filter_map(|r| r.ok()).collect()
+                };
+                Ok(results)
+            })();
+
+            if let Ok(r) = results {
+                if !r.is_empty() { return Ok(r); }
+            }
+
+            // Fallback: LIKE search (original behavior)
+            let pattern = format!("%{}%", query.to_lowercase());
             let results = if let Some(type_filter) = types {
                 let placeholders: Vec<String> = type_filter.iter()
                     .enumerate()
                     .map(|(i, _)| format!("?{}", i + 2))
                     .collect();
                 let type_clause = placeholders.join(",");
-
                 let sql = format!(
                     "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes
                      WHERE (LOWER(content) LIKE ?1 OR LOWER(metadata) LIKE ?1)
@@ -237,14 +329,12 @@ impl super::SilvaDB {
                      LIMIT {}",
                     type_clause, max_results
                 );
-
                 let mut stmt = conn.prepare(&sql)?;
                 let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
                 param_values.push(Box::new(pattern));
                 for t in type_filter {
                     param_values.push(Box::new(t.to_string()));
                 }
-
                 let refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
                 let rows = stmt.query_map(refs.as_slice(), |row| {
                     Ok(GraphNode {
@@ -294,7 +384,6 @@ impl super::SilvaDB {
                 })?;
                 rows.filter_map(|r| r.ok()).collect()
             };
-
             Ok(results)
         })
     }

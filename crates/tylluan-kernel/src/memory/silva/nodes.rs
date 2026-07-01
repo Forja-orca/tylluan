@@ -108,6 +108,13 @@ impl super::SilvaDB {
                     updated_at = CURRENT_TIMESTAMP",
                 params![id, node_type, content, metadata, topic_key, valid_until, federation_source],
             )?;
+            // Sync FTS5 index
+            if let Ok(rowid) = conn.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
+                let _ = conn.execute(
+                    "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
+                    params![rowid, id, content, metadata],
+                );
+            }
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())
@@ -521,12 +528,19 @@ impl super::SilvaDB {
                 params![id], |r| r.get(0),
             ).unwrap_or(false);
             if protected { return Ok(false); }
+            let fts_rowid: Option<i64> = conn.query_row(
+                "SELECT rowid FROM nodes WHERE id = ?1",
+                params![id], |r| r.get(0),
+            ).ok();
             let tx = conn.unchecked_transaction()?;
             tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;
             tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
             tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![id])?;
             let deleted = tx.execute("DELETE FROM nodes WHERE id = ?1", params![id])?;
             tx.commit()?;
+            if let Some(rid) = fts_rowid {
+                conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", params![rid]).ok();
+            }
             Ok(deleted > 0)
         })
     }
