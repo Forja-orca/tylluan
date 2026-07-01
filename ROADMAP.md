@@ -142,33 +142,59 @@ Delivered:
 - [x] P0 — Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, latency p50: 1.3ms, p95: 1.9ms (baseline_v0.9.0.json).
 - [x] P1 — HNSW index via `instant-distance`: HnswIndex + schema v12 (`hnsw_index` BLOB table) + search fast path (threshold >=12k nodes) + background rebuild scheduler.
 - [x] P2 — Batch embeddings: Connected callers to `embed_batch` (single ONNX lock) and main.rs reindexer loop chunked to 32 nodes.
-- [x] P3 — LinearRAG local graph traversal: `degree_centrality` + `local_query_graph` (PageRank + degree centrality boost) integrated into RRF hybrid search.
+- [x] P3 — LinearRAG local graph traversal: `degree_centrality` + `local_query_graph` (Personalized PageRank + degree centrality) integrated into RRF hybrid search. ⚠️ **The original degree formula `score * (1 + deg*0.1)` was identified as a bug in v0.10.0** — it boosted hub nodes (high connectivity = generic concepts) to top positions, hurting MRR for specific queries. Corrected to `score / (1 + deg*0.1)` (degree penalty).
 - [x] P4 — Semantic Coloquio Search: Optional `"episodic"` filtering in `tylluan_recall` using `search_hybrid` type filter.
 
-**270 lib tests passing** (217 kernel + 53 link) + 1 evals test · 0 failures · 2 new unit tests for P4.
+**272 kernel lib tests + 56 link tests + 1 evals = 329 total** · 0 failures · 2 new unit tests for P4.
 
-**v0.10.0 backlog:**
-- M14-E — Mesh test harness (simulated fault injection, network partitions, recovery simulation via turmoil)
-- Portability compliance CI: RPi4 (aarch64) smoke test in release workflow + USB bundle boot verification
-- Sparse Retrieval / ColBERT: Contextual retrieval enhancements (deferred to v1.1.0)
+## v0.10.0 — El sistema que sabe si funciona
 
-## M14-D — Cross-Datacenter Federation (deferred, context preserved)
+**Status:** Complete (tag: v0.10.0).
 
-**Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational portability invariant (small peer clusters, offline-first). Revisit when v0.6.0 portable foundation is solid.
+**Goal:** Validate v0.9.0's foundations before adding more layers. Retrieval quality delta measurement + M6-full realistic fault scenarios + LinearRAG bug fix.
 
-**What was designed (2026-06-30 coloquio, T50-T66):**
+Delivered:
+- [x] P0 — Extended Retrieval Benchmark: 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop), `skip_graph` A/B flag in `search_hybrid` (internal). Graph ON vs OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix), +4ms latency. Results in `benchmarks/benchmark_v0.10.0.json`.
+- [x] P1 — M6-full Fault DST: `fault_dst.rs` — 4 new tests exercising all 5 `PartitionableTransport<T>` modes: partition+heal convergence, latency injection, drop-rate eventual convergence, error mode graceful failure.
+- [x] P2-fix — LinearRAG Degree Bias Fix: `local_query_graph` (`graph.rs:739`) and `dual_retrieval.rs` (lines 30, 69) inverted from multiply to divide — penalizes hub nodes. New test `test_local_query_graph_degree_penalty`. Root cause: degree boost promoted generic hub concepts to top MRR positions.
+- [x] P3-spec — ADR-004 M14-D Guild Dispatch spec: `docs/architecture/M14D_dispatch_spec.md` — Capability-Aware + Latency-Based Hybrid Routing, 4-phase plan (~8 sessions), CONTRACT-01 preserved.
+
+**273 kernel lib tests + 61 link tests + 2 evals = 336 total** · 0 failures.
+
+## v0.11.0 — Guild Execution Channels (in progress)
+
+**Goal:** Peers discover each other's capabilities and dispatch guild tools remotely over Noise XK.
+
+Delivered so far:
+- [x] M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` in `GossipEntry` (`#[serde(default)]`, backwards compatible); `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL=300s, `prune_expired()`, `ingest_from_engine()`; 6 unit tests.
+
+Remaining (v0.11.0 backlog):
+- [ ] M14-D Phase 2 — `DispatchRouter`: load+latency scoring, wire `prune_expired` into background gossip task in `main.rs`.
+- [ ] M14-D Phase 3 — `GuildDispatchRequest/Response` + Noise NK handler for remote tool execution.
+- [ ] M14-D Phase 4 — Fallback (queue + circuit breaker) + dashboard UX for peer capability view.
+- [ ] M14-E — Mesh test harness (turmoil-based simulated fault injection, network partitions, recovery).
+- [ ] Portability compliance CI: RPi4 (aarch64) smoke test in release workflow.
+
+**Current:** 273 kernel + 67 link + 2 evals = **342 total tests** · 0 failures.
+
+## M14-D — Guild Execution Channels (in progress — see v0.11.0 above)
+
+**Status:** Active. Phase 1 complete. Spec published in `docs/architecture/M14D_dispatch_spec.md` (ADR-004).
+
+**ADR-004 design (2026-07-02):**
+- Capability-Aware + Latency-Based Hybrid Routing — transparent inside `tylluan_do` (CONTRACT-01 preserved)
+- `CapabilityRegistry`: DHT+Gossip peer capability store, TTL=5min, `HardwareCaps { ram_mb, has_gpu, load_avg }`
+- `DispatchRouter`: load+latency scoring for peer selection
+- Remote Execution Protocol: `GuildDispatchRequest/Response` structs, JSON over Noise NK
+- Fallback Strategy: local queue + circuit breaker
+
+**Original design context (2026-06-30 coloquio, T50-T66):**
 - Latency-aware routing between regional clusters
 - RTT metric: ICMP pre-handshake (Option A — simple, sufficient for 2-cluster minimal)
 - Remote guild execution channels over Noise XK (prerequisite: guild proxy protocol)
-- Configurable sync priority by node proximity
-- Antigravity designed `trait MeshTransport: Send { send/recv }` — sits above `NoiseSession`, compatible with in-memory mock for M14-E tests
+- `trait MeshTransport: Send { send/recv }` — sits above `NoiseSession`, compatible with in-memory mock for M14-E tests
 
-**Why deferred:**
-- The offline-first use case requires 5-10 peers max — mDNS (M12-D) + Gossip (M14-B) already solve peer discovery at that scale
-- "Cross-datacenter" is enterprise language. The foundational invariant is USB-portable, not cloud-native
-- Build the portable foundation first (v0.6.0), then scale up (M14-D as v0.7.0 or v1.0)
-
-**Prerequisite when revisiting:** M14-E test harness must exist first — latency routing cannot be validated without multi-node fault injection.
+**Prerequisite before Phase 3:** M14-E test harness (turmoil-based) — latency routing cannot be validated without multi-node fault injection.
 
 ## v1.0.0 — Production Ready
 

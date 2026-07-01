@@ -36,28 +36,28 @@ All notable changes to Tylluan are documented here.
     - `drop_rate_eventual_convergence`: Modo `Drop(0.3)` (30% pérdida) — convergencia eventual garantizada en ≤10 rounds de anti-entropy.
     - `error_mode_graceful_failure`: Modo `Error` — falla limpiamente sin corromper el estado del `GossipEngine`.
 
-### In progress
-
 - **Extended Retrieval Benchmark (P0)**
-  - 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop). `skip_graph` flag for A/B comparison.
-  - Results with fake 12-dim deterministic embeddings: Graph ON → Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5%/+5.0% recall, −0.1% MRR, +4ms latency.
+  - 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop). `skip_graph: bool` param in `search_hybrid` for A/B comparison (internal, not exposed in MCP API).
+  - Results with deterministic 12-dim embeddings (semantic caveat — real BGE-M3 delta expected higher): Graph ON → Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5%/+5.0% recall, −0.1% MRR (pre-fix), +4ms latency.
   - Output: `benchmarks/benchmark_v0.10.0.json`
-
-- **LinearRAG Degree Bias Fix (P2-fix)**
-  - `local_query_graph` (`graph.rs:739`): `pr_score * (1 + deg×0.1)` → `pr_score / (1 + deg×0.1)` — hub nodes penalized instead of boosted.
-  - `dual_retrieval.rs` (lines 30, 69): same inversion applied to graph-boosted scores.
-  - New test `test_local_query_graph_degree_penalty`: asserts low-degree (deg=1) node outranks high-degree (deg=5) node with slightly lower PR score.
-  - Rationale: benchmark showed MRR flat despite recall gain — degree boost was promoting generic hub nodes to top positions.
 
 - **M14-D Guild Dispatch ADR (P3-spec)**
   - `docs/architecture/M14D_dispatch_spec.md` (ADR-004) — Capability-Aware + Latency-Based Hybrid Routing.
   - 4 components: Capability Registry (DHT+Gossip, TTL 5min), Dispatch Algorithm (load+latency scoring), Remote Execution Protocol (JSON over Noise NK, `GuildDispatchRequest/Response`), Fallback Strategy (queue + circuit breaker).
   - CONTRACT-01 preserved: routing is transparent inside `tylluan_do`.
-  - 4-phase implementation plan (~8 sessions). Phase 1 (Capability Registry) can start immediately.
+  - 4-phase implementation plan (~8 sessions).
+
+### Fixed
+
+- **LinearRAG Degree Bias (P2-fix)**
+  - `local_query_graph` (`graph.rs:739`): `pr_score * (1 + deg×0.1)` → `pr_score / (1 + deg×0.1)` — hub nodes now penalized instead of boosted.
+  - `dual_retrieval.rs` (lines 30, 69): same inversion applied to graph-boosted scores.
+  - New test `test_local_query_graph_degree_penalty` verifies low-degree (deg=1) outranks high-degree (deg=5) with slightly lower PR score.
+  - Root cause: benchmark revealed MRR was flat despite recall gain — degree boost promoted generic hub nodes to top positions instead of penalizing them.
 
 ### Tests
 
-**273 kernel lib tests + 61 link tests + 1 evals = 335 total** · 0 failures.
+**273 kernel lib tests + 61 link tests + 2 evals = 336 total** · 0 failures.
 
 ---
 
@@ -71,7 +71,7 @@ All notable changes to Tylluan are documented here.
 
 - **LinearRAG Local Graph Traversal (P3)**
   - `degree_centrality`: SQL-native edge connectivity calculation chunked in groups of 50 to avoid SQLite parameter limit errors.
-  - `local_query_graph`: Graph traversal using Personalized PageRank from vector seeds, boosted by degree centrality: `score * (1.0 + degree * 0.1)`.
+  - `local_query_graph`: Graph traversal using Personalized PageRank from vector seeds, boosted by degree centrality: `score * (1.0 + degree * 0.1)`. ⚠️ **This formula was identified as a bug in v0.10.0** (boosting hub nodes hurts MRR for specific queries) and corrected to `score / (1.0 + degree * 0.1)` (see v0.10.0 Fixed).
   - `search_hybrid` integration: Vector search results (IVF) serve as seeds for `local_query_graph` traversal, with outputs fused via Reciprocal Rank Fusion (RRF).
 
 - **Batch Embeddings — FastEmbed ONNX (P2)**

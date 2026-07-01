@@ -5,8 +5,8 @@
 ```
   Windows (nativo)              Docker Desktop
   ─────────────────             ─────────────────
-  tylluan  :3030  ←──────→  tylluan  :3040
-  tylluan-proxy  :3030            (via docker-compose.secondary.yml)
+  tylluan-nexus  :3030  ←──────→  tylluan-nexus  :3040
+  (direct binding, no proxy)       (via docker-compose.secondary.yml)
   data/tylluan.db                 data-docker/tylluan.db
   tylluan.toml                    tylluan.docker.toml
   .tylluan-token                  .tylluan-token-docker

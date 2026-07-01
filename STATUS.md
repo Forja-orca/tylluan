@@ -59,7 +59,7 @@
 - M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` added to `GossipEntry`; `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL-based peer store, `prune_expired()`, `ingest_from_engine()`; 6 unit tests (v0.11.0-dev)
 - Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` — eliminates double filesystem scan at startup (~10s → ~5s) (P3)
 - HNSW index via `instant-distance`: `hnsw.rs` + schema v12 (`hnsw_index` BLOB table) + fast path in `search.rs` (HNSW ≥12k nodes → IVF → linear fallback); rebuild scheduler every 10min; survives restart via SQLite BLOB (v0.9.0)
-- LinearRAG local graph traversal: `degree_centrality` (SQL-native) + `local_query_graph` (Personalized PageRank local + degree boost) integrated into RRF hybrid search (v0.9.0)
+- LinearRAG local graph traversal: `degree_centrality` (SQL-native) + `local_query_graph` (Personalized PageRank local + degree penalty, corrected in v0.10.0) integrated into RRF hybrid search (v0.9.0)
 - Batch Embeddings: Callers connected to `embed_batch` in `embeddings.rs`. Reindex loop in main.rs processed in chunks of 32 with 500ms sleep (v0.9.0)
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
