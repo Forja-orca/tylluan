@@ -1,10 +1,29 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HardwareCaps {
+    pub ram_mb: u32,
+    pub has_gpu: bool,
+    pub load_avg: f32,
+}
+
+impl Default for HardwareCaps {
+    fn default() -> Self {
+        Self {
+            ram_mb: 0,
+            has_gpu: false,
+            load_avg: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipEntry {
     pub node_id: String,
     pub addr: String,
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub hardware: HardwareCaps,
     pub clock: u64,
 }
 
@@ -52,6 +71,7 @@ mod tests {
                 node_id: "peer1".into(),
                 addr: "192.168.1.1:3030".into(),
                 capabilities: vec!["mesh".into()],
+                hardware: HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.3 },
                 clock: 1,
             }],
         );

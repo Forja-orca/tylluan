@@ -1,4 +1,4 @@
-use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipEntry, GossipMessage};
+use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipEntry, GossipMessage, HardwareCaps};
 use tylluan_link::transport::{MeshTransport, in_memory_pair};
 
 fn make_entry(node_id: &str, clock: u64) -> GossipEntry {
@@ -6,6 +6,7 @@ fn make_entry(node_id: &str, clock: u64) -> GossipEntry {
         node_id: node_id.to_string(),
         addr: format!("127.0.0.1:{}", 3000 + clock),
         capabilities: vec!["mesh".into()],
+        hardware: HardwareCaps::default(),
         clock,
     }
 }

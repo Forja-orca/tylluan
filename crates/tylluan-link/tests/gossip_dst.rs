@@ -5,7 +5,7 @@
 //! All sync roundtrips use tokio::join! to avoid deadlocks (spawn + sequential
 //! can hang because the responder task must be polled concurrently).
 
-use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipMessage};
+use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipEntry, GossipMessage, HardwareCaps};
 use tylluan_link::transport::{MeshTransport, in_memory_pair};
 
 fn make_engine(id: &str) -> GossipEngine {
@@ -34,7 +34,7 @@ async fn test_gossip_dst_normal_sync() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry = engine_a.local_entry("127.0.0.1:9000", vec!["bash".into(), "git".into()]);
+    let entry = engine_a.local_entry("127.0.0.1:9000", vec!["bash".into(), "git".into()], HardwareCaps::default());
     engine_a.store_entries(&[entry.clone()]);
 
     let (mut t_a, mut t_b) = in_memory_pair();
@@ -79,10 +79,10 @@ async fn test_gossip_dst_bidirectional_convergence() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["bash".into()]);
+    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["bash".into()], HardwareCaps::default());
     engine_a.store_entries(&[entry_a]);
     engine_b.advance_clock();
-    let entry_b = engine_b.local_entry("10.0.0.2:9000", vec!["git".into()]);
+    let entry_b = engine_b.local_entry("10.0.0.2:9000", vec!["git".into()], HardwareCaps::default());
     engine_b.store_entries(&[entry_b]);
 
     let (mut t_a, mut t_b) = in_memory_pair();
@@ -112,7 +112,7 @@ async fn test_gossip_dst_3node_convergence() {
     let mut engine_c = make_engine("node-c");
 
     engine_a.advance_clock();
-    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["rust".into()]);
+    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["rust".into()], HardwareCaps::default());
     engine_a.store_entries(&[entry_a]);
 
     // Round 1: B pulls from A
@@ -153,7 +153,7 @@ async fn test_gossip_dst_message_loss_resilience() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["resilience".into()]);
+    let entry_a = engine_a.local_entry("10.0.0.1:9000", vec!["resilience".into()], HardwareCaps::default());
     engine_a.store_entries(&[entry_a]);
 
     // Attempt 1: packet loss — responder closes channel without responding
@@ -192,8 +192,6 @@ async fn test_gossip_dst_message_loss_resilience() {
 /// After sync, the fresh entry must survive on both sides.
 #[tokio::test]
 async fn test_gossip_dst_concurrent_conflicting_updates() {
-    use tylluan_link::gossip::GossipEntry;
-
     let mut engine_a = make_engine("node-a");
     let mut engine_b = make_engine("node-b");
 
@@ -202,12 +200,14 @@ async fn test_gossip_dst_concurrent_conflicting_updates() {
         addr: "10.0.0.10:9000".to_string(),
         capabilities: vec!["stale".into()],
         clock: 5,
+        hardware: HardwareCaps::default(),
     };
     let entry_x_fresh = GossipEntry {
         node_id: "node-x".to_string(),
         addr: "10.0.0.10:9001".to_string(),
         capabilities: vec!["fresh".into()],
         clock: 10,
+        hardware: HardwareCaps::default(),
     };
 
     engine_a.store_entries(&[entry_x_stale]);
