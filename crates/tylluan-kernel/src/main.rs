@@ -1284,25 +1284,35 @@ async fn main() -> anyhow::Result<()> {
                     let stale_nodes = silva_inner.get_stale_embeddings(&model_id, model_hash.as_deref()).await?;
                     if !stale_nodes.is_empty() {
                         info!("🧠 Agnostic Indexer: Found {} stale nodes. Re-indexing...", stale_nodes.len());
-                        for node_id in stale_nodes.iter().take(100) {
-                            if let Ok(Some(node)) = silva_inner.get_node(node_id).await {
-                                let contextual = build_contextual_text(&node.metadata, &node.content);
-                                let _ = engine.embed(&contextual).map(|vector: Vec<f32>| {
-                                    let sid = silva_inner.clone();
-                                    let nid = node_id.clone();
-                                    let mid = model_id.clone();
-                                    let mhash = model_hash.clone();
-                                    tokio::spawn(async move {
-                                        let _ = sid.save_embedding(
-                                            &nid,
-                                            &vector,
-                                            &mid,
-                                            mhash.as_deref()
-                                        ).await;
-                                    });
-                                }).map_err(|e| warn!("Re-index error for '{}': {}", node_id, e));
+                        let batch_size: usize = 32;
+                        let nodes_vec: Vec<&String> = stale_nodes.iter().take(100).collect();
+                        for chunk in nodes_vec.chunks(batch_size) {
+                            let mut texts: Vec<String> = Vec::with_capacity(chunk.len());
+                            let mut nodes: Vec<(String, String, String)> = Vec::with_capacity(chunk.len());
+                            for node_id in chunk {
+                                if let Ok(Some(node)) = silva_inner.get_node(node_id).await {
+                                    let contextual = build_contextual_text(&node.metadata, &node.content);
+                                    texts.push(contextual);
+                                    nodes.push((node_id.to_string(), model_id.clone(), model_hash.clone().unwrap_or_default()));
+                                }
                             }
-                            tokio::time::sleep(Duration::from_millis(200)).await;
+                            if texts.is_empty() {
+                                continue;
+                            }
+                            let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                            match engine.embed_batch(&text_refs) {
+                                Ok(vectors) => {
+                                    for (vector, (nid, mid, mhash_str)) in vectors.into_iter().zip(nodes.drain(..)) {
+                                        let sid = silva_inner.clone();
+                                        tokio::spawn(async move {
+                                            let mhash_ref = if mhash_str.is_empty() { None } else { Some(mhash_str.as_str()) };
+                                            let _ = sid.save_embedding(&nid, &vector, &mid, mhash_ref).await;
+                                        });
+                                    }
+                                }
+                                Err(e) => warn!("Batch re-index error for {} nodes: {:?}", chunk.len(), e),
+                            }
+                            tokio::time::sleep(Duration::from_millis(500)).await;
                         }
                     }
                 }

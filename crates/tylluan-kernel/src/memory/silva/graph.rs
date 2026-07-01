@@ -1,4 +1,4 @@
-﻿use anyhow::Result;
+use anyhow::Result;
 use rusqlite::params;
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -661,6 +661,91 @@ impl super::SilvaDB {
             connected_path: path_summary,
             node_count: node_ids.len(),
         })
+    }
+
+    /// Calculates the degree centrality (incoming + outgoing edge count) of a set of node IDs
+    pub async fn degree_centrality(&self, node_ids: &[String]) -> Result<HashMap<String, usize>> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut degree_map = HashMap::new();
+            if node_ids.is_empty() {
+                return Ok(degree_map);
+            }
+
+            // Initialize all IDs with 0
+            for id in node_ids {
+                degree_map.insert(id.clone(), 0);
+            }
+
+            // Query in chunks of 50 to avoid SQLite parameter limits
+            for chunk in node_ids.chunks(50) {
+                let placeholders = std::iter::repeat_n("?", chunk.len())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql = format!(
+                    "SELECT source, target FROM edges WHERE source IN ({}) OR target IN ({})",
+                    placeholders, placeholders
+                );
+                let mut stmt = conn.prepare(&sql)?;
+                let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter().chain(chunk.iter())))?;
+
+                while let Some(row) = rows.next()? {
+                    let s: String = row.get(0)?;
+                    let t: String = row.get(1)?;
+                    if node_ids.contains(&s) {
+                        *degree_map.entry(s).or_insert(0) += 1;
+                    }
+                    if node_ids.contains(&t) {
+                        *degree_map.entry(t).or_insert(0) += 1;
+                    }
+                }
+            }
+
+            Ok(degree_map)
+        })
+    }
+
+    /// Performs a local query over the graph using seed node IDs (activated via vector search)
+    /// to return a ranked list of neighboring context nodes based on Personalized PageRank and degree centrality.
+    pub async fn local_query_graph(
+        &self,
+        seed_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<(GraphNode, f32)>> {
+        if seed_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // 1. Personalized PageRank local around seeds
+        let pagerank_results = self.personalized_pagerank_local(seed_ids, 0.85, 10, limit * 2).await?;
+        if pagerank_results.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // 2. Compute degree centrality for candidate nodes
+        let candidate_ids: Vec<String> = pagerank_results.iter().map(|(id, _)| id.clone()).collect();
+        let degree_map = self.degree_centrality(&candidate_ids).await?;
+
+        // 3. Retrieve GraphNodes and combine PageRank with Degree Centrality
+        // final_score = pr_score * (1.0 + degree * 0.1)
+        let results = tokio::task::block_in_place(|| -> Result<Vec<(GraphNode, f32)>> {
+            let conn = self.conn.blocking_lock();
+            let mut scored_nodes = Vec::new();
+
+            for (id, pr_score) in pagerank_results {
+                if let Ok(Some(node)) = self.get_node_sync(&id, &conn) {
+                    let deg = *degree_map.get(&id).unwrap_or(&0) as f64;
+                    let final_score = pr_score * (1.0 + deg * 0.1);
+                    scored_nodes.push((node, final_score as f32));
+                }
+            }
+
+            scored_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            scored_nodes.truncate(limit);
+            Ok(scored_nodes)
+        })?;
+
+        Ok(results)
     }
 
     async fn find_contradictions_in(&self, _node_ids: &[String]) -> Result<Vec<String>> {
