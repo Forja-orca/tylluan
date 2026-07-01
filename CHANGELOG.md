@@ -10,6 +10,16 @@ All notable changes to Tylluan are documented here.
 
 ### Added
 
+- **M14-D Phase 2 — DispatchRouter**
+  - `crates/tylluan-link/src/dispatch.rs`: `DispatchRouter` + `DispatchDecision` enum.
+  - Scoring: `(1 - load_avg) × (1000 / max(1, latency_ms)) × gpu_multiplier`.
+  - Circuit breaker: 3 consecutive failures → cooldown 60s (configurable). `record_latency / record_failure / record_success` public API.
+  - Default latency 0.0 for peers without history (favors exploration at cluster start).
+  - `HttpState` gains `capability_registry: Arc<Mutex<CapabilityRegistry>>` (TTL 300s).
+  - Gossip background task (tick 60s): `ingest_from_engine` + `prune_expired` + debug log when peers pruned.
+  - Lock ordering: `registry` → `stats` within `route()`; acquired post-.await, dropped pre-.await (no Send trap).
+  - 5 unit tests: local fallback (no peers), remote GPU peer, unknown-latency exploration, circuit breaker trip+recovery, success reset.
+
 - **M14-D Phase 1 — Capability Registry**
   - `HardwareCaps { ram_mb: u32, has_gpu: bool, load_avg: f32 }` struct added to `GossipEntry` with `#[serde(default)]` — backwards-compatible with v0.10.0 peers.
   - `CapabilityRegistry` in `crates/tylluan-link/src/capability.rs`: `HashMap<NodeId, (CapabilityRecord, Instant)>` with configurable TTL (default 300s).
@@ -19,7 +29,7 @@ All notable changes to Tylluan are documented here.
 
 ### Tests
 
-**273 kernel lib tests + 67 link tests + 2 evals = 342 total** · 0 failures.
+**273 kernel lib tests + 71 link tests + 2 evals = 346 total** · 0 failures.
 
 ---
 
