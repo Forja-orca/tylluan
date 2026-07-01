@@ -74,6 +74,7 @@ pub struct HttpState {
     pub nat_cache: Arc<tokio::sync::RwLock<Option<tylluan_link::nat::ExternalAddr>>>,
     pub dht_routing_table: Arc<tokio::sync::RwLock<tylluan_link::dht::RoutingTable>>,
     pub gossip_engine: Arc<tokio::sync::RwLock<tylluan_link::gossip::GossipEngine>>,
+    pub capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::CapabilityRegistry>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -402,6 +403,9 @@ pub async fn start_http_server_with_download(
                 node_identity.node_id().to_string()
             )
         )),
+        capability_registry: Arc::new(std::sync::Mutex::new(
+            tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300))
+        )),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),
@@ -503,6 +507,7 @@ pub async fn start_http_server_with_download(
                 addr: local_addr,
                 capabilities: vec!["mesh".into()],
                 clock,
+                hardware: tylluan_link::gossip::HardwareCaps::default(),
             };
             // Store our own entry so it's available for Pull responses
             gossip_state.gossip_engine.write().await.store_entries(&[local_entry.clone()]);
@@ -593,6 +598,19 @@ pub async fn start_http_server_with_download(
                         tracing::trace!("gossip pull → {}: {}", peer_entry.addr, e);
                     }
                 }
+            }
+
+            // Phase 3: CapabilityRegistry — ingest fresh state + prune expired
+            // Read engine first (async), then lock registry (sync) — avoids holding
+            // MutexGuard across an await boundary.
+            let engine_snapshot = gossip_state.gossip_engine.read().await;
+            let mut reg = gossip_state.capability_registry.lock().unwrap();
+            reg.ingest_from_engine(&*engine_snapshot);
+            let pruned = reg.prune_expired();
+            drop(reg);
+            drop(engine_snapshot);
+            if pruned > 0 {
+                tracing::debug!("CapabilityRegistry: pruned {} expired peers", pruned);
             }
         }
     });
