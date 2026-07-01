@@ -5,4 +5,4 @@
 
 ## ADR Index
 
-*No ADRs recorded yet. Create a new file here when documenting a decision.*
+- [ADR-004 — M14-D: Guild Execution Channels](M14D_dispatch_spec.md) — 2026-07-01. Capability-Aware + Latency-Based Hybrid Routing for guild dispatch across the mesh. Preserves CONTRACT-01 (5 sovereign tools).

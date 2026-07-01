@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.10.0] — in progress — El sistema que sabe si funciona
+## [v0.10.0] — 2026-07-01 — El sistema que sabe si funciona
 
 **Norte estrella:** Validar lo construido en v0.9.0 antes de añadir más capas. Retrieval quality delta + M6-full completo.
 

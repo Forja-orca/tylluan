@@ -19,7 +19,7 @@
 
 ## Version
 
-**v0.9.0** — Graph-Augmented Local RAG release (LinearRAG local graph traversal + batch ONNX embeddings + HNSW index + retrieval baseline + semantic Coloquio search + fault injection DST + security hardening).
+**v0.10.0** — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
 
