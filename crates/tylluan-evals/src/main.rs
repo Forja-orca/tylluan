@@ -4,6 +4,9 @@ mod metrics;
 mod runner;
 mod beam_scale;
 
+#[cfg(test)]
+mod tests;
+
 use std::path::Path;
 
 enum Suite {

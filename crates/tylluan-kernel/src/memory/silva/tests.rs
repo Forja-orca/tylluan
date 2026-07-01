@@ -893,3 +893,26 @@ async fn test_entity_boost_in_hybrid_search() {
     let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
     assert!(ids.contains(&"ent1") || ids.contains(&"lesson1"), "at least one matching node must appear");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hnsw_not_built_below_threshold() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "lesson", "test content", "{}").await.unwrap();
+    db.rebuild_hnsw_if_needed().await.unwrap();
+    let guard = db.hnsw.read().await;
+    assert!(guard.is_none(), "HNSW must not build below threshold");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hnsw_serialize_roundtrip() {
+    use crate::memory::silva::hnsw::{EmbPoint, HnswIndex, serialize_hnsw_data, deserialize_hnsw_rebuild};
+    use instant_distance::Builder;
+    let points = vec![EmbPoint(vec![1.0f32, 0.0, 0.0]), EmbPoint(vec![0.0, 1.0, 0.0])];
+    let values = vec!["n1".to_string(), "n2".to_string()];
+    let map = Builder::default().build(points.clone(), values);
+    let index = HnswIndex { map, node_ids: vec!["n1".into(), "n2".into()], points };
+    let bytes = serialize_hnsw_data(&index).unwrap();
+    assert!(!bytes.is_empty());
+    let restored = deserialize_hnsw_rebuild(&bytes).unwrap();
+    assert_eq!(restored.node_ids.len(), 2);
+}

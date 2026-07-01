@@ -122,7 +122,7 @@ async fn test_consensus_hardening_stress() -> Result<()> {
     // 5. Phase 3: Decay & Resilience Validation
     info!("📉 Phase 3: Applying extreme biological decay...");
     let nodes_before = silva.stats().await?.node_count;
-    silva.apply_decay().await?; // Standard decay
+    silva.apply_decay(336).await?; // Standard decay (336h = 14d default)
     
     // Check nodes
     let synthesis_count;

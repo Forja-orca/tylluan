@@ -7,15 +7,51 @@ use super::GraphNode;
 
 impl super::SilvaDB {
     /// Pure Rust vector cosine similarity search on the graph.
-    /// Now defaults to IVF (Inverted File Index) when centroids are available.
+    /// Fast path: HNSW → IVF → linear fallback.
     pub async fn search_vector(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
-        // Try IVF first (optimized path)
+        // Fast path: HNSW if index is built (approximate, best for large datasets)
+        let hnsw_result = self.search_vector_hnsw(query_embedding, limit).await;
+        if let Ok(ref results) = hnsw_result
+            && !results.is_empty() {
+                return hnsw_result;
+            }
+        // Try IVF next (optimized path)
         if let Ok(results) = self.search_vector_ivf(query_embedding, limit).await
             && !results.is_empty() {
                 return Ok(results);
             }
         // Fallback to linear search
         self.search_vector_linear(query_embedding, limit).await
+    }
+
+    /// HNSW approximate nearest neighbor search via instant-distance.
+    /// Returns empty results if no HNSW index is loaded or if it returns nothing.
+    async fn search_vector_hnsw(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
+        let hnsw_results = {
+            let guard = self.hnsw.read().await;
+            let Some(ref state) = *guard else { return Ok(vec![]); };
+            let results = crate::memory::silva::hnsw::search_hnsw(state, query_embedding, limit * 3);
+            // Collect owned data before guard is dropped
+            results.into_iter().map(|(id, dist)| (id.to_string(), dist)).collect::<Vec<_>>()
+        };
+
+        if hnsw_results.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let results: Vec<(GraphNode, f32)> = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut results = Vec::new();
+            for (id, dist) in &hnsw_results {
+                if let Ok(Some(node)) = self.get_node_sync(id, &conn) {
+                    let score = 1.0 - dist;
+                    results.push((node, score));
+                }
+            }
+            results
+        });
+        let truncated = results.into_iter().take(limit).collect();
+        Ok(truncated)
     }
 
     /// Linear vector search (fallback when IVF not available)
