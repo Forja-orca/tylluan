@@ -15,7 +15,7 @@ pub fn start_lifecycle_reaper(
     registry: Arc<RwLock<GuildRegistry>>,
     check_interval_secs: u64,
 ) -> tokio::task::JoinHandle<()> {
-    start_lifecycle_reaper_with_silva(registry, check_interval_secs, None)
+    start_lifecycle_reaper_with_silva(registry, check_interval_secs, None, 336)
 }
 
 /// Start lifecycle reaper with SilvaDB for WAL checkpoint (P1 fix)
@@ -23,6 +23,7 @@ pub fn start_lifecycle_reaper_with_silva(
     registry: Arc<RwLock<GuildRegistry>>,
     check_interval_secs: u64,
     silva: Option<Arc<SilvaDB>>,
+    decay_half_life_hours: u64,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let interval = Duration::from_secs(check_interval_secs);
@@ -76,7 +77,7 @@ pub fn start_lifecycle_reaper_with_silva(
             if loop_count % 100 == 0
                 && let Some(silva_db) = &silva {
                     info!("🧠 [T26] Applying biological decay to SilvaDB...");
-                    let _ = silva_db.apply_decay().await;
+                    let _ = silva_db.apply_decay(decay_half_life_hours).await;
                     let deleted = silva_db.apply_cleanup(0.05).await.unwrap_or(0);
                     if deleted > 0 {
                         info!("🧹 [T26] Biological pruning removed {} dead memories.", deleted);

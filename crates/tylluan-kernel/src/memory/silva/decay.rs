@@ -7,27 +7,61 @@ use tracing::info;
 impl super::SilvaDB {
     /// Apply weight decay to unused nodes and prune dead memories.
     /// Implements biological pruning: recent items are kept, old/unused ones fade.
-    pub async fn apply_decay(&self) -> Result<usize> {
+    pub async fn apply_decay(&self, half_life_hours: u64) -> Result<usize> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let mut conn = self.conn.blocking_lock();
             
-            // Step 1: Biological decay with type-specific rates
-            // - lesson: 0.02 (Long term memory)
-            // - experience: 0.05 (Mid term memory)
-            // - concept/default: 0.08 (Short term / Transient)
-            let node_changes = conn.execute(
-                "UPDATE nodes
-                 SET weight = MAX(weight - CASE 
-                    WHEN type = 'lesson' THEN 0.02
-                    WHEN type = 'experience' THEN 0.05
-                    ELSE 0.08
-                 END, 0.1)
-                 WHERE type != 'identity' AND protected = 0 
-                 AND julianday('now') - julianday(updated_at) > 1",
-                [],
-            )?;
+            // Step 1: Query nodes that need decay:
+            // type != 'identity' AND protected = 0 AND (now - updated_at) > 1 day.
+            // We select the ID, node type, current weight, and time elapsed in hours.
+            let nodes_to_decay: Vec<(String, String, f64, f64)> = {
+                let mut stmt = conn.prepare(
+                    "SELECT id, type, weight, (julianday('now') - julianday(updated_at)) * 24.0 FROM nodes
+                     WHERE type != 'identity' AND protected = 0
+                     AND julianday('now') - julianday(updated_at) > 1"
+                )?;
+                
+                stmt.query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, f64>(2)?,
+                        row.get::<_, f64>(3)?,
+                    ))
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            };
+
+            // Step 2: Biological decay with type-specific exponential rates calculated in Rust
+            // - lesson: full decay_half_life_hours (Long term / Durable memory)
+            // - experience: half_life / 2 (Medium term memory)
+            // - concept/default: half_life / 5 (Transient / Short term memory)
+            let hl = half_life_hours as f64;
+            let node_changes = if !nodes_to_decay.is_empty() {
+                let tx = conn.transaction()?;
+                let mut count = 0;
+                {
+                    let mut update_stmt = tx.prepare("UPDATE nodes SET weight = ?1 WHERE id = ?2")?;
+                    for (id, node_type, weight, hours_elapsed) in nodes_to_decay {
+                        let divisor = match node_type.as_str() {
+                            "lesson" => hl,
+                            "experience" => (hl / 2.0).max(1.0),
+                            _ => (hl / 5.0).max(1.0),
+                        };
+                        
+                        let new_weight = (weight * 0.5_f64.powf(hours_elapsed / divisor)).max(0.1);
+                        update_stmt.execute(rusqlite::params![new_weight, id])?;
+                        count += 1;
+                    }
+                }
+                tx.commit()?;
+                count
+            } else {
+                0
+            };
             
-            // Step 2: Ensure minimum floor for non-prunable nodes
+            // Step 3: Ensure minimum floor for non-prunable nodes
             conn.execute(
                 "UPDATE nodes SET weight = MAX(weight, 0.01) WHERE weight < 0.01 AND type != 'identity' AND protected = 0",
                 [],
