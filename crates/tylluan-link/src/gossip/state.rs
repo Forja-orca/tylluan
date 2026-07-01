@@ -236,6 +236,10 @@ impl GossipEngine {
         self.state.entries_since(cursor)
     }
 
+    pub fn local_node_id(&self) -> &str {
+        &self.state.local_node_id
+    }
+
     pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
         self.state.local_entry(addr, capabilities)
     }

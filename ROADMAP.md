@@ -115,12 +115,29 @@ Out of scope (v1.0.0):
 - [x] Contextual Retrieval: `build_contextual_text()` prepends `[source_file > heading_path]` before embedding. Applied in background reindex loop and manual reindex endpoint. Zero overhead when metadata is absent.
 - [x] M1 — Memory Decay: exponential half-life `weight * 0.5^(hours/half_life)` computed in Rust (no SQL POWER() dependency). Type-specific effective half-lives (lesson/experience/concept). Configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14 days). Protected nodes exempt.
 
-**v0.8.0 backlog (do not start before v0.7.0 is complete):**
-- M2 — Hybrid Search v2: multi-signal RRF (semantic + BM25 + entity boosting)
-- M6-full — Fault injection, network partitions, recovery simulation
-- M6 — Dual-Level LightRAG retrieval (depends on M2 for solid vector foundation)
+## v0.8.0 — Self-Aware Agent
+
+**Status:** Complete.
+
+**Goal:** The agent that knows itself and remembers conversations (norte estrella from MemGPT/Letta research cycle).
+
+**Research basis:** Antigravity Research Cycle 2 (MemGPT/Letta architecture mapping), full team deliberation in Coloquio v0.8.0 planning cycle.
+
+Delivered:
+- [x] P0-A — Core Memory (persona/preferences): `AgentProfile` gains `persona: String` + `preferences: serde_json::Value`; `agent_get_persona` / `agent_set_persona` kernel tools wired under `tylluan_recall`/`tylluan_remember` subtool routing. CONTRACT-01 (5 sovereign tools) unchanged.
+- [x] P0-B — Coloquio→SilvaDB episodic flywheel: background `tokio::spawn` every 60s ingests Coloquio turns into SilvaDB as `episodic` nodes; deterministic IDs `coloquio:{channel}:{turn}`; 100ms CPU throttle; `HashMap<String, i64>` watermarks for idempotent dedup.
+- [x] P1 — M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 ranking with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF; 2 new BM25 integration tests (multi_thread flavor).
+- [x] P2 — DST harness minimal: `crates/tylluan-link/tests/gossip_dst.rs` — 3 InMemoryTransport-based GossipEngine simulation tests (normal sync, partition failure, bidirectional convergence); `GossipEngine::local_node_id()` accessor added to `state.rs`.
+- [x] P3 — Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` in `catalog.rs` — eliminates double filesystem scan, startup time ~10s → ~5s.
+
+**316 lib tests passing** (263 kernel + 53 link) at release.
+
+**v0.9.0 backlog:**
+- M6-full — Fault injection, network partitions, recovery simulation (turmoil — deferred from P2 due to single-thread constraint)
+- M6 — Dual-Level LightRAG retrieval (depends on M2 P1 for solid vector foundation)
 - Batch embedding pipeline (embed in batches, not one-by-one)
 - HNSW index via `instant-distance` (before 500k nodes)
+- Semantic search over Coloquio (episodic recall — depends on P0-B flywheel being populated)
 
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
