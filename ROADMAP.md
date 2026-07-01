@@ -111,7 +111,7 @@ Out of scope (v1.0.0):
 
 - [x] M6-minimal — Deterministic Simulation Testing (DST) foundation: `MeshTransport` trait + `InMemoryTransport` (mpsc-based) + `TcpTransport` (length-prefixed). `GossipEngine::perform_sync/handle_incoming_message` generic over transport. 4 integration tests. Prerequisite for validating all mesh milestones.
 - [ ] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. Detect `.py` files with fastmcp header. Zero-config for new guilds. Also includes mxbai-edge-colbert reranker swap (Jina 280M → mxbai 109M, ~500MB RAM reduction, RPi4-friendly). (~1 day)
-- [ ] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. No separate dashboard process required. One binary, one `tylluan.toml`, done. (~0.5 days)
+- [x] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. `--features bundled-dashboard` embeds assets at compile time; disk fallback preserved for dev. (~0.5 days)
 - [ ] Contextual Retrieval: prepend document context to each chunk before embedding (Anthropic 2024 pattern). Offline fallback: filename + Markdown heading hierarchy as local heuristic, zero CPU cost. ~15-49% retrieval improvement. (~1 day)
 - [ ] M1 — Memory Decay: exponential half-life weight decay on nodes (`weight * 0.5^(hours/half_life)`), configurable `decay_half_life_hours` in `tylluan.toml`. Protected nodes exempt. Background loop every 10 min alongside existing reindex loop. (~1.5 days)
 
