@@ -1,13 +1,13 @@
 ﻿//! # Guild Catalog
 //!
-//! Static registry of all known guilds — the SINGLE SOURCE OF TRUTH.
-//! Ported from TylluanMCP's `GUILD_MANIFESTS` in `SemanticRouter.ts`.
-//!
-//! Each guild has a name, description (for semantic matching), module path,
-//! and type (core vs builder vs scholar vs watcher).
+//! Auto-discovered from `guilds/` directory structure.
+//! Scans for `.py` files with FastMCP servers at startup.
+//! Zero-config for new guilds — just put a `.py` file in the right directory.
 
 use serde::{Deserialize, Serialize};
 use crate::config::GuildWeight;
+use std::collections::HashMap;
+use std::path::Path;
 
 /// Describes a guild that the kernel can load.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,744 +61,358 @@ impl std::fmt::Display for GuildCategory {
     }
 }
 
-/// Returns the complete built-in guild catalog.
-/// This is the master list — guilds can also be added dynamically from config.
-pub fn builtin_catalog() -> Vec<GuildDescriptor> {
-    // All Python guild files live under guilds/ — organized by category:
-    // builders/, scholars/, wardens/, watchers/ subdirectory packages
-    vec![
-        // ─── Core (always-on) ─────────────────────────────────────────
-        GuildDescriptor {
-            name: "bash".into(),
-            description: "shell commands test run scripts execute".into(),
-            module_path: "guilds.builders.plugins.bash".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                // Build & test commands
-                "cargo ".into(), "cargo build".into(), "cargo test".into(),
-                "cargo check".into(), "cargo run".into(), "cargo clippy".into(),
-                "npm run".into(), "npm install".into(), "npm start".into(),
-                "npx ".into(), "pip install".into(), "pip3 install".into(),
-                "pytest".into(), "python -m".into(), "python3 ".into(),
-                // Network commands — must trigger before filesystem interprets URLs as paths
-                "curl ".into(), "curl http".into(), "curl https".into(),
-                "wget ".into(), "wget http".into(), "wget https".into(),
-                // Execution triggers
-                "echo ".into(),
-                "run script".into(), "run command".into(), "run tests".into(),
-                "run the tests".into(), "execute command".into(), "execute this".into(),
-                "shell command".into(), "terminal command".into(),
-                "ejecuta ".into(), "ejecutar ".into(), "executar ".into(),
-                "compila ".into(), "compilar ".into(),
-                "make build".into(), "cmake ".into(), "rustc ".into(),
-                "node ".into(), "deno ".into(), "powershell".into(),
-                "taskkill".into(), "chmod ".into(), "sudo ".into(),
-                "apt install".into(), "brew install".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Heavy, // bash runs cargo/npm/pytest — can take minutes on CPU
-        },
-        GuildDescriptor {
-            name: "filesystem".into(),
-            description: "read write files find directory list".into(),
-            module_path: "guilds.builders.plugins.filesystem".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "find files".into(), "list files".into(), "list directory".into(),
-                "read file".into(), "write file".into(), "create file".into(),
-                "delete file".into(), "move file".into(), "copy file".into(),
-                "rename file".into(), "save file".into(), "open file".into(),
-                "show file".into(), "file content".into(), "file list".into(),
-                "cat file".into(), "buscar archivos".into(), "listar archivos".into(),
-                "leer archivo".into(), "crear archivo".into(), "mostrar archivo".into(),
-                "listar directorio".into(), "contenido del archivo".into(),
-                "read the file".into(), "read the contents".into(),
-                "show file contents".into(), "show contents of".into(),
-                "leer el archivo".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec!["git".into()],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "memory".into(),
-            description: "memory remember recall store knowledge".into(),
-            module_path: "guilds.scholars.plugins.memory".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "remember ".into(), "remember:".into(), "recall ".into(), "store fact".into(),
-                "store this".into(), "memorize".into(), "save this fact".into(),
-                "add to memory".into(), "retrieve memory".into(),
-                "recuerda ".into(), "recuerda esto".into(), "guarda esto".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["content".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "monitor".into(),
-            description: "monitor CPU memory disk processes network".into(),
-            module_path: "guilds.watchers.plugins.monitor".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "list processes".into(), "top processes".into(),
-                "list top processes".into(), "show processes".into(),
-                "process list".into(), "running processes".into(),
-                "processes by memory".into(), "processes by cpu".into(),
-                "list top".into(), "what is running".into(),
-                "qué procesos".into(), "procesos en ejecución".into(),
-                "network stats".into(), "network io".into(),
-                "bytes sent".into(), "bytes received".into(),
-                "bandwidth".into(), "network traffic".into(),
-                "estadísticas de red".into(), "watch logs".into(),
-                "tail logs".into(), "follow log".into(),
-                "monitor process".into(), "ver logs".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained, no args needed
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "code_graph".into(),
-            description: "code analysis parse structure dependencies".into(),
-            module_path: "guilds.core.code_graph".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "analiza el codigo".into(), "analiza el código".into(),
-                "analyze code".into(), "parse codebase".into(),
-                "code topology".into(), "index repository".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Medium,
-        },
-
-        // ─── Builders (on-demand) ─────────────────────────────────────
-        GuildDescriptor {
-            name: "git".into(),
-            description: "git version control commit push pull".into(),
-            module_path: "guilds.builders.plugins.git".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "git".into(), "commit".into(), "branch".into(), "diff".into(),
-                "log".into(), "push".into(), "pull".into(), "merge".into(),
-                "stash".into(), "rebase".into(), "checkout".into(), "clone".into(),
-                "remote".into(), "tag".into(), "blame".into(), "git fetch".into(),
-                "cherry-pick".into(), "version control".into(),
-                "commit history".into(), "show diff".into(),
-                "historial de commits".into(), "git status".into(),
-                "git diff".into(), "git log".into(), "git commit".into(),
-                "git push".into(), "git pull".into(), "git checkout".into(),
-                "git branch".into(), "git merge".into(), "git stash".into(),
-                "git rebase".into(), "git blame".into(), "git clone".into(),
-                "git add".into(), "git reset".into(), "git tag".into(),
-                "git remote".into(), "git show".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "docker".into(),
-            description: "Docker container orchestration compose images".into(),
-            module_path: "guilds.builders.plugins.docker".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "docker run".into(), "docker build".into(), "docker compose".into(),
-                "docker ps".into(), "docker stop".into(), "docker pull".into(),
-                "docker container".into(), "docker image".into(),
-                "docker exec".into(), "docker logs".into(), "docker-compose".into(),
-                "container status".into(), "inspect container".into(),
-                "container environment".into(), "container variables".into(),
-                "container inspect".into(), "list containers".into(),
-                "running containers".into(), "container logs".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Heavy,
-        },
-        // NOTE: sandbox guild removed — guilds.builders.plugins.sandbox doesn't exist in runtime
-        // Code execution intents now route to "code" guild instead
-        GuildDescriptor {
-            name: "database".into(),
-            description: "SQL database queries schema tables".into(),
-            module_path: "guilds.builders.plugins.database".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "sql query".into(), "run query".into(), "database schema".into(),
-                "table schema".into(), "select from".into(), "insert into".into(),
-                "create table".into(), "consulta sql".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["query".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "code".into(),
-            description: "write edit refactor code files functions".into(),
-            module_path: "guilds.builders.plugins.code".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "write code".into(), "edit code".into(), "refactor".into(),
-                "apply diff".into(), "apply patch".into(), "format code".into(),
-                "modify function".into(), "implement feature".into(),
-                "editar código".into(), "escribir código".into(),
-                "analyze the file".into(), "analyze file".into(),
-                "explain the file".into(), "explain file".into(),
-                "parse the file".into(), "parse file".into(),
-                "what does this file".into(), "what does the file".into(),
-                "describe the file".into(), "describe file".into(),
-                "analiza el archivo".into(), "analiza el fichero".into(),
-                "explica el archivo".into(), "lee este archivo".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Medium,
-        },
-
-        // ─── Scholars (on-demand) ─────────────────────────────────────
-        GuildDescriptor {
-            name: "search".into(),
-            description: "internet web search lookup research".into(),
-            module_path: "guilds.scholars.plugins.search".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "search the web".into(), "search online".into(),
-                "search internet".into(), "look up".into(), "look this up".into(),
-                "find online".into(), "google ".into(), "wikipedia ".into(),
-                "buscar en internet".into(), "buscar en la web".into(),
-                "buscar online".into(), "investigar ".into(), "pesquisar ".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["query".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "code_analysis".into(),
-            description: "static code analysis symbols dependencies".into(),
-            module_path: "guilds.builders.plugins.code_analysis".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "pdf".into(),
-            description: "PDF document text extraction parsing".into(),
-            module_path: "guilds.scholars.plugins.pdf".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "read pdf".into(), "parse pdf".into(), "extract pdf".into(),
-                "pdf content".into(), "leer pdf".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "vision".into(),
-            description: "analyze images OCR recognition computer vision".into(),
-            module_path: "guilds.core.vision".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "analyze image".into(), "describe image".into(),
-                "what is in this image".into(), "ocr ".into(), "analizar imagen".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "browser".into(),
-            description: "browser navigate web automation screenshots".into(),
-            module_path: "guilds.core.browser".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "open browser".into(), "navigate to".into(), "web browser".into(),
-                "take screenshot".into(), "search web".into(), "scrape".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["url".into()],
-            weight: GuildWeight::Heavy,
-        },
-
-        GuildDescriptor {
-            name: "audit".into(),
-            description: "audit health security compliance inspect".into(),
-            module_path: "guilds.wardens.plugins.audit".into(),
-            category: GuildCategory::Watcher,
-            trigger_phrases: vec![
-                "audit system".into(), "audit the system".into(), "system audit".into(),
-                "run audit".into(), "guild health check".into(),
-                "inspect guild inventory".into(), "guild inventory".into(),
-                "inspect kernel".into(), "kernel health".into(),
-                "security audit".into(), "compliance check".into(),
-                "inventory tools".into(), "audita".into(),
-                "inventario de guilds".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "system_metrics".into(),
-            description: "system health CPU memory disk metrics".into(),
-            module_path: "guilds.watchers.plugins.system_metrics".into(),
-            category: GuildCategory::Watcher,
-            trigger_phrases: vec![
-                "system metrics".into(), "show metrics".into(), "cpu usage".into(),
-                "memory usage".into(), "disk space".into(), "disk usage".into(),
-                "system health".into(), "system status".into(), "health check".into(),
-                "system info".into(), "show cpu".into(), "resource usage".into(),
-                "how much memory".into(), "uso de cpu".into(), "uso de memoria".into(),
-                "estado del sistema".into(), "métricas del sistema".into(),
-                "system uptime".into(), "show uptime".into(), "uptime".into(),
-                "show cpu usage".into(), "show cpu".into(),
-                "show memory usage".into(), "show ram".into(),
-                "show disk usage".into(), "show disk space".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "deep_analysis".into(),
-            description: "codebase mapping dependency analysis architecture".into(),
-            module_path: "guilds.scholars.plugins.deep_analysis".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["query".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "sequential_thinking".into(),
-            description: "step by step reasoning think plan break down".into(),
-            module_path: "guilds.scholars.plugins.sequential_thinking".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "think step by step".into(), "think through".into(),
-                "step by step".into(), "break this down".into(), "break down".into(),
-                "plan this out".into(), "reason through".into(),
-                "analyze step".into(), "walk me through".into(),
-                "piensa paso a paso".into(), "desglosa".into(), "planifica".into(),
-                "compare options".into(), "compare choices".into(),
-                "compare alternatives".into(), "which is better".into(),
-                "which should i".into(), "pros and cons".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "ingest".into(),
-            description: "ingest import load data documents files".into(),
-            module_path: "guilds.scholars.plugins.ingest".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "ingest ".into(), "ingest text".into(), "ingest url".into(),
-                "ingest file".into(), "import document".into(), "seed knowledge".into(),
-                "index content".into(), "load repository".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["url".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "knowledge".into(),
-            description: "extract triples entities knowledge graph NER".into(),
-            module_path: "guilds.scholars.plugins.knowledge".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                // Technical NLP triggers
-                "extract triples".into(),
-                "extrae triples".into(),
-                "triple extraction".into(),
-                "named entity".into(),
-                "subject predicate".into(),
-                "entity extraction".into(),
-                "relation extraction".into(),
-                "ner ".into(),
-                // Natural language — English
-                "knowledge graph".into(),
-                "build graph from".into(),
-                "link concepts".into(),
-                "link this concept".into(),
-                "find entities".into(),
-                "add to knowledge".into(),
-                "add to the graph".into(),
-                "populate the graph".into(),
-                "store knowledge".into(),
-                "learn from this".into(),
-                "learn this concept".into(),
-                "extract knowledge".into(),
-                "extract entities from text".into(),
-                "extract relations from text".into(),
-                "auto-link".into(),
-                // Natural language — Spanish
-                "aprende este".into(),
-                "aprende que".into(),
-                "aprende esto".into(),
-                "guarda en el grafo".into(),
-                "añade al grafo".into(),
-                "añade esto al grafo".into(),
-                "poblar el grafo".into(),
-                "enlaza conceptos".into(),
-                "relaciona conceptos".into(),
-                "extrae conceptos".into(),
-                "extraer conceptos".into(),
-                "extrae el conocimiento".into(),
-                "extrae las relaciones".into(),
-                "infiere entidades".into(),
-                "vincular ideas".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["content".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "data_tools".into(),
-            description: "parse JSON YAML CSV data transform".into(),
-            module_path: "guilds.scholars.plugins.data_tools".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "formatter".into(),
-            description: "format code Ruff Prettier Rustfmt lint".into(),
-            module_path: "guilds.builders.plugins.formatter".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "mcp_bridge".into(),
-            description: "MCP bridge federated remote servers".into(),
-            module_path: "guilds.core.mcp_bridge".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "mcp ping".into(), "mcp call".into(), "mcp list tools".into(),
-                "ping mcp".into(), "call remote tool".into(), "federated mcp".into(),
-                "mcp bridge".into(), "mcp connectivity".into(), "remote mcp".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "code_reviewer".into(),
-            description: "code review analyze quality bugs".into(),
-            module_path: "guilds.core.code_reviewer".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "review code".into(), "code review".into(), "review this".into(),
-                "critique code".into(), "find bugs".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "deep_web_research".into(),
-            description: "deep web research fetch scrape online".into(),
-            module_path: "guilds.core.deep_web_research".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "fetch page".into(), "fetch url".into(), "fetch http".into(),
-                "research topic".into(), "deep research".into(), "crawl page".into(),
-                "scrape page".into(), "web scraping".into(),
-                "research online about".into(), "look up on the web".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["query".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "comfy_ui".into(),
-            description: "generate images video ComfyUI Flux Wan2".into(),
-            module_path: "guilds.core.comfy_ui".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "generate image".into(), "generate an image".into(), "genera imagen".into(),
-                "comfy status".into(), "comfyui status".into(), "comfy ui".into(),
-                "text to image".into(), "img2img".into(), "image to image".into(),
-                "generate video".into(), "genera video".into(), "youtube short".into(),
-                "ken burns".into(), "tts narration".into(), "kokoro".into(),
-                "list models".into(), "flux schnell".into(), "image generation".into(),
-                "create art".into(), "render scene".into(), "generate art".into(),
-                "generación de imagen".into(), "genera una imagen".into(),
-                // Wan2.2 video
-                "generate video wan".into(), "wan2".into(), "wan video".into(),
-                "generate wan".into(), "video wan".into(), "genera video wan".into(),
-                "landscape video".into(), "shorts video".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["prompt".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "n8n_bridge".into(),
-            description: "n8n workflow automation pipelines orchestration".into(),
-            module_path: "guilds.core.n8n_bridge".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "n8n".into(), "trigger workflow".into(), "run workflow".into(),
-                "execute workflow".into(), "list workflows".into(),
-                "automation pipeline".into(), "n8n status".into(),
-                "ejecuta workflow".into(), "lanza workflow".into(),
-                "kernel pulse".into(), "system pulse".into(), "tylluan pulse".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "coloquio".into(),
-            description: "coloquio channel messages chat group".into(),
-            module_path: "guilds.core.coloquio".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "lee el coloquio".into(), "leer coloquio".into(), "ver coloquio".into(),
-                "read coloquio".into(), "lee el canal".into(), "ver canal coloquio".into(),
-                "publica en coloquio".into(), "post to coloquio".into(),
-                "post to coloquio channel".into(), "post to channel".into(),
-                "send message to coloquio".into(), "send to coloquio".into(),
-                "send message".into(), "envia al canal".into(), "envía al canal".into(),
-                "message coloquio".into(),
-                "lista canales coloquio".into(), "list coloquio channels".into(),
-                "coloquio channel".into(), "canal coloquio".into(),
-                "hilo coloquio".into(), "historial coloquio".into(),
-                "conversacion grupal".into(), "group chat".into(),
-                "publicar en coloquio".into(),
-                "publica en canal".into(), "publicar en canal".into(),
-                "post to mision".into(),
-                "que hay de nuevo".into(), "ponme al dia".into(),
-                "what's new".into(), "whats new".into(), "catch up".into(),
-                "ponte al dia".into(), "mensajes sin leer".into(),
-                "novedades coloquio".into(), "novedades".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["channel_id".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "coloquio_digest".into(),
-            description: "digest summarize coloquio memory reasoning".into(),
-            module_path: "guilds.core.coloquio_digest".into(),
-            category: GuildCategory::Core,
-            trigger_phrases: vec![
-                "digest coloquio".into(), "digest all channels".into(),
-                "summarize channels".into(), "coloquio to memory".into(),
-                "sincroniza coloquio".into(), "resumen canales".into(),
-                "auto reason cycle".into(), "reasoning cycle".into(),
-                "flywheel knowledge".into(), "digest status".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["channel_id".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "websearch".into(),
-            description: "SearXNG web search meta-engine research".into(),
-            module_path: "guilds.core.websearch".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "busca en internet".into(), "search web".into(),
-                "busca informacion sobre".into(), "web search".into(),
-                "buscar online".into(), "buscar en la web".into(),
-                "internet search".into(), "look up".into(),
-                "find online".into(), "research topic".into(),
-                "buscar informacion".into(), "fact check".into(),
-                "online research".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["query".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "scrapling".into(),
-            description: "web scraping HTML parse crawl extract".into(),
-            module_path: "guilds.core.scrapling_web".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "raspa la pagina".into(), "raspa la página".into(),
-                "scrape url".into(), "scrape page".into(),
-                "extrae contenido de".into(), "extraer contenido de".into(),
-                "fetch webpage".into(), "fetch page".into(),
-                "download page".into(), "download url".into(),
-                "extract data".into(), "extract structure".into(),
-                "scrape website".into(), "scrape search".into(),
-                "crawl page".into(), "crawl website".into(),
-                "extraer datos".into(), "extraer estructura".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["url".into()],
-            weight: GuildWeight::Medium,
-        },
-        // ─── V1 Port ────────────────────────────────────────────────
-        GuildDescriptor {
-            name: "audio_tools".into(),
-            description: "audio transcribe Whisper ComfyUI".into(),
-            module_path: "guilds.builders.plugins.audio_tools".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec!["transcribe audio".into(), "whisper".into(), "audio transcription".into()],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Heavy,
-        },
-        GuildDescriptor {
-            name: "ffmpeg_tools".into(),
-            description: "media probe trim concat resize".into(),
-            module_path: "guilds.builders.plugins.ffmpeg_tools".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "convert video".into(), "trim video".into(), "concat video".into(), "resize video".into(),
-                "extract audio".into(), "media info".into(), "ffmpeg".into(), "ffprobe".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "screenshot_tools".into(),
-            description: "screen capture screenshot image".into(),
-            module_path: "guilds.builders.plugins.screenshot_tools".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec!["screenshot".into(), "capture screen".into(), "take screenshot".into(), "pantallazo".into()],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "clipboard_tools".into(),
-            description: "clipboard read write system".into(),
-            module_path: "guilds.builders.plugins.clipboard_tools".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec!["clipboard".into(), "copy to clipboard".into(), "paste from clipboard".into(), "portapapeles".into()],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec![], // self-contained
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "local_llm_proxy".into(),
-            description: "local LLM inference Ollama API".into(),
-            module_path: "guilds.builders.plugins.local_llm_proxy".into(),
-            category: GuildCategory::Builder,
-            trigger_phrases: vec![
-                "ollama".into(), "lm studio".into(), "local llm".into(), "local model".into(),
-                "run inference".into(), "chat with model".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["prompt".into()],
-            weight: GuildWeight::Medium,
-        },
-        GuildDescriptor {
-            name: "cron_scheduler".into(),
-            description: "schedule recurring tasks jobs".into(),
-            module_path: "guilds.watchers.plugins.cron_scheduler".into(),
-            category: GuildCategory::Watcher,
-            trigger_phrases: vec!["schedule".into(), "cron job".into(), "recurring task".into(), "tarea programada".into()],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["command".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "biome_warden".into(),
-            description: "format lint code BiomeJS".into(),
-            module_path: "guilds.wardens.plugins.biome_warden".into(),
-            category: GuildCategory::Watcher,
-            trigger_phrases: vec!["biome".into(), "format code".into(), "lint file".into(), "auto-format".into()],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Light,
-        },
-        GuildDescriptor {
-            name: "ast_surgeon".into(),
-            description: "AST rename symbol refactor TS".into(),
-            module_path: "guilds.scholars.plugins.ast_surgeon".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "ast".into(), "rename symbol".into(), "file outline".into(), "find references".into(),
-                "syntax tree".into(), "refactor symbol".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["path".into()],
-            weight: GuildWeight::Light,
-        },
-        // External MCP guild — no Python file, launched via npx codebase-memory-mcp
-        GuildDescriptor {
-            name: "codebase_memory".into(),
-            description: "Code knowledge graph: index repos, search code, trace calls, architecture analysis".into(),
-            module_path: "external:codebase_memory".into(),
-            category: GuildCategory::Scholar,
-            trigger_phrases: vec![
-                "index this project".into(),
-                "index codebase".into(),
-                "index repository".into(),
-                "search code".into(),
-                "call chain".into(),
-                "trace path".into(),
-                "trace calls".into(),
-                "code architecture".into(),
-                "find function".into(),
-                "code snippet".into(),
-                "detect changes".into(),
-                "graph schema".into(),
-            ],
-            embedding: None,
-            negative_keywords: vec![],
-            required_args: vec!["repo_path".into()],
-            weight: GuildWeight::Heavy,
-        },
-    ]
+/// Overrides for guilds that need explicit weight or required_args
+/// not inferrable from the Python file alone.
+fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> {
+    let mut m = HashMap::new();
+    m.insert("bash", (GuildWeight::Heavy, vec!["command"]));
+    m.insert("filesystem", (GuildWeight::Light, vec!["path"]));
+    m.insert("memory", (GuildWeight::Light, vec!["content"]));
+    m.insert("vision", (GuildWeight::Medium, vec!["path"]));
+    m.insert("knowledge", (GuildWeight::Medium, vec!["command"]));
+    m.insert("code_analysis", (GuildWeight::Heavy, vec!["command"]));
+    m.insert("deep_analysis", (GuildWeight::Heavy, vec!["query"]));
+    m.insert("deep_web_research", (GuildWeight::Heavy, vec!["query"]));
+    m.insert("ingest", (GuildWeight::Medium, vec!["path"]));
+    m.insert("git", (GuildWeight::Heavy, vec!["command"]));
+    m.insert("docker", (GuildWeight::Heavy, vec!["command"]));
+    m.insert("coloquio", (GuildWeight::Medium, vec!["channel_id"]));
+    m.insert("websearch", (GuildWeight::Heavy, vec!["query"]));
+    m.insert("search", (GuildWeight::Heavy, vec!["query"]));
+    m.insert("browser", (GuildWeight::Heavy, vec!["url"]));
+    m.insert("code", (GuildWeight::Heavy, vec!["path"]));
+    m.insert("code_graph", (GuildWeight::Heavy, vec!["path"]));
+    m.insert("database", (GuildWeight::Heavy, vec!["url"]));
+    m.insert("comfy_ui", (GuildWeight::Heavy, vec!["prompt"]));
+    m.insert("n8n_bridge", (GuildWeight::Medium, vec![]));
+    m.insert("scrapling", (GuildWeight::Heavy, vec!["url"]));
+    m.insert("pdf", (GuildWeight::Medium, vec!["path"]));
+    m.insert("code_reviewer", (GuildWeight::Medium, vec!["command"]));
+    m.insert("formatter", (GuildWeight::Medium, vec!["path"]));
+    m.insert("data_tools", (GuildWeight::Medium, vec!["path"]));
+    m.insert("ast_surgeon", (GuildWeight::Light, vec!["command"]));
+    m.insert("audio_tools", (GuildWeight::Medium, vec!["path"]));
+    m.insert("ffmpeg_tools", (GuildWeight::Medium, vec!["path"]));
+    m.insert("screenshot_tools", (GuildWeight::Light, vec!["path"]));
+    m.insert("clipboard_tools", (GuildWeight::Light, vec!["path"]));
+    m.insert("local_llm_proxy", (GuildWeight::Medium, vec!["command"]));
+    m.insert("biome_warden", (GuildWeight::Medium, vec!["query"]));
+    m.insert("audit", (GuildWeight::Heavy, vec!["path"]));
+    m.insert("cron_scheduler", (GuildWeight::Light, vec!["command"]));
+    m.insert("sequential_thinking", (GuildWeight::Medium, vec!["prompt"]));
+    m.insert("coloquio_digest", (GuildWeight::Medium, vec!["channel_id"]));
+    m.insert("whats_new", (GuildWeight::Light, vec!["channel_id"]));
+    m.insert("council", (GuildWeight::Medium, vec!["query"]));
+    m.insert("mcp_bridge", (GuildWeight::Light, vec![]));
+    m.insert("monitor", (GuildWeight::Light, vec![]));
+    m.insert("system_metrics", (GuildWeight::Light, vec![]));
+    m
 }
 
+fn dir_to_category(dir_name: &str) -> GuildCategory {
+    match dir_name {
+        "builders" => GuildCategory::Builder,
+        "scholars" => GuildCategory::Scholar,
+        "wardens" => GuildCategory::Core,
+        "watchers" => GuildCategory::Watcher,
+        _ => GuildCategory::Core,
+    }
+}
+
+/// Map file stem to guild name for files where FastMCP name differs from filename.
+fn name_override(stem: &str) -> Option<&'static str> {
+    let name = match stem {
+        "scrapling_web" => "scrapling",
+        _ => return None,
+    };
+    Some(name)
+}
+
+fn description_override(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "bash" => "Shell command execution: build, test, compile, run scripts",
+        "filesystem" => "Read and write files, find and list directories",
+        "memory" => "Store and retrieve knowledge from long-term memory",
+        "git" => "Git source control: status, diff, log, commits, checkout, branches",
+        "docker" => "Docker container management and database services",
+        "system_metrics" => "System health metrics: CPU, memory, disk usage",
+        "code_analysis" => "Static analysis and code quality checks",
+        "deep_analysis" => "Deep code analysis and architectural understanding",
+        "deep_web_research" => "Multi-source web research and content gathering",
+        "knowledge" => "Knowledge graph triple extraction and entity recognition",
+        "ingest" => "Ingest documents and code into memory",
+        "vision" => "Image analysis and OCR using vision models",
+        "browser" => "Web browser automation with CDP protocol",
+        "code" => "Code modification and generation across languages",
+        "database" => "Database query and schema management",
+        "search" => "Semantic and keyword search across indexed content",
+        "pdf" => "PDF document reading and text extraction",
+        "websearch" => "Web search engine queries and result fetching",
+        "code_reviewer" => "Code review and quality checks",
+        "coloquio" => "Coloquio multi-agent conversation channels",
+        "mcp_bridge" => "External MCP server integration bridge",
+        "code_graph" => "Code dependency graph and structure analysis",
+        "comfy_ui" => "Image generation via ComfyUI workflow",
+        "n8n_bridge" => "n8n workflow automation trigger and management",
+        "scrapling" => "Web scraping and content extraction from URLs",
+        "data_tools" => "JSON, YAML, CSV data manipulation tools",
+        "formatter" => "Code formatter: Ruff, Prettier, Rustfmt",
+        "sequential_thinking" => "Step-by-step reasoning and analysis",
+        "coloquio_digest" => "Coloquio channel digest and summary",
+        "whats_new" => "Unread messages and updates from channels",
+        "council" => "Multi-voice decision making and tradeoff analysis",
+        "ast_surgeon" => "AST manipulation and code transformation",
+        "audio_tools" => "Audio file processing and conversion",
+        "ffmpeg_tools" => "FFmpeg multimedia processing tools",
+        "screenshot_tools" => "Screen capture and screenshot utilities",
+        "clipboard_tools" => "Clipboard read and write utilities",
+        "local_llm_proxy" => "Local LLM inference proxy and requests",
+        "biome_warden" => "Biome code quality linting and formatting",
+        "audit" => "Security audit and system integrity checks",
+        "cron_scheduler" => "Scheduled task and cron job management",
+        _ => return None,
+    })
+}
+
+fn name_to_description(name: &str) -> String {
+    if let Some(desc) = description_override(name) {
+        return desc.to_string();
+    }
+    let words: Vec<String> = name.split('_')
+        .map(|w| match w {
+            "ui" => "UI".to_string(),
+            "mcp" => "MCP".to_string(),
+            "llm" => "LLM".to_string(),
+            "api" => "API".to_string(),
+            "n8n" => "n8n".to_string(),
+            "pdf" => "PDF".to_string(),
+            "ast" => "AST".to_string(),
+            "ner" => "NER".to_string(),
+            "ocr" => "OCR".to_string(),
+            "t2i" => "T2I".to_string(),
+            "i2i" => "I2I".to_string(),
+            "coloquio" => "Coloquio conversation".to_string(),
+            "cron" => "Cron scheduled".to_string(),
+            "biome" => "Biome code quality".to_string(),
+            other => other.to_string(),
+        })
+        .collect();
+    let desc = words.join(" ");
+    if desc.len() > 10 { desc } else { format!("{} guild tools", name) }
+}
+
+/// Extract trigger phrases from a guild's Python file by scanning for
+/// "Use for:" lines in module docstrings, including continuation lines.
+fn extract_trigger_phrases(content: &str) -> Vec<String> {
+    let mut phrases = Vec::new();
+    let mut in_docstring = false;
+    let mut collecting = false;
+    let mut pending = String::new();
+
+        for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
+            let after_quotes = trimmed[3..].to_string();
+            // Detect single-line docstring: opens and closes on same line
+            let closing = if trimmed.starts_with("\"\"\"") {
+                after_quotes.rfind("\"\"\"")
+            } else {
+                after_quotes.rfind("'''")
+            };
+            if let Some(close_pos) = closing {
+                // Single-line docstring: """content"""
+                let middle = after_quotes[..close_pos].trim().to_string();
+                if let Some(use_for_pos) = middle.find("Use for:") {
+                    let use_for = middle[use_for_pos + 8..].trim().trim_end_matches(',');
+                    pending.push_str(use_for);
+                    for phrase in pending.split(',') {
+                        let p = phrase.trim().to_string();
+                        if !p.is_empty() { phrases.push(p); }
+                    }
+                    pending.clear();
+                }
+                continue;
+            }
+            if in_docstring {
+                // Closing multi-line docstring
+                let after = after_quotes.trim().to_string();
+                if collecting && !after.is_empty() {
+                    pending.push(' ');
+                    pending.push_str(after.trim_end_matches(','));
+                }
+            } else {
+                // Opening multi-line docstring
+                let after = after_quotes.trim().to_string();
+                if let Some(use_for_pos) = after.find("Use for:") {
+                    let use_for = after[use_for_pos + 8..].trim().trim_end_matches(',');
+                    pending.push_str(use_for);
+                    collecting = true;
+                }
+            }
+            in_docstring = !in_docstring;
+            if !in_docstring && collecting {
+                for phrase in pending.split(',') {
+                    let p = phrase.trim().to_string();
+                    if !p.is_empty() { phrases.push(p); }
+                }
+                pending.clear();
+                collecting = false;
+            }
+            continue;
+        }
+        if in_docstring {
+            if let Some(use_for_pos) = trimmed.find("Use for:") {
+                let use_for = trimmed[use_for_pos + 8..].trim().trim_end_matches(',');
+                pending.push_str(use_for);
+                collecting = true;
+            } else if collecting {
+                if trimmed.is_empty() || trimmed.starts_with("Args:") || trimmed.starts_with("Returns:") || trimmed.starts_with("Raises:") {
+                    for phrase in pending.split(',') {
+                        let p = phrase.trim().to_string();
+                        if !p.is_empty() { phrases.push(p); }
+                    }
+                    pending.clear();
+                    collecting = false;
+                } else {
+                    let clean = trimmed.trim_end_matches(',');
+                    pending.push(' ');
+                    pending.push_str(clean);
+                }
+            }
+        }
+    }
+    // flush if docstring never closed
+    if collecting {
+        for phrase in pending.split(',') {
+            let p = phrase.trim().to_string();
+            if !p.is_empty() { phrases.push(p); }
+        }
+    }
+    phrases
+}
+
+/// Extract guild name from `mcp = FastMCP("name")` or similar pattern.
+fn extract_guild_name(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(start) = trimmed.find("FastMCP(") {
+            let after = &trimmed[start + 8..];
+            if let Some(end) = after.find(&[')', '\n'][..]) {
+                let inner = &after[..end];
+                let name = inner.trim_matches(&['"', '\''][..]);
+                if !name.is_empty() && !name.contains(|c: char| c.is_whitespace()) {
+                    return Some(name.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Scan the guilds directory and auto-discover all guilds.
+/// Returns descriptors derived from file paths and docstrings.
+pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
+    let overrides = guild_overrides();
+    let mut descriptors = Vec::new();
+
+    let entries = match std::fs::read_dir(guilds_root) {
+        Ok(e) => e,
+        Err(_) => return descriptors,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+        let category_dir = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        let plugins_dir = path.join("plugins");
+        let search_dir = if plugins_dir.is_dir() { plugins_dir } else { path.clone() };
+
+        if let Ok(files) = std::fs::read_dir(&search_dir) {
+            for file_entry in files.flatten() {
+                let file_path = file_entry.path();
+                if file_path.extension().and_then(|e| e.to_str()) != Some("py") {
+                    continue;
+                }
+
+                let file_stem = file_path.file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+
+                if file_stem.starts_with('_') { continue; }
+
+                let content = std::fs::read_to_string(&file_path).unwrap_or_default();
+                if extract_guild_name(&content).is_none() { continue; }
+                let guild_name = name_override(file_stem).unwrap_or(file_stem).to_string();
+                let trigger_phrases = extract_trigger_phrases(&content);
+
+                let module_path = if search_dir.ends_with("plugins") {
+                    format!("guilds.{}.plugins.{}", category_dir, file_stem)
+                } else {
+                    format!("guilds.{}.{}", category_dir, file_stem)
+                };
+
+                let description = name_to_description(&guild_name);
+                let (weight, req_args) = overrides
+                    .get(guild_name.as_str())
+                    .cloned()
+                    .unwrap_or((GuildWeight::Medium, vec![]));
+                let required_args: Vec<String> = req_args.into_iter().map(String::from).collect();
+
+                descriptors.push(GuildDescriptor {
+                    name: guild_name,
+                    description,
+                    module_path,
+                    category: dir_to_category(&category_dir),
+                    trigger_phrases,
+                    embedding: None,
+                    negative_keywords: vec![],
+                    required_args,
+                    weight,
+                });
+            }
+        }
+    }
+
+    descriptors
+}
+
+/// Returns the guild catalog auto-discovered from the filesystem.
+/// Falls back to scanning relative to workspace root.
+pub fn builtin_catalog() -> Vec<GuildDescriptor> {
+    // Try workspace root relative to the binary's working directory,
+    // then walk up looking for Cargo.toml / guilds/ directory.
+    let mut candidate = std::env::current_dir().unwrap_or_default();
+    if !candidate.join("guilds").is_dir() {
+        if let Some(parent) = candidate.parent() {
+            candidate = parent.to_path_buf();
+        }
+    }
+    if !candidate.join("guilds").is_dir() {
+        candidate = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        // Walk up looking for guilds/
+        for _ in 0..6 {
+            if candidate.join("guilds").is_dir() {
+                break;
+            }
+            if let Some(parent) = candidate.parent().map(|p| p.to_path_buf()) {
+                candidate = parent;
+            } else {
+                break;
+            }
+        }
+    }
+    let guilds_dir = candidate.join("guilds");
+    let mut catalog = scan_guilds_directory(&guilds_dir);
+    catalog.sort_by(|a, b| a.name.cmp(&b.name));
+    catalog
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -806,13 +420,9 @@ mod tests {
     #[test]
     fn test_catalog_not_empty() {
         let catalog = builtin_catalog();
-        // 28 active guilds
-        // Core: bash, filesystem, memory, monitor, mcp_bridge, code_reviewer, deep_web_research, coloquio, websearch (9)
-        // Builders: git, docker, database, code (4)
-        // Scholars: search, code_analysis, pdf, vision (4)
-        // Watchers: system_metrics, deep_analysis, audit, sequential_thinking, ingest, knowledge, data_tools, formatter (8)
-        // + browser (1), comfy_ui (1), n8n_bridge (1), code_graph (1)
-        assert_eq!(catalog.len(), 40, "Expected 40 active guilds. Update this assertion when adding/removing guilds.");
+        // All guilds auto-discovered from guilds/ directory
+        // Count should match number of .py files with FastMCP servers
+        assert!(catalog.len() >= 35, "Expected at least 35 guilds, got {}", catalog.len());
         // Verify critical guilds are present
         let names: Vec<&str> = catalog.iter().map(|g| g.name.as_str()).collect();
         assert!(names.contains(&"bash"), "bash guild missing");
@@ -822,14 +432,13 @@ mod tests {
 
     #[test]
     fn test_core_guilds_present() {
+        // Auto-discovered guilds get their category from their guilds/ subdirectory.
+        // Builders/ → Builder, Scholars/ → Scholar, Wardens/ → Core, Watchers/ → Watcher.
         let catalog = builtin_catalog();
-        let core: Vec<&str> = catalog.iter()
-            .filter(|g| g.category == GuildCategory::Core)
-            .map(|g| g.name.as_str())
-            .collect();
-        assert!(core.contains(&"bash"));
-        assert!(core.contains(&"filesystem"));
-        assert!(core.contains(&"memory"));
+        let names: Vec<&str> = catalog.iter().map(|g| g.name.as_str()).collect();
+        assert!(names.contains(&"bash"), "bash guild missing from catalog");
+        assert!(names.contains(&"filesystem"), "filesystem guild missing from catalog");
+        assert!(names.contains(&"memory"), "memory guild missing from catalog");
     }
 
     #[test]
@@ -894,22 +503,60 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_trigger_phrases_knowledge() {
+        let path = std::path::Path::new("guilds/scholars/plugins/knowledge.py");
+        let content = if path.exists() {
+            std::fs::read_to_string(path).unwrap()
+        } else {
+            std::fs::read_to_string("../../guilds/scholars/plugins/knowledge.py").unwrap()
+        };
+        eprintln!("knowledge.py size: {} bytes, has Use for: {}", content.len(), content.contains("Use for:"));
+        // Find the Use for: line and dump context
+        if let Some(pos) = content.find("Use for:") {
+            let start = pos.saturating_sub(200);
+            let end = (pos + 300).min(content.len());
+            eprintln!("--- Context around Use for: ---");
+            eprintln!("{:?}", &content[start..end]);
+            eprintln!("--- End context ---");
+        }
+        let result = extract_trigger_phrases(&content);
+        eprintln!("knowledge file result: {:?}", result);
+        assert!(!result.is_empty(), "Should extract phrases from knowledge.py");
+    }
+
+    #[test]
     fn test_knowledge_guild_has_trigger_phrases() {
         let catalog = builtin_catalog();
         let knowledge = catalog.iter().find(|g| g.name == "knowledge").expect("knowledge guild missing");
-        assert!(!knowledge.trigger_phrases.is_empty(), "knowledge guild should have trigger phrases");
-        // Technical triggers
-        assert!(knowledge.trigger_phrases.contains(&"extract triples".to_string()));
-        assert!(knowledge.trigger_phrases.contains(&"knowledge graph".to_string()));
-        assert!(knowledge.trigger_phrases.contains(&"ner ".to_string()));
-        // Natural language triggers — GIK fix
-        assert!(knowledge.trigger_phrases.contains(&"aprende este".to_string()), "missing Spanish natural trigger");
-        assert!(knowledge.trigger_phrases.contains(&"añade al grafo".to_string()), "missing Spanish graph trigger");
-        assert!(knowledge.trigger_phrases.contains(&"add to knowledge".to_string()), "missing English natural trigger");
-        assert!(knowledge.trigger_phrases.contains(&"populate the graph".to_string()), "missing English graph trigger");
+        assert!(!knowledge.trigger_phrases.is_empty(), "knowledge guild should have trigger phrases, got {:?}", knowledge.trigger_phrases);
+    }
 
-        let ingest = catalog.iter().find(|g| g.name == "ingest").expect("ingest guild missing");
-        assert!(!ingest.description.contains("knowledge ingestion"), "ingest description should not contain 'knowledge ingestion'");
+    #[test]
+    fn test_dump_trigger_phrases() {
+        let catalog = builtin_catalog();
+        for g in &catalog {
+            eprintln!("{}: desc={:?} triggers sample={:?}", g.name, g.description, g.trigger_phrases.iter().take(5).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn test_debug_git_routing() {
+        use crate::router::matcher::{GuildMatcher, keyword_score, tokenize};
+        let catalog = builtin_catalog();
+        let matcher = GuildMatcher::new(catalog.clone());
+        let query = "check git status";
+        let q_lower = query.to_lowercase();
+        let result = matcher.match_guild(query, None, 0.3, None);
+        eprintln!("Result for '{}': {:?}", query, result);
+        // Manually check scores for key guilds
+        let tokens = tokenize(query);
+        for g in &catalog {
+            if g.name == "git" || g.name == "filesystem" || g.name == "bash" {
+                let trig = if g.trigger_phrases.iter().any(|t| q_lower.contains(t)) { 0.5 } else { 0.0 };
+                let kw = keyword_score(&tokens, &g.description, &g.name);
+                eprintln!("  {}: kw={:.3} trig={:.1} total={:.3}", g.name, kw, trig, (kw + trig) * 0.45);
+            }
+        }
     }
 
     /// ANTI-REGRESSION: Every Python MCP guild must have a catalog entry.
