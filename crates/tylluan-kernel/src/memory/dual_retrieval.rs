@@ -14,7 +14,7 @@ pub async fn dual_retrieve(
     query_embedding: Option<&[f32]>,
     limit: usize,
 ) -> anyhow::Result<DualRetrievalResult> {
-    let low_level = silva.search_hybrid(query, query_embedding, limit * 2, None).await?;
+    let low_level = silva.search_hybrid(query, query_embedding, limit * 2, None, false).await?;
 
     let seed_ids: Vec<String> = low_level
         .iter()
@@ -27,7 +27,7 @@ pub async fn dual_retrieve(
         if let Ok(context) = silva.get_context(seed_id, 1).await {
             for neighbor in context {
                 let degree = compute_degree(silva, &neighbor.id);
-                let hs = 0.3 * (1.0 + (degree as f32 + 1.0).log2() / 10.0);
+                let hs = 0.3 / (1.0 + (degree as f32 + 1.0).log2() / 10.0);
                 high_map
                     .entry(neighbor.id.clone())
                     .and_modify(|e| {
@@ -66,8 +66,8 @@ pub async fn dual_retrieve(
 
     for (node, score) in &mut merged {
         let degree = degrees.get(&node.id).copied().unwrap_or(0);
-        let boost = 1.0 + (degree as f32 + 1.0).log2() * 0.05;
-        *score *= boost;
+        let penalty = 1.0 / (1.0 + (degree as f32 + 1.0).log2() * 0.05);
+        *score *= penalty;
     }
 
     merged.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -98,20 +98,20 @@ mod tests {
     use super::*;
     use crate::memory::silva::GraphNode;
 
-    fn boost(degree: i64) -> f32 {
-        1.0 + (degree as f32 + 1.0).log2() * 0.05
+    fn penalty(degree: i64) -> f32 {
+        1.0 / (1.0 + (degree as f32 + 1.0).log2() * 0.05)
     }
 
     #[test]
-    fn test_centralidad_boost_monotonica() {
-        let b0 = boost(0);
-        let b1 = boost(1);
-        let b100 = boost(100);
+    fn test_centralidad_penalty_invertida() {
+        let b0 = penalty(0);
+        let b1 = penalty(1);
+        let b100 = penalty(100);
 
-        assert!((b0 - 1.0).abs() < 1e-6, "degree 0 should give boost 1.0, got {b0}");
-        assert!(b1 > 1.0, "degree 1 should give boost > 1.0, got {b1}");
-        assert!(b100 < 2.0, "degree 100 should give boost < 2.0, got {b100}");
-        assert!(b1 < b100, "boost should be monotonically increasing");
+        assert!((b0 - 1.0).abs() < 1e-6, "degree 0 should give penalty = 1.0, got {b0}");
+        assert!(b1 < 1.0, "degree 1 should give penalty < 1.0, got {b1}");
+        assert!(b100 > 0.5, "degree 100 should give penalty > 0.5, got {b100}");
+        assert!(b1 > b100, "penalty should be monotonically decreasing with degree");
     }
 
     #[test]

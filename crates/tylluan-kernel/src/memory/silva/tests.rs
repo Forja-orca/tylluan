@@ -284,7 +284,7 @@ async fn test_silva() -> SilvaDB {
         
         // Hybrid search: query "consensus" (text match) + semantic match
         let query_emb = vec![0.95_f32, 0.05, 0.0];
-        let results = db.search_hybrid("consensus", Some(&query_emb), 5, None).await.unwrap();
+        let results = db.search_hybrid("consensus", Some(&query_emb), 5, None, false).await.unwrap();
         
         assert!(!results.is_empty());
         assert_eq!(results[0].0.id, "n1");
@@ -888,7 +888,7 @@ async fn test_entity_boost_in_hybrid_search() {
     db.upsert_node("ent1", "entity", "Tokio async runtime for Rust", "{}").await.unwrap();
     db.upsert_node("lesson1", "lesson", "Tokio is the async runtime we use in this project", "{}").await.unwrap();
 
-    let results = db.search_hybrid("Tokio runtime", None, 5, None).await.unwrap();
+        let results = db.search_hybrid("Tokio runtime", None, 5, None, false).await.unwrap();
     assert!(!results.is_empty(), "hybrid search must return results for 'Tokio runtime'");
     let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
     assert!(ids.contains(&"ent1") || ids.contains(&"lesson1"), "at least one matching node must appear");
@@ -958,6 +958,41 @@ async fn test_local_query_graph() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_local_query_graph_degree_penalty() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("seed", "entity", "Seed node", "{}").await.unwrap();
+    db.upsert_node("low_degree", "entity", "Low degree node", "{}").await.unwrap();
+    db.upsert_node("high_degree", "entity", "High degree hub node", "{}").await.unwrap();
+
+    // low_degree has 1 edge (to seed)
+    db.add_edge("seed", "low_degree", "link", 1.0, "{}").await.unwrap();
+
+    // high_degree has 5 edges (to seed + 4 dummy nodes)
+    db.add_edge("seed", "high_degree", "link", 1.0, "{}").await.unwrap();
+    for i in 0..4 {
+        let dummy = format!("dummy_{i}");
+        db.upsert_node(&dummy, "entity", "Dummy", "{}").await.unwrap();
+        db.add_edge("high_degree", &dummy, "link", 1.0, "{}").await.unwrap();
+    }
+
+    let results = db.local_query_graph(&["seed".to_string()], 5).await.unwrap();
+    assert!(!results.is_empty(), "local_query_graph should return results");
+
+    // Both neighbors must be present
+    let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
+    assert!(ids.contains(&"low_degree"), "low_degree should be in results");
+    assert!(ids.contains(&"high_degree"), "high_degree should be in results");
+
+    // The degree penalty inverts the bias: low-degree node should rank above high-degree node
+    let rank_low = ids.iter().position(|&id| id == "low_degree").unwrap();
+    let rank_high = ids.iter().position(|&id| id == "high_degree").unwrap();
+    assert!(
+        rank_low < rank_high,
+        "low_degree (degree=1) should rank above high_degree (degree=5) — got low={rank_low}, high={rank_high}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_search_hybrid_with_graph_traversal() {
     let db = SilvaDB::in_memory().await.unwrap();
     db.upsert_node("n1", "entity", "Entity 1 Tokio async", "{}").await.unwrap();
@@ -978,7 +1013,7 @@ async fn test_search_hybrid_with_graph_traversal() {
     });
 
     // Búsqueda híbrida con embedding
-    let results = db.search_hybrid("Tokio async", Some(&emb), 5, None).await.unwrap();
+    let results = db.search_hybrid("Tokio async", Some(&emb), 5, None, false).await.unwrap();
     assert!(!results.is_empty());
 }
 
@@ -989,14 +1024,14 @@ async fn test_search_hybrid_with_type_filter() {
     db.upsert_node("n2", "lesson", "Lección de testeo general", "{}").await.unwrap();
 
     // 1. Filtrar por 'episodic'
-    let results_epi = db.search_hybrid("testeo", None, 5, Some("episodic")).await.unwrap();
+    let results_epi = db.search_hybrid("testeo", None, 5, Some("episodic"), false).await.unwrap();
     assert!(!results_epi.is_empty());
     let ids: Vec<&str> = results_epi.iter().map(|(n, _)| n.id.as_str()).collect();
     assert!(ids.contains(&"n1"));
     assert!(!ids.contains(&"n2"));
 
     // 2. Filtrar por 'lesson'
-    let results_les = db.search_hybrid("testeo", None, 5, Some("lesson")).await.unwrap();
+    let results_les = db.search_hybrid("testeo", None, 5, Some("lesson"), false).await.unwrap();
     assert!(!results_les.is_empty());
     let ids_les: Vec<&str> = results_les.iter().map(|(n, _)| n.id.as_str()).collect();
     assert!(!ids_les.contains(&"n1"));

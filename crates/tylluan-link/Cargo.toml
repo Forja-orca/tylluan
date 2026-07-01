@@ -28,6 +28,9 @@ snow = "0.10"
 # Optional: Mainline DHT for WAN bootstrap (used in dht::bootstrap)
 mainline = { version = "2", optional = true }
 
+[dev-dependencies]
+turmoil = "0.6"
+
 [features]
 default = []
 mainline-dht = ["mainline"]
