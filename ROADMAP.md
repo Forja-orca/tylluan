@@ -143,11 +143,11 @@ Delivered:
 - [x] P1 — HNSW index via `instant-distance`: HnswIndex + schema v12 (`hnsw_index` BLOB table) + search fast path (threshold >=12k nodes) + background rebuild scheduler.
 - [x] P2 — Batch embeddings: Connected callers to `embed_batch` (single ONNX lock) and main.rs reindexer loop chunked to 32 nodes.
 - [x] P3 — LinearRAG local graph traversal: `degree_centrality` + `local_query_graph` (PageRank + degree centrality boost) integrated into RRF hybrid search.
+- [x] P4 — Semantic Coloquio Search: Optional `"episodic"` filtering in `tylluan_recall` using `search_hybrid` type filter.
 
-**268 lib tests passing** (215 kernel + 53 link) + 1 evals test · 0 failures.
+**270 lib tests passing** (217 kernel + 53 link) + 1 evals test · 0 failures · 2 new unit tests for P4.
 
 **v0.10.0 backlog:**
-- P4 — Semantic search over Coloquio (episodic recall - search_channel_semantic)
 - M14-E — Mesh test harness (simulated fault injection, network partitions, recovery simulation via turmoil)
 - Portability compliance CI: RPi4 (aarch64) smoke test in release workflow + USB bundle boot verification
 - Sparse Retrieval / ColBERT: Contextual retrieval enhancements (deferred to v1.1.0)

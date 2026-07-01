@@ -33,9 +33,14 @@ All notable changes to Tylluan are documented here.
   - Verified baseline: Recall@5: 60%, Precision@5: 12%, latency p50: 1.3ms, p95: 1.9ms.
   - JSON baseline output persisted in `crates/tylluan-evals/benchmarks/baseline_v0.9.0.json`.
 
+- **Semantic Coloquio Search (P4)**
+  - Optional `"episodic": bool` parameter parsed in the MCP tool `tylluan_recall`.
+  - Integrates a `type_filter` option in `search_hybrid` to filter nodes post-RRF (retaining only `"episodic"` type).
+  - Clean adaptation of callers in `dual_retrieval.rs`, `idle_lab.rs`, `autolink.rs`, `api_memory.rs`, and server handlers.
+
 ### Tests
 
-**268 lib tests passing** (215 kernel + 53 link) + 1 evals test · 0 failures.
+**270 lib tests passing** (217 kernel + 53 link) + 1 evals test · 0 failures · 2 new unit tests for P4.
 
 ---
 

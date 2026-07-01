@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** [dd1f886](https://github.com/Forja-orca/tylluan/commit/dd1f886433e4f694ef61d116e3d0887978f8e6f1) · 268 tests (215 kernel + 53 link) green as of 2026-07-01.
+**Commit:** [488b68f](https://github.com/Forja-orca/tylluan/commit/488b68f0a04944b0b1bc67a7b8e5c82e3650228e) · 270 tests (217 kernel + 53 link) green as of 2026-07-01.
 
 ---
 
 ## Version
 
-**v0.9.0** — Graph-Augmented Local RAG release (LinearRAG/LightRAG local graph traversal + batch embeddings in FastEmbed ONNX + HNSW index via instant-distance + retrieval baseline benchmark).
+**v0.9.0** — Graph-Augmented Local RAG release (LinearRAG/LightRAG local graph traversal + batch embeddings in FastEmbed ONNX + HNSW index via instant-distance + retrieval baseline benchmark + semantic coloquio search P4).
 
 ---
 
@@ -56,7 +56,8 @@
 - LinearRAG local graph traversal: `degree_centrality` (SQL-native) + `local_query_graph` (Personalized PageRank local + degree boost) integrated into RRF hybrid search (v0.9.0)
 - Batch Embeddings: Callers connected to `embed_batch` in `embeddings.rs`. Reindex loop in main.rs processed in chunks of 32 with 500ms sleep (v0.9.0)
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
-- **268 kernel lib tests passing** + 53 link tests + 1 evals test = **322 total** · integration suite requires live kernel
+- Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
+- **270 kernel lib tests passing** + 53 link tests + 1 evals test = **324 total** · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
