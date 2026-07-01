@@ -112,8 +112,8 @@ Out of scope (v1.0.0):
 - [x] M6-minimal — Deterministic Simulation Testing (DST) foundation: `MeshTransport` trait + `InMemoryTransport` (mpsc-based) + `TcpTransport` (length-prefixed). `GossipEngine::perform_sync/handle_incoming_message` generic over transport. 4 integration tests. Prerequisite for validating all mesh milestones.
 - [x] M3 — Guild Auto-Discovery: scan `guilds/` at startup, eliminate manual `catalog.rs` registry. `scan_guilds_directory()` extracts name + trigger phrases from FastMCP docstrings. 34 `description_override()` entries for routing-critical guilds. Zero-config for new guilds.
 - [x] M7 — Single Binary: bundle `dashboard/dist/` into `tylluan-nexus` binary via `rust-embed`. `--features bundled-dashboard` embeds assets at compile time; disk fallback preserved for dev. (~0.5 days)
-- [ ] Contextual Retrieval: prepend document context to each chunk before embedding (Anthropic 2024 pattern). Offline fallback: filename + Markdown heading hierarchy as local heuristic, zero CPU cost. ~15-49% retrieval improvement. (~1 day)
-- [ ] M1 — Memory Decay: exponential half-life weight decay on nodes (`weight * 0.5^(hours/half_life)`), configurable `decay_half_life_hours` in `tylluan.toml`. Protected nodes exempt. Background loop every 10 min alongside existing reindex loop. (~1.5 days)
+- [x] Contextual Retrieval: `build_contextual_text()` prepends `[source_file > heading_path]` before embedding. Applied in background reindex loop and manual reindex endpoint. Zero overhead when metadata is absent.
+- [x] M1 — Memory Decay: exponential half-life `weight * 0.5^(hours/half_life)` computed in Rust (no SQL POWER() dependency). Type-specific effective half-lives (lesson/experience/concept). Configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14 days). Protected nodes exempt.
 
 **v0.8.0 backlog (do not start before v0.7.0 is complete):**
 - M2 — Hybrid Search v2: multi-signal RRF (semantic + BM25 + entity boosting)
