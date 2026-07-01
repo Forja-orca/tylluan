@@ -117,11 +117,17 @@ Downloading BGE-M3 embedding model... [##########] 2.2 GB
 ✅ Tylluan v0.9.0 running at http://127.0.0.1:3030
 ```
 
-Verify it's up before connecting:
+Verify it's up before continuing:
 
 ```bash
 curl -s http://127.0.0.1:3030/health
 ```
+
+> [!TIP]
+> **Lightweight profiles for older/modest hardware (e.g. Raspberry Pi 4):**
+> If you want to bypass the 2.2 GB download or have less than 8GB of RAM, initialize with a lightweight profile:
+> * **Portable Profile (0 MB download, BM25-only):** `tylluan-cli install --profile=portable`
+> * **Clinic Profile (~100 MB download, BGE-Small):** `tylluan-cli install --profile=clinic`
 
 > **Auth:** A bearer token is auto-generated at `.tylluan-token` on first boot. Dev mode (`--dev`) skips auth — never use on a network that isn't your own.
 
@@ -141,6 +147,27 @@ Add to any SSE-capable MCP client:
 | **VS Code** | `.vscode/mcp.json` in your workspace |
 
 > **Always use `127.0.0.1`** — never `localhost` (Windows resolves IPv6 first and misses the kernel).
+
+### Step 4 — Try a quick HTTP request (5 seconds)
+
+To verify the memory APIs directly without configuring an MCP client, read the auto-generated token in your workspace and query SilvaDB via curl:
+
+```bash
+# 1. Read token
+export TYLLUAN_TOKEN=$(cat ~/.tylluan/.tylluan-token)
+
+# 2. Store a memory
+curl -X POST http://127.0.0.1:3030/api/v1/memory/remember \
+  -H "Authorization: Bearer $TYLLUAN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Tylluan is running local graph RAG."}'
+
+# 3. Retrieve it
+curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
+  -H "Authorization: Bearer $TYLLUAN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How does Tylluan query graphs?"}'
+```
 
 ---
 
@@ -328,6 +355,13 @@ See [examples/](examples/) for full source code.
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Forja-orca/tylluan&type=Date)](https://star-history.com/#Forja-orca/tylluan&Date)
+
+## 👾 How to Help (Testing & Feedback)
+
+Tylluan is in active pre-production and we need external testers to harden the system:
+1. **Hardware Reports**: Run Tylluan on modest hardware (Raspberry Pi 4, old laptops, mini PCs) and share your latency & RAM reports in [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions).
+2. **Retrieve Quality**: Test the hybrid RRF search (`search_hybrid` combining BM25, vector, and LinearRAG graph traversal) and let us know if the context retrieval quality matches your expectations.
+3. **Bug Reports**: Open an issue if you encounter installation hiccups or model loading issues. Please include the logs via `tylluan-cli logs`.
 
 ## License
 
