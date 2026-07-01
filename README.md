@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.8.0-blue.svg" alt="v0.8.0">
+  <img src="https://img.shields.io/badge/version-0.9.0-blue.svg" alt="v0.9.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -34,7 +34,8 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion. Entity boost ×1.25 post-RRF. Runs entirely on CPU |
+| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + **LinearRAG local graph traversal (PageRank)**. Entity boost ×1.25 post-RRF |
+| **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` (HNSW) for large datasets (threshold >=12k nodes) |
 | **Agent Persona** | Agents have `persona` + `preferences` stored in Core Memory (always available, not retrieved on demand) |
 | **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes — agents remember what was discussed |
 | **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
@@ -113,7 +114,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.8.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.9.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before connecting:
@@ -155,7 +156,7 @@ Add to any SSE-capable MCP client:
 
 ---
 
-## Status: v0.8.0 (Self-Aware Agent)
+## Status: v0.9.0 (Graph-Augmented Local RAG)
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
@@ -177,8 +178,8 @@ Add to any SSE-capable MCP client:
 | **v0.6.1 Models** | Config-driven embedding model · install profiles (portable/clinic/server) · reindex SSE | ✅ |
 | **v0.7.0 Intelligence** | Guild auto-discovery · single binary · contextual retrieval · memory decay | ✅ |
 | **v0.8.0 Self-Aware** | Core Memory (persona/preferences) · episodic flywheel · BM25 FTS5 · DST harness | ✅ |
-| **M14-E** | Mesh test harness — fault injection, partition, recovery (turmoil) | 🔜 v0.9.0 |
-| **LightRAG** | Dual-level retrieval — entity graph expansion + degree centrality | 🔜 v0.9.0 |
+| **v0.9.0 Graph RAG** | LinearRAG local graph traversal · batch embeddings · HNSW index via instant-distance | ✅ |
+| **M14-E** | Mesh test harness — fault injection, partition, recovery (turmoil) | 🔜 v1.0.0 |
 
 ---
 

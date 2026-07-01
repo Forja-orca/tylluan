@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-01 (v0.8.0 release)
+> Last updated: 2026-07-01 (v0.9.0 release)
 
 ## CI
 
@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** [a2f1dfd](https://github.com/Forja-orca/tylluan/commit/a2f1dfd36acb4beeca3f91f54adbd57b66c08742) · 316 tests (263 kernel + 53 link) green as of 2026-07-01.
+**Commit:** [dd1f886](https://github.com/Forja-orca/tylluan/commit/dd1f886433e4f694ef61d116e3d0887978f8e6f1) · 268 tests (215 kernel + 53 link) green as of 2026-07-01.
 
 ---
 
 ## Version
 
-**v0.8.0** — Self-Aware Agent release (Core Memory persona/preferences + Coloquio→SilvaDB episodic flywheel + M2 Hybrid Search v2 BM25+FTS5 + DST harness + startup optimization).
+**v0.9.0** — Graph-Augmented Local RAG release (LinearRAG/LightRAG local graph traversal + batch embeddings in FastEmbed ONNX + HNSW index via instant-distance + retrieval baseline benchmark).
 
 ---
 
@@ -52,9 +52,11 @@
 - M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 (`bm25(nodes_fts, 10.0, 5.0, 5.0)`) with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF (P1)
 - DST harness: `crates/tylluan-link/tests/gossip_dst.rs` — 3 InMemoryTransport-based GossipEngine tests (normal sync, partition graceful failure, bidirectional convergence); `GossipEngine::local_node_id()` accessor added (P2)
 - Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` — eliminates double filesystem scan at startup (~10s → ~5s) (P3)
-- HNSW index via `instant-distance`: `hnsw.rs` + schema v12 (`hnsw_index` BLOB table) + fast path in `search.rs` (HNSW ≥12k nodes → IVF → linear fallback); rebuild scheduler every 10min; survives restart via SQLite BLOB (v0.9.0 P1)
-- Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` as LightRAG pre-baseline (v0.9.0 P0)
-- **265 lib tests passing** (263 kernel + 2 HNSW) + 1 evals test · integration suite requires live kernel
+- HNSW index via `instant-distance`: `hnsw.rs` + schema v12 (`hnsw_index` BLOB table) + fast path in `search.rs` (HNSW ≥12k nodes → IVF → linear fallback); rebuild scheduler every 10min; survives restart via SQLite BLOB (v0.9.0)
+- LinearRAG local graph traversal: `degree_centrality` (SQL-native) + `local_query_graph` (Personalized PageRank local + degree boost) integrated into RRF hybrid search (v0.9.0)
+- Batch Embeddings: Callers connected to `embed_batch` in `embeddings.rs`. Reindex loop in main.rs processed in chunks of 32 with 500ms sleep (v0.9.0)
+- Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
+- **268 lib tests passing** (215 kernel + 53 link) + 1 evals test · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)

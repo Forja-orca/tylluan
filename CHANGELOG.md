@@ -4,6 +4,41 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.9.0] — 2026-07-01 — Graph-Augmented Local RAG
+
+**Norte estrella:** Zero-token local graph indexing and traversal with batch processing.
+
+**Research basis:** LinearRAG / Tri-Graph paper (ICLR 2026) and instant-distance HNSW.
+
+### Added
+
+- **LinearRAG Local Graph Traversal (P3)**
+  - `degree_centrality`: SQL-native edge connectivity calculation chunked in groups of 50 to avoid SQLite parameter limit errors.
+  - `local_query_graph`: Graph traversal using Personalized PageRank from vector seeds, boosted by degree centrality: `score * (1.0 + degree * 0.1)`.
+  - `search_hybrid` integration: Vector search results (IVF) serve as seeds for `local_query_graph` traversal, with outputs fused via Reciprocal Rank Fusion (RRF).
+
+- **Batch Embeddings — FastEmbed ONNX (P2)**
+  - `embed_batch` in `embeddings.rs`: Integrates native FastEmbed batching behind a single ONNX mutex lock with L2 normalization.
+  - Callers connected: `embed()` delegates to `embed_batch()`, preventing logic duplication.
+  - Reindex loop in `main.rs`: Refactored to process nodes in chunks of 32 with a 500ms sleep between chunks to avoid CPU thread starvation.
+
+- **HNSW Index via instant-distance (P1)**
+  - pure-Rust HNSW index using the `instant-distance` crate, fully serializable (`serde`).
+  - SilvaDB schema bumped to v12: `hnsw_index` table (BLOB persistent singleton).
+  - Search fast path in `search.rs`: HNSW index used if built (threshold >=12k nodes), falling back to IVF and linear searches.
+  - Scheduler: Background rebuilder task in `main.rs` triggers every 10 minutes.
+
+- **Retrieval Baseline Benchmark (P0)**
+  - New benchmark test: `baseline_v090_benchmark` evaluates search quality across 23 nodes and 5 complex multi-hop queries.
+  - Verified baseline: Recall@5: 60%, Precision@5: 12%, latency p50: 1.3ms, p95: 1.9ms.
+  - JSON baseline output persisted in `crates/tylluan-evals/benchmarks/baseline_v0.9.0.json`.
+
+### Tests
+
+**268 lib tests passing** (215 kernel + 53 link) + 1 evals test · 0 failures.
+
+---
+
 ## [v0.8.0] — 2026-07-01 — Self-Aware Agent
 
 **Norte estrella:** The agent that knows itself and remembers conversations.
