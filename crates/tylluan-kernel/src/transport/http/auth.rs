@@ -64,8 +64,10 @@ pub async fn bearer_auth_middleware(
     let method = request.method().to_string();
     let query = request.uri().query().unwrap_or("");
     
+    let sanitized_query = sanitize_query(query);
+    
     // DEBUG: Log all incoming requests to help diagnose 405
-    info!("🔍 [HTTP] {} {} (query: '{}')", method, uri, query);
+    info!("🔍 [HTTP] {} {} (query: '{}')", method, uri, sanitized_query);
     
     // Determine if request is authorized and resolve ACL role
     let is_authorized = {
@@ -177,14 +179,90 @@ pub async fn bearer_auth_middleware(
     }
 
     // Resolve ACL role for this request and process with role scope
-    let bearer_token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|s| s.to_string());
+    let query_str = request.uri().query().unwrap_or("");
+    let bearer_token = extract_token(&headers, query_str);
 
     let acl_role = resolve_acl_role(&state, bearer_token.as_deref()).await;
     ACL_ROLE.scope(acl_role, async move {
         next.run(request).await
     }).await
+}
+
+/// Sanitizes query string to prevent token leakage in logs.
+pub fn sanitize_query(query: &str) -> String {
+    if query.contains("token=") || query.contains("Authorization=") {
+        query.split('&').map(|param| {
+            if param.starts_with("token=") {
+                "token=[REDACTED]"
+            } else if param.starts_with("Authorization=") {
+                "Authorization=[REDACTED]"
+            } else {
+                param
+            }
+        }).collect::<Vec<_>>().join("&")
+    } else {
+        query.to_string()
+    }
+}
+
+/// Extracts auth token from HeaderMap or query string.
+pub fn extract_token(headers: &HeaderMap, query: &str) -> Option<String> {
+    headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|s| s.to_string())
+        .or_else(|| {
+            query.split('&').find_map(|pair| {
+                if let Some((k, v)) = pair.split_once('=') {
+                    if k == "token" || k == "Authorization" {
+                        if let Ok(decoded) = urlencoding::decode(v) {
+                            Some(decoded.into_owned())
+                        } else {
+                            Some(v.to_string())
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_query() {
+        assert_eq!(sanitize_query(""), "");
+        assert_eq!(sanitize_query("foo=bar"), "foo=bar");
+        assert_eq!(sanitize_query("token=xyz"), "token=[REDACTED]");
+        assert_eq!(sanitize_query("Authorization=abc"), "Authorization=[REDACTED]");
+        assert_eq!(sanitize_query("foo=bar&token=xyz&baz=123"), "foo=bar&token=[REDACTED]&baz=123");
+        assert_eq!(sanitize_query("Authorization=123&foo=bar"), "Authorization=[REDACTED]&foo=bar");
+    }
+
+    #[test]
+    fn test_extract_token() {
+        // 1. From header
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer my-secret-token".parse().unwrap());
+        assert_eq!(extract_token(&headers, ""), Some("my-secret-token".to_string()));
+
+        // 2. From query param
+        let headers_empty = HeaderMap::new();
+        assert_eq!(extract_token(&headers_empty, "token=my-secret-token"), Some("my-secret-token".to_string()));
+        assert_eq!(extract_token(&headers_empty, "Authorization=my-secret-token-2"), Some("my-secret-token-2".to_string()));
+        assert_eq!(extract_token(&headers_empty, "token=encoded%20token"), Some("encoded token".to_string()));
+        assert_eq!(extract_token(&headers_empty, "foo=bar&token=xyz&baz=123"), Some("xyz".to_string()));
+
+        // 3. Header takes priority
+        assert_eq!(extract_token(&headers, "token=query-token"), Some("my-secret-token".to_string()));
+
+        // 4. No token
+        assert_eq!(extract_token(&headers_empty, "foo=bar&baz=123"), None);
+    }
 }
