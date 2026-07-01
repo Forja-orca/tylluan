@@ -180,7 +180,7 @@ impl super::SilvaDB {
         self.search_vector_linear(query_embedding, limit).await
     }
 
-    /// Hybrid search for SilvaDB: Semantic (vector) + Weight-Ranked (topic/text).
+    /// Hybrid search for SilvaDB: Semantic (vector) + Weight-Ranked (topic/text) + Graph-Traversal (LightRAG).
     pub async fn search_hybrid(
         &self,
         query: &str,
@@ -193,13 +193,27 @@ impl super::SilvaDB {
         const K: f32 = 60.0;
         let mut rrf_scores: HashMap<String, (GraphNode, f32)> = HashMap::new();
 
+        let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
-            let vector_results = self.search_vector_ivf(emb, limit).await.unwrap_or_default();
-            for (rank, (node, _score)) in vector_results.into_iter().enumerate() {
+            vector_results = self.search_vector_ivf(emb, limit).await.unwrap_or_default();
+            for (rank, (node, _score)) in vector_results.iter().enumerate() {
                 let rrf = 1.0 / (K + rank as f32 + 1.0);
                 rrf_scores.entry(node.id.clone())
                     .and_modify(|e| e.1 += rrf)
-                    .or_insert((node, rrf));
+                    .or_insert((node.clone(), rrf));
+            }
+        }
+
+        // LightRAG local graph query: use vector search results as seeds for Personalized PageRank local traversal
+        if !vector_results.is_empty() {
+            let seed_ids: Vec<String> = vector_results.iter().map(|(node, _)| node.id.clone()).collect();
+            if let Ok(graph_results) = self.local_query_graph(&seed_ids, limit).await {
+                for (rank, (node, _score)) in graph_results.into_iter().enumerate() {
+                    let rrf = 1.0 / (K + rank as f32 + 1.0);
+                    rrf_scores.entry(node.id.clone())
+                        .and_modify(|e| e.1 += rrf)
+                        .or_insert((node, rrf));
+                }
             }
         }
 

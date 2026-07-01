@@ -145,26 +145,31 @@ impl EmbeddingEngine {
 
     /// Embed a text string into a vector.
     pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        // FastEmbed processes immediately
+        let mut batch = self.embed_batch(&[text])?;
+        batch.pop().context("No embedding returned")
+    }
+
+    /// Embed multiple texts in one ONNX batch call.
+    /// FastEmbed natively batches — this avoids N sequential inference calls.
+    /// Each returned vector is L2-normalized for cosine similarity.
+    pub fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
-        let embeddings = model.embed(vec![text], None)
-            .map_err(|e| anyhow!("Inference failed: {:?}", e))?;
-        
-        // It returns a list of embeddings (one per text). We take the first.
-        let mut vector = embeddings.into_iter().next()
-            .context("No embedding returned")?;
+        let mut embeddings = model.embed(texts.to_vec(), None)
+            .map_err(|e| anyhow!("Batch inference failed: {:?}", e))?;
 
-        // BGE-M3 produces 1024-dim vectors natively — no truncation needed
-
-        // L2 Normalization (FastEmbed might already do it, but we strictly enforce for Cosine Similarity)
-        let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
-        if norm > 1e-6 {
-            for val in &mut vector {
-                *val /= norm;
+        for vector in &mut embeddings {
+            let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if norm > 1e-6 {
+                for val in vector.iter_mut() {
+                    *val /= norm;
+                }
             }
         }
 
-        Ok(vector)
+        Ok(embeddings)
     }
 
     /// Get a unique ID for the current embedding engine
