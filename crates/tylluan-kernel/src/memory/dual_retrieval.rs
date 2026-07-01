@@ -14,7 +14,7 @@ pub async fn dual_retrieve(
     query_embedding: Option<&[f32]>,
     limit: usize,
 ) -> anyhow::Result<DualRetrievalResult> {
-    let low_level = silva.search_hybrid(query, query_embedding, limit * 2).await?;
+    let low_level = silva.search_hybrid(query, query_embedding, limit * 2, None).await?;
 
     let seed_ids: Vec<String> = low_level
         .iter()

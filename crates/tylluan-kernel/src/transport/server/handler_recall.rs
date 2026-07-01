@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use serde_json;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::Ordering;
@@ -131,6 +131,8 @@ pub async fn handle_tylluan_recall(
         .unwrap_or("personal").to_string();
     let compact = arguments.as_ref()
         .and_then(|a| a.get("compact")).and_then(|v| v.as_bool()).unwrap_or(true);
+    let episodic = arguments.as_ref()
+        .and_then(|a| a.get("episodic")).and_then(|v| v.as_bool()).unwrap_or(false);
     let rec_agent_id = arguments.as_ref()
         .and_then(|a| a.get("agent_id")).and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
@@ -513,8 +515,9 @@ if let Some(ref mut s) = stmt {
     if candidates.is_empty() {
         // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
+        let filter = if episodic { Some("episodic") } else { None };
         candidates = server.silva
-            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool)
+            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool, filter)
             .await.unwrap_or_default();
 
         if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
@@ -762,5 +765,69 @@ mod tests {
         // Compact false -> no truncation
         let res_no_compact = truncate_adaptive(&long_text, 0.40, false);
         assert_eq!(res_no_compact.len(), 1200);
+    }
+
+    async fn test_server() -> TylluanServer {
+        use crate::registry::guild_process::GuildRegistry;
+        use crate::router::catalog::builtin_catalog;
+        use crate::router::matcher::GuildMatcher;
+        use crate::memory::hybrid::HybridMemory;
+        use crate::memory::silva::SilvaDB;
+        use crate::memory::mailbox::Mailbox;
+        use crate::memory::agent_nodes::AgentNodeRouter;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tokio::sync::broadcast;
+
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
+        ));
+        TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handler_recall_episodic_filter() {
+        let server = test_server().await;
+        
+        // 1. Insertar dos tipos de nodos en SilvaDB
+        server.silva.upsert_node("n1", "episodic", "Mensaje de coloquio episódico de testeo", "{}").await.unwrap();
+        server.silva.upsert_node("n2", "lesson", "Lección de testeo general", "{}").await.unwrap();
+
+        // 2. Invocar recall con episodic = true
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("episódico".to_string()));
+        args.insert("episodic".to_string(), serde_json::Value::Bool(true));
+        
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        
+        // Debe encontrar el episódico pero no el de lección
+        assert!(text.text.contains("episódico"), "Debe retornar el nodo episódico: {:?}", text);
+        assert!(!text.text.contains("general"), "No debe retornar el nodo de lección: {:?}", text);
+        
+        // 3. Invocar recall sin episodic (por defecto busca todo)
+        let mut args_all = serde_json::Map::new();
+        args_all.insert("query".to_string(), serde_json::Value::String("testeo".to_string()));
+        
+        let result_all = handle_tylluan_recall(&server, Some(args_all)).await.unwrap();
+        let text_all = result_all.content[0].as_text().unwrap();
+        assert!(text_all.text.contains("episódico") && text_all.text.contains("general"), "Debe contener ambos: {:?}", text_all);
     }
 }

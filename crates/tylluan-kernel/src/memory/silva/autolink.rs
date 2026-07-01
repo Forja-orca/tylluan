@@ -124,7 +124,7 @@ impl super::SilvaDB {
             let links = if let Some(eng) = engine {
                 // Aggressive hybrid: semantic + keyword via search_hybrid
                 let emb = eng.embed(&node.content).ok();
-                let candidates = self.search_hybrid(&node.content, emb.as_deref(), 10).await.unwrap_or_default();
+                let candidates = self.search_hybrid(&node.content, emb.as_deref(), 10, None).await.unwrap_or_default();
                 let mut count = 0usize;
                 for (neighbor, score) in &candidates {
                     if neighbor.id == node.id { continue; }

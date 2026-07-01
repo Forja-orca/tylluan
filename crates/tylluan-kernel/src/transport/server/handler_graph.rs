@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use tracing::info;
 use serde_json;
 use chrono;
@@ -60,7 +60,7 @@ pub async fn handle_tylluan_graph(
 
             let _ = server.silva.touch_node(&subject, &agent_id, "query").await;
 
-            let nodes_with_scores = server.silva.search_hybrid(&subject, None, 5).await.unwrap_or_default();
+            let nodes_with_scores = server.silva.search_hybrid(&subject, None, 5, None).await.unwrap_or_default();
             let mut triples = Vec::new();
 
             for (node, _) in nodes_with_scores {
