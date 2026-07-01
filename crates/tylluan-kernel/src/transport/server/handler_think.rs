@@ -23,9 +23,9 @@ pub async fn handle_tylluan_think(
 
     let embedding = server.matcher.engine().and_then(|e| e.embed(&query).ok());
     let nodes_with_scores = if let Some(ref reranker) = server.reranker {
-        server.silva.search_hybrid_reranked(&query, embedding.as_deref(), 20, reranker).await
+        server.silva.search_hybrid_reranked(&query, embedding.as_deref(), 20, reranker, false).await
     } else {
-        server.silva.search_hybrid(&query, embedding.as_deref(), 20, None).await
+        server.silva.search_hybrid(&query, embedding.as_deref(), 20, None, false).await
     }.unwrap_or_default();
     
     let mut nodes: Vec<GraphNode> = nodes_with_scores.iter().map(|(n, _)| n.clone()).collect();

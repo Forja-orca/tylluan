@@ -181,12 +181,14 @@ impl super::SilvaDB {
     }
 
     /// Hybrid search for SilvaDB: Semantic (vector) + Weight-Ranked (topic/text) + Graph-Traversal (LightRAG).
+    /// When `skip_graph` is true, the LightRAG local graph traversal (Personalized PageRank) is skipped entirely.
     pub async fn search_hybrid(
         &self,
         query: &str,
         query_embedding: Option<&[f32]>,
         limit: usize,
         type_filter: Option<&str>,
+        skip_graph: bool,
     ) -> Result<Vec<(GraphNode, f32)>> {
         // Reciprocal Rank Fusion (RRF): score(d) = Σ 1/(k + rank)
         // k=60 is the standard constant (Cormack et al. 2009).
@@ -206,7 +208,7 @@ impl super::SilvaDB {
         }
 
         // LightRAG local graph query: use vector search results as seeds for Personalized PageRank local traversal
-        if !vector_results.is_empty() {
+        if !skip_graph && !vector_results.is_empty() {
             let seed_ids: Vec<String> = vector_results.iter().map(|(node, _)| node.id.clone()).collect();
             if let Ok(graph_results) = self.local_query_graph(&seed_ids, limit).await {
                 for (rank, (node, _score)) in graph_results.into_iter().enumerate() {
@@ -263,8 +265,9 @@ impl super::SilvaDB {
         query_embedding: Option<&[f32]>,
         limit: usize,
         reranker: &crate::router::embeddings::RerankEngine,
+        skip_graph: bool,
     ) -> Result<Vec<(GraphNode, f32)>> {
-        let candidates = self.search_hybrid(query, query_embedding, (limit * 4).min(20), None).await?;
+        let candidates = self.search_hybrid(query, query_embedding, (limit * 4).min(20), None, skip_graph).await?;
         if candidates.is_empty() { return Ok(candidates); }
         let docs: Vec<&str> = candidates.iter().map(|(n, _)| n.content.as_str()).collect();
         let ranked = reranker.rerank(query, &docs).unwrap_or_else(|_| {

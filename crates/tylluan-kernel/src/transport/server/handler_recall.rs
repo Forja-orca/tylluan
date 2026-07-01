@@ -517,7 +517,7 @@ if let Some(ref mut s) = stmt {
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
         let filter = if episodic { Some("episodic") } else { None };
         candidates = server.silva
-            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool, filter)
+            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool, filter, false)
             .await.unwrap_or_default();
 
         if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {

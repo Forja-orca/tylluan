@@ -169,7 +169,7 @@ impl LongMemEvalBench {
 
         let query_embedding = engine.and_then(|e| e.embed(&q.question).ok());
         let start = Instant::now();
-        let retrieved = db.search_hybrid_reranked(&q.question, query_embedding.as_deref(), 10, reranker)
+        let retrieved = db.search_hybrid_reranked(&q.question, query_embedding.as_deref(), 10, reranker, false)
             .await
             .unwrap_or_default();
         let elapsed = start.elapsed();
@@ -238,7 +238,7 @@ impl LongMemEvalBench {
 
         let query_embedding = engine.and_then(|e| e.embed(&q.question).ok());
         let start = Instant::now();
-        let retrieved = db.search_hybrid(&q.question, query_embedding.as_deref(), 10)
+        let retrieved = db.search_hybrid(&q.question, query_embedding.as_deref(), 10, None, false)
             .await
             .unwrap_or_default();
         let elapsed = start.elapsed();

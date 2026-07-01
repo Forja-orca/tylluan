@@ -727,7 +727,8 @@ impl super::SilvaDB {
         let degree_map = self.degree_centrality(&candidate_ids).await?;
 
         // 3. Retrieve GraphNodes and combine PageRank with Degree Centrality
-        // final_score = pr_score * (1.0 + degree * 0.1)
+        // final_score = pr_score / (1.0 + degree * 0.1)
+        // Inverted bias: high-degree hub nodes are penalized, low-degree specific nodes are preferred.
         let results = tokio::task::block_in_place(|| -> Result<Vec<(GraphNode, f32)>> {
             let conn = self.conn.blocking_lock();
             let mut scored_nodes = Vec::new();
@@ -735,7 +736,7 @@ impl super::SilvaDB {
             for (id, pr_score) in pagerank_results {
                 if let Ok(Some(node)) = self.get_node_sync(&id, &conn) {
                     let deg = *degree_map.get(&id).unwrap_or(&0) as f64;
-                    let final_score = pr_score * (1.0 + deg * 0.1);
+                    let final_score = pr_score / (1.0 + deg * 0.1);
                     scored_nodes.push((node, final_score as f32));
                 }
             }
