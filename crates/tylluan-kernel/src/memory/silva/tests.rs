@@ -903,8 +903,8 @@ async fn test_hnsw_not_built_below_threshold() {
     assert!(guard.is_none(), "HNSW must not build below threshold");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_hnsw_serialize_roundtrip() {
+#[test]
+fn test_hnsw_serialize_roundtrip() {
     use crate::memory::silva::hnsw::{EmbPoint, HnswIndex, serialize_hnsw_data, deserialize_hnsw_rebuild};
     use instant_distance::Builder;
     let points = vec![EmbPoint(vec![1.0f32, 0.0, 0.0]), EmbPoint(vec![0.0, 1.0, 0.0])];
@@ -915,4 +915,69 @@ async fn test_hnsw_serialize_roundtrip() {
     assert!(!bytes.is_empty());
     let restored = deserialize_hnsw_rebuild(&bytes).unwrap();
     assert_eq!(restored.node_ids.len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_degree_centrality() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "entity", "Entity 1", "{}").await.unwrap();
+    db.upsert_node("n2", "entity", "Entity 2", "{}").await.unwrap();
+    db.upsert_node("n3", "entity", "Entity 3", "{}").await.unwrap();
+
+    // n1 <-> n2 y n2 <-> n3
+    db.add_edge("n1", "n2", "link", 1.0, "{}").await.unwrap();
+    db.add_edge("n2", "n3", "link", 1.0, "{}").await.unwrap();
+
+    let candidate_ids = vec!["n1".to_string(), "n2".to_string(), "n3".to_string()];
+    let degree_map = db.degree_centrality(&candidate_ids).await.unwrap();
+
+    // n1 tiene 1 (con n2)
+    // n2 tiene 2 (con n1 y n3)
+    // n3 tiene 1 (con n2)
+    assert_eq!(*degree_map.get("n1").unwrap(), 1);
+    assert_eq!(*degree_map.get("n2").unwrap(), 2);
+    assert_eq!(*degree_map.get("n3").unwrap(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_local_query_graph() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "entity", "Entity 1", "{}").await.unwrap();
+    db.upsert_node("n2", "entity", "Entity 2", "{}").await.unwrap();
+    db.upsert_node("n3", "entity", "Entity 3", "{}").await.unwrap();
+
+    db.add_edge("n1", "n2", "link", 1.0, "{}").await.unwrap();
+    db.add_edge("n2", "n3", "link", 1.0, "{}").await.unwrap();
+
+    let results = db.local_query_graph(&["n1".to_string()], 5).await.unwrap();
+    assert!(!results.is_empty());
+    
+    // n2 es el vecino directo de n1, debe ser retornado
+    let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
+    assert!(ids.contains(&"n2"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_hybrid_with_graph_traversal() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "entity", "Entity 1 Tokio async", "{}").await.unwrap();
+    db.upsert_node("n2", "entity", "Entity 2 Tokio runner", "{}").await.unwrap();
+
+    db.add_edge("n1", "n2", "link", 1.0, "{}").await.unwrap();
+
+    // Insertar un embedding falso de 1024-dim
+    let mut emb = vec![0.0f32; 1024];
+    emb[0] = 1.0;
+    let emb_bytes: Vec<u8> = emb.iter().flat_map(|v| v.to_le_bytes()).collect();
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute(
+            "INSERT OR REPLACE INTO node_embeddings (node_id, embedding, model_id) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["n1", emb_bytes, "test"],
+        ).unwrap();
+    });
+
+    // Búsqueda híbrida con embedding
+    let results = db.search_hybrid("Tokio async", Some(&emb), 5).await.unwrap();
+    assert!(!results.is_empty());
 }
