@@ -868,3 +868,28 @@ fn test_exponential_decay_two_halflives() {
     let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
     assert!((decayed - 0.25).abs() < 0.001, "Expected ~0.25, got {}", decayed);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bm25_search_returns_relevant_nodes() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "lesson", "Rust ownership and borrowing rules are strict", "{}").await.unwrap();
+    db.upsert_node("n2", "concept", "Python uses garbage collection for memory management", "{}").await.unwrap();
+    db.upsert_node("n3", "lesson", "Rust lifetimes ensure memory safety without GC", "{}").await.unwrap();
+
+    let results = db.search("Rust memory safety", 5, None).await.unwrap();
+    assert!(!results.is_empty(), "BM25 search must return results for 'Rust memory safety'");
+    let ids: Vec<&str> = results.iter().map(|n| n.id.as_str()).collect();
+    assert!(ids.contains(&"n1") || ids.contains(&"n3"), "Rust nodes must appear in results");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_entity_boost_in_hybrid_search() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("ent1", "entity", "Tokio async runtime for Rust", "{}").await.unwrap();
+    db.upsert_node("lesson1", "lesson", "Tokio is the async runtime we use in this project", "{}").await.unwrap();
+
+    let results = db.search_hybrid("Tokio runtime", None, 5).await.unwrap();
+    assert!(!results.is_empty(), "hybrid search must return results for 'Tokio runtime'");
+    let ids: Vec<&str> = results.iter().map(|(n, _)| n.id.as_str()).collect();
+    assert!(ids.contains(&"ent1") || ids.contains(&"lesson1"), "at least one matching node must appear");
+}
