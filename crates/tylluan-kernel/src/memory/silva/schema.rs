@@ -41,7 +41,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 11;
+            const SCHEMA_VERSION: i32 = 12;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -179,6 +179,13 @@ impl super::SilvaDB {
                      last_guild TEXT,
                      created_unix INTEGER NOT NULL DEFAULT 0,
                      id TEXT NOT NULL
+                 );
+
+                 CREATE TABLE IF NOT EXISTS hnsw_index (
+                     id INTEGER PRIMARY KEY CHECK (id = 1),
+                     index_blob BLOB NOT NULL,
+                     node_count INTEGER NOT NULL,
+                     built_at TEXT NOT NULL
                  );"
             )?;
 

@@ -1311,6 +1311,21 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // HNSW index rebuild scheduler (runs every 10 minutes, only if >= threshold)
+    let silva_hnsw = silva.clone();
+    tokio::spawn(async move {
+        let mut hnsw_interval = tokio::time::interval(Duration::from_secs(600));
+        loop {
+            hnsw_interval.tick().await;
+            let silva_inner = silva_hnsw.clone();
+            let guard = GuardedTask::new("HNSW Rebuild", Duration::from_secs(120));
+            let _ = guard.run(async move {
+                silva_inner.rebuild_hnsw_if_needed().await?;
+                Ok::<(), anyhow::Error>(())
+            }).await;
+        }
+    });
+
     // Collective memory consensus scheduler (runs every 1 hour)
     // Optimized: Uses 60s tick instead of 1s to save CPU on toaster hardware
     let silva_consensus = silva.clone();

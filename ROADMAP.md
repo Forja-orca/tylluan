@@ -135,9 +135,10 @@ Delivered:
 **v0.9.0 backlog:**
 - M6-full — Fault injection, network partitions, recovery simulation (turmoil — deferred from P2 due to single-thread constraint)
 - M6 — Dual-Level LightRAG retrieval (depends on M2 P1 for solid vector foundation)
-- Batch embedding pipeline (embed in batches, not one-by-one)
-- HNSW index via `instant-distance` (before 500k nodes)
+- Batch embedding pipeline (embed in batches of 32+, not one-by-one — required before 500k nodes)
+- HNSW index via `instant-distance` (auto-activate when nodes > 100k)
 - Semantic search over Coloquio (episodic recall — depends on P0-B flywheel being populated)
+- Portability compliance CI: RPi4 (aarch64) smoke test in release workflow + USB bundle boot verification
 
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
