@@ -102,9 +102,9 @@ Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 
 ## 🧭 North Star — Invariante Fundacional (leer antes de proponer cualquier feature)
 
-**Caso de uso fundacional:** Un médico en África rural lleva Tylluan en un USB. Lo ejecuta en máquinas distintas de distintos pueblos. Mantiene sus memorias, sus herramientas y las de su equipo IA **sin conexión a internet**. Cuando tiene LAN (clínica con 3 ordenadores), sincroniza con colegas automáticamente. Cuando vuelve a la ciudad y tiene acceso a hardware mejor o clientes cloud (Claude Code, Cursor, Codex), los conecta a su Tylluan local — todo el material recopilado disponible.
+**Invariante de portabilidad:** Un único binario arranca offline en hardware modesto (RPi4, CPU sin GPU) y también en un servidor. Sin dependencias de red en el path crítico. El conocimiento persiste en local, la sync con peers es oportunista — no requerida.
 
-**Filtro de decisión para cualquier nueva feature:** ¿Puede el mismo componente servir al médico (5-10 peers, CPU modesta, sin internet) Y al arquitecto (100+ peers, servidor, datacenter) **sin bifurcar el código** — solo diferente `tylluan.toml`? Si no, el diseño está mal, no el scope.
+**Filtro de decisión para cualquier nueva feature:** ¿Puede el mismo componente servir a un usuario con hardware modesto (5-10 peers, CPU sin internet) Y a uno con servidor (100+ peers, datacenter) **sin bifurcar el código** — solo diferente `tylluan.toml`? Si no, el diseño está mal, no el scope.
 
 **Invariantes derivados:**
 - **Toaster-friendly:** debe funcionar en Raspberry Pi 4 (4GB RAM) y hardware de 10 años
@@ -114,7 +114,7 @@ Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 
 **Historial de deriva detectada (2026-06-30, coloquio T58-T67):**
 - M14-D "cross-datacenter federation" → diferido (fuera del north star). Ver sección M14-D en ROADMAP.md.
-- El médico con 5-10 peers no necesita DHT a escala BitTorrent — pero DHT arranca en vacío sin coste, por lo que no se elimina.
+- Un nodo en entorno modesto con 5-10 peers no necesita DHT a escala BitTorrent — pero DHT arranca en vacío sin coste, por lo que no se elimina.
 
 ---
 
