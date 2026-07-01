@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.6.0-blue.svg" alt="v0.6.0">
+  <img src="https://img.shields.io/badge/version-0.8.0-blue.svg" alt="v0.8.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -34,12 +34,15 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | Dual-level retrieval (LightRAG pattern): entity-level BGE-M3 vector search + graph expansion with degree centrality. Runs entirely on CPU |
+| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion. Entity boost ×1.25 post-RRF. Runs entirely on CPU |
+| **Agent Persona** | Agents have `persona` + `preferences` stored in Core Memory (always available, not retrieved on demand) |
+| **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes — agents remember what was discussed |
 | **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
-| **Tools** | 40+ guilds: bash, git, filesystem, docker, code, vision, web search, and more |
+| **Tools** | 47+ guilds: bash, git, filesystem, docker, code, vision, web search, and more. Auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync over LAN/VPN — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Encryption** | AES-256 at rest via SQLCipher (feature-gated: `cargo build --features encryption`, `PRAGMA hexkey`, no SQL injection vector) |
+| **Mesh** | DHT Kademlia peer discovery + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
+| **Encryption** | AES-256 at rest via SQLCipher (feature-gated: `cargo build --features encryption`) |
 | **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
 
 ### Dashboard
@@ -59,8 +62,8 @@ Every MCP client sees exactly these tools — nothing more, nothing less:
 
 ```
 tylluan_do        Route tasks to guilds via natural language
-tylluan_recall    Search long-term memory — dual-level (entity + graph) or standard
-tylluan_remember  Store knowledge persistently in the graph
+tylluan_recall    Search long-term memory (BM25+FTS5+vector hybrid) or agent persona
+tylluan_remember  Store knowledge or update agent persona persistently
 tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations (triples, paths, PageRank)
 ```
@@ -69,7 +72,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (293 lib tests, 8 integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (**316 lib tests**, multiple integration suites) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -77,7 +80,7 @@ Every push runs 5 jobs: Rust build+test (293 lib tests, 8 integration suites) + 
 
 > **The honest toll:** First boot downloads the BGE-M3 embedding model (~2.2 GB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant. Use `embedding_model = "none"` in `tylluan.toml` for zero-download BM25-only mode.
 
-**Supported platforms (v0.6.0):**
+**Supported platforms:**
 
 | Platform | Binary |
 |----------|--------|
@@ -110,7 +113,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.6.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.8.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before connecting:
@@ -129,8 +132,8 @@ Add to any SSE-capable MCP client:
 { "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3030/sse" } } }
 ```
 
-| Client | Config file |
-|--------|-------------|
+| Client | Config |
+|--------|--------|
 | **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:3030/sse` |
 | **Claude Desktop** | `claude_desktop_config.json` |
 | **Cursor** | `~/.cursor/mcp.json` |
@@ -145,70 +148,73 @@ Add to any SSE-capable MCP client:
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Python guilds (bash, vision, web search, 40+ tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (bash, vision, web search, 47+ tools) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/QUICKSTART.md#build-from-source](docs/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
+| Installation profiles (portable/clinic/server) | `tylluan-cli install --profile=portable` |
 
 ---
 
-## Status: v0.6.0 (Portable Foundation)
+## Status: v0.8.0 (Self-Aware Agent)
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
-| **M1** | Memory Decay & Salience — half-life exponential T½=14d | ✅ |
-| **M2** | BGE-M3 1024-dim native — hybrid search, Matryoshka fix | ✅ |
+| **M1** | Memory decay — half-life exponential T½=14d, type-specific rates | ✅ |
+| **M2** | Hybrid Search v2 — BM25 + FTS5 + BGE-M3 vector + RRF + entity boost ×1.25 | ✅ |
+| **M3** | Guild auto-discovery — scan `guilds/` at startup, zero manual registration | ✅ |
 | **M4** | rmcp integration — ServerHandler + stdio transport | ✅ |
-| **M6** | Dual-Level Retrieval (LightRAG pattern) — entity + graph centrality | ✅ |
-| **M7** | Single-binary + public release | ✅ |
-| **Docker** | Production image at `:3030`, BGE-M3 persistent cache volume | ✅ |
+| **M7** | Single binary — `--features bundled-dashboard` embeds React at compile time | ✅ |
 | **M10** | Bounded Work Contracts — finite multi-agent protocol with budget gate | ✅ |
-| **M10-B** | SQL persistence for contracts — survive kernel restarts | ✅ |
 | **Security CI** | 30 automated security tests — intent filter, ACL, rate limiter, impersonation | ✅ |
-| **M11-A** | Federation peer DB — SQLite `peers.db`, `auth_token`/`shared_secret` split | ✅ |
-| **M11-B** | Pull sync — `/sync/export`, `/sync/pull`, `/sync/both` | ✅ |
-| **M11-C** | Node provenance — `federation_source` SQL column, echo-loop prevention, `/federation/nodes` query | ✅ |
-| **M11-D** | Scheduled auto-sync — background tokio loop, configurable interval and mode | ✅ |
-| **M11-E** | Federation integration tests — `federation_audit.rs` (6 tests) | ✅ |
-| **Encryption** | SQLCipher AES-256 at rest — `PRAGMA hexkey`, 4 DB modules, `--features encryption` | ✅ |
-| **M12 Mesh** | Ed25519 identity · STUN NAT · mDNS LAN · node signing · integration tests | ✅ |
-| **M13 Onboarding** | Binary releases · install scripts · `tylluan-cli` · README 3-step | ✅ |
-| **M14-A DHT** | Kademlia routing table (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap · 23 tests | ✅ |
-| **M14-B Gossip** | Symmetric push-pull exchange · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
-| **M14-C Noise** | XK handshake · NK HTTP payload encryption · Ed25519→X25519 · wired to federation sync endpoints | ✅ |
-| **v0.6.0 Portable** | `embedding_model = "none"` (BM25-only, zero download) · ARM64 Linux (Raspberry Pi 4) · north star invariant documented | ✅ |
-| **M14-D** | Cross-datacenter federation — latency-aware routing | 🔜 |
-| **M14-E** | Mesh test harness — fault injection, partition, recovery | 🔜 |
+| **M11 Federation** | SQLite peers · push/pull/auto-sync · ChaCha20 encrypted · provenance · echo-loop safe | ✅ |
+| **Encryption** | SQLCipher AES-256 at rest — `--features encryption` | ✅ |
+| **M12 Mesh** | Ed25519 identity · STUN NAT · mDNS LAN · node signing | ✅ |
+| **M13 Onboarding** | Binary releases for 4 platforms · install scripts · `tylluan-cli` | ✅ |
+| **M14-A DHT** | Kademlia routing (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap | ✅ |
+| **M14-B Gossip** | Symmetric push-pull · LRU entry store · anti-entropy cursor · JSON persistence | ✅ |
+| **M14-C Noise** | XK handshake · NK HTTP encryption · Ed25519→X25519 · wired to federation sync | ✅ |
+| **v0.6.0 Portable** | `embedding_model = "none"` (BM25-only) · ARM64 (RPi4) · portability invariant | ✅ |
+| **v0.6.1 Models** | Config-driven embedding model · install profiles (portable/clinic/server) · reindex SSE | ✅ |
+| **v0.7.0 Intelligence** | Guild auto-discovery · single binary · contextual retrieval · memory decay | ✅ |
+| **v0.8.0 Self-Aware** | Core Memory (persona/preferences) · episodic flywheel · BM25 FTS5 · DST harness | ✅ |
+| **M14-E** | Mesh test harness — fault injection, partition, recovery (turmoil) | 🔜 v0.9.0 |
+| **LightRAG** | Dual-level retrieval — entity graph expansion + degree centrality | 🔜 v0.9.0 |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              MCP Clients                             │
-│  (Claude, Cursor, VS Code, LM Studio, any client)  │
-└──────────────┬──────────────────────────────────────┘
-               │ SSE / HTTP Streamable
-┌──────────────▼──────────────────────────────────────┐
-│         tylluan-nexus (:3030)                        │
-│                                                      │
-│  ┌──────────────┐  ┌───────────────────┐  ┌───────────────┐  │
-│  │ Dual-Level   │  │ SilvaDB           │  │ Guild Registry│  │
-│  │ Retrieval    │  │ SQLite WAL        │  │ 40+ Python    │  │
-│  │ BGE-M3 1024  │  │ IVF vectors       │  │ tools (MCP)   │  │
-│  │ BM25 + Graph │  │ Knowledge graph   │  │               │  │
-│  │ centrality   │  │ Salience decay    │  │               │  │
-│  └──────────────┘  └───────────────────┘  └───────────────┘  │
-│                                                      │
-│  ┌──────────────────────────────────────────────┐   │
-│  │ Federation Layer                              │   │
-│  │ peers.db · ChaCha20 encrypted · provenance  │   │
-│  │ push / pull / auto-sync · echo-loop safe    │   │
-│  └──────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              MCP Clients                                 │
+│  (Claude, Cursor, VS Code, LM Studio, any SSE client)   │
+└──────────────────┬──────────────────────────────────────┘
+                   │ SSE / HTTP Streamable
+┌──────────────────▼──────────────────────────────────────┐
+│              tylluan-nexus (:3030)                       │
+│                                                          │
+│  ┌─────────────────┐  ┌──────────────────┐              │
+│  │  Core Memory     │  │  SilvaDB         │              │
+│  │  persona         │  │  SQLite WAL      │              │
+│  │  preferences     │  │  BGE-M3 vectors  │              │
+│  │  (agent_profiles)│  │  FTS5 BM25       │              │
+│  └─────────────────┘  │  knowledge graph │              │
+│                        │  episodic nodes  │              │
+│  ┌─────────────────┐  │  salience decay  │              │
+│  │  Guild Registry  │  └──────────────────┘              │
+│  │  47+ Python tools│                                    │
+│  │  auto-discovered │  ┌──────────────────┐              │
+│  └─────────────────┘  │  Coloquio         │              │
+│                        │  multi-agent      │              │
+│  ┌──────────────────────────────────────┐ │              │
+│  │  Federation + Mesh Layer             │ │              │
+│  │  peers.db · ChaCha20 · provenance   │ │              │
+│  │  DHT Kademlia · Gossip · Noise XK   │ └──────────────┘│
+│  └──────────────────────────────────────┘                │
+└─────────────────────────────────────────────────────────┘
                │ ChaCha20-Poly1305 encrypted
         ┌──────▼──────┐
-        │  Peer nodes │  (LAN / VPN)
+        │  Peer nodes │  (LAN / VPN / WAN via DHT)
         └─────────────┘
 ```
 
@@ -217,13 +223,14 @@ Add to any SSE-capable MCP client:
 | Component | Technology |
 |-----------|------------|
 | Kernel | Rust (tokio + axum) |
-| Embeddings | BGE-M3 (local ONNX, CPU) |
+| Embeddings | BGE-M3 (local ONNX, CPU) — configurable: bge-small, nomic, none |
 | Reranker | Jina v1 Turbo (local ONNX) |
-| Search | Dual-level: entity BM25 + BGE-M3 vector + graph expansion + degree centrality + cross-encoder rerank |
+| Search | BM25 + FTS5 + BGE-M3 vector + RRF hybrid fusion + entity boost |
 | Storage | SQLite WAL + mmap vector index |
 | Federation | SQLite `peers.db` + ChaCha20-Poly1305 (per-peer keys) |
+| Mesh | DHT Kademlia + Gossip + Noise Protocol XK |
 | Guilds | Python (fastmcp) |
-| Dashboard | React + Vite + Tailwind |
+| Dashboard | React + Vite + Tailwind (embedded in binary) |
 
 ## Project Structure
 
@@ -232,16 +239,14 @@ tylluan/
 ├── crates/
 │   ├── tylluan-kernel/    Core kernel (memory, routing, guilds, federation, security)
 │   ├── tylluan-common/    Shared types and errors
-│   └── tylluan-evals/     Benchmarks (LongMemEval, BeamScale)
-├── guilds/                Python tool plugins (fastmcp)
-│   ├── builders/          DO things (bash, git, docker, code)
-│   ├── scholars/          ANALYZE things (knowledge, deep analysis)
-│   ├── wardens/           GUARD quality (audit, formatting)
-│   └── watchers/          MONITOR health (metrics, cron)
-├── dashboard/             React dashboard (Vite + Tailwind)
+│   ├── tylluan-link/      Federation networking (mesh identity, DHT, NAT, mDNS, Gossip, Noise)
+│   ├── tylluan-cli/       CLI management binary (start / stop / status / install)
+│   └── tylluan-evals/     Benchmarks (Recall@N, Precision@N, latency percentiles)
+├── guilds/                Python tool plugins (fastmcp) — auto-discovered at startup
+├── dashboard/             React dashboard (Vite + Tailwind) — embedded in binary
 ├── docs/                  Architecture and guides
-├── integrations/          MCP client config examples
-└── tests/                 E2E and integration tests
+├── integrations/          MCP client config examples (Claude, Cursor, LM Studio, Antigravity)
+└── tests/                 Integration and E2E tests
 ```
 
 ## Federation
@@ -269,7 +274,6 @@ curl -X POST "http://127.0.0.1:3030/api/v1/federation/sync/pull?peer=node-b"
 
 # Query provenance — which nodes came from which peer?
 curl "http://127.0.0.1:3030/api/v1/federation/nodes?source=node-b"
-curl "http://127.0.0.1:3030/api/v1/federation/nodes?source=local"
 ```
 
 Security invariants: unapproved peers are never synced; protected nodes are never exported; received nodes carry `federation_source` provenance and are excluded from outbound sync by default (echo-loop prevention).
@@ -312,11 +316,12 @@ See [examples/](examples/) for full source code.
 
 | Document | Purpose |
 |----------|---------|
+| [CHANGELOG.md](CHANGELOG.md) | Full version history |
+| [ROADMAP.md](ROADMAP.md) | Versioned roadmap |
+| [STATUS.md](STATUS.md) | Verified technical state (source of truth) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards (humans + AI) |
-| [AI_POLICY.md](AI_POLICY.md) | Rules for AI-generated contributions |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Detailed setup guide |
-| [ROADMAP.md](ROADMAP.md) | Versioned roadmap — v0.2, v0.3 done, v1.0 planned |
 | [docs/architecture/FEDERATION_V3.md](docs/architecture/FEDERATION_V3.md) | Federation protocol spec |
 
 ## Star History
