@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-01 (v0.7.0 release)
+> Last updated: 2026-07-01 (v0.8.0 release)
 
 ## CI
 
@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** `d363b92` · All 5 jobs green as of 2026-07-01.
+**Commit:** pending · 316 tests (263 kernel + 53 link) green as of 2026-07-01.
 
 ---
 
 ## Version
 
-**v0.7.0** — Intelligence Foundation release (M3 guild auto-discovery + M7 single binary + Contextual Retrieval + M1 exponential memory decay).
+**v0.8.0** — Self-Aware Agent release (Core Memory persona/preferences + Coloquio→SilvaDB episodic flywheel + M2 Hybrid Search v2 BM25+FTS5 + DST harness + startup optimization).
 
 ---
 
@@ -47,7 +47,12 @@
 - `--features bundled-dashboard` embeds React build into binary at compile time via rust-embed; disk fallback preserved for dev (M7)
 - `build_contextual_text()` prepends `[source_file > heading_path]` before embedding — zero overhead when metadata absent (Contextual Retrieval)
 - Exponential half-life decay `weight * 0.5^(hours/half_life)` computed in Rust, configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14d). Type-specific rates per node type (M1)
-- **259 lib tests passing** (213 kernel + 46 link) · integration suite requires live kernel
+- Agent Core Memory: `AgentProfile` gains `persona: String` + `preferences: serde_json::Value`; kernel tools `agent_get_persona` / `agent_set_persona` (under `tylluan_recall`/`tylluan_remember` subtool routing) — CONTRACT-01 unchanged (P0-A)
+- Coloquio→SilvaDB episodic flywheel: background `tokio::spawn` every 60s ingests Coloquio turns into SilvaDB as `episodic` nodes; deterministic IDs `coloquio:{channel}:{turn}`; 100ms throttle; watermark-based dedup (P0-B)
+- M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 (`bm25(nodes_fts, 10.0, 5.0, 5.0)`) with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF (P1)
+- DST harness: `crates/tylluan-link/tests/gossip_dst.rs` — 3 InMemoryTransport-based GossipEngine tests (normal sync, partition graceful failure, bidirectional convergence); `GossipEngine::local_node_id()` accessor added (P2)
+- Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` — eliminates double filesystem scan at startup (~10s → ~5s) (P3)
+- **316 lib tests passing** (263 kernel + 53 link) · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)

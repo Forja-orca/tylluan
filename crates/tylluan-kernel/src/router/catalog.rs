@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::GuildWeight;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
 /// Describes a guild that the kernel can load.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -382,36 +383,40 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
 
 /// Returns the guild catalog auto-discovered from the filesystem.
 /// Falls back to scanning relative to workspace root.
+static CATALOG_CACHE: OnceLock<Vec<GuildDescriptor>> = OnceLock::new();
+
 pub fn builtin_catalog() -> Vec<GuildDescriptor> {
-    // Try workspace root relative to the binary's working directory,
-    // then walk up looking for Cargo.toml / guilds/ directory.
-    let mut candidate = std::env::current_dir().unwrap_or_default();
-    if !candidate.join("guilds").is_dir() {
-        if let Some(parent) = candidate.parent() {
-            candidate = parent.to_path_buf();
-        }
-    }
-    if !candidate.join("guilds").is_dir() {
-        candidate = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_default();
-        // Walk up looking for guilds/
-        for _ in 0..6 {
-            if candidate.join("guilds").is_dir() {
-                break;
-            }
-            if let Some(parent) = candidate.parent().map(|p| p.to_path_buf()) {
-                candidate = parent;
-            } else {
-                break;
+    CATALOG_CACHE.get_or_init(|| {
+        // Try workspace root relative to the binary's working directory,
+        // then walk up looking for Cargo.toml / guilds/ directory.
+        let mut candidate = std::env::current_dir().unwrap_or_default();
+        if !candidate.join("guilds").is_dir() {
+            if let Some(parent) = candidate.parent() {
+                candidate = parent.to_path_buf();
             }
         }
-    }
-    let guilds_dir = candidate.join("guilds");
-    let mut catalog = scan_guilds_directory(&guilds_dir);
-    catalog.sort_by(|a, b| a.name.cmp(&b.name));
-    catalog
+        if !candidate.join("guilds").is_dir() {
+            candidate = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_default();
+            // Walk up looking for guilds/
+            for _ in 0..6 {
+                if candidate.join("guilds").is_dir() {
+                    break;
+                }
+                if let Some(parent) = candidate.parent().map(|p| p.to_path_buf()) {
+                    candidate = parent;
+                } else {
+                    break;
+                }
+            }
+        }
+        let guilds_dir = candidate.join("guilds");
+        let mut catalog = scan_guilds_directory(&guilds_dir);
+        catalog.sort_by(|a, b| a.name.cmp(&b.name));
+        catalog
+    }).clone()
 }
 #[cfg(test)]
 mod tests {
