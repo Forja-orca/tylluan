@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-01 (v0.6.1 release)
+> Last updated: 2026-07-01 (v0.7.0 release)
 
 ## CI
 
@@ -19,7 +19,7 @@
 
 ## Version
 
-**v0.6.1** — Model Portability release (P5 config-driven embeddings + P6 install profiles + P7 reindex endpoint).
+**v0.7.0** — Intelligence Foundation release (M3 guild auto-discovery + M7 single binary + Contextual Retrieval + M1 exponential memory decay).
 
 ---
 
@@ -43,7 +43,11 @@
 - ChaCha20-Poly1305 encryption for federation payloads; optional SQLCipher for DB at rest
 - Self-healing: doctor module, background maintenance, hormone-based load signalling
 - Docker support (verified clean boot via `tylluan.docker.toml`)
-- **293 lib tests passing** (250 kernel + 43 link) · integration suite requires live kernel
+- Guild catalog auto-discovered from `guilds/` at startup — zero-config for new guilds. 34 `description_override()` entries preserve routing quality (M3)
+- `--features bundled-dashboard` embeds React build into binary at compile time via rust-embed; disk fallback preserved for dev (M7)
+- `build_contextual_text()` prepends `[source_file > heading_path]` before embedding — zero overhead when metadata absent (Contextual Retrieval)
+- Exponential half-life decay `weight * 0.5^(hours/half_life)` computed in Rust, configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14d). Type-specific rates per node type (M1)
+- **259 lib tests passing** (213 kernel + 46 link) · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
