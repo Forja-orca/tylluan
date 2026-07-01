@@ -936,3 +936,26 @@ impl super::SilvaDB {
         })
     }
 }
+
+/// Build contextual text for embedding (Contextual Retrieval pattern).
+/// Prepends document origin metadata before the content so the embedding
+/// captures WHERE the chunk came from, not just WHAT it says.
+/// Offline-friendly: uses only metadata already stored in the node — no LLM call.
+pub fn build_contextual_text(metadata_json: &str, content: &str) -> String {
+    let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata_json) else {
+        return content.to_string();
+    };
+    let source = meta.get("source_file")
+        .or_else(|| meta.get("source"))
+        .or_else(|| meta.get("file"))
+        .and_then(|v| v.as_str());
+    let heading = meta.get("heading_path")
+        .or_else(|| meta.get("section"))
+        .or_else(|| meta.get("heading"))
+        .and_then(|v| v.as_str());
+    match (source, heading) {
+        (Some(s), Some(h)) => format!("[{} > {}]\n{}", s, h, content),
+        (Some(s), None)    => format!("[{}]\n{}", s, content),
+        _                  => content.to_string(),
+    }
+}

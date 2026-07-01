@@ -1,4 +1,4 @@
-﻿//! # SilvaDB: Sovereign Knowledge Graph
+//! # SilvaDB: Sovereign Knowledge Graph
 //!
 //! Ported from `TylluanMCP/src/brain/SilvaDB.ts`.
 //!

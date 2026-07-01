@@ -13,6 +13,7 @@ use tylluan_kernel::transport;
 use tylluan_kernel::registry::{guild_process::GuildRegistry, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
 use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::{AgentProfileStore, sync_agent_reputation_to_silva}, agent_memory::AgentMemoryManager};
 use tylluan_kernel::memory::agent_nodes::AgentNodeRouter;
+use tylluan_kernel::memory::silva::nodes::build_contextual_text;
 use tylluan_kernel::router::{matcher::GuildMatcher, catalog::builtin_catalog, embeddings::{EmbeddingEngine, RerankEngine}};
 use tylluan_kernel::doctor::Doctor;
 use tylluan_kernel::guard::GuardedTask;
@@ -908,7 +909,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let _reaper = lifecycle::start_lifecycle_reaper_with_silva(registry_arc.clone(), 60, Some(silva.clone()));
+    let _reaper = lifecycle::start_lifecycle_reaper_with_silva(
+        registry_arc.clone(),
+        60,
+        Some(silva.clone()),
+        config.silva.decay_half_life_hours,
+    );
     let _supervisor = tylluan_kernel::registry::supervisor::start_supervisor(registry_arc.clone(), 10);
 
     info!("🛠️ Starting transports...");
@@ -1188,6 +1194,7 @@ async fn main() -> anyhow::Result<()> {
     // Biological decay scheduler (respects config)
     let silva_decay = silva.clone();
     let decay_enabled = config.silva.decay_enabled;
+    let decay_half_life_hours = config.silva.decay_half_life_hours;
     tokio::spawn(async move {
         if !decay_enabled {
             info!("🌲 SilvaDB: Biological decay is DISABLED by config.");
@@ -1199,7 +1206,7 @@ async fn main() -> anyhow::Result<()> {
             let silva_inner = silva_decay.clone();
             let guard = GuardedTask::new("Memory Decay", Duration::from_secs(60));
             let _ = guard.run(async move {
-                silva_inner.apply_decay().await.map(|_| ())?;
+                silva_inner.apply_decay(decay_half_life_hours).await.map(|_| ())?;
                 Ok::<(), anyhow::Error>(())
             }).await;
         }
@@ -1237,7 +1244,8 @@ async fn main() -> anyhow::Result<()> {
                         info!("🧠 Agnostic Indexer: Found {} stale nodes. Re-indexing...", stale_nodes.len());
                         for node_id in stale_nodes.iter().take(100) {
                             if let Ok(Some(node)) = silva_inner.get_node(node_id).await {
-                                let _ = engine.embed(&node.content).map(|vector: Vec<f32>| {
+                                let contextual = build_contextual_text(&node.metadata, &node.content);
+                                let _ = engine.embed(&contextual).map(|vector: Vec<f32>| {
                                     let sid = silva_inner.clone();
                                     let nid = node_id.clone();
                                     let mid = model_id.clone();

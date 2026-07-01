@@ -1,4 +1,4 @@
-﻿use axum::{
+use axum::{
     Json,
     extract::{State, Path},
     http::StatusCode,
@@ -561,7 +561,11 @@ pub async fn maintenance_checkpoint_handler(State(state): State<Arc<HttpState>>)
 }
 
 pub async fn maintenance_decay_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    state.silva.apply_decay().await.map(|_| StatusCode::OK).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    let half_life = {
+        let cfg = state.config.read().await;
+        cfg.silva.decay_half_life_hours
+    };
+    state.silva.apply_decay(half_life).await.map(|_| StatusCode::OK).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 pub async fn maintenance_purge_lessons_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {

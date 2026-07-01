@@ -606,7 +606,23 @@ pub async fn start_http_server_with_download(
     }
 
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
-    sse::spawn_heartbeat(broadcast_tx.clone(), state.start_time, state.sessions.clone(), state.mailbox.clone(), state.silva.clone(), true, 21600, Arc::new(state.registry.clone()), state.matcher.clone());
+    let (decay_enabled, decay_interval_secs, decay_half_life_hours) = {
+        let cfg = state.config.read().await;
+        (cfg.silva.decay_enabled, cfg.silva.decay_interval_hours * 3600, cfg.silva.decay_half_life_hours)
+    };
+
+    sse::spawn_heartbeat(
+        broadcast_tx.clone(),
+        state.start_time,
+        state.sessions.clone(),
+        state.mailbox.clone(),
+        state.silva.clone(),
+        decay_enabled,
+        decay_interval_secs,
+        decay_half_life_hours,
+        Arc::new(state.registry.clone()),
+        state.matcher.clone(),
+    );
 
     sse::spawn_metrics_broadcaster(broadcast_tx.clone(), state.doctor.clone());
 

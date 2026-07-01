@@ -171,7 +171,7 @@ async fn test_silva() -> SilvaDB {
             ).unwrap();
         }
 
-        let _changes = db.apply_decay().await.unwrap();
+        let _changes = db.apply_decay(336).await.unwrap();
         assert!(_changes > 0);
 
         let node = db.get_node("old").await.unwrap().unwrap();
@@ -201,7 +201,7 @@ async fn test_silva() -> SilvaDB {
         }
         
         // Apply decay
-        let _changes = db.apply_decay().await.unwrap();
+        let _changes = db.apply_decay(336).await.unwrap();
         
         // Identity node should NOT be affected (protected flag should be auto-set for identity type)
         let node = db.get_node("agent:megaingeniero").await.unwrap().unwrap();
@@ -226,7 +226,7 @@ async fn test_silva() -> SilvaDB {
         }
         
         // Apply decay - should not affect protected node
-        db.apply_decay().await.unwrap();
+        db.apply_decay(336).await.unwrap();
         
         let node = db.get_node("secret-plan").await.unwrap().unwrap();
         assert!((node.weight - 1.0).abs() < 0.01, "Protected node should remain 1.0, got {}", node.weight);
@@ -825,4 +825,46 @@ async fn test_cleanup_orphan_nodes() {
     assert!(db.get_node("orphan_node").await.unwrap().is_none());
     assert!(db.get_node("protected_orphan").await.unwrap().is_some());
     assert!(db.get_node("identity_orphan").await.unwrap().is_some());
+}
+
+#[test]
+fn test_build_contextual_text_with_source_and_heading() {
+    use crate::memory::silva::nodes::build_contextual_text;
+    let meta = r#"{"source_file":"manual.md","heading_path":"Setup > Install"}"#;
+    let result = build_contextual_text(meta, "Run tylluan-cli start");
+    assert_eq!(result, "[manual.md > Setup > Install]\nRun tylluan-cli start");
+}
+
+#[test]
+fn test_build_contextual_text_source_only() {
+    use crate::memory::silva::nodes::build_contextual_text;
+    let meta = r#"{"source":"README.md"}"#;
+    let result = build_contextual_text(meta, "One binary. No dependencies.");
+    assert_eq!(result, "[README.md]\nOne binary. No dependencies.");
+}
+
+#[test]
+fn test_build_contextual_text_no_metadata() {
+    use crate::memory::silva::nodes::build_contextual_text;
+    let result = build_contextual_text("{}", "plain content");
+    assert_eq!(result, "plain content");
+}
+
+#[test]
+fn test_exponential_decay_formula() {
+    let weight = 1.0_f64;
+    let half_life = 336.0_f64; // 14 days in hours
+    let hours_elapsed = 336.0_f64; // exactly one half-life
+    let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
+    // After exactly one half-life, weight should be 0.5
+    assert!((decayed - 0.5).abs() < 0.001, "Expected ~0.5, got {}", decayed);
+}
+
+#[test]
+fn test_exponential_decay_two_halflives() {
+    let weight = 1.0_f64;
+    let half_life = 336.0_f64;
+    let hours_elapsed = 672.0_f64; // 28 days = 2 half-lives
+    let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
+    assert!((decayed - 0.25).abs() < 0.001, "Expected ~0.25, got {}", decayed);
 }

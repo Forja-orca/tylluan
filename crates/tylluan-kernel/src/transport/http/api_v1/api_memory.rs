@@ -6,6 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 //
+use crate::memory::silva::nodes::build_contextual_text;
 use crate::transport::http::{HttpState, MemorySearchQuery};
 
 pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req): Json<serde_json::Value>) -> impl IntoResponse {
@@ -92,7 +93,8 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
         let mut done = 0usize;
         for node_id in &stale_nodes {
             if let Ok(Some(node)) = silva.get_node(node_id).await {
-                let _ = engine.embed(&node.content).map(|vector| {
+                let contextual = build_contextual_text(&node.metadata, &node.content);
+                let _ = engine.embed(&contextual).map(|vector| {
                     let sid = silva.clone();
                     let nid = node_id.clone();
                     let mid = model_id.clone();

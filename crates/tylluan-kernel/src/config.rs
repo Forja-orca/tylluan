@@ -605,6 +605,9 @@ pub struct SilvaConfig {
     #[serde(default = "default_decay_prune_threshold")]
     pub decay_prune_threshold: f64,
 
+    #[serde(default = "default_decay_half_life_hours")]
+    pub decay_half_life_hours: u64,
+
     #[serde(default = "default_sync_interval")]
     pub sync_interval_ms: u64,
 }
@@ -616,6 +619,7 @@ impl Default for SilvaConfig {
             decay_enabled: true,
             decay_interval_hours: default_decay_interval_hours(),
             decay_prune_threshold: default_decay_prune_threshold(),
+            decay_half_life_hours: default_decay_half_life_hours(),
             sync_interval_ms: default_sync_interval(),
         }
     }
@@ -888,6 +892,7 @@ fn default_silva_db_path() -> String { "./data/silva.db".into() }
 fn default_sync_interval() -> u64 { 5000 }
 fn default_decay_interval_hours() -> u64 { 6 }
 fn default_decay_prune_threshold() -> f64 { 0.15 }
+fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
 fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }
