@@ -99,6 +99,7 @@ impl super::TylluanServer {
                 RiskLevel::Low,
             ).with_subtools(vec![
                 "memory_write".into(),
+                "agent_set_persona".into(),
             ]),
             TylluanTool::new(
                 "tylluan_recall",
@@ -120,6 +121,7 @@ impl super::TylluanServer {
                 "agent_query_memory".into(),
                 "agent_check_inbox".into(),
                 "agent_synthesize_context".into(),
+                "agent_get_persona".into(),
             ]),
             TylluanTool::new(
                 "tylluan_think",
@@ -436,6 +438,33 @@ impl super::TylluanServer {
                 "Analyze the current session bridge and memory to identify contradictions or missing links.",
                 serde_json::json!({"type": "object", "properties": {}}),
                 ToolCategory::Kernel,
+                RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "agent_get_persona",
+                "Read your own agent persona and preferences from the profile store.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity." }
+                    }
+                }),
+                ToolCategory::Memory,
+                RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "agent_set_persona",
+                "Set your own agent persona string and optional preferences JSON.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity." },
+                        "persona": { "type": "string", "description": "Your persona description." },
+                        "preferences": { "type": "object", "description": "Optional key-value preferences." }
+                    },
+                    "required": ["persona"]
+                }),
+                ToolCategory::Memory,
                 RiskLevel::Low,
             ),
         ]
