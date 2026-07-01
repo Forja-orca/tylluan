@@ -132,13 +132,25 @@ Delivered:
 
 **316 lib tests passing** (263 kernel + 53 link) at release.
 
-**v0.9.0 backlog:**
-- M6-full — Fault injection, network partitions, recovery simulation (turmoil — deferred from P2 due to single-thread constraint)
-- M6 — Dual-Level LightRAG retrieval (depends on M2 P1 for solid vector foundation)
-- Batch embedding pipeline (embed in batches of 32+, not one-by-one — required before 500k nodes)
-- HNSW index via `instant-distance` (auto-activate when nodes > 100k)
-- Semantic search over Coloquio (episodic recall — depends on P0-B flywheel being populated)
+## v0.9.0 — Graph-Augmented Local RAG
+
+**Status:** Complete.
+
+**Goal:** Zero-token local graph retrieval and batch indexing.
+
+Delivered:
+- [x] P0 — Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, latency p50: 1.3ms, p95: 1.9ms (baseline_v0.9.0.json).
+- [x] P1 — HNSW index via `instant-distance`: HnswIndex + schema v12 (`hnsw_index` BLOB table) + search fast path (threshold >=12k nodes) + background rebuild scheduler.
+- [x] P2 — Batch embeddings: Connected callers to `embed_batch` (single ONNX lock) and main.rs reindexer loop chunked to 32 nodes.
+- [x] P3 — LinearRAG local graph traversal: `degree_centrality` + `local_query_graph` (PageRank + degree centrality boost) integrated into RRF hybrid search.
+
+**268 lib tests passing** (215 kernel + 53 link) + 1 evals test · 0 failures.
+
+**v0.10.0 backlog:**
+- P4 — Semantic search over Coloquio (episodic recall - search_channel_semantic)
+- M14-E — Mesh test harness (simulated fault injection, network partitions, recovery simulation via turmoil)
 - Portability compliance CI: RPi4 (aarch64) smoke test in release workflow + USB bundle boot verification
+- Sparse Retrieval / ColBERT: Contextual retrieval enhancements (deferred to v1.1.0)
 
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
