@@ -52,7 +52,9 @@
 - M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 (`bm25(nodes_fts, 10.0, 5.0, 5.0)`) with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF (P1)
 - DST harness: `crates/tylluan-link/tests/gossip_dst.rs` — 3 InMemoryTransport-based GossipEngine tests (normal sync, partition graceful failure, bidirectional convergence); `GossipEngine::local_node_id()` accessor added (P2)
 - Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` — eliminates double filesystem scan at startup (~10s → ~5s) (P3)
-- **316 lib tests passing** (263 kernel + 53 link) · integration suite requires live kernel
+- HNSW index via `instant-distance`: `hnsw.rs` + schema v12 (`hnsw_index` BLOB table) + fast path in `search.rs` (HNSW ≥12k nodes → IVF → linear fallback); rebuild scheduler every 10min; survives restart via SQLite BLOB (v0.9.0 P1)
+- Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` as LightRAG pre-baseline (v0.9.0 P0)
+- **265 lib tests passing** (263 kernel + 2 HNSW) + 1 evals test · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
