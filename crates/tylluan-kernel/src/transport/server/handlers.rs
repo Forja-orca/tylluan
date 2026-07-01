@@ -86,6 +86,30 @@ impl TylluanServer {
                 self.thought(thought, 1.0);
                 Ok(CallToolResult { content: vec![Content::text("Pondering...")], is_error: Some(false) })
             }
+            "agent_get_persona" => {
+                let profile = if let Some(ref profiles) = self.agent_profiles {
+                    profiles.lock().ok().and_then(|store| store.get_profile(&agent_id).ok()).flatten()
+                } else { None };
+                let result = match profile {
+                    Some(p) => serde_json::json!({ "agent_id": p.agent_id, "persona": p.persona, "preferences": p.preferences }),
+                    None    => serde_json::json!({ "agent_id": agent_id, "persona": "", "preferences": {} }),
+                };
+                Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())], is_error: Some(false) })
+            }
+            "agent_set_persona" => {
+                let persona = arguments.as_ref().and_then(|a| a.get("persona")).and_then(|v| v.as_str()).unwrap_or("");
+                let preferences = arguments.as_ref().and_then(|a| a.get("preferences"));
+                if let Some(ref profiles) = self.agent_profiles {
+                    if let Ok(store) = profiles.lock() {
+                        let _ = store.upsert_activity(&agent_id, "kernel", true, Some("set_persona"));
+                        store.set_persona(&agent_id, persona).ok();
+                        if let Some(prefs) = preferences {
+                            store.set_preferences(&agent_id, prefs).ok();
+                        }
+                    }
+                }
+                Ok(CallToolResult { content: vec![Content::text("✅ Persona updated")], is_error: Some(false) })
+            }
             _ => Err(McpError::invalid_params(format!("Unknown kernel tool: {}", name), None)),
         };
 
