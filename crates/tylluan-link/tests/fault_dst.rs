@@ -5,11 +5,15 @@
 //! (mpsc channels) wrapped in PartitionableTransport for fault injection.
 
 use std::time::Duration;
-use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipMessage};
+use tylluan_link::gossip::{GossipEngine, GossipConfig, GossipMessage, HardwareCaps};
 use tylluan_link::transport::{FaultMode, MeshTransport, PartitionableTransport, in_memory_pair};
 
 fn make_engine(id: &str) -> GossipEngine {
     GossipEngine::new(id.to_string(), GossipConfig::default())
+}
+
+fn default_hw() -> HardwareCaps {
+    HardwareCaps::default()
 }
 
 async fn respond_to_sync(
@@ -56,7 +60,7 @@ async fn test_fault_dst_partition_heal_convergence() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["mesh".into()]);
+    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["mesh".into()], default_hw());
     engine_a.store_entries(&[entry]);
 
     // Attempt 1: Partition mode — responder never gets the Pull
@@ -106,7 +110,7 @@ async fn test_fault_dst_latency_injection() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["latency".into()]);
+    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["latency".into()], default_hw());
     engine_a.store_entries(&[entry]);
 
     let (t_a_raw, mut t_b_raw) = in_memory_pair();
@@ -141,7 +145,7 @@ async fn test_fault_dst_drop_rate_eventual_convergence() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["drop".into()]);
+    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["drop".into()], default_hw());
     engine_a.store_entries(&[entry]);
 
     // Fresh transports each round — drop randomness across rounds
@@ -187,7 +191,7 @@ async fn test_fault_dst_error_mode_graceful_failure() {
     let mut engine_b = make_engine("node-b");
 
     engine_a.advance_clock();
-    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["error".into()]);
+    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["error".into()], default_hw());
     engine_a.store_entries(&[entry]);
 
     let (t_a_raw, mut t_b_raw) = in_memory_pair();

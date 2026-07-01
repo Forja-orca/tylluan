@@ -2,6 +2,7 @@
 //!
 //! TCP-based P2P with HMAC-SHA256 challenge-response handshake.
 
+pub mod capability;
 pub mod dht;
 pub mod gossip;
 pub mod identity;

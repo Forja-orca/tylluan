@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 use crate::dht::RoutingTable;
 use crate::transport::{MeshTransport, TransportError};
-use super::message::{GossipEntry, GossipMessage};
+use super::message::{GossipEntry, GossipMessage, HardwareCaps};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_GOSSIP_INTERVAL: Duration = Duration::from_secs(30);
@@ -165,11 +165,12 @@ impl GossipState {
         self.entries.len()
     }
 
-    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
+    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>, hardware: HardwareCaps) -> GossipEntry {
         GossipEntry {
             node_id: self.local_node_id.clone(),
             addr: addr.to_string(),
             capabilities,
+            hardware,
             clock: self.local_clock,
         }
     }
@@ -240,8 +241,8 @@ impl GossipEngine {
         &self.state.local_node_id
     }
 
-    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>) -> GossipEntry {
-        self.state.local_entry(addr, capabilities)
+    pub fn local_entry(&self, addr: &str, capabilities: Vec<String>, hardware: HardwareCaps) -> GossipEntry {
+        self.state.local_entry(addr, capabilities, hardware)
     }
 
     pub async fn perform_sync<T: MeshTransport + ?Sized>(
@@ -332,6 +333,7 @@ mod tests {
             node_id: node_id.to_string(),
             addr: format!("127.0.0.1:{}", 3000 + clock),
             capabilities: vec!["mesh".into()],
+            hardware: HardwareCaps::default(),
             clock,
         }
     }
@@ -429,9 +431,11 @@ mod tests {
     fn test_local_entry() {
         let mut state = GossipState::new("node42".into());
         state.tick();
-        let entry = state.local_entry("1.2.3.4:3030", vec!["mesh".into()]);
+        let hw = HardwareCaps { ram_mb: 8192, has_gpu: true, load_avg: 0.1 };
+        let entry = state.local_entry("1.2.3.4:3030", vec!["mesh".into()], hw);
         assert_eq!(entry.node_id, "node42");
         assert_eq!(entry.addr, "1.2.3.4:3030");
+        assert!(entry.hardware.has_gpu);
         assert_eq!(entry.clock, 1);
     }
 

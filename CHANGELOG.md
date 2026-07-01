@@ -4,6 +4,25 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.11.0] — in progress — M14-D Guild Execution Channels
+
+**Norte estrella:** Los peers descubren capacidades entre sí y despachan guild tools remotamente sobre Noise XK.
+
+### Added
+
+- **M14-D Phase 1 — Capability Registry**
+  - `HardwareCaps { ram_mb: u32, has_gpu: bool, load_avg: f32 }` struct added to `GossipEntry` with `#[serde(default)]` — backwards-compatible with v0.10.0 peers.
+  - `CapabilityRegistry` in `crates/tylluan-link/src/capability.rs`: `HashMap<NodeId, (CapabilityRecord, Instant)>` with configurable TTL (default 300s).
+  - Methods: `ingest(record)`, `lookup(node_id)`, `prune_expired()`, `ingest_from_engine(&GossipEngine)`.
+  - 6 unit tests: new/is_empty, ingest+lookup, stale-clock rejection, prune_expired, ingest_from_engine, default TTL.
+  - `prune_expired()` ready to wire into background gossip task in `main.rs` (Phase 2).
+
+### Tests
+
+**273 kernel lib tests + 67 link tests + 2 evals = 342 total** · 0 failures.
+
+---
+
 ## [v0.10.0] — 2026-07-01 — El sistema que sabe si funciona
 
 **Norte estrella:** Validar lo construido en v0.9.0 antes de añadir más capas. Retrieval quality delta + M6-full completo.
