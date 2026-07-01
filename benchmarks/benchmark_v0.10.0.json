@@ -1,0 +1,33 @@
+{
+  "dataset": {
+    "embedding_dims": 12,
+    "embedding_source": "deterministic-fake",
+    "num_edges": 40,
+    "num_nodes": 44,
+    "num_queries": 10
+  },
+  "date": "2026-07-01",
+  "delta_graph_minus_baseline": {
+    "mrr": -0.1,
+    "recall_at_10": 5.0,
+    "recall_at_5": 2.5
+  },
+  "graph_disabled": {
+    "latency_p50_ms": 1.58,
+    "latency_p95_ms": 1.8,
+    "latency_p99_ms": 1.8,
+    "mrr": 23.25,
+    "recall_at_10": 25.0,
+    "recall_at_5": 17.5
+  },
+  "graph_enabled": {
+    "latency_p50_ms": 5.65,
+    "latency_p95_ms": 6.59,
+    "latency_p99_ms": 6.59,
+    "mrr": 23.15,
+    "recall_at_10": 30.0,
+    "recall_at_5": 20.0
+  },
+  "notes": "P3 LightRAG quality delta. Deterministic fake embeddings. Graph traversal enabled via local_query_graph (PPR + degree centrality). skip_graph=true disables the graph path entirely.",
+  "version": "v0.10.0-quality-delta"
+}

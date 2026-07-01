@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-01 (v0.9.0 + M6-full + P-security)
+> Last updated: 2026-07-01 (v0.10.0-dev: P1 fault_dst + P2-fix degree bias + P3-spec M14-D ADR)
 
 ## CI
 
@@ -13,7 +13,7 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** [59f82dd](https://github.com/Forja-orca/tylluan/commit/59f82dd) · 272 kernel + 56 link + 1 evals = **329 total** green as of 2026-07-01.
+**Commit:** HEAD · 273 kernel + 61 link + 1 evals = **335 total** green as of 2026-07-01.
 
 ---
 
@@ -52,6 +52,10 @@
 - M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 (`bm25(nodes_fts, 10.0, 5.0, 5.0)`) with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF (P1)
 - DST harness: `gossip_dst.rs` — 6 tests: normal sync, partition graceful failure, bidirectional convergence, 3-node transitive propagation, message loss + retry, LWW conflict resolution (M6-full)
 - `PartitionableTransport<T>` in `tylluan-link`: 5 switchable modes (Transparent, Drop(f64), Partition, Latency(Duration), Error) for deterministic fault injection in tests (M6-full)
+- `fault_dst.rs` — 4 realistic fault scenarios: `partition_heal_convergence` (Partition→Transparent→converge), `latency_injection` (Latency 100ms, +150ms measurable), `drop_rate_eventual_convergence` (Drop 0.3, ≤10 rounds), `error_mode_graceful_failure` (Error mode, no state corruption) (v0.10.0 P1)
+- LinearRAG degree bias corrected (v0.10.0 P2-fix): `local_query_graph` in `graph.rs` and `dual_retrieval.rs` now divide by degree factor instead of multiply — penalizes generic hub nodes, improves MRR for specific queries. New test `test_local_query_graph_degree_penalty` added.
+- Retrieval quality benchmark v0.10.0: 44 nodes, 40 edges, 10 queries (5 original + 5 multi-hop). With LinearRAG graph ON: Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix). Results with fake 12-dim embeddings; real BGE-M3 delta expected higher.
+- ADR-004 M14-D Guild Execution Channels spec published: `docs/architecture/M14D_dispatch_spec.md` — Capability-Aware Hybrid Routing, 4-phase implementation plan (~8 sessions), preserves CONTRACT-01
 - Startup optimization: `builtin_catalog()` cached via `std::sync::OnceLock` — eliminates double filesystem scan at startup (~10s → ~5s) (P3)
 - HNSW index via `instant-distance`: `hnsw.rs` + schema v12 (`hnsw_index` BLOB table) + fast path in `search.rs` (HNSW ≥12k nodes → IVF → linear fallback); rebuild scheduler every 10min; survives restart via SQLite BLOB (v0.9.0)
 - LinearRAG local graph traversal: `degree_centrality` (SQL-native) + `local_query_graph` (Personalized PageRank local + degree boost) integrated into RRF hybrid search (v0.9.0)
@@ -59,7 +63,7 @@
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **272 kernel lib tests passing** + 56 link tests + 1 evals test = **329 total** · integration suite requires live kernel
+- **273 kernel lib tests passing** + 61 link tests + 1 evals test = **335 total** · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
@@ -107,7 +111,7 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-D through M14-E (cross-datacenter routing, mesh test harness) not yet implemented
+- M14-D through M14-E (cross-datacenter routing, mesh test harness) not yet implemented — spec in progress (v0.10.0 P2)
 - Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
 
 ---

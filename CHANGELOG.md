@@ -4,6 +4,44 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.10.0] — in progress — El sistema que sabe si funciona
+
+**Norte estrella:** Validar lo construido en v0.9.0 antes de añadir más capas. Retrieval quality delta + M6-full completo.
+
+### Added
+
+- **M6-full — Fault DST escenarios realistas (P1)**
+  - `fault_dst.rs` in `tylluan-link/tests/`: 4 new tests ejercitando los 5 modos de `PartitionableTransport<T>`.
+    - `partition_heal_convergence`: Modo `Partition` fuerza fallo, switch a `Transparent` restaura sync y los nodos convergen.
+    - `latency_injection`: Modo `Latency(100ms)` — sync exitosa; latencia medida ≥150ms confirma inyección efectiva.
+    - `drop_rate_eventual_convergence`: Modo `Drop(0.3)` (30% pérdida) — convergencia eventual garantizada en ≤10 rounds de anti-entropy.
+    - `error_mode_graceful_failure`: Modo `Error` — falla limpiamente sin corromper el estado del `GossipEngine`.
+
+### In progress
+
+- **Extended Retrieval Benchmark (P0)**
+  - 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop). `skip_graph` flag for A/B comparison.
+  - Results with fake 12-dim deterministic embeddings: Graph ON → Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5%/+5.0% recall, −0.1% MRR, +4ms latency.
+  - Output: `benchmarks/benchmark_v0.10.0.json`
+
+- **LinearRAG Degree Bias Fix (P2-fix)**
+  - `local_query_graph` (`graph.rs:739`): `pr_score * (1 + deg×0.1)` → `pr_score / (1 + deg×0.1)` — hub nodes penalized instead of boosted.
+  - `dual_retrieval.rs` (lines 30, 69): same inversion applied to graph-boosted scores.
+  - New test `test_local_query_graph_degree_penalty`: asserts low-degree (deg=1) node outranks high-degree (deg=5) node with slightly lower PR score.
+  - Rationale: benchmark showed MRR flat despite recall gain — degree boost was promoting generic hub nodes to top positions.
+
+- **M14-D Guild Dispatch ADR (P3-spec)**
+  - `docs/architecture/M14D_dispatch_spec.md` (ADR-004) — Capability-Aware + Latency-Based Hybrid Routing.
+  - 4 components: Capability Registry (DHT+Gossip, TTL 5min), Dispatch Algorithm (load+latency scoring), Remote Execution Protocol (JSON over Noise NK, `GuildDispatchRequest/Response`), Fallback Strategy (queue + circuit breaker).
+  - CONTRACT-01 preserved: routing is transparent inside `tylluan_do`.
+  - 4-phase implementation plan (~8 sessions). Phase 1 (Capability Registry) can start immediately.
+
+### Tests
+
+**273 kernel lib tests + 61 link tests + 1 evals = 335 total** · 0 failures.
+
+---
+
 ## [v0.9.0] — 2026-07-01 — Graph-Augmented Local RAG
 
 **Norte estrella:** Zero-token local graph indexing and traversal with batch processing.

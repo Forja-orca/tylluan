@@ -46,7 +46,7 @@ impl super::TylluanServer {
         }
 
         synthesis.push_str("\nLECCIONES HISTORICAS:\n");
-        if let Ok(results) = self.silva.search_hybrid(query, embedding.as_deref(), 5, None).await {
+        if let Ok(results) = self.silva.search_hybrid(query, embedding.as_deref(), 5, None, false).await {
             for (node, score) in results { synthesis.push_str(&format!("  * {} (score: {:.2})\n", node.content, score)); }
         }
 

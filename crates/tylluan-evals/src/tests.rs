@@ -72,7 +72,7 @@ async fn baseline_v090_benchmark() {
         let emb = generate_embedding(query, 12);
         let start = Instant::now();
         let retrieved = db
-            .search_hybrid(query, Some(&emb), 10)
+            .search_hybrid(query, Some(&emb), 10, None, false)
             .await
             .unwrap_or_default();
         let elapsed = start.elapsed();
@@ -143,5 +143,272 @@ async fn baseline_v090_benchmark() {
         recall_at_5 > 0.0,
         "Baseline Recall@5 must be > 0% — got {:.1}%",
         recall_at_5
+    );
+}
+
+// ── v0.10.0 Extended Benchmark ──────────────────────────────────────────────────
+// 50 nodes, 40 edges, 10 queries (5 original + 5 multi-hop).
+// Runs with skip_graph=false (P3 on) and skip_graph=true (P3 off) to measure
+// the quality delta of LightRAG graph traversal.
+
+const EXTRA_NODES: &[(&str, &str, &str, &str)] = &[
+    ("entity:llm", "entity", "Large Language Models power the reasoning behind agent tool calls. The kernel does not bundle an LLM — it connects to external MCP clients.", "{\"topic\":\"ai\"}"),
+    ("entity:docker", "entity", "Docker containers isolate guild subprocesses from the host system, providing reproducible execution environments.", "{\"topic\":\"infra\"}"),
+    ("entity:linux", "entity", "Linux is the primary deployment target. The kernel is tested on x86_64 and aarch64 (RPi4) architectures.", "{\"topic\":\"infra\"}"),
+    ("entity:raspberrypi", "entity", "Raspberry Pi 4 with 4GB RAM is the reference portable deployment target. The kernel must run within 2GB idle.", "{\"topic\":\"infra\"}"),
+    ("entity:github", "entity", "GitHub hosts the source repository. CI workflows run cargo test, cargo clippy, and integration checks on each PR.", "{\"topic\":\"devops\"}"),
+    ("concept:noise_protocol", "concept", "Noise Protocol Framework provides P2P encryption for tylluan-link. Supports XK and NK handshake patterns with snow crate.", "{\"topic\":\"networking\"}"),
+    ("concept:gossip_protocol", "concept", "Gossip protocol disseminates peer information across the mesh using push-pull sync with LWW conflict resolution by clock.", "{\"topic\":\"networking\"}"),
+    ("concept:dht", "concept", "Kademlia DHT provides decentralized peer discovery without a central bootstrap server. Uses XOR distance routing.", "{\"topic\":\"networking\"}"),
+    ("concept:partition_tolerance", "concept", "PartitionableTransport injects faults (drop, latency, partition, error) to test gossip resilience under network degradation.", "{\"topic\":\"testing\"}"),
+    ("concept:mcp_streaming", "concept", "HTTP Streamable MCP allows real-time tool responses. The kernel negotiates protocol version automatically.", "{\"topic\":\"protocol\"}"),
+    ("lesson:portable_deployment", "lesson", "The kernel must fit in 2GB RAM idle and 3GB under load to run on RPi4. Quantization and mmap reduce the footprint.", "{\"topic\":\"infra\"}"),
+    ("lesson:fault_tolerance_first", "lesson", "Fault tolerance validation must precede new features. Network partitions and message loss are expected in rural deployments.", "{\"topic\":\"reliability\"}"),
+    ("lesson:deterministic_tests", "lesson", "InMemoryTransport with mpsc channels provides deterministic simulation testing without turmoil. Avoid runtime simulation frameworks.", "{\"topic\":\"testing\"}"),
+    ("episodic:session_006", "episodic", "@episode agent=opencode intent='P2 batch embeddings' result='embed_batch + chunked reindex 268 tests' date=2026-07-01", "{\"agent\":\"opencode\"}"),
+    ("episodic:session_007", "episodic", "@episode agent=antigravity intent='P3 LightRAG' result='local_query_graph + PPR traversal integrated' date=2026-07-01", "{\"agent\":\"antigravity\"}"),
+    ("episodic:session_008", "episodic", "@episode agent=opencode intent='M6-full DST' result='PartitionableTransport 5 modes 61 link tests' date=2026-07-01", "{\"agent\":\"opencode\"}"),
+    ("episodic:session_009", "episodic", "@episode agent=qwen intent='v0.10.0 research' result='M14-D protocol research backlog' date=2026-07-01", "{\"agent\":\"qwen\"}"),
+    ("episodic:session_010", "episodic", "@episode agent=antigravity intent='T427 gossip DST' result='3 DST tests + concurrent LWW convergence' date=2026-07-01", "{\"agent\":\"antigravity\"}"),
+    ("decision:offline_first", "decision", "All critical paths must work without internet access. Embeddings and inference are local via ONNX runtime.", "{\"topic\":\"architecture\"}"),
+    ("decision:deterministic_testing", "decision", "Deterministic simulation via InMemoryTransport is preferred over turmoil for testing gossip and DHT behavior.", "{\"topic\":\"testing\"}"),
+    ("decision:rpi4_target", "decision", "RPi4 4GB is the minimum deployment target. All dependencies must compile for aarch64-unknown-linux-gnu.", "{\"topic\":\"infra\"}"),
+];
+
+const EXTRA_EDGES: &[(&str, &str, &str)] = &[
+    ("concept:tylluan", "contains", "concept:noise_protocol"),
+    ("concept:tylluan", "contains", "concept:gossip_protocol"),
+    ("concept:tylluan", "contains", "concept:dht"),
+    ("concept:tylluan", "contains", "concept:partition_tolerance"),
+    ("concept:tylluan", "implements", "concept:mcp_streaming"),
+    ("concept:tylluan", "deploys_on", "entity:raspberrypi"),
+    ("concept:tylluan", "deploys_on", "entity:linux"),
+    ("concept:silvadb", "uses", "entity:sqlite"),
+    ("concept:silvadb", "uses", "entity:llm"),
+    ("concept:silvadb", "provides", "concept:hybrid_search"),
+    ("concept:guilds", "uses", "entity:docker"),
+    ("concept:noise_protocol", "encrypts", "concept:gossip_protocol"),
+    ("concept:gossip_protocol", "uses", "concept:dht"),
+    ("concept:gossip_protocol", "tested_by", "concept:partition_tolerance"),
+    ("concept:dht", "replaces", "concept:gossip_protocol"),
+    ("concept:partition_tolerance", "validates", "lesson:fault_tolerance_first"),
+    ("concept:partition_tolerance", "uses", "lesson:deterministic_tests"),
+    ("entity:raspberrypi", "constrains", "lesson:portable_deployment"),
+    ("entity:raspberrypi", "motivates", "decision:rpi4_target"),
+    ("entity:linux", "hosts", "entity:docker"),
+    ("entity:docker", "isolates", "concept:guilds"),
+    ("entity:github", "hosts", "concept:tylluan"),
+    ("entity:fastembed", "enables", "decision:offline_first"),
+    ("lesson:portable_deployment", "depends_on", "lesson:no_cloud"),
+    ("lesson:deterministic_tests", "requires", "decision:deterministic_testing"),
+    ("concept:episodic_memory", "stores", "episodic:session_006"),
+    ("concept:episodic_memory", "stores", "episodic:session_007"),
+    ("concept:episodic_memory", "stores", "episodic:session_008"),
+    ("concept:episodic_memory", "stores", "episodic:session_009"),
+    ("concept:episodic_memory", "stores", "episodic:session_010"),
+    ("lesson:tool_design", "governs", "decision:tools_count"),
+    ("lesson:storage_choice", "motivates", "decision:storage"),
+    ("lesson:port_choice", "secures", "entity:mcp"),
+    ("concept:hybrid_search", "uses", "concept:silvadb"),
+    ("concept:hybrid_search", "ranks_by", "lesson:bge_dims"),
+    ("concept:guilds", "implemented_in", "entity:python"),
+    ("entity:rust", "implements", "concept:tylluan"),
+    ("entity:python", "implements", "concept:guilds"),
+    ("concept:silvadb", "stores", "decision:storage"),
+    ("concept:tylluan", "licensed_under", "lesson:license"),
+];
+
+
+
+const ALL_QUERIES: &[(&str, &[&str])] = &[
+    ("how many sovereign tools does tylluan provide", &["decision:tools_count", "lesson:tool_design"]),
+    ("what database engine does silvadb use", &["entity:sqlite", "lesson:storage_choice", "decision:storage", "concept:silvadb"]),
+    ("what port does the kernel listen on", &["lesson:port_choice"]),
+    ("what is episodic memory", &["concept:episodic_memory"]),
+    ("how does hybrid search work in tylluan", &["concept:hybrid_search", "concept:silvadb"]),
+    ("what networking protocols does tylluan mesh use", &["concept:noise_protocol", "concept:gossip_protocol", "concept:dht", "concept:partition_tolerance"]),
+    ("how is the mesh tested for reliability", &["concept:partition_tolerance", "lesson:fault_tolerance_first", "lesson:deterministic_tests", "decision:deterministic_testing"]),
+    ("what hardware does tylluan target", &["entity:raspberrypi", "entity:linux", "lesson:portable_deployment", "decision:rpi4_target"]),
+    ("how does p2p encryption work", &["concept:noise_protocol", "concept:gossip_protocol"]),
+    ("what infra dependencies does the project have", &["entity:docker", "entity:github", "entity:linux", "entity:sqlite"]),
+];
+
+fn compute_mrr(results: &[(String, f32)], relevant: &[&str]) -> f64 {
+    for (rank, (id, _)) in results.iter().enumerate() {
+        if relevant.contains(&id.as_str()) {
+            return 1.0 / (rank as f64 + 1.0);
+        }
+    }
+    0.0
+}
+
+fn compute_recall(results: &[(String, f32)], relevant: &[&str], k: usize) -> f64 {
+    let top_k: Vec<&str> = results.iter().take(k).map(|(n, _)| n.as_str()).collect();
+    let hits = relevant.iter().filter(|r| top_k.contains(r)).count();
+    hits as f64 / relevant.len() as f64
+}
+
+async fn seed_extended_dataset(db: &SilvaDB) {
+    // Insert all 50 nodes (29 original + 21 extra)
+    for (id, node_type, content, metadata) in NODES {
+        db.upsert_node(id, node_type, content, metadata).await.unwrap();
+        let emb = generate_embedding(content, 12);
+        db.save_embedding(id, &emb, "test-fake", None).await.unwrap();
+    }
+    for (id, node_type, content, metadata) in EXTRA_NODES {
+        db.upsert_node(id, node_type, content, metadata).await.unwrap();
+        let emb = generate_embedding(content, 12);
+        db.save_embedding(id, &emb, "test-fake", None).await.unwrap();
+    }
+    // Insert 40 edges
+    for (subject, predicate, object) in EXTRA_EDGES {
+        let _ = db.add_edge(subject, object, predicate, 1.0, "").await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn benchmark_v0_10_0_quality_delta() {
+    let db = SilvaDB::in_memory().await.expect("Failed to create in-memory SilvaDB");
+    seed_extended_dataset(&db).await;
+
+    // ── Run with graph traversal (P3 enabled) ──
+    let mut total_recall5 = 0.0f64;
+    let mut total_recall10 = 0.0f64;
+    let mut total_mrr = 0.0f64;
+    let mut all_lat_ms: Vec<f64> = Vec::new();
+
+    for (_i, (query, relevant_ids)) in ALL_QUERIES.iter().enumerate() {
+        let emb = generate_embedding(query, 12);
+        let start = Instant::now();
+        let retrieved = db.search_hybrid(query, Some(&emb), 10, None, false)
+            .await
+            .unwrap_or_default();
+        let elapsed = start.elapsed();
+        all_lat_ms.push(elapsed.as_secs_f64() * 1000.0);
+        let results: Vec<(String, f32)> = retrieved.iter().map(|(n, s)| (n.id.clone(), *s)).collect();
+        let r5 = compute_recall(&results, relevant_ids, 5);
+        let r10 = compute_recall(&results, relevant_ids, 10);
+        let mrr = compute_mrr(&results, relevant_ids);
+        total_recall5 += r5;
+        total_recall10 += r10;
+        total_mrr += mrr;
+    }
+
+    let n = ALL_QUERIES.len() as f64;
+    let recall5_graph = (total_recall5 / n) * 100.0;
+    let recall10_graph = (total_recall10 / n) * 100.0;
+    let mrr_graph = (total_mrr / n) * 100.0;
+
+    all_lat_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let p50 = all_lat_ms[((50.0 / 100.0) * (all_lat_ms.len() - 1) as f64).round() as usize];
+    let p95 = all_lat_ms[((95.0 / 100.0) * (all_lat_ms.len() - 1) as f64).round() as usize];
+    let p99 = all_lat_ms[((99.0 / 100.0) * (all_lat_ms.len() - 1) as f64).round() as usize];
+
+    // ── Run without graph traversal (skip_graph=true) ──
+    // We need a fresh DB to avoid cross-contamination from previous run's PPR state
+    let db_off = SilvaDB::in_memory().await.expect("Failed to create in-memory SilvaDB");
+    seed_extended_dataset(&db_off).await;
+
+    let mut total_recall5_off = 0.0f64;
+    let mut total_recall10_off = 0.0f64;
+    let mut total_mrr_off = 0.0f64;
+    let mut all_lat_ms_off: Vec<f64> = Vec::new();
+
+    for (_i, (query, relevant_ids)) in ALL_QUERIES.iter().enumerate() {
+        let emb = generate_embedding(query, 12);
+        let start = Instant::now();
+        let retrieved = db_off.search_hybrid(query, Some(&emb), 10, None, true)
+            .await
+            .unwrap_or_default();
+        let elapsed = start.elapsed();
+        all_lat_ms_off.push(elapsed.as_secs_f64() * 1000.0);
+
+        let results: Vec<(String, f32)> = retrieved.iter().map(|(n, s)| (n.id.clone(), *s)).collect();
+        let r5 = compute_recall(&results, relevant_ids, 5);
+        let r10 = compute_recall(&results, relevant_ids, 10);
+        let mrr = compute_mrr(&results, relevant_ids);
+        total_recall5_off += r5;
+        total_recall10_off += r10;
+        total_mrr_off += mrr;
+    }
+
+    let recall5_off = (total_recall5_off / n) * 100.0;
+    let recall10_off = (total_recall10_off / n) * 100.0;
+    let mrr_off = (total_mrr_off / n) * 100.0;
+
+    all_lat_ms_off.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let p50_off = all_lat_ms_off[((50.0 / 100.0) * (all_lat_ms_off.len() - 1) as f64).round() as usize];
+    let p95_off = all_lat_ms_off[((95.0 / 100.0) * (all_lat_ms_off.len() - 1) as f64).round() as usize];
+    let p99_off = all_lat_ms_off[((99.0 / 100.0) * (all_lat_ms_off.len() - 1) as f64).round() as usize];
+
+    let delta_recall5 = recall5_graph - recall5_off;
+    let delta_recall10 = recall10_graph - recall10_off;
+    let delta_mrr = mrr_graph - mrr_off;
+
+    let report = serde_json::json!({
+        "version": "v0.10.0-quality-delta",
+        "date": "2026-07-01",
+        "dataset": {
+            "num_nodes": NODES.len() + EXTRA_NODES.len(),
+            "num_edges": EXTRA_EDGES.len(),
+            "num_queries": ALL_QUERIES.len(),
+            "embedding_dims": 12,
+            "embedding_source": "deterministic-fake",
+        },
+        "graph_enabled": {
+            "recall_at_5": (recall5_graph * 100.0).round() / 100.0,
+            "recall_at_10": (recall10_graph * 100.0).round() / 100.0,
+            "mrr": (mrr_graph * 100.0).round() / 100.0,
+            "latency_p50_ms": (p50 * 100.0).round() / 100.0,
+            "latency_p95_ms": (p95 * 100.0).round() / 100.0,
+            "latency_p99_ms": (p99 * 100.0).round() / 100.0,
+        },
+        "graph_disabled": {
+            "recall_at_5": (recall5_off * 100.0).round() / 100.0,
+            "recall_at_10": (recall10_off * 100.0).round() / 100.0,
+            "mrr": (mrr_off * 100.0).round() / 100.0,
+            "latency_p50_ms": (p50_off * 100.0).round() / 100.0,
+            "latency_p95_ms": (p95_off * 100.0).round() / 100.0,
+            "latency_p99_ms": (p99_off * 100.0).round() / 100.0,
+        },
+        "delta_graph_minus_baseline": {
+            "recall_at_5": (delta_recall5 * 100.0).round() / 100.0,
+            "recall_at_10": (delta_recall10 * 100.0).round() / 100.0,
+            "mrr": (delta_mrr * 100.0).round() / 100.0,
+        },
+        "notes": "P3 LightRAG quality delta. Deterministic fake embeddings. Graph traversal enabled via local_query_graph (PPR + degree centrality). skip_graph=true disables the graph path entirely.",
+    });
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(manifest_dir);
+    let bench_dir = workspace_root.join("benchmarks");
+    if !bench_dir.exists() {
+        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
+    }
+    let json_path = bench_dir.join("benchmark_v0.10.0.json");
+    let json_str = serde_json::to_string_pretty(&report).expect("Failed to serialize JSON");
+    std::fs::write(&json_path, &json_str).expect("Failed to write benchmark JSON");
+
+    println!("\n  Benchmark saved to: {:?}", json_path);
+    println!("  Dataset: {} nodes, {} edges, {} queries",
+        NODES.len() + EXTRA_NODES.len(), EXTRA_EDGES.len(), ALL_QUERIES.len());
+    println!("  ── Graph ON (P3 enabled) ──");
+    println!("  Recall@5:  {:.1}%", recall5_graph);
+    println!("  Recall@10: {:.1}%", recall10_graph);
+    println!("  MRR:       {:.1}%", mrr_graph);
+    println!("  Latency p50/p95/p99: {:.1}/{:.1}/{:.1}ms", p50, p95, p99);
+    println!("  ── Graph OFF (skip_graph=true) ──");
+    println!("  Recall@5:  {:.1}%", recall5_off);
+    println!("  Recall@10: {:.1}%", recall10_off);
+    println!("  MRR:       {:.1}%", mrr_off);
+    println!("  Latency p50/p95/p99: {:.1}/{:.1}/{:.1}ms", p50_off, p95_off, p99_off);
+    println!("  ── Delta ──");
+    println!("  ΔRecall@5:  {:+.1}%", delta_recall5);
+    println!("  ΔRecall@10: {:+.1}%", delta_recall10);
+    println!("  ΔMRR:       {:+.1}%", delta_mrr);
+
+    assert!(
+        recall5_graph > 0.0 || recall5_off > 0.0,
+        "At least one benchmark variant must achieve Recall@5 > 0%"
     );
 }

@@ -225,7 +225,7 @@ async fn evaluate_at_scale(
     };
 
     let start = Instant::now();
-    let retrieved = db.search_hybrid(&q.question, query_embedding.as_deref(), 10)
+    let retrieved = db.search_hybrid(&q.question, query_embedding.as_deref(), 10, None, false)
         .await
         .unwrap_or_default();
     let elapsed = start.elapsed();

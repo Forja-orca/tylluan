@@ -219,6 +219,7 @@ impl IdleLab {
                 embedding.as_deref(),
                 pool_size,
                 None,
+                false,
             ).await {
                 Ok(r) => r,
                 Err(e) => { warn!("IdleLab search error: {}", e); continue; }

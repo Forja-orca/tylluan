@@ -47,7 +47,7 @@ pub async fn run_real_benchmark(db_path: &str, engine: Option<&EmbeddingEngine>)
         let query_embedding = engine.and_then(|e| e.embed(&query).ok());
 
         let start = Instant::now();
-        let retrieved = db.search_hybrid(&query, query_embedding.as_deref(), 10)
+        let retrieved = db.search_hybrid(&query, query_embedding.as_deref(), 10, None, false)
             .await
             .unwrap_or_default();
         let elapsed = start.elapsed();
@@ -153,7 +153,7 @@ async fn run_single_query(
     let query_embedding = engine.and_then(|e| e.embed(&query.query).ok());
 
     let start = Instant::now();
-    let retrieved = db.search_hybrid(&query.query, query_embedding.as_deref(), 10)
+    let retrieved = db.search_hybrid(&query.query, query_embedding.as_deref(), 10, None, false)
         .await
         .unwrap_or_default();
     let elapsed = start.elapsed();
@@ -186,7 +186,7 @@ async fn test_contradictions(
         let query = correct_node.as_ref().unwrap().content.chars().take(60).collect::<String>();
         let query_embedding = engine.and_then(|e| e.embed(&query).ok());
 
-        let results = db.search_hybrid(&query, query_embedding.as_deref(), 10)
+        let results = db.search_hybrid(&query, query_embedding.as_deref(), 10, None, false)
             .await
             .unwrap_or_default();
 

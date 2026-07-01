@@ -24,7 +24,7 @@ pub async fn memory_search_handler(State(state): State<Arc<HttpState>>, Query(p)
     let query = p.q.as_deref().unwrap_or("");
     let limit = p.limit.unwrap_or(20);
     let query_embedding = state.matcher.engine().and_then(|e| e.embed(query).ok());
-    Json(state.silva.search_hybrid(query, query_embedding.as_deref(), limit, None).await.unwrap_or_default())
+    Json(state.silva.search_hybrid(query, query_embedding.as_deref(), limit, None, false).await.unwrap_or_default())
 }
 
 pub async fn memory_retention_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
