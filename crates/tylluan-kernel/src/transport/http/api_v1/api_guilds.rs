@@ -5,6 +5,7 @@ use axum::{
     response::IntoResponse,
 };
 use std::sync::Arc;
+use tylluan_link::dispatch::{GuildDispatchRequest, GuildDispatchResponse};
 //
 use crate::transport::http::{
     HttpState, GuildRequest, GuildRegisterRequest,
@@ -118,5 +119,45 @@ pub async fn guild_start_alt_handler(
     match state.registry.ensure_running(&name).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"status": "started", "guild": name}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string(), "guild": name}))).into_response(),
+    }
+}
+
+pub async fn guild_dispatch_execute_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(req): Json<GuildDispatchRequest>,
+) -> impl IntoResponse {
+    let start = std::time::Instant::now();
+    let executor_id = state.node_identity.node_id().to_string();
+
+    let tool_req = rmcp::model::CallToolRequestParam {
+        name: req.tool.into(),
+        arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
+    };
+
+    match state.registry.call_tool(&req.guild, tool_req).await {
+        Ok(result) => {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let response = GuildDispatchResponse {
+                request_id: req.request_id,
+                success: !result.is_error.unwrap_or(false),
+                result: serde_json::json!(result.content),
+                error: None,
+                executor_id,
+                duration_ms,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let response = GuildDispatchResponse {
+                request_id: req.request_id,
+                success: false,
+                result: serde_json::Value::Null,
+                error: Some(e.to_string()),
+                executor_id,
+                duration_ms,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
     }
 }

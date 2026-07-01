@@ -2,8 +2,105 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
 use crate::gossip::HardwareCaps;
 use crate::capability::CapabilityRegistry;
+use crate::identity::NodeIdentity;
+use crate::noise::{noise_encrypt_payload, noise_decrypt_payload};
+use crate::transport::{MeshTransport, TransportError};
+
+// ─── Phase 3: Guild Dispatch Request/Response ───────────────────────────
+
+/// A request to execute a guild tool on a remote peer.
+/// Serialized and encrypted via Noise NK before sending over MeshTransport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuildDispatchRequest {
+    /// The guild to execute (e.g. "bash", "vision")
+    pub guild: String,
+    /// The tool within the guild to call (e.g. "execute_command")
+    pub tool: String,
+    /// JSON arguments for the tool
+    pub args: serde_json::Value,
+    /// Request ID for correlating response
+    pub request_id: String,
+    /// Sender node ID
+    pub sender_id: String,
+    /// Optional timeout in seconds
+    pub timeout_secs: Option<u64>,
+}
+
+/// Response from a remote guild dispatch execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuildDispatchResponse {
+    /// Correlates to the original request
+    pub request_id: String,
+    /// True if the tool executed successfully
+    pub success: bool,
+    /// JSON result payload
+    pub result: serde_json::Value,
+    /// Error message if success == false
+    pub error: Option<String>,
+    /// Node ID that executed the request
+    pub executor_id: String,
+    /// Duration of execution in milliseconds
+    pub duration_ms: u64,
+}
+
+/// Encrypt a GuildDispatchRequest with Noise NK and send it over a transport.
+pub async fn send_dispatch_request(
+    transport: &mut dyn MeshTransport,
+    identity: &NodeIdentity,
+    peer_pubkey_hex: &str,
+    request: &GuildDispatchRequest,
+) -> Result<(), TransportError> {
+    let json = serde_json::to_vec(request)
+        .map_err(|e| TransportError::Serialize(format!("dispatch request: {}", e)))?;
+    let encrypted = noise_encrypt_payload(&json, identity, peer_pubkey_hex)
+        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch: {}", e)))?;
+    transport.send(&encrypted).await
+}
+
+/// Receive a GuildDispatchRequest from a transport and decrypt it with Noise NK.
+pub async fn receive_dispatch_request(
+    transport: &mut dyn MeshTransport,
+    identity: &NodeIdentity,
+    expected_peer_pubkey_hex: &str,
+) -> Result<GuildDispatchRequest, TransportError> {
+    let encrypted = transport.receive().await?;
+    let decrypted = noise_decrypt_payload(&encrypted, identity, expected_peer_pubkey_hex)
+        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch: {}", e)))?;
+    serde_json::from_slice(&decrypted)
+        .map_err(|e| TransportError::Deserialize(format!("dispatch request: {}", e)))
+}
+
+/// Encrypt a GuildDispatchResponse with Noise NK and send it over a transport.
+pub async fn send_dispatch_response(
+    transport: &mut dyn MeshTransport,
+    identity: &NodeIdentity,
+    peer_pubkey_hex: &str,
+    response: &GuildDispatchResponse,
+) -> Result<(), TransportError> {
+    let json = serde_json::to_vec(response)
+        .map_err(|e| TransportError::Serialize(format!("dispatch response: {}", e)))?;
+    let encrypted = noise_encrypt_payload(&json, identity, peer_pubkey_hex)
+        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch response: {}", e)))?;
+    transport.send(&encrypted).await
+}
+
+/// Receive a GuildDispatchResponse from a transport and decrypt it with Noise NK.
+pub async fn receive_dispatch_response(
+    transport: &mut dyn MeshTransport,
+    identity: &NodeIdentity,
+    expected_peer_pubkey_hex: &str,
+) -> Result<GuildDispatchResponse, TransportError> {
+    let encrypted = transport.receive().await?;
+    let decrypted = noise_decrypt_payload(&encrypted, identity, expected_peer_pubkey_hex)
+        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch response: {}", e)))?;
+    serde_json::from_slice(&decrypted)
+        .map_err(|e| TransportError::Deserialize(format!("dispatch response: {}", e)))
+}
+
+// ─── Phase 2: DispatchRouter ────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DispatchDecision {
