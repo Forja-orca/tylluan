@@ -14,6 +14,8 @@ pub struct AgentProfile {
     pub role: String,
     pub reputation_score: f64,
     pub domain_scores: HashMap<String, f64>,
+    pub persona: String,
+    pub preferences: serde_json::Value,
 }
 
 pub struct AgentProfileStore {
@@ -37,6 +39,13 @@ impl AgentProfileStore {
         // Migration: add role column if not present (idempotent)
         conn.execute_batch(
             "ALTER TABLE agent_profiles ADD COLUMN role TEXT DEFAULT 'generalist';"
+        ).ok();
+        // Migration: add persona and preferences columns (idempotent)
+        conn.execute_batch(
+            "ALTER TABLE agent_profiles ADD COLUMN persona TEXT DEFAULT '';"
+        ).ok();
+        conn.execute_batch(
+            "ALTER TABLE agent_profiles ADD COLUMN preferences TEXT DEFAULT '{}';"
         ).ok();
         // agent_domain_scores: granular per-agent per-guild outcome tracking
         conn.execute_batch(
@@ -224,7 +233,7 @@ impl AgentProfileStore {
 
     pub fn get_profile(&self, agent_id: &str) -> Result<Option<AgentProfile>> {
         let mut stmt = self.conn.prepare(
-            "SELECT agent_id, first_seen, total_calls, competencies, last_intent, role FROM agent_profiles WHERE agent_id = ?1",
+            "SELECT agent_id, first_seen, total_calls, competencies, last_intent, role, persona, preferences FROM agent_profiles WHERE agent_id = ?1",
         )?;
         let mut rows = stmt.query(params![agent_id])?;
         if let Some(row) = rows.next()? {
@@ -234,8 +243,12 @@ impl AgentProfileStore {
             let comp_json: String = row.get(3)?;
             let last_intent: Option<String> = row.get(4)?;
             let role: String = row.get(5)?;
+            let persona: String = row.get(6)?;
+            let prefs_json: String = row.get(7)?;
             let counts: serde_json::Value =
                 serde_json::from_str(&comp_json).unwrap_or(serde_json::json!({}));
+            let preferences: serde_json::Value =
+                serde_json::from_str(&prefs_json).unwrap_or(serde_json::json!({}));
             let (reputation_score, domain_scores) = self.compute_reputation_and_scores(&agent_id)
                 .unwrap_or((0.0, HashMap::new()));
             Ok(Some(AgentProfile {
@@ -247,6 +260,8 @@ impl AgentProfileStore {
                 role,
                 reputation_score,
                 domain_scores,
+                persona,
+                preferences,
             }))
         } else {
             Ok(None)
@@ -266,7 +281,7 @@ impl AgentProfileStore {
 
     pub fn list_profiles(&self) -> Result<Vec<AgentProfile>> {
         let mut stmt = self.conn.prepare(
-            "SELECT agent_id, first_seen, total_calls, competencies, last_intent, role FROM agent_profiles ORDER BY total_calls DESC",
+            "SELECT agent_id, first_seen, total_calls, competencies, last_intent, role, persona, preferences FROM agent_profiles ORDER BY total_calls DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             let agent_id: String = row.get(0)?;
@@ -275,13 +290,17 @@ impl AgentProfileStore {
             let comp_json: String = row.get(3)?;
             let last_intent: Option<String> = row.get(4)?;
             let role: String = row.get(5)?;
-            Ok((agent_id, first_seen, total_calls, comp_json, last_intent, role))
+            let persona: String = row.get(6)?;
+            let prefs_json: String = row.get(7)?;
+            Ok((agent_id, first_seen, total_calls, comp_json, last_intent, role, persona, prefs_json))
         })?;
         let mut profiles = Vec::new();
         for row in rows {
-            let (agent_id, first_seen, total_calls, comp_json, last_intent, role) = row?;
+            let (agent_id, first_seen, total_calls, comp_json, last_intent, role, persona, prefs_json) = row?;
             let counts: serde_json::Value =
                 serde_json::from_str(&comp_json).unwrap_or(serde_json::json!({}));
+            let preferences: serde_json::Value =
+                serde_json::from_str(&prefs_json).unwrap_or(serde_json::json!({}));
             let (reputation_score, domain_scores) = self.compute_reputation_and_scores(&agent_id)
                 .unwrap_or((0.0, HashMap::new()));
             profiles.push(AgentProfile {
@@ -293,9 +312,28 @@ impl AgentProfileStore {
                 role,
                 reputation_score,
                 domain_scores,
+                persona,
+                preferences,
             });
         }
         Ok(profiles)
+    }
+
+    pub fn set_persona(&self, agent_id: &str, persona: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE agent_profiles SET persona = ?1 WHERE agent_id = ?2",
+            params![persona, agent_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_preferences(&self, agent_id: &str, preferences: &serde_json::Value) -> Result<()> {
+        let json_str = serde_json::to_string(preferences)?;
+        self.conn.execute(
+            "UPDATE agent_profiles SET preferences = ?1 WHERE agent_id = ?2",
+            params![json_str, agent_id],
+        )?;
+        Ok(())
     }
 }
 
@@ -359,6 +397,38 @@ mod tests {
         // Test via list_profiles
         let all = store.list_profiles().unwrap();
         assert_eq!(all.len(), 1, "Only agent_a should be listed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_set_persona() {
+        let dir = std::env::temp_dir().join(format!("test_set_persona_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("test_agent_profiles.db");
+        let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();
+
+        let _ = store.upsert_activity("agent_x", "bash", true, None);
+        store.set_persona("agent_x", "I am a helpful coding assistant.").unwrap();
+
+        let profile = store.get_profile("agent_x").unwrap().unwrap();
+        assert_eq!(profile.persona, "I am a helpful coding assistant.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_set_preferences() {
+        let dir = std::env::temp_dir().join(format!("test_set_preferences_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("test_agent_profiles.db");
+        let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();
+
+        let _ = store.upsert_activity("agent_y", "git", true, None);
+        let prefs = serde_json::json!({"theme": "dark", "notifications": true});
+        store.set_preferences("agent_y", &prefs).unwrap();
+
+        let profile = store.get_profile("agent_y").unwrap().unwrap();
+        assert_eq!(profile.preferences["theme"], "dark");
+        assert_eq!(profile.preferences["notifications"], true);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
