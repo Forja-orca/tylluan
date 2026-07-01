@@ -84,16 +84,16 @@ Out of scope (v1.0.0):
 - External security audit of the mesh layer
 - Formal Byzantine fault tolerance guarantees
 
-## v0.6.0 — Portable Foundation (north star: toaster-friendly, USB-portable)
+## v0.6.0 — Portable Foundation
 
-**Goal:** Verify and solidify portability. Same binary serves a doctor on a Raspberry Pi and an architect on a server cluster — different `tylluan.toml`, same code.
+**Goal:** Same binary, any hardware. RPi4 at 5W or a server cluster — different `tylluan.toml`, same code. No internet required at runtime. No cloud dependency in the critical path.
 
-North star use case: a doctor in rural Africa carries Tylluan on a USB stick, runs it on different machines across villages, maintains memories and tools offline, and syncs with colleagues when LAN is available. When back in the city with access to better hardware or cloud inference clients (Claude Code, Cursor, Codex), connects them to the same Tylluan — all accumulated knowledge available.
+**Portability invariant:** Single binary. Zero install dependencies beyond the binary itself. Runs offline. Knowledge persists across machines via USB. Syncs with peers when a network is available.
 
-- [ ] P1 — Write the foundational invariant: document "toaster-friendly, USB-portable, offline-first" in CLAUDE.md, README, ROADMAP. Without this written, any agent can drift without knowing it.
-- [ ] P2 — Gossip configurable: connect `fanout`, `timeout`, `interval` from `tylluan.toml` to `GossipEngine` init. Unify the two `GossipConfig` structs (tylluan-link vs kernel). Without this, Gossip fails on slow satellite connections.
-- [ ] P3 — `embedding_model = "none"` config flag: explicit graceful degradation to BM25-only mode. Doctor chooses: "light" (no download) or "full" (BGE-M3 2.2 GB).
-- [ ] P4 — ARM64 build: add `aarch64-unknown-linux-gnu` to CI release matrix. Without this, Raspberry Pi 4 cannot install Tylluan.
+- [x] P1 — Portability invariant documented in README and ROADMAP. Agents that drift from it can be corrected against this definition. *(closed v0.6.0)*
+- [x] P2 — Gossip configurable: `fanout`, `interval_secs`, `max_entries` from `tylluan.toml` wired to `tylluan_link::gossip::GossipConfig` in `http/mod.rs`. Two `GossipConfig` structs unified via explicit field mapping. *(done silently during v0.6.0, closed here)*
+- [x] P3 — `embedding_model = "none"` config flag: BM25-only mode, zero download. `resolve_model()` / `resolve_dimension()` in embeddings.rs. *(done in P5, v0.6.1)*
+- [x] P4 — ARM64 build: `aarch64-unknown-linux-gnu` added to CI release matrix. Pre-compiled binary ships for RPi4+. *(done in v0.6.0 release)*
 
 ## v0.6.1 — Model Portability (backlog)
 
@@ -103,7 +103,7 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 
 ## v0.7.0 — Intelligence Foundation
 
-**Goal:** Smarter retrieval, faster discovery, solid test infrastructure. Everything in this milestone serves the north star directly — the doctor's offline knowledge base gets meaningfully better, guild setup gets simpler, and the mesh gets testable for the first time.
+**Goal:** Smarter retrieval, faster discovery, solid test infrastructure. Everything in this milestone serves the portability invariant directly — offline knowledge quality improves, guild setup requires zero manual registration, and the mesh layer gets a deterministic test foundation for the first time.
 
 **Research basis:** research-tylluan coloquio (T1-T13), Antigravity cycle 1, Qwen3.7 engineering review.
 
@@ -124,7 +124,7 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 
 ## M14-D — Cross-Datacenter Federation (deferred, context preserved)
 
-**Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational north star (doctor use case). Revisit when v0.6.0 portable foundation is solid.
+**Status:** Deferred. Not cancelled — the design is sound for large-scale deployments. Moved out of v0.5.0 because it is outside the foundational portability invariant (small peer clusters, offline-first). Revisit when v0.6.0 portable foundation is solid.
 
 **What was designed (2026-06-30 coloquio, T50-T66):**
 - Latency-aware routing between regional clusters
@@ -134,7 +134,7 @@ North star use case: a doctor in rural Africa carries Tylluan on a USB stick, ru
 - Antigravity designed `trait MeshTransport: Send { send/recv }` — sits above `NoiseSession`, compatible with in-memory mock for M14-E tests
 
 **Why deferred:**
-- The doctor use case requires 5-10 peers max — mDNS (M12-D) + Gossip (M14-B) already solve peer discovery at that scale
+- The offline-first use case requires 5-10 peers max — mDNS (M12-D) + Gossip (M14-B) already solve peer discovery at that scale
 - "Cross-datacenter" is enterprise language. The foundational invariant is USB-portable, not cloud-native
 - Build the portable foundation first (v0.6.0), then scale up (M14-D as v0.7.0 or v1.0)
 
