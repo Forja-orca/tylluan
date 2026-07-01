@@ -38,9 +38,20 @@ All notable changes to Tylluan are documented here.
   - Integrates a `type_filter` option in `search_hybrid` to filter nodes post-RRF (retaining only `"episodic"` type).
   - Clean adaptation of callers in `dual_retrieval.rs`, `idle_lab.rs`, `autolink.rs`, `api_memory.rs`, and server handlers.
 
+- **Security fixes (P-security)**
+  - `sanitize_query()` in `auth.rs`: redacts `token=` and `Authorization=` values to `[REDACTED]` before `info!` logging — prevents bearer token exposure in log collectors.
+  - `extract_token()` in `auth.rs`: unified token extraction checking `Authorization` header first, then URL-decoded query string fallback — `resolve_acl_role` now receives the actual bearer on `?token=` auth instead of falling to `default_role`.
+
+- **M6-full — Fault Injection DST**
+  - `PartitionableTransport<T>` in `tylluan-link/src/transport.rs`: generic wrapper over any `MeshTransport` with 5 switchable modes: `Transparent` (pass-through), `Drop(f64)` (probabilistic message loss), `Partition` (silent drops on send, error on receive), `Latency(Duration)` (adds delay), `Error` (always fails). Mode switchable at runtime via `set_mode()`.
+  - 3 new DST scenarios in `gossip_dst.rs`:
+    - `test_gossip_dst_3node_convergence` — transitive propagation A→B→C without A↔C direct link.
+    - `test_gossip_dst_message_loss_resilience` — packet loss leaves engine state clean; retry succeeds.
+    - `test_gossip_dst_concurrent_conflicting_updates` — LWW semantics: higher `clock` entry survives bilateral sync.
+
 ### Tests
 
-**270 lib tests passing** (217 kernel + 53 link) + 1 evals test · 0 failures · 2 new unit tests for P4.
+**272 kernel lib tests + 56 link tests + 1 evals = 329 total** · 0 failures · gossip_dst: 6 tests (3 prev + 3 new M6-full).
 
 ---
 
