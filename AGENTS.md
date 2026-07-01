@@ -33,8 +33,8 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
-**Tests:** 273 kernel lib + 67 link + 2 evals = **342 total** · 0 fallos  
-**HEAD commit:** `1ae3eca` (main)
+**Tests:** 273 kernel lib + 71 link + 2 evals = **346 total** · 0 fallos  
+**HEAD commit:** `c5af0f6` (main)
 
 ### Milestones completados
 
@@ -61,10 +61,10 @@ cargo run -p tylluan-cli -- start
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
-| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in `GossipEntry` | ✅ committed |
-| **M14-D Phase 2** | `DispatchRouter` — load+latency scoring, `prune_expired` wiring | 🔜 |
-| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK handler | 🔜 |
-| **M14-D Phase 4** | Fallback (queue + circuit breaker) + dashboard UX | 🔜 |
+| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in `GossipEntry` | ✅ |
+| **M14-D Phase 2** | `DispatchRouter` — scoring, circuit breaker, `prune_expired` kernel wiring | ✅ |
+| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ |
+| **M14-D Phase 4** | Fallback queue + circuit breaker integration + dashboard UX | 🔜 |
 
 ---
 

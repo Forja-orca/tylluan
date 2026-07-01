@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.10.0-blue.svg" alt="v0.10.0">
+  <img src="https://img.shields.io/badge/version-0.11.0--dev-blue.svg" alt="v0.11.0-dev">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -43,6 +43,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync over LAN/VPN — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | DHT Kademlia peer discovery + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
+| **Guild Dispatch** | Peers discover each other's capabilities (`CapabilityRegistry`) and dispatch guild tools remotely via Noise NK — `DispatchRouter` scores peers by load, latency, and GPU; circuit breaker protects against degraded peers |
 | **Encryption** | AES-256 at rest via SQLCipher (feature-gated: `cargo build --features encryption`) |
 | **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
 
@@ -73,7 +74,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (**342 total tests** — 273 kernel lib + 67 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (**346 total tests** — 273 kernel lib + 71 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -204,7 +205,9 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **v0.10.0** | Retrieval quality benchmark · degree-bias fix (penalty not boost) · ADR-004 M14-D spec · fault DST | ✅ |
 | **M6-full** | `PartitionableTransport<T>` (5 fault modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
 | **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.11.0-dev |
-| **M14-D Phase 2–4** | `DispatchRouter` · `GuildDispatchRequest/Response` · fallback + circuit breaker | 🔜 v0.11.0 |
+| **M14-D Phase 2** | `DispatchRouter` — load+latency+GPU scoring, circuit breaker, kernel wiring | ✅ v0.11.0-dev |
+| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.11.0-dev |
+| **M14-D Phase 4** | Fallback queue + circuit breaker integration + dashboard UX | 🔜 v0.11.0 |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
