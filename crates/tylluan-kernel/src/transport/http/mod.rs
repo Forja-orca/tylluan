@@ -28,6 +28,11 @@ use tower_http::cors::{CorsLayer, Any};
 
 use crate::registry::actor::RegistryHandle;
 use crate::doctor::Doctor;
+
+#[cfg(feature = "bundled-dashboard")]
+#[derive(rust_embed::Embed)]
+#[folder = "../../dashboard/dist/"]
+struct DashboardAssets;
 use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::SilvaDB;
 use crate::transport::server::TylluanServer;
@@ -746,6 +751,23 @@ fn build_router(state: Arc<HttpState>) -> Router {
                             .unwrap();
                         return Ok::<_, std::convert::Infallible>(resp);
                     }
+                    // Try embedded assets first (bundled-dashboard feature)
+                    #[cfg(feature = "bundled-dashboard")]
+                    {
+                        let asset_path = path.trim_start_matches('/');
+                        if let Some(asset) = DashboardAssets::get(asset_path) {
+                            let mime = mime_guess::from_path(asset_path)
+                                .first_or_octet_stream()
+                                .to_string();
+                            let resp = axum::http::Response::builder()
+                                .status(200)
+                                .header("Content-Type", mime)
+                                .header("Cache-Control", "public, max-age=31536000, immutable")
+                                .body(axum::body::Body::from(asset.data.to_vec()))
+                                .unwrap();
+                            return Ok(resp);
+                        }
+                    }
                     // Static assets (JS/CSS/fonts) — serve from disk
                     let file_path = static_dir_inner.join(path.trim_start_matches('/'));
                     if file_path.is_file() {
@@ -771,6 +793,18 @@ fn build_router(state: Arc<HttpState>) -> Router {
                         }
                     }
                     // SPA client-side routes → index.html
+                    #[cfg(feature = "bundled-dashboard")]
+                    {
+                        if let Some(asset) = DashboardAssets::get("index.html") {
+                            let resp = axum::http::Response::builder()
+                                .status(200)
+                                .header("Content-Type", "text/html; charset=utf-8")
+                                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                                .body(axum::body::Body::from(asset.data.to_vec()))
+                                .unwrap();
+                            return Ok(resp);
+                        }
+                    }
                     let index_path = static_dir_inner.join("index.html");
                     match tokio::fs::read(&index_path).await {
                         Ok(bytes) => {
@@ -802,19 +836,28 @@ fn build_router(state: Arc<HttpState>) -> Router {
 
 
 async fn serve_index() -> impl IntoResponse {
+    #[cfg(feature = "bundled-dashboard")]
+    {
+        if let Some(asset) = DashboardAssets::get("index.html") {
+            return axum::response::Response::builder()
+                .status(200)
+                .header("Content-Type", "text/html; charset=utf-8")
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .body(axum::body::Body::from(asset.data.to_vec()))
+                .expect("valid index response builder");
+        }
+    }
     let index_path = find_workspace_root().join("dashboard/dist/index.html");
     match tokio::fs::read(&index_path).await {
         Ok(bytes) => axum::response::Response::builder()
             .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
             .header("Cache-Control", "no-cache, no-store, must-revalidate")
-            .header("Pragma", "no-cache")
-            .header("Expires", "0")
             .body(axum::body::Body::from(bytes))
             .expect("valid index response builder"),
         Err(_) => axum::response::Response::builder()
             .status(404)
-            .body(axum::body::Body::from("index.html not found"))
+            .body(axum::body::Body::from("Dashboard not built. Run: cd dashboard && pnpm build"))
             .expect("valid 404 response builder"),
     }
 }
