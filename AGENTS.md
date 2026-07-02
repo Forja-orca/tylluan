@@ -70,6 +70,7 @@ cargo run -p tylluan-cli -- start
 | **CI/deps cleanup** | `deny.toml` green · `Cargo.toml` 0.11.0 · README/docs consistency | ✅ |
 | **ADR-005 M14-F** | P2P TCP dispatch spec — Noise XK session pool, Option A transparent routing, 6-phase plan | ✅ |
 | **Moondream guild** | `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via moondream pip | ✅ |
+| **M14-F Phase 1** | `p2p.rs` — `P2pSessionPool` + `execute_remote_tcp()` + `HardwareCaps.supports_p2p/tcp_port` | ✅ |
 
 ---
 
