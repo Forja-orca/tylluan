@@ -92,6 +92,7 @@ async fn test_state() -> Arc<HttpState> {
         node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_bb_{}", TEST_COUNTER.fetch_add(1, Ordering::Relaxed)))).unwrap()),
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
         dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
+        p2p_pool: Arc::new(tokio::sync::Mutex::new(tylluan_link::p2p::P2pSessionPool::new(16, 300))),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(tylluan_link::gossip::GossipEngine::new(
             "test-node".to_string(),
             tylluan_link::gossip::GossipConfig::default(),

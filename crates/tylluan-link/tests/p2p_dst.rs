@@ -1,3 +1,5 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use tylluan_link::dispatch::{DispatchDecision, DispatchRouter, GuildDispatchRequest, GuildDispatchResponse};
 use tylluan_link::capability::CapabilityRegistry;
@@ -38,15 +40,17 @@ async fn test_p2p_noise_roundtrip() {
     let identity_arc = Arc::new(identity);
 
     // Handler stub: always returns success
-    let handler = Arc::new(|req: GuildDispatchRequest| -> GuildDispatchResponse {
-        GuildDispatchResponse {
-            request_id: req.request_id,
-            success: true,
-            result: serde_json::json!({"echo": req.args}),
-            error: None,
-            executor_id: "test-listener".to_string(),
-            duration_ms: 1,
-        }
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+        Box::pin(async move {
+            GuildDispatchResponse {
+                request_id: req.request_id,
+                success: true,
+                result: serde_json::json!({"echo": req.args}),
+                error: None,
+                executor_id: "test-listener".to_string(),
+                duration_ms: 1,
+            }
+        })
     });
 
     // Start listener on port 0 (dynamic)
@@ -97,15 +101,17 @@ async fn test_p2p_error_response() {
     let identity_arc = Arc::new(identity);
 
     // Handler stub: always returns error
-    let handler = Arc::new(|req: GuildDispatchRequest| -> GuildDispatchResponse {
-        GuildDispatchResponse {
-            request_id: req.request_id,
-            success: false,
-            result: serde_json::Value::Null,
-            error: Some("simulated error".to_string()),
-            executor_id: "test-listener".to_string(),
-            duration_ms: 1,
-        }
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+        Box::pin(async move {
+            GuildDispatchResponse {
+                request_id: req.request_id,
+                success: false,
+                result: serde_json::Value::Null,
+                error: Some("simulated error".to_string()),
+                executor_id: "test-listener".to_string(),
+                duration_ms: 1,
+            }
+        })
     });
 
     // Start listener
