@@ -97,6 +97,12 @@ async fn test_state() -> Arc<HttpState> {
             "test-node".to_string(),
             tylluan_link::gossip::GossipConfig::default(),
         ))),
+        capability_registry: Arc::new(std::sync::Mutex::new(tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300)))),
+        dispatch_router: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchRouter::new(
+            Arc::new(std::sync::Mutex::new(tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300)))),
+            std::time::Duration::from_secs(60),
+        ))),
+        dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
     })
 }
 

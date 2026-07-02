@@ -183,15 +183,13 @@ impl DispatchRouter {
             }
 
             // Check circuit breaker
-            if let Some(peer_stat) = stats.get(node_id) {
-                if peer_stat.consecutive_failures >= 3 {
-                    if let Some(last_fail) = peer_stat.last_failure {
-                        if now.duration_since(last_fail) < self.cooldown {
-                            // Degraded / Circuit open — skip this peer
-                            continue;
-                        }
-                    }
-                }
+            if let Some(peer_stat) = stats.get(node_id)
+                && peer_stat.consecutive_failures >= 3
+                && let Some(last_fail) = peer_stat.last_failure
+                && now.duration_since(last_fail) < self.cooldown
+            {
+                // Degraded / Circuit open — skip this peer
+                continue;
             }
 
             // Obtain latency: default to 0.0 (favors exploration)
@@ -217,22 +215,20 @@ impl DispatchRouter {
             }
         }
 
-        if let Some((peer_id, addr, best_score, supports_p2p, tcp_port_opt)) = best_peer {
-            if best_score > local_score * 1.2 {
-                if supports_p2p {
-                    if let Some(port) = tcp_port_opt {
-                        return DispatchDecision::RemoteTcp {
-                            node_id: peer_id,
-                            addr,
-                            tcp_port: port,
-                        };
-                    }
-                }
-                return DispatchDecision::Remote {
+        if let Some((peer_id, addr, best_score, supports_p2p, tcp_port_opt)) = best_peer
+            && best_score > local_score * 1.2
+        {
+            if supports_p2p && let Some(port) = tcp_port_opt {
+                return DispatchDecision::RemoteTcp {
                     node_id: peer_id,
                     addr,
+                    tcp_port: port,
                 };
             }
+            return DispatchDecision::Remote {
+                node_id: peer_id,
+                addr,
+            };
         }
 
         DispatchDecision::Local
