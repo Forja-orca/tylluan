@@ -169,17 +169,17 @@ Delivered so far:
 - [x] M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` in `GossipEntry` (`#[serde(default)]`, backwards compatible); `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL=300s, `prune_expired()`, `ingest_from_engine()`; 6 unit tests.
 
 Remaining (v0.11.0 backlog):
-- [ ] M14-D Phase 2 — `DispatchRouter`: load+latency scoring, wire `prune_expired` into background gossip task in `main.rs`.
+- [x] M14-D Phase 2 — `DispatchRouter`: load+latency scoring `(1-load)×(1000/latency)×gpu_mult`, circuit breaker (3 failures + 60s cooldown); `HttpState` gains `capability_registry`; gossip tick wires `ingest_from_engine + prune_expired`.
 - [x] M14-D Phase 3 — `GuildDispatchRequest/Response` + Noise NK handler + `POST /api/v1/guilds/dispatch/execute` endpoint.
 - [x] M14-D Phase 4 — `DispatchQueue` (fallback buffer + TTL) + `POST /guilds/dispatch/remote` + `GET /guilds/peers` + circuit breaker wired. **M14-D complete.**
-- [ ] M14-E — Mesh test harness (turmoil-based simulated fault injection, network partitions, recovery).
+- [ ] M14-E — Mesh integration test harness: 3-node `InMemoryTransport` simulations, partition/recovery scenarios, `DispatchRouter` multi-peer routing validation. See spec below.
 - [ ] Portability compliance CI: RPi4 (aarch64) smoke test in release workflow.
 
-**Current:** 273 kernel + 67 link + 2 evals = **342 total tests** · 0 failures.
+**Current:** 273 kernel + 71 link + 2 evals = **346 total tests** · 0 failures.
 
 ## M14-D — Guild Execution Channels (in progress — see v0.11.0 above)
 
-**Status:** Active. Phase 1 complete. Spec published in `docs/architecture/M14D_dispatch_spec.md` (ADR-004).
+**Status:** Complete (v0.11.0-dev). All 4 phases delivered. Spec in `docs/architecture/M14D_dispatch_spec.md` (ADR-004).
 
 **ADR-004 design (2026-07-02):**
 - Capability-Aware + Latency-Based Hybrid Routing — transparent inside `tylluan_do` (CONTRACT-01 preserved)
@@ -194,7 +194,43 @@ Remaining (v0.11.0 backlog):
 - Remote guild execution channels over Noise XK (prerequisite: guild proxy protocol)
 - `trait MeshTransport: Send { send/recv }` — sits above `NoiseSession`, compatible with in-memory mock for M14-E tests
 
-**Prerequisite before Phase 3:** M14-E test harness (turmoil-based) — latency routing cannot be validated without multi-node fault injection.
+**M14-E prerequisite note (historical):** Turmoil was evaluated and rejected — single-thread runtime constraint is incompatible with non-tokio syscalls (SQLite, ONNX, std::fs). The established approach is `InMemoryTransport` (mpsc channels) + `PartitionableTransport<T>`, already used in `gossip_dst.rs` and `fault_dst.rs`.
+
+## M14-E — Mesh Integration Test Harness (backlog v0.11.0)
+
+**Status:** Not started. Turmoil evaluated and rejected (see note above). Approach: `InMemoryTransport` + `PartitionableTransport<T>`.
+
+**What already exists (foundation):**
+- `InMemoryTransport` (mpsc channels) + `in_memory_pair()` in `tylluan-link/src/transport.rs`
+- `PartitionableTransport<T>` — 5 modes: Transparent, Drop(f64), Partition, Latency(Duration), Error
+- `gossip_dst.rs` — 6 deterministic 2-node tests (normal sync, partition, bidirectional convergence)
+- `fault_dst.rs` — 4 fault injection tests (partition+heal, latency, drop-rate, error-mode)
+
+**What M14-E adds (3 phases):**
+
+### Phase 1 — 3-Node Topology Simulation
+- Extend `InMemoryTransport` infrastructure to support N-node meshes (star, chain, full-mesh topologies)
+- New file `crates/tylluan-link/tests/mesh_simulation.rs`
+- Tests: 3-node gossip convergence, transitive propagation (A→B→C), split-brain detection
+
+### Phase 2 — DispatchRouter Multi-Peer Validation
+- Tests that `DispatchRouter::route()` selects the correct peer given varied `HardwareCaps`
+- Scenarios: GPU peer preferred for heavy guild, CPU-only fallback, circuit breaker isolation, cooldown recovery
+- Validates scoring formula `(1-load)×(1000/latency)×gpu_mult` end-to-end via in-memory topology
+
+### Phase 3 — Partition + Recovery Scenarios
+- Simulate network partition mid-dispatch: inflight request → queue fallback → recovery → dequeue
+- `DispatchQueue` TTL behavior: entries expire after 300s, `remove_timed_out` verified
+- Multi-hop: 3 peers, primary fails → secondary elected via router
+
+**Scope exclusions:**
+- No real TCP/UDP — all tests stay in-process (`InMemoryTransport`)
+- No Byzantine fault tolerance — that is out of scope until v1.0.0+
+- No new public APIs — test-only code under `#[cfg(test)]` and integration test files
+
+**Estimated test delta:** +12–18 tests → ~364 total
+
+---
 
 ## v1.0.0 — Production Ready
 
