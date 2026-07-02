@@ -5,13 +5,14 @@
 
 use crate::dispatch::{GuildDispatchRequest, GuildDispatchResponse};
 use crate::identity::NodeIdentity;
-use crate::noise::{noise_connect, NoiseSession};
+use crate::noise::{noise_accept, noise_connect, NoiseSession};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
 #[derive(Debug)]
@@ -76,8 +77,8 @@ impl P2pSessionPool {
         self.pool.is_empty()
     }
 
-    fn get_mut(&mut self, key: &str) -> Option<&mut PooledSession> {
-        self.pool.get_mut(key)
+    fn remove(&mut self, key: &str) -> Option<PooledSession> {
+        self.pool.remove(key)
     }
 
     fn insert(&mut self, key: String, session: PooledSession) {
@@ -100,30 +101,25 @@ pub async fn execute_remote_tcp(
 ) -> Result<GuildDispatchResponse, DispatchError> {
     let timeout_secs = request.timeout_secs.unwrap_or(30);
 
-    if let Some(session) = pool.get_mut(peer_pubkey_hex) {
-        session.last_used = Instant::now();
-        let data = serde_json::to_vec(&request).map_err(|e| DispatchError::Serialize(e.to_string()))?;
-        timeout(Duration::from_secs(timeout_secs), session.noise.async_encrypt_write(&mut session.write, &data))
-            .await
-            .map_err(|_| DispatchError::Timeout)??;
-        let resp_bytes = timeout(Duration::from_secs(timeout_secs), session.noise.async_decrypt_read(&mut session.read))
-            .await
-            .map_err(|_| DispatchError::Timeout)??;
-        let response: GuildDispatchResponse = serde_json::from_slice(&resp_bytes)
-            .map_err(|e| DispatchError::Serialize(e.to_string()))?;
-        return Ok(response);
-    }
+    // Bug fix: extract session from pool before using; reinsert only on success
+    let mut session_opt = pool.remove(peer_pubkey_hex);
 
-    let mut stream = TcpStream::connect(peer_addr).await?;
-    let pipe = noise_connect(&mut stream, identity, peer_pubkey_hex)
-        .await
-        .map_err(|e| DispatchError::Protocol(e.to_string()))?;
-    let (read, write) = stream.into_split();
-    let mut session = PooledSession {
-        noise: pipe.session,
-        write,
-        read,
-        last_used: Instant::now(),
+    let mut session = if let Some(s) = session_opt.take() {
+        // Reuse existing session
+        s
+    } else {
+        // New connection
+        let mut stream = TcpStream::connect(peer_addr).await?;
+        let pipe = noise_connect(&mut stream, identity, peer_pubkey_hex)
+            .await
+            .map_err(|e| DispatchError::Protocol(e.to_string()))?;
+        let (read, write) = stream.into_split();
+        PooledSession {
+            noise: pipe.session,
+            write,
+            read,
+            last_used: Instant::now(),
+        }
     };
 
     let data = serde_json::to_vec(&request).map_err(|e| DispatchError::Serialize(e.to_string()))?;
@@ -136,9 +132,85 @@ pub async fn execute_remote_tcp(
     let response: GuildDispatchResponse = serde_json::from_slice(&resp_bytes)
         .map_err(|e| DispatchError::Serialize(e.to_string()))?;
 
+    // Reinsert only on success (bug fix: broken session is dropped)
     session.last_used = Instant::now();
     pool.insert(peer_pubkey_hex.to_string(), session);
     Ok(response)
+}
+
+/// Start a P2P listener that accepts Noise XK connections and handles GuildDispatchRequest.
+/// Returns a JoinHandle and the bound SocketAddr (useful when port=0 for dynamic assignment).
+pub async fn start_p2p_listener_noise(
+    addr: SocketAddr,
+    identity: Arc<NodeIdentity>,
+    handler: Arc<dyn Fn(GuildDispatchRequest) -> GuildDispatchResponse + Send + Sync + 'static>,
+) -> tokio::io::Result<(tokio::task::JoinHandle<()>, SocketAddr)> {
+    let listener = TcpListener::bind(addr).await?;
+    let bound_addr = listener.local_addr()?;
+
+    let handle = tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((mut stream, peer_addr)) => {
+                    let id = identity.clone();
+                    let h = handler.clone();
+                    tokio::spawn(async move {
+                        // Perform Noise XK handshake
+                        let pipe = match noise_accept(&mut stream, &id).await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                tracing::warn!("noise_accept failed from {}: {}", peer_addr, e);
+                                return;
+                            }
+                        };
+                        let (read, write) = stream.into_split();
+                        let mut session = PooledSession {
+                            noise: pipe.session,
+                            write,
+                            read,
+                            last_used: Instant::now(),
+                        };
+
+                        // Read GuildDispatchRequest
+                        let req_bytes = match session.noise.async_decrypt_read(&mut session.read).await {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::warn!("decrypt read failed from {}: {}", peer_addr, e);
+                                return;
+                            }
+                        };
+                        let request: GuildDispatchRequest = match serde_json::from_slice(&req_bytes) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                tracing::warn!("deserialize failed from {}: {}", peer_addr, e);
+                                return;
+                            }
+                        };
+
+                        // Call handler (sync stub in Phase 2)
+                        let response = h(request);
+
+                        // Write GuildDispatchResponse
+                        let resp_bytes = match serde_json::to_vec(&response) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::warn!("serialize failed for {}: {}", peer_addr, e);
+                                return;
+                            }
+                        };
+                        if let Err(e) = session.noise.async_encrypt_write(&mut session.write, &resp_bytes).await {
+                            tracing::warn!("encrypt write failed to {}: {}", peer_addr, e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("accept error: {}", e);
+                }
+            }
+        }
+    });
+
+    Ok((handle, bound_addr))
 }
 
 #[cfg(test)]

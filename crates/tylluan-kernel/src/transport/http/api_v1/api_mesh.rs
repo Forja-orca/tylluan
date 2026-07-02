@@ -163,7 +163,8 @@ pub async fn guild_dispatch_remote_handler(
                 }))),
             }
         }
-        DispatchDecision::Remote { ref addr, .. } => {
+        DispatchDecision::Remote { ref addr, .. } | DispatchDecision::RemoteTcp { ref addr, .. } => {
+            // RemoteTcp falls back to HTTP for now; Phase 3 will implement native P2P over Noise XK
             let url = format!("http://{}/api/v1/guilds/dispatch/execute", peer_addr);
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
