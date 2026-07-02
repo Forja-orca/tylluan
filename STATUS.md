@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-02 (v0.11.0-dev: M14-D + M14-E complete + ADR-005 M14-F spec)
+> Last updated: 2026-07-02 (v0.11.0-dev: M14-D + M14-E + M14-F Phase 2 complete)
 
 ## CI
 
@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** HEAD `022b0e1` · 273 kernel + 85 link + 2 evals = **360 total** green as of 2026-07-02.
+**Commit:** HEAD `f06fa0e` · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
 
 ---
 
 ## Version
 
-**v0.11.0-dev** (HEAD) — M14-D + M14-E complete + M14-F Phase 1 (P2pSessionPool + execute_remote_tcp). 360 tests, 0 failures.
+**v0.11.0-dev** (HEAD) — M14-D + M14-E + M14-F Phase 2 complete (start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests). 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
@@ -58,6 +58,9 @@
 - Retrieval quality benchmark v0.10.0: 44 nodes, 40 edges, 10 queries (5 original + 5 multi-hop). With LinearRAG graph ON: Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix). Results with fake 12-dim embeddings; real BGE-M3 delta expected higher.
 - ADR-004 M14-D Guild Execution Channels spec published: `docs/architecture/M14D_dispatch_spec.md` — Capability-Aware Hybrid Routing, 4-phase implementation plan (~8 sessions), preserves CONTRACT-01
 - M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` added to `GossipEntry`; `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL-based peer store, `prune_expired()`, `ingest_from_engine()`; 6 unit tests (v0.11.0-dev)
+- M14-F Phase 2 — `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)`: Noise XK responder loop (`noise_accept` → decrypt → handler → encrypt write); `DispatchDecision::RemoteTcp { node_id, addr, tcp_port }` variant; `route()` picks best-scoring peer first, then checks `supports_p2p` (bug fix: early return bypassed score threshold — fixed); `tests/p2p_dst.rs` 3 tests: TCP loopback roundtrip, error response, RemoteTcp routing. **88 link tests, 363 total.** (v0.11.0-dev)
+- M14-F Phase 1 — `P2pSessionPool` (HashMap, LRU evict, TTL prune) + `execute_remote_tcp()` (Noise XK initiator, pool extract-before-use + reinsert-on-success-only bug fix); `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>`. (v0.11.0-dev)
+- Moondream guild: `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via `moondream` pip (0.5B local vision). (v0.11.0-dev)
 - M14-E — Mesh Integration Test Harness: `tests/mesh_simulation.rs` (full-mesh A↔B↔C, star topology B-hub, split-brain + heal LWW); `tests/dispatch_dst.rs` (GPU peer selection, capability filter, CB fallback, DispatchQueue FIFO/overflow/TTL); `DispatchQueue` moved from kernel to `tylluan-link/src/dispatch.rs`. **M14-D + M14-E both complete.** (v0.11.0-dev)
 - M14-D Phase 4 — Fallback + Remote Dispatch: `DispatchQueue` (VecDeque + TTL 300s, max 1000); `HttpState` gains `dispatch_router` + `dispatch_queue`; `GET /api/v1/guilds/peers` returns CapabilityRegistry view; `POST /api/v1/guilds/dispatch/remote` routes via DispatchRouter (local or HTTP forward), fallback-enqueues on failure, wires record_success/record_failure. **M14-D milestone complete.** (v0.11.0-dev)
 - M14-D Phase 3 — Guild Dispatch Protocol: `GuildDispatchRequest/Response` structs (Serde); `send/receive_dispatch_request/response` using Noise NK (`noise_encrypt/decrypt_payload` over `dyn MeshTransport`); `POST /api/v1/guilds/dispatch/execute` endpoint — receives request, calls `registry.call_tool()`, returns response with `executor_id` + `duration_ms`; CONTRACT-01 preserved (v0.11.0-dev)
@@ -69,7 +72,7 @@
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **273 kernel lib tests passing** + 81 link tests + 2 evals tests = **356 total** · integration suite requires live kernel
+- **273 kernel lib tests passing** + 88 link tests + 2 evals tests = **363 total** · integration suite requires live kernel
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
@@ -117,7 +120,7 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-F (P2P direct TCP dispatch over Noise XK) — ADR-005 spec complete (`docs/architecture/M14F_p2p_dispatch_spec.md`); implementation backlog post-v0.11.0. Decisions: pool with TTL+keepalive, Option A transparent routing, tcp_addr from GossipEntry.addr + HardwareCaps.supports_p2p
+- M14-F Phase 3 (kernel wiring) — pending: `p2p_pool` in `HttpState`, async `P2pHandlerFn` (BoxFuture), native `RemoteTcp` arm in `guild_dispatch_remote_handler`, listener startup from `[p2p]` config section.
 - Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
 
 ---
