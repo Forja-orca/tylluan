@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** HEAD `f06fa0e` · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
+**Commit:** HEAD `177ed42` · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
 
 ---
 
 ## Version
 
-**v0.11.0-dev** (HEAD) — M14-D + M14-E + M14-F Phase 2 complete (start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests). 363 tests, 0 failures.
+**v0.11.0-dev** (HEAD) — M14-D (all 4 phases) + M14-E (mesh harness) + M14-F (P2P TCP dispatch, Noise XK session pool, conditional listener) completos. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
