@@ -4,11 +4,32 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.11.0] — in progress — M14-D + M14-E complete + ADR-005
+## [v0.11.0] — in progress — M14-D + M14-E + M14-F Phase 2 complete
 
 **Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
 
 ### Added
+
+- **M14-F Phase 2 — start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests** (`commits 41b6194, f06fa0e`)
+  - `p2p.rs` bug fix: `pool.remove()` antes de usar la sesión; reinserta solo en éxito — sesión rota se droppea, nunca vuelve al pool.
+  - `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)` — Noise XK responder: `TcpListener::bind` → `noise_accept` → `async_decrypt_read` → `handler(req)` → `async_encrypt_write`. Puerto 0 → OS asigna dirección real.
+  - `DispatchDecision::RemoteTcp { node_id, addr, tcp_port: u16 }` — nueva variante; `route()` la devuelve cuando `peer.supports_p2p=true && peer.tcp_port.is_some() && best_score > local_score * 1.2` (score evaluado primero, P2P elegido post-loop).
+  - `api_mesh.rs`: arm `RemoteTcp` exhaustivo — HTTP fallback hasta Phase 3 (kernel wiring).
+  - `catalog.rs`: `vision_moondream` añadido a `KNOWN_GUILDS` (guild de Padawan faltaba en la lista del anti-regresión test).
+  - `tests/p2p_dst.rs` — 3 DST tests:
+    - `test_p2p_noise_roundtrip` — TCP loopback real (puerto 0), listener Noise XK, roundtrip completo.
+    - `test_p2p_error_response` — handler devuelve `success=false`, initiator recibe error correctamente.
+    - `test_route_prefers_tcp` — `route()` con `supports_p2p=true + tcp_port=9001` → `RemoteTcp { tcp_port: 9001 }`.
+  - **88 link tests** (61 lib + 27 integration), 273 kernel tests, 2 evals = **363 total** · 0 failures.
+
+- **M14-F Phase 1 — P2pSessionPool + execute_remote_tcp** (`commit 022b0e1`)
+  - `p2p.rs`: `P2pSessionPool` (HashMap, LRU evict, TTL prune) + `execute_remote_tcp()` (Noise XK initiator, length-prefixed framing, 30/120s timeouts).
+  - `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>` (both `#[serde(default)]`, backwards-compatible).
+  - 4 unit tests: pool empty, prune noop, error display.
+
+- **Moondream guild** (`commit 6a1906e`) — `guilds/core/vision_moondream.py`: `analyze_image` + `caption_image` via `moondream` pip package (0.5B local vision model).
+
+- **ADR-005 M14-F spec** (`commit 6979795`) — `docs/architecture/M14F_p2p_dispatch_spec.md`: Noise XK session pool, Option A transparent routing, 6-phase plan.
 
 - **M14-E Phase 1 — Mesh Topology Simulation** (`tests/mesh_simulation.rs`)
   - `test_full_mesh_3node_all_pairs` — A↔B, B↔C, A↔C convergencia completa tras 3 rounds de sync.

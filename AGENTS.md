@@ -33,8 +33,8 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
-**Tests:** 273 kernel lib + 81 link + 2 evals = **356 total** · 0 fallos  
-**HEAD commit:** `79f2641` (main)
+**Tests:** 273 kernel lib + 88 link + 2 evals = **363 total** · 0 fallos  
+**HEAD commit:** `f06fa0e` (main)
 
 ### Milestones completados
 
@@ -71,6 +71,7 @@ cargo run -p tylluan-cli -- start
 | **ADR-005 M14-F** | P2P TCP dispatch spec — Noise XK session pool, Option A transparent routing, 6-phase plan | ✅ |
 | **Moondream guild** | `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via moondream pip | ✅ |
 | **M14-F Phase 1** | `p2p.rs` — `P2pSessionPool` + `execute_remote_tcp()` + `HardwareCaps.supports_p2p/tcp_port` | ✅ |
+| **M14-F Phase 2** | `start_p2p_listener_noise()` + `DispatchDecision::RemoteTcp` + score-first routing + `p2p_dst.rs` (3 tests) | ✅ |
 
 ---
 
