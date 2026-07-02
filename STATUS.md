@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-02 (v0.11.0-dev: M14-D Phase 1 — CapabilityRegistry + HardwareCaps in GossipEntry)
+> Last updated: 2026-07-02 (v0.11.0-dev: M14-D complete — all 4 phases, capability-aware peer routing)
 
 ## CI
 
@@ -13,13 +13,14 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** HEAD · 273 kernel + 67 link + 2 evals = **342 total** green as of 2026-07-02.
+**Commit:** HEAD `4efb022` · 273 kernel + 71 link + 2 evals = **346 total** green as of 2026-07-02.
 
 ---
 
 ## Version
 
-**v0.10.0** — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
+**v0.11.0-dev** (HEAD) — M14-D Guild Execution Channels completo: capability-aware peer routing, circuit breaker, DispatchQueue, Noise NK dispatch protocol.
+**v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
 
@@ -115,7 +116,7 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-D through M14-E (cross-datacenter routing, mesh test harness) not yet implemented — spec in progress (v0.10.0 P2)
+- M14-E (mesh test harness — turmoil-based fault injection, network partitions) not yet implemented — backlog v0.11.0
 - Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
 
 ---

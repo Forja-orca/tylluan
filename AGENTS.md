@@ -34,7 +34,7 @@ cargo run -p tylluan-cli -- start
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
 **Tests:** 273 kernel lib + 71 link + 2 evals = **346 total** · 0 fallos  
-**HEAD commit:** `c5af0f6` (main)
+**HEAD commit:** `4efb022` (main)
 
 ### Milestones completados
 
