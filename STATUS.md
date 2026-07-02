@@ -13,13 +13,13 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 
-**Commit:** HEAD `b49e8ba` · 273 kernel + 81 link + 2 evals = **356 total** green as of 2026-07-02.
+**Commit:** HEAD `79f2641` · 273 kernel + 81 link + 2 evals = **356 total** green as of 2026-07-02.
 
 ---
 
 ## Version
 
-**v0.11.0-dev** (HEAD) — M14-D Guild Execution Channels completo: capability-aware peer routing, circuit breaker, DispatchQueue, Noise NK dispatch protocol.
+**v0.11.0-dev** (HEAD) — M14-D Guild Execution Channels completo (all 4 phases) + M14-E Mesh Test Harness completo. 356 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
