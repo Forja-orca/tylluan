@@ -179,6 +179,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/guilds/register", post(guild_register_handler))
         .route("/api/v1/guilds/request", post(guild_request_handler))
         .route("/api/v1/guilds/dispatch/execute", post(guild_dispatch_execute_handler))
+        .route("/api/v1/guilds/dispatch/remote", post(guild_dispatch_remote_handler))
+        .route("/api/v1/guilds/peers", get(guild_peers_handler))
         .route("/api/v1/guilds/{name}/start", post(guild_start_handler))
         .route("/api/v1/guilds/{name}/stop", post(guild_stop_handler))
         .route("/api/v1/guilds/{name}/reset-backoff", post(guild_reset_backoff_handler))
