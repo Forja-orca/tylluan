@@ -106,6 +106,7 @@ pub async fn receive_dispatch_response(
 pub enum DispatchDecision {
     Local,
     Remote { node_id: String, addr: String },
+    RemoteTcp { node_id: String, addr: String, tcp_port: u16 },
 }
 
 #[derive(Debug, Default, Clone)]
@@ -173,7 +174,7 @@ impl DispatchRouter {
         let stats = self.peer_stats.lock().unwrap();
         let now = Instant::now();
 
-        let mut best_peer: Option<(String, String, f32)> = None;
+        let mut best_peer: Option<(String, String, f32, bool, Option<u16>)> = None;
 
         for (node_id, (record, _)) in registry.all_peers() {
             // Must support the requested guild
@@ -201,17 +202,32 @@ impl DispatchRouter {
 
             let peer_score = Self::calculate_score(&record.hardware, peer_latency);
 
-            if let Some((_, _, best_score)) = best_peer {
-                if peer_score > best_score {
-                    best_peer = Some((node_id.clone(), record.addr.clone(), peer_score));
-                }
-            } else {
-                best_peer = Some((node_id.clone(), record.addr.clone(), peer_score));
+            let is_p2p = record.hardware.supports_p2p;
+            let tcp_port = record.hardware.tcp_port;
+
+            match &best_peer {
+                Some((_, _, s, _, _)) if peer_score <= *s => {}
+                _ => best_peer = Some((
+                    node_id.clone(),
+                    record.addr.clone(),
+                    peer_score,
+                    is_p2p,
+                    tcp_port,
+                )),
             }
         }
 
-        if let Some((peer_id, addr, best_score)) = best_peer {
+        if let Some((peer_id, addr, best_score, supports_p2p, tcp_port_opt)) = best_peer {
             if best_score > local_score * 1.2 {
+                if supports_p2p {
+                    if let Some(port) = tcp_port_opt {
+                        return DispatchDecision::RemoteTcp {
+                            node_id: peer_id,
+                            addr,
+                            tcp_port: port,
+                        };
+                    }
+                }
                 return DispatchDecision::Remote {
                     node_id: peer_id,
                     addr,
