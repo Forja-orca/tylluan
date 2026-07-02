@@ -82,7 +82,7 @@
 - Installs to `~/.tylluan/bin/`, adds to PATH, prints MCP config + token hint
 
 ### Python guilds
-- ~47 guilds in `guilds/core/` via FastMCP (bash, git, filesystem, code, vision, websearch, coloquio, scrapling, deep_web_research, comfy_ui, n8n_bridge, code_graph, and more)
+- ~48 guilds in `guilds/core/` via FastMCP (bash, git, filesystem, code, vision, vision_moondream, websearch, coloquio, scrapling, deep_web_research, comfy_ui, n8n_bridge, code_graph, and more)
 - Guild catalog in `registry.json`; lazy on-demand loading
 - Security: `_security.py` per-guild ACL layer
 

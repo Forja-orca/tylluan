@@ -58,6 +58,12 @@ All notable changes to Tylluan are documented here.
   - 6 unit tests: new/is_empty, ingest+lookup, stale-clock rejection, prune_expired, ingest_from_engine, default TTL.
   - `prune_expired()` ready to wire into background gossip task in `main.rs` (Phase 2).
 
+- **Moondream Vision Guild** (`guilds/core/vision_moondream.py`)
+  - `analyze_image(image_path, prompt)` — Moondream 0.5B Q&A sobre imagen local → JSON
+  - `caption_image(image_path)` — caption corto → JSON
+  - Lazy loading, PIL+moondream pip (no torch, no transformers), impresiones a stderr
+  - Paralelo a `vision.py` (SmolVLM2 ONNX) — dos guilds de visión disponibles
+
 - **ADR-005 M14-F — P2P Guild Dispatch over Noise XK** (`docs/architecture/M14F_p2p_dispatch_spec.md`)
   - Context: NK stateless dispatch (M14-D) repeats key exchange per request; XK amortizes 3-message handshake over a persistent session.
   - Q1: `execute_remote_tcp(request, peer_addr, identity, peer_pubkey_hex) -> Result<GuildDispatchResponse, TransportError>` — len-prefixed framing (u32 BE), same as noise.rs; 30s connect timeout, 120s per-request timeout.
