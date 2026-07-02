@@ -34,7 +34,7 @@ cargo run -p tylluan-cli -- start
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
 **Tests:** 273 kernel lib + 81 link + 2 evals = **356 total** · 0 fallos  
-**HEAD commit:** `b49e8ba` (main)
+**HEAD commit:** `79f2641` (main)
 
 ### Milestones completados
 
@@ -65,8 +65,9 @@ cargo run -p tylluan-cli -- start
 | **M14-D Phase 2** | `DispatchRouter` — scoring, circuit breaker, `prune_expired` kernel wiring | ✅ |
 | **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ |
 | **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ |
-| **M14-E Phase 1** | `mesh_simulation.rs` — full-mesh, star topology, split-brain + heal (Padawan) | ✅ |
-| **M14-E Phase 2+3** | `dispatch_dst.rs` — multi-peer routing + `DispatchQueue` moved to link (Deep) | ✅ |
+| **M14-E Phase 1** | `mesh_simulation.rs` — full-mesh, star topology, split-brain + heal | ✅ |
+| **M14-E Phase 2+3** | `dispatch_dst.rs` — multi-peer routing + `DispatchQueue` moved to link | ✅ |
+| **CI/deps cleanup** | `deny.toml` green · `Cargo.toml` 0.11.0 · README/docs consistency | ✅ |
 
 ---
 
@@ -108,7 +109,7 @@ cargo test -p tylluan-kernel --lib 2>&1 | tail -3
 # Esperado: 273 lib tests passing
 
 cargo test -p tylluan-link 2>&1 | tail -3
-# Esperado: 67 link tests passing
+# Esperado: 81 link tests passing
 
 cargo test -p tylluan-evals 2>&1 | tail -3
 # Esperado: 2 evals tests passing

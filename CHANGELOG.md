@@ -60,7 +60,7 @@ All notable changes to Tylluan are documented here.
 
 ### Tests
 
-**273 kernel lib tests + 71 link tests + 2 evals = 346 total** · 0 failures.
+**273 kernel lib tests + 81 link tests + 2 evals = 356 total** · 0 failures.
 
 ---
 
