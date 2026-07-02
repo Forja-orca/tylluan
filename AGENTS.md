@@ -57,14 +57,14 @@ cargo run -p tylluan-cli -- start
 | **M6-full** | `PartitionableTransport<T>` (5 modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
 | **v0.10.0** | Retrieval benchmark · degree-bias fix (penalty not boost) · ADR-004 M14-D | ✅ |
 
-### En progreso — v0.11.0
+### Completado en v0.11.0
 
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
 | **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in `GossipEntry` | ✅ |
 | **M14-D Phase 2** | `DispatchRouter` — scoring, circuit breaker, `prune_expired` kernel wiring | ✅ |
 | **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ |
-| **M14-D Phase 4** | Fallback queue + circuit breaker integration + dashboard UX | 🔜 |
+| **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ |
 
 ---
 

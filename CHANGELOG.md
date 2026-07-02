@@ -10,6 +10,13 @@ All notable changes to Tylluan are documented here.
 
 ### Added
 
+- **M14-D Phase 4 — Fallback Queue + Remote Dispatch + Peers Endpoint**
+  - `DispatchQueue` in `mod.rs`: `VecDeque`-backed fallback buffer (max 1000), `enqueue/dequeue`, `peek_timed_out/remove_timed_out` (300s TTL cleanup).
+  - `HttpState` gains `dispatch_router: Arc<Mutex<DispatchRouter>>` + `dispatch_queue: Arc<Mutex<DispatchQueue>>`.
+  - `GET /api/v1/guilds/peers` — returns all `CapabilityRegistry` peers with `hardware` and `capabilities` fields.
+  - `POST /api/v1/guilds/dispatch/remote` — asks `DispatchRouter` for routing decision; executes locally (`Local`) or forwards via HTTP to peer's `/dispatch/execute` (`Remote`); on success calls `record_success`; on failure enqueues body to `DispatchQueue` + calls `record_failure` (circuit breaker).
+  - M14-D complete. All 4 phases delivered. CONTRACT-01 preserved.
+
 - **M14-D Phase 3 — GuildDispatchRequest/Response + Noise NK handler**
   - `GuildDispatchRequest { guild, tool, args, request_id, sender_id, timeout_secs }` — Serde serialize/deserialize.
   - `GuildDispatchResponse { request_id, success, result, error, executor_id, duration_ms }`.

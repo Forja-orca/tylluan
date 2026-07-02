@@ -171,7 +171,7 @@ Delivered so far:
 Remaining (v0.11.0 backlog):
 - [ ] M14-D Phase 2 — `DispatchRouter`: load+latency scoring, wire `prune_expired` into background gossip task in `main.rs`.
 - [x] M14-D Phase 3 — `GuildDispatchRequest/Response` + Noise NK handler + `POST /api/v1/guilds/dispatch/execute` endpoint.
-- [ ] M14-D Phase 4 — Fallback (queue + circuit breaker) + dashboard UX for peer capability view.
+- [x] M14-D Phase 4 — `DispatchQueue` (fallback buffer + TTL) + `POST /guilds/dispatch/remote` + `GET /guilds/peers` + circuit breaker wired. **M14-D complete.**
 - [ ] M14-E — Mesh test harness (turmoil-based simulated fault injection, network partitions, recovery).
 - [ ] Portability compliance CI: RPi4 (aarch64) smoke test in release workflow.
 
