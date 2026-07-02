@@ -4,11 +4,28 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.11.0] — in progress — M14-D Guild Execution Channels
+## [v0.11.0] — in progress — M14-D + M14-E complete
 
-**Norte estrella:** Los peers descubren capacidades entre sí y despachan guild tools remotamente sobre Noise XK.
+**Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
 
 ### Added
+
+- **M14-E Phase 1 — Mesh Topology Simulation** (`tests/mesh_simulation.rs`)
+  - `test_full_mesh_3node_all_pairs` — A↔B, B↔C, A↔C convergencia completa tras 3 rounds de sync.
+  - `test_star_topology_hub_propagation` — B como hub; A y C no se ven entre sí; info fluye por B.
+  - `test_split_brain_partition_then_heal` — A y C divergen (clock distinto), se curan vía B, LWW resuelve conflicto.
+  - 3 tests, todos `#[tokio::test]`, patrón `in_memory_pair` + `tokio::join!` para determinismo.
+
+- **M14-E Phase 2 — DispatchRouter Multi-Peer Tests** (`tests/dispatch_dst.rs`)
+  - `test_router_selects_gpu_peer_over_two_cpu_peers` — 3 peers en registry, GPU gana sobre 2 CPU peers.
+  - `test_router_capability_filter_excludes_wrong_guild` — solo peers con guild correcta son candidatos.
+  - `test_router_falls_back_to_second_peer_when_first_circuit_open` — CB abierto en primario → enruta a secundario.
+
+- **M14-E Phase 3 — DispatchQueue moved to tylluan-link** (`src/dispatch.rs`)
+  - `DispatchQueue` extraído de `tylluan-kernel/src/transport/http/mod.rs` → `tylluan-link/src/dispatch.rs`.
+  - Kernel importa vía `use tylluan_link::dispatch::DispatchQueue`.
+  - 4 tests: FIFO, max-size overflow, TTL expiry, TTL keeps fresh entries.
+  - M14-E complete. 81 link tests, 273 kernel tests.
 
 - **M14-D Phase 4 — Fallback Queue + Remote Dispatch + Peers Endpoint**
   - `DispatchQueue` in `mod.rs`: `VecDeque`-backed fallback buffer (max 1000), `enqueue/dequeue`, `peek_timed_out/remove_timed_out` (300s TTL cleanup).
