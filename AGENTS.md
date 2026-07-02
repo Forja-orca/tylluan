@@ -34,7 +34,7 @@ cargo run -p tylluan-cli -- start
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
 **Tests:** 273 kernel lib + 88 link + 2 evals = **363 total** · 0 fallos  
-**HEAD commit:** `538afcc` (main)
+**HEAD commit:** `177ed42` (main)
 
 ### Milestones completados
 
@@ -73,6 +73,7 @@ cargo run -p tylluan-cli -- start
 | **M14-F Phase 1** | `p2p.rs` — `P2pSessionPool` + `execute_remote_tcp()` + `HardwareCaps.supports_p2p/tcp_port` | ✅ |
 | **M14-F Phase 2** | `start_p2p_listener_noise()` + `DispatchDecision::RemoteTcp` + score-first routing + `p2p_dst.rs` (3 tests) | ✅ |
 | **M14-F Phase 3** | `P2pHandlerFn` (BoxFuture) · `P2pConfig` `[p2p]` in `config.rs` · `p2p_pool` in `HttpState` · P2P listener spawn (conditional) · `api_mesh.rs` native `RemoteTcp` via `execute_remote_tcp` · `guild_peers_handler` exposes `supports_p2p/tcp_port` | ✅ |
+
 
 ---
 
@@ -113,8 +114,8 @@ cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
 # Esperado: 273 lib tests passing
 
-cargo test -p tylluan-link 2>&1 | tail -3
-# Esperado: 81 link tests passing
+cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
+# Esperado: 88 link tests passing (distribuidos en 7 archivos)
 
 cargo test -p tylluan-evals 2>&1 | tail -3
 # Esperado: 2 evals tests passing

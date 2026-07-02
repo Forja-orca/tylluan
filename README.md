@@ -74,7 +74,7 @@ tylluan_graph     Direct graph operations (triples, paths, PageRank)
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (**356 total tests** — 273 kernel lib + 81 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push runs 5 jobs: Rust build+test (**363 total tests** — 273 kernel lib + 88 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -209,6 +209,7 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.11.0-dev |
 | **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ v0.11.0-dev |
 | **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.11.0-dev |
+| **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm, conditional P2P listener | ✅ v0.11.0-dev |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---

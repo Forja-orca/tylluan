@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.11.0] — in progress — M14-D + M14-E + M14-F Phase 2 complete
+## [v0.11.0] — in progress — M14-D + M14-E + M14-F complete
 
 **Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
 
@@ -104,7 +104,7 @@ All notable changes to Tylluan are documented here.
 
 ### Tests
 
-**273 kernel lib tests + 81 link tests + 2 evals = 356 total** · 0 failures.
+**273 kernel lib tests + 88 link tests + 2 evals = 363 total** · 0 failures.
 
 ---
 
