@@ -130,7 +130,14 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 
 | Agente | Runtime | Rol |
 |--------|---------|-----|
-| **Claude Code (Sonnet 4.6)** | CLI / IDE | Tech lead — planes, prompts, síntesis, docs |
-| **OpenCode (DeepSeek V4 Flash)** | VS Code extension | Implementación Rust — crates/ |
-| **Antigravity** | Browser + MCP | Research web, auditoría MCP, tests DST |
-| **Qwen Desktop** | App escritorio | Research masivo, specs arquitectura, auditorías vía SSE MCP |
+| **Claude Code (Sonnet 4.6)** | CLI / IDE | Tech lead — planes, briefings, síntesis, docs, memoria |
+| **Deep (DeepSeek V4 Flash)** | OpenCode IDE #1 | Implementación Rust — features complejas, razonamiento largo |
+| **DeepSeekPadawan (DeepSeek V4 Flash)** | OpenCode IDE #2 | Implementación Rust — segundo carril paralelo, tareas acotadas |
+| **Antigravity** | Browser + MCP | UI/UX/GUI — dashboard React, visualizaciones (inferencia limitada, reservar) |
+| **Qwen Desktop** | App escritorio | Investigación web + deep research — papers, repos, benchmarks; vía SSE MCP |
+
+**Reglas de asignación:**
+- Rust / crates/ → Deep o DeepSeekPadawan (briefing previo con DoD y zonas excluidas)
+- Research web / papers / repos → Qwen Desktop
+- Dashboard / UI / visualizaciones → Antigravity (solo si hay budget disponible)
+- Orquestación / docs / arbitraje → Claude Code
