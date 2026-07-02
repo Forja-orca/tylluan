@@ -78,7 +78,7 @@ Planned:
 - [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests.
 - [x] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
 - [x] M14-C — Encrypted transport overlay: Noise Protocol XK (TCP sessions) + NK (HTTP payloads) wired to federation sync endpoints. Ed25519→X25519 key conversion, ChaCha20-Poly1305 AEAD, async length-prefixed framing.
-- [ ] M14-E — Mesh integration tests: multi-node test harness with simulated network partitions and recovery.
+- [x] M14-E — Mesh integration test harness: `mesh_simulation.rs` (full-mesh, star, split-brain) + `dispatch_dst.rs` (multi-peer routing, DispatchQueue TTL). 81 link tests.
 
 Out of scope (v1.0.0):
 - External security audit of the mesh layer
@@ -172,10 +172,10 @@ Remaining (v0.11.0 backlog):
 - [x] M14-D Phase 2 — `DispatchRouter`: load+latency scoring `(1-load)×(1000/latency)×gpu_mult`, circuit breaker (3 failures + 60s cooldown); `HttpState` gains `capability_registry`; gossip tick wires `ingest_from_engine + prune_expired`.
 - [x] M14-D Phase 3 — `GuildDispatchRequest/Response` + Noise NK handler + `POST /api/v1/guilds/dispatch/execute` endpoint.
 - [x] M14-D Phase 4 — `DispatchQueue` (fallback buffer + TTL) + `POST /guilds/dispatch/remote` + `GET /guilds/peers` + circuit breaker wired. **M14-D complete.**
-- [ ] M14-E — Mesh integration test harness: 3-node `InMemoryTransport` simulations, partition/recovery scenarios, `DispatchRouter` multi-peer routing validation. See spec below.
+- [x] M14-E — Mesh integration test harness: 3-node `InMemoryTransport` simulations, partition/recovery scenarios, `DispatchRouter` multi-peer routing validation. **Complete.**
 - [ ] Portability compliance CI: RPi4 (aarch64) smoke test in release workflow.
 
-**Current:** 273 kernel + 71 link + 2 evals = **346 total tests** · 0 failures.
+**Current:** 273 kernel + 81 link + 2 evals = **356 total tests** · 0 failures.
 
 ## M14-D — Guild Execution Channels (in progress — see v0.11.0 above)
 

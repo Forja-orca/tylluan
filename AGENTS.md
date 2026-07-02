@@ -33,8 +33,8 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.10.0 (tag), v0.11.0-dev (HEAD)
 
-**Tests:** 273 kernel lib + 71 link + 2 evals = **346 total** · 0 fallos  
-**HEAD commit:** `4efb022` (main)
+**Tests:** 273 kernel lib + 81 link + 2 evals = **356 total** · 0 fallos  
+**HEAD commit:** `b49e8ba` (main)
 
 ### Milestones completados
 
@@ -65,6 +65,8 @@ cargo run -p tylluan-cli -- start
 | **M14-D Phase 2** | `DispatchRouter` — scoring, circuit breaker, `prune_expired` kernel wiring | ✅ |
 | **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ |
 | **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ |
+| **M14-E Phase 1** | `mesh_simulation.rs` — full-mesh, star topology, split-brain + heal (Padawan) | ✅ |
+| **M14-E Phase 2+3** | `dispatch_dst.rs` — multi-peer routing + `DispatchQueue` moved to link (Deep) | ✅ |
 
 ---
 
