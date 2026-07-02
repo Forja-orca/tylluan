@@ -5,6 +5,10 @@ pub struct HardwareCaps {
     pub ram_mb: u32,
     pub has_gpu: bool,
     pub load_avg: f32,
+    #[serde(default)]
+    pub supports_p2p: bool,
+    #[serde(default)]
+    pub tcp_port: Option<u16>,
 }
 
 impl Default for HardwareCaps {
@@ -13,6 +17,8 @@ impl Default for HardwareCaps {
             ram_mb: 0,
             has_gpu: false,
             load_avg: 0.0,
+            supports_p2p: false,
+            tcp_port: None,
         }
     }
 }
@@ -71,7 +77,7 @@ mod tests {
                 node_id: "peer1".into(),
                 addr: "192.168.1.1:3030".into(),
                 capabilities: vec!["mesh".into()],
-                hardware: HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.3 },
+                hardware: HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.3, supports_p2p: false, tcp_port: None },
                 clock: 1,
             }],
         );

@@ -431,7 +431,7 @@ mod tests {
     fn test_local_entry() {
         let mut state = GossipState::new("node42".into());
         state.tick();
-        let hw = HardwareCaps { ram_mb: 8192, has_gpu: true, load_avg: 0.1 };
+        let hw = HardwareCaps { ram_mb: 8192, has_gpu: true, load_avg: 0.1, supports_p2p: false, tcp_port: None };
         let entry = state.local_entry("1.2.3.4:3030", vec!["mesh".into()], hw);
         assert_eq!(entry.node_id, "node42");
         assert_eq!(entry.addr, "1.2.3.4:3030");

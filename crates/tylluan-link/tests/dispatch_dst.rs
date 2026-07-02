@@ -9,17 +9,17 @@ fn make_registry() -> Arc<Mutex<CapabilityRegistry>> {
 }
 
 fn inject_peer(registry: &Arc<Mutex<CapabilityRegistry>>, node_id: &str, addr: &str, ram_mb: u32, has_gpu: bool, load_avg: f32, capabilities: &[&str]) {
-    let hw = HardwareCaps { ram_mb, has_gpu, load_avg };
+    let hw = HardwareCaps { ram_mb, has_gpu, load_avg, supports_p2p: false, tcp_port: None };
     let caps: Vec<String> = capabilities.iter().map(|s| s.to_string()).collect();
     registry.lock().unwrap().ingest(node_id, addr, &hw, &caps, 1);
 }
 
 fn make_local_light() -> HardwareCaps {
-    HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5 }
+    HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5, supports_p2p: false, tcp_port: None }
 }
 
 fn make_local_loaded() -> HardwareCaps {
-    HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.9 }
+    HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.9, supports_p2p: false, tcp_port: None }
 }
 
 /// 3 peers with different capabilities. Router should pick the peer with GPU + low load for "vision".
@@ -63,7 +63,7 @@ fn test_router_gpu_preference() {
     let router = DispatchRouter::new(registry, Duration::from_secs(60));
     router.record_latency("gpu-peer", 5.0);
 
-    let local = HardwareCaps { ram_mb: 8192, has_gpu: false, load_avg: 0.7 };
+    let local = HardwareCaps { ram_mb: 8192, has_gpu: false, load_avg: 0.7, supports_p2p: false, tcp_port: None };
     let decision = router.route("vision", &local, 20.0);
     assert_eq!(
         decision,

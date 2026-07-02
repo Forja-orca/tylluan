@@ -9,6 +9,7 @@ pub mod gossip;
 pub mod identity;
 pub mod nat;
 pub mod noise;
+pub mod p2p;
 pub mod transport;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
