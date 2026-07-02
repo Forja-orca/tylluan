@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-02 (v0.11.0-dev: M14-D complete — all 4 phases, capability-aware peer routing)
+> Last updated: 2026-07-02 (v0.11.0-dev: M14-D + M14-E complete + ADR-005 M14-F spec)
 
 ## CI
 
@@ -117,7 +117,7 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-F (P2P direct TCP dispatch over Noise NK, proposed by Deep) — backlog post-v0.11.0
+- M14-F (P2P direct TCP dispatch over Noise XK) — ADR-005 spec complete (`docs/architecture/M14F_p2p_dispatch_spec.md`); implementation backlog post-v0.11.0. Decisions: pool with TTL+keepalive, Option A transparent routing, tcp_addr from GossipEntry.addr + HardwareCaps.supports_p2p
 - Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
 
 ---

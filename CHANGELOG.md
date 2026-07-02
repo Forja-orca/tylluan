@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.11.0] — in progress — M14-D + M14-E complete
+## [v0.11.0] — in progress — M14-D + M14-E complete + ADR-005
 
 **Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
 
@@ -57,6 +57,14 @@ All notable changes to Tylluan are documented here.
   - Methods: `ingest(record)`, `lookup(node_id)`, `prune_expired()`, `ingest_from_engine(&GossipEngine)`.
   - 6 unit tests: new/is_empty, ingest+lookup, stale-clock rejection, prune_expired, ingest_from_engine, default TTL.
   - `prune_expired()` ready to wire into background gossip task in `main.rs` (Phase 2).
+
+- **ADR-005 M14-F — P2P Guild Dispatch over Noise XK** (`docs/architecture/M14F_p2p_dispatch_spec.md`)
+  - Context: NK stateless dispatch (M14-D) repeats key exchange per request; XK amortizes 3-message handshake over a persistent session.
+  - Q1: `execute_remote_tcp(request, peer_addr, identity, peer_pubkey_hex) -> Result<GuildDispatchResponse, TransportError>` — len-prefixed framing (u32 BE), same as noise.rs; 30s connect timeout, 120s per-request timeout.
+  - Q2: Session pool — `HashMap<NodeId, NoisedPipe>` with 5min TTL, max 16 peers, keepalive ping every 60s, background prune task.
+  - Q3: Option A (transparent) — `dispatch/remote` auto-detects `supports_p2p=true` and routes to TCP; `dispatch/send` reserved for v0.12.0 explicit API.
+  - Q4: `tcp_addr` lives in `GossipEntry.addr` (already present); `HardwareCaps` gains `supports_p2p: bool` (default false, backwards-compatible).
+  - Implementation: 6-phase plan — pool struct → execute_remote_tcp → HardwareCaps field → kernel wiring → DST tests → integration.
 
 ### Tests
 
