@@ -29,7 +29,6 @@ snow = "0.10"
 mainline = { version = "2", optional = true }
 
 [dev-dependencies]
-turmoil = "0.6"
 
 [features]
 default = []
