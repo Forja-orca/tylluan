@@ -37,6 +37,61 @@ use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::SilvaDB;
 use crate::transport::server::TylluanServer;
 use rmcp::model::{CallToolRequestParam, Content};
+use std::collections::VecDeque;
+
+pub struct DispatchQueue {
+    queue: VecDeque<(Instant, serde_json::Value)>,
+    max_size: usize,
+}
+
+impl DispatchQueue {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            queue: VecDeque::new(),
+            max_size,
+        }
+    }
+
+    pub fn enqueue(&mut self, item: serde_json::Value) -> bool {
+        if self.queue.len() >= self.max_size {
+            return false;
+        }
+        self.queue.push_back((Instant::now(), item));
+        true
+    }
+
+    pub fn dequeue(&mut self) -> Option<serde_json::Value> {
+        self.queue.pop_front().map(|(_, v)| v)
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    pub fn peek_timed_out(&self, timeout: std::time::Duration) -> Vec<serde_json::Value> {
+        let now = Instant::now();
+        self.queue
+            .iter()
+            .filter(|(enqueued, _)| now.duration_since(*enqueued) >= timeout)
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    pub fn remove_timed_out(&mut self, timeout: std::time::Duration) {
+        let now = Instant::now();
+        self.queue.retain(|(enqueued, _)| now.duration_since(*enqueued) < timeout);
+    }
+}
+
+impl Default for DispatchQueue {
+    fn default() -> Self {
+        Self::new(1000)
+    }
+}
 
 /// Shared application state for all HTTP handlers.
 pub struct HttpState {
@@ -75,6 +130,8 @@ pub struct HttpState {
     pub dht_routing_table: Arc<tokio::sync::RwLock<tylluan_link::dht::RoutingTable>>,
     pub gossip_engine: Arc<tokio::sync::RwLock<tylluan_link::gossip::GossipEngine>>,
     pub capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::CapabilityRegistry>>,
+    pub dispatch_router: Arc<std::sync::Mutex<tylluan_link::dispatch::DispatchRouter>>,
+    pub dispatch_queue: Arc<std::sync::Mutex<DispatchQueue>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -349,6 +406,18 @@ pub async fn start_http_server_with_download(
         max_entries: mesh_gossip_kernel.max_entries,
     };
 
+let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::CapabilityRegistry>> =
+        Arc::new(std::sync::Mutex::new(
+            tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300))
+        ));
+    let dispatch_router: Arc<std::sync::Mutex<tylluan_link::dispatch::DispatchRouter>> =
+        Arc::new(std::sync::Mutex::new(
+            tylluan_link::dispatch::DispatchRouter::new(
+                capability_registry.clone(),
+                std::time::Duration::from_secs(60),
+            )
+        ));
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -403,9 +472,9 @@ pub async fn start_http_server_with_download(
                 node_identity.node_id().to_string()
             )
         )),
-        capability_registry: Arc::new(std::sync::Mutex::new(
-            tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300))
-        )),
+        capability_registry,
+        dispatch_router,
+        dispatch_queue: Arc::new(std::sync::Mutex::new(DispatchQueue::new(1000))),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),
