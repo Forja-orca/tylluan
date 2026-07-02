@@ -37,61 +37,7 @@ use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::SilvaDB;
 use crate::transport::server::TylluanServer;
 use rmcp::model::{CallToolRequestParam, Content};
-use std::collections::VecDeque;
-
-pub struct DispatchQueue {
-    queue: VecDeque<(Instant, serde_json::Value)>,
-    max_size: usize,
-}
-
-impl DispatchQueue {
-    pub fn new(max_size: usize) -> Self {
-        Self {
-            queue: VecDeque::new(),
-            max_size,
-        }
-    }
-
-    pub fn enqueue(&mut self, item: serde_json::Value) -> bool {
-        if self.queue.len() >= self.max_size {
-            return false;
-        }
-        self.queue.push_back((Instant::now(), item));
-        true
-    }
-
-    pub fn dequeue(&mut self) -> Option<serde_json::Value> {
-        self.queue.pop_front().map(|(_, v)| v)
-    }
-
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    pub fn peek_timed_out(&self, timeout: std::time::Duration) -> Vec<serde_json::Value> {
-        let now = Instant::now();
-        self.queue
-            .iter()
-            .filter(|(enqueued, _)| now.duration_since(*enqueued) >= timeout)
-            .map(|(_, v)| v.clone())
-            .collect()
-    }
-
-    pub fn remove_timed_out(&mut self, timeout: std::time::Duration) {
-        let now = Instant::now();
-        self.queue.retain(|(enqueued, _)| now.duration_since(*enqueued) < timeout);
-    }
-}
-
-impl Default for DispatchQueue {
-    fn default() -> Self {
-        Self::new(1000)
-    }
-}
+pub use tylluan_link::dispatch::DispatchQueue;
 
 /// Shared application state for all HTTP handlers.
 pub struct HttpState {
