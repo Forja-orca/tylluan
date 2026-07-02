@@ -8,7 +8,9 @@ use crate::identity::NodeIdentity;
 use crate::noise::{noise_accept, noise_connect, NoiseSession};
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -138,12 +140,15 @@ pub async fn execute_remote_tcp(
     Ok(response)
 }
 
+/// Async handler for inbound P2P dispatch requests.
+pub type P2pHandlerFn = Arc<dyn Fn(GuildDispatchRequest) -> Pin<Box<dyn Future<Output = GuildDispatchResponse> + Send>> + Send + Sync + 'static>;
+
 /// Start a P2P listener that accepts Noise XK connections and handles GuildDispatchRequest.
 /// Returns a JoinHandle and the bound SocketAddr (useful when port=0 for dynamic assignment).
 pub async fn start_p2p_listener_noise(
     addr: SocketAddr,
     identity: Arc<NodeIdentity>,
-    handler: Arc<dyn Fn(GuildDispatchRequest) -> GuildDispatchResponse + Send + Sync + 'static>,
+    handler: P2pHandlerFn,
 ) -> tokio::io::Result<(tokio::task::JoinHandle<()>, SocketAddr)> {
     let listener = TcpListener::bind(addr).await?;
     let bound_addr = listener.local_addr()?;
@@ -187,8 +192,8 @@ pub async fn start_p2p_listener_noise(
                             }
                         };
 
-                        // Call handler (sync stub in Phase 2)
-                        let response = h(request);
+                        // Call handler (async via P2pHandlerFn)
+                        let response = h(request).await;
 
                         // Write GuildDispatchResponse
                         let resp_bytes = match serde_json::to_vec(&response) {

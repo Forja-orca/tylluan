@@ -158,6 +158,9 @@ pub struct TylluanConfig {
     pub mesh: MeshConfig,
 
     #[serde(default)]
+    pub p2p: P2pConfig,
+
+    #[serde(default)]
     pub federation: FederationConfig,
 
     #[serde(default)]
@@ -286,6 +289,26 @@ pub struct MdnsConfig {
     /// Disabled by default — enable only in trusted LAN environments.
     #[serde(default)]
     pub discover: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct P2pConfig {
+    /// Enable the P2P dispatch listener for direct Noise XK connections.
+    #[serde(default = "default_p2p_enabled")]
+    pub enabled: bool,
+    /// TCP port for the P2P dispatch listener.
+    #[serde(default = "default_p2p_listen_port")]
+    pub listen_port: u16,
+}
+fn default_p2p_enabled() -> bool { true }
+fn default_p2p_listen_port() -> u16 { 9123 }
+impl Default for P2pConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            listen_port: 9123,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

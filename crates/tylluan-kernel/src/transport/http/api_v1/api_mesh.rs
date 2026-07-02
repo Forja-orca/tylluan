@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 use crate::transport::http::HttpState;
 use tylluan_link::dispatch::DispatchDecision;
+use tylluan_link::dispatch::GuildDispatchRequest;
+use tylluan_link::p2p::execute_remote_tcp;
 
 #[derive(Serialize)]
 pub struct MeshStatusResponse {
@@ -104,6 +106,8 @@ pub async fn guild_peers_handler(
                 "ram_mb": rec.hardware.ram_mb,
                 "has_gpu": rec.hardware.has_gpu,
                 "load_avg": rec.hardware.load_avg,
+                "supports_p2p": rec.hardware.supports_p2p,
+                "tcp_port": rec.hardware.tcp_port,
             },
         })
     }).collect();
@@ -163,8 +167,62 @@ pub async fn guild_dispatch_remote_handler(
                 }))),
             }
         }
-        DispatchDecision::Remote { ref addr, .. } | DispatchDecision::RemoteTcp { ref addr, .. } => {
-            // RemoteTcp falls back to HTTP for now; Phase 3 will implement native P2P over Noise XK
+        DispatchDecision::RemoteTcp { ref node_id, tcp_port, .. } => {
+            let peer_ip: std::net::SocketAddr = match peer_addr.parse() {
+                Ok(a) => a,
+                Err(_) => {
+                    return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                        "success": false,
+                        "error": format!("invalid peer_addr: {}", peer_addr)
+                    })));
+                }
+            };
+            let tcp_addr = std::net::SocketAddr::new(peer_ip.ip(), tcp_port);
+
+            let request = GuildDispatchRequest {
+                guild: guild.clone(),
+                tool: tool.clone(),
+                args: args.clone(),
+                request_id: uuid::Uuid::new_v4().to_string(),
+                sender_id: state.node_identity.node_id().to_string(),
+                timeout_secs: Some(60),
+            };
+
+            let mut pool = state.p2p_pool.lock().await;
+            match execute_remote_tcp(&mut pool, request, tcp_addr, node_id, &state.node_identity).await {
+                Ok(resp) => {
+                    state.dispatch_router.lock().unwrap().record_success(node_id);
+                    (StatusCode::OK, Json(serde_json::json!({
+                        "success": resp.success,
+                        "result": resp.result,
+                        "executor": format!("p2p://{}:{}", node_id, tcp_port),
+                        "duration_ms": resp.duration_ms,
+                    })))
+                }
+                Err(e) => {
+                    state.dispatch_router.lock().unwrap().record_failure(node_id);
+                    let dispatch_body = serde_json::json!({
+                        "guild": guild,
+                        "tool": tool,
+                        "args": args,
+                        "request_id": uuid::Uuid::new_v4().to_string(),
+                        "sender_id": state.node_identity.node_id().to_string(),
+                        "timeout_secs": 60u64,
+                    });
+                    {
+                        let mut q = state.dispatch_queue.lock().unwrap();
+                        q.enqueue(dispatch_body);
+                    }
+                    (StatusCode::OK, Json(serde_json::json!({
+                        "success": false,
+                        "error": format!("P2P dispatch failed: {}", e),
+                        "queued": true,
+                        "executor": format!("p2p://{}:{}", node_id, tcp_port),
+                    })))
+                }
+            }
+        }
+        DispatchDecision::Remote { ref addr, .. } => {
             let url = format!("http://{}/api/v1/guilds/dispatch/execute", peer_addr);
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))

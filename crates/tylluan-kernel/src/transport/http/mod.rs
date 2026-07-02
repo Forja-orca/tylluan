@@ -38,6 +38,7 @@ use crate::memory::silva::SilvaDB;
 use crate::transport::server::TylluanServer;
 use rmcp::model::{CallToolRequestParam, Content};
 pub use tylluan_link::dispatch::DispatchQueue;
+use tylluan_link::p2p::{P2pSessionPool, P2pHandlerFn, start_p2p_listener_noise};
 
 /// Shared application state for all HTTP handlers.
 pub struct HttpState {
@@ -78,6 +79,7 @@ pub struct HttpState {
     pub capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::CapabilityRegistry>>,
     pub dispatch_router: Arc<std::sync::Mutex<tylluan_link::dispatch::DispatchRouter>>,
     pub dispatch_queue: Arc<std::sync::Mutex<DispatchQueue>>,
+    pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -364,6 +366,8 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             )
         ));
 
+    let p2p_pool = Arc::new(tokio::sync::Mutex::new(P2pSessionPool::new(16, 300)));
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -421,6 +425,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         capability_registry,
         dispatch_router,
         dispatch_queue: Arc::new(std::sync::Mutex::new(DispatchQueue::new(1000))),
+        p2p_pool: p2p_pool.clone(),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),
@@ -723,6 +728,71 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     tokio::spawn(async move {
         let idle_lab = std::sync::Arc::new(crate::memory::idle_lab::IdleLab::new(ar_silva, &data_dir));
         crate::memory::autoresearch::autoresearch_daemon(idle_lab, ar_engine, ar_reranker).await;
+    });
+
+    // M14-F Phase 3: P2P dispatch listener
+    let p2p_state = state.clone();
+    tokio::spawn(async move {
+        let p2p_cfg = p2p_state.config.read().await.p2p.clone();
+        if !p2p_cfg.enabled {
+            tracing::info!("P2P dispatch listener: disabled by config");
+            return;
+        }
+        use std::net::SocketAddr;
+        let addr: SocketAddr = match format!("0.0.0.0:{}", p2p_cfg.listen_port).parse() {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!("P2P dispatch listener: invalid addr: {}", e);
+                return;
+            }
+        };
+        let identity = p2p_state.node_identity.clone();
+        let registry = p2p_state.registry.clone();
+        let handler: P2pHandlerFn = Arc::new(move |req: tylluan_link::dispatch::GuildDispatchRequest| {
+            let reg = registry.clone();
+            Box::pin(async move {
+                let tool_req = CallToolRequestParam {
+                    name: req.tool.clone().into(),
+                    arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
+                };
+                let start = std::time::Instant::now();
+                match reg.call_tool(&req.guild, tool_req).await {
+                    Ok(res) => {
+                        let dur = start.elapsed().as_millis() as u64;
+                        tylluan_link::dispatch::GuildDispatchResponse {
+                            request_id: req.request_id,
+                            success: !res.is_error.unwrap_or(false),
+                            result: serde_json::json!(res.content),
+                            error: None,
+                            executor_id: "local".to_string(),
+                            duration_ms: dur,
+                        }
+                    }
+                    Err(e) => {
+                        let dur = start.elapsed().as_millis() as u64;
+                        tylluan_link::dispatch::GuildDispatchResponse {
+                            request_id: req.request_id,
+                            success: false,
+                            result: serde_json::Value::Null,
+                            error: Some(e.to_string()),
+                            executor_id: "local".to_string(),
+                            duration_ms: dur,
+                        }
+                    }
+                }
+            })
+        });
+        match start_p2p_listener_noise(addr, identity, handler).await {
+            Ok((handle, bound_addr)) => {
+                tracing::info!("P2P dispatch listener started on {}", bound_addr);
+                if let Err(e) = handle.await {
+                    tracing::error!("P2P dispatch listener exited: {:?}", e);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to start P2P dispatch listener: {}", e);
+            }
+        }
     });
     // ------------------------------------------
 
