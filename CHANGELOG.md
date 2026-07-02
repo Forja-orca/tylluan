@@ -4,11 +4,23 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.11.0] — in progress — M14-D + M14-E + M14-F complete
+## [v0.11.0] — 2026-07-02 — M14-D + M14-E + M14-F complete · CI ARM64 green
 
 **Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
 
 ### Added
+
+- **CI ARM64 portability** (`commit 4d010a8`) — `portability-check` job en `ci.yml`: cross-compila `tylluan-kernel` y `tylluan-cli` para `aarch64-unknown-linux-gnu` en cada push a main. Verifica que el código compila para RPi4 sin regresiones.
+
+- **fix(ci)** (`commit c51357a`) — Clippy let-chain collapsible ifs en `p2p.rs` y `dispatch.rs`; campos `capability_registry`, `dispatch_router`, `dispatch_queue` añadidos a 5 test fixtures (`federation_audit`, `mesh_audit`, `blackboard_e2e`, `sovereign_e2e`, `pipeline_tests`).
+
+- **M14-F Phase 3 — kernel wiring P2P dispatch** (`commit 538afcc`)
+  - `P2pHandlerFn` type alias → `BoxFuture<'static, GuildDispatchResponse>` — permite llamadas async (`registry.call_tool()`) desde el listener.
+  - `[p2p]` section en `config.rs` (`enabled: bool`, `listen_port: u16`).
+  - `p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>` en `HttpState`.
+  - Listener P2P arranca condicionalmente al iniciar el kernel (`config.p2p.enabled`).
+  - `api_mesh.rs`: arm `RemoteTcp` nativo — llama `execute_remote_tcp` directamente (no HTTP fallback).
+  - `guild_peers_handler` expone `supports_p2p` y `tcp_port` en la respuesta de peers.
 
 - **M14-F Phase 2 — start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests** (`commits 41b6194, f06fa0e`)
   - `p2p.rs` bug fix: `pool.remove()` antes de usar la sesión; reinserta solo en éxito — sesión rota se droppea, nunca vuelve al pool.

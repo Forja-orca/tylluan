@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-02 (v0.11.0-dev: M14-D + M14-E + M14-F Phase 2 complete)
+> Last updated: 2026-07-02 (v0.11.0: M14-D + M14-E + M14-F complete · ARM64 CI green)
 
 ## CI
 
@@ -12,14 +12,15 @@
 | Python — lint + test | ✅ pass |
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
+| Rust — ARM64 portability (aarch64-unknown-linux-gnu) | ✅ pass |
 
-**Commit:** HEAD `177ed42` · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
+**Commit:** HEAD `c51357a` (tag `v0.11.0`) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
 
 ---
 
 ## Version
 
-**v0.11.0-dev** (HEAD) — M14-D (all 4 phases) + M14-E (mesh harness) + M14-F (P2P TCP dispatch, Noise XK session pool, conditional listener) completos. 363 tests, 0 failures.
+**v0.11.0** (tag, HEAD) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
