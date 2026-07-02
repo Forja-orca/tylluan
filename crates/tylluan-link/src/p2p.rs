@@ -84,11 +84,11 @@ impl P2pSessionPool {
     }
 
     fn insert(&mut self, key: String, session: PooledSession) {
-        if self.pool.len() >= self.max_per_peer {
-            if let Some(oldest) = self.pool.iter().min_by_key(|(_, s)| s.last_used) {
-                let k = oldest.0.clone();
-                self.pool.remove(&k);
-            }
+        if self.pool.len() >= self.max_per_peer
+            && let Some(oldest) = self.pool.iter().min_by_key(|(_, s)| s.last_used)
+        {
+            let k = oldest.0.clone();
+            self.pool.remove(&k);
         }
         self.pool.insert(key, session);
     }

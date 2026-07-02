@@ -103,11 +103,17 @@ async fn test_state() -> Arc<HttpState> {
         dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
         p2p_pool: 
 Arc::new(tokio::sync::Mutex::new(tylluan_link::p2p::P2pSessionPool::new(16, 300))),
-        gossip_engine: 
+        gossip_engine:
 Arc::new(tokio::sync::RwLock::new(tylluan_link::gossip::GossipEngine::new(
             "test-node".to_string(),
             tylluan_link::gossip::GossipConfig::default(),
         ))),
+        capability_registry: Arc::new(std::sync::Mutex::new(tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300)))),
+        dispatch_router: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchRouter::new(
+            Arc::new(std::sync::Mutex::new(tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300)))),
+            std::time::Duration::from_secs(60),
+        ))),
+        dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
     })
 }
 
