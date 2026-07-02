@@ -58,6 +58,15 @@ All notable changes to Tylluan are documented here.
   - 6 unit tests: new/is_empty, ingest+lookup, stale-clock rejection, prune_expired, ingest_from_engine, default TTL.
   - `prune_expired()` ready to wire into background gossip task in `main.rs` (Phase 2).
 
+- **M14-F Phase 1 — P2pSessionPool + execute_remote_tcp** (`crates/tylluan-link/src/p2p.rs`)
+  - `DispatchError { Io, Timeout, Protocol, Serialize }` — Display + From<io::Error> + std::error::Error
+  - `PooledSession { noise: NoiseSession, write: OwnedWriteHalf, read: OwnedReadHalf, last_used }` — holds live XK session halves
+  - `P2pSessionPool::new(max_per_peer, keepalive_secs)` — HashMap-backed pool, `prune()` removes stale sessions by TTL, LRU eviction when at capacity
+  - `execute_remote_tcp(pool, request, peer_addr, peer_pubkey_hex, identity)` — reuses pooled session or TCP connect + Noise XK handshake; `async_encrypt_write` + `async_decrypt_read` with per-request timeout
+  - `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>` (both `#[serde(default)]`, backwards-compatible)
+  - 4 unit tests added in `p2p.rs`; struct literal updates propagated to capability.rs, dispatch.rs, gossip/state.rs, dispatch_dst.rs
+  - Phase 2 pending: `start_p2p_listener` (Noise XK responder), `DispatchRouter` extension for `RemoteTcp`, kernel wiring, `p2p_dst.rs` DST tests
+
 - **Moondream Vision Guild** (`guilds/core/vision_moondream.py`)
   - `analyze_image(image_path, prompt)` — Moondream 0.5B Q&A sobre imagen local → JSON
   - `caption_image(image_path)` — caption corto → JSON
