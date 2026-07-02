@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -220,6 +220,68 @@ impl DispatchRouter {
         }
 
         DispatchDecision::Local
+    }
+}
+
+// ─── Phase 3: DispatchQueue (moved from kernel http/mod.rs) ─────────────
+
+/// A FIFO queue for dispatch items with TTL expiry and overflow protection.
+#[derive(Debug, Clone)]
+pub struct DispatchQueue {
+    queue: VecDeque<(Instant, serde_json::Value)>,
+    max_size: usize,
+}
+
+impl DispatchQueue {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            queue: VecDeque::new(),
+            max_size,
+        }
+    }
+
+    /// Enqueue an item. Returns false if the queue is full.
+    pub fn enqueue(&mut self, item: serde_json::Value) -> bool {
+        if self.queue.len() >= self.max_size {
+            return false;
+        }
+        self.queue.push_back((Instant::now(), item));
+        true
+    }
+
+    /// Dequeue the oldest item (FIFO).
+    pub fn dequeue(&mut self) -> Option<serde_json::Value> {
+        self.queue.pop_front().map(|(_, v)| v)
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    /// Return items that have exceeded the given TTL, without removing them.
+    pub fn peek_timed_out(&self, timeout: Duration) -> Vec<serde_json::Value> {
+        let now = Instant::now();
+        self.queue
+            .iter()
+            .filter(|(enqueued, _)| now.duration_since(*enqueued) >= timeout)
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    /// Remove items that have exceeded the given TTL.
+    pub fn remove_timed_out(&mut self, timeout: Duration) {
+        let now = Instant::now();
+        self.queue.retain(|(enqueued, _)| now.duration_since(*enqueued) < timeout);
+    }
+}
+
+impl Default for DispatchQueue {
+    fn default() -> Self {
+        Self::new(1000)
     }
 }
 
