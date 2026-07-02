@@ -73,6 +73,29 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
 
+  portability-check:
+    name: Rust — ARM64 portability (aarch64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+
+      - name: Check tylluan-kernel (ARM64)
+        run: cargo check -p tylluan-kernel --target aarch64-unknown-linux-gnu
+
+      - name: Check tylluan-cli (ARM64)
+        run: cargo check -p tylluan-cli --target aarch64-unknown-linux-gnu
+
   e2e-security-tests:
     name: Rust — security audit tests
     runs-on: ubuntu-latest
