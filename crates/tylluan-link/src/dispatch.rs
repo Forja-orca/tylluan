@@ -303,6 +303,8 @@ mod tests {
             ram_mb: 8192,
             has_gpu: false,
             load_avg: 0.2,
+            supports_p2p: false,
+            tcp_port: None,
         };
 
         let decision = router.route("vision", &local_caps, 5.0);
@@ -316,6 +318,8 @@ mod tests {
             ram_mb: 16384,
             has_gpu: true,
             load_avg: 0.1,
+            supports_p2p: false,
+            tcp_port: None,
         };
         {
             let mut reg = registry.lock().unwrap();
@@ -335,6 +339,8 @@ mod tests {
             ram_mb: 4096,
             has_gpu: false,
             load_avg: 0.8,
+            supports_p2p: false,
+            tcp_port: None,
         };
 
         // Peer score will be way higher because of GPU and low load
@@ -355,6 +361,8 @@ mod tests {
             ram_mb: 8192,
             has_gpu: false,
             load_avg: 0.1,
+            supports_p2p: false,
+            tcp_port: None,
         };
         {
             let mut reg = registry.lock().unwrap();
@@ -374,6 +382,8 @@ mod tests {
             ram_mb: 8192,
             has_gpu: false,
             load_avg: 0.5,
+            supports_p2p: false,
+            tcp_port: None,
         };
 
         let decision = router.route("bash", &local_caps, 10.0);
@@ -393,6 +403,8 @@ mod tests {
             ram_mb: 8192,
             has_gpu: false,
             load_avg: 0.1,
+            supports_p2p: false,
+            tcp_port: None,
         };
         {
             let mut reg = registry.lock().unwrap();
@@ -412,6 +424,8 @@ mod tests {
             ram_mb: 4096,
             has_gpu: false,
             load_avg: 0.9,
+            supports_p2p: false,
+            tcp_port: None,
         };
 
         // Initially routed remote

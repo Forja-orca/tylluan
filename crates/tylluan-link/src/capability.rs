@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn test_capability_registry_ingest_and_lookup() {
         let mut reg = CapabilityRegistry::new(Duration::from_secs(300));
-        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5 };
+        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5, supports_p2p: false, tcp_port: None };
 
         reg.ingest("node-a", "10.0.0.1:9000", &hw, &["bash".into(), "git".into()], 5);
         assert_eq!(reg.len(), 1);
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn test_capability_registry_stale_clock_ignored() {
         let mut reg = CapabilityRegistry::new(Duration::from_secs(300));
-        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5 };
+        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5, supports_p2p: false, tcp_port: None };
 
         reg.ingest("node-a", "10.0.0.1:9000", &hw, &["bash".into()], 10);
         // stale write with lower clock
@@ -162,7 +162,7 @@ mod tests {
         let mut engine = GossipEngine::new("self".into(), GossipConfig::default());
         engine.advance_clock();
 
-        let entry = engine.local_entry("127.0.0.1:9000", vec!["bash".into()], HardwareCaps { ram_mb: 2048, has_gpu: false, load_avg: 0.3 });
+        let entry = engine.local_entry("127.0.0.1:9000", vec!["bash".into()], HardwareCaps { ram_mb: 2048, has_gpu: false, load_avg: 0.3, supports_p2p: false, tcp_port: None });
         engine.store_entries(&[entry]);
 
         let mut reg = CapabilityRegistry::new(Duration::from_secs(300));
