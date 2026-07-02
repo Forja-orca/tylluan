@@ -70,6 +70,7 @@ fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> 
     m.insert("filesystem", (GuildWeight::Light, vec!["path"]));
     m.insert("memory", (GuildWeight::Light, vec!["content"]));
     m.insert("vision", (GuildWeight::Medium, vec!["path"]));
+    m.insert("vision_moondream", (GuildWeight::Light, vec!["image_path"]));
     m.insert("knowledge", (GuildWeight::Medium, vec!["command"]));
     m.insert("code_analysis", (GuildWeight::Heavy, vec!["command"]));
     m.insert("deep_analysis", (GuildWeight::Heavy, vec!["query"]));
@@ -143,6 +144,7 @@ fn description_override(name: &str) -> Option<&'static str> {
         "knowledge" => "Knowledge graph triple extraction and entity recognition",
         "ingest" => "Ingest documents and code into memory",
         "vision" => "Image analysis and OCR using vision models",
+        "vision_moondream" => "Lightweight image analysis and captioning using Moondream 0.5B",
         "browser" => "Web browser automation with CDP protocol",
         "code" => "Code modification and generation across languages",
         "database" => "Database query and schema management",
@@ -583,7 +585,7 @@ mod tests {
             "coloquio", "coloquio_digest", "comfy_ui", "data_tools", "database", "deep_analysis", "deep_web_research",
             "docker", "filesystem", "formatter", "git", "ingest", "knowledge",
             "mcp_bridge", "memory", "monitor", "n8n_bridge", "pdf", "scrapling", "search",
-            "sequential_thinking", "system_metrics", "vision", "websearch",
+            "sequential_thinking", "system_metrics", "vision", "vision_moondream", "websearch",
             // V1 Port — guilds/builders/plugins/, guilds/watchers/plugins/, guilds/wardens/plugins/, guilds/scholars/plugins/
             "audio_tools", "ffmpeg_tools", "screenshot_tools", "clipboard_tools",
             "local_llm_proxy", "cron_scheduler", "biome_warden", "ast_surgeon",
