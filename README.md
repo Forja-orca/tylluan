@@ -115,7 +115,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.10.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.11.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before continuing:
@@ -207,7 +207,8 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.11.0-dev |
 | **M14-D Phase 2** | `DispatchRouter` — load+latency+GPU scoring, circuit breaker, kernel wiring | ✅ v0.11.0-dev |
 | **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.11.0-dev |
-| **M14-D Phase 4** | Fallback queue + circuit breaker integration + dashboard UX | 🔜 v0.11.0 |
+| **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ v0.11.0-dev |
+| **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.11.0-dev |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
