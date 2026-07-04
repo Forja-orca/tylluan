@@ -1,0 +1,32 @@
+# Tylluan — Docker runtime config
+# host = "0.0.0.0" is intentional here (Docker port mapping).
+# dev_mode = false so auth is enforced. Never combine 0.0.0.0 + dev_mode=true.
+
+[nexus]
+host = "0.0.0.0"
+port = 3030
+transport = ["http"]
+dev_mode = false
+
+[nexus.timeouts]
+handshake_secs = 30
+tool_call_secs = 3600
+lazy_load_timeout_secs = 600
+
+[memory]
+db_path = "tylluan.db"
+# Portable default — no model download needed.
+# User can download BGE-M3 and change to "bge-m3" for better recall.
+embedding_model = "none"
+vector_dimensions = 0
+vector_limit = 5000
+
+[performance]
+reindex_interval_secs = 600
+decay_interval_secs = 300
+
+[sharing]
+enabled = false
+
+[federation]
+enabled = false
