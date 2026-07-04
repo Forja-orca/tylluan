@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Tylluan Windows Installer
+# Tylluan Windows Installer — v0.12.0
 # Usage: irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 param(
@@ -8,11 +8,21 @@ param(
 
 $Repo = "Forja-orca/tylluan"
 $BinDir = "$env:USERPROFILE\.tylluan\bin"
-$Target = "x86_64-pc-windows-msvc"
+$DataDir = "$env:USERPROFILE\.tylluan"
 
-function Write-Step($Text) { Write-Host "🔹 $Text" -ForegroundColor Cyan }
-function Write-OK($Text)   { Write-Host "✅ $Text" -ForegroundColor Green }
-function Write-Err($Text)  { Write-Host "❌ $Text" -ForegroundColor Red; exit 1 }
+function Write-Step($Text) { Write-Host "Tylluan $Text" -ForegroundColor Cyan }
+function Write-OK($Text)   { Write-Host "OK $Text" -ForegroundColor Green }
+function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 1 }
+
+$Arch = $env:PROCESSOR_ARCHITECTURE
+switch ($Arch) {
+    "AMD64"  { $Target = "x86_64-pc-windows-msvc" }
+    "ARM64"  { $Target = "aarch64-pc-windows-msvc" }
+    default { Write-Err "Unsupported architecture: $Arch. Tylluan supports x86_64 and ARM64 on Windows." }
+}
+
+Write-Host "=== Tylluan Installer - v0.12.0 ===" -ForegroundColor White
+Write-Step "Detected: Windows ($Target)"
 
 Write-Step "Detecting latest release..."
 if ($Version -eq "latest") {
@@ -44,8 +54,6 @@ try {
 }
 Remove-Item $OutFile -Force
 
-Write-OK "Tylluan v$Version installed to $BinDir"
-
 $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 $PathEntries = $UserPath -split ';'
 if ($PathEntries -notcontains $BinDir) {
@@ -53,17 +61,55 @@ if ($PathEntries -notcontains $BinDir) {
     [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
     $env:PATH = "$env:PATH;$BinDir"
     Write-OK "Added $BinDir to PATH"
-    Write-Host "   → Open a NEW terminal for PATH to take effect in other apps." -ForegroundColor Yellow
+    Write-Host "   Open a NEW terminal for PATH to take effect in other apps." -ForegroundColor Yellow
 }
 
+Write-Step "Starting Tylluan..."
+$Process = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru
+
+Write-Step "Waiting for kernel to be ready..."
+$Ready = $false
+for ($i = 0; $i -lt 30; $i++) {
+    try {
+        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:3030/health" -UseBasicParsing -ErrorAction Stop
+        if ($Response.StatusCode -eq 200) {
+            $Ready = $true
+            break
+        }
+    } catch {
+        # still starting
+    }
+    Write-Host "." -NoNewline
+    Start-Sleep -Seconds 1
+}
 Write-Host ""
-Write-Host "   ┌──────────────────────────────────────────────────────┐" -ForegroundColor White
-Write-Host "   │  tylluan-cli start        # Start the kernel         │" -ForegroundColor White
-Write-Host "   │  curl -s 127.0.0.1:3030/health  # Verify it's up     │" -ForegroundColor White
-Write-Host "   └──────────────────────────────────────────────────────┘" -ForegroundColor White
+if (-not $Ready) {
+    Write-Err "Kernel did not start within 30 seconds. Check $DataDir\logs\"
+}
+
+Write-OK "Tylluan is running at http://127.0.0.1:3030"
 Write-Host ""
-Write-Host "   📄 Auth token (auto-generated on first boot):" -ForegroundColor White
-Write-Host "       .tylluan-token     (in kernel working directory)" -ForegroundColor White
+
+Write-Host "Connect your MCP client:" -ForegroundColor White
 Write-Host ""
-Write-Host "   🔗 Connect your MCP client with this config:" -ForegroundColor White
-Write-Host '       { "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3030/sse" } } }' -ForegroundColor White
+Write-Host "  Claude Desktop (~/.claude/claude_desktop_config.json):" -ForegroundColor White
+Write-Host '  {'
+Write-Host '    "mcpServers": {'
+Write-Host '      "tylluan": { "type": "sse",'
+Write-Host '        "url": "http://127.0.0.1:3030/sse" }'
+Write-Host '    }'
+Write-Host '  }'
+Write-Host ""
+Write-Host "  Claude Code:" -ForegroundColor White
+Write-Host '    /mcp add tylluan sse http://127.0.0.1:3030/sse'
+Write-Host ""
+Write-Host "  Cursor:" -ForegroundColor White
+Write-Host "    Add MCP server: http://127.0.0.1:3030/sse"
+Write-Host ""
+Write-Host "  curl (verify):" -ForegroundColor White
+Write-Host "    curl http://127.0.0.1:3030/health"
+Write-Host ""
+Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
+Write-Host "  tylluan-cli download-models"
+Write-Host ""
+Write-OK "Tylluan v$Version installed to $BinDir"

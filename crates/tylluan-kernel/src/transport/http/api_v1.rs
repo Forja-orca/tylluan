@@ -221,6 +221,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
         .route("/api/v1/models", get(models_handler))
+        .route("/api/v1/setup-hint", get(setup_hint_handler))
         .route("/api/v1/bash", post(bash_execute_handler)) // DEPRECATED - usar tylluan_do
 
         .route("/api/v1/security/events", get(security_events_handler))
@@ -1452,6 +1453,39 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
             "dimension_mismatch_risk": "changing model with different dims requires full reindex"
         }
     })).into_response()
+}
+
+async fn setup_hint_handler() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "version": "v0.12.0",
+        "status": "ready",
+        "embedding_model": "none",
+        "mode": "BM25-only",
+        "note": "Run 'tylluan-cli download-models' for BGE-M3 (better recall)",
+        "mcp_clients": {
+            "claude_desktop": {
+                "config": {
+                    "mcpServers": {
+                        "tylluan": {
+                            "type": "sse",
+                            "url": "http://127.0.0.1:3030/sse"
+                        }
+                    }
+                },
+                "location": "~/.claude/claude_desktop_config.json"
+            },
+            "claude_code": {
+                "command": "/mcp add tylluan sse http://127.0.0.1:3030/sse"
+            },
+            "cursor": {
+                "command": "Add MCP server: http://127.0.0.1:3030/sse"
+            }
+        },
+        "verify": {
+            "curl": "curl http://127.0.0.1:3030/health",
+            "dashboard": "http://127.0.0.1:3030"
+        }
+    }))
 }
 
 // --- SYSTEM ---
