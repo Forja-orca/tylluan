@@ -1,0 +1,57 @@
+name: Install Smoke Test
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  install-smoke-linux:
+    name: Install — Linux (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install Tylluan via install.sh
+        run: curl -fsSL https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.sh | bash
+
+      - name: Verify health endpoint
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3030/health >/dev/null 2>&1; then
+              echo "::notice::Tylluan kernel is UP"
+              curl -s http://127.0.0.1:3030/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Kernel did not start within 30 seconds"
+          exit 1
+
+  install-smoke-windows:
+    name: Install — Windows (x86_64)
+    runs-on: windows-2022
+    steps:
+      - name: Install Tylluan via install.ps1
+        shell: pwsh
+        run: |
+          iex (Invoke-RestMethod https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1)
+
+      - name: Verify health endpoint
+        shell: pwsh
+        run: |
+          $Ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:3030/health" -UseBasicParsing -ErrorAction Stop
+              if ($r.StatusCode -eq 200) {
+                Write-Host "::notice::Tylluan kernel is UP"
+                Write-Host $r.Content
+                $Ready = $true
+                break
+              }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          if (-not $Ready) {
+            Write-Host "::error::Kernel did not start within 30 seconds"
+            exit 1
+          }

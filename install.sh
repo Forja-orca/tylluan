@@ -3,8 +3,11 @@ set -euo pipefail
 
 REPO="Forja-orca/tylluan"
 BIN_DIR="${HOME}/.tylluan/bin"
+DATA_DIR="${HOME}/.tylluan"
+CONFIG_FILE="${DATA_DIR}/config.toml"
 
 say() { printf "\033[1;32m%s\033[0m\n" "$*" >&2; }
+info() { printf "\033[1;34m%s\033[0m\n" "$*" >&2; }
 err() { printf "\033[1;31m%s\033[0m\n" "$*" >&2; exit 1; }
 
 ARCH=$(uname -m)
@@ -15,28 +18,32 @@ case "$OS" in
     case "$ARCH" in
       aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
       x86_64)        TARGET="x86_64-unknown-linux-gnu" ;;
-      *)             err "unsupported Linux arch: $ARCH" ;;
+      *)             err "Unsupported Linux architecture: $ARCH. Tylluan supports x86_64 and aarch64." ;;
     esac
     ;;
   darwin)
     case "$ARCH" in
       arm64|aarch64) TARGET="aarch64-apple-darwin" ;;
       x86_64)        TARGET="x86_64-apple-darwin" ;;
-      *)             err "unsupported macOS arch: $ARCH" ;;
+      *)             err "Unsupported macOS architecture: $ARCH. Tylluan supports Apple Silicon and Intel." ;;
     esac
     ;;
-  *) err "unsupported OS: $OS" ;;
+  *) err "Unsupported OS: $OS. Tylluan supports Linux, macOS, and Windows." ;;
 esac
 
-say "📡 Detecting latest release..."
+info "Tylluan Installer — v0.12.0"
+info "Detected: ${OS} (${TARGET})"
+say ""
+
+say "Detecting latest release..."
 LATEST=$(curl -fsL "https://api.github.com/repos/${REPO}/releases/latest" \
   | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-[ -n "$LATEST" ] || err "could not detect latest version"
+[ -n "$LATEST" ] || err "Could not detect latest version from GitHub. Check your internet connection."
 
 ARCHIVE="tylluan-${TARGET}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
 
-say "📦 Downloading Tylluan v${LATEST} (${TARGET})..."
+say "Downloading Tylluan v${LATEST} (${TARGET})..."
 mkdir -p "$BIN_DIR"
 curl -fsL "$URL" | tar xzf - -C "$BIN_DIR" --strip-components=1
 
@@ -50,23 +57,53 @@ if ! echo ":$PATH:" | grep -qF ":$BIN_DIR:"; then
   esac
   if [ -n "$SHELL_PROFILE" ]; then
     echo "export PATH=\"\$PATH:${BIN_DIR}\"" >> "$SHELL_PROFILE"
-    say "🔧 Added \${BIN_DIR} to PATH (${SHELL_PROFILE})"
+    say "Added ${BIN_DIR} to PATH in ${SHELL_PROFILE}"
+    say "   → Run: source ${SHELL_PROFILE}"
   else
-    say "⚠️  Add \${BIN_DIR} to your PATH manually"
+    info "Add ${BIN_DIR} to your PATH manually, or run:"
+    info "   export PATH=\"\$PATH:${BIN_DIR}\""
   fi
-  say "   → Open a NEW terminal, or run: source ${SHELL_PROFILE}"
 fi
 
 say ""
-say "✅ Tylluan v${LATEST} installed to ${BIN_DIR}/"
+say "Starting Tylluan..."
+"${BIN_DIR}/tylluan-cli" start --profile portable &
+PID=$!
+
+say "Waiting for kernel to be ready..."
+for i in $(seq 1 30); do
+  if curl -s "http://127.0.0.1:3030/health" >/dev/null 2>&1; then
+    say "Tylluan is running at http://127.0.0.1:3030"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    err "Kernel did not start within 30 seconds. Check logs at ${DATA_DIR}/logs/"
+  fi
+  printf "."
+  sleep 1
+done
 say ""
-say "   ┌─────────────────────────────────────────────┐"
-say "   │  tylluan-cli start    # Start the kernel    │"
-say "   │  curl -s 127.0.0.1:3030/health  # Verify   │"
-say "   └─────────────────────────────────────────────┘"
+
+say "Connect your MCP client:"
 say ""
-say "   📄 Auth token (auto-generated on first boot):"
-say "       .tylluan-token     (in working directory)"
+say "  Claude Desktop (~/.claude/claude_desktop_config.json):"
+echo '  {'
+echo '    "mcpServers": {'
+echo '      "tylluan": { "type": "sse",'
+echo '        "url": "http://127.0.0.1:3030/sse" }'
+echo '    }'
+echo '  }'
 say ""
-say "   🔗 Connect your MCP client:"
-say '       { "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3030/sse" } } }'
+say "  Claude Code:"
+say '    /mcp add tylluan sse http://127.0.0.1:3030/sse'
+say ""
+say "  Cursor:"
+say "    Add MCP server: http://127.0.0.1:3030/sse"
+say ""
+say "  curl (verify):"
+say "    curl http://127.0.0.1:3030/health"
+say ""
+say "For better retrieval (BGE-M3):"
+info "  tylluan-cli download-models"
+say ""
+say "Tylluan v${LATEST} installed to ${BIN_DIR}/"
