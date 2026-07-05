@@ -1,0 +1,27 @@
+{
+  "version": "v0.12.0-longmemeval",
+  "date": "2026-07-05",
+  "dataset": {
+    "name": "LongMemEval-S",
+    "source": "xiaowu0162/longmemeval (HuggingFace)",
+    "num_questions": 50,
+    "question_types": "human-authored, episodic memory, multi-hop, temporal reasoning"
+  },
+  "config": {
+    "search_backend": "BGE-M3 + BM25 + RRF",
+    "embedding_model": "bge-m3",
+    "embedding_dims": 1024,
+    "reranker": false,
+    "embedding_source": "real ONNX (fastembed)"
+  },
+  "results": {
+    "recall_at_1": 46.0,
+    "recall_at_3": 72.0,
+    "recall_at_5": 82.0,
+    "recall_at_10": 90.0,
+    "precision_at_5": 16.4,
+    "latency_p50_ms": 12.9
+  },
+  "notes": "M16-P0 gate result. 82% R@5 > 50% threshold → M17 Rama A open. Each question seeds a fresh in-memory SilvaDB from the haystack sessions — latency reflects per-query cold-start embedding (~30-60s per question on CPU, test ran with 60min timeout). Contrast: synthetic corpus queries (short descriptions) gave 50% R@5 — real human queries give 82%, confirming the pipeline is sound.",
+  "decision": "M17 Rama A OPEN — OpenClaw + Hermes integration docs (v0.13.0)"
+}
