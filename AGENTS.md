@@ -34,7 +34,7 @@ cargo run -p tylluan-cli -- start
 ## Estado actual — v0.12.0 (tag, HEAD)
 
 **Tests:** 273 kernel lib + 88 link + 2 evals = **363 total** · 0 fallos  
-**HEAD commit:** `0431583` (main) · **tag: `v0.12.0`\*** (pending force-move from `13086eb` to `0431583`)
+**HEAD commit:** `0431583` (main) · **tag: `v0.12.0`**
 
 ### En progreso — ninguno (v0.12.0 cerrado, próximo: M16 BGE-M3 Benchmark)
 
