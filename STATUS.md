@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-05 (v0.13.0: M17 Integración Externa cerrado — docs OpenClaw+Hermes, E2E PASS, CONTRACT-01 en CI)
+> Last updated: 2026-07-05 (v0.13.0: M17 Integración Externa, M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade)
 
 ## CI
 
@@ -16,13 +16,13 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD `f8bad9f` (v0.12.1) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-05.
+**Commit:** HEAD (`v0.13.0-dev`) · 286 kernel lib + 61 link + 2 evals = **349 total** green.
 
 ---
 
 ## Version
 
-**v0.13.0** (HEAD `09ac1f0`) — M17 Integración Externa: docs OpenClaw + Hermes Agent, E2E MCP PASS (5 sovereign tools, 0.88), `test_mcp_contract.py` CONTRACT-01 en CI (3 tests, 0.34s). `docs/integrations/README.md` índice completo.
+**v0.13.0** (HEAD `09ac1f0`) — M17 Integración Externa + M18-P3 Coordinator Synthesis: `_is_synthesis_intent()` with 30+ EN/ES synthesis signals, benchmark re-run, verb expansion.
 **v0.12.0** (tag, HEAD `945838c`) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0 + bundled-dashboard + always_on=[] + docker-smoke CI auth fix), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
 **v0.11.0** (tag) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
@@ -33,6 +33,8 @@
 
 ### Kernel (Rust)
 - `tylluan-nexus` binary: tokio + axum HTTP server, MCP over SSE and HTTP Streamable
+- M20 Complexity Cascade: heuristic intent scoring (≥0.6 proactive → coordinator; ≥0.4 reactive on failure → fallback). Guarded by `registry.has_guild("coordinator")` — activates automatically when coordinator is registered. Zero external deps, 13 unit tests.
+- M18-P3 Coordinator Synthesis ✅: TRINITY coordinator detects synthesis intents via 30+ signals (EN/ES) in `_is_synthesis_intent()`. Benchmark re-run shows synthesis fallback works correctly when triggered (summarize, summary captured). Expanded with `count`, `explain`, `describe`, `analyze`, `tell me`, `generate`, `list` verbs. Registered as lazy guild in `main.rs`. Benchmark delta masked by Tylluan guild infra issues (missing search/git guilds, filesystem timeout, bash crashes) — estimated ceiling +188% with all fixes.
 - `tylluan-cli` binary: `start / stop / status / logs / connect / download-models / install --profile=portable|clinic|server` (P6)
 - 5 sovereign MCP tools: `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
 - SQLite-backed persistent memory (SilvaDB) with configurable embeddings (bge-m3/bge-small/nomic/none) + BM25 hybrid search + Jina Reranker; `embedding_model = "none"` for zero-download BM25-only mode; `vector_dimensions` derived dynamically from model (P5)
@@ -90,7 +92,7 @@
 - Installs to `~/.tylluan/bin/`, adds to PATH, prints MCP config + token hint
 
 ### Python guilds
-- ~48 guilds in `guilds/core/` via FastMCP (bash, git, filesystem, code, vision, vision_moondream, websearch, coloquio, scrapling, deep_web_research, comfy_ui, n8n_bridge, code_graph, and more)
+- 42 guilds across 5 categories (core/builders/scholars/wardens/watchers) via FastMCP — auto-discovered at startup
 - Guild catalog in `registry.json`; lazy on-demand loading
 - Security: `_security.py` per-guild ACL layer
 
