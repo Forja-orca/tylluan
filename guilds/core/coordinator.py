@@ -58,6 +58,28 @@ def _is_failure(result: str) -> bool:
     return "\u274c" in result or lowered.startswith("error") or '"error"' in lowered
 
 
+def _is_synthesis_intent(intent: str) -> bool:
+    """Return True if the intent is about synthesizing, combing, or summarising
+    the results of previous steps rather than starting a new atomic task."""
+    lowered = intent.lower().strip()
+    synthesis_signals = [
+        "synthesize", "synthesise", "synthesis",
+        "summarize", "summarise", "summary", "sum up",
+        "combine", "merge", "unify", "consolidate",
+        "wrap up", "conclude", "finalize",
+        "put it together", "put together",
+        "collect results", "gather results",
+        "generar resumen", "resumir", "sintetizar",
+        "combinar", "unificar", "consolidar",
+        "concluir", "finalizar",
+        "dame un resumen", "resume todo",
+    ]
+    for signal in synthesis_signals:
+        if signal in lowered:
+            return True
+    return False
+
+
 # ── Main tool ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()
