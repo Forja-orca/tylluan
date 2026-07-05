@@ -23,7 +23,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 COPY dashboard/ ./dashboard/
 RUN cd dashboard && npm install && npm run build
 
-RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features encryption
+RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features encryption,bundled-dashboard
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -35,7 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /build/target/release/tylluan-nexus /usr/local/bin/
 COPY --from=builder /build/target/release/tylluan-cli /usr/local/bin/
-COPY --from=builder /build/dashboard/dist /home/tylluan/dashboard/dist
 
 # Install ONNX Runtime shared library based on target architecture
 RUN dpkgArch="$(dpkg --print-architecture)" \
