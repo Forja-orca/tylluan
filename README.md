@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.11.0--dev-blue.svg" alt="v0.11.0-dev">
+  <img src="https://img.shields.io/badge/version-0.12.0-blue.svg" alt="v0.12.0">
   <img src="https://img.shields.io/badge/rust-1.82+-orange.svg" alt="Rust 1.82+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -115,7 +115,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.11.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.12.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up before continuing:
@@ -184,7 +184,7 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 
 ---
 
-## Status: v0.10.0 — current release · v0.11.0-dev in progress
+## Status: v0.12.0 — current release · v0.12.1-dev in progress
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
@@ -204,12 +204,14 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **v0.6–v0.9** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LinearRAG · episodic search | ✅ |
 | **v0.10.0** | Retrieval quality benchmark · degree-bias fix (penalty not boost) · ADR-004 M14-D spec · fault DST | ✅ |
 | **M6-full** | `PartitionableTransport<T>` (5 fault modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
-| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.11.0-dev |
-| **M14-D Phase 2** | `DispatchRouter` — load+latency+GPU scoring, circuit breaker, kernel wiring | ✅ v0.11.0-dev |
-| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.11.0-dev |
-| **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ v0.11.0-dev |
-| **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.11.0-dev |
-| **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm, conditional P2P listener | ✅ v0.11.0-dev |
+| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.12.0 |
+| **M14-D Phase 2** | `DispatchRouter` — load+latency+GPU scoring, circuit breaker, kernel wiring | ✅ v0.12.0 |
+| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.12.0 |
+| **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ v0.12.0 |
+| **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.12.0 |
+| **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm, conditional P2P listener | ✅ v0.12.0 |
+| **M15** | Rufus Release — zero-dependency install scripts, setup hints, Docker slim image | ✅ v0.12.0 |
+| **M16** | BGE-M3 Benchmark Real — evaluate recall with real 1024D models and reproducible dataset | 🔜 v0.12.1-dev |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
