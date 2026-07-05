@@ -345,26 +345,35 @@ pub async fn handle_tylluan_do(
 
     let path_hint = extract_path_from_intent(&intent);
     let url_hint = extract_url_from_intent(&intent).unwrap_or_default();
-    // Only inject path_hint as cwd/directory if it actually exists as a directory
-    let safe_path = if path_hint != "." && std::path::Path::new(&path_hint).is_dir() {
-        &path_hint
-    } else {
-        "."
-    };
-    let project_hint = {
-        let mut p = path_hint.replace('/', "-").replace('\\', "-").replace(':', "");
-        while p.contains("--") { p = p.replace("--", "-"); }
-        p.trim_matches('-').to_string()
-    };
     let mut tool_args = serde_json::json!({
-        "command": intent, "intent": intent, "directory": safe_path,
-        "cwd": safe_path, "path": path_hint, "file_path": path_hint, "repo_path": path_hint,
-        "project": project_hint,
+        "command": intent, "intent": intent,
         "query": intent, "text": intent, "content": intent,
         "prompt": intent, "message": intent, "input": intent,
         "server_url": url_hint, "url": url_hint,
         "timeout_secs": 30, "language": "", "depth": 2, "max_results": 50,
     });
+    // Only inject path fields when intent contains an actual path — passing "."
+    // causes "Permission denied" in guilds that require filesystem access.
+    if path_hint != "." {
+        let safe_path = if std::path::Path::new(&path_hint).is_dir() {
+            &path_hint
+        } else {
+            "."
+        };
+        let project_hint = {
+            let mut p = path_hint.replace('/', "-").replace('\\', "-").replace(':', "");
+            while p.contains("--") { p = p.replace("--", "-"); }
+            p.trim_matches('-').to_string()
+        };
+        if let Some(obj) = tool_args.as_object_mut() {
+            obj.insert("directory".to_string(), serde_json::Value::String(safe_path.to_string()));
+            obj.insert("cwd".to_string(), serde_json::Value::String(safe_path.to_string()));
+            obj.insert("path".to_string(), serde_json::Value::String(path_hint.clone()));
+            obj.insert("file_path".to_string(), serde_json::Value::String(path_hint.clone()));
+            obj.insert("repo_path".to_string(), serde_json::Value::String(path_hint.clone()));
+            obj.insert("project".to_string(), serde_json::Value::String(project_hint));
+        }
+    }
 
     // Bash/Git: extract clean command from NL wrapper ("run X", "execute X:", etc.)
     // so the guild receives "ls -la" instead of "execute bash command: ls -la".
