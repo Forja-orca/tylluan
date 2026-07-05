@@ -20,16 +20,21 @@ from guilds.core.silva_utils import add_node, add_edge_direct, get_silva_db_path
 mcp = FastMCP("tylluan-code-graph")
 logger = logging.getLogger("tylluan-code-graph")
 
-# Initialize tree-sitter
-from tree_sitter import Parser, Language
-import tree_sitter_python
-import tree_sitter_rust
-
-PY_LANG = Language(tree_sitter_python.language())
-RUST_LANG = Language(tree_sitter_rust.language())
-
-py_parser = Parser(PY_LANG)
-rust_parser = Parser(RUST_LANG)
+# Initialize tree-sitter — optional dep, graceful degradation if missing
+try:
+    from tree_sitter import Parser, Language
+    import tree_sitter_python
+    import tree_sitter_rust
+    PY_LANG = Language(tree_sitter_python.language())
+    RUST_LANG = Language(tree_sitter_rust.language())
+    py_parser = Parser(PY_LANG)
+    rust_parser = Parser(RUST_LANG)
+    _TREE_SITTER_AVAILABLE = True
+except Exception as _ts_err:
+    py_parser = None
+    rust_parser = None
+    _TREE_SITTER_AVAILABLE = False
+    logger.warning("tree-sitter not available (%s) — install: pip install tree-sitter tree-sitter-python tree-sitter-rust", _ts_err)
 
 # ── AST Walkers ────────────────────────────────────────────────────────────────
 
@@ -221,6 +226,9 @@ def analyze_file_internal(file_path: Path) -> Dict[str, Any]:
         "relations": []
     }
     
+    if not _TREE_SITTER_AVAILABLE:
+        return {"status": "error", "reason": "tree-sitter not installed — run: pip install tree-sitter tree-sitter-python tree-sitter-rust"}
+
     if ext == ".py":
         tree = py_parser.parse(content_bytes)
         walk_python_ast(tree.root_node, content_bytes, file_id, results)
