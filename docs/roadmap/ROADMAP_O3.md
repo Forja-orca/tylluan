@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-05 · v0.13.0 (HEAD `19566e5`) — M18 P0 spec publicada
+> **Última actualización:** 2026-07-05 · v0.13.0 (HEAD `68cd270`) — M18 P1 implementado
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -77,7 +77,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | Fase | Descripción | Agente |
 |------|-------------|--------|
 | P0 | Spec + ADR-008: Thinker/Worker/Verifier, routing via catalog.rs, FastMCP interface, benchmark spec | Claude | ✅ |
-| P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py + evals stub | Deep | ⬜ |
+| P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py + evals stub | Deep | ✅ |
 | P2 | Benchmark: 10 queries, score 0–3, delta ≥ 30% hypothesis | Claude + Qwen | ⬜ |
 | P3 | Si benchmark pasa: merge. Si no: revise spec. Data-driven, sin deadline. | Todo el equipo | ⬜ |
 
