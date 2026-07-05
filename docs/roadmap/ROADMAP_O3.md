@@ -78,10 +78,14 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 |------|-------------|--------|
 | P0 | Spec + ADR-008: Thinker/Worker/Verifier, routing via catalog.rs, FastMCP interface, benchmark spec | Claude | ✅ |
 | P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py + evals stub | Deep | ✅ |
-| P2 | Benchmark: 10 queries, score 0–3, delta ≥ 30% hypothesis | Claude + Qwen | ⬜ |
-| P3 | Si benchmark pasa: merge. Si no: revise spec. Data-driven, sin deadline. | Todo el equipo | ⬜ |
+| P2 | Benchmark: 10 queries, score 0–3, delta ≥ 30% hypothesis | Antigravity | ✅ delta=22.2% — RECHAZADA |
+| P3 | Revise spec: añadir synthesis fallback para verbos lógicos (summarize/count/explain/generate) + registro en registry.json + re-benchmark | Deep | ⬜ |
 
-**Criterio de cierre:** Benchmark comparativo con delta positivo publicado en `docs/research/`.
+**Resultado P2:** mean_sin=0.90, mean_con=1.10, delta=**22.2%** < 30%. Causa raíz: paso 2 con verbos de síntesis se enruta a bash → CommandNotFoundException. Ver `docs/research/trinity_benchmark.md`.
+
+**P3 Fix:** `_is_synthesis_intent()` en coordinator.py — cuando el sub-task es síntesis y hay contexto previo, sintetizar en lugar de despachar al kernel. Estimado delta post-fix: 40-60%.
+
+**Criterio de cierre:** Benchmark re-run con delta ≥ 30% publicado en `docs/research/`.
 
 **Nota de disciplina:** Este milestone solo abre si M15 y M16 están cerrados. No se añade inteligencia antes de resolver la instalación.
 
