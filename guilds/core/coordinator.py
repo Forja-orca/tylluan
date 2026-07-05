@@ -103,6 +103,12 @@ def coordinate(intent: str, agent_id: str = "coordinator") -> str:
         else:
             task_with_ctx = task
 
+        if _is_synthesis_intent(task) and prev_result:
+            result = f"[Synthesis]\n{prev_result[:500]}"
+            results.append((task, result))
+            prev_result = result
+            continue
+
         result = _dispatch(task_with_ctx, agent_id)
 
         if _is_failure(result):
