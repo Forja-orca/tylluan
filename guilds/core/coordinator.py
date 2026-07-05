@@ -63,16 +63,27 @@ def _is_synthesis_intent(intent: str) -> bool:
     the results of previous steps rather than starting a new atomic task."""
     lowered = intent.lower().strip()
     synthesis_signals = [
+        # Universal synthesis
         "synthesize", "synthesise", "synthesis",
-        "summarize", "summarise", "summary", "sum up",
-        "combine", "merge", "unify", "consolidate",
+        # Summary / count
+        "summarize", "summarise", "summary", "sum up", "count",
+        # Reasoning
+        "explain", "describe", "analyze", "tell me",
+        # Generation
+        "generate", "produce", "create",
+        # Aggregation
+        "combine", "merge", "unify", "consolidate", "collect results", "gather results",
+        # Conclusion
         "wrap up", "conclude", "finalize",
         "put it together", "put together",
-        "collect results", "gather results",
+        # Listing from context
+        "list them", "list the", "list all",
+        # Spanish
         "generar resumen", "resumir", "sintetizar",
         "combinar", "unificar", "consolidar",
         "concluir", "finalizar",
         "dame un resumen", "resume todo",
+        "contar", "lista", "listar", "explicar", "describir", "analizar",
     ]
     for signal in synthesis_signals:
         if signal in lowered:
