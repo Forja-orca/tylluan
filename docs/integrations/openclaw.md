@@ -113,6 +113,6 @@ All memory is stored in `~/.tylluan/` as SQLite databases. Nothing leaves your m
 
 ## See also
 
-- [Hermes Agent integration](hermes.md)
+- [Hermes Agent integration](hermes-agent.md)
 - [Setup hint endpoint](../architecture/ADR006_rufus_release.md) — `GET /api/v1/setup-hint`
 - [MCP client configs](../../integrations/) — Claude Desktop, Claude Code, Cursor, LM Studio

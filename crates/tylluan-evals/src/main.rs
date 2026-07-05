@@ -23,7 +23,7 @@ enum CliMode {
     GenerateOracle { db_path: String, output: String },
 }
 
-fn parse_args() -> CliMode {
+fn parse_args() -> (CliMode, Option<String>) {
     let args: Vec<String> = std::env::args().collect();
     let mut suite = "synthetic".to_string();
     let mut limit: usize = 50;
@@ -31,6 +31,7 @@ fn parse_args() -> CliMode {
     let mut use_reranker = false;
     let mut generate_oracle = false;
     let mut oracle_output = "data/idle_lab_oracle.json".to_string();
+    let mut save_path: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -65,13 +66,19 @@ fn parse_args() -> CliMode {
                     i += 1;
                 }
             }
+            "--save" => {
+                if i + 1 < args.len() {
+                    save_path = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
     }
 
     if generate_oracle {
-        return CliMode::GenerateOracle { db_path, output: oracle_output };
+        return (CliMode::GenerateOracle { db_path, output: oracle_output }, save_path);
     }
 
     let suite = match suite.as_str() {
@@ -88,7 +95,7 @@ fn parse_args() -> CliMode {
         "beam-emb" => Suite::BeamScale { questions: limit.min(3), use_embedding: true },
         _ => Suite::Synthetic,
     };
-    CliMode::Suite(suite)
+    (CliMode::Suite(suite), save_path)
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -100,7 +107,7 @@ async fn main() {
     println!("  ╚═══════════════════════════════════════════╝");
     println!();
 
-    let mode = parse_args();
+    let (mode, save_path) = parse_args();
 
     match &mode {
         CliMode::GenerateOracle { db_path, output } => {
@@ -138,6 +145,9 @@ async fn main() {
             let report = runner::run_synthetic_benchmark(&corpus, engine.as_ref()).await;
             metrics::print_report(&report);
             metrics::print_comparison(&report);
+            if let Some(ref path) = save_path {
+                save_report_json(&report, path);
+            }
         }
         Suite::Real { db_path } => {
             println!("  Suite: REAL SilvaDB — {}", db_path);
@@ -146,6 +156,9 @@ async fn main() {
             let report = runner::run_real_benchmark(&db_path, engine.as_ref()).await;
             metrics::print_report(&report);
             metrics::print_comparison(&report);
+            if let Some(ref path) = save_path {
+                save_report_json(&report, path);
+            }
         }
         Suite::AutoLink { db_path } => {
             println!("  Suite: AUTOLINK CERO-LLM — {}", db_path);
@@ -166,6 +179,9 @@ async fn main() {
             let report = bench.run_limit(engine.as_ref(), limit).await;
             metrics::print_report(&report);
             metrics::print_comparison(&report);
+            if let Some(ref path) = save_path {
+                save_report_json(&report, path);
+            }
         }
         Suite::LongMemEvalReranked { limit } => {
             let data_path = Path::new("data/longmemeval_s_subset.json");
@@ -191,6 +207,9 @@ async fn main() {
             let report = bench.run_limit_reranked(engine.as_ref(), &reranker, limit).await;
             metrics::print_report(&report);
             metrics::print_comparison(&report);
+            if let Some(ref path) = save_path {
+                save_report_json(&report, path);
+            }
         }
         Suite::BeamScale { questions, use_embedding } => {
             let data_path = Path::new("data/longmemeval_s_subset.json");
@@ -216,5 +235,13 @@ async fn main() {
             let results = beam_scale::run_beam_scale(data_path, engine.as_ref(), &config).await;
             beam_scale::print_beam_report(&results);
         }
+    }
+}
+
+fn save_report_json(report: &metrics::BenchmarkReport, path: &str) {
+    let json = serde_json::to_string_pretty(report).expect("serialize BenchmarkReport");
+    match std::fs::write(path, &json) {
+        Ok(_) => println!("  Saved JSON report to {}", path),
+        Err(e) => eprintln!("  ERROR: failed to write {}: {}", path, e),
     }
 }
