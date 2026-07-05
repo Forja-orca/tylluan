@@ -173,6 +173,7 @@ fn description_override(name: &str) -> Option<&'static str> {
         "biome_warden" => "Biome code quality linting and formatting",
         "audit" => "Security audit and system integrity checks",
         "cron_scheduler" => "Scheduled task and cron job management",
+        "coordinator" => "Orchestrate multi-step tasks: research then implement, do X then Y, first do A then do B, plan and execute",
         _ => return None,
     })
 }
@@ -588,7 +589,7 @@ mod tests {
             "sequential_thinking", "system_metrics", "vision", "vision_moondream", "websearch",
             // V1 Port — guilds/builders/plugins/, guilds/watchers/plugins/, guilds/wardens/plugins/, guilds/scholars/plugins/
             "audio_tools", "ffmpeg_tools", "screenshot_tools", "clipboard_tools",
-            "local_llm_proxy", "cron_scheduler", "biome_warden", "ast_surgeon",
+            "local_llm_proxy", "cron_scheduler", "coordinator", "biome_warden", "ast_surgeon",
             // NOTE: sandbox.py exists but is experimental — add here when it's production-ready.
         ];
 
