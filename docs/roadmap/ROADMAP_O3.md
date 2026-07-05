@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-05 · v0.12.1 (HEAD `f8bad9f`)
+> **Última actualización:** 2026-07-05 · v0.13.0-dev (HEAD post-M17-P1)
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -8,7 +8,7 @@
 
 ## Estado actual — v0.12.1 ✅
 
-M16 BGE-M3 Benchmark cerrado. R@5 82% en LongMemEval-S (50 queries reales), ADR-007 IdleLab INNECESARIO (defaults son óptimo local). M17 Rama A abierta: OpenClaw + Hermes docs publicados.
+M16 BGE-M3 Benchmark cerrado. R@5 82% en LongMemEval-S. M17 Rama A en progreso: P0+P1 cerrados — docs OpenClaw + Hermes publicados, test E2E MCP PASS (Antigravity verificó 5 sovereign tools, remember→recall score 0.88). P2 pendiente (CI mock client).
 
 Lo que ya tenemos:
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -50,9 +50,9 @@ HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, BGE-M3 + BM25). ADR-00
 
 | Fase | Descripción | Agente |
 |------|-------------|--------|
-| P0 | `docs/integrations/openclaw.md` — guía completa: "Tylluan como memoria soberana para OpenClaw" | Claude |
-| P1 | MCP config verificado: OpenClaw → Tylluan vía SSE. Test E2E en coloquio (Antigravity ejecuta). | Antigravity |
-| P2 | Entrada en `integrations/` + validación en CI (mock MCP client) | Deep |
+| P0 | `docs/integrations/openclaw.md` — guía completa: "Tylluan como memoria soberana para OpenClaw" | Claude | ✅ |
+| P1 | MCP config verificado: OpenClaw → Tylluan vía SSE. Test E2E en coloquio (Antigravity ejecuta). | Antigravity | ✅ |
+| P2 | Entrada en `integrations/` + validación en CI (mock MCP client) | Deep | ⬜ |
 
 **Rama B — Si OpenClaw no confirmado (o integración > 1 semana):**
 

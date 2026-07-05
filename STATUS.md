@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-05 (v0.12.1: M16 BGE-M3 Benchmark — R@5 82% LongMemEval-S, ADR-007 IdleLab verdict)
+> Last updated: 2026-07-05 (M17-P1: Tylluan MCP E2E verified — Antigravity PASS, 5 sovereign tools, remember→recall score 0.88)
 
 ## CI
 
@@ -22,7 +22,7 @@
 
 ## Version
 
-**v0.12.1** (HEAD `f8bad9f`) — M16 BGE-M3 Benchmark: R@5 82% / R@10 90% en LongMemEval-S (50 queries reales, BGE-M3+BM25, p50 12.9ms). ADR-007: IdleLab INNECESARIO (defaults son óptimo local, 0.0pp delta). `--suite idle-lab` en tylluan-evals. Docs integración OpenClaw + Hermes Agent. M17 Rama A activa.
+**v0.12.1 + M17-P1** — M17-P1 E2E MCP test PASS: Antigravity verificó 5 sovereign tools (CONTRACT-01 intacto), tylluan_remember node_id confirmado, tylluan_recall score 0.88. Integración OpenClaw + Hermes verificada end-to-end. P2 pendiente (CI mock client).
 **v0.12.0** (tag, HEAD `945838c`) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0 + bundled-dashboard + always_on=[] + docker-smoke CI auth fix), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
 **v0.11.0** (tag) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
