@@ -29,13 +29,26 @@ RUN cargo build --release --locked -p tylluan-kernel -p tylluan-cli --features e
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libssl3 libsqlite3-0 \
+    ca-certificates curl libssl3 libsqlite3-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 tylluan
 
 COPY --from=builder /build/target/release/tylluan-nexus /usr/local/bin/
 COPY --from=builder /build/target/release/tylluan-cli /usr/local/bin/
 COPY --from=builder /build/dashboard/dist /home/tylluan/dashboard/dist
+
+# Install ONNX Runtime shared library based on target architecture
+RUN dpkgArch="$(dpkg --print-architecture)" \
+    && case "${dpkgArch}" in \
+        amd64) ortArch="x64" ;; \
+        arm64) ortArch="aarch64" ;; \
+        *) echo "Unsupported architecture: ${dpkgArch}"; exit 1 ;; \
+    esac \
+    && curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-${ortArch}-1.22.0.tgz" \
+    && tar -zxvf /tmp/onnxruntime.tgz -C /tmp \
+    && mv /tmp/onnxruntime-linux-${ortArch}-1.22.0/lib/libonnxruntime.so* /usr/lib/ \
+    && rm -rf /tmp/onnxruntime* \
+    && ldconfig
 
 COPY tylluan.docker.toml /etc/tylluan/tylluan.toml
 RUN mkdir -p /data && chown tylluan:tylluan /data
