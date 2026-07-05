@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-05 · v0.13.0-dev (HEAD post-M17-P1)
+> **Última actualización:** 2026-07-05 · v0.13.0 (HEAD `09ac1f0`)
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -8,7 +8,7 @@
 
 ## Estado actual — v0.12.1 ✅
 
-M16 BGE-M3 Benchmark cerrado. R@5 82% en LongMemEval-S. M17 Rama A en progreso: P0+P1 cerrados — docs OpenClaw + Hermes publicados, test E2E MCP PASS (Antigravity verificó 5 sovereign tools, remember→recall score 0.88). P2 pendiente (CI mock client).
+M17 Integración Externa cerrado (v0.13.0). Rama A completa: docs OpenClaw + Hermes, test E2E MCP PASS (5 sovereign tools, 0.88), CONTRACT-01 en CI (3 tests, 0.34s). M18 TRINITY Coordinator Guild es el siguiente milestone.
 
 Lo que ya tenemos:
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -42,17 +42,17 @@ HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, BGE-M3 + BM25). ADR-00
 
 ---
 
-### M17 — Integración Externa (v0.13.0) ← ACTIVO
+### M17 — Integración Externa (v0.13.0) ✅ CERRADO
 
-**Norte:** Tylluan como sovereign memory backend para el ecosistema externo (OpenClaw, Hermes, Claude Desktop). La condición es el resultado de P3 (M15).
+HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-01 en CI.
 
-**Rama A — Si OpenClaw confirmado (stars reales + spike OK < 1 semana de trabajo):**
+**Rama A — OpenClaw confirmado:**
 
-| Fase | Descripción | Agente |
-|------|-------------|--------|
-| P0 | `docs/integrations/openclaw.md` — guía completa: "Tylluan como memoria soberana para OpenClaw" | Claude | ✅ |
-| P1 | MCP config verificado: OpenClaw → Tylluan vía SSE. Test E2E en coloquio (Antigravity ejecuta). | Antigravity | ✅ |
-| P2 | Entrada en `integrations/` + validación en CI (mock MCP client) | Deep | ⬜ |
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | `docs/integrations/openclaw.md` — guía completa | Claude | ✅ |
+| P1 | MCP E2E en coloquio: 5 tools, remember→recall 0.88 | Antigravity | ✅ |
+| P2 | `docs/integrations/README.md` + `test_mcp_contract.py` (3 passed in 0.34s) | Deep | ✅ |
 
 **Rama B — Si OpenClaw no confirmado (o integración > 1 semana):**
 
