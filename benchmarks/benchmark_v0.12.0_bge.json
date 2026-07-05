@@ -1,0 +1,143 @@
+{
+  "suite_name": "Synthetic Corpus",
+  "num_queries": 10,
+  "num_nodes": 25,
+  "num_edges": 53,
+  "recall_at_1": 30.0,
+  "recall_at_3": 40.0,
+  "recall_at_5": 50.0,
+  "recall_at_10": 100.0,
+  "precision_at_5": 10.0,
+  "latency_p50_ms": 13.5179,
+  "latency_p95_ms": 27.9243,
+  "latency_p99_ms": 27.9243,
+  "embedding_available": true,
+  "reranker_available": false,
+  "per_query": [
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": false,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.0,
+      "precision_at_10": 0.1,
+      "recall_at_5": 0.0,
+      "latency_ms": 13.0151
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": false,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.0,
+      "precision_at_10": 0.1,
+      "recall_at_5": 0.0,
+      "latency_ms": 12.1036
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": false,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.0,
+      "precision_at_10": 0.1,
+      "recall_at_5": 0.0,
+      "latency_ms": 13.4054
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": false,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.0,
+      "precision_at_10": 0.1,
+      "recall_at_5": 0.0,
+      "latency_ms": 11.6501
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": true,
+      "correct_in_top5": true,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.3333333333333333,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.1,
+      "recall_at_5": 1.0,
+      "latency_ms": 14.1448
+    },
+    {
+      "correct_in_top1": true,
+      "correct_in_top3": true,
+      "correct_in_top5": true,
+      "correct_in_top10": true,
+      "precision_at_1": 1.0,
+      "precision_at_3": 0.3333333333333333,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.2,
+      "recall_at_5": 0.5,
+      "latency_ms": 13.5179
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": false,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.0,
+      "precision_at_10": 0.2,
+      "recall_at_5": 0.0,
+      "latency_ms": 14.687999999999999
+    },
+    {
+      "correct_in_top1": true,
+      "correct_in_top3": true,
+      "correct_in_top5": true,
+      "correct_in_top10": true,
+      "precision_at_1": 1.0,
+      "precision_at_3": 0.3333333333333333,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.2,
+      "recall_at_5": 0.5,
+      "latency_ms": 12.4558
+    },
+    {
+      "correct_in_top1": true,
+      "correct_in_top3": true,
+      "correct_in_top5": true,
+      "correct_in_top10": true,
+      "precision_at_1": 1.0,
+      "precision_at_3": 0.3333333333333333,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.2,
+      "recall_at_5": 0.5,
+      "latency_ms": 27.9243
+    },
+    {
+      "correct_in_top1": false,
+      "correct_in_top3": false,
+      "correct_in_top5": true,
+      "correct_in_top10": true,
+      "precision_at_1": 0.0,
+      "precision_at_3": 0.0,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.1,
+      "recall_at_5": 1.0,
+      "latency_ms": 16.0321
+    }
+  ],
+  "contradiction_accuracy": {
+    "total": 5,
+    "correct_version_outranks_wrong": 5,
+    "both_in_top5": 0
+  }
+}
