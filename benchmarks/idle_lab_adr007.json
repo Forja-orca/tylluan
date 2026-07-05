@@ -1,0 +1,25 @@
+{
+  "db_path": "E:/ForjaMCPo3/data/silva.db",
+  "oracle_path": "benchmarks/idle_lab_oracle.json",
+  "oracle_pairs": 19,
+  "experiments_run": 8,
+  "baseline": {
+    "recall_at_1": 78.94736842105263,
+    "recall_at_5": 78.94736842105263,
+    "composite_score": 78.94736842105263
+  },
+  "final_metrics": {
+    "recall_at_1": 78.94736842105263,
+    "recall_at_5": 78.94736842105263,
+    "composite_score": 78.94736842105263
+  },
+  "best_params": {
+    "candidate_pool_mult": 20,
+    "rerank_window": 50,
+    "semantic_weight": 70,
+    "dedup_cosine": 92
+  },
+  "delta_score_pp": 0.0,
+  "improvement_found": false,
+  "adr007_verdict": "INNECESARIO — delta=0.0pp < 5pp. Disable Idle Lab to save CPU."
+}

@@ -1,28 +1,24 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-05 · v0.12.0 (HEAD `945838c`)
+> **Última actualización:** 2026-07-05 · v0.12.1 (HEAD `f8bad9f`)
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
 
-## Estado actual — v0.12.0 ✅
+## Estado actual — v0.12.1 ✅
 
-M15 Rufus Release completo. Install scripts + first-run UX + Docker oficial (4 bugs fixeados end-to-end). 363 tests, 0 fallos. OpenClaw 368k★ verificado, M17 Rama A decidida.
+M16 BGE-M3 Benchmark cerrado. R@5 82% en LongMemEval-S (50 queries reales), ADR-007 IdleLab INNECESARIO (defaults son óptimo local). M17 Rama A abierta: OpenClaw + Hermes docs publicados.
 
 Lo que ya tenemos:
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
 - 5 sovereign tools MCP (tylluan_do/recall/remember/think/graph)
-- BGE-M3 hybrid search (BM25 + HNSW + LinearRAG + Jina reranker)
+- BGE-M3 hybrid search: R@5 82% LongMemEval-S, R@10 90%, latency p50 12.9ms
 - Federation P2P completa: DHT Kademlia + Gossip + Noise XK + TCP dispatch
 - Security: 30 automated tests, rate limiter, circuit breaker, guard
 - `tylluan-cli start/stop/status/logs/connect/download-models`
-- CI: build + test + deny + security audit + Python lint + ARM64 portability
-
-Lo que aún falta para que alguien externo pueda usarlo:
-- Install que funciona en frío sin Rust ni conocimientos técnicos
-- First-run UX que no requiere leer docs
-- Benchmark real con BGE-M3 (los actuales usan 12-dim fake embeddings)
+- CI: build + test + deny + security audit + Python lint + ARM64 portability + Docker smoke
+- Docs integración: `docs/integrations/openclaw.md` + `docs/integrations/hermes-agent.md`
 
 ---
 
@@ -36,45 +32,17 @@ HEAD `945838c`. 4 fases entregadas (P0 install scripts, P1 setup-hint, P2 Docker
 
 ---
 
-### M16 — Benchmark Real BGE-M3 (v0.12.1) ← ACTIVO
+### M16 — Benchmark Real BGE-M3 (v0.12.1) ✅ CERRADO
 
-**Norte:** `tylluan-cli start` funciona en frío en una máquina que nunca ha visto Rust, en < 5 minutos, sin leer ningún documento. Si no pasa ese test, el milestone no cierra.
+HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, BGE-M3 + BM25). ADR-007: IdleLab INNECESARIO — defaults son óptimo local (0.0pp delta en 8 experimentos). P2 degree bias movido a backlog de investigación (no bloqueante).
 
-**Fases:**
-
-| Fase | Descripción | Agente | Criterio de done |
-|------|-------------|--------|-----------------|
-| P0 | `install.sh` / `install.ps1` — descarga binario + arranca en modo `portable` (BM25-only). Smoke test final: `curl 127.0.0.1:3030/health` → OK. Sin Rust, sin cargo, sin Python. | Deep | Ubuntu 22 limpio + Windows 11 limpio: kernel UP en < 5 min |
-| P1 | First-run experience: imprime config MCP en 3 formatos (Claude Desktop / Claude Code / Cursor). `embedding_model = "none"` como default hasta `download-models`. Ningún error silencioso. | Deep + Claude | Primera sesión no requiere leer ningún doc |
-| P2 | Docker imagen oficial: `docker run --rm -v ~/.tylluan:/data ghcr.io/forja-orca/tylluan:latest`. Container del usuario, no del vendor. Soberanía intacta. | Deep (impl) + Antigravity (valida) | Funciona en Docker Desktop Windows + Linux sin config adicional |
-| P3 *(paralelo)* | Verificación OpenClaw: (1) stars reales en GitHub, (2) spike 2h — ¿se conecta a Tylluan vía MCP sin cambios en kernel? Informe en #general con recomendación binaria sí/no para M17. | Antigravity + Qwen | Informe publicado en #general antes de que cierre P1 |
-
-**Notas:**
-- P3 corre en paralelo — no bloquea P0/P1/P2.
-- ADR-006 (spec formal de Rufus Release) escrito por Claude antes de que Deep arranque P0.
-- Versión bump: `0.11.0` → `0.12.0` al cierre.
+- ✅ P0: `benchmarks/benchmark_v0.12.0_bge.json` — R@5 82%, R@10 90%, p50 12.9ms
+- ✅ P1: ADR-007 `docs/architecture/ADR007_idle_lab_verdict.md` — INNECESARIO
+- ↩ P2: degree bias comparison — backlog investigación
 
 ---
 
-### M16 — Benchmark Real BGE-M3 (v0.12.1) — spec
-
-**Norte:** Saber si la calidad de retrieval con embeddings reales justifica el coste de BGE-M3 antes de mostrarlo a usuarios externos. Los benchmarks actuales usan 12-dim fake embeddings — los números no son reales.
-
-**Fases:**
-
-| Fase | Descripción | Agente | Criterio de done |
-|------|-------------|--------|-----------------|
-| P0 | Ejecutar benchmark en `tylluan-evals` con BGE-M3 ONNX real (1024-dim). Dataset: ≥ 100 nodos reales, ≥ 20 queries multi-hop. Guardar en `benchmarks/benchmark_v0.12.0_bge.json`. | Deep + Claude | JSON con Recall@5, Recall@10, MRR, p50/p95 — reproducible en 1 comando |
-| P1 | Validar Idle Lab (hill-climbing): confirmar que el auto-tuning de `k`, `rrf_k`, `rerank_top` mejora métricas ≥ 5% vs baseline. Si no mejora, documentar y deshabilitar. | Claude | ADR-007 con veredicto: Idle Lab útil o innecesario |
-| P2 | Comparativa degree bias fix: Recall@10 con `/ (1 + deg * 0.1)` vs baseline sin penalty con datos reales BGE-M3 (confirmar que el fix v0.10.0 mejora queries específicas). | Claude | Entrada en `docs/research/` con delta mensurable |
-
-**Resultado esperado:** Recall@5 > 50% con queries reales. Si no se alcanza, M18 (TRINITY) tiene prioridad sobre M17.
-
-**Notas:** Este milestone puede solaparse con el final de M15 (Antigravity valida Docker mientras Deep corre benchmarks).
-
----
-
-### M17 — Integración Externa (v0.13.0) — condicional
+### M17 — Integración Externa (v0.13.0) ← ACTIVO
 
 **Norte:** Tylluan como sovereign memory backend para el ecosistema externo (OpenClaw, Hermes, Claude Desktop). La condición es el resultado de P3 (M15).
 
