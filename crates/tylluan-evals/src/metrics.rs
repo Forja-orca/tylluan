@@ -1,7 +1,7 @@
 ﻿
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[allow(dead_code)]
 pub struct QueryResult {
     pub correct_in_top1: bool,
@@ -16,7 +16,7 @@ pub struct QueryResult {
     pub latency_ms: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct BenchmarkReport {
     pub suite_name: String,
     pub num_queries: usize,
@@ -36,7 +36,7 @@ pub struct BenchmarkReport {
     pub contradiction_accuracy: Option<ContradictionAccuracy>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ContradictionAccuracy {
     pub total: usize,
     pub correct_version_outranks_wrong: usize,
