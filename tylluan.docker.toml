@@ -28,5 +28,10 @@ decay_interval_secs = 300
 [sharing]
 enabled = false
 
+[guilds.core]
+# Portable mode: no Python guilds in minimal image.
+# Add Python + pip packages to enable on-demand guilds.
+always_on = []
+
 [federation]
 enabled = false

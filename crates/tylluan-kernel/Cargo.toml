@@ -83,7 +83,8 @@ futures-util = "0.3"
 socket2 = { version = "0.5", features = ["all"] }
 dashmap = "6"
 memmap2 = "0.9"
-rust-embed = { version = "8", features = ["mime_guess"] }
+rust-embed = { version = "8", features = ["mime_guess"], optional = true }
+mime_guess = { version = "2", optional = true }
 instant-distance = "0.6"
 bincode = "1"
 
@@ -122,7 +123,7 @@ integration = []
 guild_knowledge_test = []
 
 # Bundled dashboard (embeds dist/ as static assets at compile time)
-bundled-dashboard = []
+bundled-dashboard = ["rust-embed", "mime_guess"]
 
 [dev-dependencies]
 proptest = "1"
