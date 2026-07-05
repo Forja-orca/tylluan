@@ -17,6 +17,7 @@ enum Suite {
     LongMemEvalReranked { limit: usize },
     BeamScale { questions: usize, use_embedding: bool },
     IdleLab { db_path: String, oracle_path: String, experiments: usize },
+    Coordinator,
 }
 
 enum CliMode {
@@ -109,6 +110,7 @@ fn parse_args() -> (CliMode, Option<String>) {
         "beam" => Suite::BeamScale { questions: limit.min(10), use_embedding: false },
         "beam-emb" => Suite::BeamScale { questions: limit.min(3), use_embedding: true },
         "idle-lab" | "il" => Suite::IdleLab { db_path, oracle_path, experiments },
+        "coordinator" | "coord" => Suite::Coordinator,
         _ => Suite::Synthetic,
     };
     (CliMode::Suite(suite), save_path)
@@ -240,6 +242,12 @@ async fn main() {
                     Err(e) => eprintln!("  ERROR writing {}: {}", path, e),
                 }
             }
+        }
+        Suite::Coordinator => {
+            println!("  Suite: COORDINATOR BENCHMARK (M18-P2 — not yet implemented)");
+            println!("  Run: tylluan-evals --suite coordinator");
+            println!("  Status: stub — benchmark queries defined in ADR-008");
+            println!();
         }
         Suite::BeamScale { questions, use_embedding } => {
             let data_path = Path::new("data/longmemeval_s_subset.json");
