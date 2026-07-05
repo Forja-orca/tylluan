@@ -44,8 +44,11 @@ jobs:
           docker logs tylluan-test
           exit 1
 
-      - name: Test setup-hint endpoint
-        run: curl -sf http://127.0.0.1:3030/api/v1/setup-hint | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='ready'; assert d['embedding_model']=='none'; print('✅ setup-hint OK')"
+      - name: Test setup-hint endpoint (authenticated)
+        run: |
+          TOKEN=$(docker exec tylluan-test cat /data/.tylluan-token)
+          curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3030/api/v1/setup-hint \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='ready'; assert d['embedding_model']=='none'; print('✅ setup-hint OK')"
 
       - name: Show container logs
         if: always()
