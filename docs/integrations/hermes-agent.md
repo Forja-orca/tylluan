@@ -1,6 +1,10 @@
-# Tylluan + Hermes Agent Integration Guide
+# Tylluan + Hermes Agent (NousResearch)
 
-> **Use case:** Add sovereign persistent memory to any Hermes agent. Hermes natively supports MCP servers — Tylluan plugs in with zero kernel changes.
+> **Note for Forja team:** This document is for external users of
+> [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
+> Our internal Hermes agent connects to **ForjaMCPo3**, not to Tylluan.
+
+> **Use case:** Add sovereign persistent memory to any NousResearch Hermes agent instance. Hermes natively supports MCP servers — Tylluan plugs in with zero kernel changes.
 
 ## Prerequisites
 
@@ -81,3 +85,4 @@ All memory in `~/.tylluan/` (SQLite). No cloud, no telemetry.
 
 - [OpenClaw integration](openclaw.md)
 - [MCP client configs](../../integrations/) — Claude Desktop, Claude Code, Cursor
+- [NousResearch/hermes-agent official docs](https://github.com/NousResearch/hermes-agent)
