@@ -31,10 +31,12 @@ cargo run -p tylluan-cli -- start
 
 ---
 
-## Estado actual — v0.11.0 (tag, HEAD)
+## Estado actual — v0.12.0 (tag, HEAD)
 
 **Tests:** 273 kernel lib + 88 link + 2 evals = **363 total** · 0 fallos  
-**HEAD commit:** `c51357a` (main) · **tag: `v0.11.0`**
+**HEAD commit:** `13086eb` (main) · **tag: `v0.12.0`**
+
+### En progreso — ninguno (v0.12.0 cerrado, próximo: M16 BGE-M3 Benchmark)
 
 ### Milestones completados
 
@@ -74,6 +76,17 @@ cargo run -p tylluan-cli -- start
 | **M14-F Phase 2** | `start_p2p_listener_noise()` + `DispatchDecision::RemoteTcp` + score-first routing + `p2p_dst.rs` (3 tests) | ✅ |
 | **M14-F Phase 3** | `P2pHandlerFn` (BoxFuture) · `P2pConfig` `[p2p]` in `config.rs` · `p2p_pool` in `HttpState` · P2P listener spawn (conditional) · `api_mesh.rs` native `RemoteTcp` via `execute_remote_tcp` · `guild_peers_handler` exposes `supports_p2p/tcp_port` | ✅ |
 | **Portability CI** | `portability-check` job — `cargo check` para `aarch64-unknown-linux-gnu` en cada push · ARM64 (RPi4) portability garantizada | ✅ |
+
+### Completado en v0.12.0
+
+| Milestone | Descripción | Estado |
+|-----------|-------------|--------|
+| **M15-P0** | `install.sh` / `install.ps1` — descarga binario, arranca `--profile portable`, health check 30s, imprime config MCP | ✅ `2df8f73` |
+| **M15-P1** | `GET /api/v1/setup-hint` — JSON con configs Claude Desktop / Code / Cursor. BM25 como default | ✅ `2df8f73` |
+| **M15-P2** | Docker imagen `ghcr.io/forja-orca/tylluan:latest` — `debian:bookworm-slim` + ONNX 1.22.0 + `/data` volumen usuario | ✅ `a2642da` + `13086eb` |
+| **M15-P3** | OpenClaw 368k stars verificados · Hermes Agent compatible · M17 Rama A decidida | ✅ `5c9b32d` |
+| **ADR-006** | Spec Rufus Release — `docs/architecture/ADR006_rufus_release.md` | ✅ |
+| **Roadmap** | M15-M19 planificados — `docs/roadmap/ROADMAP_O3.md` | ✅ |
 
 
 ---

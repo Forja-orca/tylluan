@@ -4,6 +4,34 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.12.0] — 2026-07-05 — M15 Rufus Release · Zero-friction install · Docker oficial
+
+**Norte estrella:** `tylluan-cli start` funciona en frío en una máquina que nunca ha visto Rust, en < 5 minutos, sin leer ningún documento. Rufus test: pasado.
+
+### Added
+
+- **M15-P0 — Install scripts desde cero** (`commit 2df8f73`) — `install.sh` (Linux/macOS) e `install.ps1` (Windows): detección OS+arch, descarga binario desde GitHub Releases, instala en `~/.tylluan/bin/`, arranca con `--profile portable` (BM25-only), health check wait 30s con spinner, imprime config MCP para 3 clientes directamente en terminal. Idempotente. Sin Rust, sin cargo, sin Python.
+
+- **M15-P1 — First-run UX** (`commit 2df8f73`) — `GET /api/v1/setup-hint`: JSON con configs MCP para Claude Desktop, Claude Code y Cursor + comandos de verify. `embedding_model = "none"` como default en `--profile portable`. BM25 funciona sin descargar modelos.
+
+- **M15-P2 — Docker imagen oficial** (`commits a2642da, 13086eb`) — `ghcr.io/forja-orca/tylluan:latest`: multi-stage build (`rust:1.88-bookworm` → `debian:bookworm-slim`), ONNX Runtime 1.22.0 instalado según arquitectura (x64/aarch64), `HEALTHCHECK` en `/health`, `VOLUME /data` del usuario. `dev_mode = false` por defecto. Sin telemetría, sin call-home, sin federación en el default. Soberanía intacta.
+
+- **M15-P3 — Verificación OpenClaw** (`commit 5c9b32d`) — OpenClaw confirmado: 368,249 stars (fuente primaria), soporte MCP SSE nativo (`openclaw mcp add <url>`). Hermes Agent (NousResearch) compatible vía `~/.hermes/config.yaml`. **M17 Rama A decidida:** docs de integración en v0.13.0, sin cambios en kernel.
+
+- **CI — Install smoke** (`.github/workflows/install-smoke.yml`) — smoke test en Ubuntu 22.04 y Windows Server 2022 limpios, activado en release publish.
+
+- **CI — Docker smoke** (`.github/workflows/docker-smoke.yml`) — build + run + health check + setup-hint test, activado en push a main, PR, y release publish.
+
+- **ADR-006** (`docs/architecture/ADR006_rufus_release.md`) — spec completa del Rufus Release: contexto, alternativas rechazadas, flujo exacto de los 4 scripts, DoD medible.
+
+- **Roadmap** (`docs/roadmap/ROADMAP_O3.md`) — primer roadmap formal: M15-M19 con criterios de cierre medibles, reglas de disciplina permanentes, backlog de investigación.
+
+### Fixed
+
+- **Dockerfile — ONNX Runtime 1.22.0** (`commit 13086eb`) — La imagen anterior crasheaba al arrancar por `libonnxruntime.so` no encontrado. Fix: instalar `libgomp1` + descargar ONNX Runtime v1.22.0 oficial (la `ort` v2.0.0-rc.10 requiere `1.22.x`, no `1.16.x`). Detecta arquitectura automáticamente (amd64/arm64).
+
+---
+
 ## [v0.11.0] — 2026-07-02 — M14-D + M14-E + M14-F complete · CI ARM64 green
 
 **Norte estrella:** Los peers descubren capacidades entre sí, despachan guild tools remotamente sobre Noise XK, y el harness de tests valida routing multi-peer y topologías de red.
