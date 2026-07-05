@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-02 (v0.11.0: M14-D + M14-E + M14-F complete · ARM64 CI green)
+> Last updated: 2026-07-05 (v0.12.0: M15 Rufus Release — install scripts + first-run UX + Docker)
 
 ## CI
 
@@ -13,14 +13,17 @@
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 | Rust — ARM64 portability (aarch64-unknown-linux-gnu) | ✅ pass |
+| Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
+| Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD `c51357a` (tag `v0.11.0`) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-02.
+**Commit:** HEAD `13086eb` (tag `v0.12.0`) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-05.
 
 ---
 
 ## Version
 
-**v0.11.0** (tag, HEAD) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
+**v0.12.0** (tag, HEAD) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
+**v0.11.0** (tag) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
