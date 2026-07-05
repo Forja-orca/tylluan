@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-05 · v0.13.0 (HEAD `09ac1f0`)
+> **Última actualización:** 2026-07-05 · v0.13.0 (HEAD `19566e5`) — M18 P0 spec publicada
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -76,10 +76,10 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 | Fase | Descripción | Agente |
 |------|-------------|--------|
-| P0 | Spec del coordinator guild: cómo recibe intent de `tylluan_do`, lo descompone en sub-tareas, asigna a Thinker/Worker/Verifier guilds. ADR-008. | Claude |
-| P1 | Implementación: `guilds/core/coordinator.py` (FastMCP). El coordinator llama a otros guilds internamente vía `registry.call_tool()`. | Deep |
-| P2 | Benchmark comparativo: 10 queries complejas multi-paso con/sin coordinator. Hipótesis: mejora calidad ≥ 30%. | Claude + Qwen |
-| P3 | Si benchmark pasa: merge a main. Si no: documentar y revisar spec. Sin presión de timeline. | Todo el equipo |
+| P0 | Spec + ADR-008: Thinker/Worker/Verifier, routing via catalog.rs, FastMCP interface, benchmark spec | Claude | ✅ |
+| P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py + evals stub | Deep | ⬜ |
+| P2 | Benchmark: 10 queries, score 0–3, delta ≥ 30% hypothesis | Claude + Qwen | ⬜ |
+| P3 | Si benchmark pasa: merge. Si no: revise spec. Data-driven, sin deadline. | Todo el equipo | ⬜ |
 
 **Criterio de cierre:** Benchmark comparativo con delta positivo publicado en `docs/research/`.
 
