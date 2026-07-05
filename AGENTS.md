@@ -34,7 +34,7 @@ cargo run -p tylluan-cli -- start
 ## Estado actual — v0.12.0 (tag, HEAD)
 
 **Tests:** 273 kernel lib + 88 link + 2 evals = **363 total** · 0 fallos  
-**HEAD commit:** `0431583` (main) · **tag: `v0.12.0`**
+**HEAD commit:** `945838c` (main) · **tag: `v0.12.0`**
 
 ### En progreso — ninguno (v0.12.0 cerrado, próximo: M16 BGE-M3 Benchmark)
 
@@ -83,7 +83,7 @@ cargo run -p tylluan-cli -- start
 |-----------|-------------|--------|
 | **M15-P0** | `install.sh` / `install.ps1` — descarga binario, arranca `--profile portable`, health check 30s, imprime config MCP | ✅ `2df8f73` |
 | **M15-P1** | `GET /api/v1/setup-hint` — JSON con configs Claude Desktop / Code / Cursor. BM25 como default | ✅ `2df8f73` |
-| **M15-P2** | Docker imagen `ghcr.io/forja-orca/tylluan:latest` — `debian:bookworm-slim` + ONNX 1.22.0 + bundled-dashboard + `always_on=[]` | ✅ `a2642da` + `13086eb` + `0431583` |
+| **M15-P2** | Docker imagen `ghcr.io/forja-orca/tylluan:latest` — `debian:bookworm-slim` + ONNX 1.22.0 + bundled-dashboard + `always_on=[]` + docker-smoke CI auth | ✅ `a2642da`→`945838c` |
 | **M15-P3** | OpenClaw 368k stars verificados · Hermes Agent compatible · M17 Rama A decidida | ✅ `5c9b32d` |
 | **ADR-006** | Spec Rufus Release — `docs/architecture/ADR006_rufus_release.md` | ✅ |
 | **Roadmap** | M15-M19 planificados — `docs/roadmap/ROADMAP_O3.md` | ✅ |
