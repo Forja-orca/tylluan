@@ -13,6 +13,8 @@
 
 use anyhow::{Result, Context, anyhow};
 use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch};
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::sync::Mutex;
 use tracing::{info, warn};
 use crate::config::InferenceDevice;
@@ -22,6 +24,7 @@ pub struct EmbeddingEngine {
     model: Mutex<TextEmbedding>,
     model_type: String,
     dimension: u32,
+    cache: Mutex<LruCache<String, Vec<f32>>>,
 }
 
 /// Resolve fastembed model enum from config string.
@@ -121,6 +124,7 @@ impl EmbeddingEngine {
             model: Mutex::new(text_model),
             model_type,
             dimension,
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())),
         })
     }
 
@@ -144,9 +148,23 @@ impl EmbeddingEngine {
     }
 
     /// Embed a text string into a vector.
+    /// Uses an LRU cache (512 slots) to avoid repeated ONNX inference on identical inputs.
+    /// Cache hit: <5ms. Cache miss: 2-8s (CPU) / 200-500ms (GPU).
     pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let cache_key = text.trim().to_lowercase();
+        {
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(cached) = cache.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
         let mut batch = self.embed_batch(&[text])?;
-        batch.pop().context("No embedding returned")
+        let embedding = batch.pop().context("No embedding returned")?;
+        {
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            cache.put(cache_key, embedding.clone());
+        }
+        Ok(embedding)
     }
 
     /// Embed multiple texts in one ONNX batch call.

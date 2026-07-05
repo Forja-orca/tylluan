@@ -74,7 +74,7 @@ active = false
 name = "tylluan-nexus"
 command = "node"
 args = ["e:/TylluanMCP/dist/index.js"]
-active = true
+active = false
 
 [external_mcp.env]
 MCP_TRANSPORT_STDIO = "true"
@@ -95,7 +95,7 @@ SOURCE = "tylluan"
 
 [[external_mcp]]
 name = "kokoro-tts"
-command = "C:/Users/USERNAME/AppData/Roaming/Python/Python314/Scripts/uv.exe"
+command = "uv"
 args = [
     "--directory",
     "E:/kokoro-tts-mcp",
@@ -118,6 +118,7 @@ command = "npx"
 args = [
     "-y",
     "@playwright/mcp@latest",
+    "--browser", "firefox",
     ]
 active = true
 

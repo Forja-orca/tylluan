@@ -19,6 +19,7 @@ import os
 import re
 import shlex
 import sys
+import json
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -168,7 +169,7 @@ async def _fetch_tools(server_url: str) -> list[dict]:
         return _tools_cache[server_url]
 
     tools: list[dict] = []
-    async for session in _iter_session(server_url):
+    async for session in _safe_iter_session(server_url):
         response = await session.list_tools()
         tools = [
             {"name": t.name, "description": t.description or ""}
@@ -182,7 +183,7 @@ async def _fetch_tools(server_url: str) -> list[dict]:
 
 async def _do_call(server_url: str, tool_name: str, args: dict) -> str:
     """Open a session, call the tool, return text content."""
-    async for session in _iter_session(server_url):
+    async for session in _safe_iter_session(server_url):
         result = await session.call_tool(tool_name, args)
         parts = []
         for block in (result.content or []):
@@ -203,6 +204,23 @@ async def _iter_session(server_url: str):
     else:
         async for session in _session_sse(server_url):
             yield session
+
+
+async def _safe_iter_session(server_url: str):
+    """Wrapper that catches ExceptionGroup from asyncio.TaskGroup inside MCP lib.
+
+    The MCP client library uses asyncio.TaskGroup internally. When connecting
+    to an unreachable or non-existent server, the library raises ExceptionGroup
+    instead of a plain Exception. This wrapper normalises that into a single
+    exception message so callers don't need to handle ExceptionGroup everywhere.
+    """
+    try:
+        async for session in _iter_session(server_url):
+            yield session
+    except* Exception as eg:
+        # Python 3.11+: unpack ExceptionGroup into the first underlying cause
+        causes = [str(e) for e in eg.exceptions]
+        raise Exception(f"mcp_bridge: connection failed to {server_url}: {'; '.join(causes)}")
 
 
 if __name__ == "__main__":
