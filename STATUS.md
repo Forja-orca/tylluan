@@ -16,15 +16,13 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD `0431583` (tag `v0.12.0`\*) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-05.
-
-> \* Tag currently points to `13086eb` — pending force-move to `0431583` after Antigravity re-validates Docker build (bundled-dashboard + always_on fix).
+**Commit:** HEAD `0431583` (tag `v0.12.0`) · 273 kernel + 88 link + 2 evals = **363 total** green as of 2026-07-05.
 
 ---
 
 ## Version
 
-**v0.12.0** (tag\*, HEAD `0431583`) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0 + bundled-dashboard feature, empty always_on), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
+**v0.12.0** (tag, HEAD `0431583`) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0 + bundled-dashboard feature, empty always_on), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
 **v0.11.0** (tag) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
