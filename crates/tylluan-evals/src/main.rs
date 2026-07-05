@@ -16,6 +16,7 @@ enum Suite {
     LongMemEval { limit: usize },
     LongMemEvalReranked { limit: usize },
     BeamScale { questions: usize, use_embedding: bool },
+    IdleLab { db_path: String, oracle_path: String, experiments: usize },
 }
 
 enum CliMode {
@@ -31,6 +32,8 @@ fn parse_args() -> (CliMode, Option<String>) {
     let mut use_reranker = false;
     let mut generate_oracle = false;
     let mut oracle_output = "data/idle_lab_oracle.json".to_string();
+    let mut oracle_path = "data/idle_lab_oracle.json".to_string();
+    let mut experiments: usize = 8;
     let mut save_path: Option<String> = None;
 
     let mut i = 1;
@@ -66,6 +69,18 @@ fn parse_args() -> (CliMode, Option<String>) {
                     i += 1;
                 }
             }
+            "--oracle" => {
+                if i + 1 < args.len() {
+                    oracle_path = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--experiments" | "-e" => {
+                if i + 1 < args.len() {
+                    experiments = args[i + 1].parse().unwrap_or(8);
+                    i += 1;
+                }
+            }
             "--save" => {
                 if i + 1 < args.len() {
                     save_path = Some(args[i + 1].clone());
@@ -93,6 +108,7 @@ fn parse_args() -> (CliMode, Option<String>) {
         }
         "beam" => Suite::BeamScale { questions: limit.min(10), use_embedding: false },
         "beam-emb" => Suite::BeamScale { questions: limit.min(3), use_embedding: true },
+        "idle-lab" | "il" => Suite::IdleLab { db_path, oracle_path, experiments },
         _ => Suite::Synthetic,
     };
     (CliMode::Suite(suite), save_path)
@@ -209,6 +225,20 @@ async fn main() {
             metrics::print_comparison(&report);
             if let Some(ref path) = save_path {
                 save_report_json(&report, path);
+            }
+        }
+        Suite::IdleLab { db_path, oracle_path, experiments } => {
+            println!("  Suite: IDLE LAB HILL-CLIMBING — ADR-007");
+            println!("  DB: {}  |  Oracle: {}  |  Experiments: {}", db_path, oracle_path, experiments);
+            println!();
+            let report = runner::run_idle_lab(&db_path, &oracle_path, experiments, engine.as_ref()).await;
+            runner::print_idle_lab_report(&report);
+            if let Some(ref path) = save_path {
+                let json = serde_json::to_string_pretty(&report).expect("serialize IdleLabReport");
+                match std::fs::write(path, &json) {
+                    Ok(_) => println!("  Saved JSON report to {}", path),
+                    Err(e) => eprintln!("  ERROR writing {}: {}", path, e),
+                }
             }
         }
         Suite::BeamScale { questions, use_embedding } => {
