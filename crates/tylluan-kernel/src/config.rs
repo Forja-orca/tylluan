@@ -940,7 +940,7 @@ impl GuildWeight {
         match self {
             GuildWeight::Light => 15_000,
             GuildWeight::Medium => 60_000,
-            GuildWeight::Heavy => 600_000,
+            GuildWeight::Heavy => 180_000,
         }
     }
 }
