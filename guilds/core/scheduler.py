@@ -40,7 +40,7 @@ def _resolve_kernel_base() -> str:
         port = data.get("port", 3032)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:3032"
+        return "http://127.0.0.1:4000"
 
 KERNEL_BASE = _resolve_kernel_base()
 POLL_INTERVAL_SECS = int(os.environ.get("SCHEDULER_POLL_SECS", "30"))

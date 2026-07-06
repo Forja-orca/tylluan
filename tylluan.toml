@@ -2,7 +2,7 @@ low_memory_mode = false
 
 [nexus]
 host = "127.0.0.1"
-port = 3030
+port = 4000
 transport = [
     "http",
     "sse",
@@ -54,6 +54,7 @@ always_on = [
     "deep_web_research",
     "code_graph",
     "scrapling",
+    "scheduler",
 ]
 lazy_load_timeout_secs = 300
 
@@ -141,7 +142,7 @@ approved = true
 [proxy.wsl]
 enabled = true
 auto_detect = true
-fallback_port = 3030
+fallback_port = 4001
 
 [inference]
 providers = []
@@ -161,7 +162,7 @@ max_requests_per_agent_per_min = 60
 [tunnel]
 enabled = true
 wsl_bridge = true
-wsl_bridge_port = 3031
+wsl_bridge_port = 4002
 wsl_bridge_cleanup = true
 
 [timeouts]
@@ -193,7 +194,7 @@ stun_retries = 2
 intent_filter = true
 
 [security.sandbox]
-enabled = true
+enabled = false
 image = "python:3.12-slim"
 memory = "512m"
 network = false
