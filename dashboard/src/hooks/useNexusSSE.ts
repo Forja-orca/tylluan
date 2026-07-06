@@ -1,4 +1,4 @@
-﻿/**
+/**
  * useNexusSSE — Resilient SSE client hook for TylluanNexus Dashboard V4.
  *
  * Features:

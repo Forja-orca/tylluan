@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { Search, Trash2, Scroll, Filter } from 'lucide-react';
@@ -107,7 +107,7 @@ export function LogsTab({ events, onClear }: Props) {
             type="text"
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            placeholder="Search logs..."
+            placeholder="Buscar en logs..."
             className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-300 placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 outline-none"
           />
         </div>

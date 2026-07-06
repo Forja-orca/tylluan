@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HippocampusGraph — Living memory visualization
  *
  * Canvas 2D · Custom force simulation · Zero graph library dependencies
@@ -705,11 +705,11 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
         <div className="flex items-center gap-3 text-xs font-mono ml-1">
           <span className="text-emerald-400/80 font-semibold">
             {stats.nodes}
-            <span className="text-slate-600 font-normal ml-1 text-[9px]">nodes</span>
+            <span className="text-slate-600 font-normal ml-1 text-[9px]">nodos</span>
           </span>
           <span className="text-blue-400/80 font-semibold">
             {stats.edges}
-            <span className="text-slate-600 font-normal ml-1 text-[9px]">synapses</span>
+            <span className="text-slate-600 font-normal ml-1 text-[9px]">sinapsis</span>
           </span>
         </div>
 
@@ -731,16 +731,16 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
             <ZoomIn className="w-3 h-3" />
           </button>
           <div className="w-px h-3 bg-white/[0.06] mx-0.5" />
-          <button type="button" aria-label="Fit graph"
+          <button type="button" aria-label="Encuadrar grafo"
             onClick={fitToGraph}
             className="p-1 text-slate-600 hover:text-slate-400 transition-colors"
-            title="Fit all nodes">
+            title="Encuadrar todos los nodos">
             <Maximize2 className="w-3 h-3" />
           </button>
-          <button type="button" aria-label="Redistribute positions"
+          <button type="button" aria-label="Re-diseñar posiciones"
             onClick={resetStoredLayout}
             className="p-1 text-slate-600 hover:text-slate-400 transition-colors"
-            title="Reset positions and clear layout cache">
+            title="Reiniciar posiciones y limpiar caché de diseño">
             <RotateCcw className="w-3 h-3" />
           </button>
         </div>
@@ -768,7 +768,7 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
             </span>
           )}
           {pathTrace.picks.length > 0 && (
-            <button type="button" aria-label="Clear trace"
+            <button type="button" aria-label="Limpiar traza"
               onClick={clearPathTrace}
               className="p-1 text-slate-600 hover:text-slate-400 transition-colors">
               <X className="w-3 h-3" />
@@ -782,11 +782,11 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
             type="text"
             value={query}
             onChange={e => { queryRef.current = e.target.value; setQuery(e.target.value); }}
-            placeholder="Search neuron…"
+            placeholder="Buscar neurona…"
             className="pl-6 pr-6 py-1 w-36 rounded-md bg-white/[0.04] border border-white/[0.06] text-xs text-slate-400 placeholder-slate-700 focus:outline-none focus:border-emerald-500/40 transition-colors"
           />
           {query && (
-            <button type="button" aria-label="Clear"
+            <button type="button" aria-label="Limpiar"
               onClick={() => { queryRef.current = ''; setQuery(''); }}
               className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-700 hover:text-slate-500">
               <X className="w-3 h-3" />
@@ -796,7 +796,7 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
 
         <button type="button" aria-label="Métricas"
           onClick={() => setShowPerf(p => !p)}
-          title="Show performance metrics"
+          title="Mostrar métricas de rendimiento"
           className={`p-1.5 rounded-md border transition-colors ${
             showPerf
               ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-400'
@@ -846,8 +846,8 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
 
           {!loading && !error && stats.nodes === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-              <p className="text-[11px] text-slate-700">Empty hippocampus</p>
-              <p className="text-[10px] text-slate-800">Ingest content to see memory grow</p>
+              <p className="text-[11px] text-slate-700">Hipocampo vacío</p>
+              <p className="text-[10px] text-slate-800">Ingesta contenido para ver crecer la memoria</p>
             </div>
           )}
 
@@ -892,7 +892,7 @@ export function HippocampusGraph({ bridge, events, onNodeClick }: Props) {
                     style={{ background: selected.color + 'aa' }}>
                 {selected.kind}
               </span>
-              <button type="button" aria-label="Close"
+              <button type="button" aria-label="Cerrar"
                 onClick={() => setSelected(null)}
                 className="text-slate-700 hover:text-slate-500 transition-colors">
                 <X className="w-3.5 h-3.5" />

@@ -84,13 +84,13 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
           className="flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-200 transition-colors cursor-pointer"
         >
           {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {artifacts.length} artifact{artifacts.length !== 1 ? 's' : ''} detected
+          {artifacts.length} artefacto{artifacts.length !== 1 ? 's' : ''} detectado{artifacts.length !== 1 ? 's' : ''}
         </button>
         {!collapsed && (
           <div className="flex flex-col max-h-32 overflow-y-auto px-2 pb-2 gap-1">
             {artifacts.length === 0 && (
               <p className="text-[11px] text-slate-500 px-1 py-2">
-                No code blocks in the channel. Paste code in chat and it will appear here.
+                Sin bloques de código en el canal. Pega código en el chat y aparecerá aquí.
               </p>
             )}
             {artifacts.map(a => (
@@ -195,7 +195,7 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 // ── DOCS TAB — collaborative live document ────────────────────────────────────
 interface CollabDoc { doc_id: string; title: string; content: string; updated_by: string; version: number; updated_at: number; }
 
-function DocsTab({ authorId = 'user' }: { authorId?: string }) {
+function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   const [docs, setDocs] = useState<CollabDoc[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [content, setContent] = useState('');
@@ -339,7 +339,7 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
   const restoreVersion = async () => {
     if (selectedVersionIdx === null || !selectedDocId) return;
     const snap = versions[selectedVersionIdx];
-    if (!confirm(`Restore the document to version ${snap.version} state?`)) return;
+    if (!confirm(`¿Restaurar el documento al estado de la versión ${snap.version}?`)) return;
     await saveDoc(selectedDocId, snap.title, versionContent);
     await loadDocs();
     selectDoc(selectedDocId);
@@ -460,7 +460,7 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
                 onClick={restoreVersion}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded cursor-pointer"
               >
-                Restore this version
+                Restaurar esta versión
               </button>
             </div>
           )}
@@ -519,7 +519,7 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
       <div className="w-36 shrink-0 border-r border-slate-700/60 bg-slate-900/60 flex flex-col">
         <div className="px-2 py-2 border-b border-slate-700/60 flex items-center justify-between">
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Documentos</span>
-          <button onClick={() => setCreating(p => !p)} className="text-slate-500 hover:text-indigo-400 text-lg leading-none cursor-pointer" title="New doc">+</button>
+          <button onClick={() => setCreating(p => !p)} className="text-slate-500 hover:text-indigo-400 text-lg leading-none cursor-pointer" title="Nuevo doc">+</button>
         </div>
         {creating && (
           <div className="px-2 py-1.5 border-b border-slate-700/60 flex gap-1">
@@ -537,15 +537,15 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
               <button onClick={() => selectDoc(d.doc_id)}
                 className={cn('flex-1 text-left px-2 py-2 text-[10px] cursor-pointer truncate',
                   selectedDocId === d.doc_id ? 'text-indigo-300' : 'text-slate-400')}>
-                {d.title || 'Untitled'}
+                {d.title || 'Sin título'}
               </button>
               <button onClick={() => deleteDoc(d.doc_id, d.title)}
                 className="opacity-0 group-hover:opacity-100 pr-1.5 text-slate-600 hover:text-rose-400 cursor-pointer text-xs leading-none shrink-0 transition-opacity"
-                title="Delete document">×</button>
+                title="Borrar documento">×</button>
             </div>
           ))}
           {docs.length === 0 && !creating && (
-            <p className="text-[10px] text-slate-600 p-3 text-center">No documents.<br />Press + to create one.</p>
+            <p className="text-[10px] text-slate-600 p-3 text-center">Sin documentos.<br />Pulsa + para crear uno.</p>
           )}
         </div>
       </div>
@@ -557,13 +557,13 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
             <div className="shrink-0 px-3 py-1.5 border-b border-slate-700/60 bg-slate-900/80 flex items-center gap-2">
               <input value={title} onChange={e => onTitleChange(e.target.value)}
                 className="flex-1 bg-transparent text-xs font-bold text-slate-200 outline-none placeholder-slate-600 min-w-0"
-                placeholder="Document title..." />
+                placeholder="Título del documento..." />
               <span className={cn('text-[9px] font-mono shrink-0', STATUS_COLOR[saveStatus])}>{STATUS_LABEL[saveStatus]}</span>
               {lastEditor && saveStatus === 'saved' && (
-                <span className="text-[9px] text-slate-600 shrink-0">by {lastEditor}</span>
+                <span className="text-[9px] text-slate-600 shrink-0">por {lastEditor}</span>
               )}
               {saveStatus === 'conflict' && (
-                <button onClick={() => loadDoc(selectedDocId, true)} className="text-[9px] text-rose-400 hover:text-rose-300 cursor-pointer shrink-0">reload</button>
+                <button onClick={() => loadDoc(selectedDocId, true)} className="text-[9px] text-rose-400 hover:text-rose-300 cursor-pointer shrink-0">recargar</button>
               )}
               <button
                 onClick={() => {
@@ -571,7 +571,7 @@ function DocsTab({ authorId = 'user' }: { authorId?: string }) {
                   loadVersions(selectedDocId);
                 }}
                 className="text-[9px] text-slate-600 hover:text-slate-300 flex items-center gap-1 cursor-pointer shrink-0"
-                title="Version history"
+                title="Historial de versiones"
               >
                 <History className="w-3.5 h-3.5" />
               </button>
@@ -670,7 +670,7 @@ function WhiteboardTab() {
           {[2, 4, 8, 16].map(s => <option key={s} value={s}>{s}px</option>)}
         </select>
         <button onClick={clear} className="ml-auto text-[10px] text-slate-500 hover:text-rose-400 flex items-center gap-1 cursor-pointer">
-          <Trash className="w-3 h-3" /> clear
+          <Trash className="w-3 h-3" /> limpiar
         </button>
       </div>
       <div className="flex-1 relative bg-[#06080d]">
@@ -727,9 +727,7 @@ function KnowledgeTab({ channelId }: { channelId: string }) {
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   useEffect(() => {
-    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030`
-      : window.location.port === '5174' ? `${window.location.hostname}:3033`
-      : window.location.host;
+    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
     setWsStatus('connecting');
     const ws = new WebSocket(wsUrl);
@@ -956,7 +954,7 @@ function KnowledgeTab({ channelId }: { channelId: string }) {
         {/* Floating add-node panel */}
         <div className="absolute top-3 left-3 bg-slate-900/90 border border-slate-700/80 p-3 rounded-xl shadow-xl w-52 z-20 flex flex-col gap-2 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Add node</span>
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Añadir nodo</span>
             <button onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })} className="text-slate-500 hover:text-slate-200 cursor-pointer"><Maximize2 className="w-3 h-3" /></button>
           </div>
           <input type="text" placeholder="Contenido o etiqueta..." value={newNodeLabel} onChange={e => setNewNodeLabel(e.target.value)}

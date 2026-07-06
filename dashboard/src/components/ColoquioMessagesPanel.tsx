@@ -42,38 +42,22 @@ function VirtualMessageList({ messages, renderItem, scrollToBottom, onScrollToBo
 }
 
 const AGENT_META: Record<string, { color: string; bg: string; border: string; initial: string }> = {
-  user: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'U' },
-  human: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'U' },
+  antigravity: { color: 'text-violet-300', bg: 'bg-violet-950/40', border: 'border-violet-500/30', initial: 'A' },
+  'claude-code': { color: 'text-blue-300', bg: 'bg-blue-950/40', border: 'border-blue-500/30', initial: 'C' },
+  opencode: { color: 'text-amber-300', bg: 'bg-amber-950/40', border: 'border-amber-500/30', initial: 'O' },
+  qwen: { color: 'text-orange-300', bg: 'bg-orange-950/40', border: 'border-orange-500/30', initial: 'Q' },
+  jose: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'J' },
 };
 const DA = { color: 'text-slate-300', bg: 'bg-slate-800/60', border: 'border-slate-600/30', initial: '?' };
 function agentMeta(id: string) {
-  const cleanId = id.toLowerCase();
-  const k = Object.keys(AGENT_META).find(key => cleanId.includes(key));
-  if (k) return AGENT_META[k];
-  
-  let hash = 0;
-  for (let i = 0; i < cleanId.length; i++) {
-    hash = cleanId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colors = [
-    { color: 'text-violet-300', bg: 'bg-violet-950/40', border: 'border-violet-500/30' },
-    { color: 'text-blue-300', bg: 'bg-blue-950/40', border: 'border-blue-500/30' },
-    { color: 'text-amber-300', bg: 'bg-amber-950/40', border: 'border-indigo-500/30' },
-    { color: 'text-orange-300', bg: 'bg-orange-950/40', border: 'border-orange-500/30' },
-    { color: 'text-pink-300', bg: 'bg-pink-950/40', border: 'border-pink-500/30' },
-    { color: 'text-indigo-300', bg: 'bg-indigo-950/40', border: 'border-indigo-500/30' },
-    { color: 'text-teal-300', bg: 'bg-teal-950/40', border: 'border-teal-500/30' },
-    { color: 'text-lime-300', bg: 'bg-lime-950/40', border: 'border-lime-500/30' },
-    { color: 'text-rose-300', bg: 'bg-rose-950/40', border: 'border-rose-500/30' },
-  ];
-  const choice = colors[Math.abs(hash) % colors.length];
-  return { ...choice, initial: id[0]?.toUpperCase() ?? '?' };
+  const k = Object.keys(AGENT_META).find(k => id.toLowerCase().includes(k));
+  return k ? AGENT_META[k] : { ...DA, initial: id[0]?.toUpperCase() ?? '?' };
 }
 
 const QUICK_TEMPLATES = [
-  { label: '\u{1F9F9} Graph', text: 'Consolidate SilvaDB knowledge graph' },
-  { label: '\u{1F4CA} Status', text: 'Give me a fleet status report' },
-  { label: '\u{1F9EC} Reindex', text: 'Reindex SilvaDB and regenerate embeddings' },
+  { label: '\u{1F9F9} Grafo', text: 'Consolida el grafo de conocimiento SilvaDB' },
+  { label: '\u{1F4CA} Status', text: 'Dadme un reporte de estado de la flota' },
+  { label: '\u{1F9EC} Reindex', text: 'Reindexa SilvaDB y regenera embeddings' },
 ];
 
 function parseMarkdown(text: string): string {
@@ -227,8 +211,8 @@ export function ColoquioMessagesPanel({
     const d = new Date(msg.created_at * 1000).toDateString();
     if (prev && new Date(prev.created_at * 1000).toDateString() === d) return null;
     const today = new Date().toDateString(), yday = new Date(Date.now() - 86400000).toDateString();
-    let label = new Date(msg.created_at * 1000).toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
-    if (d === today) label = 'Today'; else if (d === yday) label = 'Yesterday';
+    let label = new Date(msg.created_at * 1000).toLocaleDateString('es', { weekday: 'long', month: 'long', day: 'numeric' });
+    if (d === today) label = 'Hoy'; else if (d === yday) label = 'Ayer';
     return (
       <div className="flex items-center justify-center my-5">
         <div className="h-px bg-slate-800 flex-1" />
@@ -292,7 +276,7 @@ export function ColoquioMessagesPanel({
                 {isStreaming && (
                   <span className="text-[9px] text-violet-400 bg-violet-950/40 border border-violet-800/40 px-1 py-0.25 rounded flex items-center gap-1">
                     <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-pulse" />
-                    typing...
+                    escribiendo...
                   </span>
                 )}
               </div>
@@ -320,7 +304,7 @@ export function ColoquioMessagesPanel({
                   <details className="group/details bg-slate-950/40 border border-indigo-950/30 rounded-xl p-2.5 my-2 text-[11px] text-slate-400 cursor-pointer" open>
                     <summary className="font-semibold text-indigo-400/80 hover:text-indigo-300 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                      🧠 Reasoning
+                      🧠 Razonando
                     </summary>
                     <div className="mt-2 pl-3 border-l border-indigo-500/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[10px] select-text cursor-text" dangerouslySetInnerHTML={{
                       __html: parseMarkdown(thoughtContent)
@@ -332,7 +316,7 @@ export function ColoquioMessagesPanel({
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
                     <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                      Plan pending human approval
+                      Plan pendiente de aprobación humana
                     </span>
                     <div className="flex gap-2">
                       <button
@@ -346,15 +330,15 @@ export function ColoquioMessagesPanel({
                         }}
                         className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
-                        <Network className="w-3 h-3" /> Visualize on Blackboard
+                        <Network className="w-3 h-3" /> Visualizar en Pizarra
                       </button>
                       <button
                         onClick={async () => {
                           if (bridge) {
                             await bridge.postColoquioMessage(selectedId!, {
-                              author_id: authorId || 'user',
+                              author_id: authorId || 'jose',
                               role: 'human',
-                              content: `[APPROVED] #${planTurn}`,
+                              content: `[APROBADO] #${planTurn}`,
                               metadata: '{}'
                             });
                             fetchThread();
@@ -362,7 +346,7 @@ export function ColoquioMessagesPanel({
                         }}
                         className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
-                        <Check className="w-3 h-3 stroke-[3]" /> Approve & Start
+                        <Check className="w-3 h-3 stroke-[3]" /> Aprobar e Iniciar
                       </button>
                     </div>
                   </div>
@@ -372,7 +356,7 @@ export function ColoquioMessagesPanel({
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-semibold">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      Plan approved by human
+                      Plan aprobado por el humano
                     </div>
                     <button
                       onClick={() => {
@@ -385,7 +369,7 @@ export function ColoquioMessagesPanel({
                       }}
                       className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[10px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer"
                     >
-                      <Network className="w-3 h-3" /> Visualize on Blackboard
+                      <Network className="w-3 h-3" /> Visualizar en Pizarra
                     </button>
                   </div>
                 )}
@@ -407,7 +391,7 @@ export function ColoquioMessagesPanel({
               </div>
               <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-slate-900 border border-slate-700 rounded-lg p-1 shadow-xl opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
                 isHuman ? 'right-full mr-2' : 'left-full ml-2')}>
-                <button onClick={() => handleCopy(msg.msg_id, msg.content)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors" title="Copy">
+                <button onClick={() => handleCopy(msg.msg_id, msg.content)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors" title="Copiar">
                   {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
                 <button onClick={() => handleQuote(msg.author_id, msg.content)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors" title="Citar">
@@ -426,7 +410,7 @@ export function ColoquioMessagesPanel({
       <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-700/60 bg-slate-900/60 shrink-0">
         <Hash className="w-4 h-4 text-slate-500" />
         <span className="text-sm font-semibold text-slate-200">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[10px] text-slate-600 font-mono">{allMessages.length} messages</span>
+        <span className="text-[10px] text-slate-600 font-mono">{allMessages.length} mensajes</span>
         <button
           onClick={() => setCompactMode(v => !v)}
           className={cn(
@@ -435,14 +419,14 @@ export function ColoquioMessagesPanel({
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)]" 
               : "border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
           )}
-          title="Toggle compact density"
+          title="Alternar densidad compacta"
         >
-          Compact
+          Compacto
         </button>
         <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-lg px-2.5 py-1">
           <Search className="w-3 h-3 text-slate-500 shrink-0" />
           <input className="w-32 bg-transparent text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none"
-            placeholder="Search thread..." value={msgSearch} onChange={e => setMsgSearch(e.target.value)} />
+            placeholder="Buscar en el hilo..." value={msgSearch} onChange={e => setMsgSearch(e.target.value)} />
           {msgSearch && (
             <>
               <span className="text-[9px] text-amber-400 font-mono">{filteredMessages.length}/{allMessages.length}</span>
@@ -453,7 +437,7 @@ export function ColoquioMessagesPanel({
       </div>
       {allMessages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-600">
-          <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Empty channel</p>
+          <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Canal vacío</p>
         </div>
       ) : (
         <VirtualMessageList messages={filteredMessages} renderItem={renderMessage}
@@ -471,11 +455,11 @@ export function ColoquioMessagesPanel({
       )}
       <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">As:</span>
+          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Como:</span>
           <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"
-            value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="user" />
+            value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
           <button onClick={() => setShowTemplates(v => !v)} className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
-            <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
+            <Sparkles className="w-3 h-3" />{showTemplates ? 'Ocultar' : 'Plantillas'}
           </button>
         </div>
         {showTemplates && (
@@ -506,13 +490,13 @@ export function ColoquioMessagesPanel({
           <textarea
             className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
               isDragging ? 'border-cyan-500 bg-cyan-950/20 ring-2 ring-cyan-500/30' : 'border-slate-700/60')}
-            rows={3} placeholder="Type a message... Shift+Enter for new line" value={draft}
+            rows={3} placeholder="Escribe un mensaje... Shift+Enter para saltar linea" value={draft}
             onChange={e => {
               setDraft(e.target.value);
               const now = Date.now();
               if (now - lastTypingTimeRef.current > 2000 && selectedId && bridge) {
                 lastTypingTimeRef.current = now;
-                bridge.postColoquioTyping(selectedId, authorId || 'user', 'typing...');
+                bridge.postColoquioTyping(selectedId, authorId || 'jose', 'escribiendo...');
               }
             }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postMessage(); } }}
@@ -526,7 +510,7 @@ export function ColoquioMessagesPanel({
           </button>
         </div>
         <div className="flex justify-between items-center mt-1.5 text-[9px] text-slate-700">
-          <span>Enter to send, Shift+Enter for new line</span>
+          <span>Enter para enviar, Shift+Enter nueva linea</span>
           <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Auto-refresh 5s</span>
         </div>
       </div>

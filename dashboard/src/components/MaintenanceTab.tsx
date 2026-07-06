@@ -25,13 +25,12 @@ interface MaintenanceStatus {
 }
 
 export function MaintenanceTab({ bridge, notify }: Props) {
-  const { sysStatus, setToken } = useNexus();
+  const { sysStatus } = useNexus();
   const [loading, setLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<MaintenanceStatus | null>(null);
   const [lastOp, setLastOp] = useState<{ action: string; time: string } | null>(null);
   const [probe, setProbe] = useState<any>(null);
   const [metricsHistory, setMetricsHistory] = useState<MetricsHistory | null>(null);
-  const [tokenInput, setTokenInput] = useState(() => localStorage.getItem('tylluan_token') || '');
 
   const loadStatus = useCallback(async () => {
     if (!bridge) return;
@@ -86,9 +85,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
         const res = await bridge.fetchRaw('/api/v1/maintenance/clean-orphans', { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
-          notify(`Cleanup completed: ${data.deleted_count} nodes deleted`, 'info');
+          notify(`Limpieza completada: ${data.deleted_count} nodos eliminados`, 'info');
         } else {
-          throw new Error('Cleanup failed');
+          throw new Error('Limpieza falló');
         }
       }
       if (action === 'purge') {
@@ -114,9 +113,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
     },
     {
       icon: Database,
-      label: 'Graph nodes',
+      label: 'Nodos en grafo',
       value: status ? String(status.node_count) : '—',
-      sub: `${status?.edge_count ?? 0} edges · ${status?.orphan_node_count ?? 0} orphans`,
+      sub: `${status?.edge_count ?? 0} edges · ${status?.orphan_node_count ?? 0} huérfanos`,
       color: 'text-blue-400',
     },
     {
@@ -149,7 +148,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'CHECKPOINT',
       icon: Save,
       iconColor: 'text-blue-400',
-      desc: 'Flushes the Write-Ahead Log (WAL) to the main file. Ensures persistence integrity.',
+      desc: 'Vuelca el Write-Ahead Log (WAL) al archivo principal. Garantiza integridad de persistencia.',
       btnClass: 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20',
     },
     {
@@ -157,7 +156,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'BIOLOGICAL DECAY',
       icon: Activity,
       iconColor: 'text-amber-400',
-      desc: 'Applies biological weight decay on SilvaDB. Reduces stale memories to maintain relevance.',
+      desc: 'Aplica reducción de peso biológico en SilvaDB. Reduce memorias obsoletas para mantener relevancia.',
       btnClass: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30',
     },
     {
@@ -165,7 +164,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'EXPORT BACKUP',
       icon: Download,
       iconColor: 'text-emerald-400',
-      desc: 'Exports a knowledge graph snapshot to ./data/exports/. Useful before risky operations.',
+      desc: 'Exporta un snapshot del grafo de conocimiento a ./data/exports/. Útil antes de operaciones de riesgo.',
       btnClass: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20',
     },
     {
@@ -173,7 +172,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'DETECT COMMUNITIES',
       icon: Network,
       iconColor: 'text-indigo-400',
-      desc: 'Runs the Louvain algorithm on SilvaDB to cluster nodes by semantic communities. Useful for visualization.',
+      desc: 'Ejecuta el algoritmo Louvain sobre SilvaDB para agrupar nodos por comunidades semánticas. Útil para visualización.',
       btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20',
     },
     {
@@ -181,7 +180,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'LIMPIAR HUÉRFANOS',
       icon: Trash2,
       iconColor: 'text-indigo-400',
-      desc: 'Removes orphan nodes from SilvaDB (isolated, no incoming or outgoing relations, not protected).',
+      desc: 'Elimina de SilvaDB los nodos huérfanos (aislados, sin relaciones entrantes ni salientes) no protegidos.',
       btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20',
     },
     {
@@ -189,7 +188,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'HARD RESET MEMORIA',
       icon: Trash2,
       iconColor: 'text-rose-600',
-      desc: '⚠️ WARNING: Deletes ALL SilvaDB nodes and relations. Useful for clearing context if hallucinations occur.',
+      desc: '⚠️ ADVERTENCIA: Borra TODOS los nodos y relaciones de SilvaDB. Útil para limpiar el contexto si hay alucinaciones.',
       btnClass: 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-500 border border-rose-500/40 font-black',
     },
   ];
@@ -331,10 +330,10 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/30 border border-slate-800/50">
         <Database className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
         <p className="text-[11px] text-slate-600 leading-relaxed">
-          Maintenance operations act on <span className="text-slate-400">SilvaDB</span> (knowledge graph)
-          and <span className="text-slate-400">HybridMemory</span> (FTS5+vector search).
-          VACUUM and CHECKPOINT are safe in production. DECAY is irreversible — reduces weights of old memories.
-          It is recommended to run CHECKPOINT before VACUUM to ensure integrity.
+          Las operaciones de mantenimiento actúan sobre <span className="text-slate-400">SilvaDB</span> (grafo de conocimiento)
+          y <span className="text-slate-400">HybridMemory</span> (búsqueda FTS5+vectorial).
+          VACUUM y CHECKPOINT son seguras en producción. DECAY es irreversible — reduce pesos de memorias antiguas.
+          Se recomienda hacer un CHECKPOINT antes de VACUUM para garantizar integridad.
         </p>
       </div>
 
@@ -349,31 +348,21 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             title="API management token"
             placeholder="Bearer token"
             id="nexus-token-input"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                setToken(tokenInput);
-                notify('Token actualizado, reconectando...', 'info');
-                setTimeout(() => window.location.reload(), 800);
+                const input = e.currentTarget as HTMLInputElement;
+                document.cookie = `nexus_token=${input.value}; path=/`;
+                window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: input.value }));
               }
             }}
             className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-slate-300"
           />
-          <button
-            type="button"
-            onClick={() => {
-              setToken(tokenInput);
-              notify('Token actualizado, reconectando...', 'info');
-              setTimeout(() => window.location.reload(), 800);
-            }}
-            className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors"
-          >
+          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token actualizado', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold">
             Save Token
           </button>
         </div>
         <div className="mt-3 text-[10px] text-slate-600">
-          Presiona Enter o haz clic en Guardar para actualizar. Esto reconectará el dashboard de forma segura al kernel de Tylluan.
+          Presiona Enter para guardar. Token usado para APIs protegidas del kernel.
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   User,
   Users,
@@ -124,7 +124,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
       notify(`Memoria de ${agentId} eliminada`, 'info');
       setSelectedAgentId(null);
     } catch (e) {
-      notify(`Error deleting memory: ${e}`, 'error');
+      notify(`Error al borrar memoria: ${e}`, 'error');
     }
   };
 
@@ -483,7 +483,7 @@ export function CollectiveTab() {
         </div>
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-violet-400">{pulse?.graph.nodes ?? '—'}</div>
-          <div className="text-xs text-slate-400 mt-1">Graph nodes</div>
+          <div className="text-xs text-slate-400 mt-1">Nodos en grafo</div>
         </div>
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-amber-400">{pulse?.graph.edges ?? '—'}</div>

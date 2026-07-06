@@ -35,36 +35,20 @@ interface FleetData {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-const KNOWN_AGENTS = ['user', 'agent-1', 'agent-2', 'agent-3', 'kernel'];
+const KNOWN_AGENTS = ['jose', 'claude-code', 'opencode', 'antigravity', 'qwen', 'kernel'];
 
 const AGENT_STYLE: Record<string, { color: string; bg: string; ring: string; label: string }> = {
-  'user':        { color: 'text-emerald-300', bg: 'bg-emerald-950/50', ring: 'ring-emerald-500/40', label: 'User' },
-  'human':       { color: 'text-emerald-300', bg: 'bg-emerald-950/50', ring: 'ring-emerald-500/40', label: 'User' },
-  'agent-1':     { color: 'text-blue-300',    bg: 'bg-blue-950/50',    ring: 'ring-blue-500/40',    label: 'Agent-1' },
-  'agent-2':     { color: 'text-amber-300',   bg: 'bg-amber-950/50',   ring: 'ring-amber-500/40',   label: 'Agent-2' },
-  'agent-3':     { color: 'text-violet-300',  bg: 'bg-violet-950/50',  ring: 'ring-violet-500/40',  label: 'Agent-3' },
+  'jose':        { color: 'text-emerald-300', bg: 'bg-emerald-950/50', ring: 'ring-emerald-500/40', label: 'Jose' },
+  'claude-code': { color: 'text-blue-300',    bg: 'bg-blue-950/50',    ring: 'ring-blue-500/40',    label: 'Claude' },
+  'opencode':    { color: 'text-amber-300',   bg: 'bg-amber-950/50',   ring: 'ring-amber-500/40',   label: 'OpenCode' },
+  'antigravity': { color: 'text-violet-300',  bg: 'bg-violet-950/50',  ring: 'ring-violet-500/40',  label: 'Antigravity' },
+  'qwen':        { color: 'text-orange-300',  bg: 'bg-orange-950/50',  ring: 'ring-orange-500/40',  label: 'Qwen' },
   'kernel':      { color: 'text-slate-300',   bg: 'bg-slate-800/50',   ring: 'ring-slate-500/30',   label: 'Kernel' },
 };
 
 function styleFor(id: string) {
-  const cleanId = id.toLowerCase();
-  const key = Object.keys(AGENT_STYLE).find(k => cleanId.includes(k));
-  if (key) return AGENT_STYLE[key];
-  
-  let hash = 0;
-  for (let i = 0; i < cleanId.length; i++) {
-    hash = cleanId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colors = [
-    { color: 'text-orange-300', bg: 'bg-orange-950/50', ring: 'ring-orange-500/40' },
-    { color: 'text-pink-300', bg: 'bg-pink-950/50', ring: 'ring-pink-500/40' },
-    { color: 'text-indigo-300', bg: 'bg-indigo-950/50', ring: 'ring-indigo-500/40' },
-    { color: 'text-teal-300', bg: 'bg-teal-950/50', ring: 'ring-teal-500/40' },
-    { color: 'text-lime-300', bg: 'bg-lime-950/50', ring: 'ring-lime-500/40' },
-    { color: 'text-rose-300', bg: 'bg-rose-950/50', ring: 'ring-rose-500/40' },
-  ];
-  const choice = colors[Math.abs(hash) % colors.length];
-  return { ...choice, label: id };
+  const key = Object.keys(AGENT_STYLE).find(k => id.toLowerCase().includes(k));
+  return key ? AGENT_STYLE[key] : { color: 'text-slate-300', bg: 'bg-slate-800/50', ring: 'ring-slate-600/30', label: id };
 }
 
 function initial(id: string) {

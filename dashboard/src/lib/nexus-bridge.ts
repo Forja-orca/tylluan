@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 🌉 NEXUS BRIDGE v3 (Sovereign React Edition)
  * TypeScript Implementation for TylluanNexus Dashboard.
  */
@@ -234,9 +234,9 @@ export interface ProbeResult {
   client_configs: {
     claude_code_http: any;
     claude_code_sse: any;
-    http_sse: any;
+    antigravity: any;
     lm_studio: any;
-    custom_sse: any;
+    qwen_desktop: any;
     continue_dev: any[];
     cursor: any;
   };

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, ShieldAlert, Cpu, Database, Heart, Clock } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -29,7 +29,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
     return () => clearInterval(interval);
   }, [bridge]);
 
-  // Calculate homeostasis score: guilds_ok * 40 + memory_ok * 30 + no_recent_errors * 30
+  // Calculate homeostasis score: guilds_ok * 40 + memoria_ok * 30 + sin_errores_recientes * 30
   const guildsOk = health?.components?.guilds?.ok ? 1 : 0;
   const memoryOk = health?.components?.silva?.ok ? 1 : 0;
   const noRecentErrors = health?.status === 'healthy' ? 1 : 0;
@@ -78,7 +78,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Homeostasis del Sistema</span>
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-100 tracking-tight">Tylluan Cortex</h3>
+            <h3 className="text-lg font-black text-slate-100 tracking-tight">TylluanNexus o3 Cortex</h3>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm mt-1">
               Indicador unificado de la integridad del hub local. Monitorea guilds, bases de datos y fallos en tiempo real.
             </p>
@@ -87,7 +87,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           {/* Status badge */}
           <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-widest", statusBg, statusBorder, statusColor)}>
             <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400 animate-pulse" : "bg-red-500 animate-ping")} />
-            {loading ? "Calculating..." : health?.status === "healthy" ? "Cortex Stable" : "System Strain"}
+            {loading ? "Calculando..." : health?.status === "healthy" ? "Cortex Estable" : "Tensión del Sistema"}
           </div>
         </div>
 

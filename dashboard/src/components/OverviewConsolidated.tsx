@@ -79,7 +79,6 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               healthDetailed={props.healthDetailed}
               sysStatus={props.sysStatus}
               events={props.events}
-              notify={props.notify}
             />
             {/* Team Pulse Widget */}
             <TeamPulseWidget bridge={props.bridge} />
@@ -137,10 +136,11 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
 
   const getAgentIcon = (authorId: string): string => {
     const cleanId = authorId.toLowerCase();
-    if (cleanId.includes('user') || cleanId.includes('human')) return '👤';
-    if (cleanId.includes('builder') || cleanId.includes('architect')) return '🧠';
-    if (cleanId.includes('visual') || cleanId.includes('painter')) return '🪐';
-    if (cleanId.includes('search') || cleanId.includes('web')) return '🪁';
+    if (cleanId.includes('claude')) return '🤖';
+    if (cleanId.includes('qwen')) return '🪁';
+    if (cleanId.includes('antigravity')) return '🪐';
+    if (cleanId.includes('opencode') || cleanId.includes('deepseek')) return '🧠';
+    if (cleanId.includes('jose') || cleanId.includes('human')) return '👤';
     return '🤖';
   };
 

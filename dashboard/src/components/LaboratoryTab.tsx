@@ -98,16 +98,17 @@ export function LaboratoryTab({ bridge, notify }: Props) {
   const handleSimulateMutation = async () => {
     if (!bridge) return;
     setLoading(true);
-    notify("Running local mutation and benchmark on SilvaDB...", "info");
+    notify("Ejecutando mutación y benchmark local en SilvaDB...", "info");
     try {
       const res = await bridge.evaluateAutoResearch();
       if (res.experiment_run) {
-        notify("Calibration cycle completed successfully", "info");
+        notify("Ciclo de calibración real completado con éxito", "info");
+        await fetchData();
       } else {
-        notify("Error running calibration cycle", "error");
+        notify("Error ejecutando ciclo de calibración", "error");
       }
     } catch (err) {
-      notify("Calibration error: " + (err as Error).message, "error");
+      notify("Error en calibración: " + (err as Error).message, "error");
     } finally {
       setLoading(false);
     }
@@ -136,7 +137,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              Uses idle CPU/RAM cycles to mutate SilvaDB parameters and auto-calibrate the orphan linker against the LongMemEval-S test suite.
+              Utiliza los ciclos de inactividad de CPU/RAM locales para mutar parámetros de SilvaDB y autocalibrar el enlazador de huérfanos frente a la suite de tests de LongMemEval-S.
             </p>
           </div>
         </div>
@@ -400,7 +401,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Minimum cosine similarity threshold for merging new nodes in DreamCycle (0.80 - 0.98).
+                  Umbral mínimo de similitud coseno para fusionar nuevos nodos en DreamCycle (0.80 - 0.98).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div 
