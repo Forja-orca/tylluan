@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Zap, 
   Activity, 
@@ -66,33 +66,33 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
 
   const narrativeLines: string[] = [];
   if (!interoception) {
-    narrativeLines.push('The forest is dormant. No interoception data.');
+    narrativeLines.push('El bosque está dormido. Sin datos de interoception.');
   } else {
     const { homeostasis, stress_level, knowledge_hunger, active_pheromones } = interoception;
     const nodes = silva?.node_count ?? 0;
     const edges = silva?.edge_count ?? 0;
 
-    if (homeostasis > 0.75) narrativeLines.push('The forest flourishes — high homeostasis, deep roots.');
-    else if (homeostasis > 0.45) narrativeLines.push('The forest breathes slowly — moderate homeostasis.');
-    else narrativeLines.push('The forest is under strain — critical homeostasis.');
+    if (homeostasis > 0.75) narrativeLines.push('El bosque florece — homeostasis alta, raíces profundas.');
+    else if (homeostasis > 0.45) narrativeLines.push('El bosque respira despacio — homeostasis moderada.');
+    else narrativeLines.push('El bosque está bajo tensión — homeostasis crítica.');
 
-    if (stress_level > 0.7) narrativeLines.push(`⚠️ Elevated cortisol (${(stress_level * 100).toFixed(0)}%). Several recent failed attempts.`);
-    else if (stress_level < 0.2) narrativeLines.push('No active stress signals.');
+    if (stress_level > 0.7) narrativeLines.push(`⚠️ Cortisol elevado (${(stress_level * 100).toFixed(0)}%). Varios intentos fallidos recientes.`);
+    else if (stress_level < 0.2) narrativeLines.push('Sin señales de estrés activas.');
 
-    if (knowledge_hunger > 0.6) narrativeLines.push(`Cognitive hunger active (${(knowledge_hunger * 100).toFixed(0)}%) — the forest seeks new connections.`);
+    if (knowledge_hunger > 0.6) narrativeLines.push(`Hambre cognitiva activa (${(knowledge_hunger * 100).toFixed(0)}%) — el bosque busca nuevas conexiones.`);
     
-    if ((interoception?.graph_density ?? 0) < 0.001) narrativeLines.push("The forest needs connections — use tylluan_remember with varied intents");
+    if ((interoception?.graph_density ?? 0) < 0.001) narrativeLines.push("El bosque necesita conexiones — usa tylluan_remember con intenciones variadas");
 
-    if (active_pheromones > 3) narrativeLines.push(`${active_pheromones} active pheromones — high hormonal activity.`);
+    if (active_pheromones > 3) narrativeLines.push(`${active_pheromones} feromonas activas — alta actividad hormonal.`);
     
     // Git Guild Monitor
     const gitGuild = guilds?.find(g => g.name === 'git');
     if (gitGuild) {
-      if (!gitGuild.running) narrativeLines.push('⚠️ Guild git OFFLINE — version control commands disabled.');
-      else if ((gitGuild.restarts_5m ?? 0) > 0) narrativeLines.push(`🔄 Guild git unstable: ${gitGuild.restarts_5m} recent restarts.`);
+      if (!gitGuild.running) narrativeLines.push('⚠️ Guild git OFFLINE — comandos de control de versiones deshabilitados.');
+      else if ((gitGuild.restarts_5m ?? 0) > 0) narrativeLines.push(`🔄 Guild git inestable: ${gitGuild.restarts_5m} reinicios recientes.`);
     }
 
-    narrativeLines.push(`Network: ${nodes} nodes · ${edges} edges · density ${(interoception?.graph_density ?? 0).toFixed(4)}`);
+    narrativeLines.push(`Red: ${nodes} nodos · ${edges} aristas · densidad ${(interoception?.graph_density ?? 0).toFixed(4)}`);
   }
 
   const densityVal = interoception?.graph_density ?? 0;
@@ -266,26 +266,26 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {profiles.map((p) => {
               const aid = p.agent_id.toLowerCase();
-              let costTier = "Low Power (Local)";
+              let costTier = "Bajo Consumo (Local)";
               let costColor = "text-emerald-400";
-              let description = "Local inference / Rapid execution";
+              let description = "Flash local / Inferencia rápida";
               
-              if (aid.includes("cloud-high") || aid.includes("claude") || aid.includes("sonnet") || aid.includes("gpt4")) {
-                costTier = "High Power (Cloud)";
+              if (aid.includes("claude-code") || aid.includes("sonnet")) {
+                costTier = "Alto Consumo (Cloud)";
                 costColor = "text-red-400";
-                description = "High capacity model · Complex reasoning & architecture";
-              } else if (aid.includes("cloud-medium") || aid.includes("gemini") || aid.includes("flash")) {
-                costTier = "Medium Power (Cloud)";
+                description = "Sonnet · Arquitectura y lógica crítica";
+              } else if (aid.includes("antigravity")) {
+                costTier = "Consumo Medio (Cloud)";
                 costColor = "text-amber-400";
-                description = "Balanced model · UI layout & visual editing";
-              } else if (aid.includes("local") || aid.includes("llama")) {
-                costTier = "Low Power (Local/API)";
+                description = "Gemini Flash · UX y Lienzo visual";
+              } else if (aid.includes("qwen")) {
+                costTier = "Bajo Consumo (Local/API)";
                 costColor = "text-emerald-400";
-                description = "Local model · Rapid utility execution & web search";
-              } else if (aid.includes("bg") || aid.includes("background")) {
-                costTier = "Background (Local)";
+                description = "Qwen · Auditoría y búsqueda web";
+              } else if (aid.includes("hermes")) {
+                costTier = "Inferencia Local (Background)";
                 costColor = "text-cyan-400";
-                description = "Background task agent · Autonomous batch execution";
+                description = "Hermes · Autonomía nocturna";
               }
 
               return (

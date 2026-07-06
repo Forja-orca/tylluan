@@ -1,7 +1,7 @@
 {
-  "name": "tylluannexus-dashboard-o3",
+  "name": "tylluan-dashboard",
   "private": true,
-  "version": "3.0.0",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "engines": {

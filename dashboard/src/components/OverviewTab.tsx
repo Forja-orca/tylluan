@@ -13,8 +13,7 @@ import {
   Shield,
   Zap,
   Info,
-  User,
-  RefreshCw
+  User
 } from 'lucide-react';
 import type {
   GoldenSignals,
@@ -29,7 +28,7 @@ import type {
   CollectivePulse,
   Interoception
 } from '../lib/nexus-bridge';
-import { useNexus, type MemoryStats } from '../hooks/useNexus';
+import type { MemoryStats } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
 import { HomeostasisWidget } from './HomeostasisWidget';
@@ -48,7 +47,6 @@ interface OverviewTabProps {
   healthDetailed: any | null;
   sysStatus: any | null;
   events: NexusEvent[];
-  notify?: (msg: string, type?: 'info' | 'error') => void;
 }
 
 export function OverviewTab({ 
@@ -62,10 +60,8 @@ export function OverviewTab({
   memoryStats,
   healthDetailed,
   sysStatus,
-  events,
-  notify
+  events
 }: OverviewTabProps) {
-  const { interoception, reindexState } = useNexus();
   const [liveMetrics, setLiveMetrics] = useState<{
     totalCalls: number; successRate: number; avgLatency: number;
     activeAgents: number; broadcastsLastHour: number; graphNodes: number;
@@ -78,30 +74,6 @@ export function OverviewTab({
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
   const [showHeartbeats, setShowHeartbeats] = useState(false);
-  const [reindexingPending, setReindexingPending] = useState(false);
-
-  const handleReindex = async () => {
-    if (!bridge || reindexState?.running || reindexingPending) return;
-    setReindexingPending(true);
-    try {
-      const res = await bridge.fetchRaw('/api/v1/memory/reindex', { method: 'POST' });
-      if (res && res.status === 'skipped') {
-        notify?.('BM25-only mode, nothing to reindex', 'info');
-      } else if (res && res.status === 'started') {
-        notify?.(`Reindexing started. Stale nodes: ${res.stale}, Total: ${res.total}`, 'info');
-      } else {
-        notify?.('Reindexing task triggered', 'info');
-      }
-    } catch (e: any) {
-      if (e && e.message && e.message.includes('503')) {
-        notify?.('Embedding model not downloaded yet. Run tylluan download-models.', 'error');
-      } else {
-        notify?.('Failed to trigger reindexing: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
-      }
-    } finally {
-      setReindexingPending(false);
-    }
-  };
   useEffect(() => {
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
@@ -193,55 +165,10 @@ export function OverviewTab({
 
   const getAgentColor = (id: string) => {
     const lid = id.toLowerCase();
-    if (lid.includes('user') || lid.includes('human')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    let hash = 0;
-    for (let i = 0; i < lid.length; i++) {
-      hash = lid.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const styles = [
-      'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      'bg-red-500/20 text-red-400 border-red-500/30',
-      'bg-orange-500/20 text-orange-400 border-orange-500/30',
-      'bg-violet-500/20 text-violet-400 border-violet-500/30',
-      'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-      'bg-pink-500/20 text-pink-400 border-pink-500/30',
-    ];
-    return styles[Math.abs(hash) % styles.length];
-  };
-
-  const getProfileBadge = () => {
-    const model = sysStatus?.embedding_model || interoception?.capabilities?.embedding_model || "none";
-    const loaded = sysStatus?.embeddings_loaded ?? interoception?.capabilities?.embeddings_loaded ?? false;
-    
-    let label = "Portable · BM25";
-    let style = "bg-slate-800 text-slate-400 border-slate-700/80";
-    
-    if (model === "bge-small") {
-      label = "Clinic · BGE-Small";
-      style = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-    } else if (model === "bge-m3") {
-      label = "Server · BGE-M3";
-      style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
-    } else if (model && model !== "none") {
-      label = `Custom · ${model}`;
-      style = "bg-amber-500/10 text-amber-400 border-amber-500/20";
-    }
-
-    const showWarning = !loaded && model !== "none";
-
-    return (
-      <span className={`text-xs px-2.5 py-1 rounded-full border font-mono font-medium flex items-center gap-1.5 ${style}`}>
-        {label}
-        {showWarning && (
-          <span 
-            className="cursor-help text-red-400"
-            title="Model not downloaded yet — run: tylluan download-models"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 animate-pulse inline" />
-          </span>
-        )}
-      </span>
-    );
+    if (lid.includes('claude')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    if (lid.includes('gemini') || lid.includes('antigravity')) return 'bg-red-500/20 text-red-400 border-red-500/30';
+    if (lid.includes('qwen')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    return 'bg-slate-800 text-slate-400 border-slate-700';
   };
 
   return (
@@ -297,12 +224,12 @@ export function OverviewTab({
       {liveMetrics && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[ 
-            { label: 'Total calls', value: liveMetrics.totalCalls, icon: Wifi },
-            { label: 'Success rate', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
-            { label: 'Avg latency', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
-            { label: 'Active agents', value: liveMetrics.activeAgents, icon: Cpu },
+            { label: 'Llamadas totales', value: liveMetrics.totalCalls, icon: Wifi },
+            { label: 'Tasa de éxito', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
+            { label: 'Latencia media', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
+            { label: 'Agentes activos', value: liveMetrics.activeAgents, icon: Cpu },
             { label: 'Broadcasts/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
-            { label: 'Memory nodes', value: liveMetrics.graphNodes, icon: Database },
+            { label: 'Nodos memoria', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="bg-slate-900/60 border border-slate-800/50 rounded-xl p-3 text-center hover:bg-slate-800/40 transition-colors group">
               <Icon className="w-3 h-3 text-slate-600 mx-auto mb-1 group-hover:text-emerald-400 transition-colors" />
@@ -326,44 +253,11 @@ export function OverviewTab({
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
             Uptime: {Math.floor(sysStatus.uptime_secs / 60)}m
           </span>
-          {getProfileBadge()}
-          <button
-            type="button"
-            onClick={handleReindex}
-            disabled={reindexState?.running || reindexingPending}
-            className={`text-xs px-2.5 py-1 rounded-full border font-mono font-bold uppercase transition-all flex items-center gap-1.5 ${
-              reindexState?.running
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 cursor-not-allowed'
-                : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-650 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
-            }`}
-          >
-            <RefreshCw className={`w-3 h-3 ${reindexState?.running || reindexingPending ? 'animate-spin' : ''}`} />
-            {reindexState?.running ? 'Reindexing...' : 'Reindex'}
-          </button>
-        </div>
-      )}
-
-      {/* Reindex Progress Bar */}
-      {reindexState?.running && (
-        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-2 animate-in slide-in-from-top duration-300">
-          <div className="flex justify-between items-center text-xs font-mono">
-            <span className="text-amber-400 font-bold uppercase tracking-wider">
-              {reindexState.stale === 0 ? 'Verifying embeddings...' : 'Reindexing embeddings'}
-            </span>
-            <span className="text-slate-400 font-bold">
-              {reindexState.stale === 0 ? '' : `${reindexState.done} / ${reindexState.stale} nodes`}
-            </span>
-          </div>
-          <div className="h-2 bg-slate-800 rounded-full overflow-hidden w-full border border-slate-700/50">
-            <div
-              className={`h-full bg-amber-400 rounded-full transition-all duration-300 ${
-                reindexState.stale === 0 ? 'w-full animate-pulse' : ''
-              }`}
-              style={{
-                width: reindexState.stale === 0 ? '100%' : `${((reindexState.done / reindexState.stale) * 100).toFixed(1)}%`
-              }}
-            />
-          </div>
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
+            ? 'bg-blue-500/20 text-blue-300'
+            : 'bg-amber-500/20 text-amber-400'}`}>
+            Embeddings: {sysStatus.embeddings_loaded ? 'BGE-M3' : 'FTS5 fallback'}
+          </span>
         </div>
       )}
       <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden group">
@@ -469,7 +363,7 @@ export function OverviewTab({
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" />
                   <span className="text-[10px] text-slate-300">
-                    <span className="font-bold text-emerald-400">{silvaDelta} new nodes</span> integrated in last 30s
+                    <span className="font-bold text-emerald-400">{silvaDelta} nuevos nodos</span> integrados en los últimos 30s
                   </span>
                 </div>
              </div>

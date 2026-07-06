@@ -146,7 +146,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
     try {
       const data = await bridge.fetchRaw('/api/v1/coloquio/documents', {
         method: 'POST',
-        body: JSON.stringify({ title: newDocTitle.trim(), created_by: 'user' })
+        body: JSON.stringify({ title: newDocTitle.trim(), created_by: 'opencode' })
       });
       if (data?.document) {
         setDocs(prev => [data.document, ...prev]);
@@ -171,7 +171,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
     es.addEventListener('doc:updated', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.doc_id === currentDocId && data.updated_by !== 'user' && !editingDoc) {
+        if (data.doc_id === currentDocId && data.updated_by !== 'opencode' && !editingDoc) {
           // Another agent saved — refresh content if we're not editing
           fetchDocs();
         }
@@ -230,9 +230,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
 
   // Setup WebSocket connection (depends only on channelId)
   useEffect(() => {
-    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030`
-      : window.location.port === '5174' ? `${window.location.hostname}:3033`
-      : window.location.host;
+    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
 
     setWsStatus('connecting');
@@ -525,7 +523,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
               subject: node.label,
               predicate: 'defines',
               object: 'blackboard_concept',
-              agent_id: 'user'
+              agent_id: 'jose'
             })
           });
         }
@@ -634,7 +632,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                         if (w) w.document.write(currentArtifact.code);
                       }}
                       className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 cursor-pointer"
-                      title="Open in new tab"
+                      title="Abrir en pestaña nueva"
                     >
                       <ExternalLink className="w-3 h-3" />
                     </button>
@@ -654,8 +652,8 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
                 <Play className="w-8 h-8 opacity-25 animate-pulse" />
                 <div className="text-center max-w-sm px-4">
-                  <h4 className="text-xs font-bold text-slate-400 mb-1">Empty Application Sandbox</h4>
-                  <p className="text-[10px] text-slate-600 leading-relaxed">Write or request interactive HTML code in the coloquio (e.g., ```html code block). The canvas will detect it automatically and create an interactive view here.</p>
+                  <h4 className="text-xs font-bold text-slate-400 mb-1">Sandbox de Aplicaciones Vacío</h4>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">Escribe o solicita código HTML interactivo en el coloquio (ej. bloque de código ```html). El lienzo lo detectará automáticamente y creará una vista interactiva aquí.</p>
                 </div>
               </div>
             )}
@@ -674,7 +672,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                 <button
                   onClick={() => setShowNewDocInput(true)}
                   className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 cursor-pointer"
-                  title="New document"
+                  title="Nuevo documento"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                 </button>
@@ -686,7 +684,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                     value={newDocTitle}
                     onChange={(e) => setNewDocTitle(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') createNewDoc(); if (e.key === 'Escape') setShowNewDocInput(false); }}
-                    placeholder="Doc name..."
+                    placeholder="Nombre del doc..."
                     className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                     autoFocus
                   />
@@ -695,10 +693,10 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
               )}
               <div className="flex-1 overflow-y-auto">
                 {docsLoading ? (
-                  <div className="p-3 text-[10px] text-slate-500">Loading...</div>
+                  <div className="p-3 text-[10px] text-slate-500">Cargando...</div>
                 ) : docs.length === 0 ? (
                   <div className="p-3 text-[10px] text-slate-500 text-center mt-8">
-                    No documents yet.<br/>Create one.
+                    Sin documentos aún.<br/>Crea uno nuevo.
                   </div>
                 ) : (
                   docs.map(doc => (
@@ -736,7 +734,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                         onClick={resolveConflict}
                         className="flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 text-[9px] font-bold rounded cursor-pointer border border-amber-600/40"
                       >
-                        <RefreshIcon className="w-2.5 h-2.5" /> Reload version
+                        <RefreshIcon className="w-2.5 h-2.5" /> Recargar versión
                       </button>
                     </div>
                   )}
@@ -778,7 +776,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                       <button
                         onClick={() => saveDoc(docContent, docTitle)}
                         className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 cursor-pointer"
-                        title="Save now"
+                        title="Guardar ahora"
                       >
                         <Save className="w-3 h-3" />
                       </button>
@@ -797,7 +795,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
                       <div className="w-full h-full overflow-y-auto">
                         <div 
                           className="px-6 py-5 select-text leading-relaxed max-w-3xl mx-auto"
-                          dangerouslySetInnerHTML={renderDocContent(docContent || '_The document is empty._')}
+                          dangerouslySetInnerHTML={renderDocContent(docContent || '_El documento está vacío._')}
                         />
                       </div>
                     )}
@@ -951,7 +949,7 @@ export function ColoquioGraphPanel({ channelId, messages = [], bridge }: Coloqui
               <div className="flex flex-col gap-2">
                 <input
                   type="text"
-                  placeholder="New concept..."
+                  placeholder="Nuevo concepto..."
                   value={newNodeLabel}
                   onChange={(e) => setNewNodeLabel(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addNode()}

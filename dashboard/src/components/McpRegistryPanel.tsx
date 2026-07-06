@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plug, 
   Plus, 
@@ -236,7 +236,7 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
           </div>
           <h3 className="text-sm font-bold text-slate-300 uppercase">No External MCP Servers</h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
-            Connect public HTTP endpoints or local command-line tools to extend Tylluan capabilities.
+            Connect public HTTP endpoints or local command-line tools to extend TylluanNexus capabilities.
           </p>
           <button
             onClick={() => setIsModalOpen(true)}

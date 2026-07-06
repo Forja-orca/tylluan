@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Send, Radio, Users } from 'lucide-react';
 
 interface NodeInfo {
@@ -87,8 +87,8 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
           ) : nodes.length === 0 ? (
             <div className="text-center py-8 text-slate-600">
               <Radio className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-xs">No connected nodes</p>
-              <p className="text-xs mt-1">Register a node from tylluan_do with "node register"</p>
+              <p className="text-xs">No hay nodos conectados</p>
+              <p className="text-xs mt-1">Registra un nodo desde tylluan_do con "nodo register"</p>
             </div>
           ) : (
             <div className="space-y-2">

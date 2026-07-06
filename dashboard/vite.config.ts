@@ -14,24 +14,27 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    outDir: "../dashboard/dist",
+    emptyOutDir: true,
+  },
   server: {
-    port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3033',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:3033',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true,
       },
       '/sse': {
-        target: 'http://127.0.0.1:3033',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true,
         ws: true,
       },
       '/messages': {
-        target: 'http://127.0.0.1:3033',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true,
       },
     },

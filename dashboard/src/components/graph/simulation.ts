@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HippocampusGraph — Living memory visualization
  *
  * Canvas 2D · Custom force simulation · Zero graph library dependencies
@@ -213,10 +213,10 @@ export const AGENT_COLOR_HEX = [
 
 export function getAgentColor(agentId?: string): string {
   if (!agentId) return DEFAULT_COLOR;
-  const cleanId = agentId.trim().toLowerCase();
-  if (['user', 'human'].includes(cleanId)) {
+  if (agentId.trim().toLowerCase() === 'jose') {
     return '#34d399'; // emerald-400
   }
+  const cleanId = agentId.trim().toLowerCase();
   const hash = cleanId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return AGENT_COLOR_HEX[Math.abs(hash) % AGENT_COLOR_HEX.length];
 }
@@ -700,7 +700,7 @@ export function render(
       const agentColor = getAgentColor(n.last_agent);
       
       // Outer pulsing ring in the agent's color
-      const pulseSpeed = 900;
+      const pulseSpeed = n.last_agent === 'antigravity' ? 700 : 900;
       const pulse = 1.0 + Math.sin(now / pulseSpeed) * 0.12;
       
       ctx.globalAlpha = (0.45 + Math.sin(now / pulseSpeed) * 0.15) * alpha;

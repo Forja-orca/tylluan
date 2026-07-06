@@ -22,8 +22,7 @@ import {
   Plug,
   Beaker,
   Bell,
-  Link2,
-  RefreshCw
+  Link2
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -88,7 +87,7 @@ function App() {
       if (!detail) return;
       const { agent_id, channel, message, sender } = detail;
       
-      if (agent_id === 'user' || agent_id === 'all') {
+      if (agent_id === 'jose' || agent_id === 'antigravity' || agent_id === 'all') {
         const newMention = {
           id: Date.now(),
           sender,
@@ -98,14 +97,14 @@ function App() {
         };
         setActiveMentions(prev => [newMention, ...prev].slice(0, 10));
         notify(
-          `@${sender} mentioned you in #${channel}: "${message.length > 60 ? message.slice(0, 60) + '...' : message}"`,
+          `@${sender} te mencionó en #${channel}: "${message.length > 60 ? message.slice(0, 60) + '...' : message}"`,
           'info',
-          `Mention: @${agent_id}`
+          `Mención: @${agent_id}`
         );
       }
     };
-    window.addEventListener('coloquio-mention', handleMention);
-    return () => window.removeEventListener('coloquio-mention', handleMention);
+    window.addEventListener('nexus_mention', handleMention);
+    return () => window.removeEventListener('nexus_mention', handleMention);
   }, [notify]);
 
   // SSE layer — resilient, with error_result → toast routing
@@ -134,7 +133,7 @@ function App() {
     if (!bridge || !online) return;
     const poll = async () => {
       try {
-        const data = await bridge.getColoquioUnread('user');
+        const data = await bridge.getColoquioUnread('jose');
         setColoquioUnread(data.total_unread ?? 0);
       } catch {}
     };
@@ -171,12 +170,16 @@ function App() {
 
   const getAgentDotColor = (agentId: string): string => {
     const cleanId = agentId.toLowerCase();
-    if (cleanId.includes('human') || cleanId.includes('user')) return 'bg-amber-500';
+    if (cleanId.includes('claude')) return 'bg-orange-500';
+    if (cleanId.includes('qwen')) return 'bg-blue-400';
+    if (cleanId.includes('antigravity')) return 'bg-purple-500';
+    if (cleanId.includes('opencode') || cleanId.includes('deepseek')) return 'bg-cyan-500';
+    if (cleanId.includes('jose') || cleanId.includes('human')) return 'bg-amber-500';
     let hash = 0;
     for (let i = 0; i < cleanId.length; i++) {
       hash = cleanId.charCodeAt(i) + ((hash << 5) - hash);
     }
-    const colors = ['bg-orange-500', 'bg-blue-400', 'bg-purple-500', 'bg-cyan-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-lime-500', 'bg-rose-500'];
+    const colors = ['bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-lime-500', 'bg-rose-500'];
     return colors[Math.abs(hash) % colors.length];
   };
 
@@ -210,22 +213,11 @@ function App() {
               </div>
             </div>
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-white uppercase">Tylluan</h1>
+              <h1 className="text-sm font-bold tracking-tight text-white uppercase">TylluanNexus <span className="text-emerald-400">o3</span></h1>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                <span className="text-slate-400 font-bold">v0.6.0</span>
-                <span className="opacity-50">·</span>
-                <span className="text-slate-500">Portable Foundation</span>
+                <span>Kernel Dashboard v3.0</span>
                 <span className="opacity-50">·</span>
                 <span className={online ? "text-emerald-500/80" : "text-red-500/80"}>{online ? 'Sovereign' : 'Offline'}</span>
-                {(sysStatus?.loading_model || (interoception?.capabilities as any)?.loading_model) && (
-                  <>
-                    <span className="opacity-50">·</span>
-                    <span className="text-amber-400 flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      Loading {sysStatus?.embedding_model || interoception?.capabilities?.embedding_model || "model"}...
-                    </span>
-                  </>
-                )}
               </div>
             </div>
           </div>
@@ -391,14 +383,14 @@ function App() {
           
           <div className="mt-auto p-4 border-t border-slate-800 bg-slate-900/20">
              <div className="flex items-center gap-3 mb-3">
-               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">v0.6</div>
+               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">o3</div>
                <div className="overflow-hidden">
-                 <p className="text-[10px] font-bold text-slate-300 uppercase truncate">Tylluan Hub</p>
-                 <p className="text-[9px] text-slate-500 font-mono truncate">v0.6.0 (Portable)</p>
+                 <p className="text-[10px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
+                 <p className="text-[9px] text-slate-500 font-mono truncate">ID: 0x4F...7A</p>
                </div>
              </div>
              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 w-full animate-pulse" />
+                <div className="h-full bg-emerald-500 w-3/4 animate-pulse" />
              </div>
           </div>
         </aside>
@@ -418,20 +410,6 @@ function App() {
           {/* Consolidated Tab Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-500">Loading module...</div>}>
             <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab') ? "overflow-y-auto p-6" : "p-6")}>
-              {!online && (
-                <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-500/20 flex flex-col md:flex-row md:items-center justify-between gap-4 text-red-200 animate-pulse shrink-0">
-                  <div className="flex items-start md:items-center gap-3">
-                    <WifiOff className="w-5 h-5 text-red-400 shrink-0 mt-0.5 md:mt-0" />
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">Kernel Conexión Offline</h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">El microkernel local de Tylluan en 127.0.0.1:3030 no está respondiendo. Ejecuta <code className="bg-slate-950 px-1.5 py-0.5 rounded text-red-300 font-mono text-[10px]">tylluan-cli start</code> localmente para restablecer la comunicación.</p>
-                    </div>
-                  </div>
-                  <div className="text-[10px] font-mono font-bold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 shrink-0 w-fit">
-                    PORTABLE FOUNDATION v0.6.0
-                  </div>
-                </div>
-              )}
               {activeTab === 'overview' && (
                 <ErrorBoundary>
                   <OverviewConsolidated
@@ -458,7 +436,6 @@ function App() {
                     bridge={bridge}
                     notify={notify}
                     memoryStats={memoryStats}
-                    online={online}
                   />
                 </ErrorBoundary>
               )}
@@ -475,7 +452,6 @@ function App() {
                     bridge={bridge}
                     notify={notify}
                     events={events}
-                    online={online}
                   />
                 </ErrorBoundary>
               )}
@@ -486,7 +462,6 @@ function App() {
                     notify={notify}
                     events={events}
                     onClearLogs={clearLogs}
-                    online={online}
                   />
                 </ErrorBoundary>
               )}

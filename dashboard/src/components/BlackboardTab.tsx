@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MessageSquare, Clock, User, Users, RefreshCw, AlertCircle, Zap, GitCommit, ChevronDown } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { NexusBridge } from '../lib/nexus-bridge';
@@ -77,22 +77,16 @@ export function BlackboardTab({ bridge }: BlackboardTabProps) {
   const getAgentColor = (agent: string) => {
     const a = agent.toLowerCase();
     if (a.includes('anthropic') || a.includes('claude')) return 'bg-blue-500 text-white';
-    if (a.includes('google') || a.includes('gemini')) return 'bg-red-500 text-white';
-    
-    // Dynamic color selection based on hash
-    let hash = 0;
-    for (let i = 0; i < a.length; i++) {
-      hash = a.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const colors = ['bg-orange-500 text-white', 'bg-blue-500 text-white', 'bg-purple-500 text-white', 'bg-cyan-500 text-white', 'bg-pink-500 text-white', 'bg-indigo-500 text-white', 'bg-teal-500 text-white'];
-    return colors[Math.abs(hash) % colors.length];
+    if (a.includes('google') || a.includes('antigravity') || a.includes('gemini')) return 'bg-red-500 text-white';
+    if (a.includes('alibaba') || a.includes('qwen')) return 'bg-orange-500 text-white';
+    return 'bg-slate-600 text-slate-200';
   };
 
   if (loading && !data) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-slate-500 animate-pulse">
         <RefreshCw className="w-8 h-8 mb-2 animate-spin" />
-        <p className="text-sm font-medium">Synchronizing multi-agent blackboard...</p>
+        <p className="text-sm font-medium">Sincronizando pizarra multi-agente...</p>
       </div>
     );
   }

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Upload, Layers, ChevronDown, ChevronUp, Clock, Tag, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
