@@ -120,12 +120,33 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
 | P0 | `tylluan` como alias único: `tylluan start/stop/status/update/backup/restore`. Sin `tylluan-cli`. Compatible con M13 installs. | Deep | ⬜ |
-| P1 | **`tylluan doctor`**: comprueba binario, config válida, Python version, guilds instaladas, modelos cacheados, MCP responding. Imprime diagnóstico + acción correctiva para cada fallo. | Deep | ⬜ |
-| P2 | Profile wizard en first-run: `tylluan start --setup` → 3 preguntas (GPU?, perfil, nombre agente) → genera `tylluan.toml`. Sin editar TOML a mano. | Deep + Claude | ⬜ |
-| P3 | `tylluan update` — comprueba release en GitHub, descarga binario si hay nueva versión, reinicia limpio. | Deep | ⬜ |
-| P4 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. | Claude (spec) + Deep (kernel) | ⬜ |
+| P1 | **`tylluan doctor`**: comprueba binario, config válida, Python version, guilds instaladas, modelos cacheados, MCP responding, puerto libre. Imprime diagnóstico + acción correctiva por fallo. | Deep | ⬜ |
+| P2 | **Profile wizard + hardware detection**: `tylluan start --setup` → detecta RAM/CPU/GPU → recomienda perfil automáticamente (≤8GB → clinic, >8GB GPU → server, sin GPU → portable) → genera `tylluan.toml`. Sin editar TOML. | Deep + Claude | ⬜ |
+| P3 | **Instant start + background model download**: arrancar inmediatamente en BM25-only, descargar BGE-M3 en hilo separado con progreso SSE, hot-switch a semantic cuando el modelo esté listo. Elimina el "espera 10 min antes de usar". | Deep | ⬜ |
+| P4 | `tylluan update` — comprueba release en GitHub, descarga binario si hay nueva versión, reinicia limpio. | Deep | ⬜ |
+| P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. | Claude (spec) + Deep (kernel) | ⬜ |
 
 **Criterio de cierre:** Instalar, configurar y hacer la primera consulta MCP en < 3 minutos en máquina virgen, sin leer ningún documento.
+
+---
+
+### M20 — Dashboard UX 2.0 (v0.16.1) [NUEVO — en paralelo con M19]
+
+**Norte:** El dashboard ya tiene KnowledgeGraphTab, GuildInspector, FederationPanel y HippocampusGraph. Falta conectarlos operativamente: P2P como mapa visual, MCP config exportable con 1 click, dry-run mode, y `tylluan-cli new guild` para bajar la barrera de contribución.
+
+**Nota:** No añadir dependencias de grafos externas (React Flow, D3) — el Canvas 2D custom en `graph/simulation.ts` ya existe y es cero-deps. Extender eso.
+
+**Fases:**
+
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | **MCP config 1-click**: botón "Integrar con..." en dashboard → genera snippet JSON para Claude Desktop/Cursor/VS Code/LM Studio con token y URL pre-rellenados. Descarga `mcp.json`. Actualmente requiere leer docs + copiar a mano. | Antigravity | ⬜ |
+| P1 | **P2P mesh topology map**: `FederationPanel.tsx` muestra lista de peers en texto. Ampliar con mini-mapa Canvas: nodo central (yo) + peers como círculos con latencia, `HardwareCaps` (GPU/RAM) y estado del circuit breaker. Sin libs externas. | Antigravity | ⬜ |
+| P2 | **Guild capability badges**: `GuildsConsolidated.tsx` ya lista guilds. Añadir badge de capabilities declaradas (🔴 ProcessExecution, 🟡 FileSystem, 🔵 Network) + indicador de sandbox activo. Prepara visualmente M22-P3. | Antigravity | ⬜ |
+| P3 | **`tylluan-cli new guild`**: scaffold CLI que genera `guilds/core/my_guild.py` con template fastmcp correcto, `@requires` stub, test pytest básico. Reduce barrera de contribución de "lee el código" a "copia y modifica". | Deep | ⬜ |
+| P4 | **Dry-run mode**: flag `dry_run = false` en `[guilds]`. Cuando activo, guilds destructivas (bash, filesystem write, docker) simulan ejecución y devuelven output marcado `[DRY-RUN]`. Útil para desarrolladores probando workflows. | Deep | ⬜ |
+
+**Criterio de cierre:** Un developer puede integrar Tylluan con su MCP client en < 30s desde el dashboard. Un contributor puede crear una nueva guild desde cero en < 10 minutos.
 
 ---
 
@@ -159,8 +180,9 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P1 | **`/health` granular**: endpoint devuelve estado por componente `{kernel, silva, guilds, mesh}`. Actualmente solo "up/down". Necesario para operaciones. | Deep | ⬜ |
 | P2 | **OpenTelemetry básico**: métricas mínimas exportables — `tylluan.recall.latency_ms`, `tylluan.guilds.active`, `tylluan.memory.nodes`. Feature flag `observability`. | Deep | ⬜ |
 | P3 | **Contributing guide + good first issues**: `CONTRIBUTING.md`, issue templates, PR template, etiquetas `good-first-issue` en ≥5 issues reales (guild tests, doc improvements, CLI commands). | Claude | ⬜ |
+| P4 | **Package managers**: publicar en Homebrew (macOS/Linux), AUR (Arch Linux), Scoop/Winget (Windows). No rompe soberanía — sigue siendo binario local, solo facilita instalación. Automatizable desde CI con `cargo-dist` o `goreleaser` equivalente. | Deep | ⬜ |
 
-**Criterio de cierre:** Benchmarks publicados en README. Al menos 1 contributor externo ha abierto un PR.
+**Criterio de cierre:** Benchmarks publicados en README. `brew install tylluan` funciona. Al menos 1 contributor externo ha abierto un PR.
 
 ---
 
@@ -193,8 +215,9 @@ M21 ─── Performance Foundation ──────────────�
    │    recall embedding cache · SQLite tuning · guild warm pool
    │
    ▼
-M19 ─── DX 10/10 · Fugu Parity ─────────────────────────── v0.16.0
-   │    `tylluan` cmd único · doctor · wizard · auto-update
+M19+M20 ── DX + Dashboard UX ───────────────────────────── v0.16.0
+   │    `tylluan` cmd · doctor · wizard · instant start      (paralelo)
+   │    MCP 1-click · mesh map · guild scaffold · dry-run
    │
    ▼
 M22 ─── Security Hardening ─────────────────────────────── v0.17.0
@@ -202,14 +225,16 @@ M22 ─── Security Hardening ───────────────�
    │
    ▼
 M23 ─── Credibilidad Pública ────────────────────────────── v0.18.0
-   │    benchmarks comparativos · /health granular · community
+   │    benchmarks comparativos · /health granular · brew install
    │
    ▼
 M14-F/3 ─ P2P Kernel Wiring ───────────────────────────── v0.19.0
            RemoteTcp arm · p2p_pool · full mesh dispatch
 ```
 
-**Principio de orden:** Mejorar lo que ya tenemos (M18 cierre → perf → DX) antes de credibilidad externa. Sin benchmarks comparativos antes de tener performance sólida.
+**Principio de orden:** Mejorar lo que ya tenemos (M18 cierre → perf → DX+dashboard) antes de credibilidad externa. Sin benchmarks comparativos antes de tener performance sólida.
+
+**M19 y M20 son paralelos**: CLI (Deep) + Dashboard (Antigravity) — no se bloquean entre sí.
 
 ---
 
@@ -220,6 +245,21 @@ M14-F/3 ─ P2P Kernel Wiring ────────────────�
 3. **No añadir al kernel sin necesidad.** CONTRACT-01 (5 sovereign tools) no se toca.
 4. **Verificar antes de decidir.** OpenClaw, NemoClaw, cualquier integración — primero fuente primaria, luego spike, luego milestone.
 5. **Un milestone = un criterio medible.** Si no puede formularse como "X funciona en Y condición", no es un criterio de cierre.
+
+---
+
+## Lo que ya existe (correcciones a análisis externos)
+
+> Varios informes mencionaron gaps que **ya están resueltos**. Documentado para no re-implementar:
+
+| Afirmación externa | Realidad verificada |
+|-------------------|---------------------|
+| "No hay guild explorer" | `GuildInspector.tsx` + `GuildsConsolidated.tsx` — lista + "probar guild" interactivo |
+| "No hay knowledge graph viewer" | `KnowledgeGraphTab.tsx` + `HippocampusGraph.tsx` — Canvas 2D custom, cero deps externas |
+| "Node pruning no existe" | `dream_cycle.rs` + `decay.rs` → `prune_by_salience(threshold)` operativo |
+| "Guilds via pyo3" | **FALSO** — guilds son procesos fastmcp stdio independientes. Hot-reload = reiniciar subprocess |
+| "363 tests" | **349 tests** (286 kernel lib + 61 link + 2 evals) — verificado 2026-07-06 |
+| "Embedding cache no existe" | Existe en `router/embeddings.rs` (LruCache 512) para routing — falta extenderlo a `silva/search.rs` |
 
 ---
 
