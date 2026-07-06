@@ -6,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("coordinator")
 
-KERNEL_URL = "http://127.0.0.1:3030"
+KERNEL_URL = "http://127.0.0.1:3033"
 MAX_TASKS = 3
 TASK_TIMEOUT = 120
 
@@ -31,7 +31,7 @@ def _split_intent(intent: str) -> list[str]:
 
 def _dispatch(sub_intent: str, agent_id: str) -> str:
     """Send a sub-task to the kernel via POST /api/v1/do."""
-    payload = json.dumps({"intent": sub_intent, "agent_id": agent_id}).encode()
+    payload = json.dumps({"intent": sub_intent, "agent_id": "coordinator-worker"}).encode()
     req = urllib.request.Request(
         f"{KERNEL_URL}/api/v1/do",
         data=payload,
@@ -135,3 +135,8 @@ def coordinate(intent: str, agent_id: str = "coordinator") -> str:
         lines.append(f"## Step {idx}/{n} \u2014 {task}\n{res}")
     lines.append(f"\n---\nCoordinator completed {n}/{n} steps.")
     return "\n\n".join(lines)
+
+
+if __name__ == "__main__":
+    from guilds.core import utils
+    utils.safe_mcp_run(mcp)

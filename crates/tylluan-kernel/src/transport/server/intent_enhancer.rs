@@ -38,6 +38,19 @@ pub fn enrich_intent(original: &str, recent_intents: &[String]) -> String {
     format!("[ctx: {}] {}", context.join(" "), original)
 }
 
+/// Strip the `[ctx: ...]` prefix from an intent, returning the bare query.
+pub fn strip_ctx_prefix(query: &str) -> &str {
+    if let (Some(start), Some(end)) = (query.find("[ctx:"), query.find(']')) {
+        if start == 0 {
+            query[end + 1..].trim()
+        } else {
+            query
+        }
+    } else {
+        query
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

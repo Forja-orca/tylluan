@@ -648,6 +648,9 @@ async fn main() -> anyhow::Result<()> {
         ("code_reviewer", "guilds.core.code_reviewer",   false),
         ("deep_web_research", "guilds.core.deep_web_research", false),
         ("coloquio_digest",   "guilds.core.coloquio_digest",   false),
+        ("coordinator",       "guilds.core.coordinator",       false),
+        ("git",               "guilds.builders.plugins.git",   false),
+        ("scheduler",         "guilds.core.scheduler",         true),
     ];
     // CPU inference guilds (vision, deep_analysis): tool_timeout = None → wait indefinitely.
     // Killing ONNX inference mid-run wastes all prior computation. Patience is correct on CPU.

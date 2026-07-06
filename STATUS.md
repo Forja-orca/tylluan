@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-05 (v0.13.0: M17 Integración Externa, M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade)
+> Last updated: 2026-07-06 (v0.11.0: M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, Scheduler Persist ✓)
 
 ## CI
 
@@ -16,15 +16,13 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.13.0-dev`) · 286 kernel lib + 61 link + 2 evals = **349 total** green.
+**Commit:** HEAD (`v0.11.0-dev`) · 286 kernel lib + 61 link + 2 evals = **349 total** green.
 
 ---
 
 ## Version
 
-**v0.13.0** (HEAD `09ac1f0`) — M17 Integración Externa + M18-P3 Coordinator Synthesis: `_is_synthesis_intent()` with 30+ EN/ES synthesis signals, benchmark re-run, verb expansion.
-**v0.12.0** (tag, HEAD `945838c`) — M15 Rufus Release: install.sh/ps1 desde cero, first-run UX (GET /api/v1/setup-hint), Docker imagen oficial (debian:bookworm-slim + ONNX Runtime 1.22.0 + bundled-dashboard + always_on=[] + docker-smoke CI auth fix), OpenClaw verification (368k stars, M17 Rama A). Zero-friction install: `tylluan-cli start` en frío < 5 min.
-**v0.11.0** (tag) — Saga mesh P2P completa: M14-D capability-aware dispatch + M14-E fault harness + M14-F native P2P TCP over Noise XK. ARM64 portability CI. 363 tests, 0 failures.
+**v0.11.0** (Cargo.toml) — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 **v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
 
 ---
@@ -79,7 +77,7 @@
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **273 kernel lib tests passing** + 88 link tests + 2 evals tests = **363 total** · integration suite requires live kernel
+- **286 kernel lib tests passing** + 88 link tests + 2 evals tests = **376 total** (349 core unit tests verdes)
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
@@ -142,7 +140,7 @@ tylluan-cli start
 cargo run --release -p tylluan-cli -- start
 ```
 
-Verify: `curl http://127.0.0.1:3030/health`
+Verify: `curl http://127.0.0.1:4000/health`
 
 Dashboard (dev): `cd dashboard && pnpm dev` → `http://localhost:5173`
 

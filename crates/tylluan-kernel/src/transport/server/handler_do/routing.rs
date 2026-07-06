@@ -1,4 +1,4 @@
-﻿use rmcp::model::CallToolResult;
+use rmcp::model::CallToolResult;
 use tracing::{info, warn};
 use chrono;
 
@@ -36,6 +36,20 @@ pub(super) async fn resolve_guild_name(
         } else {
             intent.to_string()
         };
+
+        // M20: Proactive Cascade check — skip if this is already a coordinator dispatch
+        let is_coordinator_worker = agent_id.map_or(false, |a| a.starts_with("coordinator"));
+        if is_coordinator_worker {
+            tracing::debug!("🔁 Coordinator worker dispatch — skipping proactive cascade");
+        } else {
+        let c_score = crate::router::complexity::score_complexity(&intent_for_matching);
+        let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
+        if c_score >= 0.6 && registry_has_coordinator {
+            info!("⚡ Proactive Cascade (score={:.2}): '{}' → coordinator", c_score, intent_for_matching);
+            trace.push(format!("proactive_cascade=coordinator score={:.2}", c_score));
+            return Ok(("coordinator".to_string(), trace));
+        }
+        }
 
         let query_embedding = server.matcher.engine()
             .and_then(|engine| engine.embed(&intent_for_matching).ok());
@@ -117,18 +131,20 @@ pub(super) async fn resolve_guild_name(
             }
 
         // Anchor fast-path: SilvaDB routing_anchor nodes beat semantic matcher when confident
-        if let Some(ref emb) = query_embedding
-            && let Ok(anchor_results) = server.silva.match_by_anchors(emb, 3).await
-                && let Some((best_guild, best_score)) = anchor_results.first() {
-                    let second_score = anchor_results.get(1).map(|(_, s)| *s).unwrap_or(0.0);
-                    let gap = best_score - second_score;
-                    if (*best_score >= 0.88 || (*best_score >= 0.70 && gap >= 0.05))
-                        && server.matcher.available_guilds().iter().any(|g| &g.name == best_guild) {
-                            info!("⚓ Anchor fast-path: '{}' → {} (score={:.3}, gap={:.3})", intent, best_guild, best_score, gap);
-                            trace.push(format!("anchor_fast_path='{}' score={:.3} gap={:.3}", best_guild, best_score, gap));
-                            return Ok((best_guild.clone(), trace));
-                        }
-                }
+        if !is_coordinator_worker {
+            if let Some(ref emb) = query_embedding
+                && let Ok(anchor_results) = server.silva.match_by_anchors(emb, 3).await
+                    && let Some((best_guild, best_score)) = anchor_results.first() {
+                        let second_score = anchor_results.get(1).map(|(_, s)| *s).unwrap_or(0.0);
+                        let gap = best_score - second_score;
+                        if (*best_score >= 0.88 || (*best_score >= 0.70 && gap >= 0.05))
+                            && server.matcher.available_guilds().iter().any(|g| &g.name == best_guild) {
+                                info!("⚓ Anchor fast-path: '{}' → {} (score={:.3}, gap={:.3})", intent, best_guild, best_score, gap);
+                                trace.push(format!("anchor_fast_path='{}' score={:.3} gap={:.3}", best_guild, best_score, gap));
+                                return Ok((best_guild.clone(), trace));
+                            }
+                    }
+        }
 
         match server.matcher.match_guild(&intent_for_matching, query_embedding.as_deref(), 0.25, ctx_ref) {
             Some(m) => {

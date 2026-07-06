@@ -39,7 +39,7 @@ timeout_secs = 30
 
 [guilds.core]
 # Always spawned on startup
-always_on = ["bash", "filesystem"]
+always_on = ["bash", "filesystem", "scheduler"]
 # Seconds before an idle lazy guild is considered for suspension
 idle_suspend_secs = 3600
 

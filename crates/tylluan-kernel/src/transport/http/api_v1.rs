@@ -966,8 +966,10 @@ async fn do_intent_handler(
     let session_id: Option<String> = body_json.get("session_id").and_then(|v| v.as_str()).map(String::from)
         .or_else(|| q.agent_id.clone());
     // M23-Fractal: score gate — intents below threshold return candidate guilds instead of executing
+    // If an explicit guild hint is provided, bypass the fractal gate
+    let guild_param = q.guild.clone().or_else(|| body_json.get("guild").and_then(|v| v.as_str()).map(String::from));
     const FRACTAL_THRESHOLD: f32 = 0.82;
-    if !intent.is_empty()
+    if guild_param.is_none() && !intent.is_empty()
         && let Some(top) = state.matcher.trigger_match_pub(&intent)
             && top.score < FRACTAL_THRESHOLD {
                 let mut candidates = state.matcher.match_all(&intent, None, 0.0);

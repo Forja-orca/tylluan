@@ -29,6 +29,7 @@ pub enum MatchMethod {
     Keyword,
     Semantic,
     Curriculum,
+    VerbTrigger,
 }
 
 impl std::fmt::Display for MatchMethod {
@@ -37,6 +38,7 @@ impl std::fmt::Display for MatchMethod {
             MatchMethod::Keyword => write!(f, "keyword"),
             MatchMethod::Semantic => write!(f, "semantic"),
             MatchMethod::Curriculum => write!(f, "curriculum"),
+            MatchMethod::VerbTrigger => write!(f, "verb_trigger"),
         }
     }
 }
@@ -565,6 +567,15 @@ impl GuildMatcher {
     fn trigger_phrases_and_verbs(&self, query: &str) -> Option<MatchResult> {
         let q = query.to_lowercase();
         let first_word = q.split_whitespace().next().unwrap_or("");
+
+        // If "search" + web/internet context → route to websearch instead of local search
+        if first_word == "search" && (q.contains("web") || q.contains("internet")) {
+            return Some(MatchResult {
+                guild_name: "websearch".to_string(),
+                score: 0.97,
+                method: MatchMethod::VerbTrigger,
+            });
+        }
 
         // Verb trigger map: first_word → guild_name
         let verb_triggers: &[(&str, &str)] = &[
