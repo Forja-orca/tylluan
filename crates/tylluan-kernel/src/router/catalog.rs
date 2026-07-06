@@ -67,7 +67,7 @@ impl std::fmt::Display for GuildCategory {
 fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> {
     let mut m = HashMap::new();
     m.insert("bash", (GuildWeight::Heavy, vec!["command"]));
-    m.insert("filesystem", (GuildWeight::Medium, vec!["path"]));
+    m.insert("filesystem", (GuildWeight::Medium, vec![]));
     m.insert("memory", (GuildWeight::Light, vec!["content"]));
     m.insert("vision", (GuildWeight::Medium, vec!["path"]));
     m.insert("vision_moondream", (GuildWeight::Light, vec!["image_path"]));

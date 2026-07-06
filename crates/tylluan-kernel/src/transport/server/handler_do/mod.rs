@@ -294,7 +294,10 @@ pub async fn handle_tylluan_do(
         });
     };
 
-    let (guild_name, routing_trace) = match resolve_guild_name(server, &effective_intent, guild_hint, agent_id.as_deref()).await {
+    // Strip [ctx: ...] prefix so it doesn't pollute routing
+    let routing_intent = intent_enhancer::strip_ctx_prefix(&effective_intent);
+
+    let (guild_name, routing_trace) = match resolve_guild_name(server, routing_intent, guild_hint, agent_id.as_deref()).await {
         Ok((name, trace)) => (name, trace),
         Err(err_result) => return Ok(err_result),
     };
@@ -592,9 +595,40 @@ pub async fn handle_tylluan_do(
             "ts": chrono::Utc::now().timestamp_millis()
         }));
     }
-    let is_success = result.is_error != Some(true)
+    let mut is_success = result.is_error != Some(true)
         && !result.content.iter().filter_map(|c| c.as_text())
             .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
+
+    // M20: Reactive Cascade Check
+    if !is_success && guild_name != "coordinator" {
+        let c_score = crate::router::complexity::score_complexity(&intent);
+        let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
+        if c_score >= 0.4 && registry_has_coordinator {
+            info!("🔄 Reactive Cascade (score={:.2}): '{}' failed on '{}' → fallback to coordinator", c_score, intent, guild_name);
+            let mut new_args = serde_json::Map::new();
+            new_args.insert("intent".to_string(), serde_json::Value::String(intent.clone()));
+            new_args.insert("guild".to_string(), serde_json::Value::String("coordinator".to_string()));
+            if let Some(ref aid) = agent_id {
+                new_args.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
+            }
+            new_args.insert("remember".to_string(), serde_json::Value::Bool(remember));
+
+            // Invoke coordinator recursively
+            match Box::pin(handle_tylluan_do(server, Some(new_args))).await {
+                Ok(cascade_res) => {
+                    info!("🔄 Reactive Cascade successful for '{}'", intent);
+                    result = cascade_res;
+                    // Recompute is_success for the new result
+                    is_success = result.is_error != Some(true)
+                        && !result.content.iter().filter_map(|c| c.as_text())
+                            .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
+                }
+                Err(e) => {
+                    warn!("🔄 Reactive Cascade failed to execute for '{}': {:?}", intent, e);
+                }
+            }
+        }
+    }
 
     server.matcher.record_outcome(&intent, &guild_name, is_success, latency_ms);
 
