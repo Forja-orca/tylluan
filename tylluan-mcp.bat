@@ -15,7 +15,7 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
     )
 )
 echo [Tylluan] Sincronizando dependencias Python...
-"%~dp0.venv\Scripts\pip" install -e "%~dp0" --quiet --no-warn-script-location
+"%~dp0.venv\Scripts\pip" install -e . --quiet --no-warn-script-location
 if errorlevel 1 (
     echo [Tylluan] ERROR: fallo la instalacion de dependencias
     pause
