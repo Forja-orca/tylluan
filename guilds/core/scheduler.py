@@ -185,3 +185,9 @@ def list_pending(agent_id: str = "") -> list:
 # Start background scheduler loop on import
 _thread = threading.Thread(target=_scheduler_loop, daemon=True)
 _thread.start()
+
+
+from guilds.core import utils
+
+if __name__ == "__main__":
+    utils.safe_mcp_run(mcp)
