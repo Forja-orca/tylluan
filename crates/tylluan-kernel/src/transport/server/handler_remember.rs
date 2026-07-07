@@ -313,11 +313,12 @@ pub async fn handle_tylluan_remember(
 
     match server.memory.add_document(&tagged_content, &metadata, embedding.as_deref()).await {
         Ok(_) => {
-            // Invalidate recall cache so new memories are immediately visible
+            // Invalidate caches so new memories are immediately visible
             {
                 let mut cache = server.recall_cache.lock().await;
                 cache.invalidate_all();
             }
+            server.silva.query_embed_cache.invalidate();
 
             let importance = arguments.as_ref()
                 .and_then(|a| a.get("metadata")).and_then(|m| m.get("importance"))
