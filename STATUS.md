@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-06 (v0.11.0: M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, Scheduler Persist ✓)
+> Last updated: 2026-07-07 (v0.11.0: M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, M21 Query Embedding Cache ✓)
 
 ## CI
 
@@ -31,6 +31,7 @@
 
 ### Kernel (Rust)
 - `tylluan-nexus` binary: tokio + axum HTTP server, MCP over SSE and HTTP Streamable
+- M21 Query Embedding Cache: `QueryEmbeddingCache` in `memory/silva/query_cache.rs` — Mutex<HashMap>, TTL 300s, LRU 256 entries, normalized key (split_whitespace+lowercase). Injected in `handler_recall.rs` — `tylluan_recall` queries cache before ONNX inference. Invalidated on `tylluan_remember`. Ingesta, batch embed, and DCR paths bypass cache (always fresh). 5 unit tests.
 - M20 Complexity Cascade: heuristic intent scoring (≥0.6 proactive → coordinator; ≥0.4 reactive on failure → fallback). Guarded by `registry.has_guild("coordinator")` — activates automatically when coordinator is registered. Zero external deps, 13 unit tests.
 - M18-P3 Coordinator Synthesis ✅: TRINITY coordinator detects synthesis intents via 30+ signals (EN/ES) in `_is_synthesis_intent()`. Benchmark re-run shows synthesis fallback works correctly when triggered (summarize, summary captured). Expanded with `count`, `explain`, `describe`, `analyze`, `tell me`, `generate`, `list` verbs. Registered as lazy guild in `main.rs`. Benchmark delta masked by Tylluan guild infra issues (missing search/git guilds, filesystem timeout, bash crashes) — estimated ceiling +188% with all fixes.
 - `tylluan-cli` binary: `start / stop / status / logs / connect / download-models / install --profile=portable|clinic|server` (P6)
@@ -77,7 +78,7 @@
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **286 kernel lib tests passing** + 88 link tests + 2 evals tests = **376 total** (349 core unit tests verdes)
+- **291 kernel lib tests passing** + 88 link tests + 2 evals tests = **381 total** (M21 query embedding cache: +5 tests)
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)

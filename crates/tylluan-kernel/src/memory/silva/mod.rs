@@ -28,6 +28,7 @@ pub mod anchors;
 pub mod autolink;
 pub mod hnsw;
 pub mod maintenance;
+pub mod query_cache;
 pub mod schema;
 pub mod sharing;
 
@@ -101,6 +102,9 @@ pub struct SilvaDB {
     pub(crate) mmap_path: Option<PathBuf>,
     /// HNSW index for approximate nearest neighbor search (built at >= 12k nodes)
     pub(crate) hnsw: tokio::sync::RwLock<Option<crate::memory::silva::hnsw::HnswIndex>>,
+    /// Query embedding cache (TTL 5min, LRU 256). Caches recall-path embeddings
+    /// to avoid repeated ONNX inference for semantically identical queries.
+    pub query_embed_cache: Arc<query_cache::QueryEmbeddingCache>,
 }
 
 impl SilvaDB {
@@ -130,6 +134,7 @@ impl SilvaDB {
             ivf_searcher: Arc::new(RwLock::new(None)),
             mmap_path: Some(mmap_path),
             hnsw: tokio::sync::RwLock::new(None),
+            query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
         };
         Ok(db)
     }
@@ -180,6 +185,7 @@ impl SilvaDB {
             ivf_searcher: Arc::new(RwLock::new(None)),
             mmap_path: None,
             hnsw: tokio::sync::RwLock::new(None),
+            query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {
