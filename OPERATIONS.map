@@ -1,83 +1,162 @@
 ╔══════════════════════════════════════════════════════════════╗
-║  Tylluan — OPERATIONS MAP v1                                 ║
-║  How things FLOW. What happens when you DO things.           ║
+║  Tylluan — OPERATIONS MAP v1                                ║
+║  How the system flows at runtime. Verified 2026-07-07.      ║
 ╚══════════════════════════════════════════════════════════════╝
 
-┌─ REQUEST FLOW: tylluan_do("list files in guilds/") ─────────┐
+┌─ START / STOP ──────────────────────────────────────────────┐
 │                                                              │
-│  Client                                                      │
-│    │ POST /messages or GET /sse (MCP call_tool)             │
-│    ▼                                                         │
-│  transport/http/mod.rs → auth.rs (bearer check)             │
-│    ▼                                                         │
-│  transport/server/handlers.rs                                │
-│    │ handle_kernel_tool("tylluan_do", args)                  │
-│    ▼                                                         │
-│  handler_do/routing.rs                                       │
-│    │ 1. anchor_fast_path (keyword match, <1ms)              │
-│    │ 2. BM25 scoring against catalog trigger_phrases        │
-│    │ 3. pick best guild + best tool                         │
-│    ▼                                                         │
-│  registry/actor.rs → guild subprocess                       │
-│    ▼                                                         │
-│  guilds/builders/plugins/filesystem.py                       │
-│    │ file_list(path="guilds/")                              │
-│    ▼                                                         │
-│  Result → MCP response → Client                            │
+│  START (from E:\tylluan):                                   │
+│    .\tylluan-mcp.bat                                        │
+│    → checks target\release\tylluan-nexus.exe               │
+│    → if missing: cargo build --release -p tylluan-kernel    │
+│    → starts tylluan-nexus.exe --config tylluan.toml         │
+│                                                              │
+│  VERIFY UP:                                                  │
+│    curl http://127.0.0.1:4000/health                        │
+│                                                              │
+│  STOP:                                                       │
+│    taskkill /IM tylluan-nexus.exe /F                        │
+│                                                              │
+│  REBUILD (after Rust changes):                               │
+│    cargo build --release -p tylluan-kernel                  │
+│    then restart                                              │
+│                                                              │
+│  TESTS (fast, no binary needed):                            │
+│    cargo test -p tylluan-kernel --lib 2>&1 | tail -3        │
+│    Expected: 291 passed; 0 failed                           │
 └─────────────────────────────────────────────────────────────┘
 
-┌─ MEMORY FLOW ───────────────────────────────────────────────┐
+┌─ MCP CLIENT CONNECTIONS ────────────────────────────────────┐
 │                                                              │
-│  WRITE: tylluan_remember(content) → handler_remember.rs     │
-│    embed BGE-M3 → SilvaDB node → auto_link edges → IVF     │
+│  Claude Code (.claude/settings.json):                        │
+│    { "type": "sse", "url": "http://127.0.0.1:4000/sse" }   │
 │                                                              │
-│  READ: tylluan_recall(query) → handler_recall.rs            │
-│    embed → BM25 + vector → RRF fusion → Jina rerank → top N│
+│  Claude Desktop (claude_desktop_config.json):               │
+│    { "url": "http://127.0.0.1:4000/sse" }                   │
 │                                                              │
-│  REASON: tylluan_think(query) → handler_think.rs            │
-│    recall → BFS graph traversal → clusters → hub → analysis│
+│  Antigravity (mcp_config.json):                             │
+│    { "serverUrl": "http://127.0.0.1:4000/messages" }        │
 │                                                              │
-│  GRAPH: tylluan_graph(command) → handler_graph.rs           │
-│    add_triple | query_path | list_neighbors | stats | ppr   │
+│  Qwen Desktop: SSE only (HTTP Streamable → "fetch failed")  │
+│    { "url": "http://127.0.0.1:4000/sse" }                   │
+│                                                              │
+│  ⚠️ ALWAYS use 127.0.0.1 not localhost (IPv4 vs IPv6 issue) │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ REQUEST FLOW (tylluan_do) ─────────────────────────────────┐
+│                                                              │
+│  Client sends intent                                        │
+│       │                                                     │
+│       ▼                                                     │
+│  handler_do/routing.rs                                      │
+│    1. catalog lookup (trigger_phrases BM25)                 │
+│    2. if no hit → BGE-M3 embed → cosine similarity         │
+│    3. guild selected (score threshold 0.6)                  │
+│       │                                                     │
+│       ▼                                                     │
+│  M20 Complexity Cascade                                     │
+│    score ≥ 0.6 → coordinator proactively                   │
+│    score ≥ 0.4 + guild fails → coordinator fallback        │
+│       │                                                     │
+│       ▼                                                     │
+│  registry.call_tool(guild, tool, args)                      │
+│    → guild subprocess receives stdio JSON                   │
+│    → result returned to client                              │
+│                                                              │
+│  Timeouts (NEVER LOWER — CPU inference):                    │
+│    system_guild_ms  = 15000                                 │
+│    analysis_guild_ms = 60000                                │
+│    heavy_guild_ms   = 180000                                │
+│    tool_call_secs   = 3600                                  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ MEMORY FLOW (tylluan_remember / tylluan_recall) ───────────┐
+│                                                              │
+│  WRITE (tylluan_remember):                                  │
+│    content → silva/mod.rs → embed (BGE-M3)                 │
+│    → SilvaDB INSERT node (text + vector + metadata)        │
+│    → extract triples → graph edges                         │
+│    → query_embed_cache.invalidate()                        │
+│                                                             │
+│  READ (tylluan_recall):                                     │
+│    query → query_embed_cache.get_or_embed()                │
+│    cache HIT  → skip ONNX (300s TTL)                       │
+│    cache MISS → BGE-M3 ONNX → store in cache              │
+│    → BM25 (FTS5) + vector cosine → RRF merge              │
+│    → LinearRAG degree penalty                               │
+│    → Jina reranker → top-N results                         │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ GUILD LIFECYCLE ───────────────────────────────────────────┐
 │                                                              │
-│  BOOT:  tylluan.toml always_on → spawn → MCP handshake     │
-│  LAZY:  first intent match → spawn → wait handshake → exec │
-│  CRASH: supervisor detects → retry (max N) → FAILED if loop│
-│  IDLE:  idle_suspend_secs → stop → respawn on next match   │
+│  ALWAYS-ON guilds (tylluan.toml always_on):                 │
+│    main.rs → registry.spawn_always_on() on startup         │
+│    supervisor.rs → checks every 10s                        │
+│    crash → backoff 1s,2s,4s → after 3 fails: DEGRADED     │
+│    degraded → logged ONCE then silenced (no spam)          │
 │                                                              │
-│  Routing: router/catalog.rs (trigger_phrases per guild)     │
-│  Adding:  1) .py in guilds/ 2) descriptor in catalog.rs    │
+│  LAZY guilds (on first call):                               │
+│    first request → registry.ensure_guild_running()         │
+│    spawns Python subprocess with fastmcp stdio             │
+│    stays alive until idle timeout (300s default)           │
+│                                                              │
+│  CRITICAL: guild_process.rs load() MUST NOT restore        │
+│    always_on or crash_count from registry.json             │
+│    main.rs re-applies always_on from config after load()   │
+│    crash_count resets to 0 on every boot                   │
+│                                                              │
+│  SCHEDULER GUILD special:                                   │
+│    In always_on: yes (tylluan.toml line 57)                │
+│    scheduler.py starts background thread on import         │
+│    THEN serves MCP via if __name__ == "__main__" block     │
+│    Without entry point → process exits → crash loop        │
+│    Fixed: commit dcbff04 (2026-07-07)                      │
 └─────────────────────────────────────────────────────────────┘
 
-┌─ COMMON OPERATIONS ────────────────────────────────────────┐
+┌─ COMMON OPERATIONS ─────────────────────────────────────────┐
 │                                                              │
-│  BUILD:   cargo build -p tylluan-kernel                     │
-│  CHECK:   cargo check -p tylluan-kernel                     │
-│  TEST:    cargo test -p tylluan-kernel --lib                │
-│  LINT:    cargo clippy -p tylluan-kernel -- -D warnings     │
-│  FORMAT:  cargo fmt -p tylluan-kernel                       │
-│  START:   ./tylluan-mcp.bat (Win) or ./tylluan-mcp.sh      │
-│  HEALTH:  curl http://127.0.0.1:3030/health                │
-│  GUILDS:  curl http://127.0.0.1:3030/api/v1/guilds         │
-│  STOP:    Ctrl+C or taskkill /IM tylluan-nexus.exe /F       │
+│  Check test count:                                          │
+│    cargo test -p tylluan-kernel --lib 2>&1 | tail -3        │
 │                                                              │
-│  TEST ROUTING:                                               │
-│    curl -X POST http://127.0.0.1:3030/api/v1/do \          │
-│      -H "Content-Type: application/json" \                  │
-│      -d '{"intent":"your intent"}'                          │
+│  Check git HEAD:                                            │
+│    git -C E:\tylluan log --oneline -3                      │
 │                                                              │
-│  MEMORY STATS (via MCP):                                     │
-│    tylluan_graph(command="stats")                            │
+│  Check health:                                              │
+│    curl http://127.0.0.1:4000/health                        │
+│                                                              │
+│  Check active port:                                         │
+│    type E:\tylluan\data\active_port.json                   │
+│                                                              │
+│  View guild status (kernel must be up):                     │
+│    curl http://127.0.0.1:4000/api/v1/guilds                 │
+│                                                              │
+│  Force reindex embeddings:                                  │
+│    curl -X POST http://127.0.0.1:4000/api/v1/memory/reindex │
+│                                                              │
+│  Run benchmark:                                             │
+│    cargo run -p tylluan-evals -- --suite retrieval          │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ ERROR RECOVERY ────────────────────────────────────────────┐
 │                                                              │
-│  "guild crash loop"  → check .py exists + pip deps + timeout│
-│  "routing miss"      → adjust catalog.rs trigger_phrases    │
-│  "502 from proxy"    → kernel not running, restart          │
-│  "sqlite locked"     → two kernels running, kill all+restart│
-│  "connection refused"→ use 127.0.0.1 not localhost          │
+│  Guild crash loop:                                          │
+│    1. Check guild_process.rs: does load() restore always_on?│
+│    2. Check guild .py: does it have if __name__ entry point?│
+│    3. Delete registry.json → fresh load from tylluan.toml   │
+│    4. Rebuild binary after any Rust fix                     │
+│                                                              │
+│  Two kernels running (SQLite corruption risk):              │
+│    taskkill /IM tylluan-nexus.exe /F  (kills ALL)          │
+│    then restart clean with .\tylluan-mcp.bat               │
+│                                                              │
+│  Binary stale (changes not in binary):                      │
+│    tylluan-mcp.bat prefers target\release\                  │
+│    delete release binary to force debug:                    │
+│      del target\release\tylluan-nexus.exe                   │
+│    or rebuild release:                                      │
+│      cargo build --release -p tylluan-kernel               │
+│                                                              │
+│  Kernel down after benchmark:                               │
+│    Antigravity stops kernel after tests — normal.           │
+│    Restart: .\tylluan-mcp.bat                               │
 └─────────────────────────────────────────────────────────────┘
