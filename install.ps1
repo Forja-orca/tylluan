@@ -6,6 +6,15 @@ param(
     [string]$Version = "latest"
 )
 
+# Execution Policy guard — detect Restricted/AllSigned before anything else
+$execPolicy = Get-ExecutionPolicy -Scope CurrentUser 2>$null
+if ($execPolicy -in 'Restricted', 'AllSigned') {
+    Write-Host "WARNING: Your PowerShell execution policy is '$execPolicy'." -ForegroundColor Yellow
+    Write-Host "This script may not run. To fix, open PowerShell as Admin and run:" -ForegroundColor Yellow
+    Write-Host "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned" -ForegroundColor Cyan
+    Write-Host ""
+}
+
 $Repo = "Forja-orca/tylluan"
 $BinDir = "$env:USERPROFILE\.tylluan\bin"
 $DataDir = "$env:USERPROFILE\.tylluan"
@@ -14,7 +23,8 @@ function Write-Step($Text) { Write-Host "Tylluan $Text" -ForegroundColor Cyan }
 function Write-OK($Text)   { Write-Host "OK $Text" -ForegroundColor Green }
 function Write-Err($Text)  { Write-Host "FAIL $Text" -ForegroundColor Red; exit 1 }
 
-$Arch = $env:PROCESSOR_ARCHITECTURE
+# PROCESSOR_ARCHITEW6432 tells the real OS arch even under 32-bit PowerShell on 64-bit Windows
+$Arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($Arch) {
     "AMD64"  { $Target = "x86_64-pc-windows-msvc" }
     "ARM64"  { $Target = "aarch64-pc-windows-msvc" }
