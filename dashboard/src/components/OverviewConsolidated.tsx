@@ -19,6 +19,7 @@ interface OverviewConsolidatedProps {
   interoception: any;
   notify: (msg: string, type?: 'info' | 'error') => void;
   onClearLogs: () => void;
+  refreshData: () => Promise<void>;
 }
 
 export function OverviewConsolidated(props: OverviewConsolidatedProps) {
@@ -79,6 +80,8 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               healthDetailed={props.healthDetailed}
               sysStatus={props.sysStatus}
               events={props.events}
+              notify={props.notify}
+              refreshData={props.refreshData}
             />
             {/* Team Pulse Widget */}
             <TeamPulseWidget bridge={props.bridge} />

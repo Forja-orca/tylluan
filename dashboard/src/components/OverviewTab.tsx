@@ -34,6 +34,7 @@ import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
 import { HomeostasisWidget } from './HomeostasisWidget';
 import { DreamStatusWidget } from './DreamStatusWidget';
 import { CanaryStatusWidget } from './CanaryStatusWidget';
+import { WelcomeEmptyState } from './WelcomeEmptyState';
 
 interface OverviewTabProps {
   bridge: NexusBridge | null;
@@ -47,6 +48,8 @@ interface OverviewTabProps {
   healthDetailed: any | null;
   sysStatus: any | null;
   events: NexusEvent[];
+  notify: (msg: string, type?: 'info' | 'error') => void;
+  refreshData: () => Promise<void>;
 }
 
 export function OverviewTab({ 
@@ -60,8 +63,11 @@ export function OverviewTab({
   memoryStats,
   healthDetailed,
   sysStatus,
-  events
+  events,
+  notify,
+  refreshData
 }: OverviewTabProps) {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<{
     totalCalls: number; successRate: number; avgLatency: number;
     activeAgents: number; broadcastsLastHour: number; graphNodes: number;
@@ -170,6 +176,27 @@ export function OverviewTab({
     if (lid.includes('qwen')) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
     return 'bg-slate-800 text-slate-400 border-slate-700';
   };
+
+  const isFirstStart = (memoryStats?.node_count === 0 || liveMetrics?.graphNodes === 0) &&
+    !(localStorage.getItem('tylluan_wizard_query') === 'true' && localStorage.getItem('tylluan_wizard_mcp') === 'true');
+
+  if (isFirstStart) {
+    return (
+      <WelcomeEmptyState
+        bridge={bridge}
+        sysStatus={sysStatus}
+        sessions={sysStatus?.sessions || []}
+        memoryStats={memoryStats}
+        notify={notify}
+        onRefresh={() => {
+          setRefreshTrigger(p => p + 1);
+          if (bridge) {
+            refreshData();
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
