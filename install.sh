@@ -37,7 +37,7 @@ say ""
 
 say "Detecting latest release..."
 LATEST=$(curl -fsL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+  | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
 [ -n "$LATEST" ] || err "Could not detect latest version from GitHub. Check your internet connection."
 
 ARCHIVE="tylluan-${TARGET}.tar.gz"
