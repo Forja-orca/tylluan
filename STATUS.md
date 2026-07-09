@@ -1,13 +1,13 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-09 (v0.11.0: M14-D/E/F mesh complete ✓, M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, M21 Query Embedding Cache ✓)
+> Last updated: 2026-07-28 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓)
 
 ## CI
 
 | Job | Status |
 |-----|--------|
-| Rust — build + test | ✅ pass |
+| Rust — build + test | ✅ pass (Rust 1.88+) |
 | Rust — cargo-deny (licenses + advisories + bans) | ✅ pass |
 | Python — lint + test | ✅ pass |
 | Dashboard — lint | ✅ pass |
@@ -16,14 +16,15 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.11.0`) · 291 kernel lib + 61 link + 2 evals = **354 total** green.
+**Commit:** HEAD (`v0.13.0`) · 291 kernel lib + 61 link + 2 evals = **354 total** green.
 
 ---
 
 ## Version
 
-**v0.11.0** (Cargo.toml) — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
-**v0.10.0** (tag) — El sistema que sabe si funciona (retrieval quality delta + degree bias fix + fault DST + M14-D spec).
+**v0.13.0** (Cargo.toml) — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.12.0** (tag) — Single binary target release and automated installer profiles.
+**v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 
 ---
 
@@ -126,8 +127,8 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M14-F Phase 3 (kernel wiring) — pending: `p2p_pool` in `HttpState`, async `P2pHandlerFn` (BoxFuture), native `RemoteTcp` arm in `guild_dispatch_remote_handler`, listener startup from `[p2p]` config section.
-- Noise transport (M14-C) wired to federation HTTP sync endpoints (encrypt_for_peer/decrypt_from_peer in federation/mod.rs); XK pattern for TCP mesh sessions, NK pattern for HTTP payloads. Not yet connected to guild execution channels.
+- M23-P2 Onboarding Wizard — pending full 5-step implementation
+- M26 Sprint 2 tldraw canvas — selected as visual board engine, implementation pending
 
 ---
 
