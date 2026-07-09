@@ -101,13 +101,31 @@ async fn main() -> Result<()> {
                 cmd.args(["--port", &p.to_string()]);
             }
 
-            // In start mode we usually want it to be a background-ish experience 
-            // if we are using the CLI to "start" it.
             let child = cmd.spawn()
                 .with_context(|| format!("Failed to launch kernel at {}", exe_path.display()))?;
             
             println!("✅ Kernel started with PID: {}", child.id());
-            println!("🌐 Gateway active. Use 'tylluan status' to verify health.");
+
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(2))
+                .build()?;
+            let port = port.unwrap_or(DEFAULT_PORT);
+            let url = format!("http://127.0.0.1:{}/health", port);
+
+            for i in 1..=30 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!("✅ Kernel is ready at http://127.0.0.1:{}", port);
+                        println!("🌐 Connect your MCP client to http://127.0.0.1:{}/sse", port);
+                        break;
+                    }
+                    _ if i == 30 => {
+                        println!("⚠️ Kernel started but not ready within 30s. Check logs.");
+                    }
+                    _ => {}
+                }
+            }
         }
         Commands::Stop => {
             let mut sys = System::new();
@@ -223,23 +241,63 @@ async fn main() -> Result<()> {
             println!("✅ tylluan.toml written to {}", config_path.display());
             println!("   Profile: {}", profile);
 
-            match profile {
-                InstallProfile::Portable => {
-                    println!("   BM25-only mode. No downloads needed.");
-                    println!("   Start with: tylluan start");
+            if profile != InstallProfile::Portable {
+                let model_name = match profile {
+                    InstallProfile::Clinic => "BGE-Small (67MB)",
+                    _ => "BGE-M3 (1.2GB)",
+                };
+                println!("📥 Downloading {} embedding model...", model_name);
+                let exe_path = find_kernel_exe()?;
+                let status = Command::new(exe_path)
+                    .arg("--download-models")
+                    .status()
+                    .with_context(|| "Failed to run model download")?;
+                if !status.success() {
+                    anyhow::bail!("Model download failed (exit code: {:?})", status.code());
                 }
-                InstallProfile::Clinic => {
-                    println!("   BGE-Small model (67MB). Download with: tylluan download-models");
-                }
-                InstallProfile::Server => {
-                    println!("   BGE-M3 model (1.2GB). Download with: tylluan download-models");
+                println!("✅ Model download complete.");
+            } else {
+                println!("   BM25-only mode. No downloads needed.");
+            }
+
+            println!("🚀 Starting Tylluan kernel...");
+            let original_dir = std::env::current_dir()?;
+            std::env::set_current_dir(&install_dir)?;
+
+            let exe_path = find_kernel_exe()?;
+            let child = Command::new(&exe_path)
+                .spawn()
+                .with_context(|| format!("Failed to launch kernel at {}", exe_path.display()))?;
+
+            println!("✅ Kernel started with PID: {}", child.id());
+
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(2))
+                .build()?;
+            let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+
+            for i in 1..=30 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!();
+                        println!("🎉 Tylluan is running at http://127.0.0.1:{}", DEFAULT_PORT);
+                        println!();
+                        println!("   Connect your MCP client:");
+                        println!("     Claude Desktop -> http://127.0.0.1:{}/sse", DEFAULT_PORT);
+                        println!("     Claude Code   -> /mcp add tylluan sse http://127.0.0.1:{}/sse", DEFAULT_PORT);
+                        println!("     curl          -> curl http://127.0.0.1:{}/health", DEFAULT_PORT);
+                        break;
+                    }
+                    _ if i == 30 => {
+                        println!("⚠️ Kernel started but not ready within 30s.");
+                        println!("   Check logs: {}", install_dir.join("logs").join("kernel.log").display());
+                    }
+                    _ => {}
                 }
             }
 
-            println!();
-            println!("📋 Next steps:");
-            println!("   cd {}", install_dir.display());
-            println!("   tylluan start");
+            let _ = std::env::set_current_dir(&original_dir);
         }
     }
 
