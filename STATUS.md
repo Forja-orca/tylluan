@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-07 (v0.11.0: M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, M21 Query Embedding Cache ✓)
+> Last updated: 2026-07-09 (v0.11.0: M14-D/E/F mesh complete ✓, M18-P3 Coordinator Synthesis ✓, M20 Complexity Cascade ✓, M21 Query Embedding Cache ✓)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.11.0-dev`) · 286 kernel lib + 61 link + 2 evals = **349 total** green.
+**Commit:** HEAD (`v0.11.0`) · 291 kernel lib + 61 link + 2 evals = **354 total** green.
 
 ---
 
