@@ -134,7 +134,7 @@ All guild calls are routed through the same 5 sovereign MCP tools — the client
 
 ## Quick Start
 
-> **Total setup time: ~10 minutes** (including BGE-M3 model download on first boot — one-time, ~2.2 GB).
+> **Total setup time: ~10 minutes** (including BGE-M3 model download on first boot — one-time, ~1.2 GB).
 > Use `embedding_model = "none"` in `tylluan.toml` for zero-download BM25-only mode.
 
 **Supported platforms:**
@@ -169,7 +169,7 @@ tylluan-cli start
 On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical connection, one-time):
 
 ```
-Downloading BGE-M3 embedding model... [##########] 2.2 GB
+Downloading BGE-M3 embedding model... [##########] 1.2 GB
 ✅ Tylluan v0.13.0 running at http://127.0.0.1:3030
 ```
 

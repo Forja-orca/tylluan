@@ -98,8 +98,14 @@ Pass the token as `?token=...` on the SSE URL or as `Authorization: Bearer ...` 
 The kernel auto-discovers guilds in `guilds/` on startup. Install dependencies:
 
 ```bash
+# Linux / macOS
 python -m venv .venv
 source .venv/bin/activate
+
+# Windows (PowerShell)
+# python -m venv .venv
+# .venv\Scripts\activate
+
 pip install -r guilds/requirements.txt
 ```
 
