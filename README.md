@@ -89,6 +89,36 @@ tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations (triples, paths, PageRank)
 ```
 
+### Retrieval Benchmarks
+
+Evaluated on **LongMemEval-S** (50 human-authored questions: episodic memory, multi-hop, temporal reasoning) using real BGE-M3 1024-dim embeddings on CPU:
+
+| Metric | Value | Backend |
+|--------|-------|---------|
+| Recall@5 | **82%** | BGE-M3 + BM25 + RRF |
+| Recall@10 | **90%** | BGE-M3 + BM25 + RRF |
+| Recall@1 | 46% | BGE-M3 + BM25 + RRF |
+| Latency p50 | 12.9 ms | CPU (no GPU) |
+
+> Synthetic corpus (short descriptions): R@5 = 50% — real human queries give 82%, confirming the pipeline degrades gracefully on harder inputs. Full results: [`benchmarks/longmemeval_v0.12.0.json`](benchmarks/longmemeval_v0.12.0.json).
+
+### Agent Skills
+
+Agents connected to Tylluan can call any of the 42 guilds via `tylluan_do` in natural language:
+
+| Skill | Command example |
+|-------|----------------|
+| **Run code** | `"run this Python script and return the output"` |
+| **Web search** | `"search for the latest Rust async patterns"` |
+| **Vision** | `"describe what's in this screenshot"` |
+| **Git** | `"show me the last 10 commits in this repo"` |
+| **Docker** | `"list running containers and their memory usage"` |
+| **Database** | `"query the SQLite database at ./data.db"` |
+| **PDF** | `"extract the key points from this paper"` |
+| **Deep research** | `"research and summarize the state of MCP tooling in 2026"` |
+
+All guild calls are routed through the same 5 sovereign MCP tools — the client sees a clean interface regardless of which guild executes the work.
+
 ### CI
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
