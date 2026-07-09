@@ -50,6 +50,8 @@ enum Commands {
     Stop,
     /// Check the status of the hub
     Status,
+    /// Run a full diagnostic scan (guilds, storage, system resources, config)
+    Doctor,
     /// Stream kernel logs
     Logs {
         /// Follow log output
@@ -157,6 +159,67 @@ async fn main() -> Result<()> {
                     println!("✅ Hub is OPERATIONAL (v{})", json["version"]);
                 }
                 _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{})", DEFAULT_PORT),
+            }
+        }
+        Commands::Doctor => {
+            println!("🩺 Running diagnostic scan...");
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .build()?;
+            let url = format!("http://127.0.0.1:{}/api/v1/doctor", DEFAULT_PORT);
+            match client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let report: serde_json::Value = resp.json().await?;
+                    let status = report["status"].as_str().unwrap_or("unknown");
+                    let icon = match status {
+                        "healthy" => "✅",
+                        "degraded" => "⚠️",
+                        _ => "🔥",
+                    };
+                    println!("{} Status: {}", icon, status);
+                    println!("   Config valid: {}", report["config_valid"]);
+
+                    if let Some(guilds) = report["guilds"].as_array() {
+                        let down: Vec<_> = guilds.iter()
+                            .filter(|g| g["running"].as_bool() == Some(false))
+                            .filter_map(|g| g["name"].as_str())
+                            .collect();
+                        if down.is_empty() {
+                            println!("   Guilds: all running ({} total)", guilds.len());
+                        } else {
+                            println!("   Guilds DOWN: {}", down.join(", "));
+                        }
+                    }
+
+                    let storage = &report["storage"];
+                    println!(
+                        "   Storage: memory_db={} silva_db={} nodes={}",
+                        storage["memory_db_ok"], storage["silva_db_ok"], storage["nodes_count"]
+                    );
+
+                    let system = &report["system"];
+                    println!(
+                        "   System: cpu={}% mem={}%",
+                        system["cpu_usage_percent"].as_f64().unwrap_or(0.0).round(),
+                        system["memory_percent"].as_f64().unwrap_or(0.0).round()
+                    );
+
+                    if let Some(suggestions) = report["suggestions"].as_array() {
+                        if !suggestions.is_empty() {
+                            println!("\n   Suggestions:");
+                            for s in suggestions {
+                                if let Some(s) = s.as_str() {
+                                    println!("   - {}", s);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                Err(_) => println!(
+                    "❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{}) — start it with 'tylluan start'",
+                    DEFAULT_PORT
+                ),
             }
         }
         Commands::Logs { follow } => {
