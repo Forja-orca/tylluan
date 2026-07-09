@@ -45,7 +45,19 @@ URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
 
 say "Downloading Tylluan v${LATEST} (${TARGET})..."
 mkdir -p "$BIN_DIR"
-curl -fsL "$URL" | tar xzf - -C "$BIN_DIR" --strip-components=1
+TMP_ARCHIVE=$(mktemp) || err "Failed to create temp file"
+trap 'rm -f "$TMP_ARCHIVE"' EXIT
+if ! curl -fsL "$URL" -o "$TMP_ARCHIVE"; then
+  rm -f "$TMP_ARCHIVE"
+  err "Download failed. Check your internet: $URL"
+fi
+if ! tar tzf "$TMP_ARCHIVE" >/dev/null 2>&1; then
+  rm -f "$TMP_ARCHIVE"
+  err "Downloaded file is corrupted (not a valid archive). Try again."
+fi
+tar xzf "$TMP_ARCHIVE" -C "$BIN_DIR" --strip-components=1
+rm -f "$TMP_ARCHIVE"
+trap - EXIT
 
 chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli 2>/dev/null || true
 

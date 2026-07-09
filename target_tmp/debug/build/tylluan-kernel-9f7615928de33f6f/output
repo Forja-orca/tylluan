@@ -1,3 +1,0 @@
-cargo:rustc-env=TYLLUAN_GIT_COMMIT=580bf6d
-cargo:rerun-if-changed=../../.git/HEAD
-cargo:rerun-if-changed=../../.git/refs/heads/main

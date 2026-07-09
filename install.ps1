@@ -75,10 +75,15 @@ if ($PathEntries -notcontains $BinDir) {
 }
 
 Write-Step "Starting Tylluan..."
-$Process = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru
+try {
+    $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
+} catch {
+    Write-Err "Failed to start Tylluan: $_"
+}
 
 Write-Step "Waiting for kernel to be ready..."
 $Ready = $false
+$ErrorCount = 0
 for ($i = 0; $i -lt 30; $i++) {
     try {
         $Response = Invoke-WebRequest -Uri "http://127.0.0.1:3030/health" -UseBasicParsing -ErrorAction Stop
@@ -87,7 +92,7 @@ for ($i = 0; $i -lt 30; $i++) {
             break
         }
     } catch {
-        # still starting
+        $ErrorCount++
     }
     Write-Host "." -NoNewline
     Start-Sleep -Seconds 1
@@ -97,9 +102,21 @@ if (-not $Ready) {
     Write-Err "Kernel did not start within 30 seconds. Check $DataDir\logs\"
 }
 
-Write-OK "Tylluan is running at http://127.0.0.1:3030"
-Write-Host ""
+# Verify the binary responds
+$Status = & "$BinDir\tylluan-cli" status 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-OK "Tylluan v$Version is running at http://127.0.0.1:3030"
+    Write-Host ""
+    Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
+    Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
+    Write-Host "  Config:    $DataDir\config.toml" -ForegroundColor Cyan
+    Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
+} else {
+    Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
+    Write-OK "Tylluan v$Version installed to $BinDir (kernel may need manual start)"
+}
 
+Write-Host ""
 Write-Host "Connect your MCP client:" -ForegroundColor White
 Write-Host ""
 Write-Host "  Claude Desktop (~/.claude/claude_desktop_config.json):" -ForegroundColor White
@@ -122,4 +139,3 @@ Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"
 Write-Host ""
-Write-OK "Tylluan v$Version installed to $BinDir"
