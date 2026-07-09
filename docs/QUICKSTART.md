@@ -29,7 +29,17 @@ cargo run -p tylluan-cli -- start
 target/release/tylluan-nexus
 ```
 
-Config `tylluan.toml` is auto-generated on first run, but you can pre-configure:
+Config `tylluan.toml` is required. Create it with:
+
+```bash
+# Automatic: run after install
+tylluan-cli install --profile server
+
+# Or copy the template (edit before first boot)
+cp tylluan.example.toml tylluan.toml
+```
+
+Minimal working config:
 
 ```toml
 [nexus]
@@ -41,6 +51,27 @@ dev_mode = false
 auto_sync_interval_secs = 3600
 auto_sync_mode = "both"
 ```
+
+---
+
+## Installation Profiles
+
+Pick a profile depending on your hardware:
+
+| Profile | Model download | RAM | Use case |
+|---------|---------------|-----|----------|
+| `portable` | 0 MB (BM25-only) | 512 MB | Raspberry Pi 4, low-RAM VPS |
+| `clinic` | ~100 MB (BGE-Small) | 1 GB | Laptop, home server |
+| `server` | ~1.2 GB (BGE-M3, default) | 4 GB | Workstation, production |
+
+```bash
+# Install with a specific profile
+tylluan-cli install --profile portable
+tylluan-cli install --profile clinic
+tylluan-cli install --profile server
+```
+
+Profiles can be changed later via `tylluan.toml` — just set `embedding_model` to one of: `"none"`, `"bge-small"`, or `"bge-m3"`.
 
 ---
 
@@ -106,7 +137,7 @@ tylluan-cli
 
 ### BGE-M3 download fails
 
-- The model is ~2.2 GB. Ensure stable internet for the first boot (5–15 min on a typical connection).
+- The model is ~1.2 GB. Ensure stable internet for the first boot (5–15 min on a typical connection).
 - On slow connections, pre-download: `tylluan-cli download-models`
 - Cached at `~/.cache/fastembed/` — it survives reinstalls.
 
