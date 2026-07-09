@@ -427,6 +427,7 @@ function App() {
                     interoception={interoception}
                     notify={notify}
                     onClearLogs={clearLogs}
+                    refreshData={refreshData}
                   />
                 </ErrorBoundary>
               )}
