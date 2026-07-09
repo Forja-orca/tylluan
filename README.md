@@ -5,7 +5,7 @@
 <h1 align="center">Tylluan</h1>
 
 <p align="center">
-  <strong>Sovereign cognitive substrate for AI agents</strong><br>
+  <strong>Persistent memory, knowledge graph, and real tool execution for AI agents — local, no cloud required.</strong><br>
   <em>Sees what others miss, remembers what others forget.</em>
 </p>
 
@@ -22,30 +22,49 @@
 
 ---
 
-> **⚠️ Experimental research software.** Tylluan executes real code on your machine. It is a research lab, not an enterprise product. Read [DISCLAIMER.md](DISCLAIMER.md) before using.
+## Why Tylluan?
+
+Most AI memory systems require an API key, a cloud subscription, or a vendor that can cut your access tomorrow. Tylluan is different:
+
+- **Your data never leaves your machine** — SQLite + BGE-M3 embeddings, all local, all yours
+- **Works offline, on a Raspberry Pi 4, on an air-gapped network** — one binary, zero cloud in the critical path
+- **No vendor lock-in** — MIT license, open SQLite database you can read with any tool
+
+The result: an agent that ran on a Raspberry Pi 4 with 12,000 memories, federated with 3 peers over encrypted Noise XK — with no internet connection.
 
 ---
 
 ## What is Tylluan?
 
-A local Rust kernel that gives AI agents **persistent memory**, a **knowledge graph**, **real tool execution**, and **federated peer sync** — all running on your machine with zero cloud dependencies.
+A local Rust kernel that gives AI agents **persistent memory**, a **knowledge graph**, **real tool execution**, and **federated peer sync** — all running on your machine.
 
-**Design north star:** One binary, zero cloud dependencies, runs offline on a Raspberry Pi 4 or a server cluster. Different `tylluan.toml` per environment — same code. Knowledge persists across machines. Peers sync when a network is available, not as a requirement.
+**Design north star:** One binary, different `tylluan.toml` per environment — same code. Knowledge persists across restarts. Peers sync when a network is available, not as a requirement.
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + **LinearRAG local graph traversal (PageRank + degree penalty)**. Entity boost ×1.25 post-RRF |
-| **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` (HNSW) for large datasets (threshold >=12k nodes) |
-| **Agent Persona** | Agents have `persona` + `preferences` stored in Core Memory (always available, not retrieved on demand) |
-| **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes — agents remember what was discussed |
-| **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
-| **Tools** | 42 guilds: bash, git, filesystem, docker, code, vision, web search, and more. Auto-discovered at startup |
+| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LinearRAG graph traversal (PageRank + degree penalty) |
+| **Agent Persona** | `persona` + `preferences` stored in Core Memory — always available, never retrieved on demand |
+| **Tools** | 42 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
-| **Federation** | Peer-to-peer knowledge sync over LAN/VPN — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | DHT Kademlia peer discovery + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
+| **Federation** | Peer-to-peer knowledge sync — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
+| **Mesh** | DHT Kademlia + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
+| **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
+
+<details>
+<summary>Full technical capabilities →</summary>
+
+| Capability | Details |
+|------------|---------|
+| **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` for large datasets (threshold ≥12k nodes) |
+| **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes |
+| **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
 | **Guild Dispatch** | Peers discover each other's capabilities (`CapabilityRegistry`) and dispatch guild tools remotely via Noise NK — `DispatchRouter` scores peers by load, latency, and GPU; circuit breaker protects against degraded peers |
 | **Encryption** | AES-256 at rest via SQLCipher (feature-gated: `cargo build --features encryption`) |
-| **MCP Native** | SSE + HTTP Streamable. Works with Claude, Cursor, VS Code, LM Studio |
+| **Query Cache** | TTL LRU 256-entry embedding cache — avoids redundant ONNX inference on repeated queries |
+| **Complexity Cascade** | Heuristic intent scoring automatically routes to the TRINITY coordinator when synthesis is needed |
+| **TRINITY Coordinator** | Thinker/Worker/Verifier guild — parallel execution, synthesis detection, 30+ intent signals (EN/ES) |
+
+</details>
 
 ### Dashboard
 
@@ -70,17 +89,18 @@ tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations (triples, paths, PageRank)
 ```
 
-### CI / Security
+### CI
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-Every push runs 5 jobs: Rust build+test (**354 total tests** — 291 kernel lib + 61 link + 2 evals) + clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. [Status](STATUS.md) — all green. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+354 tests across Rust kernel, Python guilds, and dashboard — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
 ## Quick Start
 
-> **The honest toll:** First boot downloads the BGE-M3 embedding model (~2.2 GB, one-time). This is the cost of sovereign memory — no cloud, no API key, your hardware. Subsequent starts are instant. Use `embedding_model = "none"` in `tylluan.toml` for zero-download BM25-only mode.
+> **Total setup time: ~10 minutes** (including BGE-M3 model download on first boot — one-time, ~2.2 GB).
+> Use `embedding_model = "none"` in `tylluan.toml` for zero-download BM25-only mode.
 
 **Supported platforms:**
 
@@ -115,26 +135,23 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 2.2 GB
-✅ Tylluan v0.12.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.13.0 running at http://127.0.0.1:3030
 ```
 
-Verify it's up before continuing:
+Verify it's up:
 
 ```bash
 curl -s http://127.0.0.1:3030/health
 ```
 
 > [!TIP]
-> **Lightweight profiles for older/modest hardware (e.g. Raspberry Pi 4):**
-> If you want to bypass the 2.2 GB download or have less than 8GB of RAM, initialize with a lightweight profile:
+> **Lightweight profiles for modest hardware (e.g. Raspberry Pi 4):**
 > * **Portable Profile (0 MB download, BM25-only):** `tylluan-cli install --profile=portable`
 > * **Clinic Profile (~100 MB download, BGE-Small):** `tylluan-cli install --profile=clinic`
 
 > **Auth:** A bearer token is auto-generated at `.tylluan-token` on first boot. Dev mode (`--dev`) skips auth — never use on a network that isn't your own.
 
 ### Step 3 — Connect (15 seconds)
-
-Add to any SSE-capable MCP client:
 
 ```json
 { "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3030/sse" } } }
@@ -149,26 +166,25 @@ Add to any SSE-capable MCP client:
 
 > **Always use `127.0.0.1`** — never `localhost` (Windows resolves IPv6 first and misses the kernel).
 
-### Step 4 — Try a quick HTTP request (5 seconds)
-
-To verify the memory APIs directly without configuring an MCP client, read the auto-generated token in your workspace and query SilvaDB via curl:
+### Step 4 — Try it (5 seconds)
 
 ```bash
-# 1. Read token
 export TYLLUAN_TOKEN=$(cat ~/.tylluan/.tylluan-token)
 
-# 2. Store a memory
+# Store a memory
 curl -X POST http://127.0.0.1:3030/api/v1/memory/remember \
   -H "Authorization: Bearer $TYLLUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content": "Tylluan is running local graph RAG."}'
 
-# 3. Retrieve it
+# Retrieve it
 curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
   -H "Authorization: Bearer $TYLLUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "How does Tylluan query graphs?"}'
 ```
+
+> **⚠️ Experimental research software.** Tylluan executes real code on your machine. It is a research lab, not an enterprise product. Read [DISCLAIMER.md](DISCLAIMER.md) before deploying.
 
 ---
 
@@ -177,14 +193,14 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Python guilds (bash, vision, web search, 47+ tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (42 tools) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/QUICKSTART.md#build-from-source](docs/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles (portable/clinic/server) | `tylluan-cli install --profile=portable` |
 
 ---
 
-## Status: v0.12.0 — current release · v0.12.1-dev in progress
+## Status: v0.13.0 — current release
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
@@ -201,17 +217,16 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M14-A DHT** | Kademlia routing (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap | ✅ |
 | **M14-B Gossip** | Symmetric push-pull · LRU entry store · anti-entropy cursor · HardwareCaps in GossipEntry | ✅ |
 | **M14-C Noise** | XK handshake · NK HTTP encryption · Ed25519→X25519 · wired to federation sync | ✅ |
-| **v0.6–v0.9** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LinearRAG · episodic search | ✅ |
-| **v0.10.0** | Retrieval quality benchmark · degree-bias fix (penalty not boost) · ADR-004 M14-D spec · fault DST | ✅ |
-| **M6-full** | `PartitionableTransport<T>` (5 fault modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
-| **M14-D Phase 1** | `CapabilityRegistry` + `HardwareCaps` in gossip — foundation for remote guild dispatch | ✅ v0.12.0 |
-| **M14-D Phase 2** | `DispatchRouter` — load+latency+GPU scoring, circuit breaker, kernel wiring | ✅ v0.12.0 |
-| **M14-D Phase 3** | `GuildDispatchRequest/Response` + Noise NK + `/api/v1/guilds/dispatch/execute` | ✅ v0.12.0 |
-| **M14-D Phase 4** | `DispatchQueue` + `/guilds/dispatch/remote` + `/guilds/peers` + circuit breaker | ✅ v0.12.0 |
-| **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.12.0 |
-| **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm, conditional P2P listener | ✅ v0.12.0 |
-| **M15** | Rufus Release — zero-dependency install scripts, setup hints, Docker slim image | ✅ v0.12.0 |
-| **M16** | BGE-M3 Benchmark Real — evaluate recall with real 1024D models and reproducible dataset | 🔜 v0.12.1-dev |
+| **v0.6–v0.10** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LinearRAG · degree-bias fix · fault DST | ✅ |
+| **M14-D** | Guild dispatch — `CapabilityRegistry`, `DispatchRouter`, Noise NK protocol, `DispatchQueue`, remote routing | ✅ v0.13.0 |
+| **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.13.0 |
+| **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm | ✅ v0.13.0 |
+| **M15** | Rufus Release — zero-dependency install scripts, setup hints, Docker slim image | ✅ v0.13.0 |
+| **M16** | BGE-M3 Benchmark — R@5 evaluation with real 1024D models | ✅ v0.13.0 |
+| **M17** | External Integrations — OpenClaw, Hermes, MCP CONTRACT-01 CI test | ✅ v0.13.0 |
+| **M18** | TRINITY Coordinator — Thinker/Worker/Verifier, parallel execution, synthesis detection | ✅ v0.13.0 |
+| **M20** | Complexity Cascade — heuristic intent scoring, automatic coordinator activation | ✅ v0.13.0 |
+| **M21** | Query Embedding Cache — TTL LRU 256 entries, normalized key, 5 unit tests | ✅ v0.13.0 |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
@@ -231,12 +246,11 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 │  │  Core Memory     │  │  SilvaDB         │              │
 │  │  persona         │  │  SQLite WAL      │              │
 │  │  preferences     │  │  BGE-M3 vectors  │              │
-│  │  (agent_profiles)│  │  FTS5 BM25       │              │
-│  └─────────────────┘  │  knowledge graph │              │
-│                        │  episodic nodes  │              │
-│  ┌─────────────────┐  │  salience decay  │              │
-│  │  Guild Registry  │  └──────────────────┘              │
-│  │  47+ Python tools│                                    │
+│  └─────────────────┘  │  FTS5 BM25       │              │
+│                        │  knowledge graph │              │
+│  ┌─────────────────┐  │  episodic nodes  │              │
+│  │  Guild Registry  │  │  salience decay  │              │
+│  │  42 Python tools │  └──────────────────┘              │
 │  │  auto-discovered │  ┌──────────────────┐              │
 │  └─────────────────┘  │  Coloquio         │              │
 │                        │  multi-agent      │              │
@@ -279,7 +293,7 @@ tylluan/
 ├── guilds/                Python tool plugins (fastmcp) — auto-discovered at startup
 ├── dashboard/             React dashboard (Vite + Tailwind) — embedded in binary
 ├── docs/                  Architecture and guides
-├── integrations/          MCP client config examples (Claude, Cursor, LM Studio, Antigravity)
+├── integrations/          MCP client config examples (Claude, Cursor, LM Studio)
 └── tests/                 Integration and E2E tests
 ```
 
@@ -362,12 +376,13 @@ See [examples/](examples/) for full source code.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Forja-orca/tylluan&type=Date)](https://star-history.com/#Forja-orca/tylluan&Date)
 
-## 👾 How to Help (Testing & Feedback)
+## 👾 How to Help
 
 Tylluan is in active pre-production and we need external testers to harden the system:
-1. **Hardware Reports**: Run Tylluan on modest hardware (Raspberry Pi 4, old laptops, mini PCs) and share your latency & RAM reports in [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions).
-2. **Retrieve Quality**: Test the hybrid RRF search (`search_hybrid` combining BM25, vector, and LinearRAG graph traversal) and let us know if the context retrieval quality matches your expectations.
-3. **Bug Reports**: Open an issue if you encounter installation hiccups or model loading issues. Please include the logs via `tylluan-cli logs`.
+
+1. **Hardware Reports** — Run Tylluan on modest hardware (Raspberry Pi 4, old laptops, mini PCs) and share your latency & RAM reports in [GitHub Discussions](https://github.com/Forja-orca/tylluan/discussions).
+2. **Retrieval Quality** — Test hybrid RRF search and let us know if context retrieval matches your expectations. We want honest failure reports, not just success stories.
+3. **Bug Reports** — Open an issue if you encounter installation or model loading issues. Include logs via `tylluan-cli logs`.
 
 ## License
 
