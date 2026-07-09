@@ -8,23 +8,23 @@
   },
   "date": "2026-07-01",
   "delta_graph_minus_baseline": {
-    "mrr": -4.97,
+    "mrr": -0.08,
     "recall_at_10": 2.5,
     "recall_at_5": 2.5
   },
   "graph_disabled": {
-    "latency_p50_ms": 1.29,
-    "latency_p95_ms": 1.58,
-    "latency_p99_ms": 1.58,
+    "latency_p50_ms": 1.62,
+    "latency_p95_ms": 1.84,
+    "latency_p99_ms": 1.84,
     "mrr": 23.25,
     "recall_at_10": 25.0,
     "recall_at_5": 17.5
   },
   "graph_enabled": {
-    "latency_p50_ms": 4.66,
-    "latency_p95_ms": 7.18,
-    "latency_p99_ms": 7.18,
-    "mrr": 18.28,
+    "latency_p50_ms": 5.75,
+    "latency_p95_ms": 9.62,
+    "latency_p99_ms": 9.62,
+    "mrr": 23.17,
     "recall_at_10": 27.5,
     "recall_at_5": 20.0
   },
