@@ -6,7 +6,7 @@
 
 ┌─ IDENTITY ──────────────────────────────────────────────────┐
 │ Binary:    tylluan-nexus.exe (kernel) + tylluan-cli.exe     │
-│ Port:      :4000 (kernel, primary) │ fallback :4001         │
+│ Port:      :3030 (kernel, primary) │ fallback :3031         │
 │ Config:    tylluan.toml                                     │
 │ Auth:      .tylluan-token (bearer, gitignored)              │
 │ Data:      data/*.db (sqlite) + data/silva.db (vectors)     │
@@ -15,13 +15,13 @@
 │ Build:     cargo build --release -p tylluan-kernel          │
 │ Start:     .\tylluan-mcp.bat (from repo root)               │
 │            auto-builds release if target\release\ missing   │
-│ Health:    curl http://127.0.0.1:4000/health                │
+│ Health:    curl http://127.0.0.1:3030/health                │
 │ HEAD:      dcbff04 (fix scheduler entry point)              │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ SOVEREIGN TOOLS (the only MCP interface) ──────────────────┐
 │                                                              │
-│  CLIENT ──MCP──▶ :4000/sse or /messages                     │
+│  CLIENT ──MCP──▶ :3030/sse or /messages                     │
 │                                                              │
 │  tylluan_do ────▶ natural language → router → guild → result │
 │  tylluan_remember ▶ content → SilvaDB node (embeddings+graph)│
@@ -96,7 +96,7 @@
 ┌─ DATA LAYER ────────────────────────────────────────────────┐
 │                                                              │
 │  data/silva.db        knowledge graph (nodes, edges, FTS5)  │
-│  data/active_port.json  runtime port (4000 by default)      │
+│  data/active_port.json  runtime port (3030 by default)      │
 │  data/scheduler.db    scheduler persistence                 │
 │                                                              │
 │  Embeddings: BGE-M3 via fastembed-rs (ONNX, DirectML GPU)  │
@@ -132,7 +132,7 @@
 │  ⚡ HOT: registry/guild_process.rs                          │
 │     load() must NOT restore always_on or crash_count        │
 │     main.rs re-applies always_on from tylluan.toml          │
-└─────────────────────────────────────────────────────────────┘
+│└─────────────────────────────────────────────────────────────┘
 
 ┌─ SAFETY INVARIANTS ─────────────────────────────────────────┐
 │  ✋ NEVER host=0.0.0.0 + dev_mode=true (LAN RCE)           │
@@ -140,6 +140,6 @@
 │  ✋ NEVER write .tylluan-token value in tracked files       │
 │  ✋ NEVER git push without José's explicit approval         │
 │  ✋ NEVER start processes via Bash tool (AV blocks it)      │
-│  ✋ Port :4000-4002 is Tylluan. Port :3030 is Forja.        │
-│     Never run both on same port.                            │
+│  ✋ Port :3030 is Tylluan's default port.                   │
+│     Avoid conflicts with other processes running here.      │
 └─────────────────────────────────────────────────────────────┘

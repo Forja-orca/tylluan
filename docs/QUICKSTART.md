@@ -1,6 +1,6 @@
-﻿# Tylluan Advanced Setup Guide
+# Tylluan Advanced Setup Guide
 
-**Prerequisites:** Rust 1.85+, Python 3.12+, Git, 4GB RAM
+**Prerequisites:** Rust 1.88+, Python 3.12+, Git, 4GB RAM
 **Alternative to:** The 3-step binary install in [README.md](../README.md)
 
 ---

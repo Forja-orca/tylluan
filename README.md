@@ -12,7 +12,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/version-0.13.0-blue.svg" alt="v0.13.0">
-  <img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+">
+  <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
   <img src="https://img.shields.io/badge/cloud-none-brightgreen.svg" alt="No Cloud">
@@ -67,6 +67,11 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 </details>
 
 ### Dashboard
+
+Tylluan features a built-in React-based visual dashboard. 
+
+- **Production (Single Binary):** When running the kernel, the dashboard is automatically served at [http://127.0.0.1:3030/](http://127.0.0.1:3030/) (or your configured port).
+- **Development Mode:** Run `cd dashboard && pnpm dev` to launch the hot-reloading development server at [http://localhost:5173/](http://localhost:5173/).
 
 <p align="center">
   <img src="assets/screenshots/overview.png" alt="Overview — system health and kernel pulse" width="45%">
