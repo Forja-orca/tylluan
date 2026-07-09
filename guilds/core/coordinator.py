@@ -32,10 +32,10 @@ def _resolve_kernel_url() -> str:
     port_file = Path(__file__).resolve().parent.parent.parent / "data" / "active_port.json"
     try:
         data = json.loads(port_file.read_text())
-        port = data.get("port", 4000)
+        port = data.get("port", 3030)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:4000"
+        return "http://127.0.0.1:3030"
 
 
 KERNEL_URL = _resolve_kernel_url()
