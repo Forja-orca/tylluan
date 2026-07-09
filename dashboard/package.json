@@ -15,13 +15,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.0",
+    "@tldraw/tldraw": "^5.2.4",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^1.14.0",
+    "react": "^19.2.0",
     "react-dom": "^19.2.5",
     "react-force-graph": "^1.48.2",
     "react-force-graph-2d": "^1.29.1",

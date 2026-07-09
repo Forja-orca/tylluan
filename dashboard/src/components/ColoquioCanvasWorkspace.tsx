@@ -6,6 +6,8 @@ import {
   History, Clock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { Tldraw } from '@tldraw/tldraw';
+import '@tldraw/tldraw/tldraw.css';
 
 import { ColoquioMessage, CanvasNode, CanvasEdge } from './coloquio-types';
 
@@ -595,92 +597,14 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
 
 
 // ── WHITEBOARD TAB ────────────────────────────────────────────────────────────
-function WhiteboardTab() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const lastPos = useRef<{ x: number; y: number } | null>(null);
-  const [color, setColor] = useState('#60a5fa');
-  const [size, setSize] = useState(3);
-  const COLORS = ['#60a5fa', '#34d399', '#f59e0b', '#f87171', '#a78bfa', '#ffffff'];
-
-  const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-
-  const onDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    drawing.current = true;
-    lastPos.current = getPos(e);
-  };
-
-  const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing.current || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d')!;
-    const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPos.current!.x, lastPos.current!.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = size;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    lastPos.current = pos;
-  };
-
-  const onUp = () => { drawing.current = false; };
-
-  const clear = () => {
-    if (!canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d')!;
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  };
-
-  useEffect(() => {
-    const resize = () => {
-      if (!canvasRef.current) return;
-      const { width, height } = canvasRef.current.parentElement!.getBoundingClientRect();
-      canvasRef.current.width = width;
-      canvasRef.current.height = height;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
-  }, []);
-
+function WhiteboardTab({ channelId }: { channelId: string }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-3 py-1.5 border-b border-slate-700/60 bg-slate-900/80 flex items-center gap-2 flex-wrap">
-        <PenTool className="w-3.5 h-3.5 text-violet-400" />
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pizarra</span>
-        <div className="flex gap-1 ml-2">
-          {COLORS.map(c => (
-            <button
-              key={c}
-              onClick={() => setColor(c)}
-              className={cn('w-4 h-4 rounded-full border-2 cursor-pointer transition-transform', color === c ? 'border-white scale-125' : 'border-transparent')}
-              style={{ background: c }}
-            />
-          ))}
-        </div>
-        <select
-          value={size}
-          onChange={e => setSize(Number(e.target.value))}
-          className="ml-1 bg-slate-800 border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-0.5 cursor-pointer"
-        >
-          {[2, 4, 8, 16].map(s => <option key={s} value={s}>{s}px</option>)}
-        </select>
-        <button onClick={clear} className="ml-auto text-[10px] text-slate-500 hover:text-rose-400 flex items-center gap-1 cursor-pointer">
-          <Trash className="w-3 h-3" /> limpiar
-        </button>
-      </div>
-      <div className="flex-1 relative bg-[#06080d]">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 cursor-crosshair"
-          onMouseDown={onDown}
-          onMouseMove={onMove}
-          onMouseUp={onUp}
-          onMouseLeave={onUp}
+      <div className="flex-1 relative bg-[#06080d] tldraw-container">
+        {/* We mount Tldraw inside a dark container and enforce its theme */}
+        <Tldraw 
+          persistenceKey={`tylluan_coloquio_${channelId}`}
+          autoFocus={false}
         />
       </div>
     </div>
@@ -1045,7 +969,7 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
       <div className="flex-1 overflow-hidden">
         {activeTab === 'preview' && <PreviewTab messages={messages} />}
         {activeTab === 'docs' && <DocsTab />}
-        {activeTab === 'whiteboard' && <WhiteboardTab />}
+        {activeTab === 'whiteboard' && <WhiteboardTab channelId={channelId} />}
         {activeTab === 'knowledge' && <KnowledgeTab channelId={channelId} />}
       </div>
     </div>
