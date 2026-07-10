@@ -1174,7 +1174,9 @@ async fn silva_edge_search_handler(State(state): State<Arc<HttpState>>, Json(q):
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(limit);
 
-        let mut out = Vec::with_capacity(scored.len().min(1000));
+        const MAX_SCORED_OUTPUT: usize = 1000;
+        let out_cap = scored.len().min(MAX_SCORED_OUTPUT);
+        let mut out = Vec::with_capacity(out_cap);
         for (id, sim) in &scored {
             let parts: Vec<&str> = id.splitn(4, "::").collect();
             if parts.len() < 4 { continue; }

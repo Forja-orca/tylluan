@@ -66,7 +66,8 @@ pub async fn run_longmemeval_s(
         "model": "bge-m3",
     });
     let effective_seed = seed.unwrap_or(42);
-    let n = num_queries.unwrap_or(30).min(200);
+    const MAX_EVAL_QUERIES: usize = 200;
+    let n = num_queries.unwrap_or(30).min(MAX_EVAL_QUERIES);
 
     let data = longmemeval_s::generate_dataset(n, effective_seed);
     let mut points = Vec::with_capacity(n);
