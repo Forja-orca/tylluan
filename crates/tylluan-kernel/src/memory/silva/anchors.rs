@@ -118,6 +118,7 @@ impl super::SilvaDB {
                     valid_from: row.get(11)?,
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
+                    content_hash: "".to_string(),
                 }))?.flatten().collect()
             } else {
                 let mut stmt = conn.prepare(
@@ -140,6 +141,7 @@ impl super::SilvaDB {
                     valid_from: row.get(11)?,
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
+                    content_hash: "".to_string(),
                 }))?.flatten().collect()
             };
             Ok(nodes)
@@ -170,6 +172,7 @@ impl super::SilvaDB {
                     valid_from: row.get(10)?,
                     valid_until: row.get(11)?,
                     shareable: row.get::<_, i32>(12)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(),
                 })
             })?;
@@ -199,7 +202,9 @@ impl super::SilvaDB {
                         protected: row.get::<_, i32>(5)? != 0, conflicted: row.get::<_, i32>(6)? != 0,
                         topic_key: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
-                        shareable: row.get::<_, i32>(12)? != 0, last_touched: Utc::now(),
+                        shareable: row.get::<_, i32>(12)? != 0,
+                        content_hash: "".to_string(),
+                        last_touched: Utc::now(),
                     })
                 })?.flatten().collect()
             } else {
@@ -215,7 +220,9 @@ impl super::SilvaDB {
                         protected: row.get::<_, i32>(5)? != 0, conflicted: row.get::<_, i32>(6)? != 0,
                         topic_key: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
-                        shareable: row.get::<_, i32>(12)? != 0, last_touched: Utc::now(),
+                        shareable: row.get::<_, i32>(12)? != 0,
+                        content_hash: "".to_string(),
+                        last_touched: Utc::now(),
                     })
                 })?.flatten().collect()
             };

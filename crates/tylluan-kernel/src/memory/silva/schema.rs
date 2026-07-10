@@ -29,7 +29,8 @@ impl super::SilvaDB {
                     stigmergy_heat REAL DEFAULT 0.0,
                     fsrs_stability REAL DEFAULT 14.0,
                     fsrs_difficulty REAL DEFAULT 0.3,
-                    fsrs_last_review INTEGER DEFAULT 0
+                    fsrs_last_review INTEGER DEFAULT 0,
+                    content_hash TEXT DEFAULT ''
                 );
 
                 CREATE TABLE IF NOT EXISTS edges (
@@ -44,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 13;
+            const SCHEMA_VERSION: i32 = 14;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -129,6 +130,32 @@ impl super::SilvaDB {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_difficulty REAL NOT NULL DEFAULT 0.3", []);
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_last_review INTEGER NOT NULL DEFAULT 0", []);
                 tracing::info!("🌲 SilvaDB: added FSRS columns (v13)");
+            }
+            if schema_version < 14 {
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN content_hash TEXT DEFAULT ''", []);
+                // Backfill content_hash for existing nodes using Rust-side SHA-256
+                {
+                    let nodes: Vec<(String, String)> = {
+                        let mut stmt = conn.prepare(
+                            "SELECT id, content FROM nodes WHERE content != '' AND content_hash = ''"
+                        )?;
+                        stmt.query_map([], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                        })?
+                        .filter_map(|r| r.ok())
+                        .collect()
+                    };
+                    let mut update = conn.prepare("UPDATE nodes SET content_hash = ?1 WHERE id = ?2")?;
+                    for (id, content) in &nodes {
+                        use sha2::Digest;
+                        let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+                        let _ = update.execute(rusqlite::params![hash, id]);
+                    }
+                    if !nodes.is_empty() {
+                        tracing::info!("🌲 SilvaDB: backfilled content_hash for {} nodes", nodes.len());
+                    }
+                }
+                tracing::info!("🌲 SilvaDB: added content_hash column (v14)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;

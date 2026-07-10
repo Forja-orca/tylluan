@@ -542,6 +542,7 @@ if let Some(ref mut s) = stmt {
                         valid_from: None,
                         valid_until: None,
                         shareable: false,
+                        content_hash: "".to_string(),
                     }, doc.score));
                 }
             }

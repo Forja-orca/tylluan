@@ -90,9 +90,12 @@ impl super::SilvaDB {
 
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
+            // Compute deterministic content hash (SHA-256) for SH-conflict detection (paper 1.3)
+            use sha2::Digest;
+            let content_hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
             conn.execute(
-                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_until, shareable, federation_source)
-                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, 0, ?7)
+                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_until, shareable, federation_source, content_hash)
+                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, 0, ?7, ?8)
                  ON CONFLICT(id) DO UPDATE SET
                     content = excluded.content,
                     metadata = excluded.metadata,
@@ -105,8 +108,9 @@ impl super::SilvaDB {
                     valid_until = COALESCE(excluded.valid_until, nodes.valid_until),
                     shareable = excluded.shareable,
                     federation_source = COALESCE(excluded.federation_source, nodes.federation_source),
+                    content_hash = COALESCE(excluded.content_hash, nodes.content_hash),
                     updated_at = CURRENT_TIMESTAMP",
-                params![id, node_type, content, metadata, topic_key, valid_until, federation_source],
+                params![id, node_type, content, metadata, topic_key, valid_until, federation_source, content_hash],
             )?;
             // Sync FTS5 index
             if let Ok(rowid) = conn.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
@@ -140,7 +144,7 @@ impl super::SilvaDB {
     /// Synchronous internal helper to get a node by ID.
     pub(crate) fn get_node_sync(&self, id: &str, conn: &rusqlite::Connection) -> Result<Option<GraphNode>> {
         let mut stmt = conn.prepare(
-            "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes WHERE id = ?1",
+            "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, content_hash FROM nodes WHERE id = ?1",
         )?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
@@ -158,11 +162,33 @@ impl super::SilvaDB {
                 valid_from: row.get(10)?,
                 valid_until: row.get(11)?,
                 shareable: row.get::<_, i32>(12)? != 0,
+                content_hash: row.get::<_, String>(13).unwrap_or_default(),
                 last_touched: Utc::now(),
             }))
         } else {
             Ok(None)
         }
+    }
+
+    /// Lightweight freshness info for deterministic conflict resolution (paper 1.3).
+    /// Returns (content_hash, protected, updated_at) without loading the full node.
+    pub async fn get_freshness_info(&self, id: &str) -> Result<Option<(String, bool, String)>> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare(
+                "SELECT content_hash, protected, COALESCE(updated_at, '') FROM nodes WHERE id = ?1",
+            )?;
+            let mut rows = stmt.query(params![id])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some((
+                    row.get::<_, String>(0).unwrap_or_default(),
+                    row.get::<_, i32>(1)? != 0,
+                    row.get::<_, String>(2).unwrap_or_default(),
+                )))
+            } else {
+                Ok(None)
+            }
+        })
     }
 
     /// Save an embedding for a node with model metadata.
@@ -279,6 +305,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -304,6 +331,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -572,6 +600,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -753,6 +782,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 }),
             )?;
@@ -819,6 +849,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -843,6 +874,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -868,6 +900,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -893,6 +926,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? == 1,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -919,6 +953,7 @@ impl super::SilvaDB {
                     conflicted: row.get::<_, i32>(6)? != 0,
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -947,6 +982,7 @@ impl super::SilvaDB {
                     created_at: read_timestamp(row, 8)?,
                     updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
+                    content_hash: "".to_string(),
                     last_touched: Utc::now(),
                     valid_from: None,
                     valid_until: None,
