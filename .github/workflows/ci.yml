@@ -28,6 +28,20 @@ jobs:
       - run: cargo test -p tylluan-kernel --lib
       - run: cargo clippy -p tylluan-kernel -- -D warnings
 
+      - name: Check reproducible build (debug, fast)
+        run: |
+          cargo build -p tylluan-kernel 2>&1
+          cp target/debug/tylluan-kernel target/debug/tylluan-kernel.v1
+          cargo clean 2>&1
+          cargo build -p tylluan-kernel 2>&1
+          if cmp target/debug/tylluan-kernel target/debug/tylluan-kernel.v1; then
+            echo "✅ Reproducible: debug builds produce identical binaries"
+          else
+            echo "⚠️ Non-reproducible: debug build differs between runs"
+            echo "Common causes: embedded file paths, timestamps."
+            echo "Set --remap-path-prefix in .cargo/config.toml for release builds."
+          fi
+
   rust-security-audit:
     name: Rust — cargo-deny (licenses + advisories + bans)
     runs-on: ubuntu-latest

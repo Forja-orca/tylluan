@@ -20,3 +20,4 @@ pub mod tunnel;
 pub mod metrics_ring;
 pub mod federation;
 pub mod process_isolation;
+pub mod eval;

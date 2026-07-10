@@ -241,12 +241,14 @@ Delivered:
 
 Requirements (all must be met):
 - [ ] Docker smoke tests integrated into release verification checklist
-- [ ] External security audit completed
 - [ ] 6+ months of community usage without critical vulnerabilities
 - [ ] Benchmarks validated by independent parties
 - [ ] Kill switch tested under adversarial conditions
 - [ ] Documentation reviewed by non-contributors
 - [ ] Stable API (no breaking changes for 3+ months)
+
+Stretch goals (not funded yet; deferred to v1.x):
+- [ ] External security audit — requires funding (sponsor, grant, or self-funding). The project is currently unipersonal and pre-revenue; promising a paid audit without a funding source is not honest. If you can sponsor this, [open a discussion](https://github.com/Forja-orca/tylluan/discussions).
 
 ---
 

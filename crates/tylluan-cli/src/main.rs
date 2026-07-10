@@ -37,6 +37,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Run benchmarks or list past results
+    Eval {
+        #[command(subcommand)]
+        action: EvalAction,
+    },
     /// Start the TylluanNexus kernel
     Start {
         /// Force headless mode (no TUI)
@@ -71,6 +76,12 @@ enum Commands {
         /// Bearer token for authenticated instances
         #[arg(long, short)]
         token: Option<String>,
+    },
+    /// Audit chain verification (tamper detection)
+    Audit {
+        /// Show last N audit entries (default: 10)
+        #[arg(short, long, default_value = "10")]
+        entries: usize,
     },
     /// Generate a tylluan.toml for the given installation profile
     Install {
@@ -277,6 +288,100 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Commands::Audit { .. } => {
+            println!("🔍 Audit chain verification...");
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()?;
+            let verify_url = format!("http://127.0.0.1:{}/api/v1/audit/verify", DEFAULT_PORT);
+            match client.get(&verify_url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let json: serde_json::Value = resp.json().await?;
+                    let status = json["status"].as_str().unwrap_or("unknown");
+                    let icon = match status {
+                        "clean" => "✅",
+                        "tampered" => "🚨",
+                        _ => "⚠️",
+                    };
+                    println!("{} Chain integrity: {}", icon, status);
+                    println!("   Valid entries:   {}", json["valid_count"]);
+                    println!("   Tampered entries: {}", json["tampered_count"]);
+                }
+                Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+            }
+        }
+        Commands::Eval { action } => match action {
+            EvalAction::Longmemevals { num_queries, seed } => {
+                println!("🧪 Running LongMemEval-S benchmark...");
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(300))
+                    .build()?;
+                let url = format!("http://127.0.0.1:{}/api/v1/eval/run", DEFAULT_PORT);
+                let body = serde_json::json!({
+                    "benchmark": "longmemeval-s",
+                    "num_queries": num_queries.unwrap_or(30),
+                    "seed": seed.unwrap_or(42),
+                });
+                match client.post(&url).json(&body).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        let json: serde_json::Value = resp.json().await?;
+                        if json["ok"] == false {
+                            println!("❌ Benchmark failed: {}", json["error"]);
+                        } else if let Some(r) = json["result"].as_object() {
+                            let recall_1 = r["recall_at_1"].as_f64().unwrap_or(0.0);
+                            let recall_5 = r["recall_at_5"].as_f64().unwrap_or(0.0);
+                            let recall_10 = r["recall_at_10"].as_f64().unwrap_or(0.0);
+                            let mean_lat = r["mean_latency_ms"].as_f64().unwrap_or(0.0);
+                            let p95_lat = r["p95_latency_ms"].as_f64().unwrap_or(0.0);
+                            let hash = r["result_hash"].as_str().unwrap_or("?");
+                            let n = r["num_queries"].as_u64().unwrap_or(0);
+                            println!("✅ LongMemEval-S complete ({} queries):", n);
+                            println!("   Recall@1:  {:.1}%", recall_1);
+                            println!("   Recall@5:  {:.1}%", recall_5);
+                            println!("   Recall@10: {:.1}%", recall_10);
+                            println!("   Latency:   mean={:.0}ms p95={:.0}ms", mean_lat, p95_lat);
+                            println!("   Hash:      {}", hash);
+                            println!("   (Run 'tylluan eval list' to see all results)");
+                        }
+                    }
+                    Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                    Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                }
+            }
+            EvalAction::List => {
+                println!("📊 Past benchmark results...");
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()?;
+                let url = format!("http://127.0.0.1:{}/api/v1/eval/results", DEFAULT_PORT);
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        let json: serde_json::Value = resp.json().await?;
+                        let empty_vec = vec![];
+                        let results = json["results"].as_array().unwrap_or(&empty_vec);
+                        if results.is_empty() {
+                            println!("   No results yet. Run 'tylluan eval longmemeval-s' first.");
+                        } else {
+                            for (i, r) in results.iter().enumerate() {
+                                let recall_1 = r["recall_at_1"].as_f64().unwrap_or(0.0);
+                                let recall_5 = r["recall_at_5"].as_f64().unwrap_or(0.0);
+                                let recall_10 = r["recall_at_10"].as_f64().unwrap_or(0.0);
+                                let mean_lat = r["mean_latency_ms"].as_f64().unwrap_or(0.0);
+                                let hash = r["result_hash"].as_str().unwrap_or("?");
+                                let n = r["num_queries"].as_u64().unwrap_or(0);
+                                println!("   {}. {} ({} queries)", i + 1, r["benchmark"], n);
+                                println!("      R@1={:.1}% R@5={:.1}% R@10={:.1}%  lat={:.0}ms",
+                                    recall_1, recall_5, recall_10, mean_lat);
+                                println!("      hash: {}", hash);
+                            }
+                        }
+                    }
+                    Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                    Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                }
+            }
+        },
         Commands::Install { profile, dir, force } => {
             let install_dir = dir.unwrap_or_else(|| {
                 let home = std::env::var_os("HOME")
@@ -435,6 +540,21 @@ memory = "512m"
 timeout_secs = 60
 "##
     )
+}
+
+#[derive(Subcommand)]
+enum EvalAction {
+    /// Run the LongMemEval-S benchmark (tests memory recall accuracy)
+    Longmemevals {
+        /// Number of query-document pairs (default: 30, max: 200)
+        #[arg(short, long)]
+        num_queries: Option<usize>,
+        /// Random seed for reproducible results (default: 42)
+        #[arg(short, long)]
+        seed: Option<u64>,
+    },
+    /// List past benchmark results with hashes for reproducibility verification
+    List,
 }
 
 fn resolve_url(url: Option<String>, host: Option<String>) -> Result<String> {

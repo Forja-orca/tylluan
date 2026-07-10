@@ -28,6 +28,8 @@ pub mod api_memory;
 pub mod api_monitor;
 pub mod api_silva;
 pub mod api_collective;
+pub mod api_audit;
+pub mod api_eval;
 pub mod api_ops;
 pub mod api_canvas;
 pub mod api_journal;
@@ -219,6 +221,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/tools", get(tools_list_handler))
         .route("/api/v1/capabilities", get(capabilities_handler))
         .route("/api/v1/audit/logs", get(audit_logs_handler))
+        .route("/api/v1/audit/verify", get(api_audit::audit_verify))
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
         .route("/api/v1/models", get(models_handler))
@@ -386,6 +389,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/mesh/refresh", post(mesh_refresh_handler))
         // M14-B: Gossip Protocol — peer knowledge exchange
         .route("/api/v1/gossip", post(gossip_handler))
+        // Eval benchmarks (M26-B)
+        .route("/api/v1/eval/run", post(api_eval::eval_run_handler))
+        .route("/api/v1/eval/results", get(api_eval::eval_list_handler))
 }
 
 // --- HANDLERS ---
