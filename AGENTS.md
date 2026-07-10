@@ -164,3 +164,22 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 - Research web / papers / repos → Qwen Desktop
 - Dashboard / UI / visualizaciones → Antigravity (solo si hay budget disponible)
 - Orquestación / docs / arbitraje → Claude Code
+
+---
+
+## Protocolo de actualización de documentación post-milestone
+
+**Regla:** ningún milestone se da por cerrado hasta que estos archivos reflejen el estado real. La doc que miente genera trabajo fantasma para el siguiente agente.
+
+Al cerrar cualquier milestone, el agente que lo cierra ejecuta este checklist antes de anunciar "cerrado" en Coloquio:
+
+1. **`STATUS.md`** — actualizar versión, tabla de tests, "What works" con lo que el milestone entregó. Fuente de verdad técnica: lo obsoleto se borra, no se acumula.
+2. **`ROADMAP.md`** — mover el milestone a cerrado con fecha y commit hash.
+3. **`docs/internal/PROJECT.map` / `OPERATIONS.map`** — solo si el milestone cambió arquitectura o invariantes.
+4. **`SPEC.md`** — solo si cambió alcance, audiencias, o cerró un ítem de la tabla "documentación que falta".
+5. **`CHANGELOG.md`** — entrada nueva por milestone/release, no acumular cambios sin registrar.
+6. **`AGENTS.md`** (este archivo) — si cambió la flota de agentes o sus reglas de asignación.
+
+**Quién verifica:** el Tech Lead (Claude Code) confirma que estos puntos están al día antes del visto bueno final — contrastado contra el archivo real, no solo el reporte del agente que cerró el milestone.
+
+**Por qué existe esta regla:** en la sesión del 2026-07-10 se encontró `STATUS.md` con 2 milestones de retraso (M22 y M23-P1 cerrados sin documentar). Este protocolo existe para que no se repita.
