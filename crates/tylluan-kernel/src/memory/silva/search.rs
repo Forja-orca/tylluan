@@ -294,6 +294,7 @@ impl super::SilvaDB {
             valid_from: row.get(10)?,
             valid_until: row.get(11)?,
             shareable: row.get::<_, i32>(12)? != 0,
+            content_hash: "".to_string(),
             last_touched: Utc::now(),
         })
     }
@@ -411,6 +412,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?,
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
+                        content_hash: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?;
@@ -439,6 +441,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?,
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
+                        content_hash: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?;

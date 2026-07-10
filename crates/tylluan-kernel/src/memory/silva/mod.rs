@@ -49,6 +49,7 @@ pub struct GraphNode {
     pub valid_from: Option<i64>,
     pub valid_until: Option<i64>,
     pub shareable: bool,
+    pub content_hash: String,
 }
 
 /// An edge in the knowledge graph.

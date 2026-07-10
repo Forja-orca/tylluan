@@ -317,10 +317,53 @@ pub async fn federation_sync_receive(
         }
         let meta_str = serde_json::to_string(&meta).unwrap_or_default();
 
-        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
-            received += 1;
-        } else {
-            skipped += 1;
+        // Paper 1.3: deterministic freshness conflict resolution
+        match state.silva.get_freshness_info(node_id).await {
+            Ok(Some((local_hash, local_protected, local_updated_at))) => {
+                use crate::consensus::resolve_node_freshness;
+                let remote_hash = envelope.node.get("content_hash")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let remote_updated_at = envelope.node.get("updated_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                // Priority: remote peers have lower priority (higher number) than local (priority 1)
+                const REMOTE_PEER_PRIORITY: u32 = 10;
+                match resolve_node_freshness(
+                    &local_hash,
+                    local_protected,
+                    &local_updated_at,
+                    remote_hash,
+                    REMOTE_PEER_PRIORITY,
+                    &peer.name,
+                    remote_updated_at,
+                ) {
+                    crate::consensus::FreshnessResolution::Identical => {
+                        tracing::trace!("📋 [Federation] SH-conflict skip (same hash): {}", node_id);
+                        skipped += 1;
+                    }
+                    crate::consensus::FreshnessResolution::KeepLocal { reason } => {
+                        tracing::trace!("📋 [Federation] local wins for '{}': {}", node_id, reason);
+                        skipped += 1;
+                    }
+                    crate::consensus::FreshnessResolution::AcceptRemote { reason } => {
+                        tracing::trace!("📋 [Federation] remote wins for '{}': {}", node_id, reason);
+                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                            received += 1;
+                        } else { skipped += 1; }
+                    }
+                    crate::consensus::FreshnessResolution::MarkConflicted { reason } => {
+                        tracing::warn!("📋 [Federation] conflicted '{}': {}", node_id, reason);
+                        skipped += 1;
+                    }
+                }
+            }
+            _ => {
+                // Node doesn't exist locally — accept unconditionally (first sync)
+                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                    received += 1;
+                } else { skipped += 1; }
+            }
         }
     }
 
@@ -477,9 +520,45 @@ pub async fn federation_sync_pull(
         }
         let meta_str = serde_json::to_string(&meta).unwrap_or_default();
 
-        match state.silva.upsert_node(node_id, node_type, content, &meta_str).await {
-            Ok(_) => received += 1,
-            Err(_) => skipped += 1,
+        // Paper 1.3: deterministic freshness conflict resolution
+        match state.silva.get_freshness_info(node_id).await {
+            Ok(Some((local_hash, local_protected, local_updated_at))) => {
+                use crate::consensus::resolve_node_freshness;
+                let remote_hash = envelope.node.get("content_hash")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let remote_updated_at = envelope.node.get("updated_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                const REMOTE_PEER_PRIORITY: u32 = 10;
+                match resolve_node_freshness(
+                    &local_hash,
+                    local_protected,
+                    &local_updated_at,
+                    remote_hash,
+                    REMOTE_PEER_PRIORITY,
+                    &peer.name,
+                    remote_updated_at,
+                ) {
+                    crate::consensus::FreshnessResolution::Identical
+                    | crate::consensus::FreshnessResolution::KeepLocal { .. } => {
+                        skipped += 1;
+                    }
+                    crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
+                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                            received += 1;
+                        } else { skipped += 1; }
+                    }
+                    crate::consensus::FreshnessResolution::MarkConflicted { .. } => {
+                        skipped += 1;
+                    }
+                }
+            }
+            _ => {
+                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                    received += 1;
+                } else { skipped += 1; }
+            }
         }
     }
 
@@ -575,8 +654,32 @@ pub async fn federation_sync_both(
                                 map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
                             }
                             let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-                            if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
-                                pulled += 1;
+                            // Paper 1.3: deterministic freshness conflict resolution
+                            match state.silva.get_freshness_info(node_id).await {
+                                Ok(Some((local_hash, local_protected, local_updated_at))) => {
+                                    let remote_hash = envelope.node.get("content_hash")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    let remote_updated_at = envelope.node.get("updated_at")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    match crate::consensus::resolve_node_freshness(
+                                        &local_hash, local_protected, &local_updated_at,
+                                        remote_hash, 10, &peer.name, remote_updated_at,
+                                    ) {
+                                        crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
+                                            if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                                pulled += 1;
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                _ => {
+                                    if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                        pulled += 1;
+                                    }
+                                }
                             }
                         }
                     }
@@ -859,8 +962,41 @@ async fn pull_from_peer_internal(
             continue;
         }
 
-        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
-            received += 1;
+        // Paper 1.3: deterministic freshness conflict resolution
+        match state.silva.get_freshness_info(node_id).await {
+            Ok(Some((local_hash, local_protected, local_updated_at))) => {
+                use crate::consensus::resolve_node_freshness;
+                let remote_hash = envelope.node.get("content_hash")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let remote_updated_at = envelope.node.get("updated_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                const REMOTE_PEER_PRIORITY: u32 = 10;
+                match resolve_node_freshness(
+                    &local_hash,
+                    local_protected,
+                    &local_updated_at,
+                    remote_hash,
+                    REMOTE_PEER_PRIORITY,
+                    &peer.name,
+                    remote_updated_at,
+                ) {
+                    crate::consensus::FreshnessResolution::Identical
+                    | crate::consensus::FreshnessResolution::KeepLocal { .. } => {}
+                    crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
+                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                            received += 1;
+                        }
+                    }
+                    crate::consensus::FreshnessResolution::MarkConflicted { .. } => {}
+                }
+            }
+            _ => {
+                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                    received += 1;
+                }
+            }
         }
     }
 

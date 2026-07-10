@@ -131,6 +131,7 @@ mod tests {
             valid_from: None,
             valid_until: None,
             shareable: false,
+            content_hash: String::new(),
         };
         let node_b = GraphNode {
             id: "b".into(),
@@ -147,6 +148,7 @@ mod tests {
             valid_from: None,
             valid_until: None,
             shareable: false,
+            content_hash: String::new(),
         };
 
         let low: Vec<(GraphNode, f32)> = vec![(node_a.clone(), 0.8), (node_b.clone(), 0.3)];
