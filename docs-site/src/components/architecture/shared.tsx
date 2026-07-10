@@ -84,6 +84,13 @@ export function GlowFilter({ id, color = '#14B8A6' }: { id: string; color?: stri
 }
 
 // Reusable SVG node component
+interface NodeStyle {
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  strokeDasharray?: string;
+}
+
 interface NodeProps {
   x: number;
   y: number;
@@ -91,7 +98,7 @@ interface NodeProps {
   height: number;
   label: string;
   sublabel?: string;
-  style?: typeof NODE_STYLES.core;
+  style?: NodeStyle;
   highlight?: boolean;
   onClick?: () => void;
 }

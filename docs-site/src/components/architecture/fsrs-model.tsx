@@ -40,12 +40,12 @@ export function FsrsModel() {
             {/* Step 1: Memory Creation */}
             <PhaseBox x={20} y={10} width={520} height={80} title="1. Memory Creation" color="#3B82F6">
               <SvgNode x={40} y={48} width={100} height={30} label="tylluan_store" sublabel="guild call" style={NODE_STYLES.process} />
-              <text x={200} y={58} fill="#94A3B8" fontSize="10" fontFamily="ui-monospace, monospace">
-                S₀ = 14d
-              </text>
-              <text x={200} y={72} fill="#94A3B8" fontSize="10" fontFamily="ui-monospace, monospace">
-                D₀ = 0.5, R₀ = 1.0
-              </text>
+                <text x={200} y={58} fill="#94A3B8" fontSize="10" fontFamily="ui-monospace, monospace">
+                  S₀ = 14d
+                </text>
+                <text x={200} y={72} fill="#94A3B8" fontSize="10" fontFamily="ui-monospace, monospace">
+                  D₀ = 0.3, R computed
+                </text>
               <text x={360} y={58} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
                 (migration default)
               </text>
@@ -208,11 +208,11 @@ export function FsrsModel() {
               <div className="text-emerald-400/80">
                 <span className="text-emerald-400">+</span> difficulty REAL NOT NULL DEFAULT 0.5
               </div>
-              <div className="text-emerald-400/80">
-                <span className="text-emerald-400">+</span> retrievability REAL NOT NULL DEFAULT 1.0
+              <div className="text-amber-400/80">
+                <span className="text-amber-400">~</span> retrievability (COMPUTED: 2^(-Δt / stability), no almacenado)
               </div>
               <div className="text-emerald-400/80">
-                <span className="text-emerald-400">+</span> fsrs_last_review TEXT
+                <span className="text-emerald-400">+</span> fsrs_last_review INTEGER DEFAULT 0
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground">

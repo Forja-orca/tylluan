@@ -109,14 +109,14 @@ export function DispatchFlow() {
           </PhaseBox>
 
           {/* ═══════ STEP 4: GUILD EXECUTION ═══════ */}
-          <SectionLabel x={30} y="395" text="STEP 4: Guild Execution" color="#14B8A6" />
+          <SectionLabel x={30} y={395} text="STEP 4: Guild Execution" color="#14B8A6" />
 
           <PhaseBox x={40} y={407} width={1030} height={140} title="Guild Execution & Response" color="#14B8A6">
             {/* Guild types */}
             <SvgNode x={60} y={440} width={110} height={34} label="tylluan_do" sublabel="execute action" style={NODE_STYLES.process} />
             <SvgNode x={190} y={440} width={110} height={34} label="tylluan_recall" sublabel="memory search" style={NODE_STYLES.process} />
             <SvgNode x={320} y={440} width={110} height={34} label="tylluan_store" sublabel="persist memory" style={NODE_STYLES.process} />
-            <SvgNode x={450} y={440} width={110} height={34} label="tylluan_ask" sublabel="LLM query" style={NODE_STYLES.process} />
+            <SvgNode x={450} y={440} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
 
             {/* Execution details */}
             <text x={600} y={448} fill="#94A3B8" fontSize="9" fontFamily="ui-monospace, monospace">
@@ -149,7 +149,7 @@ export function DispatchFlow() {
           </PhaseBox>
 
           {/* ═══════ STEP 5: RESPONSE ═══════ */}
-          <SectionLabel x={30} y="565" text="STEP 5: Response" color="#10B981" />
+          <SectionLabel x={30} y={565} text="STEP 5: Response" color="#10B981" />
 
           <PhaseBox x={200} y={577} width={700} height={65} title="Response Assembly" color="#10B981">
             <SvgNode x={220} y={607} width={130} height={26} label="Guild Result" sublabel="stdout/stderr" style={NODE_STYLES.core} />

@@ -185,7 +185,7 @@ export function Roadmap() {
                     <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${statusStyle.color}`}>
                       {statusStyle.label}
                     </span>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${phaseColor.color} ${phaseColor.bg} ${phaseColor.border}`}>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${phaseColor.text} ${phaseColor.bg} ${phaseColor.border}`}>
                       P{item.phase}
                     </span>
                   </div>
