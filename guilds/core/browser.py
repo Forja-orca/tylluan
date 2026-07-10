@@ -64,7 +64,7 @@ def find_browser() -> Optional[str]:
 def find_free_port() -> int:
     """Find a free port for remote debugging."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
+        s.bind(('127.0.0.1', 0))
         return s.getsockname()[1]
 
 

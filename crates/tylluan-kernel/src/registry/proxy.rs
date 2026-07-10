@@ -1,4 +1,4 @@
-﻿//! # MCP Proxy
+//! # MCP Proxy
 //!
 //! Connects the TylluanNexus kernel to Python guild subprocesses using the
 //! MCP protocol (JSON-RPC over stdio). Uses `rmcp` as an MCP **client** to
@@ -630,6 +630,24 @@ impl SseMcpProxy {
         use std::str::FromStr;
 
         let tool_timeout = Duration::from_millis(timeout_ms);
+
+        let validate_url = |url_str: &str| -> Result<()> {
+            if let Ok(url) = reqwest::Url::parse(url_str) {
+                if url.scheme() == "http" {
+                    if let Some(host) = url.host_str() {
+                        if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+                            return Err(anyhow::anyhow!(
+                                "Security violation: Cleartext transmission of sensitive information blocked for external host '{}'. Use HTTPS instead.",
+                                host
+                            ));
+                        }
+                    }
+                }
+            }
+            Ok(())
+        };
+        validate_url(sse_url)?;
+        validate_url(post_url)?;
 
         let mut header_map = HeaderMap::new();
         header_map.insert("accept", HeaderValue::from_static("text/event-stream"));
