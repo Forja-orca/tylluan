@@ -949,6 +949,26 @@ impl SseMcpProxy {
         }
     }
 
+    /// Reject cleartext HTTP to non-localhost hosts at call time.
+    /// This mirrors connect()'s validate_url but runs on every request,
+    /// making the guard visible to static analysis (CodeQL).
+    fn guard_cleartext_transmission(url: &str) -> Result<()> {
+        if let Ok(parsed) = reqwest::Url::parse(url) {
+            if parsed.scheme() == "http" {
+                if let Some(host) = parsed.host_str() {
+                    if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+                        return Err(anyhow::anyhow!(
+                            "Security violation: Cleartext transmission of sensitive information \
+                             blocked for external host '{}'. Use HTTPS instead.",
+                            host
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Send JSON-RPC request via POST and await the response from the SSE stream.
     async fn jsonrpc(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
@@ -966,6 +986,7 @@ impl SseMcpProxy {
         }
 
         let post_url = format!("{}?sessionId={}", self.post_url, self.session_id);
+        Self::guard_cleartext_transmission(&post_url)?;
         let send_result = tokio::time::timeout(
             self.tool_call_timeout,
             self.client.post(&post_url).json(&body).send(),
@@ -1009,8 +1030,11 @@ impl SseMcpProxy {
             .map_err(|_| anyhow::anyhow!("SSE listener dropped before response for '{}'", self.guild_name))?;
 
         if let Some(err) = json.get("error") {
+            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown");
+            let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
+            let safe_msg: String = msg.chars().take(200).collect();
             return Err(anyhow::anyhow!(
-                "MCP error calling '{}' on '{}': {}", method, self.guild_name, err
+                "MCP error {} calling '{}' on '{}': {}", code, method, self.guild_name, safe_msg
             ));
         }
 
