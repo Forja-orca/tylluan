@@ -31,10 +31,10 @@ jobs:
       - name: Check reproducible build (debug, fast)
         run: |
           cargo build -p tylluan-kernel 2>&1
-          cp target/debug/tylluan-kernel target/debug/tylluan-kernel.v1
+          cp target/debug/tylluan-nexus target/debug/tylluan-nexus.v1
           cargo clean 2>&1
           cargo build -p tylluan-kernel 2>&1
-          if cmp target/debug/tylluan-kernel target/debug/tylluan-kernel.v1; then
+          if cmp target/debug/tylluan-nexus target/debug/tylluan-nexus.v1; then
             echo "✅ Reproducible: debug builds produce identical binaries"
           else
             echo "⚠️ Non-reproducible: debug build differs between runs"
