@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check } from 'lucide-react';
+import { Database, Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check, User } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useNexus } from '../hooks/useNexus';
 
 interface WelcomeEmptyStateProps {
   bridge: any;
@@ -19,14 +20,16 @@ export function WelcomeEmptyState({
   notify,
   onRefresh
 }: WelcomeEmptyStateProps) {
+  const { agentProfiles } = useNexus();
   const [firstQueryText, setFirstQueryText] = useState('What is Tylluan?');
-  const [noteText, setNoteText] = useState('Tylluan is running local graph RAG.');
+  const [noteText, setNoteText] = useState('Tylluan is running local RAG.');
   const [copied, setCopied] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [querying, setQuerying] = useState(false);
 
   // States for checklist (using localStorage and api telemetry)
   const isInstalled = true; // By definition if they see the dashboard
+  const isProfileResolved = agentProfiles && agentProfiles.length > 0;
   const isModelLoaded = !!(sysStatus?.embeddings_loaded || sysStatus?.silva_healthy);
   
   // MCP is connected if there is at least one session, or if they checked the box
@@ -122,6 +125,7 @@ export function WelcomeEmptyState({
           <div className="space-y-3">
             {[
               { id: 'install', label: 'Install Tylluan', done: isInstalled },
+              { id: 'profile', label: 'Create Agent Profile', done: isProfileResolved },
               { id: 'model', label: 'Embeddings Engine', done: isModelLoaded },
               { id: 'mcp', label: 'Connect MCP Client', done: isMcpConnected },
               { id: 'query', label: 'First Query / Action', done: firstQueryDone }
