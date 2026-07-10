@@ -105,7 +105,7 @@ export function ArchitectureMap() {
             <SvgNode x={750} y={250} width={100} height={34} label="tylluan_do" sublabel="execute actions" style={NODE_STYLES.process} />
             <SvgNode x={870} y={250} width={100} height={34} label="tylluan_recall" sublabel="memory access" style={NODE_STYLES.process} />
             <SvgNode x={750} y={300} width={100} height={34} label="tylluan_store" sublabel="persist memory" style={NODE_STYLES.process} />
-            <SvgNode x={870} y={300} width={100} height={34} label="tylluan_ask" sublabel="query LLM" style={NODE_STYLES.process} />
+            <SvgNode x={870} y={300} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
 
             <rect x={750} y={342} width={220} height={28} rx={4} fill="none" stroke="#F59E0B" strokeWidth={0.8} strokeDasharray="4 2" opacity={0.5} />
             <text x={860} y={360} textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" opacity={0.7}>
@@ -146,7 +146,7 @@ export function ArchitectureMap() {
           </PhaseBox>
 
           {/* ═══════ LAYER 5: INFRASTRUCTURE ═══════ */}
-          <SectionLabel x={30} y="562" text="INFRASTRUCTURE" color="#64748B" />
+          <SectionLabel x={30} y={562} text="INFRASTRUCTURE" color="#64748B" />
 
           <SvgNode x={60} y={548} width={160} height={36} label="BGE-M3 Embeddings" sublabel="multilingual · 1024d" style={NODE_STYLES.subsystem} />
           <SvgNode x={250} y={548} width={140} height={36} label="HNSW Index" sublabel="vector search" style={NODE_STYLES.subsystem} />
@@ -155,7 +155,7 @@ export function ArchitectureMap() {
           <SvgNode x={750} y={548} width={150} height={36} label="ONNX Runtime" sublabel="model inference" style={NODE_STYLES.subsystem} />
 
           {/* ═══════ FUTURE: SLEEP CYCLE ═══════ */}
-          <PhaseBox x={60} y="612" width={840} height={80} title="FUTURE: SleepCycle (SCM) — Memory Consolidation" color="#F59E0B">
+          <PhaseBox x={60} y={612} width={840} height={80} title="FUTURE: SleepCycle (SCM) — Memory Consolidation" color="#F59E0B">
             <SvgNode x={80} y={650} width={120} height={30} label="NREM Phase" sublabel="deduplicate · merge" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
             <SvgNode x={220} y={650} width={120} height={30} label="REM Phase" sublabel="reactivate weak" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
             <SvgNode x={360} y={650} width={140} height={30} label="Value Forgetting" sublabel="prune low-value" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />

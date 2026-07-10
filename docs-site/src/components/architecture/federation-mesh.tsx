@@ -112,7 +112,7 @@ export function FederationMesh() {
           </PhaseBox>
 
           {/* Step 4: Apply */}
-          <PhaseBox x={550} y="330" width={520} height={60} title="Step 4 — Apply & Log" color="#10B981">
+          <PhaseBox x={550} y={330} width={520} height={60} title="Step 4 — Apply & Log" color="#10B981">
             <SvgNode x={570} y={360} width={130} height={24} label="Merge to SilvaDB" sublabel="" style={NODE_STYLES.core} />
             <SvgNode x={720} y={360} width={130} height={24} label="Log to Ledger" sublabel="sync record" style={NODE_STYLES.subsystem} />
             <text x={880} y={372} fill="#10B981" fontSize="9" fontFamily="ui-monospace, monospace">
