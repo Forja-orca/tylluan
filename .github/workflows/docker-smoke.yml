@@ -23,6 +23,11 @@ jobs:
       - name: Build Docker image
         run: docker build -t tylluan:test .
 
+      - name: Prepare data volume
+        run: |
+          mkdir -p ${{ github.workspace }}/.tylluan-data
+          sudo chown 1000:1000 ${{ github.workspace }}/.tylluan-data
+
       - name: Start container
         run: |
           docker run -d --name tylluan-test \
