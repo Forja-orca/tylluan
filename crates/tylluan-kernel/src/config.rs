@@ -841,6 +841,27 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
 ///    Service daemon). This mode does NOT protect against filesystem/disk access —
 ///    the seed lives next to the encrypted DB. Operators on server/Docker profiles
 ///    should set `TYLLUAN_DB_KEY` explicitly for real at-rest protection.
+/// Quick check for DBus availability on Linux (fails fast in Docker/headless).
+/// Prevents keyring from hanging for ~25s on zbus connection timeout.
+fn dbus_is_available() -> bool {
+    // Session bus: $XDG_RUNTIME_DIR/bus  (e.g. /run/user/1000/bus)
+    if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
+        let session_bus = std::path::Path::new(&runtime).join("bus");
+        if session_bus.exists() {
+            return true;
+        }
+    }
+    // System bus: /run/dbus/system_bus_socket
+    if std::path::Path::new("/run/dbus/system_bus_socket").exists() {
+        return true;
+    }
+    // Explicit env var override
+    if std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok() {
+        return true;
+    }
+    false
+}
+
 fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
     if let Ok(key_hex) = std::env::var("TYLLUAN_DB_KEY") {
         if key_hex.chars().all(|c| c.is_ascii_hexdigit()) && key_hex.len() == 64 {
@@ -850,6 +871,16 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
             "TYLLUAN_DB_KEY must be a 64-character hex string \
              (generate with: openssl rand -hex 32)"
         );
+    }
+
+    // On Linux, detect DBus presence EARLY to avoid a ~25s zbus timeout
+    // inside keyring::get_password() when no DBus daemon is running
+    // (common in Docker / headless CI environments).
+    if cfg!(target_os = "linux") && !dbus_is_available() {
+        tracing::warn!("No DBus detected on Linux — skipping OS keychain. \
+             File-based key fallback does NOT protect against filesystem access. \
+             Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
+        return file_based_key_fallback(data_dir);
     }
 
     let account = data_dir.to_string_lossy().to_string();
