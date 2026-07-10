@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "timestamp": 1783725194.3137066,
+    "mean_sin_ms": 3141.4398300112225,
+    "mean_con_ms": 2597.2416799748316,
+    "improvement_pct": 17.323207811828333,
+    "errors_sin": 2,
+    "errors_con": 2
+  },
+  "queries": [
+    {
+      "query_index": 1,
+      "query": "search for rust async patterns then summarize the top 3",
+      "latency_sin_ms": 5327.287300024182,
+      "latency_con_ms": 1074.1180999903008,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 79.8374287043722
+    },
+    {
+      "query_index": 2,
+      "query": "check system CPU usage then check disk usage",
+      "latency_sin_ms": 935.981799964793,
+      "latency_con_ms": 1527.3460999596864,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": -63.1811751058768
+    },
+    {
+      "query_index": 3,
+      "query": "find all Python files in guilds/core then count how many there are",
+      "latency_sin_ms": 992.4498000182211,
+      "latency_con_ms": 582.6775999739766,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 41.28895990877536
+    },
+    {
+      "query_index": 4,
+      "query": "check git log last 5 commits then summarize what changed",
+      "latency_sin_ms": 289.2124999780208,
+      "latency_con_ms": 284.5499999821186,
+      "error_sin": true,
+      "error_con": true,
+      "delta_pct": 1.6121364035982249
+    },
+    {
+      "query_index": 5,
+      "query": "search web for tylluan mcp then find mentions of sovereign memory",
+      "latency_sin_ms": 2022.2487000282854,
+      "latency_con_ms": 15776.154199964367,
+      "error_sin": true,
+      "error_con": true,
+      "delta_pct": -680.1292788440761
+    },
+    {
+      "query_index": 6,
+      "query": "read the file README.md then generate a one-sentence summary",
+      "latency_sin_ms": 15939.24880004488,
+      "latency_con_ms": 686.5569999208674,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 95.6926640111237
+    },
+    {
+      "query_index": 7,
+      "query": "list files in guilds/core then show the names of the largest 3",
+      "latency_sin_ms": 859.1872999677435,
+      "latency_con_ms": 1393.337200046517,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": -62.16920339707386
+    },
+    {
+      "query_index": 8,
+      "query": "get current system metrics then tell me if memory usage is above 70%",
+      "latency_sin_ms": 1104.7471000347286,
+      "latency_con_ms": 1016.9070999836549,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 7.951141039276084
+    },
+    {
+      "query_index": 9,
+      "query": "search for TRINITY coordinator AI paper then explain the three roles",
+      "latency_sin_ms": 2444.9901999905705,
+      "latency_con_ms": 2333.9979000156745,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 4.539580566634749
+    },
+    {
+      "query_index": 10,
+      "query": "find TODO comments in guilds/core/coordinator.py then list them",
+      "latency_sin_ms": 1499.0448000608012,
+      "latency_con_ms": 1296.7715999111533,
+      "error_sin": false,
+      "error_con": false,
+      "delta_pct": 13.493472652814892
+    }
+  ]
+}
