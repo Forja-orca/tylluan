@@ -1,9 +1,19 @@
-﻿/**
+/**
  * TylluanNexus | Sovereign Control Center JS
  */
 
 const API_BASE = window.location.origin;
 let authToken = sessionStorage.getItem('tylluan_token') || localStorage.getItem('tylluan_token') || '';
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
 const views = {
     dashboard: document.getElementById('dashboard'),
@@ -182,9 +192,9 @@ const app = {
                 if (data.storage.recent_nodes.length > 0) {
                     intelligenceEl.innerHTML = data.storage.recent_nodes.map(node => `
                         <div class="card insight-card">
-                            <h4>${node.node_type}</h4>
-                            <div class="insight-content">${this.truncate(node.content, 120)}</div>
-                            <div class="insight-meta">ID: ${node.id} | Peso: ${node.weight.toFixed(2)}</div>
+                            <h4>${escapeHtml(node.node_type)}</h4>
+                            <div class="insight-content">${escapeHtml(this.truncate(node.content, 120))}</div>
+                            <div class="insight-meta">ID: ${escapeHtml(node.id)} | Peso: ${node.weight.toFixed(2)}</div>
                         </div>
                     `).join('');
                 } else {
@@ -203,7 +213,7 @@ const app = {
                 list.innerHTML = filtered.map(g => `
                     <div class="guild-item">
                         <div class="guild-info">
-                            <h4>${g.name}</h4>
+                            <h4>${escapeHtml(g.name)}</h4>
                             <span>${g.tools_count} tools | ${g.issues.length} alerts</span>
                         </div>
                         <div class="guild-actions">
@@ -213,7 +223,7 @@ const app = {
                 `).join('');
 
                 if (filtered.length === 0 && this.searchQuery) {
-                    list.innerHTML = `<div class="log-line system" style="padding: 2rem; text-align: center;">No tools match "${this.searchQuery}"</div>`;
+                    list.innerHTML = `<div class="log-line system" style="padding: 2rem; text-align: center;">No tools match "${escapeHtml(this.searchQuery)}"</div>`;
                 }
             }
         } catch (e) {
@@ -512,7 +522,7 @@ const app = {
                 <span>🧠 PENSAMIENTO SOBERANO</span>
                 <span>${time} | Confianza: ${confPct}%</span>
             </div>
-            <div class="thought-text">${data.thought}</div>
+            <div class="thought-text">${escapeHtml(data.thought)}</div>
             <div class="confidence-bar">
                 <div class="confidence-fill" style="width: ${confPct}%"></div>
             </div>
@@ -706,8 +716,8 @@ const app = {
                 logPanel.innerHTML = '<div class="log-line system">🛡️ Monitoreo activo: No se han detectado brechas de seguridad.</div>';
             } else if (data.events.length > 0) {
                 logPanel.innerHTML = data.events.map(ev => {
-                    const levelClass = ev.level.toLowerCase();
-                    return `<div class="log-line ${levelClass}">[${ev.timestamp}] ${ev.module.toUpperCase()}: ${ev.message}</div>`;
+                    const levelClass = escapeHtml(ev.level.toLowerCase());
+                    return `<div class="log-line ${levelClass}">[${escapeHtml(ev.timestamp)}] ${escapeHtml(ev.module.toUpperCase())}: ${escapeHtml(ev.message)}</div>`;
                 }).join('');
                 logPanel.scrollTop = logPanel.scrollHeight;
             }
@@ -799,9 +809,9 @@ const app = {
         container.innerHTML = data.map((p, idx) => `
             <div class="provider-item">
                 <div class="provider-info">
-                    <strong>${p.name}</strong>
-                    <span>${p.mcp_server} / ${p.model_id}</span>
-                    <span class="badge">${(p.capability || []).join(', ')}</span>
+                    <strong>${escapeHtml(p.name)}</strong>
+                    <span>${escapeHtml(p.mcp_server)} / ${escapeHtml(p.model_id)}</span>
+                    <span class="badge">${(p.capability || []).map(c => escapeHtml(c)).join(', ')}</span>
                 </div>
                 <button class="btn-micro btn-danger" onclick="app.removeProvider(${idx})">🗑️</button>
             </div>
@@ -881,15 +891,15 @@ const app = {
             return `
             <div class="guild-manager-item ${isCore ? 'core-guild' : ''}">
                 <div class="guild-manager-info">
-                    <strong>${isCore ? '★ ' : ''}${g.name}</strong>
+                    <strong>${isCore ? '★ ' : ''}${escapeHtml(g.name)}</strong>
                     <span>${g.tools_count || 0}T</span>
                     <span class="mem-est">${memEst}</span>
                     <span class="badge ${g.running ? 'online' : 'offline'}">${g.running ? 'RUN' : 'STOP'}</span>
                 </div>
                 <div class="guild-manager-actions">
                     ${g.running 
-                        ? `<button class="btn-micro btn-danger" onclick="app.stopGuild('${g.name}')">STOP</button>`
-                        : `<button class="btn-micro btn-success" onclick="app.startGuild('${g.name}')">START</button>`
+                        ? `<button class="btn-micro btn-danger" onclick="app.stopGuild('${escapeHtml(g.name)}')">STOP</button>`
+                        : `<button class="btn-micro btn-success" onclick="app.startGuild('${escapeHtml(g.name)}')">START</button>`
                     }
                 </div>
             </div>

@@ -1135,7 +1135,7 @@ async fn silva_add_edge_handler(State(state): State<Arc<HttpState>>, Json(p): Js
 }
 
 async fn silva_edge_search_handler(State(state): State<Arc<HttpState>>, Json(q): Json<EdgeSearchQuery>) -> impl IntoResponse {
-    let limit = q.limit.unwrap_or(10);
+    let limit = q.limit.unwrap_or(10).min(1000);
     let engine = match state.matcher.engine() {
         Some(e) => e,
         None => return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "embedding engine not available"}))).into_response(),
