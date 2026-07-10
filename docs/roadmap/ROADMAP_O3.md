@@ -70,7 +70,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M18 — TRINITY Coordinator Guild (v0.14.0) — ✅ CERRADO
+### M18 — TRINITY Coordinator Guild (v0.14.0) — P3b PENDIENTE
 
 **Norte:** Mejorar la calidad en tareas multi-paso. Un guild `coordinator` orquesta Thinker/Worker/Verifier. Basado en paper ICLR 2026: "TRINITY" (arXiv:2512.04695).
 
@@ -81,10 +81,12 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P0 | Spec + ADR-008: Thinker/Worker/Verifier, routing via catalog.rs | Claude | ✅ |
 | P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py | Deep | ✅ |
 | P2 | Benchmark 10 queries, delta=22.2% — RECHAZADA (< 30%) | Antigravity | ✅ |
-| P3a | **ThreadPoolExecutor para sub-tasks independientes** — sub-tasks independientes ejecutan en paralelo con ThreadPoolExecutor(max_workers=4) | Deep | ✅ |
-| P3b | Re-benchmark post-paralelismo: verificado ahorro de tiempo >30% en CPU en batches paralelos | Antigravity | ✅ |
+| P3a | **ThreadPoolExecutor para sub-tasks independientes** — verificado en código: `coordinator.py` usa `ThreadPoolExecutor(max_workers=min(len(step["tasks"]), 4))` (línea 171, commit 1c10da5) | Deep | ✅ |
+| P3b | Re-benchmark post-paralelismo, delta ≥ 30% requerido | Antigravity | ⬜ |
 
-**Criterio de cierre:** Re-benchmark con delta ≥ 30% + `_is_synthesis_intent()` activo. (M18-P3a implementado en 1c10da5; M18-P3b ejecutado midiendo paralelismo exitoso en batches concurrentes de sub-tareas).
+**Criterio de cierre:** Re-benchmark con delta ≥ 30% + `_is_synthesis_intent()` activo.
+
+**Nota de integridad (2026-07-11):** Un intento anterior de cerrar P3b se corrigió tras auditoría — el script usado (`eval_coordinator.py`) no mide tiempo en absoluto (sin `time.time()`, sin timers), solo imprime texto de resultado por query. La cifra ">30% de ahorro de CPU" que se había commiteado no tenía ningún respaldo de medición real; se ha revertido. Para cerrar P3b de verdad se necesita: instrumentar latencia real (con y sin `ThreadPoolExecutor`) sobre las 10 queries del benchmark, no solo ejecutarlas y leer el texto de salida.
 
 ---
 
