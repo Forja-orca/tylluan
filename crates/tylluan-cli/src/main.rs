@@ -387,6 +387,14 @@ port = 3030               # HTTP/S gateway port
 dev_mode = false          # NEVER enable in production — disables auth
 transports = ["stdio", "http", "sse"]
 
+# ── Security ─────────────────────────────────────────────────────────
+[security]
+# encrypt_at_rest left unset on purpose: defaults to true only on binaries built
+# with --features encryption (bundles SQLCipher+OpenSSL; not supported on Windows
+# native). Setting it to `true` here would be misleading on standard builds,
+# which log a warning and run unencrypted instead of silently failing.
+# Key resolved from: TYLLUAN_DB_KEY env var > OS keychain > file fallback.
+
 # ── Data paths ──────────────────────────────────────────────────────
 [memory]
 db_path = "./data/tylluan.db"

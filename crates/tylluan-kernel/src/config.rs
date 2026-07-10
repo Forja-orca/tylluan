@@ -10,6 +10,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 use std::fs;
+use rand::rngs::OsRng;
+use rand::RngCore;
+use sha2::Digest;
 
 #[derive(Debug, Clone)]
 pub struct GremioDiscovery {
@@ -752,9 +755,18 @@ pub struct SecurityConfig {
     pub sandbox: SandboxConfig,
     #[serde(default)]
     pub acl: AclConfig,
-    /// Enable SQLCipher encryption at rest. Reads key from TYLLUAN_DB_KEY env var.
-    #[serde(default)]
+    /// Enable SQLCipher encryption at rest. Defaults to true ONLY when the binary
+    /// was compiled with the `encryption` feature — that feature is not in the
+    /// default feature set (bundles SQLCipher+OpenSSL from source, unsupported on
+    /// Windows native). Defaulting this to true unconditionally would silently
+    /// report "encrypted" on standard builds that cannot actually encrypt.
+    /// Key resolved from: TYLLUAN_DB_KEY env var > OS keychain > file fallback.
+    #[serde(default = "default_encrypt_at_rest")]
     pub encrypt_at_rest: bool,
+}
+
+fn default_encrypt_at_rest() -> bool {
+    cfg!(feature = "encryption")
 }
 
 impl Default for SecurityConfig {
@@ -763,15 +775,14 @@ impl Default for SecurityConfig {
             intent_filter: false,
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
-            encrypt_at_rest: false,
+            encrypt_at_rest: default_encrypt_at_rest(),
         }
     }
 }
 
 /// Open a SQLite connection with optional SQLCipher encryption.
-/// If [security] encrypt_at_rest = true, reads TYLLUAN_DB_KEY from env.
-/// The key MUST be a 64-character lowercase hex string (32 bytes).
-/// Generate with: openssl rand -hex 32
+/// When [security] encrypt_at_rest = true (default), the encryption key is
+/// resolved via: TYLLUAN_DB_KEY env var > .tylluan-db-key file > auto-generate.
 ///
 /// Encryption requires the `encryption` Cargo feature:
 ///   cargo build --features encryption
@@ -789,34 +800,19 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     if let Ok(cfg_lock) = TylluanConfig::load_cached() {
         if let Ok(cfg) = cfg_lock.try_read() {
             if cfg.security.encrypt_at_rest {
+                let data_dir = path.parent().unwrap_or(Path::new("."));
+                let key_hex = ensure_db_key(data_dir)?;
+
                 #[cfg(feature = "encryption")]
                 {
-                    match std::env::var("TYLLUAN_DB_KEY") {
-                        Ok(key_hex) => {
-                            if !key_hex.chars().all(|c| c.is_ascii_hexdigit()) || key_hex.len() != 64 {
-                                return Err(anyhow::anyhow!(
-                                    "TYLLUAN_DB_KEY must be a 64-character hex string \
-                                     (generate with: openssl rand -hex 32)"
-                                ));
-                            }
-                            conn.pragma_update(None, "hexkey", &key_hex)?;
-                            // Verify the key is correct before proceeding
-                            conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-                                .map_err(|_| anyhow::anyhow!(
-                                    "Encryption key rejected for {}: wrong TYLLUAN_DB_KEY or \
-                                     database was not encrypted with SQLCipher",
-                                    path.display()
-                                ))?;
-                            tracing::info!("🔐 SQLCipher encryption active: {}", path.display());
-                        }
-                        Err(_) => {
-                            tracing::warn!(
-                                "⚠️ encrypt_at_rest=true but TYLLUAN_DB_KEY not set \
-                                 — {} is NOT encrypted",
-                                path.display()
-                            );
-                        }
-                    }
+                    conn.pragma_update(None, "hexkey", &key_hex)?;
+                    conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
+                        .map_err(|_| anyhow::anyhow!(
+                            "Encryption key rejected for {}: wrong key or \
+                             database was not encrypted with SQLCipher",
+                            path.display()
+                        ))?;
+                    tracing::info!("🔐 SQLCipher encryption active: {}", path.display());
                 }
                 #[cfg(not(feature = "encryption"))]
                 {
@@ -824,6 +820,7 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
                         "encrypt_at_rest=true but binary was not compiled with encryption support. \
                          Rebuild with: cargo build --features encryption"
                     );
+                    let _ = key_hex;
                 }
             }
         }
@@ -831,6 +828,120 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
 
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
     Ok(conn)
+}
+
+/// Resolve the DB encryption key with priority:
+/// 1. `TYLLUAN_DB_KEY` env var (64-char hex) — explicit operator override, e.g. injected
+///    from a vault/secrets manager in server/Docker deployments.
+/// 2. OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service).
+///    The key never touches the data directory — it is tied to the OS user account,
+///    so copying the DB file or the data directory alone does not leak the key.
+/// 3. File-based fallback (`.tylluan-db-key`, derived with Argon2id) — ONLY used when
+///    no keychain backend is available (e.g. headless Linux/Docker without a Secret
+///    Service daemon). This mode does NOT protect against filesystem/disk access —
+///    the seed lives next to the encrypted DB. Operators on server/Docker profiles
+///    should set `TYLLUAN_DB_KEY` explicitly for real at-rest protection.
+fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
+    if let Ok(key_hex) = std::env::var("TYLLUAN_DB_KEY") {
+        if key_hex.chars().all(|c| c.is_ascii_hexdigit()) && key_hex.len() == 64 {
+            return Ok(key_hex);
+        }
+        anyhow::bail!(
+            "TYLLUAN_DB_KEY must be a 64-character hex string \
+             (generate with: openssl rand -hex 32)"
+        );
+    }
+
+    let account = data_dir.to_string_lossy().to_string();
+    match keyring::Entry::new("tylluan-nexus-db", &account) {
+        Ok(entry) => match entry.get_password() {
+            Ok(key_hex) if key_hex.chars().all(|c| c.is_ascii_hexdigit()) && key_hex.len() == 64 => {
+                tracing::info!("🔐 DB encryption key loaded from OS keychain");
+                return Ok(key_hex);
+            }
+            Ok(_) => {
+                tracing::warn!("OS keychain entry for tylluan-nexus-db is corrupt — regenerating");
+            }
+            Err(keyring::Error::NoEntry) => {
+                let mut raw = [0u8; 32];
+                OsRng.fill_bytes(&mut raw);
+                let key_hex: String = raw.iter().map(|b| format!("{:02x}", b)).collect();
+                match entry.set_password(&key_hex) {
+                    Ok(()) => {
+                        tracing::info!("🔑 Generated DB encryption key, stored in OS keychain (never written to disk)");
+                        return Ok(key_hex);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Could not store key in OS keychain ({e}) — falling back to file-based key. \
+                             This does NOT protect against filesystem/disk access. \
+                             Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("OS keychain unavailable ({e}) — falling back to file-based key. \
+                     This does NOT protect against filesystem/disk access. \
+                     Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
+            }
+        },
+        Err(e) => {
+            tracing::warn!("OS keychain unavailable ({e}) — falling back to file-based key. \
+                 This does NOT protect against filesystem/disk access. \
+                 Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
+        }
+    }
+
+    file_based_key_fallback(data_dir)
+}
+
+/// Last-resort key storage for environments without an OS keychain (headless
+/// Linux/Docker without Secret Service). The seed sits next to the encrypted
+/// DB, so this does NOT protect against an attacker with filesystem access —
+/// it only guards against e.g. accidentally syncing just the `.db` file
+/// without its sibling key file.
+fn file_based_key_fallback(data_dir: &Path) -> anyhow::Result<String> {
+    let key_path = data_dir.join(".tylluan-db-key");
+
+    if key_path.exists() {
+        let seed = fs::read(&key_path)
+            .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", key_path.display(), e))?;
+        if seed.len() != 32 {
+            anyhow::bail!(
+                "{} must be exactly 32 bytes (got {}). Delete it to auto-regenerate.",
+                key_path.display(),
+                seed.len()
+            );
+        }
+        return derive_key_argon2(&seed, data_dir);
+    }
+
+    let mut seed = [0u8; 32];
+    OsRng.fill_bytes(&mut seed);
+    fs::write(&key_path, &seed)
+        .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
+    tracing::info!("🔑 Generated file-based DB encryption key at {} (no keychain available)", key_path.display());
+
+    derive_key_argon2(&seed, data_dir)
+}
+
+/// Derive a 64-char hex SQLCipher key from a 32-byte seed using Argon2id.
+/// Uses SHA-256(seed + data_dir) as the deterministic salt (16 bytes).
+fn derive_key_argon2(seed: &[u8], data_dir: &Path) -> anyhow::Result<String> {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(seed);
+    hasher.update(data_dir.to_string_lossy().as_bytes());
+    let hash = hasher.finalize();
+
+    let mut salt = [0u8; 16];
+    salt.copy_from_slice(&hash[..16]);
+
+    let argon2 = argon2::Argon2::default();
+    let mut key = [0u8; 32];
+    argon2
+        .hash_password_into(seed, &salt, &mut key)
+        .map_err(|e| anyhow::anyhow!("Argon2id key derivation failed: {}", e))?;
+
+    Ok(key.iter().map(|b| format!("{:02x}", b)).collect())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
