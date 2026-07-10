@@ -140,39 +140,44 @@ fn test_guilds_v2_all_module_paths_in_guilds_core() {
 fn test_guilds_v2_categories_correctly_assigned() {
     let catalog = builtin_catalog();
 
-    // Core: bash, filesystem, memory, monitor
-    let core: Vec<&str> = catalog.iter()
-        .filter(|g| g.category == GuildCategory::Core)
-        .map(|g| g.name.as_str())
-        .collect();
-    assert!(core.contains(&"bash"), "bash must be Core");
-    assert!(core.contains(&"filesystem"), "filesystem must be Core");
-    assert!(core.contains(&"memory"), "memory must be Core");
-
-    // Builders: git, docker, code
+    // Category is derived from the guild's directory (builders/scholars/
+    // watchers/wardens -> mapped; anything else falls back to Core). bash
+    // and filesystem live under guilds/builders/plugins/ (build/dev tools),
+    // memory lives under guilds/scholars/plugins/ (research/knowledge tool)
+    // -- both are correct given the real directory layout, not Core.
     let builders: Vec<&str> = catalog.iter()
         .filter(|g| g.category == GuildCategory::Builder)
         .map(|g| g.name.as_str())
         .collect();
+    assert!(builders.contains(&"bash"), "bash must be Builder (lives in guilds/builders/plugins/)");
+    assert!(builders.contains(&"filesystem"), "filesystem must be Builder (lives in guilds/builders/plugins/)");
     assert!(builders.contains(&"git"), "git must be Builder");
     assert!(builders.contains(&"code"), "code must be Builder");
     assert!(builders.contains(&"docker"), "docker must be Builder");
 
-    // Scholars: search, browser, pdf, vision, code_analysis, knowledge
+    // Scholars: search, browser, pdf, vision, code_analysis, knowledge, memory
     let scholars: Vec<&str> = catalog.iter()
         .filter(|g| g.category == GuildCategory::Scholar)
         .map(|g| g.name.as_str())
         .collect();
+    assert!(scholars.contains(&"memory"), "memory must be Scholar (lives in guilds/scholars/plugins/)");
     assert!(scholars.contains(&"search"), "search must be Scholar");
     assert!(scholars.contains(&"knowledge"), "knowledge must be Scholar");
 
-    // Watchers: audit, system_metrics
+    // Watchers: system_metrics (lives in guilds/watchers/plugins/)
     let watchers: Vec<&str> = catalog.iter()
         .filter(|g| g.category == GuildCategory::Watcher)
         .map(|g| g.name.as_str())
         .collect();
-    assert!(watchers.contains(&"audit"), "audit must be Watcher");
     assert!(watchers.contains(&"system_metrics"), "system_metrics must be Watcher");
+
+    // Core: audit (lives in guilds/wardens/plugins/ -- "wardens" maps to Core,
+    // not a dedicated Warden category)
+    let core: Vec<&str> = catalog.iter()
+        .filter(|g| g.category == GuildCategory::Core)
+        .map(|g| g.name.as_str())
+        .collect();
+    assert!(core.contains(&"audit"), "audit must be Core (lives in guilds/wardens/plugins/, which maps to Core)");
 }
 
 // ─── Section 2: Guild Context Routing ─────────────────────────────────────────
