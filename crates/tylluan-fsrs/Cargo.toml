@@ -1,0 +1,13 @@
+[package]
+name = "tylluan-fsrs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Free Spaced Repetition Scheduler (FSRS-5) — per-item stability/difficulty/retrievability model"
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

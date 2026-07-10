@@ -4436,6 +4436,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tylluan-fsrs"
+version = "0.13.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "tylluan-gui"
 version = "3.0.0-rc.1"
 
@@ -4494,6 +4502,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tylluan-common",
+ "tylluan-fsrs",
  "tylluan-link",
  "urlencoding",
  "uuid",

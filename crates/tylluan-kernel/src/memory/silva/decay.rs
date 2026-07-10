@@ -3,54 +3,65 @@ use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
+use tylluan_fsrs::FsrsItem;
 
 impl super::SilvaDB {
-    /// Apply weight decay to unused nodes and prune dead memories.
-    /// Implements biological pruning: recent items are kept, old/unused ones fade.
+    /// Apply FSRS-based retrievability decay to nodes, then prune dead memories.
+    ///
+    /// Replaces the old fixed half-life (`weight *= 0.5^(t / 14d)`) with
+    /// **per-node stability**: retrievability = 2^(-elapsed_days / fsrs_stability).
+    ///
+    /// Nodes with retrievability below `prune_threshold` AND stability below
+    /// a minimum are candidates for pruning.
     pub async fn apply_decay(&self, half_life_hours: u64) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let mut conn = self.conn.blocking_lock();
-            
-            // Step 1: Query nodes that need decay:
-            // type != 'identity' AND protected = 0 AND (now - updated_at) > 1 day.
-            // We select the ID, node type, current weight, and time elapsed in hours.
-            let nodes_to_decay: Vec<(String, String, f64, f64)> = {
+            let now_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+
+            // Step 1: Query nodes that need decay — those not accessed recently
+            let nodes: Vec<(String, f64, f64, i64)> = {
                 let mut stmt = conn.prepare(
-                    "SELECT id, type, weight, (julianday('now') - julianday(updated_at)) * 24.0 FROM nodes
+                    "SELECT id, weight, fsrs_stability, fsrs_last_review
+                     FROM nodes
                      WHERE type != 'identity' AND protected = 0
                      AND julianday('now') - julianday(updated_at) > 1"
                 )?;
-                
                 stmt.query_map([], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
+                        row.get::<_, f64>(1)?,
                         row.get::<_, f64>(2)?,
-                        row.get::<_, f64>(3)?,
+                        row.get::<_, i64>(3)?,
                     ))
                 })?
                 .filter_map(|r| r.ok())
                 .collect()
             };
-
-            // Step 2: Biological decay with type-specific exponential rates calculated in Rust
-            // - lesson: full decay_half_life_hours (Long term / Durable memory)
-            // - experience: half_life / 2 (Medium term memory)
-            // - concept/default: half_life / 5 (Transient / Short term memory)
-            let hl = half_life_hours as f64;
-            let node_changes = if !nodes_to_decay.is_empty() {
+            // Step 2: Compute retrievability from FSRS, update weight
+            let _hl = half_life_hours as f64;
+            let node_changes = if !nodes.is_empty() {
                 let tx = conn.transaction()?;
                 let mut count = 0;
                 {
-                    let mut update_stmt = tx.prepare("UPDATE nodes SET weight = ?1 WHERE id = ?2")?;
-                    for (id, node_type, weight, hours_elapsed) in nodes_to_decay {
-                        let divisor = match node_type.as_str() {
-                            "lesson" => hl,
-                            "experience" => (hl / 2.0).max(1.0),
-                            _ => (hl / 5.0).max(1.0),
+                    let mut update_stmt = tx.prepare(
+                        "UPDATE nodes SET weight = ?1 WHERE id = ?2"
+                    )?;
+                    for (id, weight, stability, last_review) in &nodes {
+                        let item = FsrsItem::with_params(*stability, 0.3, *last_review);
+                        let elapsed_days = if *last_review > 0 {
+                            ((now_unix - last_review) as f64 / 86400.0).max(0.0)
+                        } else {
+                            0.0
                         };
-                        
-                        let new_weight = (weight * 0.5_f64.powf(hours_elapsed / divisor)).max(0.1);
+                        let retrievability = item.retrievability(elapsed_days);
+
+                        // Map retrievability 0..1 to weight 0.01..1.0
+                        // R=1.0 → w=1.0, R=0.0 → w≈0.01
+                        let new_weight = (retrievability * 0.99 + 0.01).max(weight.min(0.1));
+
                         update_stmt.execute(rusqlite::params![new_weight, id])?;
                         count += 1;
                     }
@@ -60,19 +71,14 @@ impl super::SilvaDB {
             } else {
                 0
             };
-            
-            // Step 3: Ensure minimum floor for non-prunable nodes
-            conn.execute(
-                "UPDATE nodes SET weight = MAX(weight, 0.01) WHERE weight < 0.01 AND type != 'identity' AND protected = 0",
-                [],
-            )?;
 
-            // Step 3: Prune dead memories (The right to be forgotten / Memory limit)
-            // Prune if weight < 0.2 AND hasn't been touched in 30 days
+            // Step 3: Prune dead memories
             let pruned = conn.execute(
                 "DELETE FROM nodes
-                 WHERE type != 'identity' AND protected = 0 
-                 AND weight < 0.2 AND julianday('now') - julianday(updated_at) > 30",
+                 WHERE type != 'identity' AND protected = 0
+                 AND weight < 0.15
+                 AND julianday('now') - julianday(updated_at) > 30
+                 AND fsrs_stability < 7.0",
                 [],
             )?;
 
@@ -84,9 +90,80 @@ impl super::SilvaDB {
 
             let total = node_changes + pruned + edge_cleanup;
             if total > 0 {
-                info!("🌲 SilvaDB: Biological decay applied. {} affected, {} pruned, {} edges cleaned.", node_changes, pruned, edge_cleanup);
+                info!("🌲 SilvaDB: FSRS decay applied. {} nodes recomputed, {} pruned, {} edges cleaned.", node_changes, pruned, edge_cleanup);
             }
             Ok(total)
+        })
+    }
+
+    /// Apply long-term stability erosion to very old, unaccessed nodes.
+    ///
+    /// This is separate from FSRS retrievability decay. Where retrievability
+    /// answers "how likely am I to recall this today?", stability erosion
+    /// answers "has this memory structurally weakened from total disuse?"
+    ///
+    /// Erosion is applied per-node using Rust-side computation:
+    ///   new_stability = stability * (1 - factor)^(elapsed_days / 30)
+    ///
+    /// Default factor is 0.01 (1% erosion per 30 days of no access) — about
+    /// 1/70th the speed of retrievability decay, so it only dominates for
+    /// memories untouched for years. Pass `factor = 0.0` to disable entirely.
+    pub async fn apply_stability_erosion(&self, factor: f64) -> Result<usize> {
+        tokio::task::block_in_place(|| {
+            let mut conn = self.conn.blocking_lock();
+            let now_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+
+            if factor <= 0.0 {
+                return Ok(0);
+            }
+
+            // Select nodes with ancient last_review
+            let candidates: Vec<(String, f64, i64)> = {
+                let mut stmt = conn.prepare(
+                    "SELECT id, fsrs_stability, fsrs_last_review
+                     FROM nodes
+                     WHERE type != 'identity' AND protected = 0
+                       AND fsrs_last_review > 0
+                       AND ?1 - fsrs_last_review > 60 * 86400"
+                )?;
+                stmt.query_map(params![now_unix], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, f64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            };
+
+            if candidates.is_empty() {
+                return Ok(0);
+            }
+
+            let tx = conn.transaction()?;
+            let mut count = 0;
+            {
+                let mut update = tx.prepare(
+                    "UPDATE nodes SET fsrs_stability = ?1 WHERE id = ?2"
+                )?;
+                for (id, stability, last_review) in &candidates {
+                    let elapsed_days = (now_unix - last_review) as f64 / 86400.0;
+                    let periods = (elapsed_days / 30.0).max(1.0);
+                    let new_stability = (stability * (1.0 - factor).powf(periods)).max(1.0);
+                    update.execute(params![new_stability, id])?;
+                    count += 1;
+                }
+            }
+            tx.commit()?;
+
+            if count > 0 {
+                info!("🧊 stability erosion: {} nodes eroded (factor={})", count, factor);
+            }
+            Ok(count)
         })
     }
 
@@ -114,9 +191,25 @@ impl super::SilvaDB {
         Ok(result)
     }
 
-    /// Record that an agent touched a node. Creates a stigmergy trace entry
-    /// and updates the node's last_touched timestamp.
+    /// Record that an agent touched a node. Creates a stigmergy trace entry,
+    /// updates the node's last_touched timestamp, and applies an FSRS review
+    /// (Good rating) to boost stability on successful access.
+    ///
+    /// For v2, use `touch_node_with_rating` to pass an explicit Rating (e.g.
+    /// from retrieval score).
     pub async fn touch_node(&self, node_id: &str, agent_id: &str, trace_type: &str) -> Result<()> {
+        self.touch_node_with_rating(node_id, agent_id, trace_type, None).await
+    }
+
+    /// Like `touch_node`, but accepts an optional `Rating` for the FSRS review.
+    /// When `None`, defaults to `Rating::Good`.
+    pub async fn touch_node_with_rating(
+        &self,
+        node_id: &str,
+        agent_id: &str,
+        trace_type: &str,
+        rating: Option<tylluan_fsrs::Rating>,
+    ) -> Result<()> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let now = std::time::SystemTime::now()
@@ -131,6 +224,27 @@ impl super::SilvaDB {
                 "UPDATE nodes SET last_touched = ?1 WHERE id = ?2",
                 params![now, node_id],
             )?;
+
+            // FSRS review: every access to a node triggers a review.
+            // Default is Good; callers can pass an explicit Rating when they
+            // have signal (e.g. retrieval score → Easy for top-1, Hard for low).
+            let rating = rating.unwrap_or(tylluan_fsrs::Rating::Good);
+            if let Ok((fsrs_stability, fsrs_difficulty, fsrs_last_review)) =
+                conn.query_row::<(f64, f64, i64), _, _>(
+                    "SELECT fsrs_stability, fsrs_difficulty, fsrs_last_review FROM nodes WHERE id = ?1",
+                    params![node_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+            {
+                let mut item = tylluan_fsrs::FsrsItem::with_params(
+                    fsrs_stability, fsrs_difficulty, fsrs_last_review,
+                );
+                item.review(rating, now);
+                let _ = conn.execute(
+                    "UPDATE nodes SET fsrs_stability = ?1, fsrs_difficulty = ?2, fsrs_last_review = ?3 WHERE id = ?4",
+                    params![item.stability, item.difficulty, item.last_review, node_id],
+                );
+            }
             // Stigmergy: propagate heat to direct neighbors (1 hop, up to 10).
             // Each neighbor gets a "stigmergy_propagation" trace — lighter signal than
             // a direct touch. This implements pheromone diffusion: accessing a node

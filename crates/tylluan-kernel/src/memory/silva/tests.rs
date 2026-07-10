@@ -162,12 +162,15 @@ async fn test_silva() -> SilvaDB {
     async fn test_decay() {
         let db = test_silva().await;
         db.upsert_node("old", "concept", "Old node", "{}").await.unwrap();
-        // Force old timestamp
+        // Force old timestamp AND FSRS last_review (set it 10 days ago in unix seconds)
+        let ten_days_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap()
+            .as_secs() as i64 - 864000;
         {
             let conn = db.conn.lock().await;
             conn.execute(
-                "UPDATE nodes SET updated_at = datetime('now', '-10 days') WHERE id = 'old'",
-                [],
+                "UPDATE nodes SET updated_at = datetime('now', '-10 days'), fsrs_last_review = ?1 WHERE id = 'old'",
+                params![ten_days_ago],
             ).unwrap();
         }
 

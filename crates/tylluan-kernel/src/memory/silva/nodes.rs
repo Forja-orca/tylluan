@@ -384,20 +384,31 @@ impl super::SilvaDB {
 
     /// Manual weight decay using half-life exponential formula.
     /// T_half = 14 days = 1_209_600 seconds.
-    /// new_weight = old_weight * exp(-lambda * elapsed_secs)
-    /// where lambda = ln(2) / T_half
+    /// Decay a node using FSRS retrievability.
+    /// Weight is derived from retrievability: R=2^(-elapsed_days / fsrs_stability).
+    /// The node's fsrs_stability is also slightly reduced (passive decay).
     pub async fn decay_node(&self, id: &str, elapsed_secs: i64) -> Result<()> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let lambda = std::f64::consts::LN_2 / 1_209_600.0_f64;
-            let decay_factor = (-lambda * elapsed_secs as f64).exp();
-            conn.execute(
-                "UPDATE nodes SET
-                    weight = MAX(weight * ?2, 0.01),
-                    updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?1",
-                params![id, decay_factor],
-            )?;
+            let elapsed_days = (elapsed_secs as f64 / 86400.0).max(0.0);
+
+            let result: Result<(f64, f64, i64), _> = conn.query_row(
+                "SELECT fsrs_stability, fsrs_difficulty, fsrs_last_review FROM nodes WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            );
+            if let Ok((stability, difficulty, last_review)) = result {
+                let item = tylluan_fsrs::FsrsItem::with_params(stability, difficulty, last_review);
+                let r = item.retrievability(elapsed_days);
+                let new_weight = (r * 0.99 + 0.01).max(0.01);
+                // Passive stability decay: -5% per 30 days
+                let decayed_stability = (stability * 0.95_f64.powf(elapsed_days / 30.0))
+                    .max(tylluan_fsrs::MIN_STABILITY_DAYS);
+                conn.execute(
+                    "UPDATE nodes SET weight = ?1, fsrs_stability = ?2, updated_at = CURRENT_TIMESTAMP WHERE id = ?3",
+                    params![new_weight, decayed_stability, id],
+                )?;
+            }
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())
