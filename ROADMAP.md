@@ -161,7 +161,7 @@ Delivered:
 
 **273 kernel lib tests + 61 link tests + 2 evals = 336 total** · 0 failures.
 
-## v0.11.0 — Guild Execution Channels (in progress)
+## v0.11.0 — Guild Execution Channels (complete)
 
 **Goal:** Peers discover each other's capabilities and dispatch guild tools remotely over Noise XK.
 
@@ -175,9 +175,9 @@ Remaining (v0.11.0 backlog):
 - [x] M14-E — Mesh integration test harness: 3-node `InMemoryTransport` simulations, partition/recovery scenarios, `DispatchRouter` multi-peer routing validation. **Complete.**
 - [ ] Portability compliance CI: RPi4 (aarch64) smoke test in release workflow.
 
-**Current:** 273 kernel + 81 link + 2 evals = **356 total tests** · 0 failures.
+**Closed.** Superseded by v0.13.0 test counts below.
 
-## M14-D — Guild Execution Channels (in progress — see v0.11.0 above)
+## M14-D — Guild Execution Channels (complete — see v0.11.0 above)
 
 **Status:** Complete (v0.11.0-dev). All 4 phases delivered. Spec in `docs/architecture/M14D_dispatch_spec.md` (ADR-004).
 
@@ -196,39 +196,42 @@ Remaining (v0.11.0 backlog):
 
 **M14-E prerequisite note (historical):** Turmoil was evaluated and rejected — single-thread runtime constraint is incompatible with non-tokio syscalls (SQLite, ONNX, std::fs). The established approach is `InMemoryTransport` (mpsc channels) + `PartitionableTransport<T>`, already used in `gossip_dst.rs` and `fault_dst.rs`.
 
-## M14-E — Mesh Integration Test Harness (backlog v0.11.0)
+## M14-E — Mesh Integration Test Harness (complete)
 
-**Status:** Not started. Turmoil evaluated and rejected (see note above). Approach: `InMemoryTransport` + `PartitionableTransport<T>`.
+**Status:** Done. `mesh_simulation.rs` (3-node topology, gossip convergence, transitive propagation) and `dispatch_dst.rs::test_router_multi_peer_picks_best` (DispatchRouter multi-peer validation) both exist and pass — verified against code, not just this doc, on 2026-07-10.
 
-**What already exists (foundation):**
-- `InMemoryTransport` (mpsc channels) + `in_memory_pair()` in `tylluan-link/src/transport.rs`
-- `PartitionableTransport<T>` — 5 modes: Transparent, Drop(f64), Partition, Latency(Duration), Error
-- `gossip_dst.rs` — 6 deterministic 2-node tests (normal sync, partition, bidirectional convergence)
-- `fault_dst.rs` — 4 fault injection tests (partition+heal, latency, drop-rate, error-mode)
+Foundation used: `InMemoryTransport` (mpsc channels) + `PartitionableTransport<T>` (5 modes: Transparent, Drop, Partition, Latency, Error), same infra as `gossip_dst.rs`/`fault_dst.rs`.
 
-**What M14-E adds (3 phases):**
+Scope exclusions honored: no real TCP/UDP (in-process only), no Byzantine fault tolerance (deferred to v1.0.0+).
 
-### Phase 1 — 3-Node Topology Simulation
-- Extend `InMemoryTransport` infrastructure to support N-node meshes (star, chain, full-mesh topologies)
-- New file `crates/tylluan-link/tests/mesh_simulation.rs`
-- Tests: 3-node gossip convergence, transitive propagation (A→B→C), split-brain detection
+---
 
-### Phase 2 — DispatchRouter Multi-Peer Validation
-- Tests that `DispatchRouter::route()` selects the correct peer given varied `HardwareCaps`
-- Scenarios: GPU peer preferred for heavy guild, CPU-only fallback, circuit breaker isolation, cooldown recovery
-- Validates scoring formula `(1-load)×(1000/latency)×gpu_mult` end-to-end via in-memory topology
+## v0.12.0 — Single Binary (complete)
 
-### Phase 3 — Partition + Recovery Scenarios
-- Simulate network partition mid-dispatch: inflight request → queue fallback → recovery → dequeue
-- `DispatchQueue` TTL behavior: entries expire after 300s, `remove_timed_out` verified
-- Multi-hop: 3 peers, primary fails → secondary elected via router
+**Goal:** Zero-friction install — one binary, no separate model download step, no manual dashboard build.
 
-**Scope exclusions:**
-- No real TCP/UDP — all tests stay in-process (`InMemoryTransport`)
-- No Byzantine fault tolerance — that is out of scope until v1.0.0+
-- No new public APIs — test-only code under `#[cfg(test)]` and integration test files
+Delivered:
+- [x] `--features bundled-dashboard` embeds React build into the binary via rust-embed (disk fallback preserved for dev)
+- [x] `tylluan install --profile portable|clinic|server` generates config, resolves embedding model per profile
+- [x] Automated installer profiles: `portable` (BM25-only, zero deps), `clinic` (BGE-Small), `server` (BGE-M3)
+- [x] Release binaries published for 4 platforms (v0.13.0 tag)
 
-**Estimated test delta:** +12–18 tests → ~364 total
+## v0.13.0 — Junior Onboarding + First Minute + Security Hardening (complete)
+
+**Goal:** A junior engineer or first-time user gets from zero to a working, understood instance without help — and the base is provably secure, not just "probably fine."
+
+Delivered:
+- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→3030, repo root cleanup)
+- [x] **M23-P1 "El Primer Minuto"** — `tylluan install` auto-downloads the embedding model + auto-starts the kernel + polls `/health` (`910f15f`); dashboard shows a designed Empty State (hero + 3 action cards + progress checklist) instead of a blank screen when SilvaDB is empty (`bad7015`)
+- [x] **M26 Sprint 1** — Coloquio Canvas Workspace: modular tabs, collaborative DOCS with CRUD+SSE
+- [x] **M26 Sprint 2** — tldraw interactive whiteboard embedded in the canvas, per-channel persistence (`50da092`)
+- [x] **Security Hardening** — `tylluan doctor` CLI wired to the existing kernel-side diagnostic engine; SQLCipher key management moved from a plaintext file next to the DB to the OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service), with an honest `encrypt_at_rest` default that only activates on binaries actually compiled with the `encryption` feature; 4 CodeQL alerts (#12–#15: XSS, uncontrolled allocation, cleartext transmission ×2) fixed and verified against the deployed commit, not just the working tree
+- [x] Docker Smoke CI fixed: root cause was the bind-mounted data volume being owned by the CI runner, not the container's non-root user — `chown` added before container start
+- [x] `STATUS.md`/`ROADMAP.md` doc-drift corrected (was 2 milestones behind actual code state) — post-milestone documentation protocol added to `AGENTS.md` so this does not recur
+
+**Not started, backlog:** M23-P2 — full 5-step first-run wizard (research done, spec ready in Coloquio T508-T509; P1's Empty State already meets the minimum bar, P2 is enhancement, not blocking)
+
+**354 kernel lib + link + evals tests** · 0 failures.
 
 ---
 
