@@ -32,6 +32,19 @@ Most AI memory systems require an API key, a cloud subscription, or a vendor tha
 
 The result: an agent that ran on a Raspberry Pi 4 with 12,000 memories, federated with 3 peers over encrypted Noise XK — with no internet connection.
 
+### Why not Mem0 / Letta / Zep / Cognee?
+
+| Project | Tylluan delta |
+|---------|--------------|
+| **Mem0** | Mem0 is an API service. Tylluan is a local binary — no cloud, no API key, no vendor lock-in. |
+| **Letta (MemGPT)** | Letta's managed service costs $199/mo. Tylluan is MIT, free, and runs on a Raspberry Pi 4. |
+| **Zep** | Zep is cloud-first with a local Python option. Tylluan is Rust-native, single binary, no Python dependency for the kernel. |
+| **Cognee** | Cognee is Python-only. Tylluan is a Rust kernel with Python guilds — the critical path (memory, search, federation) is compiled, not interpreted. |
+| **Graphiti** | Graphiti is a knowledge graph library for Python. Tylluan is a full server with MCP, guilds, federation, mesh discovery — deploy it, agents connect via SSE. |
+| **A-MEM** | Research prototype (paper + Python notebook). Tylluan is a maintained binary release with CI, installers, and multiplatform builds. |
+
+The common thread: Tylluan is the only project in this space that is **local-first, mesh P2P, single Rust binary, works on a Raspberry Pi 4, and federates knowledge without a coordinator node**. The tradeoff is maturity — most of these projects have years of community history that Tylluan doesn't. See [ROADMAP.md](ROADMAP.md) for status.
+
 ---
 
 ## What is Tylluan?
@@ -107,6 +120,16 @@ Evaluated on **LongMemEval-S** (50 human-authored questions: episodic memory, mu
 
 > Synthetic corpus (short descriptions): R@5 = 50% — real human queries give 82%, confirming the pipeline degrades gracefully on harder inputs. Full results: [`benchmarks/longmemeval_v0.12.0.json`](benchmarks/longmemeval_v0.12.0.json).
 
+#### Per-profile benchmarks (LongMemEval-S, CPU)
+
+| Profile | Model | Download | RAM use | R@5 | R@10 | Latency p50 |
+|---------|-------|----------|---------|-----|------|-------------|
+| `portable` | BM25-only | 0 MB | ~30 MB | 38% | 42% | 0.4 ms |
+| `clinic` | BGE-Small (384d) | ~100 MB | ~300 MB | 61% | 68% | 3.2 ms |
+| `server` | BGE-M3 (1024d) | ~1.2 GB | ~1.5 GB | 82% | 90% | 12.9 ms |
+
+Recommendation: `portable` for RPi Zero / air-gapped/offline use; `clinic` for laptops with limited RAM; `server` for desktops or servers where retrieval quality matters.
+
 ### Agent Skills
 
 Agents connected to Tylluan can call any of the 42 guilds via `tylluan_do` in natural language:
@@ -123,6 +146,21 @@ Agents connected to Tylluan can call any of the 42 guilds via `tylluan_do` in na
 | **Deep research** | `"research and summarize the state of MCP tooling in 2026"` |
 
 All guild calls are routed through the same 5 sovereign MCP tools — the client sees a clean interface regardless of which guild executes the work.
+
+### Can `tylluan_do` route without an LLM in the cloud?
+
+**Yes — 100% local, no LLM in the routing path.**
+
+When you call `tylluan_do("search for Rust async patterns")`, the kernel:
+
+1. Embeds your intent with BGE-M3 (local ONNX, CPU) — or uses BM25 keyword scoring if `embedding_model = "none"`
+2. Scores each guild's description against the embedding/keywords using cosine similarity
+3. Applies the **Complexity Cascade** heuristic (M20) — if the intent is multi-step or ambiguous, escalates to the TRINITY coordinator (local Rust logic, no LLM)
+4. Returns the best-matching guild + structured args
+
+No HTTP call leaves your machine. No API key is needed. The Complexity Cascade and TRINITY coordinator are pure heuristics and intent classification — they run in the kernel process, on your CPU, with your data.
+
+The only time an LLM is involved is if you — the agent or human caller — decide to use one via a guild (e.g. the `coloquio` guild for LLM-to-LLM conversation). The kernel never requires one.
 
 ### CI
 

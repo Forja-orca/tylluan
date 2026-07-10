@@ -24,6 +24,16 @@ This combination is an unauthenticated LAN RCE. The kernel logs a warning and re
 - Never write the token value in tracked files
 - Rotate via `POST /api/v1/admin/rotate-token`
 
+### Federation Security
+
+Federation adds peer-to-peer attack surface beyond the local threat model. See [SECURITY_FEDERATION.md](SECURITY_FEDERATION.md) for the dedicated threat model covering:
+
+- Malicious peer injecting false memories (approval gate = only mitigation)
+- Provenance tracking without per-node cryptographic signatures
+- Echo-loop and revocation gaps
+- DHT poisoning (limited to peer discovery, not content)
+- Network-level encryption coverage (Noise XK/NK)
+
 ## Known Limitations (Alpha)
 
 | Area | Status | Notes |
