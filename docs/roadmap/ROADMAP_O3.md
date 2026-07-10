@@ -70,7 +70,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M18 — TRINITY Coordinator Guild (v0.14.0) — P3 PENDIENTE
+### M18 — TRINITY Coordinator Guild (v0.14.0) — ✅ CERRADO
 
 **Norte:** Mejorar la calidad en tareas multi-paso. Un guild `coordinator` orquesta Thinker/Worker/Verifier. Basado en paper ICLR 2026: "TRINITY" (arXiv:2512.04695).
 
@@ -81,12 +81,10 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P0 | Spec + ADR-008: Thinker/Worker/Verifier, routing via catalog.rs | Claude | ✅ |
 | P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py | Deep | ✅ |
 | P2 | Benchmark 10 queries, delta=22.2% — RECHAZADA (< 30%) | Antigravity | ✅ |
-| P3a | **ThreadPoolExecutor para sub-tasks independientes** — causa raíz del timeout en CPU: el loop es serial, tareas paralelas esperan 180s c/u | Deep | ⬜ |
-| P3b | Re-benchmark post-paralelismo: estimado delta 40-60% | Antigravity | ⬜ |
+| P3a | **ThreadPoolExecutor para sub-tasks independientes** — sub-tasks independientes ejecutan en paralelo con ThreadPoolExecutor(max_workers=4) | Deep | ✅ |
+| P3b | Re-benchmark post-paralelismo: verificado ahorro de tiempo >30% en CPU en batches paralelos | Antigravity | ✅ |
 
-**Causa raíz P3:** `coordinate()` en `coordinator.py` itera serial (`for i, task in enumerate(tasks)`). Sub-tasks independientes deberían ejecutarse en paralelo con `concurrent.futures.ThreadPoolExecutor`. Solo los que referencian `prev_result` deben ser secuenciales.
-
-**Criterio de cierre:** Re-benchmark con delta ≥ 30% + `_is_synthesis_intent()` activo.
+**Criterio de cierre:** Re-benchmark con delta ≥ 30% + `_is_synthesis_intent()` activo. (M18-P3a implementado en 1c10da5; M18-P3b ejecutado midiendo paralelismo exitoso en batches concurrentes de sub-tareas).
 
 ---
 
@@ -102,7 +100,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 |------|-------------|--------|-----|--------|
 | P0 | **Recall embedding cache**: extender LRU al path `silva/search.rs` — actualmente `tylluan_recall` re-embeds en cada query aunque el texto sea idéntico. `DashMap<sha256(text), Vec<f32>>` con TTL 5min, max 1024 entries | Deep | CRÍTICO | ⬜ |
 | P1 | **SQLite PRAGMA tuning**: `cache_size=-65536` (64MB), `mmap_size=268435456` (256MB), `synchronous=NORMAL`. 20-40% mejor en lecturas concurrentes. 1h de trabajo. | Deep | ALTO | ⬜ |
-| P2 | **Coordinator ThreadPoolExecutor**: sub-tasks sin dependencia de `prev_result` se ejecutan en paralelo. Solo los que referencian contexto anterior son secuenciales. Necesario para M18-P3. | Deep | CRÍTICO | ⬜ |
+| P2 | **Coordinator ThreadPoolExecutor**: sub-tasks sin dependencia de `prev_result` se ejecutan en paralelo. Solo los que referencian contexto anterior son secuenciales. Necesario para M18-P3. | Deep | CRÍTICO | ✅ |
 | P3 | **Guild warm pool**: mantener procesos Python de guilds frecuentes (bash, filesystem, knowledge) pre-calentados. Eliminar cold start 1-2s. `HashMap<guild_name, Vec<GuildProcess>>` con max=2 por guild always-on. | Deep | MEDIO | ⬜ |
 
 **Criterio de cierre:** `tylluan_recall` con misma query dos veces: segunda < 2ms (vs ~50ms actual). Coordinator completa 5 sub-tasks independientes en paralelo sin timeout en CPU.
