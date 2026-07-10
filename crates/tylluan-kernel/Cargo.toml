@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 tylluan-common = { path = "../tylluan-common" }
 tylluan_link = { path = "../tylluan-link", package = "tylluan-link" }
+tylluan-fsrs = { path = "../tylluan-fsrs" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

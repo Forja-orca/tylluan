@@ -26,7 +26,10 @@ impl super::SilvaDB {
                     topic_key TEXT,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    stigmergy_heat REAL DEFAULT 0.0
+                    stigmergy_heat REAL DEFAULT 0.0,
+                    fsrs_stability REAL DEFAULT 14.0,
+                    fsrs_difficulty REAL DEFAULT 0.3,
+                    fsrs_last_review INTEGER DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS edges (
@@ -41,7 +44,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 12;
+            const SCHEMA_VERSION: i32 = 13;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -120,6 +123,12 @@ impl super::SilvaDB {
                 )?;
                 conn.execute("INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')", [])?;
                 tracing::info!("🌲 SilvaDB: created nodes_fts FTS5 table + backfill (v11)");
+            }
+            if schema_version < 13 {
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_stability REAL NOT NULL DEFAULT 14.0", []);
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_difficulty REAL NOT NULL DEFAULT 0.3", []);
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN fsrs_last_review INTEGER NOT NULL DEFAULT 0", []);
+                tracing::info!("🌲 SilvaDB: added FSRS columns (v13)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;
