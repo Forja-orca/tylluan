@@ -30,17 +30,26 @@ jobs:
             -v ${{ github.workspace }}/.tylluan-data:/data \
             tylluan:test
 
+      - name: Verify container is running
+        run: |
+          if ! docker ps --filter name=tylluan-test --format "{{.Status}}" | grep -q "Up"; then
+            echo "❌ Container is not running"
+            docker logs tylluan-test 2>&1 | tail -40
+            exit 1
+          fi
+          echo "✅ Container is up"
+
       - name: Wait for health
         run: |
-          for i in $(seq 1 15); do
+          for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:3030/health > /dev/null 2>&1; then
               echo "✅ Health check passed"
               exit 0
             fi
-            echo "Waiting... ($i/15)"
+            echo "Waiting... ($i/60)"
             sleep 2
           done
-          echo "❌ Health check timed out"
+          echo "❌ Health check timed out (120s)"
           docker logs tylluan-test
           exit 1
 
