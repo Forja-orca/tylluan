@@ -28,6 +28,7 @@ import type {
   CollectivePulse,
   Interoception
 } from '../lib/nexus-bridge';
+import { useNexus } from '../hooks/useNexus';
 import type { MemoryStats } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
@@ -177,7 +178,12 @@ export function OverviewTab({
     return 'bg-slate-800 text-slate-400 border-slate-700';
   };
 
+  const { agentProfiles } = useNexus();
+  const isProfileResolved = agentProfiles && agentProfiles.length > 0;
+  const isModelLoaded = sysStatus?.embeddings_loaded || sysStatus?.silva_healthy;
+
   const isFirstStart = (memoryStats?.node_count === 0 || liveMetrics?.graphNodes === 0) &&
+    !(isProfileResolved && isModelLoaded) &&
     !(localStorage.getItem('tylluan_wizard_query') === 'true' && localStorage.getItem('tylluan_wizard_mcp') === 'true');
 
   if (isFirstStart) {
