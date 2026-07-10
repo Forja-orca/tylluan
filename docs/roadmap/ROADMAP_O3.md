@@ -8,7 +8,7 @@
 
 ## Estado actual — v0.11.0 ✅
 
-M15-M17 cerrados. M18 P0-P2 entregados, P3 pendiente (re-benchmark ≥30%). M20 Complexity Cascade integrado. 349 tests. Puertos: :4000-4002.
+M15-M17 cerrados. M18 P0-P2 entregados, P3 pendiente (re-benchmark ≥30%). M20 Complexity Cascade integrado. 349 tests. Puertos: :3030-3032.
 
 Lo que ya tenemos (verificado 2026-07-06):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
