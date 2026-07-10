@@ -62,6 +62,13 @@ image = "0.25"
 # Constant-time comparison for timing-attack prevention
 subtle = "2.6"
 
+# Argon2id KDF for encryption key derivation (file-based fallback only)
+argon2 = "0.5"
+
+# OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service)
+# for DB encryption key storage — key never touches the data directory.
+keyring = "3"
+
 # OAuth 2.0 + PKCE local server
 sha2 = "0.10"
 base64 = "0.22"

@@ -12,6 +12,7 @@
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+.tylluan-db-key
 
 # Model downloads (descargados por --download-models)
 /models/
