@@ -139,6 +139,8 @@ fn description_override(name: &str) -> Option<&'static str> {
         "git" => "Git source control: status, diff, log, commits, checkout, branches",
         "docker" => "Docker container management and database services",
         "system_metrics" => "System health metrics: CPU, memory, disk usage",
+        "monitor" => "Real-time system monitoring: CPU, memory, disk, network, top processes",
+        "sandbox" => "Isolated execution sandbox for untrusted or experimental code",
         "code_analysis" => "Static analysis and code quality checks",
         "deep_analysis" => "Deep code analysis and architectural understanding",
         "deep_web_research" => "Multi-source web research and content gathering",
@@ -228,7 +230,7 @@ fn extract_trigger_phrases(content: &str) -> Vec<String> {
                 // Single-line docstring: """content"""
                 let middle = after_quotes[..close_pos].trim().to_string();
                 if let Some(use_for_pos) = middle.find("Use for:") {
-                    let use_for = middle[use_for_pos + 8..].trim().trim_end_matches(',');
+                    let use_for = middle[use_for_pos + 8..].trim();
                     pending.push_str(use_for);
                     for phrase in pending.split(',') {
                         let p = phrase.trim().to_string();
@@ -243,13 +245,13 @@ fn extract_trigger_phrases(content: &str) -> Vec<String> {
                 let after = after_quotes.trim().to_string();
                 if collecting && !after.is_empty() {
                     pending.push(' ');
-                    pending.push_str(after.trim_end_matches(','));
+                    pending.push_str(&after);
                 }
             } else {
                 // Opening multi-line docstring
                 let after = after_quotes.trim().to_string();
                 if let Some(use_for_pos) = after.find("Use for:") {
-                    let use_for = after[use_for_pos + 8..].trim().trim_end_matches(',');
+                    let use_for = after[use_for_pos + 8..].trim();
                     pending.push_str(use_for);
                     collecting = true;
                 }
@@ -267,7 +269,7 @@ fn extract_trigger_phrases(content: &str) -> Vec<String> {
         }
         if in_docstring {
             if let Some(use_for_pos) = trimmed.find("Use for:") {
-                let use_for = trimmed[use_for_pos + 8..].trim().trim_end_matches(',');
+                let use_for = trimmed[use_for_pos + 8..].trim();
                 pending.push_str(use_for);
                 collecting = true;
             } else if collecting {
@@ -279,7 +281,7 @@ fn extract_trigger_phrases(content: &str) -> Vec<String> {
                     pending.clear();
                     collecting = false;
                 } else {
-                    let clean = trimmed.trim_end_matches(',');
+                    let clean = trimmed;
                     pending.push(' ');
                     pending.push_str(clean);
                 }

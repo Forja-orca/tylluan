@@ -89,7 +89,7 @@ async def bash_execute(
     """Execute a shell command and return stdout + stderr. [approval="always"]
 
     Use for: run command, execute command, bash, shell, run script, run cargo,
-    run python, run npm, run git, ejecutar comando, correr script.
+    cargo test, cargo build, run python, run npm, run git, ejecutar comando, correr script.
 
     Args:
         command: The shell command to execute.
