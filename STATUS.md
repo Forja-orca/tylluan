@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.13.0`) · 303 kernel lib + 61 link + 12 fsrs = **376 total** green.
+**Commit:** HEAD (`v0.13.0`) · 310 kernel lib + 61 link + 12 fsrs = **383 total** green.
 
 ---
 
@@ -57,6 +57,7 @@
 - Exponential half-life decay `weight * 0.5^(hours/half_life)` computed in Rust, configurable `decay_half_life_hours` in `[silva]` tylluan.toml (default 336h = 14d). Type-specific rates per node type (M1)
 - Agent Core Memory: `AgentProfile` gains `persona: String` + `preferences: serde_json::Value`; kernel tools `agent_get_persona` / `agent_set_persona` (under `tylluan_recall`/`tylluan_remember` subtool routing) — CONTRACT-01 unchanged (P0-A)
 - Coloquio→SilvaDB episodic flywheel: background `tokio::spawn` every 60s ingests Coloquio turns into SilvaDB as `episodic` nodes; deterministic IDs `coloquio:{channel}:{turn}`; 100ms throttle; watermark-based dedup (P0-B)
+- Sovereign Consensus: `memory::consensus::ConsensusEngine` runs hourly in `main.rs` (`GuardedTask` background job, 120s guard) — resolves conflicting nodes sharing a `topic_key` (or a semantic cluster via cosine similarity > 0.80 over conflicted embeddings) via `score = weight*trust + evidence_bonus*2.0`: clear winner (diff ≥15%) reinforces + decays losers, close scores (5-15%) synthesize a unified protected node linking all sources, ties (<5%) mark all candidates `Ambiguous` pending `human_override()`. Found running unwired/undocumented/untested during the 2026-07-11 reflection cycle audit (added 2026-06-27, commit a92e480) — 7 unit tests added covering all three resolution paths plus the protected-node skip, evidence-bonus tie-break, single-candidate no-op, and human override (2026-07-11)
 - M2 Hybrid Search v2: SilvaDB schema v11 adds FTS5 virtual table `nodes_fts`; `search()` uses BM25 (`bm25(nodes_fts, 10.0, 5.0, 5.0)`) with LIKE fallback; `search_hybrid()` applies entity boost ×1.25 post-RRF (P1)
 - DST harness: `gossip_dst.rs` — 6 tests: normal sync, partition graceful failure, bidirectional convergence, 3-node transitive propagation, message loss + retry, LWW conflict resolution (M6-full)
 - `PartitionableTransport<T>` in `tylluan-link`: 5 switchable modes (Transparent, Drop(f64), Partition, Latency(Duration), Error) for deterministic fault injection in tests (M6-full)

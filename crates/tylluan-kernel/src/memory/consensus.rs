@@ -228,10 +228,159 @@ impl ConsensusEngine {
             .filter(|n| n.id != winner_id)
             .map(|n| (n.id, 0.0))
             .collect();
-            
+
         self.apply_resolution(winner_id, &losers).await?;
         // Set as protected so it doesn't enter consensus again easily
         self.silva.set_protected(winner_id, true).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup(topic: &str, entries: &[(&str, f64, bool)]) -> std::sync::Arc<SilvaDB> {
+        let silva = std::sync::Arc::new(SilvaDB::in_memory().await.unwrap());
+        for (id, weight, verified) in entries {
+            let metadata = if *verified {
+                json!({"topic": topic, "verified": true}).to_string()
+            } else {
+                json!({"topic": topic}).to_string()
+            };
+            // consolidate() is an internal cognitive module path — mirror that here
+            // by writing via upsert_node_with_validity directly (bypasses drift guard,
+            // not relevant for these node types, but keeps parity with production writers).
+            silva.upsert_node_with_validity(id, "note", "content", &metadata, None, true).await.unwrap();
+            silva.set_weight(id, *weight).await.unwrap();
+            silva.mark_conflicted(id, true).await.unwrap();
+        }
+        silva
+    }
+
+    /// score = weight * trust(1.0) + evidence_bonus * 2.0; trust and evidence are fixed
+    /// in this module (get_agent_trust always 1.0, get_evidence_bonus 1.0 iff
+    /// metadata.verified == true), so weight is the only free variable available
+    /// to callers to steer win_percent deterministically in these tests.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consolidate_clear_winner_reinforces_and_decays_loser() {
+        let silva = setup("topic_a", &[("a", 1.0, false), ("b", 2.0, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        let resolved = engine.consolidate(Some("topic_a")).await.unwrap();
+        assert_eq!(resolved, 1);
+
+        let winner = silva.get_node("b").await.unwrap().unwrap();
+        let loser = silva.get_node("a").await.unwrap().unwrap();
+
+        // Winner reinforced (1.15x, so > its pre-consolidate weight of 2.0) and no longer conflicted.
+        assert!(winner.weight > 2.0, "winner should be reinforced, got {}", winner.weight);
+        assert!(!winner.conflicted, "winner must not remain marked conflicted");
+
+        // Loser decayed below its original weight and marked no-longer-conflicted
+        // (accelerated decay penalty, not a re-open of the conflict).
+        assert!(loser.weight < 1.0, "loser should decay below its original weight, got {}", loser.weight);
+        assert!(!loser.conflicted, "loser should be un-marked conflicted after resolution");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consolidate_protected_loser_is_not_decayed() {
+        let silva = setup("topic_p", &[("a", 1.0, false), ("b", 2.0, false)]).await;
+        silva.set_protected("a", true).await.unwrap();
+        let engine = ConsensusEngine::new(silva.clone());
+
+        engine.consolidate(Some("topic_p")).await.unwrap();
+
+        let protected_loser = silva.get_node("a").await.unwrap().unwrap();
+        // apply_resolution skips protected nodes entirely: no decay, no conflicted flip.
+        assert!((protected_loser.weight - 1.0).abs() < 1e-9,
+            "protected node weight must be untouched, got {}", protected_loser.weight);
+        assert!(protected_loser.conflicted, "protected node's conflicted flag must be left as-is");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consolidate_close_scores_trigger_synthesis() {
+        // diff=0.1, winner_score=1.1 -> win_percent ~9.09%, inside the [5,15) synthesis band.
+        let silva = setup("topic_s", &[("a", 1.0, false), ("b", 1.1, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        let resolved = engine.consolidate(Some("topic_s")).await.unwrap();
+        assert_eq!(resolved, 1);
+
+        let a = silva.get_node("a").await.unwrap().unwrap();
+        let b = silva.get_node("b").await.unwrap().unwrap();
+        assert!(!a.conflicted && !b.conflicted, "both sources must be resolved, not left conflicted");
+
+        let a_meta: serde_json::Value = serde_json::from_str(&a.metadata).unwrap();
+        assert_eq!(a_meta.get("status").and_then(|v| v.as_str()), Some("ResolvedBySynthesis"));
+
+        // A synthesis node must exist, be protected, and reference both sources.
+        let synth_nodes = silva.search_by_topic("topic_s").await.unwrap();
+        let synth = synth_nodes.iter().find(|n| n.node_type == "synthesis")
+            .expect("a synthesis node must have been created");
+        assert!(synth.protected, "synthesis node must be protected from decay");
+        let synth_meta: serde_json::Value = serde_json::from_str(&synth.metadata).unwrap();
+        let sources: Vec<String> = synth_meta.get("sources").unwrap()
+            .as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        assert!(sources.contains(&"a".to_string()) && sources.contains(&"b".to_string()));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consolidate_ambiguous_scores_mark_both_without_resolving() {
+        // Identical weights -> win_percent = 0% < 5% -> Case C (critical ambiguity).
+        let silva = setup("topic_c", &[("a", 1.0, false), ("b", 1.0, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        let resolved = engine.consolidate(Some("topic_c")).await.unwrap();
+        assert_eq!(resolved, 0, "ambiguous ties must not count as resolved");
+
+        for id in ["a", "b"] {
+            let node = silva.get_node(id).await.unwrap().unwrap();
+            assert!((node.weight - 1.0).abs() < 1e-9, "ambiguous nodes must not be reinforced or decayed");
+            assert!(node.conflicted, "ambiguous nodes must remain conflicted pending human review");
+            let meta: serde_json::Value = serde_json::from_str(&node.metadata).unwrap();
+            assert_eq!(meta.get("status").and_then(|v| v.as_str()), Some("Ambiguous"));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consolidate_skips_single_node_topics() {
+        let silva = setup("topic_lonely", &[("a", 1.0, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        let resolved = engine.consolidate(Some("topic_lonely")).await.unwrap();
+        assert_eq!(resolved, 0, "a topic with a single candidate has nothing to resolve");
+
+        let node = silva.get_node("a").await.unwrap().unwrap();
+        assert!(node.conflicted, "untouched single-candidate node keeps its original conflicted flag");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_evidence_bonus_can_overturn_higher_raw_weight() {
+        // Without evidence, "b" (weight 2.0) would win over "a" (weight 1.0) outright.
+        // With "a" verified, its score becomes 1.0 + 2.0 = 3.0 vs "b"'s 2.0 -> "a" wins instead.
+        let silva = setup("topic_evidence", &[("a", 1.0, true), ("b", 2.0, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        engine.consolidate(Some("topic_evidence")).await.unwrap();
+
+        let a = silva.get_node("a").await.unwrap().unwrap();
+        let b = silva.get_node("b").await.unwrap().unwrap();
+        assert!(a.weight > 1.0, "verified node 'a' should have won and been reinforced, got {}", a.weight);
+        assert!(b.weight < 2.0, "outscored node 'b' should have been decayed, got {}", b.weight);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_human_override_reinforces_declared_winner_and_protects_it() {
+        let silva = setup("topic_h", &[("a", 1.0, false), ("b", 1.0, false)]).await;
+        let engine = ConsensusEngine::new(silva.clone());
+
+        engine.human_override("topic_h", "a").await.unwrap();
+
+        let winner = silva.get_node("a").await.unwrap().unwrap();
+        let loser = silva.get_node("b").await.unwrap().unwrap();
+        assert!(winner.weight > 1.0, "declared winner must be reinforced");
+        assert!(winner.protected, "declared winner must be protected from future consensus churn");
+        assert!(loser.weight < 1.0, "the non-chosen node must be decayed");
     }
 }
