@@ -940,6 +940,9 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: (msgs: Colo
 export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview');
 
+  // Client session ID to prevent reflection loops on WebSocket broadcasts
+  const clientId = useMemo(() => Math.random().toString(36).substring(2), []);
+
   // Elevated WebSocket state for both Canvas tabs
   const [nodes, setNodes] = useState<CanvasNode[]>([
     { id: '1', label: 'SilvaDB Core', x: 250, y: 150, type: 'concept' },
@@ -968,20 +971,24 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
     wsRef.current = ws;
     ws.onopen = () => { 
       setWsStatus('connected'); 
-      ws.send(JSON.stringify({ type: 'request_sync', channelId })); 
+      ws.send(JSON.stringify({ type: 'request_sync', channelId, clientId })); 
     };
     ws.onmessage = (event) => {
       try {
         if (typeof event.data !== 'string') return;
         const msg = JSON.parse(event.data);
         if (msg.channelId !== channelId) return;
+        
+        // Skip processing our own echo messages to avoid ping-pong infinite update loops
+        if (msg.clientId === clientId) return;
+
         switch (msg.type) {
           case 'sync_response': 
             if (msg.nodes) setNodes(msg.nodes); 
             if (msg.edges) setEdges(msg.edges); 
             break;
           case 'request_sync': 
-            ws.send(JSON.stringify({ type: 'sync_response', channelId, nodes: nodesRef.current, edges: edgesRef.current })); 
+            ws.send(JSON.stringify({ type: 'sync_response', channelId, clientId, nodes: nodesRef.current, edges: edgesRef.current })); 
             break;
           case 'node_moved': 
             setNodes(p => p.map(n => n.id === msg.id ? { ...n, x: msg.x, y: msg.y } : n)); 
@@ -1005,7 +1012,7 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
     ws.onerror = () => setWsStatus('error');
     ws.onclose = () => setWsStatus('connecting');
     return () => ws.close();
-  }, [channelId]);
+  }, [channelId, clientId]);
 
   // Listen to Event Bridge events to keep the Canvas in sync in real time
   useEffect(() => {
@@ -1030,9 +1037,9 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
 
   const wsSend = useCallback((payload: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ ...payload, channelId }));
+      wsRef.current.send(JSON.stringify({ ...payload, channelId, clientId }));
     }
-  }, [channelId]);
+  }, [channelId, clientId]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#06080d]">
