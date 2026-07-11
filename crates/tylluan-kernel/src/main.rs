@@ -1507,6 +1507,15 @@ async fn run_night_consolidation_loop(
             dr.duplicates_merged, dr.nodes_decayed, dr.contradictions_flagged,
             dr.exact_content_groups, dr.pair_comparisons, dr.nodes_processed,
             dr.graph_nodes_total, dr.graph_edges_total);
+        server.read().await.notify("dream_cycle_complete", serde_json::json!({
+            "duplicates_merged": dr.duplicates_merged,
+            "nodes_decayed": dr.nodes_decayed,
+            "contradictions_flagged": dr.contradictions_flagged,
+            "salience_pruned": dr.salience_pruned,
+            "graph_nodes_total": dr.graph_nodes_total,
+            "graph_edges_total": dr.graph_edges_total,
+            "ts": chrono::Utc::now().timestamp_millis()
+        }));
 
         // AutoLink CERO-LLM: connect orphan nodes, detect file refs, link by topic
         let linker = tylluan_kernel::memory::auto_link::AutoLinker::new(silva.clone());
