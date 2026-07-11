@@ -23,7 +23,7 @@ export function DispatchFlow() {
           <SectionLabel x={30} y={30} text="STEP 1: Intent Arrival" color="#94A3B8" />
 
           <SvgNode x={200} y={18} width={240} height={38} label="User Input" sublabel="natural language / command" style={NODE_STYLES.subsystem} />
-          <SvgNode x={500} y={18} width={200} height={38} label="Guild Call" sublabel="tylluan_do / recall / store" style={NODE_STYLES.process} />
+            <SvgNode x={500} y={18} width={200} height={38} label="Guild Call" sublabel="tylluan_do / recall / remember" style={NODE_STYLES.process} />
 
           <Connection x1={440} y1={37} x2={500} y2={37} markerId="disp-arrow-gray" strokeWidth={0.8} />
 
@@ -115,8 +115,9 @@ export function DispatchFlow() {
             {/* Guild types */}
             <SvgNode x={60} y={440} width={110} height={34} label="tylluan_do" sublabel="execute action" style={NODE_STYLES.process} />
             <SvgNode x={190} y={440} width={110} height={34} label="tylluan_recall" sublabel="memory search" style={NODE_STYLES.process} />
-            <SvgNode x={320} y={440} width={110} height={34} label="tylluan_store" sublabel="persist memory" style={NODE_STYLES.process} />
-            <SvgNode x={450} y={440} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
+            <SvgNode x={320} y={440} width={130} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
+            <SvgNode x={470} y={440} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
+            <SvgNode x={600} y={440} width={110} height={34} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
 
             {/* Execution details */}
             <text x={600} y={448} fill="#94A3B8" fontSize="9" fontFamily="ui-monospace, monospace">
@@ -151,11 +152,12 @@ export function DispatchFlow() {
           {/* ═══════ STEP 5: RESPONSE ═══════ */}
           <SectionLabel x={30} y={565} text="STEP 5: Response" color="#10B981" />
 
-          <PhaseBox x={200} y={577} width={700} height={65} title="Response Assembly" color="#10B981">
-            <SvgNode x={220} y={607} width={130} height={26} label="Guild Result" sublabel="stdout/stderr" style={NODE_STYLES.core} />
-            <SvgNode x={370} y={607} width={130} height={26} label="Recall Context" sublabel="memories used" style={NODE_STYLES.core} />
-            <SvgNode x={520} y={607} width={130} height={26} label="FSRS Update" sublabel="touch accessed" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1 }} />
-            <SvgNode x={670} y={607} width={130} height={26} label="Audit Log" sublabel="guild_call entry" style={NODE_STYLES.subsystem} />
+          <PhaseBox x={120} y={577} width={840} height={65} title="Response Assembly" color="#10B981">
+            <SvgNode x={140} y={607} width={120} height={26} label="Guild Result" sublabel="stdout/stderr" style={NODE_STYLES.core} />
+            <SvgNode x={280} y={607} width={120} height={26} label="Recall Context" sublabel="memories used" style={NODE_STYLES.core} />
+            <SvgNode x={420} y={607} width={120} height={26} label="FSRS Update" sublabel="touch accessed" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1 }} />
+            <SvgNode x={560} y={607} width={120} height={26} label="DreamCycle" sublabel="consolidate episode" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1 }} />
+            <SvgNode x={700} y={607} width={120} height={26} label="Audit Log" sublabel="guild_call entry" style={NODE_STYLES.subsystem} />
 
             <Connection x1={350} y1={620} x2={370} y2={620} markerId="disp-arrow" strokeWidth={0.8} />
             <Connection x1={500} y1={620} x2={520} y2={620} markerId="disp-arrow" strokeWidth={0.8} />

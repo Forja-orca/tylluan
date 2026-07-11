@@ -70,8 +70,8 @@ export function FederationMesh() {
             {/* Guilds */}
             <SvgNode x={40} y={340} width={100} height={28} label="tylluan_do" sublabel="execute" style={NODE_STYLES.process} />
             <SvgNode x={150} y={340} width={100} height={28} label="tylluan_recall" sublabel="search" style={NODE_STYLES.process} />
-            <SvgNode x={260} y={340} width={100} height={28} label="tylluan_store" sublabel="persist" style={NODE_STYLES.process} />
-            <SvgNode x={370} y={340} width={110} height={28} label="tylluan_ask" sublabel="LLM query" style={NODE_STYLES.process} />
+            <SvgNode x={260} y={340} width={110} height={28} label="tylluan_remember" sublabel="persist" style={NODE_STYLES.process} />
+            <SvgNode x={380} y={340} width={110} height={28} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
 
             <text x={40} y={390} fill="#475569" fontSize="8" fontFamily="ui-monospace, monospace">
               Profiles: portable (Pi 4) · clinic (local server) · server (full mesh)
@@ -83,7 +83,7 @@ export function FederationMesh() {
 
           {/* Step 1: Local Change */}
           <PhaseBox x={550} y={45} width={520} height={80} title="Step 1 — Local Mutation" color="#14B8A6">
-            <SvgNode x={570} y={78} width={120} height={28} label="tylluan_store" sublabel="guild call" style={NODE_STYLES.process} />
+            <SvgNode x={570} y={78} width={130} height={28} label="tylluan_remember" sublabel="guild call" style={NODE_STYLES.process} />
             <text x={720} y={88} fill="#94A3B8" fontSize="9" fontFamily="ui-monospace, monospace">
               → New memory or update
             </text>

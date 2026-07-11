@@ -101,14 +101,15 @@ export function ArchitectureMap() {
           </PhaseBox>
 
           {/* Guilds */}
-          <PhaseBox x={730} y={212} width={350} height={170} title="Guilds — Agent Capabilities" color="#A855F7">
+          <PhaseBox x={730} y={212} width={360} height={190} title="Guilds — Agent Capabilities" color="#A855F7">
             <SvgNode x={750} y={250} width={100} height={34} label="tylluan_do" sublabel="execute actions" style={NODE_STYLES.process} />
             <SvgNode x={870} y={250} width={100} height={34} label="tylluan_recall" sublabel="memory access" style={NODE_STYLES.process} />
-            <SvgNode x={750} y={300} width={100} height={34} label="tylluan_store" sublabel="persist memory" style={NODE_STYLES.process} />
-            <SvgNode x={870} y={300} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
+            <SvgNode x={750} y={300} width={100} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
+            <SvgNode x={870} y={300} width={100} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
+            <SvgNode x={750} y={350} width={100} height={28} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
 
-            <rect x={750} y={342} width={220} height={28} rx={4} fill="none" stroke="#F59E0B" strokeWidth={0.8} strokeDasharray="4 2" opacity={0.5} />
-            <text x={860} y={360} textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" opacity={0.7}>
+            <rect x={870} y={350} width={200} height={28} rx={4} fill="none" stroke="#F59E0B" strokeWidth={0.8} strokeDasharray="4 2" opacity={0.5} />
+            <text x={970} y={368} textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" opacity={0.7}>
               FUTURE: Local tool-calling model (26M-1B)
             </text>
           </PhaseBox>
@@ -154,14 +155,14 @@ export function ArchitectureMap() {
           <SvgNode x={580} y={548} width={140} height={36} label="Noise Protocol" sublabel="encrypted p2p" style={NODE_STYLES.subsystem} />
           <SvgNode x={750} y={548} width={150} height={36} label="ONNX Runtime" sublabel="model inference" style={NODE_STYLES.subsystem} />
 
-          {/* ═══════ FUTURE: SLEEP CYCLE ═══════ */}
-          <PhaseBox x={60} y={612} width={840} height={80} title="FUTURE: SleepCycle (SCM) — Memory Consolidation" color="#F59E0B">
-            <SvgNode x={80} y={650} width={120} height={30} label="NREM Phase" sublabel="deduplicate · merge" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
-            <SvgNode x={220} y={650} width={120} height={30} label="REM Phase" sublabel="reactivate weak" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
-            <SvgNode x={360} y={650} width={140} height={30} label="Value Forgetting" sublabel="prune low-value" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
-            <SvgNode x={520} y={650} width={140} height={30} label="Self-Model" sublabel="introspection" style={{ fill: '#1A1510', stroke: '#F59E0B', strokeWidth: 1, strokeDasharray: '3 2' } as any} />
-            <text x={720} y={668} textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-monospace, monospace">
-              tylluan-cli sleep
+          {/* ═══════ SLEEP CYCLE (ACTIVE) ═══════ */}
+          <PhaseBox x={60} y={612} width={840} height={80} title="ACTIVE: DreamCycle — NightConsolidation (hourly)" color="#10B981">
+            <SvgNode x={80} y={650} width={130} height={30} label="Deduplicate" sublabel="merge similar episodes" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1.5 }} />
+            <SvgNode x={230} y={650} width={130} height={30} label="Salience Decay" sublabel="prune low-weight" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1.5 }} />
+            <SvgNode x={380} y={650} width={150} height={30} label="Contradiction Detection" sublabel="mark conflicted" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1.5 }} />
+            <SvgNode x={550} y={650} width={130} height={30} label="ConsensusEngine" sublabel="reinforce winner" style={{ fill: '#0A1A15', stroke: '#A855F7', strokeWidth: 1.5 }} />
+            <text x={730} y={668} textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-monospace, monospace">
+              Future: REM phase · self-model
             </text>
           </PhaseBox>
 
@@ -240,20 +241,20 @@ export function ArchitectureMap() {
               Replaced fixed half-life (T½=14d) with per-memory stability model.
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  305 tests passing
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  383 tests passing (310+61+12)
             </text>
           </g>
 
           <g>
             <rect x={600} y="710" width={580} height={60} rx={6} fill="#1A1510" stroke="#F59E0B" strokeWidth={0.8} opacity={0.8} />
             <text x={616} y={730} fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
-              ⬡ Papers 2026 — Proposed Enhancements
+              ⬡ Project Status — Jul 2026
             </text>
             <text x={616} y={746} fill="#94A3B8" fontSize="10" fontFamily="system-ui, sans-serif">
-              HippoRAG-PPR (associative recall) · SCM SleepCycle · KNEXA-FL (bandit dispatch) ·
+              ACTIVE: Deterministic Freshness · DreamCycle · Dashboard M26 · Mem0 Benchmark ·
             </text>
             <text x={616} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              Deterministic freshness · Local tool-calling (26M-1B) · Mem0 benchmarking
+              PROPOSED: HippoRAG-PPR · Local tool-calling (26M-1B) · FUTURE: KNEXA-FL (LinUCB)
             </text>
           </g>
 

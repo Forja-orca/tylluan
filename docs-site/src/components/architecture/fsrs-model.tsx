@@ -39,7 +39,7 @@ export function FsrsModel() {
 
             {/* Step 1: Memory Creation */}
             <PhaseBox x={20} y={10} width={520} height={80} title="1. Memory Creation" color="#3B82F6">
-              <SvgNode x={40} y={48} width={100} height={30} label="tylluan_store" sublabel="guild call" style={NODE_STYLES.process} />
+              <SvgNode x={40} y={48} width={120} height={30} label="tylluan_remember" sublabel="guild call" style={NODE_STYLES.process} />
                 <text x={200} y={58} fill="#94A3B8" fontSize="10" fontFamily="ui-monospace, monospace">
                   S₀ = 14d
                 </text>
