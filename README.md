@@ -55,7 +55,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LinearRAG graph traversal (PageRank + degree penalty) |
+| **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LightRAG graph traversal (PageRank + degree penalty) |
 | **Agent Persona** | `persona` + `preferences` stored in Core Memory — always available, never retrieved on demand |
 | **Tools** | 42 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
@@ -166,7 +166,7 @@ The only time an LLM is involved is if you — the agent or human caller — dec
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-354 tests across Rust kernel, Python guilds, and dashboard — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+383 tests across Rust kernel, Python guilds, and dashboard — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -290,7 +290,7 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M14-A DHT** | Kademlia routing (256 K-buckets) · Ed25519 XOR metric · mainline DHT bootstrap | ✅ |
 | **M14-B Gossip** | Symmetric push-pull · LRU entry store · anti-entropy cursor · HardwareCaps in GossipEntry | ✅ |
 | **M14-C Noise** | XK handshake · NK HTTP encryption · Ed25519→X25519 · wired to federation sync | ✅ |
-| **v0.6–v0.10** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LinearRAG · degree-bias fix · fault DST | ✅ |
+| **v0.6–v0.10** | Portable profiles · config-driven embeddings · Core Memory · HNSW · LightRAG · degree-bias fix · fault DST | ✅ |
 | **M14-D** | Guild dispatch — `CapabilityRegistry`, `DispatchRouter`, Noise NK protocol, `DispatchQueue`, remote routing | ✅ v0.13.0 |
 | **M14-E** | Mesh test harness — full-mesh, star, split-brain, multi-peer routing, DispatchQueue TTL | ✅ v0.13.0 |
 | **M14-F** | P2P TCP dispatch — Noise XK session pool, `P2pSessionPool`, native `RemoteTcp` arm | ✅ v0.13.0 |

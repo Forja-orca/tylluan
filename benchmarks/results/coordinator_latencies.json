@@ -1,178 +1,77 @@
 {
   "metadata": {
-    "timestamp": 1783730649.0388858,
-    "mean_sin_ms": 2581.622862489894,
-    "mean_con_ms": 1211.105674970895,
-    "improvement_pct_of_means": 53.0874283549371,
-    "mean_individual_delta_pct": 10.239987236617544,
-    "errors_sin": 2,
-    "errors_con": 2,
-    "filtered_queries_count": 8
+    "timestamp": 1783813999.672042,
+    "generated_at_utc": "2026-07-11T23:53:19.672052+00:00",
+    "kernel": "http://127.0.0.1:4000",
+    "repeats_per_query": 3,
+    "mean_sin_ms": 1672.7011600043625,
+    "mean_con_ms": 635.2639734124144,
+    "improvement_pct_of_means": 62.02166958437706,
+    "mean_individual_delta_pct": 57.67767242066082,
+    "valid_queries": 5,
+    "total_queries": 5
   },
   "queries": [
     {
-      "query_index": 1,
-      "query": "search for rust async patterns then summarize the top 3",
-      "latency_sin_ms": 2458.896900061518,
-      "latency_con_ms": 801.4877999667078,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 67.40457886027447
+      "query": "cpu_and_disk",
+      "sub_tasks": [
+        "check system CPU usage",
+        "check system disk usage"
+      ],
+      "mean_sin_ms": 941.2847999483347,
+      "mean_con_ms": 423.2133334347357,
+      "delta_pct": 55.03875835900409,
+      "errors_sin": 0,
+      "errors_con": 0
     },
     {
-      "query_index": 2,
-      "query": "check system CPU usage then check disk usage",
-      "latency_sin_ms": 796.9073997810483,
-      "latency_con_ms": 1703.4386999439448,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -113.75616544807686
+      "query": "cpu_and_memory",
+      "sub_tasks": [
+        "check system CPU usage",
+        "check system memory usage"
+      ],
+      "mean_sin_ms": 1054.7089000077297,
+      "mean_con_ms": 531.7393001168966,
+      "delta_pct": 49.584259684070204,
+      "errors_sin": 0,
+      "errors_con": 0
     },
     {
-      "query_index": 3,
-      "query": "find all Python files in guilds/core then count how many there are",
-      "latency_sin_ms": 889.7798999678344,
-      "latency_con_ms": 453.78799992613494,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 48.999971797234416
+      "query": "two_web_searches",
+      "sub_tasks": [
+        "search the web for rust async runtime benchmarks",
+        "search the web for python asyncio performance"
+      ],
+      "mean_sin_ms": 3631.382233230397,
+      "mean_con_ms": 1097.9284000738214,
+      "delta_pct": 69.76555125409838,
+      "errors_sin": 0,
+      "errors_con": 0
     },
     {
-      "query_index": 4,
-      "query": "check git log last 5 commits then summarize what changed",
-      "latency_sin_ms": 227.5622000452131,
-      "latency_con_ms": 229.2559000197798,
-      "error_sin": true,
-      "error_con": true,
-      "delta_pct": -0.744280014092932
+      "query": "three_metrics",
+      "sub_tasks": [
+        "check system CPU usage",
+        "check system memory usage",
+        "check system disk usage"
+      ],
+      "mean_sin_ms": 996.9396668020636,
+      "mean_con_ms": 500.0051334500313,
+      "delta_pct": 49.845998699808554,
+      "errors_sin": 0,
+      "errors_con": 0
     },
     {
-      "query_index": 5,
-      "query": "search web for tylluan mcp then find mentions of sovereign memory",
-      "latency_sin_ms": 224.93460006080568,
-      "latency_con_ms": 15369.244100060314,
-      "error_sin": true,
-      "error_con": true,
-      "delta_pct": -6732.761209660766
-    },
-    {
-      "query_index": 6,
-      "query": "read the file README.md then generate a one-sentence summary",
-      "latency_sin_ms": 10906.298599904403,
-      "latency_con_ms": 1080.0799001008272,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 90.09673272552529
-    },
-    {
-      "query_index": 7,
-      "query": "list files in guilds/core then show the names of the largest 3",
-      "latency_sin_ms": 1262.1691001113504,
-      "latency_con_ms": 1151.1190000455827,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 8.798353568944982
-    },
-    {
-      "query_index": 8,
-      "query": "get current system metrics then tell me if memory usage is above 70%",
-      "latency_sin_ms": 1103.0957999173552,
-      "latency_con_ms": 1142.3305999487638,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -3.556789902957492
-    },
-    {
-      "query_index": 9,
-      "query": "search for TRINITY coordinator AI paper then explain the three roles",
-      "latency_sin_ms": 2356.039100093767,
-      "latency_con_ms": 2323.1800999492407,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 1.3946712575024167
-    },
-    {
-      "query_index": 10,
-      "query": "find TODO comments in guilds/core/coordinator.py then list them",
-      "latency_sin_ms": 879.7961000818759,
-      "latency_con_ms": 1033.4212998859584,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -17.46145496550687
-    }
-  ],
-  "filtered_queries": [
-    {
-      "query_index": 1,
-      "query": "search for rust async patterns then summarize the top 3",
-      "latency_sin_ms": 2458.896900061518,
-      "latency_con_ms": 801.4877999667078,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 67.40457886027447
-    },
-    {
-      "query_index": 2,
-      "query": "check system CPU usage then check disk usage",
-      "latency_sin_ms": 796.9073997810483,
-      "latency_con_ms": 1703.4386999439448,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -113.75616544807686
-    },
-    {
-      "query_index": 3,
-      "query": "find all Python files in guilds/core then count how many there are",
-      "latency_sin_ms": 889.7798999678344,
-      "latency_con_ms": 453.78799992613494,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 48.999971797234416
-    },
-    {
-      "query_index": 6,
-      "query": "read the file README.md then generate a one-sentence summary",
-      "latency_sin_ms": 10906.298599904403,
-      "latency_con_ms": 1080.0799001008272,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 90.09673272552529
-    },
-    {
-      "query_index": 7,
-      "query": "list files in guilds/core then show the names of the largest 3",
-      "latency_sin_ms": 1262.1691001113504,
-      "latency_con_ms": 1151.1190000455827,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 8.798353568944982
-    },
-    {
-      "query_index": 8,
-      "query": "get current system metrics then tell me if memory usage is above 70%",
-      "latency_sin_ms": 1103.0957999173552,
-      "latency_con_ms": 1142.3305999487638,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -3.556789902957492
-    },
-    {
-      "query_index": 9,
-      "query": "search for TRINITY coordinator AI paper then explain the three roles",
-      "latency_sin_ms": 2356.039100093767,
-      "latency_con_ms": 2323.1800999492407,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": 1.3946712575024167
-    },
-    {
-      "query_index": 10,
-      "query": "find TODO comments in guilds/core/coordinator.py then list them",
-      "latency_sin_ms": 879.7961000818759,
-      "latency_con_ms": 1033.4212998859584,
-      "error_sin": false,
-      "error_con": false,
-      "delta_pct": -17.46145496550687
+      "query": "mixed_metrics_search",
+      "sub_tasks": [
+        "check system CPU usage",
+        "search the web for tokio scheduler internals"
+      ],
+      "mean_sin_ms": 1739.1902000332873,
+      "mean_con_ms": 623.4336999865869,
+      "delta_pct": 64.15379410632288,
+      "errors_sin": 0,
+      "errors_con": 0
     }
   ]
 }
