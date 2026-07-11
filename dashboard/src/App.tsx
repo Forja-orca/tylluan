@@ -107,6 +107,38 @@ function App() {
     return () => window.removeEventListener('nexus_mention', handleMention);
   }, [notify]);
 
+  // Listen to new Event Bridge SSE events (dream_cycle_complete and federation_sync)
+  useEffect(() => {
+    const handleDreamCycle = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      const nodesConsolidated = data?.nodes_consolidated || 0;
+      const contradictionsResolved = data?.contradictions_resolved || 0;
+      notify(
+        `Ciclo de consolidación cognitiva (NREM) finalizado. Grafo optimizado: ${nodesConsolidated} nodos procesados, ${contradictionsResolved} contradicciones resueltas.`,
+        'info',
+        'Consolidación NREM'
+      );
+    };
+
+    const handleFederationSync = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      const peer = data?.peer || 'un par';
+      const count = data?.count || 0;
+      notify(
+        `Sincronización de federación completada con ${peer}. Sincronizados ${count} nodos de conocimiento.`,
+        'info',
+        'Federación P2P'
+      );
+    };
+
+    window.addEventListener('nexus_event_dream_cycle_complete', handleDreamCycle);
+    window.addEventListener('nexus_event_federation_sync', handleFederationSync);
+    return () => {
+      window.removeEventListener('nexus_event_dream_cycle_complete', handleDreamCycle);
+      window.removeEventListener('nexus_event_federation_sync', handleFederationSync);
+    };
+  }, [notify]);
+
   // SSE layer — resilient, with error_result → toast routing
   const { connectionStatus, reconnectAttempts } = useNexusSSE(bridge, {
     onError: useCallback((msg: string, guild?: string) => {

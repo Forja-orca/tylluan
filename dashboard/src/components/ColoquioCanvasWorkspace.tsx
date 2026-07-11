@@ -1007,6 +1007,27 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
     return () => ws.close();
   }, [channelId]);
 
+  // Listen to Event Bridge events to keep the Canvas in sync in real time
+  useEffect(() => {
+    const triggerSync = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'request_sync', channelId }));
+      }
+    };
+
+    window.addEventListener('nexus_event_memory_added', triggerSync);
+    window.addEventListener('nexus_event_memory_updated', triggerSync);
+    window.addEventListener('nexus_event_dream_cycle_complete', triggerSync);
+    window.addEventListener('nexus_event_federation_sync', triggerSync);
+
+    return () => {
+      window.removeEventListener('nexus_event_memory_added', triggerSync);
+      window.removeEventListener('nexus_event_memory_updated', triggerSync);
+      window.removeEventListener('nexus_event_dream_cycle_complete', triggerSync);
+      window.removeEventListener('nexus_event_federation_sync', triggerSync);
+    };
+  }, [channelId]);
+
   const wsSend = useCallback((payload: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ ...payload, channelId }));
