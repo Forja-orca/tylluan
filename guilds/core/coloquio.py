@@ -162,6 +162,13 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
     Format: 'post to channel <channel>: <message>' or supply channel_id + content directly.
     MENTIONS: writing @agent (e.g. @agent-1, @agent-2) will automatically deliver a
     notification to their inbox in the kernel — the mentioned agent can view it with tylluan_recall '@inbox'.
+    SECURITY: this tool is agent-facing and can NEVER post as role="human" --
+    the `role` parameter is accepted for backward compatibility but is always
+    overridden to "agent" server-side. Impersonating a protected author
+    (jose/admin/system) by claiming role="human" was a real, reproducible
+    vulnerability (found 2026-07-11: any agent could call this tool with
+    role="human", author_id="jose" and it would render indistinguishably
+    from a genuine human message, with zero server-side verification).
     """
     raw = query or intent or command or ""
 
@@ -188,9 +195,13 @@ def post_to_channel(channel_id: str = "", content: str = "", author_id: str = ""
         return "❌ Specify channel and content: 'post to coloquio <channel>: <message>'"
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
+        # Never trust the caller-supplied `role` -- this tool is only ever
+        # invoked by agents (via tylluan_do routing), so it must never be
+        # able to grant itself the "human" role that bypasses the kernel's
+        # protected-author impersonation guard.
         result = _post(
             f"/api/v1/coloquio/channels/{quoted_id}/post",
-            {"author_id": author_id, "role": role, "content": content, "metadata": "{}"},
+            {"author_id": author_id, "role": "agent", "content": content, "metadata": "{}"},
         )
         return (f"✅ Posted to '{channel_id}' as @{author_id} — "
                 f"turn {result.get('turn', '?')} (msg_id: {result.get('msg_id', '?')[:8]}…)")
