@@ -12,7 +12,7 @@
 │    → starts tylluan-nexus.exe --config tylluan.toml         │
 │                                                              │
 │  VERIFY UP:                                                  │
-│    curl http://127.0.0.1:4000/health                        │
+│    curl http://127.0.0.1:3030/health                        │
 │                                                              │
 │  STOP:                                                       │
 │    taskkill /IM tylluan-nexus.exe /F                        │
@@ -30,16 +30,16 @@
 ┌─ MCP CLIENT CONNECTIONS ────────────────────────────────────┐
 │                                                              │
 │  Claude Code (.claude/settings.json):                        │
-│    { "type": "sse", "url": "http://127.0.0.1:4000/sse" }   │
+│    { "type": "sse", "url": "http://127.0.0.1:3030/sse" }   │
 │                                                              │
 │  Claude Desktop (claude_desktop_config.json):               │
-│    { "url": "http://127.0.0.1:4000/sse" }                   │
+│    { "url": "http://127.0.0.1:3030/sse" }                   │
 │                                                              │
 │  Antigravity (mcp_config.json):                             │
-│    { "serverUrl": "http://127.0.0.1:4000/messages" }        │
+│    { "serverUrl": "http://127.0.0.1:3030/messages" }        │
 │                                                              │
 │  Qwen Desktop: SSE only (HTTP Streamable → "fetch failed")  │
-│    { "url": "http://127.0.0.1:4000/sse" }                   │
+│    { "url": "http://127.0.0.1:3030/sse" }                   │
 │                                                              │
 │  ⚠️ ALWAYS use 127.0.0.1 not localhost (IPv4 vs IPv6 issue) │
 └─────────────────────────────────────────────────────────────┘
@@ -123,16 +123,16 @@
 │    git -C E:\tylluan log --oneline -3                      │
 │                                                              │
 │  Check health:                                              │
-│    curl http://127.0.0.1:4000/health                        │
+│    curl http://127.0.0.1:3030/health                        │
 │                                                              │
 │  Check active port:                                         │
 │    type E:\tylluan\data\active_port.json                   │
 │                                                              │
 │  View guild status (kernel must be up):                     │
-│    curl http://127.0.0.1:4000/api/v1/guilds                 │
+│    curl http://127.0.0.1:3030/api/v1/guilds                 │
 │                                                              │
 │  Force reindex embeddings:                                  │
-│    curl -X POST http://127.0.0.1:4000/api/v1/memory/reindex │
+│    curl -X POST http://127.0.0.1:3030/api/v1/memory/reindex │
 │                                                              │
 │  Run benchmark:                                             │
 │    cargo run -p tylluan-evals -- --suite retrieval          │

@@ -6,7 +6,7 @@
 
 ┌─ IDENTITY ──────────────────────────────────────────────────┐
 │ Binary:    tylluan-nexus.exe (kernel) + tylluan-cli.exe     │
-│ Port:      :4000 (kernel, dev_mode=true, no auth)           │
+│ Port:      :3030 (kernel, dev_mode=true, no auth)           │
 │            docker single-instance maps host:3033→cont:3030  │
 │ Config:    tylluan.toml (native) / tylluan.docker.toml      │
 │ Auth:      .tylluan-token (bearer, gitignored) — disabled   │
@@ -19,13 +19,13 @@
 │            cargo build --release -p tylluan-kernel (prod)   │
 │ Start:     .\tylluan-mcp.bat (from repo root)               │
 │            auto-builds release if target\release\ missing   │
-│ Health:    curl http://127.0.0.1:4000/health                │
+│ Health:    curl http://127.0.0.1:3030/health                │
 │ HEAD:      ad28f8b (docs-site sync + P2P two-instance guide) │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ SOVEREIGN TOOLS (the only MCP interface) ──────────────────┐
 │                                                              │
-│  CLIENT ──MCP──▶ :4000/sse or /messages                     │
+│  CLIENT ──MCP──▶ :3030/sse or /messages                     │
 │                                                              │
 │  tylluan_do ────▶ natural language → router → guild → result │
 │  tylluan_remember ▶ content → SilvaDB node (embeddings+graph)│
@@ -113,7 +113,7 @@
 ┌─ DATA LAYER ────────────────────────────────────────────────┐
 │                                                              │
 │  data/silva.db        knowledge graph (nodes, edges, FTS5)  │
-│  data/active_port.json  runtime port (4000 by default,       │
+│  data/active_port.json  runtime port (3030 by default,       │
 │                          written by kernel at actual bind)   │
 │  data/scheduler.db    scheduler persistence                 │
 │                                                              │
@@ -160,6 +160,6 @@
 │     real current flow, no per-push confirmation required.   │
 │     (Confirmed 2026-07-11 — older docs said otherwise.)      │
 │  ✋ NEVER start processes via Bash tool (AV blocks it)      │
-│  ✋ Port :4000 is Tylluan's default port (native, dev_mode). │
+│  ✋ Port :3030 is Tylluan's default port (native, dev_mode). │
 │     Avoid conflicts with other processes running here.      │
 └─────────────────────────────────────────────────────────────┘
