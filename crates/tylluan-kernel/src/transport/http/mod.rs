@@ -285,13 +285,23 @@ pub async fn start_http_server(
 
     // Now that the new kernel is fully up and running on the new port,
     // gracefully shutdown the old kernel so the proxy starts routing to the new one.
-    // Safety: only ever hot-swap-shutdown a port within Tylluan's own configured
-    // range. A stale/corrupted active_port.json must never let this kernel send a
-    // shutdown signal outside its own process family (e.g. ForjaMCPo3's :3030 nexus).
-    const TYLLUAN_OWN_PORT_RANGE: std::ops::RangeInclusive<u16> = 4000..=4099;
+    // Safety: only ever hot-swap-shutdown a port this same kernel could
+    // plausibly have bound to previously -- the configured port plus the
+    // fallback range used above (port..=port+100) when the configured port
+    // was already taken. A stale/corrupted active_port.json must never let
+    // this kernel send a shutdown signal to an unrelated process on some
+    // other port (e.g. ForjaMCPo3's nexus, or anything else on the host).
+    //
+    // This is deliberately derived from `port` (the configured value) rather
+    // than a hardcoded range: Tylluan's real shipped default is :3030 (see
+    // tylluan.example.toml), identical to ForjaMCPo3's port on machines that
+    // run both -- a fixed "Tylluan always uses 4000-4099" range was wrong and
+    // would have silently broken zero-downtime restarts for any user running
+    // the default config, since :3030 fell outside that hardcoded window.
+    let own_port_range = port..=(port.saturating_add(100));
     if let Some(op) = old_port
         && op != bound_port
-        && TYLLUAN_OWN_PORT_RANGE.contains(&op) {
+        && own_port_range.contains(&op) {
             tokio::spawn(async move {
                 info!("🔌 Sending graceful shutdown signal to previous kernel on port {}...", op);
                 let client = reqwest::Client::new();
