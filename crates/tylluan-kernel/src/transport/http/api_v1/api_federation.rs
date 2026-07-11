@@ -231,6 +231,11 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
     }
 
     reload_peers_cache(&state).await;
+    let _ = state.broadcast_tx.send(serde_json::json!({
+        "type": "federation_sync", "direction": "push",
+        "synced": synced_count, "total_peers": peers.len(), "nodes_synced": local_nodes.len(),
+        "ts": chrono::Utc::now().timestamp_millis()
+    }));
     (StatusCode::OK, Json(serde_json::json!({
         "synced": synced_count,
         "total_peers": peers.len(),
@@ -367,6 +372,11 @@ pub async fn federation_sync_receive(
         }
     }
 
+    let _ = state.broadcast_tx.send(serde_json::json!({
+        "type": "federation_sync", "direction": "receive", "peer": &peer.name,
+        "received": received, "skipped": skipped, "verified": verified, "total": envelopes.len(),
+        "ts": chrono::Utc::now().timestamp_millis()
+    }));
     (StatusCode::OK, Json(serde_json::json!({
         "received": received,
         "skipped": skipped,
@@ -565,6 +575,11 @@ pub async fn federation_sync_pull(
     let _ = state.peer_db.update_last_sync(&peer.name, now_secs());
     reload_peers_cache(&state).await;
 
+    let _ = state.broadcast_tx.send(serde_json::json!({
+        "type": "federation_sync", "direction": "pull", "peer": &peer.name,
+        "received": received, "skipped": skipped, "total": envelopes.len(),
+        "ts": chrono::Utc::now().timestamp_millis()
+    }));
     (StatusCode::OK, Json(serde_json::json!({
         "received": received,
         "skipped": skipped,
@@ -691,6 +706,11 @@ pub async fn federation_sync_both(
     let _ = state.peer_db.update_last_sync(&peer.name, now_secs());
     reload_peers_cache(&state).await;
 
+    let _ = state.broadcast_tx.send(serde_json::json!({
+        "type": "federation_sync", "direction": "both", "peer": &peer.name,
+        "push_succeeded": push_ok, "pulled_nodes": pulled,
+        "ts": chrono::Utc::now().timestamp_millis()
+    }));
     (StatusCode::OK, Json(serde_json::json!({
         "peer": peer.name,
         "push_succeeded": push_ok,
