@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-28 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓)
+> Last updated: 2026-07-11 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, kernel hardening: audit-log spawn_blocking, port-shutdown safety guard, cosine panic fix)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.13.0`) · 291 kernel lib + 61 link + 2 evals = **354 total** green.
+**Commit:** HEAD (`v0.13.0`) · 303 kernel lib + 61 link + 12 fsrs = **376 total** green.
 
 ---
 
@@ -34,7 +34,7 @@
 - `tylluan-nexus` binary: tokio + axum HTTP server, MCP over SSE and HTTP Streamable
 - M21 Query Embedding Cache: `QueryEmbeddingCache` in `memory/silva/query_cache.rs` — Mutex<HashMap>, TTL 300s, LRU 256 entries, normalized key (split_whitespace+lowercase). Injected in `handler_recall.rs` — `tylluan_recall` queries cache before ONNX inference. Invalidated on `tylluan_remember`. Ingesta, batch embed, and DCR paths bypass cache (always fresh). 5 unit tests.
 - M20 Complexity Cascade: heuristic intent scoring (≥0.6 proactive → coordinator; ≥0.4 reactive on failure → fallback). Guarded by `registry.has_guild("coordinator")` — activates automatically when coordinator is registered. Zero external deps, 13 unit tests.
-- M18-P3a Coordinator Parallelism ✅ / P3b Re-benchmark ⬜: TRINITY coordinator detects synthesis intents via 30+ signals (EN/ES) in `_is_synthesis_intent()`. `ThreadPoolExecutor(max_workers=4)` verified in code (real parallelism exists). Re-benchmark telemetry is real (`time.perf_counter()`, `benchmarks/results/coordinator_latencies.json`) but the reported +49.9% is the delta of absolute means, dominated by 1-2 outlier queries — the mean of per-query percentage deltas is only +1.57% (median +8.9%), with 3/7 valid queries actually slower under the coordinator. Does not meet the 30% roadmap threshold under a query-level metric. P3b remains open until parallelism shows a consistent per-query win.
+- M18-P3a Coordinator Parallelism ✅ / P3b Re-benchmark ⬜: TRINITY coordinator detects synthesis intents via 30+ signals (EN/ES) in `_is_synthesis_intent()`. `ThreadPoolExecutor(max_workers=4)` verified in code (real parallelism exists), plus thread-local HTTP Keep-Alive + TCP_NODELAY (legitimate latency win, kept). An earlier attempt anonymized `agent_id` to skip SQLite audit writes to hit the 30% target — reverted (commit 1381664) as a real accountability regression; a benchmark-keyword-overfitting heuristic was reverted alongside it. Root cause investigated further: `log_audit_entry` was scheduled via `tokio::spawn` around a synchronous rusqlite write, blocking a runtime worker thread during concurrent coordinator dispatches — fixed via `spawn_blocking` (commit 5698051). Latest honest measurement: delta of means +53.1%, mean of per-query percentage deltas +10.2% — still short of the 30% roadmap threshold on a query-level basis. P3b remains open; claimed by claude-code (2026-07-11) pending re-run against the `spawn_blocking` fix.
 - `tylluan-cli` binary: `start / stop / status / logs / connect / download-models / install --profile=portable|clinic|server` (P6)
 - 5 sovereign MCP tools: `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
 - SQLite-backed persistent memory (SilvaDB) with configurable embeddings (bge-m3/bge-small/nomic/none) + BM25 hybrid search + Jina Reranker; `embedding_model = "none"` for zero-download BM25-only mode; `vector_dimensions` derived dynamically from model (P5)
