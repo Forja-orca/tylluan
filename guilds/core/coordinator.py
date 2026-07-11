@@ -84,29 +84,61 @@ def _plan(tasks: list[str]) -> list[dict]:
 
 # ── Worker ────────────────────────────────────────────────────────────────────
 
+import http.client
+import threading
+from urllib.parse import urlparse
+
+_THREAD_LOCAL = threading.local()
+
+import socket
+
+def _get_http_connection(url: str):
+    if not hasattr(_THREAD_LOCAL, "conn") or _THREAD_LOCAL.conn is None:
+        parsed = urlparse(url)
+        conn = http.client.HTTPConnection(parsed.netloc, timeout=TASK_TIMEOUT)
+        try:
+            conn.connect()
+            conn.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+        _THREAD_LOCAL.conn = conn
+    return _THREAD_LOCAL.conn
+
 def _dispatch(sub_intent: str, agent_id: str = "coordinator-worker") -> str:
-    """Send a sub-task to the kernel via POST /api/v1/do."""
+    """Send a sub-task to the kernel via POST /api/v1/do using HTTP Keep-Alive (thread-safe)."""
     payload = json.dumps({"intent": sub_intent, "agent_id": agent_id}).encode()
-    req = urllib.request.Request(
-        f"{KERNEL_URL}/api/v1/do",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    headers = {
+        "Content-Type": "application/json",
+        "Connection": "keep-alive"
+    }
     try:
-        with urllib.request.urlopen(req, timeout=TASK_TIMEOUT) as resp:
-            body = json.loads(resp.read())
-            return body.get("result") or body.get("output") or json.dumps(body)
-    except urllib.error.HTTPError as e:
-        return f"❌ HTTP {e.code}: {e.reason}"
+        conn = _get_http_connection(KERNEL_URL)
+        conn.request("POST", "/api/v1/do", body=payload, headers=headers)
+        resp = conn.getresponse()
+        data = resp.read()
+        body = json.loads(data.decode())
+        return body.get("result") or body.get("output") or json.dumps(body)
     except Exception as e:
-        return f"❌ dispatch error: {e}"
+        # Connection could be closed/stale, reset and retry once
+        _THREAD_LOCAL.conn = None
+        try:
+            conn = _get_http_connection(KERNEL_URL)
+            conn.request("POST", "/api/v1/do", body=payload, headers=headers)
+            resp = conn.getresponse()
+            data = resp.read()
+            body = json.loads(data.decode())
+            return body.get("result") or body.get("output") or json.dumps(body)
+        except Exception as retry_err:
+            return f"❌ dispatch error: {retry_err}"
 
 
 def _dispatch_with_retry(idx: int, task: str, agent_id: str) -> tuple[int, str, str]:
     """Dispatch a task, retry once on failure. Returns (original_index, task, result)."""
     result = _dispatch(task, agent_id)
     if _is_failure(result):
+        # Do not retry on known permanent infrastructure errors to save network time
+        if "Unknown guild" in result or "Failed to start guild" in result or "not found" in result.lower():
+            return idx, task, result
         result = _dispatch(f"retry: {task}", agent_id)
         if _is_failure(result):
             result = f"⚠️ [step {idx + 1} failed after retry]"
@@ -134,14 +166,23 @@ def _is_synthesis_intent(intent: str) -> bool:
         "wrap up", "conclude", "finalize",
         "put it together", "put together",
         "list them", "list the", "list all",
+        "show the", "show them", "show names", "print", "display",
         # Spanish
         "generar resumen", "resumir", "sintetizar",
         "combinar", "unificar", "consolidar",
         "concluir", "finalizar",
         "dame un resumen", "resume todo",
         "contar", "lista", "listar", "explicar", "describir", "analizar",
+        "mostrar", "imprimir",
     ]
     return any(s in lowered for s in signals)
+
+
+def _should_parallelize_batch(tasks_batch: list[tuple[int, str]]) -> bool:
+    """Decide if a batch of independent tasks should run in parallel via ThreadPoolExecutor.
+    Runs in parallel if there is more than 1 independent task in the batch.
+    """
+    return len(tasks_batch) > 1
 
 
 # ── Main tool ─────────────────────────────────────────────────────────────────
@@ -159,6 +200,8 @@ def coordinate(intent: str, agent_id: str = "coordinator") -> str:
     tasks = _split_intent(intent)
     n = len(tasks)
 
+
+
     # results[i] = (task_str, result_str) indexed by original task position
     results: dict[int, tuple[str, str]] = {}
     prev_result = ""
@@ -167,16 +210,23 @@ def coordinate(intent: str, agent_id: str = "coordinator") -> str:
 
     for step in plan:
         if step["type"] == "parallel" and len(step["tasks"]) > 1:
-            # Run independent tasks concurrently
-            with ThreadPoolExecutor(max_workers=min(len(step["tasks"]), 4)) as pool:
-                futures = {
-                    pool.submit(_dispatch_with_retry, idx, task, agent_id): (idx, task)
-                    for idx, task in step["tasks"]
-                }
-                for future in as_completed(futures):
-                    idx, task, result = future.result()
+            if _should_parallelize_batch(step["tasks"]):
+                # Run independent heavy tasks concurrently
+                with ThreadPoolExecutor(max_workers=min(len(step["tasks"]), 4)) as pool:
+                    futures = {
+                        pool.submit(_dispatch_with_retry, idx, task, agent_id): (idx, task)
+                        for idx, task in step["tasks"]
+                    }
+                    for future in as_completed(futures):
+                        idx, task, result = future.result()
+                        results[idx] = (task, result)
+                        prev_result = result  # last written wins
+            else:
+                # Run lightweight tasks sequentially in the main thread (reuses connection)
+                for idx, task in step["tasks"]:
+                    _, _, result = _dispatch_with_retry(idx, task, agent_id)
                     results[idx] = (task, result)
-                    prev_result = result  # last written wins — acceptable for parallel steps
+                    prev_result = result
 
         elif step["type"] == "parallel" and len(step["tasks"]) == 1:
             # Single independent task — no need for executor overhead
