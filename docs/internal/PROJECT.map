@@ -6,22 +6,26 @@
 
 ┌─ IDENTITY ──────────────────────────────────────────────────┐
 │ Binary:    tylluan-nexus.exe (kernel) + tylluan-cli.exe     │
-│ Port:      :3030 (kernel, primary) │ fallback :3031         │
-│ Config:    tylluan.toml                                     │
-│ Auth:      .tylluan-token (bearer, gitignored)              │
+│ Port:      :4000 (kernel, dev_mode=true, no auth)           │
+│            docker single-instance maps host:3033→cont:3030  │
+│ Config:    tylluan.toml (native) / tylluan.docker.toml      │
+│ Auth:      .tylluan-token (bearer, gitignored) — disabled   │
+│            when dev_mode=true (native default)               │
 │ Data:      data/*.db (sqlite) + data/silva.db (vectors)     │
 │ License:   MIT (public product)                             │
-│ Tests:     291 kernel lib + 88 link + 2 evals = 381 total   │
-│ Build:     cargo build --release -p tylluan-kernel          │
+│ Tests:     310 kernel lib + 61 tylluan-link + 12 tylluan-fsrs│
+│            = 383 total                                      │
+│ Build:     cargo build -p tylluan-kernel (dev)               │
+│            cargo build --release -p tylluan-kernel (prod)   │
 │ Start:     .\tylluan-mcp.bat (from repo root)               │
 │            auto-builds release if target\release\ missing   │
-│ Health:    curl http://127.0.0.1:3030/health                │
-│ HEAD:      dcbff04 (fix scheduler entry point)              │
+│ Health:    curl http://127.0.0.1:4000/health                │
+│ HEAD:      ad28f8b (docs-site sync + P2P two-instance guide) │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ SOVEREIGN TOOLS (the only MCP interface) ──────────────────┐
 │                                                              │
-│  CLIENT ──MCP──▶ :3030/sse or /messages                     │
+│  CLIENT ──MCP──▶ :4000/sse or /messages                     │
 │                                                              │
 │  tylluan_do ────▶ natural language → router → guild → result │
 │  tylluan_remember ▶ content → SilvaDB node (embeddings+graph)│
@@ -50,9 +54,22 @@
 │     ├── memory/  all persistence                            │
 │     │    silva/          knowledge graph + vectors          │
 │     │      query_cache.rs  M21: embed cache TTL 300s LRU256 │
+│     │      decay.rs         FSRS-5 stability/difficulty      │
+│     │        (tylluan-fsrs crate) 12 tests, wraps official  │
+│     │        `fsrs` crate — not a from-scratch reimpl       │
+│     │    consensus.rs    Sovereign Consensus Engine (237L)   │
+│     │      hourly scheduler in main.rs — resolves conflicting│
+│     │      nodes: clear winner/synthesis/ambiguous, 7 tests  │
+│     │    dream_cycle.rs  DreamCycle: dedup+decay+contradiction│
+│     │      runs hourly in NightConsolidation (main.rs)       │
 │     │    coloquio.rs     agent channels                     │
 │     │    hybrid.rs       BM25+vector fusion                 │
 │     │                                                       │
+│  crate/consensus.rs (top-level, NOT memory/consensus.rs)     │
+│    resolve_node_freshness() — 5-rule deterministic cascade   │
+│    (hash/protected/peer-priority/timestamp/tiebreak), 9 tests│
+│    wired into 4 federation sync paths (push/pull/both/recv)  │
+│                                                              │
 │     ├── federation/  P2P mesh                               │
 │     │    mod.rs           peer sync + provenance            │
 │     │    (tylluan-link)   DHT, gossip, Noise XK, NAT        │
@@ -96,7 +113,8 @@
 ┌─ DATA LAYER ────────────────────────────────────────────────┐
 │                                                              │
 │  data/silva.db        knowledge graph (nodes, edges, FTS5)  │
-│  data/active_port.json  runtime port (3030 by default)      │
+│  data/active_port.json  runtime port (4000 by default,       │
+│                          written by kernel at actual bind)   │
 │  data/scheduler.db    scheduler persistence                 │
 │                                                              │
 │  Embeddings: BGE-M3 via fastembed-rs (ONNX, DirectML GPU)  │
@@ -138,8 +156,10 @@
 │  ✋ NEVER host=0.0.0.0 + dev_mode=true (LAN RCE)           │
 │  ✋ NEVER reduce timeouts (CPU inference, not cloud)        │
 │  ✋ NEVER write .tylluan-token value in tracked files       │
-│  ✋ NEVER git push without José's explicit approval         │
+│  ℹ️  Push is routine after green tests + build — this is the │
+│     real current flow, no per-push confirmation required.   │
+│     (Confirmed 2026-07-11 — older docs said otherwise.)      │
 │  ✋ NEVER start processes via Bash tool (AV blocks it)      │
-│  ✋ Port :3030 is Tylluan's default port.                   │
+│  ✋ Port :4000 is Tylluan's default port (native, dev_mode). │
 │     Avoid conflicts with other processes running here.      │
 └─────────────────────────────────────────────────────────────┘
