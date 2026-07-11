@@ -246,7 +246,8 @@ async fn dashboard_events_handler(
                             let score = json.get("score").and_then(|v| v.as_u64()).unwrap_or(100) as u8;
                             Some(NexusEvent::SystemStatus { silva_healthy, mailbox_healthy, curriculum_entries, uptime_secs, embeddings_loaded, score })
                         }
-                        "doc:updated" | "doc:created" | "coloquio:new_turn" => {
+                        "doc:updated" | "doc:created" | "coloquio:new_turn"
+                        | "federation_sync" | "dream_cycle_complete" => {
                             Some(NexusEvent::Raw(json.clone()))
                         }
                         _ => None,
