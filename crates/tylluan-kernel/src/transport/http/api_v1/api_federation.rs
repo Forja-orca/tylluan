@@ -174,17 +174,13 @@ pub async fn federation_approve_peer(
 
 // ── Push sync ────────────────────────────────────────────────────────────────
 
-pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Result<usize> {
     let peers = state.config.read().await.federation_peers.clone();
-
     if peers.is_empty() {
-        return (StatusCode::OK, Json(serde_json::json!({"synced": 0, "message": "No federation peers configured"}))).into_response();
+        return Ok(0);
     }
 
-    let shareable_nodes = match state.silva.get_shareable_nodes().await {
-        Ok(nodes) => nodes,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Failed to get shareable nodes: {e}")}))).into_response(),
-    };
+    let shareable_nodes = state.silva.get_shareable_nodes().await?;
 
     // Exclude nodes received from federation (no echo loops)
     let local_nodes: Vec<_> = shareable_nodes.iter()
@@ -230,17 +226,32 @@ pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl I
         }
     }
 
-    reload_peers_cache(&state).await;
+    reload_peers_cache(state).await;
     let _ = state.broadcast_tx.send(serde_json::json!({
         "type": "federation_sync", "direction": "push",
         "synced": synced_count, "total_peers": peers.len(), "nodes_synced": local_nodes.len(),
         "ts": chrono::Utc::now().timestamp_millis()
     }));
-    (StatusCode::OK, Json(serde_json::json!({
-        "synced": synced_count,
-        "total_peers": peers.len(),
-        "nodes_synced": local_nodes.len(),
-    }))).into_response()
+
+    Ok(synced_count)
+}
+
+pub async fn federation_sync_push(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    match perform_sync_push_internal(&state).await {
+        Ok(synced_count) => {
+            let peers_len = state.config.read().await.federation_peers.len();
+            let nodes_len = match state.silva.get_shareable_nodes().await {
+                Ok(nodes) => nodes.len(),
+                Err(_) => 0,
+            };
+            (StatusCode::OK, Json(serde_json::json!({
+                "synced": synced_count,
+                "total_peers": peers_len,
+                "nodes_synced": nodes_len,
+            }))).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    }
 }
 
 // ── Receive sync ─────────────────────────────────────────────────────────────
@@ -1027,32 +1038,37 @@ async fn pull_from_peer_internal(
 pub fn spawn_auto_sync(state: Arc<HttpState>) {
     tokio::spawn(async move {
         // Read configuration values initially
-        let mut interval_secs = {
+        let mut interval_ms = {
             let config = state.config.read().await;
-            config.federation.auto_sync_interval_secs
+            config.silva.sync_interval_ms
         };
 
-        if interval_secs == 0 {
+        if interval_ms == 0 {
             tracing::info!("🔄 Federation auto-sync is disabled at startup (interval = 0)");
             return;
         }
 
-        tracing::info!("🔄 Federation auto-sync background task started (interval = {interval_secs}s)");
+        tracing::info!("🔄 Federation auto-sync background task started (interval = {interval_ms}ms)");
 
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
 
             // Re-read configuration values in case of runtime changes
             let (curr_interval, curr_mode) = {
                 let config = state.config.read().await;
-                (config.federation.auto_sync_interval_secs, config.federation.auto_sync_mode.clone())
+                let mode = if config.federation.auto_sync_mode.is_empty() {
+                    "both".to_string()
+                } else {
+                    config.federation.auto_sync_mode.clone()
+                };
+                (config.silva.sync_interval_ms, mode)
             };
 
             if curr_interval == 0 {
                 tracing::info!("🔄 Federation auto-sync disabled dynamically");
                 break;
             }
-            interval_secs = curr_interval; // Update loop sleep duration
+            interval_ms = curr_interval; // Update loop sleep duration
 
             tracing::info!("🔄 Starting scheduled auto-sync cycle (mode = '{curr_mode}')...");
 
