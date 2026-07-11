@@ -5,12 +5,18 @@
 
 use ndarray::ArrayView1;
 
-/// Compute cosine similarity between two equal-length f32 vectors.
+/// Compute cosine similarity between two f32 vectors.
 ///
-/// Returns 0.0 if either vector has zero magnitude.
+/// Returns 0.0 if either vector has zero magnitude, or if the vectors have
+/// different lengths (e.g. embeddings from two different model dimensions
+/// stored side by side in SilvaDB) — mismatched-dimension vectors are not
+/// comparable, so 0.0 (no similarity signal) is the correct answer rather
+/// than panicking.
 /// Returns value in [-1.0, 1.0] range.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    debug_assert_eq!(a.len(), b.len(), "vectors must be same length");
+    if a.len() != b.len() {
+        return 0.0;
+    }
 
     let av = ArrayView1::from(a);
     let bv = ArrayView1::from(b);
@@ -97,6 +103,14 @@ mod tests {
         let b = vec![-1.0, 0.0];
         let sim = cosine_similarity(&a, &b);
         assert!((sim - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_mismatched_length_returns_zero_instead_of_panicking() {
+        let a = vec![1.0, 2.0, 3.0]; // e.g. legacy 768-dim embedding (truncated for test)
+        let b = vec![1.0, 2.0, 3.0, 4.0]; // e.g. bge-m3 1024-dim embedding
+        assert_eq!(cosine_similarity(&a, &b), 0.0);
+        assert_eq!(cosine_similarity(&b, &a), 0.0);
     }
 
     #[test]

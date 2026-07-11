@@ -680,7 +680,7 @@ pub async fn handle_tylluan_do(
     let audit_agent = agent_id.clone().unwrap_or_default();
     let audit_success = is_success;
     let audit_preview = result_text.chars().take(200).collect::<String>();
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview);
     });
 
