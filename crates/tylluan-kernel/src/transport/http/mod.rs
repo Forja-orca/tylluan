@@ -285,8 +285,13 @@ pub async fn start_http_server(
 
     // Now that the new kernel is fully up and running on the new port,
     // gracefully shutdown the old kernel so the proxy starts routing to the new one.
+    // Safety: only ever hot-swap-shutdown a port within Tylluan's own configured
+    // range. A stale/corrupted active_port.json must never let this kernel send a
+    // shutdown signal outside its own process family (e.g. ForjaMCPo3's :3030 nexus).
+    const TYLLUAN_OWN_PORT_RANGE: std::ops::RangeInclusive<u16> = 4000..=4099;
     if let Some(op) = old_port
-        && op != bound_port {
+        && op != bound_port
+        && TYLLUAN_OWN_PORT_RANGE.contains(&op) {
             tokio::spawn(async move {
                 info!("🔌 Sending graceful shutdown signal to previous kernel on port {}...", op);
                 let client = reqwest::Client::new();

@@ -140,10 +140,9 @@ pub fn kmeans_plus_plus(vectors: &[Vec<f32>], nlist: u32, max_iterations: usize)
     }
 
     // 2. Main K-Means Lloyd iteration loop
-    let mut assignments = vec![0; vectors.len()];
     for _iter in 0..max_iterations {
         // Step A: Assignment
-        assignments = assign_to_centroids(vectors, &centroids);
+        let assignments = assign_to_centroids(vectors, &centroids);
 
         // Step B: Update Centroids
         let mut new_centroids = vec![vec![0.0f32; dim]; nlist];
