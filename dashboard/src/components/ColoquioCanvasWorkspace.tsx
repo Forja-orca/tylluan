@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Monitor, FileText, PenTool, Network,
   Play, Copy, ChevronDown, ChevronRight,
@@ -596,15 +596,56 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
 }
 
 
-// ── WHITEBOARD TAB ────────────────────────────────────────────────────────────
-function WhiteboardTab({ channelId }: { channelId: string }) {
+interface WhiteboardTabProps {
+  channelId: string;
+  wsSend: (payload: object) => void;
+  initialSnapshot: string | null;
+}
+
+function WhiteboardTab({ channelId, wsSend, initialSnapshot }: WhiteboardTabProps) {
+  const [editor, setEditor] = useState<any>(null);
+
+  // Load snapshot from server on open
+  useEffect(() => {
+    if (!editor || !initialSnapshot) return;
+    try {
+      const snap = JSON.parse(initialSnapshot);
+      editor.store.loadSnapshot(snap);
+    } catch (e) {
+      console.error("Failed to load whiteboard snapshot:", e);
+    }
+  }, [editor, initialSnapshot]);
+
+  // Listen to changes in the store to save them
+  useEffect(() => {
+    if (!editor || !wsSend) return;
+    
+    let timeoutId: any = null;
+    const unsubscribe = editor.store.listen(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const snapshot = editor.store.getSnapshot();
+        wsSend({
+          type: 'whiteboard_update',
+          channelId,
+          snapshot: JSON.stringify(snapshot)
+        });
+      }, 1000); // Save after 1 second of inactivity
+    });
+
+    return () => {
+      unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [editor, channelId, wsSend]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 relative bg-[#06080d] tldraw-container">
-        {/* We mount Tldraw inside a dark container and enforce its theme */}
         <Tldraw 
           persistenceKey={`tylluan_coloquio_${channelId}`}
           autoFocus={false}
+          onMount={(ed) => setEditor(ed)}
         />
       </div>
     </div>
@@ -618,16 +659,17 @@ const getNodeDims = (type: string): [number, number] => {
   return [150, 50];
 };
 
-function KnowledgeTab({ channelId }: { channelId: string }) {
-  const [nodes, setNodes] = useState<CanvasNode[]>([
-    { id: '1', label: 'SilvaDB Core', x: 250, y: 150, type: 'concept' },
-    { id: '2', label: 'Hybrid Routing', x: 120, y: 320, type: 'task' },
-    { id: '3', label: 'Letta Agent Buffer', x: 380, y: 320, type: 'episode' },
-  ]);
-  const [edges, setEdges] = useState<CanvasEdge[]>([
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e1-3', source: '1', target: '3' },
-  ]);
+interface KnowledgeTabProps {
+  channelId: string;
+  nodes: CanvasNode[];
+  setNodes: React.Dispatch<React.SetStateAction<CanvasNode[]>>;
+  edges: CanvasEdge[];
+  setEdges: React.Dispatch<React.SetStateAction<CanvasEdge[]>>;
+  wsStatus: 'connecting' | 'connected' | 'error';
+  send: (payload: object) => void;
+}
+
+function KnowledgeTab({ channelId, nodes, setNodes, edges, setEdges, wsStatus, send }: KnowledgeTabProps) {
   const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -635,51 +677,13 @@ function KnowledgeTab({ channelId }: { channelId: string }) {
   const [newNodeLabel, setNewNodeLabel] = useState('');
   const [newNodeType, setNewNodeType] = useState<CanvasNode['type']>('concept');
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
-  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
 
   // Editing state for inline text editing
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-
-  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-  useEffect(() => { edgesRef.current = edges; }, [edges]);
-
-  useEffect(() => {
-    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
-    setWsStatus('connecting');
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    ws.onopen = () => { setWsStatus('connected'); ws.send(JSON.stringify({ type: 'request_sync', channelId })); };
-    ws.onmessage = (event) => {
-      try {
-        if (typeof event.data !== 'string') return;
-        const msg = JSON.parse(event.data);
-        if (msg.channelId !== channelId) return;
-        switch (msg.type) {
-          case 'sync_response': if (msg.nodes) setNodes(msg.nodes); if (msg.edges) setEdges(msg.edges); break;
-          case 'request_sync': ws.send(JSON.stringify({ type: 'sync_response', channelId, nodes: nodesRef.current, edges: edgesRef.current })); break;
-          case 'node_moved': setNodes(p => p.map(n => n.id === msg.id ? { ...n, x: msg.x, y: msg.y } : n)); break;
-          case 'node_added': setNodes(p => p.some(n => n.id === msg.node.id) ? p.map(n => n.id === msg.node.id ? msg.node : n) : [...p, msg.node]); break;
-          case 'edge_added': setEdges(p => p.some(e => e.id === msg.edge.id) ? p : [...p, msg.edge]); break;
-          case 'node_deleted': setNodes(p => p.filter(n => n.id !== msg.id)); setEdges(p => p.filter(e => e.source !== msg.id && e.target !== msg.id)); break;
-        }
-      } catch { /* ignore */ }
-    };
-    ws.onerror = () => setWsStatus('error');
-    ws.onclose = () => setWsStatus('connecting');
-    return () => ws.close();
-  }, [channelId]);
-
-  const send = (payload: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ ...payload, channelId }));
-  };
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -936,6 +940,79 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: (msgs: Colo
 export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview');
 
+  // Elevated WebSocket state for both Canvas tabs
+  const [nodes, setNodes] = useState<CanvasNode[]>([
+    { id: '1', label: 'SilvaDB Core', x: 250, y: 150, type: 'concept' },
+    { id: '2', label: 'Hybrid Routing', x: 120, y: 320, type: 'task' },
+    { id: '3', label: 'Letta Agent Buffer', x: 380, y: 320, type: 'episode' },
+  ]);
+  const [edges, setEdges] = useState<CanvasEdge[]>([
+    { id: 'e1-2', source: '1', target: '2' },
+    { id: 'e1-3', source: '1', target: '3' },
+  ]);
+  const [whiteboardSnapshot, setWhiteboardSnapshot] = useState<string | null>(null);
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  useEffect(() => {
+    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
+    setWsStatus('connecting');
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+    ws.onopen = () => { 
+      setWsStatus('connected'); 
+      ws.send(JSON.stringify({ type: 'request_sync', channelId })); 
+    };
+    ws.onmessage = (event) => {
+      try {
+        if (typeof event.data !== 'string') return;
+        const msg = JSON.parse(event.data);
+        if (msg.channelId !== channelId) return;
+        switch (msg.type) {
+          case 'sync_response': 
+            if (msg.nodes) setNodes(msg.nodes); 
+            if (msg.edges) setEdges(msg.edges); 
+            break;
+          case 'request_sync': 
+            ws.send(JSON.stringify({ type: 'sync_response', channelId, nodes: nodesRef.current, edges: edgesRef.current })); 
+            break;
+          case 'node_moved': 
+            setNodes(p => p.map(n => n.id === msg.id ? { ...n, x: msg.x, y: msg.y } : n)); 
+            break;
+          case 'node_added': 
+            setNodes(p => p.some(n => n.id === msg.node.id) ? p.map(n => n.id === msg.node.id ? msg.node : n) : [...p, msg.node]); 
+            break;
+          case 'edge_added': 
+            setEdges(p => p.some(e => e.id === msg.edge.id) ? p : [...p, msg.edge]); 
+            break;
+          case 'node_deleted': 
+            setNodes(p => p.filter(n => n.id !== msg.id)); 
+            setEdges(p => p.filter(e => e.source !== msg.id && e.target !== msg.id)); 
+            break;
+          case 'whiteboard_update':
+            if (msg.snapshot) setWhiteboardSnapshot(msg.snapshot);
+            break;
+        }
+      } catch { /* ignore */ }
+    };
+    ws.onerror = () => setWsStatus('error');
+    ws.onclose = () => setWsStatus('connecting');
+    return () => ws.close();
+  }, [channelId]);
+
+  const wsSend = useCallback((payload: object) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ ...payload, channelId }));
+    }
+  }, [channelId]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#06080d]">
       {/* Tab bar */}
@@ -969,8 +1046,24 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
       <div className="flex-1 overflow-hidden">
         {activeTab === 'preview' && <PreviewTab messages={messages} />}
         {activeTab === 'docs' && <DocsTab />}
-        {activeTab === 'whiteboard' && <WhiteboardTab channelId={channelId} />}
-        {activeTab === 'knowledge' && <KnowledgeTab channelId={channelId} />}
+        {activeTab === 'whiteboard' && (
+          <WhiteboardTab 
+            channelId={channelId} 
+            wsSend={wsSend} 
+            initialSnapshot={whiteboardSnapshot} 
+          />
+        )}
+        {activeTab === 'knowledge' && (
+          <KnowledgeTab 
+            channelId={channelId} 
+            nodes={nodes} 
+            setNodes={setNodes} 
+            edges={edges} 
+            setEdges={setEdges} 
+            wsStatus={wsStatus} 
+            send={wsSend} 
+          />
+        )}
       </div>
     </div>
   );
