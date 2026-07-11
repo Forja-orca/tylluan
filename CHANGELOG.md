@@ -4,6 +4,32 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.13.0] — 2026-07-11 — Coordinator hardening · Federation verified · Event Bridge · M26 Canvas
+
+### Fixed
+
+- **Security: agent impersonation via `post_to_channel`** — the MCP tool accepted a caller-supplied `role` parameter and passed it straight through, so any agent could post as `role="human", author_id="jose"` and produce a message indistinguishable from a genuine human post, with zero server-side verification (the kernel's own protected-author guard only blocks impersonation when `role != "human"`). Fixed by hardcoding `role="agent"` in the tool regardless of caller input. The raw HTTP endpoint is still reachable without auth under `dev_mode=true` — closing that fully requires a real auth decision, deliberately not rushed.
+- **Kernel: audit-log write blocked the async runtime** — `log_audit_entry` (synchronous rusqlite write) was scheduled via `tokio::spawn` instead of `spawn_blocking`, blocking a worker thread during concurrent coordinator dispatches. This was the real root cause behind coordinator latency previously misdiagnosed as an `agent_id`/audit problem.
+- **Kernel: zero-downtime port rotation had no safety bound** — a stale `active_port.json` could make the kernel send a real shutdown signal to a port outside its own range. Added an explicit guard.
+- **Kernel: cosine similarity panicked on mismatched embedding dimensions** — SilvaDB can hold embeddings from different model dimensions side by side; the nightly consolidation pass compared them unguarded and crashed. Now returns 0.0 instead of panicking.
+- **graph_rag: unbounded nested node-id growth** — the clustering pass included its own `type='summary'` output as eligible input, so a summary node could win as its own component's hub and get wrapped in another `graphrag_summary:cluster:` prefix every consolidation cycle (observed at 7+ nested levels in production). Fixed by excluding `summary` from the eligible node types.
+- **Dashboard: production bundle hardcoded to one port** — `VITE_NEXUS_URL` was baked into the production build at `:3033`, breaking the dashboard on any other port/instance. Now falls back to `window.location.origin` in production; the env var override remains available in dev.
+
+### Added
+
+- **M18-P3b closed honestly** — the coordinator's real bottleneck (audit-log blocking) fixed; latency claim corrected twice before landing on an honest metric (mean of per-query deltas, not mean of absolute latencies) — still short of the original 30% target on that metric, documented as such rather than inflated.
+- **Deterministic federation freshness resolution** (`consensus.rs`) — 5-rule cascade (identical hash / protected / peer priority / timestamp / lexicographic tiebreak), 9 tests, wired into all 4 federation sync paths.
+- **ConsensusEngine test coverage** — a 237-line conflict-resolution engine that runs hourly in production (`NightConsolidation`) had zero tests before today. 7 tests added covering clear-winner, synthesis, ambiguous, protected-node, and human-override paths.
+- **Event Bridge (P0)** — `dream_cycle_complete` and `federation_sync` (push/receive/pull/both) now broadcast over the existing SSE `/api/v1/events` stream, alongside the pre-existing `coloquio:*`/`tool_call`/`memory_added` events.
+- **Federation verified for real between two live instances** — native (`:4000`) and a Docker-secondary instance (`:4040`), confirmed via a real completed sync (`last_sync` timestamp, nodes present with correct `federation_source` tagging on both sides), not just unit tests against a single process. Two open findings from this test, not yet fixed: auto-sync (`sync_interval_ms` exists in config but nothing consumes it), and an auth-middleware/field-name mismatch between `sync/receive` and the general bearer-auth layer.
+- **M26 Canvas Sprint — real-time reactive whiteboard** — tldraw-based collaborative canvas wired to the Event Bridge for live updates, replacing the earlier graph-viewer direction (explicitly rejected as "Knowledge Graph disfrazado" — the canvas needed to be a real collaborative surface, not another way to look at the same graph).
+- **SPEC.md: Sovereignty properties + comparative taxonomy** — 7 sovereign-AI properties mapped to Tylluan's actual primitives, plus a comparison table against Mem0/Letta.
+- **docs-site synced to real implementation state** — roadmap statuses (Freshness, Dashboard, DreamCycle, Mem0 benchmark) corrected from "proposed"/"future" to "active" with checkable justification (test counts, wiring locations, closed milestones) after independent verification; tool name references corrected (`tylluan_remember`, not `tylluan_store`); test count corrected to 383 (310 kernel + 61 tylluan-link + 12 tylluan-fsrs).
+
+### Process note
+
+Several of the items above (M18-P3b's benchmark, an agent's ForjaMCPo3-vs-Tylluan feature comparison, and federation "verified" being reported twice against the wrong repo before being confirmed for real) were corrected after independent verification against the running system caught inflated or misattributed claims. Documented here rather than silently fixed, since the corrections are as much a part of today's real progress as the features themselves.
+
 ## [v0.12.0] — 2026-07-05 — M15 Rufus Release · Zero-friction install · Docker oficial
 
 **Norte estrella:** `tylluan-cli start` funciona en frío en una máquina que nunca ha visto Rust, en < 5 minutos, sin leer ningún documento. Rufus test: pasado.
