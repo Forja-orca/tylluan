@@ -51,6 +51,28 @@ async fn resolve_acl_role(state: &Arc<HttpState>, bearer_token: Option<&str>) ->
     }
 }
 
+/// Paths that bypass bearer auth entirely, regardless of dev_mode. Kept as a
+/// pure, testable function rather than inline in the middleware so a
+/// regression like exempting an endpoint with no internal verification of its
+/// own (found 2026-07-12: `/api/v1/gossip` was briefly exempted despite
+/// `gossip_handler` having zero signature/identity check) gets caught by a
+/// test instead of only by manual audit.
+pub fn is_public_bypass_path(uri: &str) -> bool {
+    uri == "/health" || uri == "/discovery" || uri == "/ui" || uri == "/" || uri == "/dashboard" ||
+    uri.starts_with("/js/") || uri.starts_with("/css/") || uri.starts_with("/img/") || uri.starts_with("/fonts/") ||
+    uri.ends_with(".js") || uri.ends_with(".css") || uri.ends_with(".html") || uri.ends_with(".png") || uri.ends_with(".svg") ||
+    // sync/receive and sync/export do their own bearer-token check against the
+    // approved-peers list internally -- exempting them here just moves the
+    // check to the right place, it doesn't remove it.
+    uri == "/api/v1/federation/sync/receive" || uri == "/api/v1/federation/sync/export" || uri == "/api/v1/federation/ping"
+    // /api/v1/gossip must NOT be added here: gossip_handler has zero internal
+    // verification (no signature/identity check on GossipEntry). Exempting it
+    // would leave it completely open in production (dev_mode=false) -- anyone
+    // reaching the port could inject arbitrary DHT routing entries. If gossip
+    // ever needs to bypass bearer auth, it needs its own verification first
+    // (e.g. Noise-signed envelopes, matching the federation sync pattern).
+}
+
 /// Bearer token authentication middleware.
 pub async fn bearer_auth_middleware(
     State(state): State<Arc<HttpState>>,
@@ -72,10 +94,7 @@ pub async fn bearer_auth_middleware(
     // Determine if request is authorized and resolve ACL role
     let is_authorized = {
         // 1. Explicit Public Bypass
-        if uri == "/health" || uri == "/discovery" || uri == "/ui" || uri == "/" || uri == "/dashboard" ||
-           uri.starts_with("/js/") || uri.starts_with("/css/") || uri.starts_with("/img/") || uri.starts_with("/fonts/") ||
-           uri.ends_with(".js") || uri.ends_with(".css") || uri.ends_with(".html") || uri.ends_with(".png") || uri.ends_with(".svg")
-        {
+        if is_public_bypass_path(uri) {
             true
         }
         // 2. Dev Mode Bypass
@@ -234,6 +253,24 @@ pub fn extract_token(headers: &HeaderMap, query: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_gossip_endpoint_never_bypasses_auth() {
+        // Regression test for the 2026-07-12 audit finding: /api/v1/gossip was
+        // briefly exempted from bearer auth even though gossip_handler performs
+        // zero verification of its own on incoming entries. This must stay
+        // authenticated unless gossip_handler gains its own signature check.
+        assert!(!is_public_bypass_path("/api/v1/gossip"));
+    }
+
+    #[test]
+    fn test_federation_sync_endpoints_bypass_auth() {
+        // These legitimately bypass the general middleware because they run
+        // their own bearer-token check against the approved-peers list.
+        assert!(is_public_bypass_path("/api/v1/federation/sync/receive"));
+        assert!(is_public_bypass_path("/api/v1/federation/sync/export"));
+        assert!(is_public_bypass_path("/api/v1/federation/ping"));
+    }
 
     #[test]
     fn test_sanitize_query() {
