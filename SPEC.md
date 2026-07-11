@@ -41,3 +41,31 @@ Casos de uso:
 | Guía "Tylluan vs Letta/Mem0/Zep" — comparativa honesta para credibilidad externa (M23 roadmap viejo lo pedía, nunca se escribió) | Humanos evaluando adopción | Alta |
 | `CONTRIBUTING.md` con good-first-issues reales etiquetados (mencionado en roadmap, no verificado que exista en disco) | Agentes constructores nuevos/externos | Media |
 | Documentación de perfiles de instalación (`portable`/`clinic`/`server`) con criterio claro de cuál elegir | Humanos, agentes usuarios | Media |
+
+---
+
+## Propiedades de Soberanía (Sovereign AI Manifiesto 2026)
+
+Tylluan actúa como una implementación de referencia del concepto de **IA Soberana (Sovereign AI)**, cumpliendo las 7 propiedades estructurales de la literatura de 2026:
+
+1. **Localidad de Datos Física:** Toda la base de conocimiento (SilvaDB) reside localmente en archivos SQLite bajo el directorio del usuario. Cero dependencias de APIs en la nube en la ruta crítica.
+2. **Ejecución Hardware-Bound:** Optimizado específicamente para hardware con recursos limitados (Raspberry Pi 4 / ARM64). El motor híbrido (BM25 + fastembed ONNX) corre local sin requerir GPUs comerciales pesadas.
+3. **Ausencia de Telemetría Externa:** Sin llamadas ocultas de diagnóstico ni recolección de estadísticas fuera del host.
+4. **Criptografía Soberana:** Identidad del nodo gestionada localmente mediante firmas criptográficas Ed25519 y transporte cifrado a través de Noise Protocol XK.
+5. **Decaimiento Adaptativo (FSRS-5):** La memoria humana olvida de forma selectiva. FSRS-5 permite que cada nodo mantenga su propia estabilidad y retrievabilidad a nivel de base de datos, optimizando el contexto de forma biológica sin depender de LLMs para ponderar frescura.
+6. **Federación en Red P2P:** Redundancia distribuida sin servidores centrales. Sincronización push/pull directa y anti-bucles mediante Kademlia DHT.
+7. **Código Soberano (Licencia MIT):** Libre de licencias corporativas restrictivas o gatekeeping comercial.
+
+---
+
+## Tabla Comparativa: Tylluan vs Estado de la Arte (Mem0 / Letta / Zep)
+
+| Dimensión | Tylluan | Mem0 | Letta (formerly MemGPT) |
+|-----------|---------|------|-------------------------|
+| **Soberanía** | 🟢 Local-first (ONNX/SQLite) | 🟡 Cloud-first / API key | 🟡 Local / Configuración compleja |
+| **Optimización Edge (Pi 4)** | 🟢 Sí (fórmula exponencial FSRS) | 🔴 No (depende de llamadas OpenAI) | 🔴 No (alto consumo en base de datos) |
+| **Algoritmo de Olvido** | 🟢 FSRS-5 por nodo + Retrievability | 🔴 Peso estático (LIFO) | 🟡 Memoria jerárquica (L1/L2) con LLM |
+| **Federación P2P** | 🟢 Nativo (Kademlia + Noise XK) | 🔴 No | 🔴 Centralizado (Server-Client) |
+| **Consolidación** | 🟢 TrustMem (Auditor) + Episódico | 🔴 No | 🟡 Buffer de mensajes manual |
+| **Tooling** | 🟢 5 Sovereign Tools MCP | 🟡 Integración custom | 🟡 Agent-specific APIs |
+
