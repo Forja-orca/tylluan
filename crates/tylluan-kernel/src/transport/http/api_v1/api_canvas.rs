@@ -91,6 +91,12 @@ pub enum CanvasIncomingMsg {
         channel_id: String,
         id: String,
     },
+    #[serde(rename = "whiteboard_update")]
+    WhiteboardUpdate {
+        #[serde(rename = "channelId")]
+        channel_id: String,
+        snapshot: String,
+    },
 }
 
 pub async fn canvas_ws_handler(
@@ -152,6 +158,18 @@ async fn handle_socket(socket: WebSocket, state: Arc<HttpState>) {
                                             let _ = tx_internal.send(CanvasBroadcastMsg::Text(response_str));
                                         }
                                     }
+                                // Send saved whiteboard state if exists
+                                let wb_node_id = format!("whiteboard_state:{}", channel_id);
+                                if let Ok(Some(node)) = silva.get_node(&wb_node_id).await {
+                                    let response_json = serde_json::json!({
+                                        "type": "whiteboard_update",
+                                        "channelId": channel_id,
+                                        "snapshot": node.content
+                                    });
+                                    if let Ok(response_str) = serde_json::to_string(&response_json) {
+                                        let _ = tx_internal.send(CanvasBroadcastMsg::Text(response_str));
+                                    }
+                                }
                             } else {
                                 if let Err(e) = handle_canvas_persistence(incoming, silva).await {
                                     warn!("Failed to persist canvas state: {:?}", e);
@@ -179,6 +197,12 @@ async fn handle_canvas_persistence(
     incoming: CanvasIncomingMsg,
     silva: Arc<crate::memory::silva::SilvaDB>,
 ) -> anyhow::Result<()> {
+    if let CanvasIncomingMsg::WhiteboardUpdate { channel_id, snapshot } = incoming {
+        let node_id = format!("whiteboard_state:{}", channel_id);
+        silva.upsert_node(&node_id, "whiteboard_state", &snapshot, "{}").await?;
+        return Ok(());
+    }
+
     let channel_id = match &incoming {
         CanvasIncomingMsg::RequestSync { .. } => return Ok(()),
         CanvasIncomingMsg::SyncResponse { channel_id, .. } => channel_id,
@@ -186,6 +210,7 @@ async fn handle_canvas_persistence(
         CanvasIncomingMsg::NodeAdded { channel_id, .. } => channel_id,
         CanvasIncomingMsg::EdgeAdded { channel_id, .. } => channel_id,
         CanvasIncomingMsg::NodeDeleted { channel_id, .. } => channel_id,
+        _ => return Ok(()),
     };
 
     let node_id = format!("canvas_state:{}", channel_id);
