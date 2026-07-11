@@ -36,11 +36,11 @@ const TABS = [
 ] as const;
 
 const KEY_STATS = [
-  { label: 'Subsistemas', value: '7', detail: 'LinearRAG · Coloquio · Guilds · SilvaDB · Federation · Dispatch · Dashboard' },
-  { label: 'Retrieval Paths', value: '3+1', detail: 'BM25 · BGE-M3 · PageRank · (future) HippoRAG-PPR' },
+  { label: 'Subsistemas', value: '7', detail: 'LinearRAG · Coloquio · Guilds · SilvaDB · Federation · DreamCycle · Dashboard' },
+  { label: 'Retrieval Paths', value: '4+1', detail: 'BM25 · BGE-M3 · PageRank · DreamCycle · (future) HippoRAG-PPR' },
   { label: 'Deployment Profiles', value: '3', detail: 'portable (Pi 4) · clinic (local server) · server (full mesh)' },
   { label: 'Benchmark', value: 'R@5 82%', detail: 'LongMemEval — validated' },
-  { label: 'Tests', value: '305', detail: '293 kernel + 12 FSRS — all passing' },
+  { label: 'Tests', value: '383', detail: '310 kernel + 61 tylluan-link + 12 FSRS — all passing' },
   { label: 'Cloud Dependency', value: 'Zero', detail: 'All models local · ONNX runtime · Pi 4 compatible' },
 ];
 
@@ -192,7 +192,7 @@ export default function Page() {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-slate-700">|</span>
-              <span>Papers: FSRS · SCM · HippoRAG 2 · KNEXA-FL · Reddy2026 · Mem0 · Survey · Tool-calling</span>
+              <span>Papers: FSRS · SCM · HippoRAG 2 · KNEXA-FL · Reddy2026 · Mem0 · Survey · Tool-calling · Deterministic Freshness</span>
             </div>
           </div>
         </div>

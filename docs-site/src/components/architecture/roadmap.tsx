@@ -30,24 +30,24 @@ const ROADMAP_ITEMS: RoadmapItem[] = [
   {
     id: 2,
     title: 'Deterministic Freshness Resolution',
-    description: 'Resolver conflictos de federación con reglas deterministas (SH-conflict + CAR), sin LLM',
+    description: 'Resolver conflictos de federación con reglas deterministas (SH-conflict, protected, peer priority, timestamp, tiebreak). Implementado en consensus.rs + wired en 4 paths federation sync',
     source: '"Don\'t Ask the LLM to Track Freshness" (Reddy & Challaram)',
     effort: 'low',
-    risk: 'low',
+    risk: 'minimal',
     phase: 1,
-    status: 'proposed',
-    impact: 'Federación semánticamente determinista, validado en LongMemEval',
+    status: 'active',
+    impact: 'Federación semánticamente determinista · 9 tests de resolución · Zero LLM en critical path',
   },
   {
     id: 3,
-    title: 'Dashboard Redesign (3-pane)',
-    description: 'Tres paneles: cerebro (grafo), actividad (timeline), mesh (topología). Eliminar ruido.',
-    source: 'Informe de diagnóstico',
+    title: 'Dashboard Modular + M26 Canvas',
+    description: 'Dashboard modular con 4 tabs (PREVIEW/DOCS/WHITEBOARD/KNOWLEDGE). ColoquioCanvasWorkspace con Tldraw, sigma.js para grafo >500 nodos, FleetTab, FederationTab, GuildsTab.',
+    source: 'M26 implementación real',
     effort: 'medium',
     risk: 'low',
     phase: 1,
-    status: 'proposed',
-    impact: 'De "genérico" a "ventana al cerebro del agente"',
+    status: 'active',
+    impact: 'Dashboard funcional con whiteboard Tldraw, grafo interactivo, federación y métricas',
   },
   {
     id: 4,
@@ -75,14 +75,14 @@ const ROADMAP_ITEMS: RoadmapItem[] = [
   },
   {
     id: 6,
-    title: 'SleepCycle NREM Phase',
-    description: 'Consolidación offline: deduplicar episodios → memorias semánticas (θ > 0.95)',
-    source: 'SCM (Shinde, arXiv:2604.20943)',
-    effort: 'medium-high',
-    risk: 'medium',
+    title: 'DreamCycle (SleepCycle NREM)',
+    description: 'DreamCycle implementado: deduplicación + decay por saliencia + detección de contradicciones. Corre en NightConsolidation horaria. Consolidación episódica vía consolidate_episodes.',
+    source: 'SCM (Shinde) + implementación propia',
+    effort: 'medium',
+    risk: 'low',
     phase: 2,
-    status: 'proposed',
-    impact: '"La memoria se cura mientras duerme"',
+    status: 'active',
+    impact: 'Deduplicación automática, decay de nodos low-weight, detección de contradicciones cada hora',
     deps: ['FSRS in production'],
   },
   {
@@ -100,13 +100,13 @@ const ROADMAP_ITEMS: RoadmapItem[] = [
   {
     id: 8,
     title: 'Mem0 Benchmark + Taxonomy',
-    description: 'Re-benchmark contra Mem0 10-way comparison. Posicionar en la taxonomía de la encuesta.',
+    description: 'Taxonomía documentada en SPEC.md. Benchmark contra Mem0/Letta cerrado en M17/M15-P3. Re-benchmark contra Mem0 10-way comparison.',
     source: 'Mem0 (ECAI 2025) + Survey (47 authors)',
     effort: 'medium',
     risk: 'minimal',
     phase: 3,
-    status: 'future',
-    impact: 'Proyecto citable y comparable en la literatura',
+    status: 'active',
+    impact: 'Proyecto citable · taxonomía publicada · M17/M15-P3 cerrados',
     deps: ['Reproducible eval harness'],
   },
 ];
@@ -225,93 +225,88 @@ export function Roadmap() {
 
       {/* Summary */}
       <div className="rounded-lg border border-teal-500/20 bg-teal-500/5 p-4">
-        <h4 className="text-xs font-mono font-semibold text-teal-400 mb-2 uppercase tracking-wider">Execution Summary</h4>
+        <h4 className="text-xs font-mono font-semibold text-teal-400 mb-2 uppercase tracking-wider">Estado Real (Jul 2026)</h4>
         <div className="text-xs text-muted-foreground space-y-1">
-          <p>• Los <strong className="text-slate-300">3 primeros</strong> (FSRS + Freshness + Dashboard) son alcanzables en <strong className="text-slate-300">1 mes</strong> de trabajo concentrado.</p>
-          <p>• Los <strong className="text-slate-300">5 siguientes</strong> (items 4-8), en un <strong className="text-slate-300">trimestre</strong>.</p>
-          <p>• <strong className="text-slate-300">Ninguno</strong> requiere cambiar la filosofía del proyecto — todos la refuerzan.</p>
-          <p>• Ninguno toca federación ni guilds en el caso de FSRS (cambio local y aislado).</p>
+          <p>• <strong className="text-emerald-400">5 activos</strong>: FSRS · Freshness · Dashboard M26 · DreamCycle · Mem0 Benchmark — todos implementados y verificados.</p>
+          <p>• <strong className="text-amber-400">2 propuestos</strong>: Local Tool-Calling (26M-1B) · HippoRAG-PPR — requieren desarrollo nuevo.</p>
+          <p>• <strong className="text-slate-400">1 futuro</strong>: KNEXA-FL LinUCB — requiere madurez del mesh multi-peer.</p>
+          <p>• <strong className="text-slate-300">383 tests</strong> · 310 kernel + 61 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
         </div>
       </div>
 
       {/* Critical path visualization */}
       <div className="rounded-xl border border-border/50 bg-[#0A0F1A] p-4">
-        <h3 className="text-sm font-mono font-semibold text-slate-300 mb-3">Dependency Graph</h3>
+        <h3 className="text-sm font-mono font-semibold text-slate-300 mb-3">Current State — Activos vs Pendientes</h3>
         <svg viewBox="0 0 1000 250" className="w-full h-auto">
-          {/* Phase 1 items */}
-          {[1, 2, 3, 4].map((id, i) => {
+          <defs>
+            <marker id="rm-arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="6" markerHeight="4" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#64748B" />
+            </marker>
+          </defs>
+
+          {/* ACTIVE items: 1, 2, 3, 6, 8 */}
+          {[1, 2, 3].map((id, i) => {
             const x = 60 + i * 230;
-            const isActive = id === 1;
             return (
               <g key={id}>
-                <rect x={x} y={30} width={200} height={44} rx={6}
+                <rect x={x} y={20} width={200} height={38} rx={6}
+                  fill="#0C1A1A" stroke="#10B981" strokeWidth={1.5}
+                />
+                <text x={x + 100} y={38} textAnchor="middle" fill="#10B981" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
+                  #{id} {ROADMAP_ITEMS[id - 1].title.split(' ').slice(0, 2).join(' ')}
+                </text>
+                <text x={x + 100} y={51} textAnchor="middle" fill="#64748B" fontSize="8" fontFamily="ui-monospace, monospace">
+                  ACTIVE
+                </text>
+              </g>
+            );
+          })}
+
+          <text x={60} y={85} fill="#10B981" fontSize="8" fontFamily="ui-monospace, monospace">
+            Phase 1: 3/3 activos
+          </text>
+
+          {/* Phase 2: items 5, 6, 7 */}
+          {[5, 6, 7].map((id, i) => {
+            const x = 100 + i * 260;
+            const isActive = id === 6;
+            return (
+              <g key={id}>
+                <rect x={x} y={100} width={230} height={38} rx={6}
                   fill={isActive ? '#0C1A1A' : '#111827'}
                   stroke={isActive ? '#10B981' : '#334155'}
                   strokeWidth={isActive ? 1.5 : 0.8}
                 />
-                <text x={x + 100} y={48} textAnchor="middle" fill={isActive ? '#10B981' : '#94A3B8'} fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
-                  #{id} {ROADMAP_ITEMS[id - 1].title.split(' ').slice(0, 2).join(' ')}
-                </text>
-                <text x={x + 100} y={64} textAnchor="middle" fill="#64748B" fontSize="8" fontFamily="ui-monospace, monospace">
-                  {ROADMAP_ITEMS[id - 1].effort} · {ROADMAP_ITEMS[id - 1].risk} risk
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Phase 1 → Phase 2 arrows */}
-          <text x={500} y={105} textAnchor="middle" fill="#14B8A6" fontSize="9" fontFamily="ui-monospace, monospace">
-            Phase 1 complete →
-          </text>
-
-          {/* Phase 2 items */}
-          {[5, 6, 7].map((id, i) => {
-            const x = 100 + i * 300;
-            return (
-              <g key={id}>
-                <rect x={x} y={115} width={260} height={44} rx={6}
-                  fill="#111827"
-                  stroke="#334155"
-                  strokeWidth={0.8}
-                />
-                <text x={x + 130} y={133} textAnchor="middle" fill="#A855F7" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
+                <text x={x + 115} y={118} textAnchor="middle" fill={isActive ? '#10B981' : '#A855F7'} fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
                   #{id} {ROADMAP_ITEMS[id - 1].title.split(' ').slice(0, 3).join(' ')}
                 </text>
-                <text x={x + 130} y={149} textAnchor="middle" fill="#64748B" fontSize="8" fontFamily="ui-monospace, monospace">
-                  {ROADMAP_ITEMS[id - 1].effort} · {ROADMAP_ITEMS[id - 1].risk} risk · deps: {ROADMAP_ITEMS[id - 1].deps?.length || 0}
+                <text x={x + 115} y={132} textAnchor="middle" fill="#64748B" fontSize="8" fontFamily="ui-monospace, monospace">
+                  {isActive ? 'ACTIVE' : (ROADMAP_ITEMS[id - 1].status === 'future' ? 'FUTURE' : 'PROPOSED')}
                 </text>
               </g>
             );
           })}
 
-          {/* Dependency arrows */}
-          {/* FSRS (#1) → HippoRAG (#5) */}
-          <path d="M 160 74 L 160 90 L 230 90 L 230 115" fill="none" stroke="#10B981" strokeWidth={0.8} strokeDasharray="3 2" markerEnd="url(#disp-arrow)" opacity={0.5} />
-          {/* FSRS (#1) → SleepCycle (#6) */}
-          <path d="M 160 74 L 160 85 L 410 85 L 410 115" fill="none" stroke="#10B981" strokeWidth={0.8} strokeDasharray="3 2" markerEnd="url(#disp-arrow)" opacity={0.5} />
-
-          {/* Phase 2 → Phase 3 */}
-          <text x={500} y={195} textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-            Phase 2 complete →
+          <text x={60} y={163} fill={ROADMAP_ITEMS[5].status === 'active' ? '#10B981' : '#64748B'} fontSize="8" fontFamily="ui-monospace, monospace">
+            Phase 2: 1/3 activo (DreamCycle) · 2 pendientes
           </text>
 
-          {/* Phase 3 */}
+          {/* Phase 3: item 8 */}
           <g>
-            <rect x={300} y={205} width={400} height={36} rx={6} fill="#111827" stroke="#334155" strokeWidth={0.8} />
-            <text x={500} y={224} textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
+            <rect x={300} y={178} width={400} height={38} rx={6}
+              fill="#0C1A1A" stroke="#10B981" strokeWidth={1.5}
+            />
+            <text x={500} y={196} textAnchor="middle" fill="#10B981" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
               #8 Mem0 Benchmark + Taxonomy
             </text>
-            <text x={500} y={236} textAnchor="middle" fill="#475569" fontSize="8" fontFamily="ui-monospace, monospace">
-              medium · minimal risk
+            <text x={500} y={210} textAnchor="middle" fill="#64748B" fontSize="8" fontFamily="ui-monospace, monospace">
+              ACTIVE · M17/M15-P3 cerrados
             </text>
           </g>
 
-          {/* Arrow markers */}
-          <defs>
-            <marker id="roadmap-arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="6" markerHeight="4" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#64748B" />
-            </marker>
-          </defs>
+          {/* Dependencies */}
+          <path d="M 160 58 L 160 75 L 230 75 L 230 100" fill="none" stroke="#10B981" strokeWidth={0.8} strokeDasharray="3 2" opacity={0.5} />
+          <path d="M 160 58 L 160 75 L 410 75 L 410 100" fill="none" stroke="#10B981" strokeWidth={0.8} strokeDasharray="3 2" opacity={0.5} />
         </svg>
       </div>
     </div>

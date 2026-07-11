@@ -13,15 +13,15 @@ export function SleepCycle() {
   return (
     <div className="space-y-4">
       {/* Status banner */}
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 flex items-start gap-3">
-        <span className="text-amber-400 text-lg">⏳</span>
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-start gap-3">
+        <span className="text-emerald-400 text-lg">🌙</span>
         <div>
-          <div className="text-xs font-mono font-semibold text-amber-400 uppercase tracking-wider">
-            Proposed — Not Yet Implemented
+          <div className="text-xs font-mono font-semibold text-emerald-400 uppercase tracking-wider">
+            Active — NightConsolidation + DreamCycle
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            Basado en <span className="text-slate-300">SCM — Sleep-Consolidated Memory</span> (Shinde, arXiv:2604.20943, abril 2026).
-            Reporta 90.9% reducci&#243;n de ruido y latencia &lt;1ms. Fase NREM (deduplicaci&#243;n) da el ~90% del beneficio.
+            DreamCycle corre cada hora en NightConsolidation: dedup, decay por saliencia, detecci&#243;n de contradicciones.
+            ConsensusEngine resuelve conflictos cognitivos. consolidate_episodes fusiona episodios similares.
           </div>
         </div>
       </div>
