@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [v0.13.0] — 2026-07-11 — Coordinator hardening · Federation verified · Event Bridge · M26 Canvas
+## [Unreleased] — since v0.13.0 (2026-07-11) — Coordinator hardening · Federation verified · Event Bridge · M26 Canvas
 
 ### Fixed
 
@@ -29,6 +29,24 @@ All notable changes to Tylluan are documented here.
 ### Process note
 
 Several of the items above (M18-P3b's benchmark, an agent's ForjaMCPo3-vs-Tylluan feature comparison, and federation "verified" being reported twice against the wrong repo before being confirmed for real) were corrected after independent verification against the running system caught inflated or misattributed claims. Documented here rather than silently fixed, since the corrections are as much a part of today's real progress as the features themselves.
+
+## [v0.13.0] — 2026-07-09 — Coordinator Cascade + Dashboard Fork
+
+Tagged and published on GitHub with binary releases (aarch64-apple-darwin,
+aarch64/x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc) — this entry was
+missing from CHANGELOG.md until now, added retroactively from the real
+release notes.
+
+### Added
+
+- **M18-P3 TRINITY Coordinator** with parallel/sequential dispatch
+- **M20 Complexity Cascade** (proactive routing >= 0.6, reactive fallback >= 0.4)
+- **M21 Query Embedding Cache** (TTL, LRU 256 entries)
+- **Dashboard fork** with teal/emerald branding
+- **Scheduler guild** with SQLite persistence
+- 354 tests (291 kernel + 61 link + 2 evals), all green
+
+No breaking changes — drop-in upgrade from v0.12.0.
 
 ## [v0.12.0] — 2026-07-05 — M15 Rufus Release · Zero-friction install · Docker oficial
 
