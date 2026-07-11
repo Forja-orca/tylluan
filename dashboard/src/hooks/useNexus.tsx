@@ -157,6 +157,10 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }, 500);
     };
 
+    const targetUrl = import.meta.env.DEV 
+      ? (import.meta.env.VITE_NEXUS_URL || window.location.origin) 
+      : window.location.origin;
+
     const bridge = new NexusBridge(
       (ev) => {
         setEvents(prev => [ev, ...prev].slice(0, 100));
@@ -175,7 +179,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           refreshGraph();
         }
       },
-      import.meta.env.VITE_NEXUS_URL
+      targetUrl
     );
 
     bridgeRef.current = bridge;
