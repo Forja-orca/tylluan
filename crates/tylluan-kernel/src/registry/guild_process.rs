@@ -95,6 +95,64 @@ pub struct GuildProcess {
     pub perf_last_call_unix: AtomicU64,
 }
 
+/// Deterministic capability enforcement — no config or catalog lookup.
+/// Returns Some(block_message) if the call violates declared capabilities.
+/// Guilds without capabilities (null) are never enforced.
+pub fn enforce_capabilities(
+    guild_name: &str,
+    caps: &serde_json::Value,
+    params: &CallToolRequestParam,
+) -> Option<String> {
+    // Check process_execution
+    if let Some(false) = caps.get("process_execution").and_then(|v| v.as_bool()) {
+        let tn: &str = params.name.as_ref();
+        let is_exec_tool = tn.contains("execute") || tn.contains("run")
+            || tn.contains("exec") || tn.contains("spawn")
+            || tn.contains("shell") || tn.contains("command");
+        let has_command_arg = params.arguments.as_ref()
+            .and_then(|a| a.get("command"))
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        if is_exec_tool || has_command_arg {
+            return Some(format!(
+                "CAPABILITY_BLOCKED: guild '{}' declares process_execution=false. \
+                 This guild may not execute system commands.", guild_name
+            ));
+        }
+    }
+
+    // Check filesystem_scope
+    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array()) {
+        if !scope.is_empty() {
+            let scope_paths: Vec<&str> = scope.iter()
+                .filter_map(|v| v.as_str())
+                .collect();
+            for path_key in &["path", "cwd", "directory"] {
+                if let Some(arg_val) = params.arguments.as_ref()
+                    .and_then(|a| a.get(*path_key))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                {
+                    let allowed = scope_paths.iter().any(|prefix| {
+                        arg_val.starts_with(prefix) || prefix == &"/"
+                    });
+                    if !allowed {
+                        return Some(format!(
+                            "CAPABILITY_BLOCKED: guild '{}' declares filesystem_scope={:?}, \
+                             but argument '{}' references path '{}' outside that scope.",
+                            guild_name, scope_paths, path_key, arg_val
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 impl GuildProcess {
     /// Create a new guild process descriptor (does not spawn yet).
     pub fn new(name: &str, launcher: GuildLauncher, always_on: bool, tool_timeout_ms: Option<u64>, max_concurrent: usize) -> Self {
@@ -340,9 +398,38 @@ GuildLauncher::Python { module_path } => {
         self.concurrent_calls.clone()
     }
 
+    /// Check if a guild's capability declarations allow this tool call.
+    /// Returns Some(error_message) if the call should be blocked, None if allowed.
+    fn check_capabilities(&self, params: &CallToolRequestParam) -> Option<String> {
+        let catalog = crate::router::catalog::builtin_catalog();
+        let caps = catalog.iter()
+            .find(|d| d.name == self.name)
+            .and_then(|d| d.capabilities.as_ref())?;
+
+        let enforce = crate::config::TylluanConfig::load_cached()
+            .ok()
+            .and_then(|cfg| {
+                let locked = cfg.try_read().ok()?;
+                Some(locked.security_capabilities_enforce_enabled())
+            })
+            .unwrap_or(false);
+
+        if !enforce {
+            return None;
+        }
+
+        enforce_capabilities(&self.name, caps, params)
+    }
+
     /// Internal call with proxy - for use when lock is already held
     /// Returns a valid CallToolResult in ALL cases — never propagates errors.
     pub async fn call_tool_with_proxy(&self, params: CallToolRequestParam) -> CallToolResult {
+        // Capability enforcement check before any proxy interaction
+        if let Some(msg) = self.check_capabilities(&params) {
+            warn!("{}", msg);
+            return error_result(&msg);
+        }
+
         let permit = self.concurrent_calls.acquire()
             .await
             .map_err(|_| anyhow::anyhow!("Guild '{}' semaphore closed", self.name));
@@ -1191,6 +1278,130 @@ mod tests {
         assert_eq!(registry.guilds.len(), 2);
         assert!(matches!(registry.guilds["api-mcp"].launcher, GuildLauncher::Http { .. }));
         assert!(matches!(registry.guilds["npx-mcp"].launcher, GuildLauncher::External { .. }));
+    }
+
+    // ─── enforce_capabilities deterministic unit tests ───────────────────
+
+    fn make_params(name: &str, args: &[(&str, &str)]) -> CallToolRequestParam {
+        let mut m = serde_json::Map::new();
+        for (k, v) in args {
+            m.insert(k.to_string(), serde_json::Value::String(v.to_string()));
+        }
+        CallToolRequestParam {
+            name: name.to_string().into(),
+            arguments: if m.is_empty() { None } else { Some(m) },
+        }
+    }
+
+    #[test]
+    fn test_enforce_no_caps_passes() {
+        let caps = serde_json::Value::Null;
+        let params = make_params("bash_execute", &[("command", "rm -rf /")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_process_execution_blocks_exec_tool() {
+        let caps = serde_json::json!({"process_execution": false});
+        let params = make_params("bash_execute", &[("command", "echo hi")]);
+        let result = enforce_capabilities("test", &caps, &params);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("CAPABILITY_BLOCKED"));
+    }
+
+    #[test]
+    fn test_enforce_process_execution_blocks_command_arg() {
+        let caps = serde_json::json!({"process_execution": false});
+        let params = make_params("filesystem_read", &[("command", "rm -rf /")]);
+        let result = enforce_capabilities("test", &caps, &params);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_enforce_process_execution_allows_safe_tool() {
+        let caps = serde_json::json!({"process_execution": false});
+        let params = make_params("vision_analyze", &[("image_path", "/tmp/photo.jpg")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_filesystem_scope_blocks_outside() {
+        let caps = serde_json::json!({"filesystem_scope": ["/tmp"]});
+        let params = make_params("filesystem_read", &[("path", "/etc/passwd")]);
+        let result = enforce_capabilities("test", &caps, &params);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("filesystem_scope"));
+    }
+
+    #[test]
+    fn test_enforce_filesystem_scope_allows_inside() {
+        let caps = serde_json::json!({"filesystem_scope": ["/tmp"]});
+        let params = make_params("filesystem_read", &[("path", "/tmp/test.txt")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_process_execution_true_allows_exec() {
+        let caps = serde_json::json!({"process_execution": true});
+        let params = make_params("bash_execute", &[("command", "echo hi")]);
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_no_caps_key_skips() {
+        let caps = serde_json::json!({"process_execution": false});
+        let params = make_params("noop_tool", &[]);
+        // no command arg and tool name is safe
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_empty_filesystem_scope_skips() {
+        let caps = serde_json::json!({"filesystem_scope": []});
+        let params = make_params("filesystem_read", &[("path", "/etc/passwd")]);
+        // empty scope = no restriction
+        assert!(enforce_capabilities("test", &caps, &params).is_none());
+    }
+
+    #[test]
+    fn test_check_capabilities_guild_not_in_catalog_returns_none() {
+        let launcher = GuildLauncher::Python { module_path: "nonexistent.module".to_string() };
+        let guild = GuildProcess::new("no-such-guild", launcher, false, None, 3);
+        let params = make_params("bash_execute", &[("command", "rm -rf /")]);
+        assert!(guild.check_capabilities(&params).is_none());
+    }
+
+    #[test]
+    fn test_check_capabilities_default_config_returns_none() {
+        // websearch has process_execution=false in catalog — but enforce is false by default
+        let launcher = GuildLauncher::Python { module_path: "guilds.core.websearch".to_string() };
+        let guild = GuildProcess::new("websearch", launcher, false, None, 3);
+        let params = make_params("bash_execute", &[("command", "rm -rf /")]);
+        assert!(guild.check_capabilities(&params).is_none());
+    }
+
+    #[test]
+    fn test_enforce_check_cwd_argument() {
+        let caps = serde_json::json!({"filesystem_scope": ["/workspace"]});
+        let params = make_params("bash_execute", &[("command", "ls"), ("cwd", "/etc")]);
+        let result = enforce_capabilities("test", &caps, &params);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("/etc"));
+
+        let params_allowed = make_params("bash_execute", &[("command", "ls"), ("cwd", "/workspace/proj")]);
+        assert!(enforce_capabilities("test", &caps, &params_allowed).is_none());
+    }
+
+    #[test]
+    fn test_enforce_check_directory_argument() {
+        let caps = serde_json::json!({"filesystem_scope": ["/data"]});
+        let params = make_params("filesystem_list", &[("directory", "/home/user")]);
+        let result = enforce_capabilities("test", &caps, &params);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("/home/user"));
+
+        let params_allowed = make_params("filesystem_list", &[("directory", "/data/snapshots")]);
+        assert!(enforce_capabilities("test", &caps, &params_allowed).is_none());
     }
 }
 
