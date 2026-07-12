@@ -760,6 +760,14 @@ pub struct SecurityConfig {
     /// protection from this layer by default.
     #[serde(default = "default_intent_filter")]
     pub intent_filter: bool,
+    /// Opt-in runtime enforcement for guild capability declarations.
+    /// When true, guilds with declared CAPABILITIES are blocked from
+    /// performing operations outside their declared scope (process_execution
+    /// and filesystem_scope only — network_hosts is advisory-only).
+    /// Defaults to false: maintaining existing advisory-only behavior.
+    /// Guilds without capabilities (null) are never affected.
+    #[serde(default = "default_capabilities_enforce")]
+    pub capabilities_enforce: bool,
     #[serde(default)]
     pub sandbox: SandboxConfig,
     #[serde(default)]
@@ -779,11 +787,13 @@ fn default_encrypt_at_rest() -> bool {
 }
 
 fn default_intent_filter() -> bool { true }
+fn default_capabilities_enforce() -> bool { false }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             intent_filter: default_intent_filter(),
+            capabilities_enforce: default_capabilities_enforce(),
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),
@@ -1105,6 +1115,10 @@ static CONFIG_CACHE: std::sync::OnceLock<Arc<RwLock<TylluanConfig>>> = std::sync
 impl TylluanConfig {
     pub fn security_intent_filter_enabled(&self) -> bool {
         self.security.intent_filter
+    }
+
+    pub fn security_capabilities_enforce_enabled(&self) -> bool {
+        self.security.capabilities_enforce
     }
 
     /// Load config once and cache it. Returns cached config if already loaded.
