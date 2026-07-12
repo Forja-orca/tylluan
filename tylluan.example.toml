@@ -53,12 +53,19 @@ checkpoint_interval_secs = 300
 
 # Security: Sandbox, Access Control & Encryption
 [security]
-# Block dangerous intents (rm -rf, DROP TABLE, fork bombs, etc.)
+# Block dangerous intents (rm -rf, DROP TABLE, fork bombs, etc.) across the
+# whole tylluan_do dispatch path. Defaults to true -- leave commented out
+# to inherit that safe default, or set explicitly to false to opt out.
 # intent_filter = true
-# Encrypt SQLite databases at rest using SQLCipher (AES-256)
+# Encrypt SQLite databases at rest using SQLCipher (AES-256). Defaults to
+# true only on binaries built with `--features encryption` (not in the
+# default feature set -- bundles SQLCipher+OpenSSL, unsupported on Windows
+# native). Leave commented out to inherit that default; only set this key
+# explicitly if you need to override it, since setting `false` here
+# disables encryption even on a binary that supports it.
 # Requires TYLLUAN_DB_KEY environment variable (containing a 64-character hex key) or configured directly.
 # WARNING: If you enable this on an existing database, you must migrate it first.
-encrypt_at_rest = false
+# encrypt_at_rest = true
 # 64-character hex key (32 bytes) for SQLCipher hexkey. Only hex chars allowed for safety.
 # encryption_key_hex = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 

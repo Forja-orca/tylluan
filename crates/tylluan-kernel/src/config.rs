@@ -749,7 +749,16 @@ impl Default for WslProxyConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
-    #[serde(default)]
+    /// Blocks destructive intents (rm -rf /, DROP TABLE, fork bombs, etc.)
+    /// across the whole tylluan_do dispatch path, not just the bash guild.
+    /// Defaults to true (safe-by-default): a fresh install with no config
+    /// key set should not silently run unprotected. Was `false` until
+    /// 2026-07-12 -- the filter existed with 13 passing tests (including
+    /// explicit allow-cases for common safe intents to guard against false
+    /// positives) but was opt-in, so a new user following
+    /// tylluan.example.toml (which left it commented out) got zero
+    /// protection from this layer by default.
+    #[serde(default = "default_intent_filter")]
     pub intent_filter: bool,
     #[serde(default)]
     pub sandbox: SandboxConfig,
@@ -769,10 +778,12 @@ fn default_encrypt_at_rest() -> bool {
     cfg!(feature = "encryption")
 }
 
+fn default_intent_filter() -> bool { true }
+
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            intent_filter: false,
+            intent_filter: default_intent_filter(),
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),

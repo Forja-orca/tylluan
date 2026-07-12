@@ -75,6 +75,7 @@ async fn test_state() -> Arc<HttpState> {
         sessions: Arc::new(RwLock::new(HashMap::new())),
         guild_status_cache: Arc::new(std::sync::Mutex::new(None)),
         agent_rate_limiter: Arc::new(DashMap::new()),
+        ip_rate_limiter: Arc::new(tylluan_kernel::security::rate_limiter::RateLimiter::new(Some(300))),
         config,
         matcher,
         tunnel_wsl_url: None,
