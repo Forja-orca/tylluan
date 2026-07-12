@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.13.0`) · 310 kernel lib + 61 link + 12 fsrs = **383 total** green.
+**Commit:** HEAD (`v0.13.0`) · 315 kernel lib + 61 link + 12 fsrs + integration suite = **490 total** green.
 
 ---
 

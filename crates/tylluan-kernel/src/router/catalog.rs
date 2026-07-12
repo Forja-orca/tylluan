@@ -40,6 +40,12 @@ pub struct GuildDescriptor {
     /// Agents should provide these explicitly for reliable routing.
     #[serde(default)]
     pub required_args: Vec<String>,
+    /// Capability declarations parsed from the Python guild file.
+    /// Each guild may declare CAPABILITIES = {...} at module level.
+    /// Values: process_execution (bool), filesystem_scope (vec), network_hosts (vec).
+    /// Null if the guild doesn't declare capabilities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -316,6 +322,71 @@ fn extract_guild_name(content: &str) -> Option<String> {
     None
 }
 
+/// Extract CAPABILITIES dict from a Python guild file.
+/// Parses `CAPABILITIES = { ... }` module-level declarations.
+/// Supports simple dict literals with string, bool, and array values.
+/// Returns None if no CAPABILITIES declaration is found.
+fn extract_capabilities(content: &str) -> Option<serde_json::Value> {
+    let mut in_block = false;
+    let mut brace_depth = 0;
+    let mut result = String::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('#') || trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
+            continue;
+        }
+
+        if !in_block {
+            if let Some(pos) = trimmed.find("CAPABILITIES") {
+                let after_keyword = &trimmed[pos + 12..].trim();
+                if after_keyword.starts_with('=') {
+                    let after_eq = after_keyword[1..].trim();
+                    if after_eq.starts_with('{') {
+                        in_block = true;
+                        brace_depth = 1;
+                        result.push_str("{");
+                        let rest = &after_eq[1..];
+                        if let Some(end_brace) = rest.rfind('}') {
+                            result.push_str(&rest[..end_brace]);
+                            result.push_str("}");
+                            break;
+                        } else {
+                            result.push_str(rest);
+                        }
+                    }
+                }
+            }
+        } else {
+            for ch in trimmed.chars() {
+                match ch {
+                    '{' => brace_depth += 1,
+                    '}' => brace_depth -= 1,
+                    _ => {}
+                }
+            }
+            if brace_depth == 0 {
+                break;
+            }
+            result.push_str(trimmed);
+            result.push(' ');
+        }
+    }
+
+    if result.is_empty() || result == "{}" {
+        return None;
+    }
+
+    // Convert Python bool/None to JSON-compatible strings
+    let json_str = result
+        .replace("True", "true")
+        .replace("False", "false")
+        .replace("None", "null");
+
+    serde_json::from_str(&json_str).ok()
+}
+
 /// Scan the guilds directory and auto-discover all guilds.
 /// Returns descriptors derived from file paths and docstrings.
 pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
@@ -369,6 +440,8 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     .unwrap_or((GuildWeight::Medium, vec![]));
                 let required_args: Vec<String> = req_args.into_iter().map(String::from).collect();
 
+                let capabilities = extract_capabilities(&content);
+
                 descriptors.push(GuildDescriptor {
                     name: guild_name,
                     description,
@@ -379,6 +452,7 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     negative_keywords: vec![],
                     required_args,
                     weight,
+                    capabilities,
                 });
             }
         }

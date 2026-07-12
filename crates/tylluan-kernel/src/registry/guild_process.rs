@@ -714,6 +714,7 @@ impl GuildRegistry {
 
     /// Get the names of all registered guilds and their status.
     pub fn status_all(&self) -> Vec<GuildStatus> {
+        let catalog = crate::router::catalog::builtin_catalog();
         self.guilds
             .values()
             .map(|g| {
@@ -725,6 +726,9 @@ impl GuildRegistry {
                     GuildLauncher::Http { .. } => "http",
                     GuildLauncher::Sse { .. } => "sse",
                 }.to_string();
+                let capabilities = catalog.iter()
+                    .find(|d| d.name == g.name)
+                    .and_then(|d| d.capabilities.clone());
                 GuildStatus {
                     name: g.name.clone(),
                     running: g.is_running(),
@@ -735,6 +739,7 @@ impl GuildRegistry {
                     total_calls: g.perf_total_calls.load(Ordering::Relaxed),
                     last_latency_ms: g.last_latency_ms,
                     launcher_type,
+                    capabilities,
                 }
             })
             .collect()
@@ -953,6 +958,10 @@ pub struct GuildStatus {
     pub total_calls: u64,
     pub last_latency_ms: Option<u64>,
     pub launcher_type: String,
+    /// Capability declarations parsed from the Python guild file.
+    /// Null if the guild doesn't declare capabilities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<serde_json::Value>,
 }
 
 /// Result of a guild ingestion attempt (Phase B).

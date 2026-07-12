@@ -1,4 +1,11 @@
 """Web Search guild — SearXNG meta-search for autonomous agent research."""
+
+CAPABILITIES = {
+    "process_execution": False,
+    "network_hosts": ["127.0.0.1:32700"],
+    "filesystem_scope": [],
+}
+
 import json
 import urllib.parse
 import urllib.request
