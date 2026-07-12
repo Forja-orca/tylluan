@@ -6,21 +6,30 @@
 
 ┌─ IDENTITY ──────────────────────────────────────────────────┐
 │ Binary:    tylluan-nexus.exe (kernel) + tylluan-cli.exe     │
-│ Port:      :3030 (kernel, dev_mode=true, no auth)           │
+│ Port:      :3030 (kernel default)                            │
 │            docker single-instance maps host:3033→cont:3030  │
 │ Config:    tylluan.toml (native) / tylluan.docker.toml      │
 │ Auth:      .tylluan-token (bearer, gitignored) — disabled   │
-│            when dev_mode=true (native default)               │
+│            only when dev_mode=true. Shipped default is      │
+│            dev_mode=false (secure by default, see            │
+│            config.rs SecurityConfig::default). true on THIS │
+│            dev machine's local tylluan.toml only, for        │
+│            convenience — never the product default (same    │
+│            local-override-vs-shipped-default mistake         │
+│            corrected for port :4000 earlier this session,    │
+│            fixed here 2026-07-12)                            │
 │ Data:      data/*.db (sqlite) + data/silva.db (vectors)     │
 │ License:   MIT (public product)                             │
-│ Tests:     310 kernel lib + 61 tylluan-link + 12 tylluan-fsrs│
-│            = 383 total                                      │
+│ Tests:     312 kernel lib + 61 tylluan-link + 12 tylluan-fsrs│
+│            = 385 total (verified 2026-07-12)                │
 │ Build:     cargo build -p tylluan-kernel (dev)               │
 │            cargo build --release -p tylluan-kernel (prod)   │
 │ Start:     .\tylluan-mcp.bat (from repo root)               │
 │            auto-builds release if target\release\ missing   │
 │ Health:    curl http://127.0.0.1:3030/health                │
-│ HEAD:      ad28f8b (docs-site sync + P2P two-instance guide) │
+│ HEAD:      bbd7385 (2026-07-12 session: IP rate limit,       │
+│            intent_filter default-on, Docker volume fix,      │
+│            coordinator benchmark, P2P/test-count doc fixes)  │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ SOVEREIGN TOOLS (the only MCP interface) ──────────────────┐
@@ -132,7 +141,9 @@
 │  Gossip protocol (push-pull, LRU, anti-entropy)             │
 │  Noise XK encrypted transport (ChaCha20-Poly1305)           │
 │  DispatchRouter: score=(1-load)×(1000/latency)×gpu_mult     │
-│  M14-F Phase 3 PENDING: p2p_pool in HttpState               │
+│  M14-F Phase 3 ✅: p2p_pool in HttpState, RemoteTcp arm      │
+│    wired in api_mesh.rs (verified 2026-07-12, was already   │
+│    done — this line was stale)                              │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ CRITICAL PATHS (where bugs live) ──────────────────────────┐
