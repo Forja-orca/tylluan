@@ -664,21 +664,21 @@ pub async fn mcp_handler(
             if uri != "tylluan://skills" {
                 serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "unknown resource uri" }, "id": id })
             } else {
-                let text = "# Tylluan Skill Catalog ??? example intents for tylluan_do\n\n\
+                let text = "# Tylluan Skill Catalog — example intents for tylluan_do\n\n\
                     ## bash / shell\n\
                     - 'run ls -la in E:/myproject'\n\
                     - 'create directory E:/tmp/test'\n\
                     - 'check disk usage on C:'\n\n\
                     ## git\n\
-                    - 'git status in E:/TylluanMCPo3'\n\
+                    - 'git status in E:/myproject'\n\
                     - 'show last 5 commits'\n\
                     - 'diff HEAD~1'\n\n\
                     ## filesystem\n\
-                    - 'read file E:/TylluanMCPo3/tylluan.toml'\n\
-                    - 'search for TODO in E:/TylluanMCPo3/src'\n\
+                    - 'read file E:/myproject/tylluan.toml'\n\
+                    - 'search for TODO in E:/myproject/src'\n\
                     - 'list all .rs files in crates/'\n\n\
                     ## code\n\
-                    - 'analyze E:/TylluanMCPo3/crates/tylluan-kernel/src/main.rs'\n\
+                    - 'analyze E:/myproject/crates/tylluan-kernel/src/main.rs'\n\
                     - 'find all functions in handler_recall.rs'\n\n\
                     ## monitor\n\
                     - 'show system resource usage'\n\
