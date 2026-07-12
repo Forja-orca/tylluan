@@ -87,10 +87,35 @@ pub async fn bearer_auth_middleware(
     let query = request.uri().query().unwrap_or("");
     
     let sanitized_query = sanitize_query(query);
-    
+
     // DEBUG: Log all incoming requests to help diagnose 405
     info!("🔍 [HTTP] {} {} (query: '{}')", method, uri, sanitized_query);
-    
+
+    // ─── Rate Limiting by IP (independent of client-controlled agent_id) ───
+    // agent_id below comes from a client-supplied header/query param -- a
+    // caller can omit it or rotate a fresh value on every request to fully
+    // evade that limiter. This check is keyed by the actual TCP peer address
+    // instead, so it can't be bypassed the same way. Bypass paths (health,
+    // static assets, federation endpoints with their own auth) are exempt,
+    // same as bearer auth itself.
+    if !is_public_bypass_path(uri)
+        && let Some(axum::extract::ConnectInfo(addr)) =
+            request.extensions().get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+    {
+        let ip_key = addr.ip().to_string();
+        if let Err(reason) = state.ip_rate_limiter.check_and_record(&ip_key) {
+            warn!("🚫 RATE_LIMIT: IP '{}' exceeded limit: {}", ip_key, reason);
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(serde_json::json!({
+                    "error": "rate_limit",
+                    "scope": "ip",
+                    "retry_after_secs": 10
+                })),
+            ).into_response();
+        }
+    }
+
     // Determine if request is authorized and resolve ACL role
     let is_authorized = {
         // 1. Explicit Public Bypass

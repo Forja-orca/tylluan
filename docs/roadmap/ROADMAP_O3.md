@@ -162,7 +162,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 |------|-------------|--------|-----------|--------|
 | P0 | **SQLCipher default**: cambiar `encrypt_at_rest = false` → `true` en el perfil `server`. Generar clave 32-byte aleatoria en first-run si `TYLLUAN_DB_KEY` no está en env. Documentar en install script. | Deep | CRÍTICO | ⬜ |
 | P1 | **Input sanitization**: capa `sanitize_guild_input()` antes del dispatch — strip prompt injection patterns, escape shell metacharacters para bash guild. 10 tests deterministas. | Deep | ALTO | ⬜ |
-| P2 | **Rate limit por IP + por guild**: actualmente solo por sesión. Añadir `per_ip_limit` y `per_guild_limit` al `RateLimiter`. Previene DoS local y guild abuse. | Deep | ALTO | ⬜ |
+| P2 | **Rate limit por IP** ✅ (2026-07-12): `security::rate_limiter::RateLimiter` existía pero estaba muerto (instanciado, nunca llamado) — el único límite real era por `agent_id`, un header/query param controlado por el cliente y trivialmente evadible omitiéndolo o rotándolo. Cableado como `HttpState::ip_rate_limiter`, keyed por `ConnectInfo<SocketAddr>` real (requirió cambiar `axum::serve` a `into_make_service_with_connect_info`), 300 req/min (techo más alto que el límite por-agente para no romper múltiples agentes legítimos en la misma IP). **Por-guild aún pendiente.** | claude-code | ALTO | 🟡 parcial |
 | P3 | **Guild capability declarations (advisory)**: cada guild declara `capabilities()` → `[ProcessExecution, FileSystem(scope), Network(hosts)]`. No bloqueante aún, solo logging + dashboard visibility. Prepara P4. | Claude (spec) + Deep | MEDIO | ⬜ |
 | P4 | **Enforce capabilities at runtime**: guilds sin `ProcessExecution` no pueden spawnear procesos. Guilds sin `Network` no pueden hacer HTTP. Sandbox Docker opcional pero documentado como recomendado. | Deep | ALTO | ⬜ |
 
@@ -274,7 +274,7 @@ M14-F/3 ─ P2P Kernel Wiring ────────────────�
 | M14-F Phase 3 | `transport/http/mod.rs` | `p2p_pool` + `RemoteTcp` arm en handler | M14-F/3 |
 | SQLCipher default | `config.rs:766` | `encrypt_at_rest: false` — debería ser `true` en server | M22-P0 |
 | Bearer token en URL | `http/mod.rs` | `?token=xxx` visible en logs — OAuth PKCE implementado pero no default | M22 |
-| Rate limit por IP | `security/` | Solo por sesión, no por IP | M22-P2 |
+| ~~Rate limit por IP~~ | `security/rate_limiter.rs` | ✅ Cerrado 2026-07-12 — ver M22-P2 | M22-P2 |
 | `/health` granular | `http/mod.rs` | Solo up/down, no por subsistema | M23-P1 |
 | `tylluan doctor` | `tylluan-cli` | No implementado | M19-P1 |
 | Profile wizard | `tylluan-cli` | No implementado | M19-P2 |

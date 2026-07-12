@@ -59,6 +59,11 @@ pub struct HttpState {
     pub sessions: Arc<RwLock<HashMap<String, McpSession>>>,
     pub guild_status_cache: Arc<std::sync::Mutex<Option<(Instant, Vec<crate::registry::guild_process::GuildStatus>)>>>,
     pub agent_rate_limiter: Arc<dashmap::DashMap<String, (u32, Instant)>>,
+    /// Per-IP rate limiting, independent of the client-controlled `X-Agent-Id`
+    /// header/query param used by `agent_rate_limiter`. A caller can omit or
+    /// rotate agent_id to fully evade the per-agent limiter; this catches
+    /// that bypass at the connection level instead.
+    pub ip_rate_limiter: Arc<crate::security::rate_limiter::RateLimiter>,
     pub config: Arc<RwLock<crate::config::TylluanConfig>>,
     pub tunnel_wsl_url: Option<String>,
     pub oauth: std::sync::Arc<oauth::OAuthState>,
@@ -313,7 +318,10 @@ pub async fn start_http_server(
             });
         }
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    ).await?;
     Ok(())
 }
 
@@ -408,6 +416,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         })),
         guild_status_cache: Arc::new(std::sync::Mutex::new(None)),
         agent_rate_limiter: Arc::new(DashMap::new()),
+        // Higher ceiling than the per-agent limiter (60/min): a single IP can
+        // legitimately host several agents plus the dashboard's own polling.
+        // This is a defense-in-depth backstop against agent_id bypass, not
+        // the primary limiter.
+        ip_rate_limiter: Arc::new(crate::security::rate_limiter::RateLimiter::new(Some(300))),
         config: crate::config::TylluanConfig::load_cached().unwrap_or_else(|_| Arc::new(RwLock::new(crate::config::TylluanConfig::default()))),
         tunnel_wsl_url,
         oauth: std::sync::Arc::new(oauth::OAuthState::new(base_url)),
