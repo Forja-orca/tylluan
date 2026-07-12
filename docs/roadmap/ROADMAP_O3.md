@@ -70,7 +70,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M18 — TRINITY Coordinator Guild (v0.14.0) — P3b PENDIENTE
+### M18 — TRINITY Coordinator Guild (v0.14.0) ✅ CERRADO
 
 **Norte:** Mejorar la calidad en tareas multi-paso. Un guild `coordinator` orquesta Thinker/Worker/Verifier. Basado en paper ICLR 2026: "TRINITY" (arXiv:2512.04695).
 
@@ -82,7 +82,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P1 | `guilds/core/coordinator.py` + catalog.rs + test_coordinator.py | Deep | ✅ |
 | P2 | Benchmark 10 queries, delta=22.2% — RECHAZADA (< 30%) | Antigravity | ✅ |
 | P3a | **ThreadPoolExecutor para sub-tasks independientes** — verificado en código: `coordinator.py` usa `ThreadPoolExecutor(max_workers=min(len(step["tasks"]), 4))` (línea 171, commit 1c10da5) | Deep | ✅ |
-| P3b | Re-benchmark instrumentado (`time.perf_counter()`, `benchmarks/results/coordinator_latencies.json`) — ver nota de metodología abajo | claude-code | ⬜ |
+| P3b | Re-benchmark reproducible (`benchmarks/coordinator_bench.py`) — +62.0% delta de medias, +57.7% media de deltas por query, 0 errores 5/5 queries. Cierra el umbral del 30% en ambas métricas (2026-07-12). | claude-code | ✅ |
 
 **Criterio de cierre:** Re-benchmark con delta ≥ 30% (media del delta porcentual por query, no delta de medias absolutas) + `_is_synthesis_intent()` activo.
 
@@ -132,7 +132,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M20 — Dashboard UX 2.0 (v0.16.1) [NUEVO — en paralelo con M19]
+### M29 — Dashboard UX 2.0 (v0.16.1) [NUEVO — en paralelo con M19]
 
 **Norte:** El dashboard ya tiene KnowledgeGraphTab, GuildInspector, FederationPanel y HippocampusGraph. Falta conectarlos operativamente: P2P como mapa visual, MCP config exportable con 1 click, dry-run mode, y `tylluan-cli new guild` para bajar la barrera de contribución.
 
@@ -144,7 +144,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 |------|-------------|--------|--------|
 | P0 | **MCP config 1-click**: botón "Integrar con..." en dashboard → genera snippet JSON para Claude Desktop/Cursor/VS Code/LM Studio con token y URL pre-rellenados. Descarga `mcp.json`. Actualmente requiere leer docs + copiar a mano. | Antigravity | ⬜ |
 | P1 | **P2P mesh topology map**: `FederationPanel.tsx` muestra lista de peers en texto. Ampliar con mini-mapa Canvas: nodo central (yo) + peers como círculos con latencia, `HardwareCaps` (GPU/RAM) y estado del circuit breaker. Sin libs externas. | Antigravity | ⬜ |
-| P2 | **Guild capability badges**: `GuildsConsolidated.tsx` ya lista guilds. Añadir badge de capabilities declaradas (🔴 ProcessExecution, 🟡 FileSystem, 🔵 Network) + indicador de sandbox activo. Prepara visualmente M22-P3. | Antigravity | ⬜ |
+| P2 | **Guild capability badges**: `GuildsConsolidated.tsx` ya lista guilds. Añadir badge de capabilities declaradas (🔴 ProcessExecution, 🟡 FileSystem, 🔵 Network) + indicador de sandbox activo. Prepara visualmente M27-P3. | Antigravity | ⬜ |
 | P3 | **`tylluan-cli new guild`**: scaffold CLI que genera `guilds/core/my_guild.py` con template fastmcp correcto, `@requires` stub, test pytest básico. Reduce barrera de contribución de "lee el código" a "copia y modifica". | Deep | ⬜ |
 | P4 | **Dry-run mode**: flag `dry_run = false` en `[guilds]`. Cuando activo, guilds destructivas (bash, filesystem write, docker) simulan ejecución y devuelven output marcado `[DRY-RUN]`. Útil para desarrolladores probando workflows. | Deep | ⬜ |
 
@@ -152,7 +152,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M22 — Security Hardening (v0.17.0) [NUEVO]
+### M27 — Security Hardening (v0.17.0) [NUEVO]
 
 **Norte:** Eliminar los gaps de seguridad críticos antes de cualquier uso en equipo o publicación de benchmarks. Actualmente SQLCipher es opt-in y no hay capability system para guilds.
 
@@ -162,7 +162,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 |------|-------------|--------|-----------|--------|
 | P0 | **SQLCipher default** ✅ (verificado 2026-07-12, ya resuelto): `default_encrypt_at_rest() = cfg!(feature = "encryption")` — el Dockerfile compila con `--features encryption`, así que el perfil server (Docker) ya tiene cifrado activo por defecto, con resolución de clave `TYLLUAN_DB_KEY` env > OS keychain > fallback Argon2id a fichero. Verificado en logs del contenedor real: `🔐 SQLCipher encryption active` en las 7 DBs. **Hallazgo real más grave durante la verificación**: el volumen Docker montaba `/home/tylluan/data` pero el binario escribe en `/data` (WORKDIR) — los datos (incluida la clave de cifrado) vivían en la capa efímera del contenedor, nunca llegaban al host. Fixeado en `docker-compose.yml` (commit `49f9fb3`). | claude-code | CRÍTICO | ✅ |
 | P1 | **Input sanitization** ✅ (2026-07-12): `check_dangerous_intent()` ya existía (bloquea `rm -rf /`, `DROP TABLE`, fork bombs, `shutdown`, etc., 13 tests) pero estaba desactivado por defecto — flip a `intent_filter: true` (safe-by-default). Segunda mitad: `guilds/core/utils.flag_untrusted_content()` marca (no reescribe) contenido externo con frases típicas de prompt injection (EN/ES) — cableado en `websearch.py` y `deep_web_research.py` (web_search + fetch_page, el mayor riesgo de los tres). 8 tests nuevos. Deliberadamente no hace *stripping*: editar lenguaje natural heurísticamente es poco fiable y arriesga destruir contenido legítimo — solo marca el límite de confianza para que el agente decida. | claude-code | ALTO | ✅ |
-| P2 | **Rate limit por IP** ✅ (2026-07-12): `security::rate_limiter::RateLimiter` existía pero estaba muerto (instanciado, nunca llamado) — el único límite real era por `agent_id`, un header/query param controlado por el cliente y trivialmente evadible omitiéndolo o rotándolo. Cableado como `HttpState::ip_rate_limiter`, keyed por `ConnectInfo<SocketAddr>` real (requirió cambiar `axum::serve` a `into_make_service_with_connect_info`), 300 req/min. **Por-guild (M22-P2 parte 2)**: ✅ `TylluanServer::guild_rate_limiter` (120 req/min), chequeado en `handle_tylluan_do` tras resolver guild y en `guild_tool_call_handler` HTTP directo. | claude-code | ALTO | ✅ |
+| P2 | **Rate limit por IP** ✅ (2026-07-12): `security::rate_limiter::RateLimiter` existía pero estaba muerto (instanciado, nunca llamado) — el único límite real era por `agent_id`, un header/query param controlado por el cliente y trivialmente evadible omitiéndolo o rotándolo. Cableado como `HttpState::ip_rate_limiter`, keyed por `ConnectInfo<SocketAddr>` real (requirió cambiar `axum::serve` a `into_make_service_with_connect_info`), 300 req/min. **Por-guild (M27-P2 parte 2)**: ✅ `TylluanServer::guild_rate_limiter` (120 req/min), chequeado en `handle_tylluan_do` tras resolver guild y en `guild_tool_call_handler` HTTP directo. | claude-code | ALTO | ✅ |
 | P3 | **Guild capability declarations (advisory)** ✅ (2026-07-12): cada guild declara `CAPABILITIES = {...}` en el módulo Python. Kernel parsea el fichero `.py` en startup (`catalog.rs::extract_capabilities()`), almacena en `GuildDescriptor.capabilities` y expone en `GET /api/v1/guilds` via `GuildStatus.capabilities`. Guilds sin declaración: `null`. Ejemplos: `websearch`, `vision`. Consolea capabilites + API visibility. Prepara P4. | claude-code | MEDIO | ✅ |
 | P4 | **Enforce capabilities at runtime** ✅ (2026-07-12): `config.SecurityConfig.capabilities_enforce` (opt-in, default false). `enforce_capabilities()` en `guild_process.rs` bloquea process_execution=false en tools con nombre/signatura ejecutiva y filesystem_scope fuera de paths declarados. 13 tests AAA. network_hosts queda advisory-only (requeriría instrumentar Python). | claude-code | ALTO | ✅ |
 
@@ -170,7 +170,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M23 — Credibilidad Pública (v0.18.0) [NUEVO]
+### M28 — Credibilidad Pública (v0.18.0) [NUEVO]
 
 **Norte:** Pasar de "impressive internal tool" a "proyecto con credibilidad externa". Benchmarks comparativos publicados, comunidad mínima funcional, observabilidad básica.
 
@@ -217,16 +217,16 @@ M21 ─── Performance Foundation ──────────────�
    │    recall embedding cache · SQLite tuning · guild warm pool
    │
    ▼
-M19+M20 ── DX + Dashboard UX ───────────────────────────── v0.16.0
+M19+M29 ── DX + Dashboard UX ───────────────────────────── v0.16.0
    │    `tylluan` cmd · doctor · wizard · instant start      (paralelo)
    │    MCP 1-click · mesh map · guild scaffold · dry-run
    │
    ▼
-M22 ─── Security Hardening ─────────────────────────────── v0.17.0
+M27 ─── Security Hardening ─────────────────────────────── v0.17.0
    │    SQLCipher default · input sanitization · capabilities
    │
    ▼
-M23 ─── Credibilidad Pública ────────────────────────────── v0.18.0
+M28 ─── Credibilidad Pública ────────────────────────────── v0.18.0
    │    benchmarks comparativos · /health granular · brew install
    │
    ▼
@@ -236,7 +236,7 @@ M14-F/3 ─ P2P Kernel Wiring ────────────────�
 
 **Principio de orden:** Mejorar lo que ya tenemos (M18 cierre → perf → DX+dashboard) antes de credibilidad externa. Sin benchmarks comparativos antes de tener performance sólida.
 
-**M19 y M20 son paralelos**: CLI (Deep) + Dashboard (Antigravity) — no se bloquean entre sí.
+**M19 y M29 son paralelos**: CLI (Deep) + Dashboard (Antigravity) — no se bloquean entre sí.
 
 ---
 
@@ -272,13 +272,13 @@ M14-F/3 ─ P2P Kernel Wiring ────────────────�
 | Recall embedding cache | `silva/search.rs` | LRU para `tylluan_recall`, actualmente router solo | M21-P0 |
 | Coordinator serial | `coordinator.py:110` | `for i, task` — serial. Necesita ThreadPoolExecutor | M18-P3a |
 | M14-F Phase 3 | `transport/http/mod.rs` | `p2p_pool` + `RemoteTcp` arm en handler | M14-F/3 |
-| ~~SQLCipher default~~ | `config.rs:768` | ✅ Ya resuelto — ver M22-P0 (real bug era el volumen Docker) | M22-P0 |
-| Bearer token en URL | `http/mod.rs` | `?token=xxx` visible en logs — OAuth PKCE implementado pero no default | M22 |
-| ~~Rate limit por IP~~ | `security/rate_limiter.rs` | ✅ Cerrado 2026-07-12 — ver M22-P2 | M22-P2 |
-| `/health` granular | `http/mod.rs` | Solo up/down, no por subsistema | M23-P1 |
+| ~~SQLCipher default~~ | `config.rs:768` | ✅ Ya resuelto — ver M27-P0 (real bug era el volumen Docker) | M27-P0 |
+| Bearer token en URL | `http/mod.rs` | `?token=xxx` visible en logs — OAuth PKCE implementado pero no default | M27 |
+| ~~Rate limit por IP~~ | `security/rate_limiter.rs` | ✅ Cerrado 2026-07-12 — ver M27-P2 | M27-P2 |
+| `/health` granular | `http/mod.rs` | Solo up/down, no por subsistema | M28-P1 |
 | `tylluan doctor` | `tylluan-cli` | No implementado | M19-P1 |
 | Profile wizard | `tylluan-cli` | No implementado | M19-P2 |
-| Comparative benchmarks | `benchmarks/` | Solo internos, sin comparativa vs Letta/Mem0/Zep | M23-P0 |
+| Comparative benchmarks | `benchmarks/` | Solo internos, sin comparativa vs Letta/Mem0/Zep | M28-P0 |
 
 ## Investigación pendiente (backlog, sin fecha)
 

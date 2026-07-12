@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-12 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, kernel hardening: audit-log spawn_blocking, port-shutdown safety guard, cosine panic fix, Docker volume mount fix, Security Hardening [P0-P4: SQLCipher default, intent filter + injection flagging, IP/guild rate limits, capability declarations+enforcement — labeled "M22" in ROADMAP_O3.md, a numbering collision with this doc's own M22; not yet reconciled])
+> Last updated: 2026-07-12 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4: SQLCipher default, intent filter + injection flagging, IP/guild rate limits, capability declarations+enforcement], kernel hardening: audit-log spawn_blocking, port-shutdown safety guard, cosine panic fix, Docker volume mount fix. Milestone numbering collisions found and reconciled in ROADMAP_O3.md (2026-07-12): its own M20/M22/M23 were unrelated *future* milestones colliding with these *already-shipped* M20/M22/M23 — renumbered to M29/M27/M28 respectively, since ROADMAP_O3.md's versions were newer and not yet referenced anywhere else. This doc's M-numbers (Complexity Cascade=M20, Onboarding=M22, El Primer Minuto=M23-P1) are unchanged and remain authoritative.)
 
 ## CI
 
