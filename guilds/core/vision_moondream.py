@@ -21,7 +21,7 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("tylluan-moondream")
 
-_CACHE_DIR = r"E:\TylluanMCPo3\.fastembed_cache"
+_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".tylluan", "models_cache")
 
 _model  = None
 _loaded = False

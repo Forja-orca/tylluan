@@ -46,7 +46,7 @@ const GUILD_ARG_DEFAULTS: Record<string, { required: string[]; optional: string[
   codebase_memory: {
     required: ['intent'],
     optional: ['project_path'],
-    placeholder: { intent: 'get architecture', project_path: 'E:/TylluanMCPo3' }
+    placeholder: { intent: 'get architecture', project_path: 'E:/myproject' }
   },
   web_research: {
     required: ['query'],

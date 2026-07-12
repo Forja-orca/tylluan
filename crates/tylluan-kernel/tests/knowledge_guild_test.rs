@@ -9,10 +9,14 @@ mod knowledge_guild_tests {
     #[test]
     #[ignore = "requires .venv and guilds/core/knowledge.py"]
     fn knowledge_guild_handshake_response() {
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent().and_then(|p| p.parent())
+            .expect("crate is two levels under repo root")
+            .to_path_buf();
         let venv_python = if cfg!(windows) {
-            "E:/TylluanMCPo3/.venv/Scripts/python.exe"
+            repo_root.join(".venv/Scripts/python.exe")
         } else {
-            "E:/TylluanMCPo3/.venv/bin/python"
+            repo_root.join(".venv/bin/python")
         };
 
         let init_json = serde_json::json!({
@@ -31,7 +35,7 @@ mod knowledge_guild_tests {
 
         let mut child = Command::new(venv_python)
             .args(&["-m", "guilds.core.knowledge"])
-            .current_dir("E:/TylluanMCPo3")
+            .current_dir(&repo_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -52,10 +56,14 @@ mod knowledge_guild_tests {
     #[test]
     #[ignore = "requires .venv and guilds/core/knowledge.py"]
     fn knowledge_guild_extract_triples_valid_json() {
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent().and_then(|p| p.parent())
+            .expect("crate is two levels under repo root")
+            .to_path_buf();
         let venv_python = if cfg!(windows) {
-            "E:/TylluanMCPo3/.venv/Scripts/python.exe"
+            repo_root.join(".venv/Scripts/python.exe")
         } else {
-            "E:/TylluanMCPo3/.venv/bin/python"
+            repo_root.join(".venv/bin/python")
         };
 
         let init_json = serde_json::json!({
@@ -87,7 +95,7 @@ mod knowledge_guild_tests {
 
         let mut child = Command::new(venv_python)
             .args(&["-m", "guilds.core.knowledge"])
-            .current_dir("E:/TylluanMCPo3")
+            .current_dir(&repo_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
