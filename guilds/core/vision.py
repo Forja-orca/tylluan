@@ -8,6 +8,12 @@ Inference:     3-part ONNX pipeline (vision_encoder → embed_tokens → decoder
 Status: operational
 """
 
+CAPABILITIES = {
+    "process_execution": False,
+    "filesystem_scope": ["/"],
+    "network_hosts": [],
+}
+
 import sys
 import os
 import json
