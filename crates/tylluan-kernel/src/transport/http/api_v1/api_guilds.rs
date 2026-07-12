@@ -63,6 +63,16 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
         }
     }
 
+    // Per-guild rate limit check
+    if let Some(ref srv_arc) = state.server {
+        let srv = srv_arc.read().await;
+        if let Err(_msg) = srv.guild_rate_limiter.check_and_record(&guild) {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+                "error": format!("Rate limit for guild '{}' exceeded. Try again later.", guild)
+            }))).into_response();
+        }
+    }
+
     let req = CallToolRequestParam { name: tool.into(), arguments: args.as_object().cloned() };
     let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let _ = state.silva.touch_node(&format!("agent:{}", agent_id), agent_id, &format!("tool_call:{}", guild)).await;
