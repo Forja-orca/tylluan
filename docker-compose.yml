@@ -68,8 +68,19 @@ services:
       - "127.0.0.1:3033:3030"
     volumes:
       - ./models:/home/tylluan/models          # AI model weights (user-provided)
-      - ./data:/home/tylluan/data              # SQLite DB + embeddings
-      - ./tylluan.docker.toml:/home/tylluan/tylluan.toml:ro
+      # NOTE: Dockerfile sets WORKDIR /data and VOLUME ["/data"], and its
+      # ENTRYPOINT CMD is `--config /etc/tylluan/tylluan.toml` -- relative
+      # db paths (e.g. "tylluan.db") resolve against /data, and the config
+      # file the binary actually reads lives at /etc/tylluan, NOT under
+      # /home/tylluan. Mounting these to /home/tylluan/* silently no-ops:
+      # the container writes all SQLite DBs (+ the SQLCipher key + the
+      # federation identity key) to its own ephemeral layer at /data, lost
+      # on any `docker compose down`/recreate, while this bind mount sits
+      # empty. Found 2026-07-12 auditing a live secondary instance whose
+      # host-side data dir had been empty for its entire 11h uptime despite
+      # the kernel logging real writes.
+      - ./data:/data                           # SQLite DB + embeddings (matches Dockerfile VOLUME)
+      - ./tylluan.docker.toml:/etc/tylluan/tylluan.toml:ro
       - tylluan_fastembed_cache:/home/tylluan/.fastembed_cache
     environment:
       RUST_LOG: info
