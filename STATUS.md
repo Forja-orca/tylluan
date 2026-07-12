@@ -130,7 +130,6 @@
 - No community validation (0 external contributors)
 - No independent benchmark reproduction
 - Kernel is a research lab — executes real code on your machine
-- M26 Sprint 2 tldraw canvas — selected as visual board engine, implementation pending
 
 ---
 
