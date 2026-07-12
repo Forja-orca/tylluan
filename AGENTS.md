@@ -2,16 +2,13 @@
 
 ## Regla fundacional
 
-**Tylluan es el producto público construido sobre ForjaMCPo3.**
+**Tylluan es un producto público MIT.** Este workspace (`E:\tylluan`) es autocontenido:
+no depende de ningún otro repositorio ni framework interno para funcionar, compilar,
+o pasar sus tests.
 
-```
-ForjaMCPo3 (E:\ForjaMCPo3)  ←  framework cognitivo interno privado del equipo
-        ↓  patrones probados se portan, nunca se mezcla código
-Tylluan (E:\tylluan)          ←  producto público MIT, este workspace
-```
-
-- **NUNCA tocar `E:\ForjaMCPo3`** desde este workspace.
-- **NUNCA copiar código de Forja directamente** — adaptar e implementar limpio.
+- Trabaja exclusivamente dentro de este workspace.
+- Si necesitas portar un patrón de otro proyecto, adáptalo e impleméntalo limpio aquí
+  — nunca copies código ni referencies rutas de otros repositorios locales.
 
 ---
 
@@ -96,7 +93,7 @@ cargo run -p tylluan-cli -- start
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
-4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente. **SIN proxy** (Tylluan no tiene proxy, a diferencia de ForjaMCPo3).
+4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **AGPL soberanía:** sin dependencias cloud en el critical path.
 6. **Degree penalty (no boost):** `local_query_graph` usa `pr_score / (1 + deg * 0.1)` — penaliza hubs genéricos. El boost (`*`) fue un bug corregido en v0.10.0.
 
@@ -143,7 +140,6 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 - NUNCA `host = "0.0.0.0"` + `dev_mode = true` juntos (LAN RCE)
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (gitignored)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
-- NUNCA tocar `E:\ForjaMCPo3` — workspaces separados
 - NUNCA reducir timeouts para guilds de inferencia (BGE-M3 en CPU tarda 2-8s/embedding)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
 

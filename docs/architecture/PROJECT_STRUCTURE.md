@@ -1,6 +1,6 @@
 # Tylluan — Estructura de Proyecto (Propuesta)
 
-> Estado: PROPUESTA, no ejecutada. Tylluan ya está bien organizado (benchmarks/, docs/, scripts/ ya existen y se usan correctamente) — el hallazgo aquí es menor comparado con ForjaMCPo3.
+> Estado: PROPUESTA, no ejecutada. Tylluan ya está bien organizado (benchmarks/, docs/, scripts/ ya existen y se usan correctamente) — el hallazgo aquí es menor.
 
 ## Árbol actual (ya correcto, sin cambios)
 
@@ -21,7 +21,7 @@ tylluan/
 | Archivo actual | Problema | Destino propuesto |
 |---|---|---|
 | `crabs.md` (raíz) | Notas de sesión sueltas (M20, ya cerrado en otros docs), nombre no descriptivo, sin referencias en código/CI | `scratch/session-notes-m20.md` o eliminar si ya está reflejado en STATUS.md/CHANGELOG.md (verificar antes de decidir) |
-| `briefings/` (raíz) | Igual que ForjaMCPo3 antes de esta sesión: sin carpeta de archivo para briefings cerrados | Crear `docs/archive/briefings/` con el mismo lifecycle documentado en `AGENTS.md` |
+| `briefings/` (raíz) | Sin carpeta de archivo para briefings cerrados | Crear `docs/archive/briefings/` con el mismo lifecycle documentado en `AGENTS.md` |
 
 ## Limpieza de disco (destructivo — requiere confirmación aparte)
 
@@ -37,4 +37,4 @@ Todo lo demás ya sigue el patrón correcto (scripts en `scripts/`, benchmarks e
 
 ## Próximo paso
 
-Confirmar si `crabs.md` se archiva o se elimina (verificar contra STATUS.md/CHANGELOG.md primero) → crear `docs/archive/briefings/` espejo del de ForjaMCPo3 → commit.
+Confirmar si `crabs.md` se archiva o se elimina (verificar contra STATUS.md/CHANGELOG.md primero) → crear `docs/archive/briefings/` → commit.

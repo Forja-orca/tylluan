@@ -29,7 +29,7 @@
 
 **Numerical hypothesis REJECTED — but the synthesis fallback code works correctly.**
 
-The raw score dropped vs v1, but this is entirely due to **guild infrastructure degradation** on Tylluan kernel (:3033), not a coordinator regression. The original v1 benchmark ran against ForjaMCPo3 (:3030) with all guilds healthy.
+The raw score dropped vs v1, but this is entirely due to **guild infrastructure degradation** on Tylluan kernel (:3033), not a coordinator regression. The original v1 benchmark ran against a separate reference instance (:3030) with all guilds healthy.
 
 ---
 

@@ -295,12 +295,11 @@ pub async fn start_http_server(
     // fallback range used above (port..=port+100) when the configured port
     // was already taken. A stale/corrupted active_port.json must never let
     // this kernel send a shutdown signal to an unrelated process on some
-    // other port (e.g. ForjaMCPo3's nexus, or anything else on the host).
+    // other port (e.g. another local service, or anything else on the host).
     //
     // This is deliberately derived from `port` (the configured value) rather
     // than a hardcoded range: Tylluan's real shipped default is :3030 (see
-    // tylluan.example.toml), identical to ForjaMCPo3's port on machines that
-    // run both -- a fixed "Tylluan always uses 4000-4099" range was wrong and
+    // tylluan.example.toml) -- a fixed "Tylluan always uses 4000-4099" range was wrong and
     // would have silently broken zero-downtime restarts for any user running
     // the default config, since :3030 fell outside that hardcoded window.
     let own_port_range = port..=(port.saturating_add(100));

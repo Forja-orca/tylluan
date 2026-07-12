@@ -12,7 +12,7 @@ Tylluan cuenta con un visualizador técnico standalone construido en Next.js en 
     *   **Sleep/Dream Cycle:** [sleep-cycle.tsx](file:///E:/tylluan/docs-site/src/components/architecture/sleep-cycle.tsx)
     *   **Dispatch Flow:** [dispatch-flow.tsx](file:///E:/tylluan/docs-site/src/components/architecture/dispatch-flow.tsx)
     *   **Roadmap:** [roadmap.tsx](file:///E:/tylluan/docs-site/src/components/architecture/roadmap.tsx)
-2.  **Veracidad de Métricas:** Nunca inventar números de tests ni benchmarks en el visualizador o en `STATUS.md`. El conteo de tests real actual es **`383`** (310 kernel + 61 link + 12 fsrs). Ante cualquier cambio, corre la suite de pruebas para reportar la cifra exacta.
+2.  **Veracidad de Métricas:** Nunca inventar números de tests ni benchmarks en el visualizador o en `STATUS.md`. El conteo de tests real actual es **`388`** (315 kernel + 61 link + 12 fsrs, verificado 2026-07-12). Ante cualquier cambio, corre la suite de pruebas para reportar la cifra exacta.
 3.  **Verificación de Compilación:** Antes de finalizar cualquier turno que modifique el docs-site, debes ejecutar el build de producción para certificar que compila limpio y sin advertencias:
     ```bash
     cd E:\tylluan\docs-site
@@ -32,7 +32,7 @@ Los agentes deben estar al tanto de las siguientes particularidades del código 
 2.  **Duplicidad de ConsensusEngine:**
     *   `consensus.rs` (raíz): Motor de frescura determinista para sincronización de federación.
     *   `memory/consensus.rs`: Motor de consolidación semántica y resolución de conflictos cognitivos.
-3.  **Diferencia de API respecto a ForjaMCPo3:**
+3.  **Notas de arquitectura:**
     *   Tylluan **NO** tiene proxy local (Hyper proxy de cero tiempo de inactividad), arranca directo en `:3030`.
-    *   Tylluan no tiene el SSE daemon deliberativo síncrono `coloquio_watch.rs` de Forja (candidato a portar si se requiere multi-agent debate).
-    *   Tylluan sí cuenta en exclusiva con **FSRS-5** y el módulo `coordinator.py` de orquestación multi-agente paralela.
+    *   Tylluan no tiene un daemon SSE deliberativo síncrono tipo `coloquio_watch.rs` (candidato a implementar si se requiere multi-agent debate).
+    *   Tylluan cuenta con **FSRS-5** y el módulo `coordinator.py` de orquestación multi-agente paralela.

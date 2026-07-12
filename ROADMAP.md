@@ -21,7 +21,7 @@ Planned:
 - [x] Published benchmarks with reproducible methodology (`benchmarks/run.py`)
 - [x] 3+ end-to-end examples in `examples/` (5 examples including autonomous chain and BWC demo)
 - [x] GitHub Discussions active with community engagement (Discussion #2 live)
-- [x] Dashboard screenshots from Tylluan's own kernel (not ForjaMCPo3)
+- [x] Dashboard screenshots from Tylluan's own kernel
 - [x] Fix all compiler warnings (0 warnings as of v0.2.0)
 - [x] M10 Bounded Work Contracts — finite multi-agent coordination protocol
 - [x] Automated security tests in CI (intent filter, ACL, rate limiter) — 30 tests in `security_audit.rs`

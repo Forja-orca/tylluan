@@ -29,13 +29,13 @@ La pregunta de M16-P1: ¿mejora ≥ 5pp sobre baseline con datos reales?
 
 ```
 cargo run -p tylluan-evals -- --suite idle-lab \
-  --db E:/ForjaMCPo3/data/silva.db \
+  --db <external reference dataset>/silva.db \
   --oracle benchmarks/idle_lab_oracle.json \
   --experiments 8 \
   --save benchmarks/idle_lab_adr007.json
 ```
 
-- **Oracle:** 19 pairs generados desde ForjaMCPo3 silva.db (nodos reales: episode, document, agent_memory)
+- **Oracle:** 19 pairs generados desde un dataset de referencia externo con datos reales de producción (nodos: episode, document, agent_memory) — usado deliberadamente por ser más maduro que una instalación fresca de Tylluan, ya que el algoritmo de tuning es genérico y no depende del contenido específico
 - **Embedding:** BGE-M3 1024-dim ONNX (fastembed)
 - **Experimentos:** 8 (un ciclo completo de mutaciones: pool±5, win±10, sw±5, dc±2)
 

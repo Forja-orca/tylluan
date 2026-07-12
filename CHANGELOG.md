@@ -28,7 +28,7 @@ All notable changes to Tylluan are documented here.
 
 ### Process note
 
-Several of the items above (M18-P3b's benchmark, an agent's ForjaMCPo3-vs-Tylluan feature comparison, and federation "verified" being reported twice against the wrong repo before being confirmed for real) were corrected after independent verification against the running system caught inflated or misattributed claims. Documented here rather than silently fixed, since the corrections are as much a part of today's real progress as the features themselves.
+Several of the items above (M18-P3b's benchmark, an agent's feature comparison against an unrelated internal reference deployment, and federation "verified" being reported twice against the wrong instance before being confirmed for real) were corrected after independent verification against the running system caught inflated or misattributed claims. Documented here rather than silently fixed, since the corrections are as much a part of today's real progress as the features themselves.
 
 ## [v0.13.0] — 2026-07-09 — Coordinator Cascade + Dashboard Fork
 

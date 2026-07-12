@@ -1,8 +1,8 @@
 # Tylluan + Hermes Agent (NousResearch)
 
-> **Note for Forja team:** This document is for external users of
-> [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
-> Our internal Hermes agent connects to **ForjaMCPo3**, not to Tylluan.
+> This document is for external users of
+> [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
+> who want to connect it to Tylluan.
 
 > **Use case:** Add sovereign persistent memory to any NousResearch Hermes agent instance. Hermes natively supports MCP servers — Tylluan plugs in with zero kernel changes.
 

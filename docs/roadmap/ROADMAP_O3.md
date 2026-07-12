@@ -22,7 +22,7 @@ Lo que ya tenemos (verificado 2026-07-06):
 - Security: 30 automated tests, rate limiter, circuit breaker, guard
 - `tylluan-cli start/stop/status/logs/connect/download-models/install`
 - CI: build + test + deny + security audit + Python lint + ARM64 portability + Docker smoke
-- Dashboard React forkeado de ForjaMCPo3, branding Tylluan, build OK
+- Dashboard React con branding propio de Tylluan, build OK
 
 ---
 

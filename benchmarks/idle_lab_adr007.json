@@ -1,5 +1,5 @@
 {
-  "db_path": "E:/ForjaMCPo3/data/silva.db",
+  "db_path": "<external reference dataset, see ADR007 methodology note>",
   "oracle_path": "benchmarks/idle_lab_oracle.json",
   "oracle_pairs": 19,
   "experiments_run": 8,

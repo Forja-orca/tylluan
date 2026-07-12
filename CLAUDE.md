@@ -2,16 +2,12 @@
 
 ## 🔴 REGLA FUNDACIONAL (LEER PRIMERO)
 
-**Tylluan es el PRODUCTO PÚBLICO construido sobre ForjaMCPo3.**
+**Tylluan es un producto público MIT, autocontenido.** Este workspace (`E:\tylluan`)
+no depende de ningún otro repositorio para funcionar, compilar, o pasar sus tests.
 
-```
-ForjaMCPo3 (E:\ForjaMCPo3)  ←  framework interno privado del equipo
-        ↓ sustrato cognitivo
-Tylluan v0.5.0 (E:\tylluan)  ←  producto público, este repo
-```
-
-**NUNCA tocar `E:\ForjaMCPo3` desde este workspace.**
-**NUNCA copiar código de Forja directamente — adaptar e implementar limpio.**
+**Trabaja exclusivamente dentro de este workspace.**
+**Si portas un patrón de otro proyecto, adáptalo e impleméntalo limpio — nunca copies
+código ni referencies rutas de otros repositorios locales.**
 
 ---
 
@@ -69,7 +65,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 | Agente | Runtime | Rol en Tylluan |
 |--------|---------|----------------|
-| **Claude Code Sonnet** | `E:\ForjaMCPo3` | Tech lead global — contexto, planes, prompts |
+| **Claude Code Sonnet** | CLI / IDE | Tech lead global — contexto, planes, prompts |
 | **OpenCode (DeepSeek V3 Flash)** | VS Code extension | Implementación Rust — crates/ |
 | **Antigravity** | Browser + MCP | Research web, auditoría MCP desde cliente |
 | **Qwen Desktop** | App escritorio | Research masivo, auditoría vía SSE MCP |
@@ -124,5 +120,4 @@ Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
 - NUNCA `host = "0.0.0.0"` + `dev_mode = true` juntos (LAN RCE)
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (untracked)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
-- NUNCA tocar `E:\ForjaMCPo3` desde aquí — son workspaces separados
 - NUNCA reducir timeouts en tests de DHT — BGE-M3 en CPU tarda 2-8s por embedding

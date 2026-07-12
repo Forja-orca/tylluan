@@ -1,8 +1,8 @@
 # Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
 
 > Creado 2026-07-11 durante el ciclo de reflexión: se detectó que este setup de
-> prueba (equivalente al usado en ForjaMCPo3 con `docker-compose.secondary.yml`)
-> nunca se había portado a Tylluan. El código de federación (Noise XK, DHT,
+> prueba de dos instancias reales (nativo + `docker-compose.secondary.yml`)
+> nunca se había armado en Tylluan. El código de federación (Noise XK, DHT,
 > gossip, sync push/pull) siempre estuvo intacto — lo que faltaba era la
 > infraestructura reproducible para probarlo entre dos procesos reales en vez
 > de solo en tests unitarios.

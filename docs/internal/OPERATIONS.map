@@ -23,8 +23,8 @@
 │                                                              │
 │  TESTS (fast, no binary needed):                            │
 │    cargo test -p tylluan-kernel --lib 2>&1 | tail -3        │
-│    Expected: 310 passed; 0 failed                           │
-│    (+ 61 tylluan-link, 12 tylluan-fsrs = 383 total)          │
+│    Expected: 312 passed; 0 failed (verified 2026-07-12)      │
+│    (+ 61 tylluan-link, 12 tylluan-fsrs = 385 total)          │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ MCP CLIENT CONNECTIONS ────────────────────────────────────┐
