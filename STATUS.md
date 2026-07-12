@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-11 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, kernel hardening: audit-log spawn_blocking, port-shutdown safety guard, cosine panic fix)
+> Last updated: 2026-07-12 (v0.13.0: M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, kernel hardening: audit-log spawn_blocking, port-shutdown safety guard, cosine panic fix, Docker volume mount fix, Security Hardening [P0-P4: SQLCipher default, intent filter + injection flagging, IP/guild rate limits, capability declarations+enforcement — labeled "M22" in ROADMAP_O3.md, a numbering collision with this doc's own M22; not yet reconciled])
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** HEAD (`v0.13.0`) · 315 kernel lib + 61 link + 12 fsrs + integration suite = **490 total** green.
+**Commit:** `5de043b` (`v0.13.0`) · 328 kernel lib + 61 link + 12 fsrs + integration suite = **576 total** green (verified 2026-07-12, post M22-P4).
 
 ---
 

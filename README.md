@@ -166,7 +166,7 @@ The only time an LLM is involved is if you — the agent or human caller — dec
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-383 tests across Rust kernel, Python guilds, and dashboard — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+576 tests across Rust kernel (lib + integration), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -300,6 +300,11 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 | **M18** | TRINITY Coordinator — Thinker/Worker/Verifier, parallel execution, synthesis detection | ✅ v0.13.0 |
 | **M20** | Complexity Cascade — heuristic intent scoring, automatic coordinator activation | ✅ v0.13.0 |
 | **M21** | Query Embedding Cache — TTL LRU 256 entries, normalized key, 5 unit tests | ✅ v0.13.0 |
+| **M18-P3b** | Coordinator re-benchmark — reproducible harness, +57.7% mean per-query delta, clears 30% threshold | ✅ v0.13.0 |
+| **Security Hardening** | Per-IP + per-guild rate limiting · guild capability declarations + opt-in runtime enforcement · dangerous-intent filter on by default · prompt-injection content flagging for external sources | ✅ v0.13.0 |
+| **M22 Onboarding** | Junior-friendly first-run experience, guided setup | ✅ v0.13.0 |
+| **M23-P1** | "El Primer Minuto" — auto-start on first launch, zero manual steps | ✅ v0.13.0 |
+| **M26 Canvas** | Real-time collaborative whiteboard (tldraw) wired into Coloquio, multi-agent visual workspace | ✅ v0.13.0 |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
