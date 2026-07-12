@@ -20,6 +20,8 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from guilds.core.utils import flag_untrusted_content
+
 mcp = FastMCP("tylluan-deep-web-research")
 
 _MAX_RESULTS = 20
@@ -122,7 +124,9 @@ async def web_search(
                 lines.append(f"   {snippet[:200]}")
                 lines.append("")
 
-        return "\n".join(lines).strip()
+        return flag_untrusted_content(
+            "\n".join(lines).strip(), source="deep_web_research/web_search"
+        )
 
     except ImportError:
         return "❌ duckduckgo_search not installed. Run: pip install duckduckgo_search"
@@ -212,10 +216,11 @@ async def fetch_page(
             if not text.strip():
                 return f"📭 Page fetched but no readable text found: {url}"
 
-            return (
+            return flag_untrusted_content(
                 f"📄 **Content from:** {url}\n\n"
                 f"{text}\n\n"
-                f"---\n_Truncated to {max_chars} characters._"
+                f"---\n_Truncated to {max_chars} characters._",
+                source="deep_web_research/fetch_page",
             )
 
     except httpx.TimeoutException:
