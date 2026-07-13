@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `5de043b` (`v0.13.0`) · 328 kernel lib + 61 link + 12 fsrs + integration suite = **576 total** green (verified 2026-07-12, post M22-P4).
+**Commit:** `0029bfe` (`v0.13.0`) · 329 kernel lib + 61 link + 12 fsrs + integration suite = **578 total** green (verified 2026-07-13, post M19-P2).
 
 ---
 
