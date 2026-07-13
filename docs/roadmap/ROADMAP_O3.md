@@ -179,10 +179,10 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | **LongMemEval comparative**: re-run con BGE-M3 + comparativa pública vs Letta, Mem0, Zep usando sus benchmark públicos. Publicar en `benchmarks/COMPARISON.md` y README. | Claude + Antigravity | ⬜ |
+| P0 | **LongMemEval comparative** ✅ (2026-07-13, con ajuste de alcance): investigado el estado publicado de MemPalace/Hindsight/Mem0/Zep/Letta — hallazgo real: el código ya tenía una tabla comparativa mezclando métricas incompatibles (Hindsight 91.4% es *QA accuracy* vía juez LLM, no Recall@5; MemPalace 96.6% es retrieval puro pero marcado por fuentes independientes como "incomparable" a QA-accuracy; Mem0 contestado 94.4% vendor vs 49.0% independiente). Reescrito `print_comparison()` y creado `benchmarks/COMPARISON.md` con fuentes y caveats por número, sin afirmar "Tylluan gana/pierde" hasta correr el mismo harness contra todos. NO se publicó una tabla ranking en README (habría repetido el mismo error que hemos corregido varias veces esta semana con nuestras propias métricas). | claude-code | ✅ |
 | P1 | **`/health` granular**: endpoint devuelve estado por componente `{kernel, silva, guilds, mesh}`. Actualmente solo "up/down". Necesario para operaciones. | Deep | ⬜ |
 | P2 | **OpenTelemetry básico**: métricas mínimas exportables — `tylluan.recall.latency_ms`, `tylluan.guilds.active`, `tylluan.memory.nodes`. Feature flag `observability`. | Deep | ⬜ |
-| P3 | **Contributing guide + good first issues**: `CONTRIBUTING.md`, issue templates, PR template, etiquetas `good-first-issue` en ≥5 issues reales (guild tests, doc improvements, CLI commands). | Claude | ⬜ |
+| P3 | **Contributing guide + good first issues** ✅ (2026-07-13): `CONTRIBUTING.md`, plantillas de issue y PR ya existían (fix menor: versión de Rust desactualizada 1.75→1.88). Creadas 5 issues reales en GitHub con label `good first issue` (#5-#9): test flaky en coordinator, re-verificar claim de Zep sin fuente, tutorial de guild scaffold, `tylluan doctor`, `tylluan update`. | claude-code | ✅ |
 | P4 | **Package managers**: publicar en Homebrew (macOS/Linux), AUR (Arch Linux), Scoop/Winget (Windows). No rompe soberanía — sigue siendo binario local, solo facilita instalación. Automatizable desde CI con `cargo-dist` o `goreleaser` equivalente. | Deep | ⬜ |
 
 **Criterio de cierre:** Benchmarks publicados en README. `brew install tylluan` funciona. Al menos 1 contributor externo ha abierto un PR.
