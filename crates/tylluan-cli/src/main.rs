@@ -50,6 +50,10 @@ enum Commands {
         /// Specify the hub port
         #[arg(long)]
         port: Option<u16>,
+        /// Detect hardware (RAM/CPU/GPU) and generate tylluan.toml automatically
+        /// if none exists in the current directory. Never edit an existing TOML.
+        #[arg(long)]
+        setup: bool,
     },
     /// Stop the TylluanNexus kernel
     Stop,
@@ -122,7 +126,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Start { headless, port } => {
+        Commands::Start { headless, port, setup } => {
+            if setup {
+                run_setup_wizard()?;
+            }
             println!("🚀 Starting TylluanNexus kernel...");
             let exe_path = find_kernel_exe()?;
             
@@ -773,6 +780,77 @@ def test_{snake}_tool_registered():
         },
     }
 
+    Ok(())
+}
+
+/// Detects RAM and (best-effort) GPU presence and returns the recommended
+/// InstallProfile. Never fabricates a signal it can't check: RAM comes from
+/// `sysinfo` (real), GPU detection is a real `nvidia-smi` PATH probe (finds
+/// an actual NVIDIA driver install) -- if that check is inconclusive on a
+/// platform, this defaults to "no GPU assumed" rather than guessing yes.
+///
+/// Mapping (deliberately not "≤8GB->clinic" as an early draft of the roadmap
+/// item phrased it -- that would recommend a 67MB model download for a
+/// machine that can't spare the RAM; Portable/BM25-only is the correct
+/// bottom tier, matching its own doc comment "runs on a potato"):
+///   RAM < 8GB            -> Portable (BM25-only, zero downloads)
+///   RAM >= 8GB, no GPU   -> Clinic   (BGE-Small, light semantic)
+///   RAM >= 8GB, GPU seen -> Server   (BGE-M3, full semantic)
+fn detect_recommended_profile() -> (InstallProfile, String) {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    let total_ram_gb = sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0);
+
+    let has_gpu = find_executable_in_path("nvidia-smi").is_some();
+
+    let profile = if total_ram_gb < 8.0 {
+        InstallProfile::Portable
+    } else if has_gpu {
+        InstallProfile::Server
+    } else {
+        InstallProfile::Clinic
+    };
+
+    let reason = format!(
+        "{:.1} GB RAM detected, {} -> recommending '{}'",
+        total_ram_gb,
+        if has_gpu { "NVIDIA GPU detected (nvidia-smi found)" } else { "no GPU detected" },
+        profile,
+    );
+    (profile, reason)
+}
+
+/// Best-effort executable lookup on PATH -- does not run the binary, only
+/// checks presence, so this can't hang or fail on a system without a GPU.
+fn find_executable_in_path(name: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    let exe_name = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    std::env::split_paths(&path_var)
+        .map(|dir| dir.join(&exe_name))
+        .find(|candidate| candidate.is_file())
+}
+
+/// `tylluan start --setup`: detect hardware, print the recommendation, and
+/// write tylluan.toml to the current directory -- but ONLY if none exists
+/// there yet. Never overwrites an existing config; "sin editar TOML" is the
+/// M19-P2 closure criterion, not "silently replace whatever the user has."
+fn run_setup_wizard() -> Result<()> {
+    let config_path = PathBuf::from("tylluan.toml");
+    if config_path.exists() {
+        println!("ℹ️  tylluan.toml already exists in this directory -- --setup does not overwrite it.");
+        println!("   Delete it first (or run in an empty directory) to re-run the wizard.");
+        return Ok(());
+    }
+
+    println!("🔍 Detecting hardware...");
+    let (profile, reason) = detect_recommended_profile();
+    println!("   {reason}");
+
+    let toml = generate_config(profile);
+    std::fs::write(&config_path, &toml)
+        .with_context(|| format!("Failed to write {}", config_path.display()))?;
+
+    println!("✅ tylluan.toml written ({profile} profile) -- no manual editing needed.");
     Ok(())
 }
 
