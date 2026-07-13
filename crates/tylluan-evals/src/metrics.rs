@@ -205,40 +205,47 @@ pub fn print_report(report: &BenchmarkReport) {
     println!();
 }
 
+/// Prints Tylluan's own measured score plus published third-party numbers,
+/// with an explicit metric-mismatch warning instead of a false apples-to-
+/// apples table.
+///
+/// M28-P0 finding (2026-07-13): the previous version of this function put
+/// every number in one "R@5" column as if they were the same metric. They
+/// are not, verified against primary/independent sources:
+///   - Hindsight's 91.4% is END-TO-END QA ACCURACY (LLM judge, e.g. Gemini
+///     3 Pro) -- not retrieval Recall@5 at all.
+///   - MemPalace's 96.6% IS "recall_any@5" (pure retrieval, same metric
+///     family as Tylluan's own number) -- but independent testers report
+///     only 82.6% end-to-end QA accuracy running the same pipeline, and
+///     multiple sources explicitly flag the 96.6% figure as "incomparable
+///     to anything on the [QA-accuracy] leaderboard."
+///   - Mem0's published number is contested: their own blog claims 94.4,
+///     an independent measurement reports 49.0% for the same system.
+/// None of these are verified by us against our own harness/dataset subset,
+/// so this prints them as unverified third-party claims with sources, never
+/// as a ranked comparison.
 pub fn print_comparison(report: &BenchmarkReport) {
-    // 2026 LongMemEval leaderboard (Jun 2026)
-    // MemPalace 96.6% | Mem0 Pro 94.4% | Hindsight 91.4% | Zep+Graphiti 71.2%
-    println!("  📊 LongMemEval 2026 — competitor comparison:");
-    println!("  ┌─────────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐");
-    println!("  │ System              │ R@5      │ Embeddings│ Cloud    │ BioInsp  │ MCP      │");
-    println!("  ├─────────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤");
-    println!("  │ MemPalace           │  96.6%   │ AAAK     │ No       │ No       │ 19 tools │");
-    println!("  │ Mem0 Pro            │  94.4%   │ Vector+G │ $249/mo  │ No       │ Yes      │");
-    println!("  │ Hindsight           │  91.4%   │ Multi    │ No       │ 4-layer  │ ?        │");
-    println!("  │ TylluanNexus (this)   │  {:>5.1}%  │ BGE-M3   │ No       │ NightC.  │ 5 sov.  │",
-        report.recall_at_5);
-    println!("  │ Zep + Graphiti      │  71.2%   │ Graph    │ $25/mo   │ No       │ Yes      │");
-    println!("  │ Mem0 OSS            │  32.4%   │ Vector   │ No       │ No       │ Yes      │");
-    println!("  └─────────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘");
+    println!("  📊 Tylluan retrieval Recall@5 (LongMemEval-S, own measurement):");
+    println!("     {:.1}% -- reproducible via `cargo run -p tylluan-evals -- --suite longmemeval`", report.recall_at_5);
     println!();
+    println!("  ⚠️  Third-party numbers below are self-reported by each vendor, NOT");
+    println!("      independently reproduced against the same dataset/harness, and use");
+    println!("      DIFFERENT metrics that are not directly comparable to the R@5 above:");
+    println!("  ┌─────────────────────┬──────────┬────────────────────────────────────┐");
+    println!("  │ System              │ Claimed  │ Metric actually being reported       │");
+    println!("  ├─────────────────────┼──────────┼────────────────────────────────────┤");
+    println!("  │ MemPalace           │  96.6%   │ recall_any@5 (retrieval-only; indep. │");
+    println!("  │                     │          │ testers report 82.6% QA accuracy)    │");
+    println!("  │ Hindsight           │  91.4%   │ end-to-end QA accuracy (LLM judge)   │");
+    println!("  │ Mem0                │ 94.4/49.0│ contested -- vendor vs indep. differ │");
+    println!("  │ Zep + Graphiti      │  71.2%   │ unverified, source not re-checked    │");
+    println!("  └─────────────────────┴──────────┴────────────────────────────────────┘");
+    println!("  → See benchmarks/COMPARISON.md for sources and full caveats.");
 
     if report.suite_name.contains("Jina") {
         println!("  ✓ Mode: BGE-M3 + Jina Reranker (best config)");
     } else {
         println!("  → Tip: add --reranker flag for BGE-M3 + Jina (typically +3-5pp)");
-    }
-
-    let gap_palace = 96.6 - report.recall_at_5;
-    let gap_hindsight = 91.4 - report.recall_at_5;
-    if report.recall_at_5 >= 94.4 {
-        println!("  ✓ Tylluan R@5 ≥ Mem0 Pro — frontier tier without cloud!");
-    } else if report.recall_at_5 >= 91.4 {
-        println!("  → Tylluan R@5 between Hindsight and Mem0 Pro. Gap to MemPalace: {:.1}pp", gap_palace);
-    } else if report.recall_at_5 >= 80.0 {
-        println!("  → Gap to Hindsight: {:.1}pp | Gap to MemPalace: {:.1}pp", gap_hindsight, gap_palace);
-        println!("  → Jina Reranker + Hot Context should close the gap to Hindsight tier.");
-    } else {
-        println!("  → R@5 below expected. Check BGE-M3 model path (models/bge-m3).");
     }
     println!();
 }
