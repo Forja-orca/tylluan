@@ -1,29 +1,29 @@
 {
   "date": "2026-07-01",
-  "latency_p50_ms": 2.25,
-  "latency_p95_ms": 3.1,
+  "latency_p50_ms": 1.98,
+  "latency_p95_ms": 2.67,
   "notes": "baseline before LightRAG P3. Uses deterministic fake embeddings for vector path. Real BGE-M3 not available in test.",
   "num_nodes": 23,
   "num_queries": 5,
   "per_query": [
     {
-      "latency_ms": 2.1214,
+      "latency_ms": 1.9014,
       "query": "how many sovereign tools does tylluan provide"
     },
     {
-      "latency_ms": 2.1472,
+      "latency_ms": 1.9055,
       "query": "what database engine does silvadb use"
     },
     {
-      "latency_ms": 2.2536,
+      "latency_ms": 1.9757,
       "query": "what port does the kernel listen on"
     },
     {
-      "latency_ms": 2.2696,
+      "latency_ms": 2.0711000000000004,
       "query": "what is episodic memory"
     },
     {
-      "latency_ms": 3.0958,
+      "latency_ms": 2.6735,
       "query": "how does hybrid search work in tylluan"
     }
   ],
