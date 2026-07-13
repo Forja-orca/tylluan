@@ -113,6 +113,17 @@ jobs:
       - name: Check tylluan-cli (ARM64)
         run: cargo check -p tylluan-cli --target aarch64-unknown-linux-gnu
 
+  docs-test-count-check:
+    name: Docs — README test count matches reality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Verify README.md's claimed test count against a live run
+        run: bash scripts/check_test_count.sh
+
   e2e-security-tests:
     name: Rust — security audit tests
     runs-on: ubuntu-latest
