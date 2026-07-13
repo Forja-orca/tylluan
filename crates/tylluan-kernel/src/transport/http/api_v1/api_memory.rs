@@ -58,7 +58,7 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
     let silva = state.silva.clone();
     let broadcast = state.broadcast_tx.clone();
 
-    let maybe_engine = state.matcher.engine_arc().cloned();
+    let maybe_engine = state.matcher.engine_arc();
     let engine = match maybe_engine {
         Some(e) => e,
         None => {

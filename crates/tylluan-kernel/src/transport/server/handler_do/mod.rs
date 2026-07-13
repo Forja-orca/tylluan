@@ -696,7 +696,7 @@ pub async fn handle_tylluan_do(
     // Anchor learning: store successful routings as routing_anchor nodes (async, fire-and-forget)
     if is_success && !intent.trim().is_empty() {
         let silva_anchor = server.silva.clone();
-        let engine_anchor = server.matcher.engine_arc().cloned();
+        let engine_anchor = server.matcher.engine_arc();
         let intent_anchor = intent.clone();
         let guild_anchor = guild_name.clone();
         tokio::spawn(async move {
