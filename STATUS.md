@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-13 (v0.13.0: M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓ [P0 benchmarks init, P1 /health granular, P2 /metrics observability, P3 benchmark infra, P4 cargo-dist+AUR+Scoop configs], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓)
+> Last updated: 2026-07-13 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓, M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓)
 
 ## CI
 
