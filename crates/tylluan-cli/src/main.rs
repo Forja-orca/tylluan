@@ -101,6 +101,20 @@ enum Commands {
         #[arg(long)]
         check: bool,
     },
+    /// Create a new guild or other scaffold
+    New {
+        #[command(subcommand)]
+        what: NewWhat,
+    },
+}
+
+#[derive(Subcommand)]
+enum NewWhat {
+    /// Scaffold a new guild from a template
+    Guild {
+        /// Name of the guild (snake_case, e.g. 'my_tool')
+        name: String,
+    },
 }
 
 #[tokio::main]
@@ -668,6 +682,95 @@ async fn main() -> Result<()> {
             }
             println!("   Restart the kernel with 'tylluan start' for changes to take effect.");
         }
+        Commands::New { what } => match what {
+            NewWhat::Guild { name } => {
+                let snake = name.trim().to_lowercase().replace(' ', "_");
+                if !snake.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    anyhow::bail!("Guild name must be snake_case (letters, numbers, underscores only). Got: '{}'", name);
+                }
+
+                let guild_dir = std::path::Path::new("guilds").join("core");
+                let tests_dir = std::path::Path::new("tests").join("guilds");
+                let guild_path = guild_dir.join(format!("{}.py", &snake));
+                let test_path = tests_dir.join(format!("test_{}.py", &snake));
+
+                if guild_path.exists() {
+                    anyhow::bail!("Guild already exists at {}", guild_path.display());
+                }
+
+                std::fs::create_dir_all(&guild_dir)
+                    .with_context(|| format!("Failed to create {}", guild_dir.display()))?;
+                std::fs::create_dir_all(&tests_dir)
+                    .with_context(|| format!("Failed to create {}", tests_dir.display()))?;
+
+                let display_name = snake.replace('_', " ").split(' ').map(|w| {
+                    let mut c = w.chars();
+                    match c.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                    }
+                }).collect::<Vec<_>>().join(" ");
+
+                let guild_src = format!(
+                    r##"""TylluanNexus {} Guild — <description>
+
+Status: draft
+"""
+
+CAPABILITIES = {{
+    "process_execution": False,
+    "filesystem_scope": ["/"],
+    "network_hosts": [],
+}}
+
+from mcp.server.fastmcp import FastMCP
+from guilds.core import utils
+
+mcp = FastMCP("tylluan-{}")
+
+
+@mcp.tool()
+async def my_tool(query: str) -> str:
+    """Describe what this tool does.
+
+    Args:
+        query: Input parameter description.
+    """
+    return f"Hello from {snake}! You said: {{query}}"
+"##,
+                    display_name, snake
+                );
+
+                let test_src = format!(
+                    r##"""Tests for the {snake} guild."""
+
+import pytest
+from guilds.core.{snake} import mcp
+
+
+def test_{snake}_tool_registered():
+    """Verify the tool is registered."""
+    tools = mcp._tool_manager.list_tools()
+    assert len(tools) >= 1
+    names = [t.name for t in tools]
+    assert "my_tool" in names
+"##
+                );
+
+                std::fs::write(&guild_path, &guild_src)
+                    .with_context(|| format!("Failed to write {}", guild_path.display()))?;
+                std::fs::write(&test_path, &test_src)
+                    .with_context(|| format!("Failed to write {}", test_path.display()))?;
+
+                println!("✅ Created guild: {}", guild_path.display());
+                println!("✅ Created test:  {}", test_path.display());
+                println!();
+                println!("📋 Next steps:");
+                println!("   1. Edit  {}  to add your tool logic", guild_path.display());
+                println!("   2. Run   pytest {}  to verify", test_path.display());
+                println!("   3. Your guild auto-registers on next kernel restart");
+            }
+        },
     }
 
     Ok(())

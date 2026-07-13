@@ -95,6 +95,31 @@ pub struct GuildProcess {
     pub perf_last_call_unix: AtomicU64,
 }
 
+/// Determine if a guild is "destructive" based on its declared CAPABILITIES.
+/// Destructive guilds can execute system commands or write outside their sandbox.
+/// Guilds without CAPABILITIES (null) are conservatively treated as non-destructive.
+pub fn is_destructive_guild(caps: &serde_json::Value) -> bool {
+    // process_execution: true or absent → can run commands
+    match caps.get("process_execution") {
+        Some(v) => {
+            if v.as_bool() == Some(true) {
+                return true;
+            }
+            // false = explicitly denied, not destructive via this axis
+        }
+        None => return true, // not declared → assume destructive
+    }
+
+    // filesystem_scope covering "/" → can write anywhere
+    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array()) {
+        if scope.iter().any(|v| v.as_str() == Some("/")) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Deterministic capability enforcement — no config or catalog lookup.
 /// Returns Some(block_message) if the call violates declared capabilities.
 /// Guilds without capabilities (null) are never enforced.
@@ -428,6 +453,35 @@ GuildLauncher::Python { module_path } => {
         if let Some(msg) = self.check_capabilities(&params) {
             warn!("{}", msg);
             return error_result(&msg);
+        }
+
+        // Dry-run intercept: if config says dry_run=true and guild is destructive,
+        // simulate the call without forwarding to the proxy
+        if let Ok(cfg) = crate::config::TylluanConfig::load_cached() {
+            if let Ok(locked) = cfg.try_read() {
+                if locked.guilds_dry_run() {
+                    let catalog = crate::router::catalog::builtin_catalog();
+                    let is_destructive = catalog.iter()
+                        .find(|d| d.name == self.name)
+                        .and_then(|d| d.capabilities.as_ref())
+                        .map(|caps| is_destructive_guild(caps))
+                        .unwrap_or(false);
+
+                    if is_destructive {
+                        let tool_name = params.name.as_ref();
+                        let msg = format!(
+                            "[DRY-RUN] Guild '{}' tool '{}' — execution simulated. \
+                             Set dry_run=false in [guilds] to run for real.",
+                            self.name, tool_name
+                        );
+                        info!("{}", msg);
+                        return CallToolResult {
+                            content: vec![rmcp::model::Content::text(msg)],
+                            is_error: Some(false),
+                        };
+                    }
+                }
+            }
         }
 
         let permit = self.concurrent_calls.acquire()
