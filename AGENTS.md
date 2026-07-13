@@ -161,6 +161,8 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 - Dashboard / UI / visualizaciones → Antigravity (solo si hay budget disponible)
 - Orquestación / docs / arbitraje → Claude Code
 
+**Perfiles declarativos (M19-P5):** ver [ADR-009](docs/architecture/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
+
 ---
 
 ## Protocolo de actualización de documentación post-milestone
