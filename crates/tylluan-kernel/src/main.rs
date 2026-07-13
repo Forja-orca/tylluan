@@ -900,6 +900,22 @@ async fn main() -> anyhow::Result<()> {
         info!("✅ [Startup] Always-on guilds loaded — /health now returns ok");
     });
 
+    // ─── Warm Pool: pre-warm frequently-used lazy guilds ─────────────
+    // These are spawned at boot (faster first-use) but CAN still be killed
+    // by idle timeout — unlike always_on which is kept alive by the watchdog.
+    let warm_names: Vec<String> = config.guilds.core.warm_pool.clone();
+    if !warm_names.is_empty() {
+        let warm_reg = registry_arc.clone();
+        tokio::spawn(async move {
+            for name in warm_names {
+                info!("🔥 [WarmPool] Pre-warming guild: {}", name);
+                if let Err(e) = warm_reg.write().await.ensure_guild_running(&name).await {
+                    warn!("⚠️ [WarmPool] Guild '{}' failed to pre-warm: {}", name, e);
+                }
+            }
+        });
+    }
+
     // Try to spawn external MCP servers (non-blocking)
     let ext_mcps = config.external_mcp.clone();
     let ext_reg = registry_arc.clone();

@@ -481,6 +481,12 @@ pub struct CoreGuildsConfig {
     #[serde(default = "default_always_on")]
     pub always_on: Vec<String>,
 
+    /// Guilds to pre-warm at boot (started once, NOT kept alive by idle watchdog).
+    /// Unlike always_on, these CAN be killed by idle timeout after inactivity.
+    /// Useful for frequently-used lazy guilds that shouldn't cold-start on first call.
+    #[serde(default)]
+    pub warm_pool: Vec<String>,
+
     #[serde(default = "default_lazy_timeout")]
     pub lazy_load_timeout_secs: u64,
 }
@@ -489,6 +495,7 @@ impl Default for CoreGuildsConfig {
     fn default() -> Self {
         Self {
             always_on: default_always_on(),
+            warm_pool: Vec::new(),
             lazy_load_timeout_secs: default_lazy_timeout(),
         }
     }
@@ -847,7 +854,21 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
         }
     }
 
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
+    // M21-P1: cache_size/mmap_size/synchronous tuning applied here so every
+    // caller of open_db() benefits uniformly (15+ call sites: jobs, mailbox,
+    // agent_profiles, curriculum, federation peers, coloquio, registry,
+    // contracts, journal, audit log) instead of only the two DBs (hybrid.rs,
+    // silva/schema.rs) that happened to add the same PRAGMAs manually after
+    // their own open_db() call. Setting these PRAGMAs twice on those two is
+    // harmless (idempotent) -- left as-is rather than touched, to avoid
+    // colliding with concurrent M21-P0 work on the same files.
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL; \
+         PRAGMA busy_timeout=5000; \
+         PRAGMA synchronous=NORMAL; \
+         PRAGMA cache_size=-65536; \
+         PRAGMA mmap_size=268435456;"
+    )?;
     Ok(conn)
 }
 
