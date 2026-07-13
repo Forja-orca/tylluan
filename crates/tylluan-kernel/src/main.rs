@@ -491,13 +491,21 @@ async fn main() -> anyhow::Result<()> {
 
     let mut matcher = GuildMatcher::new(builtin_catalog());
     let _always_on = config.guilds.core.always_on.clone();
-    if let Some(_path) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
-        let model_name = &config.memory.embedding_model;
-        info!("🧠 Pre-loading embedding model: {}", model_name);
-        let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device));
+    let needs_bg_download = if let Some(ref _model) = tylluan_kernel::router::embeddings::EmbeddingEngine::model_path_from_config(&config.memory.embedding_model) {
+        if !fastembed_model_cached(&config.memory.embedding_model) {
+            info!("📥 Model '{}' not cached — fast start with BM25, background download pending", config.memory.embedding_model);
+            true
+        } else {
+            let model_name = &config.memory.embedding_model;
+            info!("🧠 Pre-loading embedding model: {}", model_name);
+            let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device));
+            false
+        }
     } else {
         info!("🧠 Embedding model disabled — using BM25-only retrieval");
-    }
+        false
+    };
+    let bg_model_name = if needs_bg_download { Some(config.memory.embedding_model.clone()) } else { None };
     let matcher = matcher.with_curriculum(curriculum.clone());
     // Create shared HormoneSystem before Arc-wrapping so both matcher and server share the same instance
     let hormones_shared = Arc::new(std::sync::Mutex::new(HormoneSystem::new()));
@@ -916,6 +924,25 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // ─── Background Model Download (instant start) ──────────────────
+    if let Some(ref model_name) = bg_model_name {
+        let bg_matcher = matcher.clone();
+        let bg_model = model_name.clone();
+        let bg_device = config.inference.device.clone();
+        let bg_model_inner = bg_model.clone();
+        tokio::spawn(async move {
+            info!("📥 [Background] Downloading embedding model '{}'...", bg_model);
+            let result = tokio::task::spawn_blocking(move || {
+                bg_matcher.hot_swap_engine(&bg_model_inner, &bg_device)
+            }).await;
+            match result {
+                Ok(Ok(())) => info!("✅ [Background] Model '{}' loaded — hot-switched to semantic search.", bg_model),
+                Ok(Err(e)) => warn!("⚠️ [Background] Model '{}' failed to load: {}", bg_model, e),
+                Err(e) => warn!("⚠️ [Background] Spawn error for '{}': {}", bg_model, e),
+            }
+        });
+    }
+
     // Try to spawn external MCP servers (non-blocking)
     let ext_mcps = config.external_mcp.clone();
     let ext_reg = registry_arc.clone();
@@ -1294,7 +1321,7 @@ async fn main() -> anyhow::Result<()> {
                     // TUI update removed
                 }
 
-                let maybe_engine: Option<Arc<EmbeddingEngine>> = matcher_inner.engine_arc().cloned();
+                let maybe_engine: Option<Arc<EmbeddingEngine>> = matcher_inner.engine_arc();
 
                 if let Some(engine) = maybe_engine {
                     let model_id = engine.engine_id();
@@ -1535,7 +1562,7 @@ async fn run_night_consolidation_loop(
 
         // AutoLink CERO-LLM: connect orphan nodes, detect file refs, link by topic
         let linker = tylluan_kernel::memory::auto_link::AutoLinker::new(silva.clone());
-        let lr = linker.run(matcher.engine()).await;
+        let lr = linker.run(matcher.engine().as_deref()).await;
         if lr.edges_after > lr.edges_before {
             info!("🔗 AutoLink: +{} edges (file_ref={} tool_ref={} topic={} orphan={})",
                 lr.edges_after - lr.edges_before,
@@ -1645,10 +1672,41 @@ async fn run_night_consolidation_loop(
             use tylluan_kernel::memory::idle_lab::IdleLab;
             let idle = IdleLab::new(silva.clone(), &data_dir);
             let rerank_ref = server.read().await.reranker.clone();
-            idle.run_experiments(matcher.engine(), rerank_ref.as_deref(), 9).await;
+            idle.run_experiments(matcher.engine().as_deref(), rerank_ref.as_deref(), 9).await;
         }
 
         info!("🌙 NightConsolidation: pass complete");
     }
+}
+
+/// Check if a fastembed model is already cached locally (avoids blocking startup on download).
+fn fastembed_model_cached(model_name: &str) -> bool {
+    if model_name.is_empty() || model_name == "none" {
+        return true;
+    }
+    let repo_id = match model_name {
+        m if m.contains("bge-m3") => "BAAI/bge-m3",
+        m if m.contains("bge-small") => "BAAI/bge-small-en-v1.5",
+        m if m.contains("minilm") => "Xenova/all-MiniLM-L6-v2",
+        _ => "BAAI/bge-m3",
+    };
+    // HF hub cache dir: $HF_HOME/hub/models--REPO--NAME/  or ~/.cache/huggingface/hub/
+    let cache_dir = std::env::var("HF_HOME")
+        .map(|h| std::path::PathBuf::from(h).join("hub"))
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| ".".into());
+            std::path::PathBuf::from(home).join(".cache").join("huggingface").join("hub")
+        });
+    let model_dir_name = format!("models--{}", repo_id.replace('/', "--"));
+    let model_dir = cache_dir.join(&model_dir_name);
+    let cached = model_dir.exists();
+    if !cached {
+        // Also check the local models/ directory
+        let local_path = std::path::PathBuf::from("models").join(model_name);
+        return local_path.exists();
+    }
+    cached
 }
 

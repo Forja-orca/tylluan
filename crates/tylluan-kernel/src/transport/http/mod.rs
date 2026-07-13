@@ -746,7 +746,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     // --- M18-1 AutoResearch Daemon Spawning ---
     let ar_silva = state.silva.clone();
     let data_dir = std::path::PathBuf::from("data");
-    let ar_engine = state.matcher.engine_arc().cloned();
+    let ar_engine = state.matcher.engine_arc();
     let ar_reranker = if let Some(ref s) = server {
         s.read().await.reranker.clone()
     } else {

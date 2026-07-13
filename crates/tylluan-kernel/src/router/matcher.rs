@@ -137,7 +137,7 @@ fn guild_category_bonus(intent_lower: &str, category: &GuildCategory) -> (f32, &
 
 pub struct GuildMatcher {
     catalog: Vec<GuildDescriptor>,
-    engine: Option<Arc<EmbeddingEngine>>,
+    engine: std::sync::Mutex<Option<Arc<EmbeddingEngine>>>,
     curriculum: Option<Arc<Mutex<crate::curriculum::CurriculumLearner>>>,
     hormones: Option<Arc<std::sync::Mutex<crate::hormones::HormoneSystem>>>,
     guild_health: dashmap::DashMap<String, f64>,
@@ -146,13 +146,27 @@ pub struct GuildMatcher {
 impl GuildMatcher {
     /// Create a new matcher from a catalog of guild descriptors.
     pub fn new(catalog: Vec<GuildDescriptor>) -> Self {
-        Self { catalog, engine: None, curriculum: None, hormones: None, guild_health: dashmap::DashMap::new() }
+        Self { catalog, engine: std::sync::Mutex::new(None), curriculum: None, hormones: None, guild_health: dashmap::DashMap::new() }
     }
 
     /// Attach a curriculum learner for experience-based routing.
     pub fn with_curriculum(mut self, curriculum: Arc<Mutex<crate::curriculum::CurriculumLearner>>) -> Self {
         self.curriculum = Some(curriculum);
         self
+    }
+
+    /// Hot-swap the embedding engine at runtime (for background model download after instant start).
+    /// Takes &self via interior mutability (Mutex on engine field).
+    /// Guilds will be lazily embedded on first use via find_lazy_candidates.
+    pub fn hot_swap_engine(&self, model_name: &str, device: &InferenceDevice) -> anyhow::Result<()> {
+        use anyhow::Context;
+        let model_path = EmbeddingEngine::model_path_from_config(model_name)
+            .context("No ONNX model found for hot-swap")?;
+        let engine = EmbeddingEngine::load_with_device(&model_path, device)?;
+        let engine_arc = Arc::new(engine);
+        *self.engine.lock().unwrap() = Some(engine_arc);
+        info!("✅ [HotSwap] Embedding engine '{}' loaded, guilds will embed lazily.", model_name);
+        Ok(())
     }
 
     /// Attach a hormone system for stress-aware routing.
@@ -162,13 +176,13 @@ impl GuildMatcher {
     }
 
     /// Access the underlying embedding engine.
-    pub fn engine(&self) -> Option<&EmbeddingEngine> {
-        self.engine.as_ref().map(|arc| arc.as_ref())
+    pub fn engine(&self) -> Option<Arc<EmbeddingEngine>> {
+        self.engine.lock().unwrap().clone()
     }
 
     /// Access the underlying embedding engine as an Arc for shared ownership.
-    pub fn engine_arc(&self) -> Option<&Arc<EmbeddingEngine>> {
-        self.engine.as_ref()
+    pub fn engine_arc(&self) -> Option<Arc<EmbeddingEngine>> {
+        self.engine.lock().unwrap().clone()
     }
 
     /// Access the curriculum learner.
@@ -200,7 +214,7 @@ impl GuildMatcher {
 
         let engine = EmbeddingEngine::load_with_device(&model_path, device)?;
         let engine_arc = Arc::new(engine);
-        self.engine = Some(engine_arc.clone());
+        *self.engine.lock().unwrap() = Some(engine_arc.clone());
         let engine_ref = engine_arc.as_ref();
         
         let mut embeddings = Vec::new();
@@ -296,7 +310,7 @@ impl GuildMatcher {
 
         // Compute query embedding if not provided and engine is loaded
         let own_emb = if query_embedding.is_none() {
-            self.engine.as_ref().and_then(|e| e.embed(query).ok())
+            self.engine.lock().unwrap().as_ref().and_then(|e| e.embed(query).ok())
         } else { None };
         let q_emb = query_embedding.or(own_emb.as_deref());
 
@@ -679,7 +693,8 @@ impl GuildMatcher {
     /// Find lazy candidates: guilds that might match but aren't loaded yet.
     /// Uses embeddings if available, otherwise keyword fallback.
     pub fn find_lazy_candidates(&self, query: &str, threshold: f32) -> Vec<MatchResult> {
-        if let Some(engine) = &self.engine
+        let engine_opt = self.engine.lock().unwrap().clone();
+        if let Some(engine) = engine_opt
             && let Ok(q_emb) = engine.embed(query) {
                 let mut results: Vec<MatchResult> = Vec::new();
                 for g in &self.catalog {

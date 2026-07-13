@@ -812,7 +812,7 @@ pub async fn autoresearch_evaluate_handler(State(state): State<Arc<HttpState>>) 
     };
 
     // Run exactly 1 experiment. It will mutate the atomic parameters and log to the TSV file.
-    idle_lab.run_experiments(engine, reranker_arc.as_deref(), 1).await;
+    idle_lab.run_experiments(engine.as_deref(), reranker_arc.as_deref(), 1).await;
 
     Json(serde_json::json!({
         "status": "Success",

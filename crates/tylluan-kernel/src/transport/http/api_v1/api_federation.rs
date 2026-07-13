@@ -855,7 +855,7 @@ pub async fn routing_anchors_list(
 pub async fn routing_anchors_reembed(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     match state.matcher.engine() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Embedding engine not ready yet"}))).into_response(),
-        Some(engine) => match state.silva.reembed_anchors(engine).await {
+        Some(engine) => match state.silva.reembed_anchors(&*engine).await {
             Ok(n) => Json(serde_json::json!({"reembedded": n, "status": "ok"})).into_response(),
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
         }
@@ -869,7 +869,7 @@ pub async fn routing_anchors_seed(
     let engine = state.matcher.engine();
     let (mut inserted, mut errors) = (0usize, 0usize);
     for entry in &entries {
-        let embedding = engine.as_ref().and_then(|e| e.embed(&entry.intent).ok());
+        let embedding = engine.as_deref().and_then(|e| e.embed(&entry.intent).ok());
         match state.silva.upsert_routing_anchor(&entry.guild, &entry.intent, &entry.source, embedding.as_deref()).await {
             Ok(_) => inserted += 1,
             Err(_) => errors += 1,
