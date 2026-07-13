@@ -59,7 +59,11 @@ tar xzf "$TMP_ARCHIVE" -C "$BIN_DIR" --strip-components=1
 rm -f "$TMP_ARCHIVE"
 trap - EXIT
 
-chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli 2>/dev/null || true
+chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli "$BIN_DIR"/tylluan 2>/dev/null || true
+# Backward compat: symlink tylluan-cli -> tylluan if only one exists
+if [ ! -f "$BIN_DIR/tylluan" ] && [ -f "$BIN_DIR/tylluan-cli" ]; then
+  ln -sf "$BIN_DIR/tylluan-cli" "$BIN_DIR/tylluan"
+fi
 
 if ! echo ":$PATH:" | grep -qF ":$BIN_DIR:"; then
   SHELL_PROFILE=""
@@ -79,7 +83,7 @@ fi
 
 say ""
 say "Starting Tylluan..."
-"${BIN_DIR}/tylluan-cli" start --profile portable &
+"${BIN_DIR}/tylluan" start --profile portable &
 PID=$!
 
 say "Waiting for kernel to be ready..."
@@ -115,7 +119,13 @@ say ""
 say "  curl (verify):"
 say "    curl http://127.0.0.1:3030/health"
 say ""
+say "Getting started:"
+say "  tylluan start    Start the Tylluan kernel"
+say "  tylluan status   Check if kernel is running"
+say "  tylluan doctor   Run diagnostic checks"
+
+say ""
 say "For better retrieval (BGE-M3):"
-info "  tylluan-cli download-models"
+info "  tylluan download-models"
 say ""
 say "Tylluan v${LATEST} installed to ${BIN_DIR}/"

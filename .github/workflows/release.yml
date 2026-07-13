@@ -61,6 +61,7 @@ jobs:
           mkdir -p dist
           cp target/${{ matrix.target }}/release/tylluan-nexus$SUFFIX dist/
           cp target/${{ matrix.target }}/release/tylluan-cli$SUFFIX dist/
+          cp target/${{ matrix.target }}/release/tylluan$SUFFIX dist/
           cp README.md dist/
           cp LICENSE dist/
 
