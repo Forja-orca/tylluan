@@ -1494,11 +1494,16 @@ async fn setup_hint_handler(
         String::new()
     };
     let sse_url = format!("{base_url}/sse{token_query}");
+    let embedding_model = state.config.read().await.memory.embedding_model.clone();
+    let mode = if embedding_model == "none" { "BM25-only" } else { "hybrid (BM25 + vector)" };
 
     Json(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
         "status": "ready",
         "auth_required": !dev_mode,
+        "embedding_model": embedding_model,
+        "mode": mode,
+        "note": "Run 'tylluan download-models' if embedding_model requires a model that isn't cached yet",
         "mcp_clients": {
             "claude_desktop": {
                 "config": {
