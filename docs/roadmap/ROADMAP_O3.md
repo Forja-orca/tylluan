@@ -127,7 +127,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P2 | **Profile wizard + hardware detection**: `tylluan start --setup` → detecta RAM/CPU/GPU → recomienda perfil automáticamente (≤8GB → clinic, >8GB GPU → server, sin GPU → portable) → genera `tylluan.toml`. Sin editar TOML. | Deep + Claude | ⬜ |
 | P3 | **Instant start + background model download**: arrancar inmediatamente en BM25-only, descargar BGE-M3 en hilo separado con progreso SSE, hot-switch a semantic cuando el modelo esté listo. Elimina el "espera 10 min antes de usar". | Deep | ⬜ |
 | P4 | `tylluan update` — comprueba release en GitHub, descarga binario si hay nueva versión, reinicia limpio. | Deep | ⬜ |
-| P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. | Claude (spec) + Deep (kernel) | ⬜ |
+| P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. Spec ✅ ([ADR-009](../architecture/ADR009_agents_declarative_contract.md), 2026-07-13): `.tylluan/agents.toml` repo-local, agent_id→rol, reutiliza `AclConfig.roles` existente sin reinventar permisos, backward-compatible (sin fichero = sin cambio de comportamiento). Kernel implementation 🟡 pendiente Deep. | Claude (spec) ✅ + Deep (kernel) ⬜ | 🟡 parcial |
 
 **Criterio de cierre:** Instalar, configurar y hacer la primera consulta MCP en < 3 minutos en máquina virgen, sin leer ningún documento.
 
