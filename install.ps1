@@ -76,7 +76,7 @@ if ($PathEntries -notcontains $BinDir) {
 
 Write-Step "Starting Tylluan..."
 try {
-    $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
+    $null = Start-Process -FilePath "$BinDir\tylluan" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
 } catch {
     Write-Err "Failed to start Tylluan: $_"
 }
@@ -103,16 +103,16 @@ if (-not $Ready) {
 }
 
 # Verify the binary responds
-$Status = & "$BinDir\tylluan-cli" status 2>&1
+$Status = & "$BinDir\tylluan" status 2>&1
 if ($LASTEXITCODE -eq 0) {
     Write-OK "Tylluan v$Version is running at http://127.0.0.1:3030"
     Write-Host ""
     Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
-    Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
+    Write-Host "  CLI:       $BinDir\tylluan.exe" -ForegroundColor Cyan
     Write-Host "  Config:    $DataDir\config.toml" -ForegroundColor Cyan
     Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
 } else {
-    Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
+    Write-Warning "'tylluan status' returned error (try in a new terminal): $Status"
     Write-OK "Tylluan v$Version installed to $BinDir (kernel may need manual start)"
 }
 
@@ -137,5 +137,5 @@ Write-Host "  curl (verify):" -ForegroundColor White
 Write-Host "    curl http://127.0.0.1:3030/health"
 Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
-Write-Host "  tylluan-cli download-models"
+Write-Host "  tylluan download-models"
 Write-Host ""
