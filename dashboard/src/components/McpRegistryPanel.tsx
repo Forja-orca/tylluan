@@ -10,7 +10,12 @@ import {
   CheckCircle,
   XCircle,
   Server,
-  ChevronDown
+  ChevronDown,
+  Copy,
+  Check,
+  Download,
+  Share2,
+  ExternalLink
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -74,12 +79,47 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
   const [newArgs, setNewArgs] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
+  // Integration setup hint modal
+  const [isIntegrationModalOpen, setIsIntegrationModalOpen] = useState(false);
+  const [setupHint, setSetupHint] = useState<any>(null);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
+  
   // Delete confirm state
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
 
   // Active toggle & expand states
   const [togglingName, setTogglingName] = useState<string | null>(null);
   const [expandedServers, setExpandedServers] = useState<Record<string, boolean>>({});
+
+  const fetchSetupHint = async () => {
+    if (!bridge) return;
+    try {
+      const hint = await bridge.fetchRaw('/api/v1/setup-hint');
+      setSetupHint(hint);
+    } catch (err: any) {
+      notify(err.message || 'Failed to fetch integration setup hint.', 'error');
+    }
+  };
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedType(type);
+    setTimeout(() => setCopiedType(null), 2000);
+    notify(`${type} config snippet copied to clipboard!`, 'info');
+  };
+
+  const downloadMcpJson = (content: string) => {
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mcp.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    notify('Successfully downloaded mcp.json!', 'info');
+  };
 
   const handleToggleActive = async (name: string, active: boolean) => {
     if (!bridge) return;
@@ -202,6 +242,16 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
             title="Refresh list"
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          </button>
+
+          <button
+            onClick={() => {
+              fetchSetupHint();
+              setIsIntegrationModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all active:scale-95"
+          >
+            <Share2 className="w-4 h-4 text-emerald-400" /> Integrate with IDE
           </button>
 
           <button
@@ -531,6 +581,255 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MCP Integration Modal */}
+      {isIntegrationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 relative flex flex-col space-y-4 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <Share2 className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-md font-bold text-white uppercase tracking-tight">Integrate Tylluan with your IDE / Client</h3>
+                  <p className="text-xs text-slate-500 font-mono">Set up Tylluan as a Model Context Protocol (MCP) server</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsIntegrationModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 font-mono text-sm px-2.5 py-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Token Info Banner */}
+            <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1">
+              <div className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider">Active Connection Properties</div>
+              <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                <div>
+                  <span className="text-slate-500">Base URL:</span>{' '}
+                  <span className="text-emerald-400 font-bold">{bridge?.getBaseUrl() || window.location.origin}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Token:</span>{' '}
+                  <span className="text-amber-400 font-bold">
+                    {bridge?.getToken() ? `${bridge.getToken().substring(0, 8)}...` : 'None (dev_mode=true)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Content Tab Box */}
+            {(() => {
+              const activeBaseUrl = bridge?.getBaseUrl() || window.location.origin;
+              const activeToken = bridge?.getToken() || '';
+              const finalSseUrl = activeToken 
+                ? `${activeBaseUrl}/sse?token=${encodeURIComponent(activeToken)}` 
+                : `${activeBaseUrl}/sse`;
+
+              const claudeDesktopSnippet = JSON.stringify({
+                mcpServers: {
+                  tylluan: {
+                    type: "sse",
+                    url: finalSseUrl
+                  }
+                }
+              }, null, 2);
+
+              const vsCodeSnippet = JSON.stringify({
+                mcpServers: {
+                  tylluan: {
+                    type: "sse",
+                    url: finalSseUrl
+                  }
+                }
+              }, null, 2);
+
+              const claudeCodeCommand = `mcp add tylluan sse ${finalSseUrl}`;
+
+              return (
+                <div className="space-y-4">
+                  {/* Download button row */}
+                  <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/10 p-3.5 rounded-xl">
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase">One-Click Configuration</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                        Download pre-filled configuration file containing connection settings and authorization tokens.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => downloadMcpJson(claudeDesktopSnippet)}
+                      className="flex items-center gap-2 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download mcp.json
+                    </button>
+                  </div>
+
+                  {/* Tabs Area */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border-b border-slate-800 pb-3">
+                    {[
+                      { id: 'desktop', label: 'Claude Desktop' },
+                      { id: 'cursor', label: 'Cursor IDE' },
+                      { id: 'vscode', label: 'VS Code (Cline/Roo)' },
+                      { id: 'cli', label: 'Claude Code / CLI' }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setSetupHint((prev: any) => ({ ...prev, active_tab: tab.id }))}
+                        className={cn(
+                          "py-2 px-3 text-xs font-bold uppercase rounded-lg border font-mono transition-all text-center",
+                          (setupHint?.active_tab || 'desktop') === tab.id
+                            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-sm"
+                            : "bg-slate-950 text-slate-500 border-slate-850 hover:border-slate-800 hover:text-slate-300"
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tab Details */}
+                  <div className="space-y-3 font-sans">
+                    {((setupHint?.active_tab || 'desktop') === 'desktop') && (
+                      <div className="space-y-2 animate-in fade-in duration-150">
+                        <div className="text-xs text-slate-400 leading-relaxed">
+                          Append this block to your Claude Desktop configuration file.
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Location: <span className="text-slate-300">~/.claude/claude_desktop_config.json</span>
+                        </div>
+                        <div className="relative group">
+                          <pre className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-400/90 max-h-40">
+                            {claudeDesktopSnippet}
+                          </pre>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(claudeDesktopSnippet, 'Claude Desktop')}
+                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                            title="Copy config snippet"
+                          >
+                            {copiedType === 'Claude Desktop' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {((setupHint?.active_tab || 'desktop') === 'cursor') && (
+                      <div className="space-y-2 animate-in fade-in duration-150">
+                        <div className="text-xs text-slate-400 leading-relaxed">
+                          Add a new MCP server in Cursor under <span className="text-white font-bold">Settings → Features → MCP</span>:
+                        </div>
+                        <div className="p-3 bg-slate-950/80 border border-slate-850 rounded-xl space-y-2 text-xs">
+                          <div>
+                            <span className="text-slate-500 block font-mono text-[10px]">NAME</span>
+                            <span className="text-slate-200 font-mono font-bold">Tylluan</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block font-mono text-[10px]">TYPE</span>
+                            <span className="text-slate-200 font-mono font-bold">SSE</span>
+                          </div>
+                          <div className="relative group pr-8">
+                            <span className="text-slate-500 block font-mono text-[10px]">URL</span>
+                            <span className="text-emerald-400 font-mono font-bold break-all">{finalSseUrl}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(finalSseUrl, 'Cursor URL')}
+                              className="absolute top-1 right-0 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              title="Copy URL"
+                            >
+                              {copiedType === 'Cursor URL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {((setupHint?.active_tab || 'desktop') === 'vscode') && (
+                      <div className="space-y-2 animate-in fade-in duration-150">
+                        <div className="text-xs text-slate-400 leading-relaxed">
+                          Add the server config into Cline or Roo Code settings (`config.json`):
+                        </div>
+                        <div className="relative group">
+                          <pre className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-400/90 max-h-40">
+                            {vsCodeSnippet}
+                          </pre>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(vsCodeSnippet, 'VS Code')}
+                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                            title="Copy config snippet"
+                          >
+                            {copiedType === 'VS Code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {((setupHint?.active_tab || 'desktop') === 'cli') && (
+                      <div className="space-y-3 animate-in fade-in duration-150">
+                        <div>
+                          <div className="text-xs text-slate-400 leading-relaxed mb-1.5">
+                            Run this command in your terminal to integrate with <span className="text-white font-bold">Claude Code</span>:
+                          </div>
+                          <div className="relative group">
+                            <pre className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-400/90 break-all pr-10">
+                              {claudeCodeCommand}
+                            </pre>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(claudeCodeCommand, 'Claude Code Command')}
+                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              title="Copy Command"
+                            >
+                              {copiedType === 'Claude Code Command' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-xs text-slate-400 leading-relaxed mb-1.5">
+                            For <span className="text-white font-bold">LM Studio (SSE)</span> client setup:
+                          </div>
+                          <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] text-slate-300 break-all relative pr-10">
+                            <span className="text-slate-500 block text-[9px] uppercase font-mono mb-0.5">LM Studio Endpoint</span>
+                            {finalSseUrl}
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(finalSseUrl, 'LM Studio URL')}
+                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              title="Copy Endpoint"
+                            >
+                              {copiedType === 'LM Studio URL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Footer */}
+            <div className="flex justify-end pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsIntegrationModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700 active:scale-95"
+              >
+                Close Panel
+              </button>
+            </div>
           </div>
         </div>
       )}

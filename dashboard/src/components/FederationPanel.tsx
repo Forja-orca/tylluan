@@ -9,7 +9,8 @@ import {
   Database,
   Key,
   ShieldCheck,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Activity
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -53,6 +54,8 @@ export function FederationPanel({ bridge, notify }: FederationPanelProps) {
   // Delete confirm state
   const [confirmDeletePeer, setConfirmDeletePeer] = useState<string | null>(null);
 
+  const [meshPeers, setMeshPeers] = useState<any[]>([]);
+
   const fetchPeers = async (silent = false) => {
     if (!bridge) return;
     if (!silent) setPeersLoading(true);
@@ -83,9 +86,22 @@ export function FederationPanel({ bridge, notify }: FederationPanelProps) {
     }
   };
 
+  const fetchMeshPeers = async () => {
+    if (!bridge) return;
+    try {
+      const data = await bridge.fetchRaw('/api/v1/guilds/peers');
+      if (data && Array.isArray(data.peers)) {
+        setMeshPeers(data.peers);
+      }
+    } catch (err) {
+      console.error('Failed to list mesh peers:', err);
+    }
+  };
+
   const handleRefreshAll = () => {
     fetchPeers();
     fetchNodes();
+    fetchMeshPeers();
   };
 
   useEffect(() => {
@@ -93,7 +109,8 @@ export function FederationPanel({ bridge, notify }: FederationPanelProps) {
     const interval = setInterval(() => {
       fetchPeers(true);
       fetchNodes(true);
-    }, 30000);
+      fetchMeshPeers();
+    }, 15000); // refresh every 15s
     return () => clearInterval(interval);
   }, [bridge]);
 
@@ -221,6 +238,17 @@ export function FederationPanel({ bridge, notify }: FederationPanelProps) {
             <Plus className="w-4 h-4" /> Add Peer Node
           </button>
         </div>
+      </div>
+
+      {/* P2P Mesh Network Topology Map */}
+      <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-md">
+        <div className="flex items-center gap-2 mb-4">
+          <Network className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-xs font-bold text-slate-300 uppercase font-mono tracking-wider">
+            P2P Mesh Network Topology Map
+          </h3>
+        </div>
+        <P2PMeshMap peers={meshPeers} />
       </div>
 
       {/* Grid: Peers Section */}
@@ -489,6 +517,365 @@ export function FederationPanel({ bridge, notify }: FederationPanelProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SimNode {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  latency: number | null;
+  reachable: boolean;
+  ram: number;
+  gpu: boolean;
+  load: number;
+  isLocal: boolean;
+}
+
+export function P2PMeshMap({ peers }: { peers: any[] }) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [latencies, setLatencies] = useState<Record<string, { latency: number; reachable: boolean; consecutiveFailures: number }>>({});
+  const simNodesRef = React.useRef<SimNode[]>([]);
+  const animationRef = React.useRef<number | null>(null);
+
+  // Ping mechanism to measure real latencies
+  useEffect(() => {
+    if (!peers || peers.length === 0) return;
+
+    const pingPeers = async () => {
+      const newLatencies = { ...latencies };
+
+      await Promise.all(peers.map(async (peer) => {
+        const url = peer.addr;
+        const start = performance.now();
+        let success = false;
+        let elapsed = 0;
+
+        try {
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), 2000); // 2s timeout
+          const cleanUrl = url.startsWith('http') ? url : `http://${url}`;
+          
+          await fetch(`${cleanUrl}/health`, {
+            mode: 'no-cors',
+            signal: controller.signal
+          });
+          clearTimeout(id);
+          elapsed = performance.now() - start;
+          success = true;
+        } catch (e) {
+          // Failure
+        }
+
+        const prev = latencies[peer.node_id] || { latency: 0, reachable: true, consecutiveFailures: 0 };
+
+        if (success) {
+          newLatencies[peer.node_id] = {
+            latency: Math.round(elapsed),
+            reachable: true,
+            consecutiveFailures: 0
+          };
+        } else {
+          const failures = prev.consecutiveFailures + 1;
+          newLatencies[peer.node_id] = {
+            latency: 0,
+            reachable: failures < 3, // Connectivity unreachable after 3 consecutive failures
+            consecutiveFailures: failures
+          };
+        }
+      }));
+
+      setLatencies(newLatencies);
+    };
+
+    pingPeers();
+    const interval = setInterval(pingPeers, 10000); // refresh every 10s
+    return () => clearInterval(interval);
+  }, [peers]);
+
+  // Sync simulation nodes with incoming peer list and measured latencies
+  useEffect(() => {
+    const localNodeId = 'Local Kernel (you)';
+    const existing = new Map(simNodesRef.current.map(n => [n.id, n]));
+    const canvas = canvasRef.current;
+    const width = canvas ? canvas.width : 800;
+    const height = canvas ? canvas.height : 300;
+
+    const nextNodes: SimNode[] = [];
+
+    // Local Node (fixed center)
+    const local = existing.get(localNodeId) || {
+      id: localNodeId,
+      label: 'Local Node',
+      x: width / 2,
+      y: height / 2,
+      vx: 0,
+      vy: 0,
+      latency: 0,
+      reachable: true,
+      ram: 0,
+      gpu: false,
+      load: 0,
+      isLocal: true
+    };
+    // keep it centered
+    local.x = width / 2;
+    local.y = height / 2;
+    nextNodes.push(local);
+
+    // Peer Nodes
+    peers.forEach((peer, idx) => {
+      const stats = latencies[peer.node_id] || { latency: null, reachable: true };
+      
+      const node = existing.get(peer.node_id) || {
+        id: peer.node_id,
+        label: peer.node_id.substring(0, 12),
+        // spawn in circle
+        x: width / 2 + Math.cos(idx * 2 * Math.PI / peers.length) * 120,
+        y: height / 2 + Math.sin(idx * 2 * Math.PI / peers.length) * 120,
+        vx: 0,
+        vy: 0,
+        latency: stats.latency,
+        reachable: stats.reachable,
+        ram: Math.round((peer.hardware?.ram_mb || 0) / 1024),
+        gpu: !!peer.hardware?.has_gpu,
+        load: peer.hardware?.load_avg || 0,
+        isLocal: false
+      };
+
+      // update dynamic properties
+      node.latency = stats.latency;
+      node.reachable = stats.reachable;
+      node.ram = Math.round((peer.hardware?.ram_mb || 0) / 1024);
+      node.gpu = !!peer.hardware?.has_gpu;
+      node.load = peer.hardware?.load_avg || 0;
+
+      nextNodes.push(node);
+    });
+
+    simNodesRef.current = nextNodes;
+  }, [peers, latencies]);
+
+  // Main canvas animation loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Resizing container helper
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    };
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    let frameCount = 0;
+
+    const runFrame = () => {
+      frameCount++;
+      const w = canvas.width / window.devicePixelRatio;
+      const h = canvas.height / window.devicePixelRatio;
+
+      // 1. Physics update
+      const nodes = simNodesRef.current;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      // Force parameters
+      const SPRING_K = 0.05;
+      const DAMPING = 0.82;
+
+      // Update positions
+      nodes.forEach(node => {
+        if (node.isLocal) {
+          node.x = cx;
+          node.y = cy;
+          return;
+        }
+
+        // Attraction to central local node (spring link)
+        // Link length changes based on latency (higher latency -> sits further out)
+        const baseLength = 100 + (node.latency || 150) * 0.4;
+        const dx = node.x - cx;
+        const dy = node.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
+        
+        // Spring force
+        const forceSpring = (dist - baseLength) * SPRING_K;
+        node.vx -= (dx / dist) * forceSpring;
+        node.vy -= (dy / dist) * forceSpring;
+
+        // Repulsion from other peer nodes
+        nodes.forEach(other => {
+          if (other.id === node.id) return;
+          const odx = node.x - other.x;
+          const ody = node.y - other.y;
+          const odist = Math.sqrt(odx * odx + ody * ody) || 1.0;
+          if (odist < 140) {
+            const forceRepulsion = (140 - odist) * 0.15;
+            node.vx += (odx / odist) * forceRepulsion;
+            node.vy += (ody / odist) * forceRepulsion;
+          }
+        });
+
+        // Apply velocities & damping
+        node.x += node.vx;
+        node.y += node.vy;
+        node.vx *= DAMPING;
+        node.vy *= DAMPING;
+
+        // Viewport bounds
+        node.x = Math.max(40, Math.min(w - 40, node.x));
+        node.y = Math.max(40, Math.min(h - 40, node.y));
+      });
+
+      // 2. Draw canvas frame
+      ctx.clearRect(0, 0, w, h);
+
+      // Draw background grid
+      ctx.strokeStyle = 'rgba(30, 41, 59, 0.3)';
+      ctx.lineWidth = 1;
+      const gridSpacing = 30;
+      for (let x = 0; x < w; x += gridSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y < h; y += gridSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Draw Spring links (Connections)
+      nodes.forEach(node => {
+        if (node.isLocal) return;
+
+        // Color based on connectivity reachable/unreachable
+        ctx.strokeStyle = node.reachable 
+          ? 'rgba(16, 185, 129, 0.25)' 
+          : 'rgba(239, 68, 68, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(node.x, node.y);
+        ctx.stroke();
+
+        // Pulsing signals along links
+        if (node.reachable) {
+          ctx.fillStyle = '#10b981';
+          const pulseSpeed = 0.02 + (1 / (node.latency || 50)) * 0.2;
+          const t = (frameCount * pulseSpeed) % 1;
+          const px = cx + (node.x - cx) * t;
+          const py = cy + (node.y - cy) * t;
+          ctx.beginPath();
+          ctx.arc(px, py, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      });
+
+      // Draw nodes
+      nodes.forEach(node => {
+        ctx.save();
+        
+        if (node.isLocal) {
+          // Central local node resplendence
+          const glow = 15 + Math.sin(frameCount * 0.05) * 5;
+          ctx.shadowBlur = glow;
+          ctx.shadowColor = '#10b981';
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 3;
+
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 16, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+
+          // Label
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('LOCAL NODE', node.x, node.y - 24);
+        } else {
+          // Peer node
+          const color = node.reachable ? '#10b981' : '#ef4444';
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = color;
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 12, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+
+          // Labels
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(node.label, node.x, node.y - 20);
+
+          // Sub-stats (Latency, RAM, GPU)
+          ctx.font = '8px monospace';
+          ctx.fillStyle = '#64748b';
+          
+          let latencyText = 'Offline';
+          if (node.reachable && node.latency !== null) {
+            latencyText = `${node.latency}ms`;
+          }
+          const capsText = `${node.ram}G${node.gpu ? '+GPU' : ''}`;
+          ctx.fillText(latencyText, node.x, node.y + 20);
+          ctx.fillText(capsText, node.x, node.y + 29);
+
+          // Mini Connectivity Badge
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(node.x + 8, node.y + 8, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      });
+
+      animationRef.current = requestAnimationFrame(runFrame);
+    };
+
+    runFrame();
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, []);
+
+  return (
+    <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-950/60">
+      <canvas 
+        ref={canvasRef} 
+        className="w-full h-[220px] block cursor-grab active:cursor-grabbing" 
+      />
+      {peers.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="text-slate-500 font-mono text-[10px] flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
+            Awaiting mesh peer discovery...
           </div>
         </div>
       )}
