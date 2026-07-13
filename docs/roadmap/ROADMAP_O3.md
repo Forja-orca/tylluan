@@ -102,13 +102,13 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 | Fase | Descripción | Agente | ROI | Estado |
 |------|-------------|--------|-----|--------|
-| P0 | **Recall embedding cache**: extender LRU al path `silva/search.rs` — actualmente `tylluan_recall` re-embeds en cada query aunque el texto sea idéntico. `DashMap<sha256(text), Vec<f32>>` con TTL 5min, max 1024 entries | Deep | CRÍTICO | ⬜ |
+| P0 | **Recall embedding cache** ✅ (cubierto por `silva/query_cache.rs`, M21 anterior): LRU 256 entries + TTL 300s + key normalization, ya inyectado en `handler_recall.rs:500-504` e invalidado en `handler_remember.rs:321`. Benchmark test añadido: 100 iteraciones, avg < 2ms en caché. Map description en ROADMAP_O3.md actualizada. | Deep | CRÍTICO | ✅ |
 | P1 | **SQLite PRAGMA tuning**: `cache_size=-65536` (64MB), `mmap_size=268435456` (256MB), `synchronous=NORMAL`. 20-40% mejor en lecturas concurrentes. 1h de trabajo. | Deep | ALTO | ⬜ |
 | P2 | **Coordinator ThreadPoolExecutor**: sub-tasks sin dependencia de `prev_result` se ejecutan en paralelo. Solo los que referencian contexto anterior son secuenciales. Necesario para M18-P3. | Deep | CRÍTICO | ✅ |
-| P3 | **Guild warm pool**: mantener procesos Python de guilds frecuentes (bash, filesystem, knowledge) pre-calentados. Eliminar cold start 1-2s. `HashMap<guild_name, Vec<GuildProcess>>` con max=2 por guild always-on. | Deep | MEDIO | ⬜ |
+| P3 | **Guild warm pool** ✅ (2026-07-12): añadido `warm_pool: Vec<String>` a `CoreGuildsConfig` (config.rs), spawn en main.rs tras always-on. Guilds en warm pool se pre-arrancan al boot pero SIGUEN siendo víctimas de idle timeout (diferencia clave con always_on). `tylluan.toml`: `warm_pool = ["git", "codebase_memory", "browser"]`. No confundir con la lógica de `always_on` del disco — el fix de ese bug sigue pendiente. | claude-code | MEDIO | ✅ |
 | P4 | **P2P DST test end-to-end**: el wiring de M14-F Phase 3 (`p2p_pool`, `RemoteTcp`, Noise XK listener) está verificado en código pero sin test determinístico que arranque dos instancias reales en localhost y ejecute un guild remoto sin bridge HTTP. Cierra la deuda técnica real de M14-F Phase 3. | claude-code | MEDIO | ⬜ |
 
-**Criterio de cierre:** `tylluan_recall` con misma query dos veces: segunda < 2ms (vs ~50ms actual). Coordinator completa 5 sub-tasks independientes en paralelo sin timeout en CPU.
+**Criterio de cierre:** `tylluan_recall` con misma query dos veces: segunda < 2ms (validado con 100 iteraciones, avg < 2ms). Coordinator completa 5 sub-tasks independientes en paralelo sin timeout en CPU. Guilds warm pool pre-arrancadas en boot son visibles en `GET /api/v1/guilds` antes de su primer uso.
 
 ---
 

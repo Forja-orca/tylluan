@@ -38,8 +38,10 @@ max_peer_cursors = 100
 timeout_secs = 30
 
 [guilds.core]
-# Always spawned on startup
+# Always spawned on startup — kept alive by watchdog
 always_on = ["bash", "filesystem", "scheduler"]
+# Pre-warmed at boot but CAN still be killed by idle timeout
+warm_pool = ["git", "codebase_memory"]
 # Seconds before an idle lazy guild is considered for suspension
 idle_suspend_secs = 3600
 

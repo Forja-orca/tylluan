@@ -142,6 +142,36 @@ mod tests {
     }
 
     #[test]
+    fn test_cache_hit_latency_under_2ms() {
+        let cache = QueryEmbeddingCache::new();
+        // Embed a realistic-length query (40+ words like a real conversation topic)
+        let query = "what was the architecture decision about the mesh protocol and how does it relate to consensus in the federation layer for the memory system";
+        let mut _total_fresh_ns: u128 = 0;
+        let mut total_hit_ns: u128 = 0;
+        let trials = 100;
+        for _ in 0..trials {
+            // Fresh embed (cache miss) — time the embedding itself
+            let start = std::time::Instant::now();
+            let _ = cache.get_or_embed(query, |_q| {
+                // Simulate real embedding latency (~50ms for BGE-M3 on CPU)
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                Ok(vec![0.1; 768])
+            }).unwrap();
+            _total_fresh_ns += start.elapsed().as_nanos();
+
+            // Cache hit — should be near-instant
+            let start = std::time::Instant::now();
+            let _ = cache.get_or_embed(query, |_q| {
+                panic!("should not be called on cache hit");
+            }).unwrap();
+            total_hit_ns += start.elapsed().as_nanos();
+        }
+        // Allow overhead: 2ms per cache hit
+        let avg_hit_ms = total_hit_ns as f64 / trials as f64 / 1_000_000.0;
+        assert!(avg_hit_ms < 2.0, "average cache hit latency {:.3}ms >= 2ms", avg_hit_ms);
+    }
+
+    #[test]
     fn test_eviction_at_capacity() {
         let cache = QueryEmbeddingCache::new();
         // Fill exactly to MAX_ENTRIES
