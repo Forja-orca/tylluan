@@ -462,6 +462,11 @@ pub struct GuildsConfig {
     /// Max simultaneous calls per guild. Tune for CPU vs GPU concurrency.
     #[serde(default = "default_max_concurrent")]
     pub guild_max_concurrent_calls: usize,
+    /// When true, destructive guilds (bash, filesystem write, docker, etc.)
+    /// simulate execution and return output marked [DRY-RUN].
+    /// Useful for safely previewing workflows.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 fn default_max_concurrent() -> usize { 3 }
@@ -472,6 +477,7 @@ impl Default for GuildsConfig {
             core: CoreGuildsConfig::default(),
             v2: None,
             guild_max_concurrent_calls: default_max_concurrent(),
+            dry_run: false,
         }
     }
 }
@@ -1140,6 +1146,10 @@ impl TylluanConfig {
 
     pub fn security_capabilities_enforce_enabled(&self) -> bool {
         self.security.capabilities_enforce
+    }
+
+    pub fn guilds_dry_run(&self) -> bool {
+        self.guilds.dry_run
     }
 
     /// Load config once and cache it. Returns cached config if already loaded.
