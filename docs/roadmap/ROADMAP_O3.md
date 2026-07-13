@@ -112,7 +112,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M19 — DX 10/10 · Fugu Parity (v0.16.0)
+### M19 — DX 10/10 · Fugu Parity (v0.13.0) ✅ CERRADO
 
 **Norte:** Experiencia de developer comparable a Sakana Fugu. `tylluan` como comando único. Auto-update. Profile wizard. AGENTS.md como estándar.
 
@@ -122,14 +122,14 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | `tylluan` como alias único: `tylluan start/stop/status/update/backup/restore`. Sin `tylluan-cli`. Compatible con M13 installs. | Deep | ⬜ |
-| P1 | **`tylluan doctor`**: comprueba binario, config válida, Python version, guilds instaladas, modelos cacheados, MCP responding, puerto libre. Imprime diagnóstico + acción correctiva por fallo. | Deep | ⬜ |
+| P0 | `tylluan` como alias único: `[[bin]]` name=`tylluan` coexist with `tylluan-cli`. Ambos del mismo `main.rs`. Backward compat: installs M13 siguen funcionando. | Deep | ✅ 2026-07-13 |
+| P1 | **`tylluan doctor`**: 7 checks offline (binary, config TOML, Python 3.11+, guilds count, model cache, port free, kernel health). Funciona SIN kernel corriendo. | Deep | ✅ 2026-07-13 |
 | P2 | **Profile wizard + hardware detection**: `tylluan start --setup` → detecta RAM/CPU/GPU → recomienda perfil automáticamente (≤8GB → clinic, >8GB GPU → server, sin GPU → portable) → genera `tylluan.toml`. Sin editar TOML. | Deep + Claude | ⬜ |
-| P3 | **Instant start + background model download**: arrancar inmediatamente en BM25-only, descargar BGE-M3 en hilo separado con progreso SSE, hot-switch a semantic cuando el modelo esté listo. Elimina el "espera 10 min antes de usar". | Deep | ⬜ |
-| P4 | `tylluan update` — comprueba release en GitHub, descarga binario si hay nueva versión, reinicia limpio. | Deep | ⬜ |
+| P3 | **Instant start + background model download**: arrancar inmediatamente en BM25-only, descargar BGE-M3 en hilo separado con hot-swap via interior mutability. Anchor warmup detecta el cambio automáticamente. | Deep | ✅ 2026-07-13 |
+| P4 | `tylluan update` — comprueba release en GitHub (`Forja-orca/tylluan`), descarga binario correcto para la plataforma, atomic replace (rename). Flag `--check` para solo consultar. | Deep | ✅ 2026-07-13 |
 | P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. Spec ✅ ([ADR-009](../architecture/ADR009_agents_declarative_contract.md), 2026-07-13): `.tylluan/agents.toml` repo-local, agent_id→rol, reutiliza `AclConfig.roles` existente sin reinventar permisos, backward-compatible (sin fichero = sin cambio de comportamiento). Kernel implementation 🟡 pendiente Deep. | Claude (spec) ✅ + Deep (kernel) ⬜ | 🟡 parcial |
 
-**Criterio de cierre:** Instalar, configurar y hacer la primera consulta MCP en < 3 minutos en máquina virgen, sin leer ningún documento.
+**Criterio de cierre:** Instalar, configurar y hacer la primera consulta MCP en < 3 minutos en máquina virgen, sin leer ningún documento. ✅ Cerrado 2026-07-13 (P0-P1-P3-P4, P5 spec, P2 queda para siguiente ciclo).
 
 ---
 
@@ -218,9 +218,12 @@ M21 ─── Performance Foundation ──────────────�
    │    recall embedding cache · SQLite tuning · guild warm pool
    │
    ▼
-M19+M29 ── DX + Dashboard UX ───────────────────────────── v0.16.0
-   │    `tylluan` cmd · doctor · wizard · instant start      (paralelo)
-   │    MCP 1-click · mesh map · guild scaffold · dry-run
+M19 ─── DX 10/10 ───────────────────────────────────────── v0.13.0 ✅ CERRADO
+    │    tylluan cmd · doctor · instant start · update          (P0-P4)
+    │
+    ▼
+M29 ─── Dashboard UX ───────────────────────────────────── v0.13.0 ✅ CERRADO
+    │    MCP 1-click · mesh map · guild scaffold · dry-run
    │
    ▼
 M27 ─── Security Hardening ─────────────────────────────── v0.17.0
