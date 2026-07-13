@@ -298,3 +298,186 @@ async fn test_nat_external_address_http_endpoint() {
     assert_eq!(json["stun_server"], "test-stun:3478");
     assert_eq!(json["cached"], true);
 }
+
+// ─── M21-P4: P2P kernel-level DST test ─────────────────────────────────────
+//
+// tylluan-link/tests/p2p_dst.rs already proves the Noise XK protocol works
+// between two real listeners with a stub handler. What was still untested:
+// the kernel's own guild_dispatch_remote_handler (POST
+// /api/v1/guilds/dispatch/remote) actually reaching DispatchDecision::RemoteTcp
+// and calling execute_remote_tcp with the real p2p_pool from HttpState --
+// i.e. the kernel wiring found already-complete during the M14-F Phase 3 doc
+// audit (2026-07-12), now backed by a real integration test instead of just
+// a manual code read.
+//
+// mesh_test_state() builds capability_registry and dispatch_router with two
+// SEPARATE CapabilityRegistry instances (matches how existing tests in this
+// file use it) -- for this test we need them to share one registry, the way
+// main.rs actually wires them (transport/http/mod.rs:379-386, verified:
+// `DispatchRouter::new(capability_registry.clone(), ...)`), so a peer
+// injected into the registry is visible to the router's routing decision.
+
+async fn dst_test_state(
+    shared_registry: Arc<std::sync::Mutex<tylluan_link::capability::CapabilityRegistry>>,
+    node_identity: Arc<NodeIdentity>,
+) -> Arc<HttpState> {
+    let workspace_root = std::env::current_dir().unwrap_or_default();
+    let registry_raw = GuildRegistry::new(workspace_root, 5, TimeoutsConfig::default(), 5);
+    let registry_arc = Arc::new(RwLock::new(registry_raw));
+    let (registry_actor, registry_handle) = RegistryActor::new(registry_arc.clone());
+    tokio::spawn(async move { registry_actor.run().await; });
+
+    let memory = Arc::new(HybridMemory::in_memory().await.unwrap());
+    let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+    silva.init().await.unwrap();
+    let mailbox = Arc::new(Mailbox::in_memory().await.unwrap());
+    mailbox.init().await.unwrap();
+    let coloquio = Arc::new(ColoquioDb::new(":memory:").unwrap());
+    let curriculum = Arc::new(std::sync::Mutex::new(
+        tylluan_kernel::curriculum::CurriculumLearner::new_in_memory(1).unwrap(),
+    ));
+    let doctor = Arc::new(Doctor::new(registry_arc, memory.clone(), silva.clone(), curriculum));
+    let matcher = Arc::new(GuildMatcher::new(vec![]));
+    let node_router = tylluan_kernel::memory::agent_nodes::AgentNodeRouter::new(tokio::sync::broadcast::channel(1).0);
+    let (broadcast_tx, _) = tokio::sync::broadcast::channel(10);
+    let (download_tx, _) = tokio::sync::broadcast::channel(10);
+    let config = Arc::new(RwLock::new(TylluanConfig::default()));
+
+    Arc::new(HttpState {
+        version: "test".to_string(),
+        auth_token: None,
+        dev_mode: Some(true),
+        start_time: Instant::now(),
+        server: None,
+        registry: registry_handle,
+        doctor,
+        memory,
+        silva,
+        mailbox,
+        coloquio,
+        broadcast_tx,
+        download_progress_tx: download_tx,
+        sessions: Arc::new(RwLock::new(HashMap::new())),
+        guild_status_cache: Arc::new(std::sync::Mutex::new(None)),
+        agent_rate_limiter: Arc::new(dashmap::DashMap::new()),
+        ip_rate_limiter: Arc::new(tylluan_kernel::security::rate_limiter::RateLimiter::new(Some(300))),
+        config,
+        matcher,
+        tunnel_wsl_url: None,
+        oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3000".to_string())),
+        metrics_ring: Arc::new(RwLock::new(tylluan_kernel::metrics_ring::MetricsRingBuffer::new())),
+        jobs: Arc::new(tylluan_kernel::memory::jobs::JobQueue::open(std::path::Path::new(":memory:")).unwrap()),
+        cancel_token: tokio_util::sync::CancellationToken::new(),
+        node_router,
+        health_ready: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        journal: Arc::new(tylluan_kernel::transport::http::api_v1::api_journal::JournalDb::open(":memory:").unwrap()),
+        agent_registry: tylluan_kernel::transport::http::api_v1::api_agents::AgentRegistry::new(7200),
+        contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
+        contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
+        peer_db: Arc::new(PeerDb::open(":memory:").unwrap()),
+        node_identity,
+        nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
+        dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
+        p2p_pool: Arc::new(tokio::sync::Mutex::new(tylluan_link::p2p::P2pSessionPool::new(16, 300))),
+        gossip_engine: Arc::new(tokio::sync::RwLock::new(tylluan_link::gossip::GossipEngine::new(
+            "test-node".to_string(),
+            tylluan_link::gossip::GossipConfig::default(),
+        ))),
+        capability_registry: shared_registry.clone(),
+        dispatch_router: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchRouter::new(
+            shared_registry,
+            std::time::Duration::from_secs(60),
+        ))),
+        dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
+    })
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_kernel_remote_dispatch_routes_via_real_noise_xk_p2p() {
+    use tylluan_link::gossip::HardwareCaps;
+    use tylluan_link::dispatch::{GuildDispatchRequest, GuildDispatchResponse};
+    use tylluan_link::p2p::start_p2p_listener_noise;
+
+    // "Remote" node: a real Noise XK listener with a stub guild handler,
+    // exactly like tylluan-link/tests/p2p_dst.rs's own roundtrip test --
+    // the difference here is the *initiator* is a full kernel HttpState
+    // reached over a real HTTP request, not a direct execute_remote_tcp call.
+    let tmp_dir = std::env::temp_dir().join("tylluan_kernel_p2p_dst_test");
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    let remote_identity = Arc::new(NodeIdentity::load_or_create(&tmp_dir.join("remote.json")).unwrap());
+    let remote_pubkey = remote_identity.public_key_hex().to_string();
+
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+        Box::pin(async move {
+            GuildDispatchResponse {
+                request_id: req.request_id,
+                success: true,
+                result: serde_json::json!({"executed_by": "remote-stub", "args": req.args}),
+                error: None,
+                executor_id: "remote-stub".to_string(),
+                duration_ms: 1,
+            }
+        })
+    });
+    let (listener_handle, bound_addr) = start_p2p_listener_noise(
+        "127.0.0.1:0".parse().unwrap(),
+        remote_identity.clone(),
+        handler,
+    ).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Local kernel state: register the remote node in the SAME registry the
+    // dispatch_router consults, with supports_p2p=true and a guild capability
+    // so route() picks DispatchDecision::RemoteTcp instead of Local.
+    let shared_registry = Arc::new(std::sync::Mutex::new(
+        tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300))
+    ));
+    let hw = HardwareCaps {
+        ram_mb: 8192,
+        has_gpu: false,
+        load_avg: 0.1,
+        supports_p2p: true,
+        tcp_port: Some(bound_addr.port()),
+    };
+    // node_id MUST be the remote's real public key hex: api_mesh.rs passes
+    // DispatchDecision::RemoteTcp's node_id straight to execute_remote_tcp as
+    // peer_pubkey_hex, which Noise XK uses to authenticate the responder.
+    // An arbitrary label here would make the handshake fail against the real
+    // listener (which really is identified by remote_identity's pubkey).
+    shared_registry.lock().unwrap().ingest(
+        &remote_pubkey, &bound_addr.to_string(), &hw, &["test-guild".to_string()], 1,
+    );
+
+    let local_identity = Arc::new(NodeIdentity::load_or_create(&tmp_dir.join("local.json")).unwrap());
+    let state = dst_test_state(shared_registry, local_identity).await;
+    let app = api_v1_routes().with_state(state);
+
+    let body = serde_json::json!({
+        "guild": "test-guild",
+        "tool": "execute",
+        "args": {"cmd": "echo hello"},
+        "peer_addr": bound_addr.to_string(),
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/guilds/dispatch/remote")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let resp_body = axum::body::to_bytes(response.into_body(), 8192).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&resp_body).unwrap();
+
+    assert_eq!(json["success"], true, "remote dispatch should succeed: {json}");
+    let executor = json["executor"].as_str().unwrap_or("");
+    assert!(
+        executor.starts_with(&format!("p2p://{remote_pubkey}:")),
+        "must route via the real p2p RemoteTcp arm, not local execution: executor={executor}"
+    );
+    assert_eq!(json["result"]["executed_by"], "remote-stub", "response must come from the remote listener, not a local stub");
+
+    listener_handle.abort();
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
