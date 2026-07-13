@@ -1472,35 +1472,55 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     })).into_response()
 }
 
-async fn setup_hint_handler() -> impl IntoResponse {
+/// Returns MCP client config snippets built from the kernel's actual
+/// runtime state -- never hardcoded. The URL is derived from the request's
+/// own `Host` header (the address the client just used to reach this
+/// endpoint, so it's correct even behind a fallback port or a non-default
+/// config), and the token is only included when auth is actually required
+/// (dev_mode=false and a real token is configured) -- embedding a token
+/// placeholder when dev_mode=true would suggest auth is needed when it isn't.
+async fn setup_hint_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("127.0.0.1:3030");
+    let base_url = format!("http://{host}");
+    let dev_mode = state.dev_mode.unwrap_or(false);
+    let token_query = if !dev_mode {
+        state.auth_token.as_deref().map(|t| format!("?token={t}")).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let sse_url = format!("{base_url}/sse{token_query}");
+
     Json(serde_json::json!({
-        "version": "v0.12.0",
+        "version": env!("CARGO_PKG_VERSION"),
         "status": "ready",
-        "embedding_model": "none",
-        "mode": "BM25-only",
-        "note": "Run 'tylluan-cli download-models' for BGE-M3 (better recall)",
+        "auth_required": !dev_mode,
         "mcp_clients": {
             "claude_desktop": {
                 "config": {
                     "mcpServers": {
                         "tylluan": {
                             "type": "sse",
-                            "url": "http://127.0.0.1:3030/sse"
+                            "url": sse_url
                         }
                     }
                 },
                 "location": "~/.claude/claude_desktop_config.json"
             },
             "claude_code": {
-                "command": "/mcp add tylluan sse http://127.0.0.1:3030/sse"
+                "command": format!("/mcp add tylluan sse {sse_url}")
             },
             "cursor": {
-                "command": "Add MCP server: http://127.0.0.1:3030/sse"
+                "command": format!("Add MCP server: {sse_url}")
             }
         },
         "verify": {
-            "curl": "curl http://127.0.0.1:3030/health",
-            "dashboard": "http://127.0.0.1:3030"
+            "curl": format!("curl {base_url}/health"),
+            "dashboard": base_url
         }
     }))
 }
