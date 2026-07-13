@@ -22,3 +22,5 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 anyhow = { workspace = true }
 sysinfo = "0.33"
 ctrlc = "3"
+tar = "0.4"
+flate2 = "1"

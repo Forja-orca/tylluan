@@ -95,6 +95,12 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// Check for updates and auto-update Tylluan binary
+    Update {
+        /// Only check for updates, don't download
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[tokio::main]
@@ -558,6 +564,110 @@ async fn main() -> Result<()> {
 
             let _ = std::env::set_current_dir(&original_dir);
         }
+        Commands::Update { check } => {
+            println!("🔍 Checking for updates...");
+            let repo = "Forja-orca/tylluan";
+            let current_ver = env!("CARGO_PKG_VERSION");
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .user_agent("tylluan-update/1.0")
+                .build()?;
+
+            let release_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+            let resp = client.get(&release_url).send().await?;
+
+            if !resp.status().is_success() {
+                println!("❌ Failed to check updates: HTTP {}", resp.status());
+                return Ok(());
+            }
+
+            let release: serde_json::Value = resp.json().await?;
+            let latest_tag = release["tag_name"].as_str().unwrap_or("v0.0.0");
+            let latest_ver = latest_tag.trim_start_matches('v');
+
+            if latest_ver == current_ver {
+                println!("✅ Tylluan v{} is up to date.", current_ver);
+                return Ok(());
+            }
+
+            println!("📦 Update available: v{} → v{}", current_ver, latest_ver);
+
+            if check {
+                println!("   Run 'tylluan update' without --check to download.");
+                return Ok(());
+            }
+
+            // Detect current platform
+            let target = detect_update_target();
+            let archive_name = format!("tylluan-{}.tar.gz", target);
+            let download_url = format!(
+                "https://github.com/{}/releases/download/{}/{}",
+                repo, latest_tag, archive_name
+            );
+
+            println!("📥 Downloading {} ...", archive_name);
+            let download_resp = client.get(&download_url).send().await?;
+            if !download_resp.status().is_success() {
+                println!("❌ Download failed: HTTP {} — unsupported platform: {}", download_resp.status(), target);
+                println!("   Manual download: https://github.com/{}/releases", repo);
+                return Ok(());
+            }
+
+            let bytes = download_resp.bytes().await?;
+            let current_exe = std::env::current_exe()?;
+            let parent = current_exe.parent().unwrap_or(std::path::Path::new("."));
+            let temp_path = parent.join(format!(".tylluan-update-{}", std::process::id()));
+
+            // Extract binary from tarball to temp, then atomic rename
+            {
+                let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(&bytes[..]));
+                let exe_name = current_exe.file_name().and_then(|n| n.to_str()).unwrap_or("tylluan");
+                let found = archive.entries()?.find_map(|entry| {
+                    let mut entry = entry.ok()?;
+                    let name = entry.path().ok()?;
+                    let fname = name.file_name()?.to_str()?;
+                    // Match: same filename, or tylluan updating from tylluan-cli, or tylluan-cli/tylluan-nexus
+                    if fname == exe_name || (exe_name == "tylluan" && fname == "tylluan-cli") || fname == "tylluan-nexus" {
+                        entry.unpack(&temp_path).ok()?;
+                        Some(())
+                    } else {
+                        None
+                    }
+                });
+                if found.is_none() {
+                    println!("❌ Could not find '{}' in archive.", exe_name);
+                    println!("   Manual download: https://github.com/{}/releases", repo);
+                    return Ok(());
+                }
+            }
+
+            if !temp_path.exists() {
+                println!("❌ Could not extract binary from archive.");
+                println!("   Manual download: https://github.com/{}/releases", repo);
+                return Ok(());
+            }
+
+            // Atomic replace: rename temp -> target
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755))?;
+            }
+            match std::fs::rename(&temp_path, &current_exe) {
+                Ok(()) => {
+                    println!("✅ Updated to Tylluan v{}", latest_ver);
+                }
+                Err(e) => {
+                    // Windows: can't rename over running exe. Place beside it.
+                    let fallback = parent.join(format!("tylluan-v{}{}", latest_ver, std::env::consts::EXE_SUFFIX));
+                    std::fs::rename(&temp_path, &fallback)?;
+                    println!("✅ Downloaded Tylluan v{} to {}", latest_ver, fallback.display());
+                    println!("   Replace {} manually with the new binary.", current_exe.display());
+                    println!("   Error was: {}", e);
+                }
+            }
+            println!("   Restart the kernel with 'tylluan start' for changes to take effect.");
+        }
     }
 
     Ok(())
@@ -732,4 +842,20 @@ fn models_dir_approx_size(dir: &std::path::Path) -> u64 {
         }
     }
     total
+}
+
+/// Detect the current platform target triple for update downloads.
+/// Must match the release artifact naming in .github/workflows/release.yml.
+fn detect_update_target() -> String {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    match (os, arch) {
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu".into(),
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu".into(),
+        ("macos", "x86_64") => "x86_64-apple-darwin".into(),
+        ("macos", "aarch64") => "aarch64-apple-darwin".into(),
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc".into(),
+        ("windows", "aarch64") => "aarch64-pc-windows-msvc".into(),
+        _ => format!("{}-{}", arch, os),
+    }
 }

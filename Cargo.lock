@@ -4406,9 +4406,11 @@ dependencies = [
  "anyhow",
  "clap",
  "ctrlc",
+ "flate2",
  "reqwest",
  "serde_json",
  "sysinfo 0.33.1",
+ "tar",
  "tokio",
  "toml",
 ]
