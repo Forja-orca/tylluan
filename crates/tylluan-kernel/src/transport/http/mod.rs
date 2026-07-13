@@ -10,7 +10,7 @@ pub mod api_v1;
 
 use axum::{
     Router, Json,
-    extract::State,
+    extract::{State, Query},
     http::{StatusCode, header, HeaderValue, Method},
     middleware,
     response::IntoResponse,
@@ -1008,10 +1008,57 @@ async fn serve_index() -> impl IntoResponse {
     }
 }
 
+#[derive(Deserialize)]
+pub struct HealthQuery {
+    pub verbose: Option<bool>,
+}
+
 async fn health_handler(
     State(state): State<Arc<HttpState>>,
+    Query(query): Query<HealthQuery>,
 ) -> impl IntoResponse {
     let ready = state.health_ready.load(std::sync::atomic::Ordering::Acquire);
+
+    if query.verbose.unwrap_or(false) {
+        let node_count = state.silva.node_count().await.unwrap_or(0);
+        let edge_count = state.silva.edge_count().await.unwrap_or(0);
+        let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
+
+        let embeddings_loaded = state.server.as_ref()
+            .and_then(|s| s.try_read().ok())
+            .map(|s| s.matcher.engine().is_some())
+            .unwrap_or(false);
+        let reranker_loaded = state.server.as_ref()
+            .and_then(|s| s.try_read().ok())
+            .map(|s| s.reranker.is_some())
+            .unwrap_or(false);
+
+        // Mesh status: active P2P sessions + DHT peers
+        let p2p_sessions = state.p2p_pool.try_lock().map(|p| p.len()).unwrap_or(0);
+        let dht_peers = state.dht_routing_table.try_read().map(|t| t.peer_count()).unwrap_or(0);
+
+        let overall = if !ready { "warming_up" }
+            else if embeddings_loaded && active_guilds > 0 { "healthy" }
+            else if embeddings_loaded || active_guilds > 0 { "degraded" }
+            else { "critical" };
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "status": overall,
+            "version": env!("CARGO_PKG_VERSION"),
+            "commit": env!("TYLLUAN_GIT_COMMIT"),
+            "boot_ready": ready,
+            "components": {
+                "kernel": { "ok": ready },
+                "embeddings": { "ok": embeddings_loaded, "model": "bge-m3" },
+                "reranker":   { "ok": reranker_loaded, "model": "jina-reranker-v1-turbo-en" },
+                "silva":      { "ok": node_count > 0, "nodes": node_count, "edges": edge_count },
+                "guilds":     { "ok": active_guilds > 0, "active": active_guilds, "total": total_guilds },
+                "mesh":       { "ok": p2p_sessions > 0 || dht_peers > 0,
+                                "p2p_sessions": p2p_sessions, "dht_peers": dht_peers }
+            }
+        })));
+    }
+
     let status = if ready { "ok" } else { "warming_up" };
     (StatusCode::OK, Json(serde_json::json!({
         "status": status,
