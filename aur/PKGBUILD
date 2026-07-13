@@ -1,0 +1,33 @@
+# Maintainer: Forja Orca <carpetanosiberia@gmail.com>
+# Contributor: Tylluan dev team
+# Arch Linux package for Tylluan — sovereign MCP kernel
+# Build from source (no prebuilt binaries)
+# https://github.com/Forja-orca/tylluan
+
+pkgname=tylluan
+pkgver=0.13.0
+pkgrel=1
+pkgdesc="Sovereign MCP kernel with SilvaDB memory, P2P mesh, and guild-based tool orchestration"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Forja-orca/tylluan"
+license=('AGPL-3.0-or-later')
+depends=('python>=3.10')
+makedepends=('cargo' 'rust')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Forja-orca/tylluan/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    cargo build --release -p tylluan-kernel
+    cargo build --release -p tylluan-cli
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    install -Dm755 target/release/tylluan-nexus "$pkgdir/usr/bin/tylluan-nexus"
+    install -Dm755 target/release/tylluan-cli "$pkgdir/usr/bin/tylluan"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+
+# vim:set ts=2 sw=2 et:

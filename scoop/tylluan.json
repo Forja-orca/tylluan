@@ -1,0 +1,30 @@
+{
+    "version": "0.13.0",
+    "description": "Sovereign MCP kernel with SilvaDB memory, P2P mesh, and guild-based tool orchestration",
+    "homepage": "https://github.com/Forja-orca/tylluan",
+    "license": "AGPL-3.0-or-later",
+    "notes": [
+        "Run 'tylluan-nexus' to start the kernel server",
+        "Requires Python 3.10+ for guild tools"
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/Forja-orca/tylluan/releases/download/v0.13.0/tylluan-x86_64-pc-windows-msvc.tar.gz",
+            "hash": "SKIP"
+        }
+    },
+    "bin": [
+        "tylluan-nexus.exe",
+        ["tylluan-nexus.exe", "tylluan-nexus"]
+    ],
+    "checkver": {
+        "github": "https://github.com/Forja-orca/tylluan"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/Forja-orca/tylluan/releases/download/v$version/tylluan-x86_64-pc-windows-msvc.tar.gz"
+            }
+        }
+    }
+}
