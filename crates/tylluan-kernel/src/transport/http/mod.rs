@@ -857,6 +857,9 @@ fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/v1/mcp/probe", get(api_v1::probe_handler))
         .merge(oauth_routes);
 
+    #[cfg(feature = "observability")]
+    let public_routes = public_routes.route("/metrics", get(crate::metrics_exporter::metrics_handler));
+
     // 2. Protected Routes (API v1 + MCP + SSE)
     let protected_routes = api_v1::api_v1_routes()
         .merge(sse::sse_routes())

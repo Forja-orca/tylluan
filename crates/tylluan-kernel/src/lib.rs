@@ -18,6 +18,8 @@ pub mod guard;
 pub mod hormones;
 pub mod tunnel;
 pub mod metrics_ring;
+#[cfg(feature = "observability")]
+pub mod metrics_exporter;
 pub mod federation;
 pub mod process_isolation;
 pub mod eval;
