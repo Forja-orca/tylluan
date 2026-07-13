@@ -1,0 +1,4 @@
+# Shell scripts must always use LF, regardless of the committer's local
+# core.autocrlf setting -- CI runs them on Linux (ubuntu-latest), and a
+# CRLF-mangled shebang/script breaks with "bad interpreter" or syntax errors.
+*.sh text eol=lf
