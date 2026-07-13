@@ -20,6 +20,7 @@ import {
   Activity,
   Layers,
   Settings,
+  ShieldCheck,
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import type { Guild, NexusBridge, NexusEvent } from '../lib/nexus-bridge';
@@ -107,10 +108,22 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   // Category filter state
   const [activeCategory, setActiveCategory] = useState<GuildCategory | 'all'>('all');
   const [hideInactive, setHideInactive] = useState(true);
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
 
   useEffect(() => {
     setGuilds(globalGuilds);
   }, [globalGuilds]);
+
+  useEffect(() => {
+    if (!bridge) return;
+    bridge.getConfig()
+      .then(cfg => {
+        if (cfg?.security?.sandbox) {
+          setSandboxEnabled(!!cfg.security.sandbox.enabled);
+        }
+      })
+      .catch(err => console.error("Failed to load config for sandbox status:", err));
+  }, [bridge]);
 
   // React to live SSE events for instant status updates (no polling lag)
   useEffect(() => {
@@ -328,6 +341,60 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             </div>
           )}
         </div>
+
+        {/* Capabilities & Sandbox Badges */}
+        {(() => {
+          const caps = (guild as any).capabilities;
+          const isSandboxActive = sandboxEnabled && (guild.name === 'bash' || guild.name === 'code');
+          const hasCaps = caps !== undefined && caps !== null;
+
+          if (!hasCaps && !isSandboxActive) return null;
+
+          return (
+            <div className="flex flex-wrap gap-1 mb-4 mt-2">
+              {isSandboxActive && (
+                <span 
+                  title="Enforced Docker Sandbox Active"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[9px] font-mono font-bold uppercase tracking-tight"
+                >
+                  <ShieldCheck className="w-2.5 h-2.5 text-sky-400" />
+                  Sandbox
+                </span>
+              )}
+              {hasCaps && (
+                <>
+                  {/* Process Execution */}
+                  {caps.process_execution !== false && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-mono uppercase tracking-tight">
+                      <span className="w-1 h-1 rounded-full bg-rose-400" />
+                      ProcExec
+                    </span>
+                  )}
+                  {/* Filesystem Scope */}
+                  {Array.isArray(caps.filesystem_scope) && caps.filesystem_scope.length > 0 && (
+                    <span 
+                      title={`FileSystem Scope: ${caps.filesystem_scope.join(', ')}`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-mono uppercase tracking-tight cursor-help"
+                    >
+                      <span className="w-1 h-1 rounded-full bg-amber-400" />
+                      FS ({caps.filesystem_scope.length})
+                    </span>
+                  )}
+                  {/* Network Hosts */}
+                  {Array.isArray(caps.network_hosts) && caps.network_hosts.length > 0 && (
+                    <span 
+                      title={`Allowed Network Hosts: ${caps.network_hosts.join(', ')}`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono uppercase tracking-tight cursor-help"
+                    >
+                      <span className="w-1 h-1 rounded-full bg-blue-400" />
+                      NET ({caps.network_hosts.length})
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Action Buttons */}
         <div className="flex gap-2">
