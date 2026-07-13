@@ -106,6 +106,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P1 | **SQLite PRAGMA tuning**: `cache_size=-65536` (64MB), `mmap_size=268435456` (256MB), `synchronous=NORMAL`. 20-40% mejor en lecturas concurrentes. 1h de trabajo. | Deep | ALTO | ⬜ |
 | P2 | **Coordinator ThreadPoolExecutor**: sub-tasks sin dependencia de `prev_result` se ejecutan en paralelo. Solo los que referencian contexto anterior son secuenciales. Necesario para M18-P3. | Deep | CRÍTICO | ✅ |
 | P3 | **Guild warm pool**: mantener procesos Python de guilds frecuentes (bash, filesystem, knowledge) pre-calentados. Eliminar cold start 1-2s. `HashMap<guild_name, Vec<GuildProcess>>` con max=2 por guild always-on. | Deep | MEDIO | ⬜ |
+| P4 | **P2P DST test end-to-end**: el wiring de M14-F Phase 3 (`p2p_pool`, `RemoteTcp`, Noise XK listener) está verificado en código pero sin test determinístico que arranque dos instancias reales en localhost y ejecute un guild remoto sin bridge HTTP. Cierra la deuda técnica real de M14-F Phase 3. | claude-code | MEDIO | ⬜ |
 
 **Criterio de cierre:** `tylluan_recall` con misma query dos veces: segunda < 2ms (vs ~50ms actual). Coordinator completa 5 sub-tasks independientes en paralelo sin timeout en CPU.
 
@@ -188,17 +189,17 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M14-F Phase 3 — P2P Kernel Wiring (v0.19.0) [DEUDA TÉCNICA]
+### M14-F Phase 3 — P2P Kernel Wiring (v0.19.0) ✅ CERRADO
 
-**Norte:** Completar la cadena P2P que quedó pendiente. Phases 1-2 de M14-F están en `tylluan-link` pero el kernel no las conecta aún.
+**Norte:** Completar la cadena P2P que quedó pendiente. Phases 1-2 de M14-F están en `tylluan-link`, el kernel las conecta.
 
-**Pendientes específicos** (documentados en STATUS.md):
-- `p2p_pool: P2pSessionPool` en `HttpState`
-- `async P2pHandlerFn` (BoxFuture)
-- Arm `DispatchDecision::RemoteTcp` en `guild_dispatch_remote_handler`
-- Arranque del listener P2P desde sección `[p2p]` en `tylluan.toml`
+**Verificado 2026-07-12** (esta sección estaba obsoleta — ya estaba todo cableado):
+- `p2p_pool: Arc<Mutex<P2pSessionPool>>` en `HttpState` (`transport/http/mod.rs:87`)
+- `P2pHandlerFn` (BoxFuture) importado y usado (`mod.rs:41`)
+- Arm `DispatchDecision::RemoteTcp` en `api_mesh.rs:170`, usa `state.p2p_pool` en línea 191
+- Listener P2P (`start_p2p_listener_noise`) arrancado condicionalmente en `mod.rs:812`
 
-**Criterio de cierre:** Test DST: dos instancias Tylluan en localhost ejecutan un guild remoto vía Noise XK sin ningún bridge HTTP intermedio.
+**Criterio de cierre:** Test DST: dos instancias Tylluan en localhost ejecutan un guild remoto vía Noise XK sin ningún bridge HTTP intermedio. **Pendiente**: no hay un test DST explícito para este escenario todavía — el wiring existe y es alcanzable, pero falta el test end-to-end que lo demuestre determinísticamente. Ítem movido al backlog de M21 (ver abajo) como tarea acotada.
 
 ---
 
@@ -228,11 +229,11 @@ M27 ─── Security Hardening ───────────────�
    ▼
 M28 ─── Credibilidad Pública ────────────────────────────── v0.18.0
    │    benchmarks comparativos · /health granular · brew install
-   │
    ▼
-M14-F/3 ─ P2P Kernel Wiring ───────────────────────────── v0.19.0
-           RemoteTcp arm · p2p_pool · full mesh dispatch
+v1.0.0
 ```
+
+M14-F Phase 3 (P2P Kernel Wiring) ya está cerrado — retirado del flujo pendiente.
 
 **Principio de orden:** Mejorar lo que ya tenemos (M18 cierre → perf → DX+dashboard) antes de credibilidad externa. Sin benchmarks comparativos antes de tener performance sólida.
 
