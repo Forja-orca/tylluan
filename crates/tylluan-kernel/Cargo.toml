@@ -131,6 +131,10 @@ integration = []
 # Knowledge guild integration tests
 guild_knowledge_test = []
 
+# OpenTelemetry-compatible metrics export (Prometheus endpoint at GET /metrics).
+# Not in default features — opt-in only, following the encryption/cuda pattern.
+observability = []
+
 # Bundled dashboard (embeds dist/ as static assets at compile time)
 bundled-dashboard = ["rust-embed", "mime_guess"]
 
