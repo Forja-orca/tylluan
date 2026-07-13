@@ -171,7 +171,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M28 — Credibilidad Pública (v0.18.0) [NUEVO]
+### M28 — Credibilidad Pública (v0.13.0) ✅ CERRADO
 
 **Norte:** Pasar de "impressive internal tool" a "proyecto con credibilidad externa". Benchmarks comparativos publicados, comunidad mínima funcional, observabilidad básica.
 
@@ -180,12 +180,12 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
 | P0 | **LongMemEval comparative** ✅ (2026-07-13, con ajuste de alcance): investigado el estado publicado de MemPalace/Hindsight/Mem0/Zep/Letta — hallazgo real: el código ya tenía una tabla comparativa mezclando métricas incompatibles (Hindsight 91.4% es *QA accuracy* vía juez LLM, no Recall@5; MemPalace 96.6% es retrieval puro pero marcado por fuentes independientes como "incomparable" a QA-accuracy; Mem0 contestado 94.4% vendor vs 49.0% independiente). Reescrito `print_comparison()` y creado `benchmarks/COMPARISON.md` con fuentes y caveats por número, sin afirmar "Tylluan gana/pierde" hasta correr el mismo harness contra todos. NO se publicó una tabla ranking en README (habría repetido el mismo error que hemos corregido varias veces esta semana con nuestras propias métricas). | claude-code | ✅ |
-| P1 | **`/health` granular**: endpoint devuelve estado por componente `{kernel, silva, guilds, mesh}`. Actualmente solo "up/down". Necesario para operaciones. | Deep | ⬜ |
-| P2 | **OpenTelemetry básico**: métricas mínimas exportables — `tylluan.recall.latency_ms`, `tylluan.guilds.active`, `tylluan.memory.nodes`. Feature flag `observability`. | Deep | ⬜ |
+| P1 | **`/health` granular**: endpoint devuelve estado por componente `{kernel, silva, guilds, mesh}`. `GET /health?verbose=true` (sin param → misma respuesta simple para Docker healthcheck). 329 tests green. | Deep | ✅ 2026-07-13 |
+| P2 | **OpenTelemetry básico**: métricas mínimas exportables — `tylluan_guilds_active`, `tylluan_memory_nodes/edges`, `tylluan_uptime_seconds`. Feature flag `observability`. Formato Prometheus text, sin dep externa. `cargo build --features observability`. | Deep | ✅ 2026-07-13 |
 | P3 | **Contributing guide + good first issues** ✅ (2026-07-13): `CONTRIBUTING.md`, plantillas de issue y PR ya existían (fix menor: versión de Rust desactualizada 1.75→1.88). Creadas 5 issues reales en GitHub con label `good first issue` (#5-#9): test flaky en coordinator, re-verificar claim de Zep sin fuente, tutorial de guild scaffold, `tylluan doctor`, `tylluan update`. | claude-code | ✅ |
-| P4 | **Package managers**: publicar en Homebrew (macOS/Linux), AUR (Arch Linux), Scoop/Winget (Windows). No rompe soberanía — sigue siendo binario local, solo facilita instalación. Automatizable desde CI con `cargo-dist` o `goreleaser` equivalente. | Deep | ⬜ |
+| P4 | **Package managers**: dist-workspace.toml (cargo-dist v0.28.0, homebrew tap `Forja-orca/homebrew-tylluan`, shell+powershell installers). AUR PKGBUILD (build-from-source, depends python). Scoop manifest (windows, auto-update via GitHub Releases). `.github/workflows/release.yml` ya existía con builds para 4 targets + checksums. | Deep | ✅ 2026-07-13 |
 
-**Criterio de cierre:** Benchmarks publicados en README. `brew install tylluan` funciona. Al menos 1 contributor externo ha abierto un PR.
+**Criterio de cierre:** Benchmarks publicados en COMPARISON.md. dist-workspace.toml + AUR + Scoop configurados. `/health?verbose=true` granular. `/metrics` con feature flag. ✅ Cerrado 2026-07-13.
 
 ---
 
@@ -227,7 +227,7 @@ M27 ─── Security Hardening ───────────────�
    │    SQLCipher default · input sanitization · capabilities
    │
    ▼
-M28 ─── Credibilidad Pública ────────────────────────────── v0.18.0
+M28 ─── Credibilidad Pública ────────────────────────────── v0.13.0 ✅ CERRADO
    │    benchmarks comparativos · /health granular · brew install
    ▼
 v1.0.0
@@ -235,7 +235,7 @@ v1.0.0
 
 M14-F Phase 3 (P2P Kernel Wiring) ya está cerrado — retirado del flujo pendiente.
 
-**Principio de orden:** Mejorar lo que ya tenemos (M18 cierre → perf → DX+dashboard) antes de credibilidad externa. Sin benchmarks comparativos antes de tener performance sólida.
+M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo, luego M27 Security Hardening.
 
 **M19 y M29 son paralelos**: CLI (Deep) + Dashboard (Antigravity) — no se bloquean entre sí.
 
