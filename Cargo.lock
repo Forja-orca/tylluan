@@ -4410,6 +4410,7 @@ dependencies = [
  "serde_json",
  "sysinfo 0.33.1",
  "tokio",
+ "toml",
 ]
 
 [[package]]

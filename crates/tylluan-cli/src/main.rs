@@ -173,64 +173,155 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Doctor => {
-            println!("🩺 Running diagnostic scan...");
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(15))
-                .build()?;
-            let url = format!("http://127.0.0.1:{}/api/v1/doctor", DEFAULT_PORT);
-            match client.get(&url).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    let report: serde_json::Value = resp.json().await?;
-                    let status = report["status"].as_str().unwrap_or("unknown");
-                    let icon = match status {
-                        "healthy" => "✅",
-                        "degraded" => "⚠️",
-                        _ => "🔥",
-                    };
-                    println!("{} Status: {}", icon, status);
-                    println!("   Config valid: {}", report["config_valid"]);
+            println!("🩺 Tylluan Diagnostic Scan (v{})", env!("CARGO_PKG_VERSION"));
+            println!("{}\n", "─".repeat(48));
 
-                    if let Some(guilds) = report["guilds"].as_array() {
-                        let down: Vec<_> = guilds.iter()
-                            .filter(|g| g["running"].as_bool() == Some(false))
-                            .filter_map(|g| g["name"].as_str())
-                            .collect();
-                        if down.is_empty() {
-                            println!("   Guilds: all running ({} total)", guilds.len());
-                        } else {
-                            println!("   Guilds DOWN: {}", down.join(", "));
+            let mut all_ok = true;
+
+            // ── 1. Binary & version ──
+            print!("[1/7] Binary version: {} ... ", env!("CARGO_PKG_VERSION"));
+            println!("✅");
+
+            // ── 2. Config file ──
+            let config_paths = [
+                PathBuf::from("tylluan.toml"),
+                std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+                    .map(|h| PathBuf::from(h).join(".tylluan").join("tylluan.toml"))
+                    .unwrap_or_default(),
+            ];
+            let config_ok = config_paths.iter().any(|p| p.exists() && p.is_file());
+            if config_ok {
+                let p = config_paths.iter().find(|p| p.exists()).unwrap();
+                let raw = match std::fs::read_to_string(p) {
+                    Ok(c) => c,
+                    Err(e) => { println!("❌ (read error: {})", e); all_ok = false; String::new() }
+                };
+                if !raw.is_empty() {
+                    match raw.parse::<toml::Value>() {
+                        Ok(_) => println!("[2/7] Config file: {} ... ✅", p.display()),
+                        Err(e) => { println!("[2/7] Config file: {} ... ❌ (invalid TOML: {})", p.display(), e); all_ok = false; }
+                    }
+                }
+            } else {
+                println!("[2/7] Config file: not found (tylluan.toml) ... ⚠️");
+                println!("       Run 'tylluan install --profile portable' to create one.");
+            }
+
+            // ── 3. Python version ──
+            let python_check = || -> Option<String> {
+                for bin in &["python3", "python"] {
+                    if let Ok(out) = Command::new(bin).arg("--version").output() {
+                        if out.status.success() {
+                            let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                            return Some(v);
                         }
                     }
+                }
+                None
+            };
+            match python_check() {
+                Some(v) => {
+                    // Check major.minor >= 3.11
+                    let major_minor = v.split_whitespace().nth(1).unwrap_or("0.0")
+                        .split('.').take(2).map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>();
+                    if major_minor.len() == 2 && major_minor[0] >= 3 && major_minor[1] >= 11 {
+                        println!("[3/7] Python: {} ... ✅", v);
+                    } else {
+                        println!("[3/7] Python: {} ... ❌ (need 3.11+)", v);
+                        all_ok = false;
+                    }
+                }
+                None => {
+                    println!("[3/7] Python: not found ... ❌");
+                    println!("       Install Python 3.11+: https://python.org/downloads");
+                    all_ok = false;
+                }
+            }
 
-                    let storage = &report["storage"];
-                    println!(
-                        "   Storage: memory_db={} silva_db={} nodes={}",
-                        storage["memory_db_ok"], storage["silva_db_ok"], storage["nodes_count"]
-                    );
+            // ── 4. Guilds installed ──
+            let guild_dir = PathBuf::from("guilds").join("core");
+            if guild_dir.exists() {
+                let count = match std::fs::read_dir(&guild_dir) {
+                    Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().map_or(false, |x| x == "py" || x == "rs")).count(),
+                    Err(_) => 0,
+                };
+                println!("[4/7] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
+            } else {
+                println!("[4/7] Guilds core: {} not found ... ⚠️", guild_dir.display());
+                println!("       Guilds will be loaded from ~/.tylluan/guilds/ at runtime.");
+            }
 
-                    let system = &report["system"];
-                    println!(
-                        "   System: cpu={}% mem={}%",
-                        system["cpu_usage_percent"].as_f64().unwrap_or(0.0).round(),
-                        system["memory_percent"].as_f64().unwrap_or(0.0).round()
-                    );
+            // ── 5. Embedding model cache ──
+            let models_dir = PathBuf::from("models");
+            let model_cache_ok = models_dir.exists() && std::fs::read_dir(&models_dir).map_or(false, |mut e| e.next().is_some());
+            if model_cache_ok {
+                let size = models_dir_approx_size(&models_dir);
+                println!("[5/7] Embedding model: cached (~{} MB) ... ✅", size / 1024 / 1024);
+            } else {
+                println!("[5/7] Embedding model: not cached ... ⚠️");
+                println!("       BM25-only mode active. Run 'tylluan download-models' for semantic search.");
+            }
 
-                    if let Some(suggestions) = report["suggestions"].as_array() {
-                        if !suggestions.is_empty() {
-                            println!("\n   Suggestions:");
-                            for s in suggestions {
-                                if let Some(s) = s.as_str() {
-                                    println!("   - {}", s);
+            // ── 6. Port free ──
+            let port_free = std::net::TcpListener::bind(("127.0.0.1", DEFAULT_PORT)).is_ok();
+            if port_free {
+                println!("[6/7] Port {}: available ... ✅", DEFAULT_PORT);
+            } else {
+                println!("[6/7] Port {}: in use (kernel likely running) ... ✅", DEFAULT_PORT);
+            }
+
+            // ── 7. Kernel health (online check) ──
+            let kernel_running = !port_free;
+            if kernel_running {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()?;
+                let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        let json: serde_json::Value = resp.json().await?;
+                        let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("ok");
+                        println!("[7/7] Kernel: running ({}) ... ✅", status);
+                        // Also fetch detailed doctor report
+                        let doctor_url = format!("http://127.0.0.1:{}/api/v1/doctor", DEFAULT_PORT);
+                        if let Ok(resp) = client.get(&doctor_url).send().await {
+                            if let Ok(report) = resp.json::<serde_json::Value>().await {
+                                if let Some(guilds) = report["guilds"].as_array() {
+                                    let down: Vec<_> = guilds.iter()
+                                        .filter(|g| g["running"].as_bool() == Some(false))
+                                        .filter_map(|g| g["name"].as_str())
+                                        .collect();
+                                    if !down.is_empty() {
+                                        println!("       Guilds DOWN: {}", down.join(", "));
+                                    }
+                                }
+                                if let Some(suggestions) = report["suggestions"].as_array() {
+                                    if !suggestions.is_empty() {
+                                        println!("\n   Suggestions:");
+                                        for s in suggestions {
+                                            if let Some(s) = s.as_str() {
+                                                println!("   - {}", s);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                    Ok(resp) => println!("[7/7] Kernel: error {} ... ❌", resp.status()),
+                    Err(_) => println!("[7/7] Kernel: unreachable despite port open ... ❌"),
                 }
-                Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
-                Err(_) => println!(
-                    "❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{}) — start it with 'tylluan start'",
-                    DEFAULT_PORT
-                ),
+            } else {
+                println!("[7/7] Kernel: not running ... ⚪");
+                println!("       Start with 'tylluan start'");
+            }
+
+            println!("\n{}", "─".repeat(48));
+            if all_ok {
+                println!("✅ All checks passed — Tylluan is ready.");
+            } else {
+                println!("⚠️ Some checks failed — review items marked ❌ above.");
+                println!("   Run 'tylluan doctor' again after resolving issues.");
             }
         }
         Commands::Logs { follow } => {
@@ -626,4 +717,19 @@ fn find_kernel_exe() -> Result<PathBuf> {
          After installation: Make sure ~/.tylluan/bin/ is in your PATH and open a NEW terminal.\n\
          Build from source: cargo build --release -p tylluan-kernel"
     ))
+}
+
+fn models_dir_approx_size(dir: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                total += std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            } else if path.is_dir() {
+                total += models_dir_approx_size(&path);
+            }
+        }
+    }
+    total
 }
