@@ -310,7 +310,7 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | **Event Bridge bidireccional (`postMessage`)**: script puente inyectado en el iframe para que la app previsualizada mande mensajes de vuelta al kernel — llamar una sovereign tool, guardar estado en SilvaDB. Requiere un canal `window.addEventListener('message', ...)` en el padre + `parent.postMessage(...)` documentado como API para el código generado dentro del iframe. | Antigravity | ⬜ |
+| P0 | **Event Bridge bidireccional (`postMessage`)**: script puente inyectado en el iframe para que la app previsualizada mande mensajes de vuelta al kernel — llamar una sovereign tool, guardar estado en SilvaDB. Requiere un canal `window.addEventListener('message', ...)` en el padre + `parent.postMessage(...)` documentado como API para el código generado dentro del iframe. | Antigravity | ✅ 2026-07-14 |
 | P1 | **Recursos locales seguros en el sandbox**: la app dentro del iframe debe poder cargar imágenes/scripts de `scratch/` u otro directorio autorizado vía un endpoint del proxy que sanitice la ruta (reusar el patrón de `validate_path()` que ya existe para filesystem guild — no reinventar sanitización de paths). | Antigravity | ⬜ |
 
 **Criterio de cierre:** una app HTML/JS renderizada en el Canvas puede llamar `tylluan_remember` y ver el resultado sin salir del iframe, y puede cargar una imagen local de `scratch/` sin que el sandbox lo bloquee ni lo permita sin restricción (verificado con un ejemplo real, no solo revisión de código).
