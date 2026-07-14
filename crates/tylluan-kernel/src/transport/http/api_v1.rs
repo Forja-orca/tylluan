@@ -287,6 +287,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/canary", get(canary_handler))
         .route("/api/v1/logs", get(logs_handler))
         .route("/api/v1/sandbox/sessions", get(sandbox_sessions_handler))
+        .route("/api/v1/sandbox/files/{path}", get(sandbox_files_handler))
 
         // --- Blackboard Coordination Protocol ---
         .route("/api/v1/blackboard/plan", post(blackboard_plan_handler))
