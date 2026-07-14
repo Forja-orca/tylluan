@@ -63,6 +63,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
   const lastInteractionRef = useRef(Date.now());
   const seenEventTsRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAutoFramedRef = useRef(false);
 
   // ── Sizing ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -97,6 +98,18 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
   }, [bridge]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // The real graph is dense (content-ingest chunks chain heavily via next_chunk
+  // edges — hundreds of nodes, thousands of links is normal here, not a bug).
+  // Default d3-force charge is tuned for sparse demo graphs and never fully
+  // separates a graph this connected — bump repulsion once on data load.
+  useEffect(() => {
+    if (data.nodes.length === 0) return;
+    const charge = fgRef.current?.d3Force?.('charge');
+    charge?.strength?.(-180);
+    const link = fgRef.current?.d3Force?.('link');
+    link?.distance?.(40);
+  }, [data.nodes.length]);
 
   // Live updates: memory_added/memory_updated events only carry {id, node_type},
   // not the full node — refetch (debounced) rather than guess the shape.
@@ -257,9 +270,19 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
         linkColor={() => 'rgba(148, 163, 184, 0.35)'}
         linkWidth={0.4}
         linkDirectionalParticles={0}
-        cooldownTicks={90}
+        cooldownTime={8000}
+        d3VelocityDecay={0.35}
         onNodeClick={handleNodeClick}
-        onEngineStop={() => { /* layout settled — physics idle from here until reheated */ }}
+        onEngineStop={() => {
+          // Layout has settled (or hit the 8s time budget) — physics idle from
+          // here until reheated by a new arrival. Frame the whole graph once,
+          // the first time it stops, so a dense 500-node graph doesn't open
+          // stuck on whatever the default camera distance happened to be.
+          if (!hasAutoFramedRef.current) {
+            hasAutoFramedRef.current = true;
+            fgRef.current?.zoomToFit?.(800, 60);
+          }
+        }}
       />
     </div>
   );

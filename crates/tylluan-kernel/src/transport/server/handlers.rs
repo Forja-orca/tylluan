@@ -106,13 +106,17 @@ impl TylluanServer {
                     }
                 }
                 if !resolved && approved {
-                    // Try grant registry
+                    // Try grant registry — approve with level
                     let level = match grant_level {
                         "this_session" => crate::security::grants::GrantLevel::ThisSession,
                         "always_for_guild" => crate::security::grants::GrantLevel::AlwaysForGuild,
                         _ => crate::security::grants::GrantLevel::ThisTime,
                     };
                     resolved = crate::security::grants::resolve(request_id, level).await;
+                }
+                if !resolved && !approved {
+                    // Reject by removing the grant without sending (receiver gets Canceled)
+                    resolved = crate::security::grants::remove(request_id).await;
                 }
                 if resolved {
                     Ok(CallToolResult { content: vec![Content::text("✅ Action resolved".to_string())], is_error: Some(false) })
