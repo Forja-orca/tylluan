@@ -1011,6 +1011,16 @@ async fn do_intent_handler(
     if let Some(content) = body_json.get("content").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
         args["content"] = serde_json::Value::String(content.to_string());
     }
+    // Explicit `arguments` passthrough for kernel tools that need fields beyond
+    // intent/query/guild/content (e.g. approve_action's requestId/approved/grant_level).
+    // Named fields above still win on conflict — arguments only fills gaps.
+    if let Some(extra) = body_json.get("arguments").and_then(|v| v.as_object()) {
+        if let Some(args_obj) = args.as_object_mut() {
+            for (k, v) in extra {
+                args_obj.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
+    }
     let _ = state.broadcast_tx.send(serde_json::json!({ "type": "tool_call", "tool": tool, "intent": intent, "status": "started", "ts": chrono::Utc::now().timestamp_millis() }));
     let call_start = std::time::Instant::now();
     match server.handle_kernel_tool(&tool, args.as_object().cloned()).await {
