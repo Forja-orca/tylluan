@@ -82,6 +82,7 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
           <McpRegistryPanel
             bridge={props.bridge}
             notify={props.notify}
+            events={props.events}
           />
         )}
         {subTab === 'federation' && (

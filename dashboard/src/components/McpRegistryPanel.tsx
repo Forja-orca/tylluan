@@ -30,9 +30,10 @@ interface McpServerInfo {
   tools?: { name: string; description: string }[];
 }
 
-interface McpRegistryPanelProps {
+export interface McpRegistryPanelProps {
   bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
+  events?: any[];
 }
 
 function parseArgs(input: string): string[] {
@@ -65,10 +66,46 @@ function parseArgs(input: string): string[] {
   return result.filter(Boolean);
 }
 
-export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
+export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelProps) {
   const [servers, setServers] = useState<McpServerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Real-time external MCP call log history
+  const [calls, setCalls] = useState<any[]>([]);
+  const lastProcessedEventTs = React.useRef<number>(0);
+
+  // Listen to external_mcp_call SSE events
+  React.useEffect(() => {
+    if (!events?.length) return;
+    
+    // Check if there are events to process
+    const newCalls = events
+      .filter((ev: any) => ev.type === 'external_mcp_call' && ev.ts > lastProcessedEventTs.current)
+      .map((ev: any) => ev.data || ev);
+
+    if (newCalls.length > 0) {
+      const maxTs = Math.max(...newCalls.map((c: any) => c.ts || 0));
+      if (maxTs > lastProcessedEventTs.current) {
+        lastProcessedEventTs.current = maxTs;
+      }
+
+      setCalls(prev => {
+        const merged = [...newCalls, ...prev];
+        merged.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        return merged.slice(0, 10);
+      });
+    }
+  }, [events]);
+
+  // Live status synchronization on guild/mcp process changes
+  React.useEffect(() => {
+    if (!events?.length) return;
+    const last = events[0];
+    if (last.type === 'guild_spawned' || last.type === 'guild_killed') {
+      setTimeout(() => fetchServers(true), 300);
+    }
+  }, [events]);
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -452,6 +489,77 @@ export function McpRegistryPanel({ bridge, notify }: McpRegistryPanelProps) {
           </div>
         </div>
       )}
+
+      {/* Live External MCP Call Log */}
+      <div className="border border-slate-800/80 bg-slate-900/30 rounded-2xl overflow-hidden backdrop-blur-md p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className={cn("w-4 h-4 text-emerald-400", calls.length > 0 && "animate-pulse")} />
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight font-mono">Live External MCP Call Log</h3>
+          </div>
+          {calls.length > 0 && (
+            <button
+              onClick={() => setCalls([])}
+              className="text-[10px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
+            >
+              Clear Log
+            </button>
+          )}
+        </div>
+
+        {calls.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+            <p className="text-xs font-mono">Waiting for external MCP server calls...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800/50 text-[9px] uppercase tracking-wider text-slate-500 font-mono font-bold">
+                  <th className="py-2 px-3">Timestamp</th>
+                  <th className="py-2 px-3">Server</th>
+                  <th className="py-2 px-3">Tool called</th>
+                  <th className="py-2 px-3">Intent query</th>
+                  <th className="py-2 px-3">Client</th>
+                  <th className="py-2 px-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/20 text-xs font-mono">
+                {calls.map((call, idx) => (
+                  <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
+                    <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                      {new Date(call.ts || Date.now()).toLocaleTimeString()}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-300">
+                      {call.server}
+                    </td>
+                    <td className="py-2.5 px-3 text-emerald-400">
+                      {call.tool}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-400 truncate max-w-[200px]" title={call.intent}>
+                      {call.intent}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500">
+                      {call.agent_id}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      {call.status === 'ok' ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[9px] font-bold uppercase">
+                          OK
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 text-[9px] font-bold uppercase">
+                          ERROR
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Add Server Modal Dialog */}
       {isModalOpen && (
