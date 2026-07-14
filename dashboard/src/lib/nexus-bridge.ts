@@ -492,6 +492,13 @@ export class NexusBridge {
     });
   }
 
+  async setSandboxProfile(profile: 'strict' | 'balanced' | 'permissive'): Promise<{ restart_required: boolean }> {
+    return await this.fetch('/api/v1/config/sandbox-profile', {
+      method: 'POST',
+      body: JSON.stringify({ profile })
+    });
+  }
+
   async getSilvaGraph(limit = 300, cluster = false): Promise<GraphData> {
     const rawData = await this.fetch(`/api/v1/graph/viz?limit=${limit}&cluster=${cluster}`);
     return {

@@ -109,6 +109,9 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   const [activeCategory, setActiveCategory] = useState<GuildCategory | 'all'>('all');
   const [hideInactive, setHideInactive] = useState(true);
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
+  const [sandboxProfile, setSandboxProfile] = useState<'strict' | 'balanced' | 'permissive'>('balanced');
+  const [isBackendMock, setIsBackendMock] = useState(false);
+  const [fullConfig, setFullConfig] = useState<any>(null);
 
   useEffect(() => {
     setGuilds(globalGuilds);
@@ -118,12 +121,51 @@ export function GuildsTab({ bridge, notify, events }: Props) {
     if (!bridge) return;
     bridge.getConfig()
       .then(cfg => {
+        setFullConfig(cfg);
+        
+        // Detect if backend natively supports sandbox_profile in any configuration struct
+        if (cfg?.guilds && 'sandbox_profile' in cfg.guilds) {
+          setSandboxProfile(cfg.guilds.sandbox_profile);
+          setIsBackendMock(false);
+        } else if (cfg?.security?.sandbox && 'profile' in cfg.security.sandbox) {
+          setSandboxProfile(cfg.security.sandbox.profile);
+          setIsBackendMock(false);
+        } else {
+          setIsBackendMock(true);
+        }
+
         if (cfg?.security?.sandbox) {
           setSandboxEnabled(!!cfg.security.sandbox.enabled);
         }
       })
-      .catch(err => console.error("Failed to load config for sandbox status:", err));
+      .catch(err => {
+        console.error("Failed to load config for sandbox status:", err);
+        setIsBackendMock(true);
+      });
   }, [bridge]);
+
+  const handleProfileChange = async (newProfile: 'strict' | 'balanced' | 'permissive') => {
+    const previous = sandboxProfile;
+    setSandboxProfile(newProfile);
+    if (!bridge) {
+      setSandboxProfile(previous);
+      notify(`Cannot set Sandbox Profile — no bridge connection`, 'error');
+      return;
+    }
+    try {
+      const result = await bridge.setSandboxProfile(newProfile);
+      setIsBackendMock(false);
+      notify(
+        result.restart_required
+          ? `Sandbox Profile set to ${newProfile} — restart required to apply`
+          : `Sandbox Profile set to ${newProfile}`,
+        'info'
+      );
+    } catch (err: any) {
+      setSandboxProfile(previous);
+      notify(`Failed to update Sandbox Profile: ${err.message}`, 'error');
+    }
+  };
 
   // React to live SSE events for instant status updates (no polling lag)
   useEffect(() => {
@@ -570,6 +612,79 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                   {cat === 'all' ? `All (${guilds.length})` : `${cat} (${categoryCounts[cat] || 0})`}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Sandbox Configuration Panel */}
+          <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/20 backdrop-blur-md space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800/60 pb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Sandbox Security Profile</h3>
+                  <p className="text-[10px] text-slate-500 font-mono">Configure execution isolation constraints for active guilds</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase border",
+                  sandboxEnabled 
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                    : "bg-slate-800 text-slate-500 border-slate-700"
+                )}>
+                  Sandbox: {sandboxEnabled ? "Enabled" : "Disabled"}
+                </span>
+                {isBackendMock && (
+                  <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-tighter" title="Backend implementation is currently a mock stub">
+                    Mock Mode
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Options Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                {
+                  id: 'strict',
+                  label: 'Strict',
+                  desc: 'Full isolation: Docker for all guilds, process_execution=false, network=none, filesystem=read-only workspace.',
+                  color: 'hover:border-red-500/30 active:border-red-500/50',
+                  activeColor: 'border-red-500 bg-red-950/10 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.05)]'
+                },
+                {
+                  id: 'balanced',
+                  label: 'Balanced',
+                  desc: 'Moderate isolation: Docker for bash/code only, enforcement per declared capabilities, network/filesystem per guild declaration. (Default)',
+                  color: 'hover:border-blue-500/30 active:border-blue-500/50',
+                  activeColor: 'border-blue-500 bg-blue-950/10 text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.05)]'
+                },
+                {
+                  id: 'permissive',
+                  label: 'Permissive',
+                  desc: 'No isolation: no Docker, process_execution allowed, full network and filesystem access. Advisory-only capability declarations.',
+                  color: 'hover:border-emerald-500/30 active:border-emerald-500/50',
+                  activeColor: 'border-emerald-500 bg-emerald-950/10 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.05)]'
+                }
+              ].map((p) => {
+                const isActive = sandboxProfile === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleProfileChange(p.id as any)}
+                    className={cn(
+                      "p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col space-y-1.5",
+                      isActive 
+                        ? p.activeColor 
+                        : "border-slate-850 bg-slate-950/30 text-slate-400 " + p.color
+                    )}
+                  >
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider">{p.label}</span>
+                    <span className="text-[10px] text-slate-500 leading-normal font-mono">{p.desc}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

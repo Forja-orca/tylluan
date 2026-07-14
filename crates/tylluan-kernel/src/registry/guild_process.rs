@@ -384,11 +384,19 @@ GuildLauncher::Python { module_path } => {
                     e
                 })?;
                 
-                // S1: Docker sandbox for bash/code guilds
-                if (self.name == "bash" || self.name == "code")
-                    && let Some(sb) = crate::config::load_sandbox_config()
+                // S1: Docker sandbox — profile-based
+                // Strict: all guilds, Balanced: bash/code only, Permissive: none
+                //
+                // Inline the profile check + docker guard as a single expression.
+                // We cannot shadow-bind outside the if-let, so duplicate the check
+                // inside each branch (the logic is cheap — no I/O).
+                let profile = crate::config::load_sandbox_profile();
+                let should_docker = profile.is_strict()
+                    || (profile.is_balanced() && (self.name == "bash" || self.name == "code"));
+                if should_docker && let Some(sb) = crate::config::load_sandbox_config()
                 {
-                    info!("🐳 Sandbox: guild '{}' running in Docker container '{}'", self.name, sb.image);
+                    info!("🐳 Sandbox: guild '{}' running in Docker container '{}' (profile={:?})",
+                        self.name, sb.image, profile);
                     // Strip Windows UNC prefix (\\?\) that canonicalize() adds — Docker doesn't understand it
                     let ws_path = workspace_root.display().to_string();
                     let ws_clean = ws_path.strip_prefix(r"\\?\").unwrap_or(&ws_path);
@@ -489,12 +497,46 @@ GuildLauncher::Python { module_path } => {
 
     /// Check if a guild's capability declarations allow this tool call.
     /// Returns Some(error_message) if the call should be blocked, None if allowed.
+    /// Respects the active SandboxProfile:
+    ///   Strict    → always enforce, override caps with process_execution=false
+    ///   Balanced  → enforce per declared capabilities (current behavior)
+    ///   Permissive → advisory only, never block
     fn check_capabilities(&self, params: &CallToolRequestParam) -> Option<String> {
+        let profile = crate::config::load_sandbox_profile();
+
+        // Permissive: no enforcement
+        if profile.is_permissive() {
+            return None;
+        }
+
         let catalog = crate::router::catalog::builtin_catalog();
         let caps = catalog.iter()
             .find(|d| d.name == self.name)
-            .and_then(|d| d.capabilities.as_ref())?;
+            .and_then(|d| d.capabilities.as_ref());
 
+        let caps = match caps {
+            Some(c) => c,
+            None => return None, // no capabilities → allowed
+        };
+
+        // Strict: override caps to process_execution=false regardless of declaration
+        if profile.is_strict() {
+            // Build an overridden JSON that forces process_execution=false
+            let mut overridden = serde_json::Map::new();
+            if let Some(obj) = caps.as_object() {
+                for (k, v) in obj.iter() {
+                    if k == "process_execution" {
+                        overridden.insert(k.clone(), serde_json::Value::Bool(false));
+                    } else {
+                        overridden.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            let overridden = serde_json::Value::Object(overridden);
+            return enforce_capabilities(&self.name, &overridden, params);
+        }
+
+        // Balanced: enforce per declared capabilities
         let enforce = crate::config::TylluanConfig::load_cached()
             .ok()
             .and_then(|cfg| {
@@ -520,16 +562,26 @@ GuildLauncher::Python { module_path } => {
         }
 
         // Dry-run intercept: if config says dry_run=true and guild is destructive,
-        // simulate the call without forwarding to the proxy
+        // simulate the call without forwarding to the proxy.
+        // Destructive classification respects SandboxProfile:
+        //   Strict → everything is destructive, Permissive → nothing is,
+        //   Balanced → per declared capabilities (is_destructive_guild).
         if let Ok(cfg) = crate::config::TylluanConfig::load_cached() {
             if let Ok(locked) = cfg.try_read() {
                 if locked.guilds_dry_run() {
-                    let catalog = crate::router::catalog::builtin_catalog();
-                    let is_destructive = catalog.iter()
-                        .find(|d| d.name == self.name)
-                        .and_then(|d| d.capabilities.as_ref())
-                        .map(|caps| is_destructive_guild(caps))
-                        .unwrap_or(false);
+                    let profile = crate::config::load_sandbox_profile();
+                    let is_destructive = match profile {
+                        crate::config::SandboxProfile::Permissive => false,
+                        crate::config::SandboxProfile::Strict => true,
+                        _ => {
+                            let catalog = crate::router::catalog::builtin_catalog();
+                            catalog.iter()
+                                .find(|d| d.name == self.name)
+                                .and_then(|d| d.capabilities.as_ref())
+                                .map(|caps| is_destructive_guild(caps))
+                                .unwrap_or(false)
+                        }
+                    };
 
                     if is_destructive {
                         let tool_name = params.name.as_ref();

@@ -325,8 +325,8 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | **Capabilities de bool a allowlist estructurada**: `filesystem_scope`/`network_hosts` ya son listas — falta que `process_execution` también sea granular (allowlist de subcomandos, no solo true/false) y que el enforcement se evalúe siempre, desacoplado del flag `sandbox.enabled` (que pasa a ser solo el selector de backend de aislamiento: none/docker/futuro gVisor). | Deep | ⬜ |
-| P1 | **Perfiles graduales predefinidos** (trusted/standard/untrusted/custom) que mapean a un set de capabilities por defecto, en vez de configurar guild por guild a mano. | Deep | ⬜ |
+| P0 | **Capabilities de bool a allowlist estructurada**: `filesystem_scope`/`network_hosts` ya son listas — `process_execution` también acepta allowlist de subcomandos (no solo true/false), enforcement evaluado siempre, desacoplado del flag `sandbox.enabled`. | Deep | ✅ |
+| P1 | **Perfiles graduales predefinidos** (strict/balanced/permissive) que mapean a un set de capabilities por defecto, en vez de configurar guild por guild a mano. Perfiles controlan: Docker scope (all/bash-code/none), enforcement (forzar false/per-declaración/skip), dry-run (todo/nada/per-caps). | OpenCode IDE | ✅ |
 | P2 | **Override jerárquico global → guild → sesión/agente**: precedencia tipo cascada (lo más específico gana), con el origen de cada regla auditado (para saber por qué una acción se permitió o no). | Deep | ⬜ |
 | P3 | **Motor de grants escalados**: cuando una acción excede la política, en vez de fallar duro, pedir aprobación una vez y ofrecer "permitir esta vez / esta sesión / siempre para este guild" — persistiendo el grant en el nivel elegido. Reusa `approve_action`/`list_pending_actions` ya existentes. | Deep | ⬜ |
 | P4 | **CLI + dashboard como front de la política**: `tylluan sandbox set <guild> <policy>`, `tylluan sandbox profile <session> untrusted`, `tylluan sandbox allow-path <guild> /data:rw` — mismo modelo de datos que los toggles del dashboard, el TOML deja de editarse a mano. | Deep + Antigravity | ⬜ |

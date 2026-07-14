@@ -1023,10 +1023,37 @@ fn derive_key_argon2(seed: &[u8], data_dir: &Path) -> anyhow::Result<String> {
     Ok(key.iter().map(|b| format!("{:02x}", b)).collect())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SandboxProfile {
+    /// Full isolation: Docker for all guilds, process_execution=false,
+    /// network=none, filesystem=read-only workspace.
+    Strict,
+    /// Moderate isolation: Docker for bash/code only, enforcement per
+    /// declared capabilities, network/filesystem per guild declaration.
+    /// This is the DEFAULT — backward compatible with pre-M30-P1 behavior.
+    Balanced,
+    /// No isolation: no Docker, process_execution allowed, full network
+    /// and filesystem access. Advisory-only capability declarations.
+    Permissive,
+}
+
+impl SandboxProfile {
+    pub fn is_strict(&self) -> bool { matches!(self, SandboxProfile::Strict) }
+    pub fn is_balanced(&self) -> bool { matches!(self, SandboxProfile::Balanced) }
+    pub fn is_permissive(&self) -> bool { matches!(self, SandboxProfile::Permissive) }
+}
+
+impl Default for SandboxProfile {
+    fn default() -> Self { Self::Balanced }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub profile: SandboxProfile,
     #[serde(default = "default_sandbox_image")]
     pub image: String,
     #[serde(default = "default_sandbox_memory")]
@@ -1041,6 +1068,7 @@ impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            profile: SandboxProfile::default(),
             image: default_sandbox_image(),
             memory: default_sandbox_memory(),
             network: false,
@@ -1079,6 +1107,18 @@ pub fn load_sandbox_config() -> Option<SandboxConfig> {
         }
     }
     None
+}
+
+/// Load the active sandbox profile, or default if sandbox is disabled.
+pub fn load_sandbox_profile() -> SandboxProfile {
+    if let Ok(cached) = TylluanConfig::load_cached() {
+        if let Ok(cfg) = cached.try_read() {
+            if cfg.security.sandbox.enabled {
+                return cfg.security.sandbox.profile;
+            }
+        }
+    }
+    SandboxProfile::Balanced
 }
 
 // ─── Defaults ───────────────────────────────────────────────────────
@@ -1355,5 +1395,58 @@ url = "https://slack.example.com/sse"
         config.nexus.host = "127.0.0.1".to_string();
         config.validate_security();
         assert_eq!(config.nexus.host, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_sandbox_profile_default_is_balanced() {
+        let cfg = SandboxConfig::default();
+        assert_eq!(cfg.profile, SandboxProfile::Balanced);
+    }
+
+    #[test]
+    fn test_sandbox_profile_serde_roundtrip() {
+        for profile in &[SandboxProfile::Strict, SandboxProfile::Balanced, SandboxProfile::Permissive] {
+            let json = serde_json::to_string(profile).unwrap();
+            let deserialized: SandboxProfile = serde_json::from_str(&json).unwrap();
+            assert_eq!(*profile, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_sandbox_profile_from_toml() {
+        let toml_str = r#"
+[security.sandbox]
+enabled = true
+profile = "strict"
+"#;
+        let config: TylluanConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.security.sandbox.enabled);
+        assert_eq!(config.security.sandbox.profile, SandboxProfile::Strict);
+    }
+
+    #[test]
+    fn test_sandbox_profile_from_toml_permissive() {
+        let toml_str = r#"
+[security.sandbox]
+enabled = true
+profile = "permissive"
+"#;
+        let config: TylluanConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.security.sandbox.profile, SandboxProfile::Permissive);
+    }
+
+    #[test]
+    fn test_sandbox_profile_helpers() {
+        assert!(SandboxProfile::Strict.is_strict());
+        assert!(!SandboxProfile::Strict.is_balanced());
+        assert!(!SandboxProfile::Strict.is_permissive());
+
+        assert!(!SandboxProfile::Balanced.is_strict());
+        assert!(SandboxProfile::Balanced.is_balanced());
+        assert!(!SandboxProfile::Balanced.is_permissive());
+
+        assert!(!SandboxProfile::Permissive.is_strict());
+        assert!(!SandboxProfile::Permissive.is_balanced());
+        assert!(SandboxProfile::Permissive.is_permissive());
     }
 }

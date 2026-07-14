@@ -76,6 +76,11 @@ checkpoint_interval_secs = 300
 # instead of directly on the host system.
 [security.sandbox]
 enabled = false
+# Sandbox profile: strict | balanced | permissive
+# strict: Docker for all guilds, process_execution=false, network=none
+# balanced: Docker for bash/code only, enforcement per guild CAPABILITIES (default)
+# permissive: no Docker, process_execution allowed, full network/filesystem
+profile = "balanced"
 image = "python:3.12-slim"
 memory = "512m"
 network = false

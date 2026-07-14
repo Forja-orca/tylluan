@@ -12,6 +12,9 @@ use crate::transport::http::{HttpState, SaveConfigRequest};
 #[derive(Deserialize)]
 pub struct SetDeviceRequest { pub device: String }
 
+#[derive(Deserialize)]
+pub struct SetSandboxProfileRequest { pub profile: String }
+
 pub async fn get_config_handler() -> impl IntoResponse {
     match crate::config::TylluanConfig::load_cached() {
         Ok(c) => match c.try_read() {
@@ -65,6 +68,81 @@ pub async fn set_inference_device_handler(Json(req): Json<SetDeviceRequest>) -> 
     }
     (StatusCode::OK, Json(serde_json::json!({
         "device": device, "restart_required": true
+    }))).into_response()
+}
+
+/// POST /api/v1/config/sandbox-profile — targeted, corruption-proof edit of
+/// `profile = "..."` under `[security.sandbox]` in tylluan.toml. Same pattern
+/// as set_inference_device_handler: never round-trip the whole config through
+/// the browser (that's what bricked it once).
+pub async fn set_sandbox_profile_handler(Json(req): Json<SetSandboxProfileRequest>) -> impl IntoResponse {
+    let profile = req.profile.trim().to_lowercase();
+    if !["strict", "balanced", "permissive"].contains(&profile.as_str()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "profile must be one of: strict, balanced, permissive"
+        }))).into_response();
+    }
+    let config_path = crate::config::TylluanConfig::find_config_file()
+        .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    let raw = match fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    };
+
+    let mut in_sandbox_section = false;
+    let mut replaced = false;
+    let mut saw_sandbox_section = false;
+    let new_raw: String = raw.lines().map(|l| {
+        let trimmed = l.trim_start();
+        if trimmed.starts_with('[') {
+            in_sandbox_section = trimmed.starts_with("[security.sandbox]");
+            if in_sandbox_section { saw_sandbox_section = true; }
+        } else if in_sandbox_section && !replaced && trimmed.starts_with("profile") && trimmed.contains('=') {
+            replaced = true;
+            return format!("profile = \"{}\"", profile);
+        }
+        l.to_string()
+    }).collect::<Vec<_>>().join("\n");
+
+    let new_raw = if replaced {
+        new_raw
+    } else if saw_sandbox_section {
+        // Section exists but no `profile` key yet — insert right after the header.
+        let mut out = String::new();
+        let mut inserted = false;
+        for l in new_raw.lines() {
+            out.push_str(l);
+            out.push('\n');
+            if !inserted && l.trim_start().starts_with("[security.sandbox]") {
+                out.push_str(&format!("profile = \"{}\"\n", profile));
+                inserted = true;
+            }
+        }
+        out
+    } else {
+        format!("{}\n\n[security.sandbox]\nprofile = \"{}\"\n", new_raw.trim_end(), profile)
+    };
+
+    if let Err(e) = toml::from_str::<crate::config::TylluanConfig>(&new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("refusing to write invalid TOML: {}", e)
+        }))).into_response();
+    }
+    let tmp_path = config_path.with_extension("toml.tmp");
+    if let Err(e) = fs::write(&tmp_path, &new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = fs::rename(&tmp_path, &config_path) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return (StatusCode::OK, Json(serde_json::json!({
+            "profile": profile, "restart_required": true,
+            "warning": format!("written to disk but in-memory reload failed: {e} — restart to apply")
+        }))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({
+        "profile": profile, "restart_required": false
     }))).into_response()
 }
 
