@@ -1206,7 +1206,79 @@ pub async fn resolve_docker_profile(guild_name: &str) -> (SandboxProfile, &'stat
     (global, "global")
 }
 
-// ─── Defaults ───────────────────────────────────────────────────────
+/// Persist a guild override to `permissive` in tylluan.toml via targeted edit.
+/// Used by the grant engine (M30-P3) when a user chooses "always_for_guild".
+/// Returns an error message string on failure, Ok(()) on success.
+pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
+    let config_path = TylluanConfig::find_config_file()
+        .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    let raw = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("cannot read config: {e}"))?;
+
+    let guild_key = format!("guild_overrides.\"{}\"", guild_name.trim());
+    let target_line = format!("{} = \"permissive\"", guild_key);
+
+    let mut in_guild_overrides = false;
+    let mut replaced = false;
+    let mut saw_sandbox_section = false;
+    let mut saw_guild_overrides = false;
+
+    let new_raw: String = raw.lines().map(|l| {
+        let trimmed = l.trim_start();
+        if trimmed.starts_with('[') {
+            in_guild_overrides = trimmed.starts_with("[security.sandbox.guild_overrides]");
+            if trimmed.starts_with("[security.sandbox]") { saw_sandbox_section = true; }
+            if trimmed.starts_with("[security.sandbox.guild_overrides]") { saw_guild_overrides = true; }
+        } else if in_guild_overrides && !replaced
+            && trimmed.starts_with(&format!("\"{}\"", guild_name.trim()))
+            && trimmed.contains('=')
+        {
+            replaced = true;
+            return format!("{} = \"permissive\"", guild_key);
+        }
+        l.to_string()
+    }).collect::<Vec<_>>().join("\n");
+
+    let new_raw = if replaced {
+        new_raw
+    } else if saw_guild_overrides {
+        let mut out = String::new();
+        let mut inserted = false;
+        let mut in_override_section = false;
+        for l in new_raw.lines() {
+            let trimmed = l.trim_start();
+            if trimmed.starts_with("[security.sandbox.guild_overrides]") {
+                in_override_section = true;
+            } else if in_override_section && trimmed.starts_with('[') {
+                if !inserted {
+                    out.push_str(&format!("{}\n", target_line));
+                    inserted = true;
+                }
+                in_override_section = false;
+            }
+            out.push_str(l);
+            out.push('\n');
+        }
+        if !inserted { out.push_str(&format!("{}\n", target_line)); }
+        out
+    } else if saw_sandbox_section {
+        // Append new section at the end
+        format!("{}\n[security.sandbox.guild_overrides]\n{}\n", new_raw.trim_end(), target_line)
+    } else {
+        format!("{}\n\n[security.sandbox]\n[security.sandbox.guild_overrides]\n{}\n", new_raw.trim_end(), target_line)
+    };
+
+    if let Err(e) = toml::from_str::<TylluanConfig>(&new_raw) {
+        return Err(format!("refusing to write invalid TOML: {e}"));
+    }
+    let tmp_path = config_path.with_extension("toml.tmp");
+    std::fs::write(&tmp_path, &new_raw)
+        .map_err(|e| format!("cannot write temp file: {e}"))?;
+    std::fs::rename(&tmp_path, &config_path)
+        .map_err(|e| format!("cannot rename temp file: {e}"))?;
+    TylluanConfig::reload().await.map_err(|e| format!("reload failed: {e}"))?;
+    Ok(())
+}
 
 fn default_host() -> String { "0.0.0.0".into() }
 fn default_port() -> u16 { 3030 }

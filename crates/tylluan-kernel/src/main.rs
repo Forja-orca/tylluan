@@ -835,6 +835,10 @@ async fn main() -> anyhow::Result<()> {
     // Shared health signal: false → /health returns warming_up, true → ok
     let health_ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
+    // ─── Grant Registry (M30-P3) ──────────────────────────────────
+    tylluan_kernel::security::grants::init();
+    tylluan_kernel::security::grants::spawn_reaper();
+
     // ─── Initialize MCP Server ──────────────────────────────────────
     // TylluanServer uses the shared Arc<RwLock<GuildRegistry>> for legacy direct
     // access; the actor-pattern handle (`registry`) flows separately to HTTP.

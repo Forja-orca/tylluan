@@ -551,13 +551,95 @@ GuildLauncher::Python { module_path } => {
         enforce_capabilities(&self.name, caps, params)
     }
 
+    /// When `check_capabilities` blocks a call, offer a grant escalation.
+    /// Returns `None` to proceed with the tool call, or `Some(result)` to abort.
+    async fn handle_capabilities_grant(
+        &self,
+        params: &CallToolRequestParam,
+        blocked_msg: &str,
+    ) -> Option<CallToolResult> {
+        let agent_id = params.arguments.as_ref()
+            .and_then(|a| a.get("agent_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("anonymous");
+        let tool_name = params.name.to_string();
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let id = crate::security::grants::register(
+            crate::security::grants::GrantRequest {
+                guild: self.name.clone(),
+                tool_name: tool_name.clone(),
+                agent_id: agent_id.to_string(),
+                reason: blocked_msg.to_string(),
+                arguments: params.arguments.clone().unwrap_or_default(),
+                tx,
+                expires_at: tokio::time::Instant::now()
+                    + tokio::time::Duration::from_secs(300),
+            },
+        ).await;
+
+        warn!(
+            "🕐 [GRANT] Guild '{}' tool '{}' blocked — awaiting approval (id={})",
+            self.name, tool_name, id
+        );
+
+        let decision = match tokio::time::timeout(
+            tokio::time::Duration::from_secs(300),
+            rx,
+        ).await {
+            Ok(Ok(level)) => level,
+            Ok(Err(_)) | Err(_) => {
+                warn!("⏱️ [GRANT] '{}' expired or cancelled", id);
+                return Some(error_result(blocked_msg));
+            }
+        };
+
+        match decision {
+            crate::security::grants::GrantLevel::ThisTime => {
+                info!("✅ [GRANT] '{}' approved this_time", id);
+                None
+            }
+            crate::security::grants::GrantLevel::ThisSession => {
+                info!("✅ [GRANT] '{}' approved this_session", id);
+                crate::config::set_session_override(
+                    agent_id,
+                    crate::config::SandboxProfile::Permissive,
+                ).await;
+                if self.check_capabilities(params).await.is_some() {
+                    error!("[GRANT] session override did not resolve block — this is a bug");
+                    Some(error_result(blocked_msg))
+                } else {
+                    None
+                }
+            }
+            crate::security::grants::GrantLevel::AlwaysForGuild => {
+                info!("✅ [GRANT] '{}' approved always_for_guild", id);
+                if let Err(e) = crate::config::persist_guild_override(&self.name).await {
+                    error!("❌ [GRANT] Failed to persist guild override: {}", e);
+                    return Some(error_result(blocked_msg));
+                }
+                if self.check_capabilities(params).await.is_some() {
+                    error!("[GRANT] guild override did not resolve block — this is a bug");
+                    Some(error_result(blocked_msg))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     /// Internal call with proxy - for use when lock is already held
     /// Returns a valid CallToolResult in ALL cases — never propagates errors.
     pub async fn call_tool_with_proxy(&self, params: CallToolRequestParam) -> CallToolResult {
-        // Capability enforcement check before any proxy interaction
+        // Capability enforcement check with grant loop
+        // If blocked, the grant engine (M30-P3) offers three escalation paths:
+        //   this_time: run once without persisting
+        //   this_session: set session override to permissive (in-memory)
+        //   always_for_guild: persist guild override to permissive (TOML)
         if let Some(msg) = self.check_capabilities(&params).await {
-            warn!("{}", msg);
-            return error_result(&msg);
+            if let Some(result) = self.handle_capabilities_grant(&params, &msg).await {
+                return result;
+            }
         }
 
         // Dry-run intercept: if config says dry_run=true and guild is destructive,

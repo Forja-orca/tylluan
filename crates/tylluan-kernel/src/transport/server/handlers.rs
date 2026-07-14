@@ -70,16 +70,55 @@ impl TylluanServer {
             "list_pending_actions" => {
                 let pending = self.pending_approvals.read().await;
                 let ids: Vec<String> = pending.keys().cloned().collect();
-                Ok(CallToolResult { content: vec![Content::text(format!("Pending approvals: {:?}", ids))], is_error: Some(false) })
+                let grants = crate::security::grants::list_pending().await;
+                let mut entries: Vec<serde_json::Value> = ids.iter().map(|id| {
+                    serde_json::json!({ "id": id, "origin": "hitl" })
+                }).collect();
+                entries.extend(grants);
+                Ok(CallToolResult {
+                    content: vec![Content::text(
+                        if entries.is_empty() {
+                            "No pending actions.".to_string()
+                        } else {
+                            serde_json::to_string_pretty(&entries).unwrap_or_default()
+                        }
+                    )],
+                    is_error: Some(false),
+                })
             }
             "approve_action" => {
                 let request_id = arguments.as_ref().and_then(|a| a.get("requestId")).and_then(|v| v.as_str()).unwrap_or("");
                 let approved = arguments.as_ref().and_then(|a| a.get("approved")).and_then(|v| v.as_bool()).unwrap_or(false);
-                let mut pending = self.pending_approvals.write().await;
-                if let Some(action) = pending.remove(request_id) {
-                    let _ = action.tx.send(Ok(CallToolResult { content: vec![Content::text(if approved { "Approved" } else { "Rejected" }.to_string())], is_error: Some(!approved) }));
+                let grant_level = arguments.as_ref()
+                    .and_then(|a| a.get("grant_level"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("this_time");
+                let mut resolved = false;
+                // First try: pending_approvals (HITL path)
+                {
+                    let mut pending = self.pending_approvals.write().await;
+                    if let Some(action) = pending.remove(request_id) {
+                        let _ = action.tx.send(Ok(CallToolResult {
+                            content: vec![Content::text(if approved { "Approved" } else { "Rejected" }.to_string())],
+                            is_error: Some(!approved),
+                        }));
+                        resolved = true;
+                    }
+                }
+                if !resolved && approved {
+                    // Try grant registry
+                    let level = match grant_level {
+                        "this_session" => crate::security::grants::GrantLevel::ThisSession,
+                        "always_for_guild" => crate::security::grants::GrantLevel::AlwaysForGuild,
+                        _ => crate::security::grants::GrantLevel::ThisTime,
+                    };
+                    resolved = crate::security::grants::resolve(request_id, level).await;
+                }
+                if resolved {
                     Ok(CallToolResult { content: vec![Content::text("✅ Action resolved".to_string())], is_error: Some(false) })
-                } else { Ok(error_result("Action not found.")) }
+                } else {
+                    Ok(error_result("Action not found."))
+                }
             }
             "ponder" => {
                 let thought = arguments.as_ref().and_then(|a| a.get("thought")).and_then(|v| v.as_str()).unwrap_or("");
