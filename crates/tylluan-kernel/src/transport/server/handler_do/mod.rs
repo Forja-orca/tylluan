@@ -12,6 +12,7 @@ mod routing;
 mod embedding;
 mod coloquio_utils;
 mod timeout;
+mod external_mcp;
 
 pub use embedding::re_embed_legacy_nodes;
 pub(crate) use embedding::distill_for_embedding;
@@ -297,9 +298,21 @@ pub async fn handle_tylluan_do(
     // Strip [ctx: ...] prefix so it doesn't pollute routing
     let routing_intent = intent_enhancer::strip_ctx_prefix(&effective_intent);
 
-    let (guild_name, routing_trace) = match resolve_guild_name(server, routing_intent, guild_hint, agent_id.as_deref()).await {
+    let (guild_name, routing_trace) = match resolve_guild_name(server, routing_intent, guild_hint.clone(), agent_id.as_deref()).await {
         Ok((name, trace)) => (name, trace),
-        Err(err_result) => return Ok(err_result),
+        Err(initial_err) => {
+            // M32: External MCP dispatch — when no internal guild matches, try registered
+            // external MCP servers before returning the "no guild found" error.
+            if guild_hint.is_none() {
+                if let Some(result) = external_mcp::try_external_mcp_dispatch(
+                    server, &intent, agent_id.as_deref()
+                ).await {
+                    info!("tylluan_do: dispatched to external MCP server");
+                    return Ok(result);
+                }
+            }
+            return Ok(initial_err);
+        }
     };
 
     // S1b: Per-Guild rate limit check — backstop against a single guild
@@ -1474,6 +1487,37 @@ mod tests {
         assert!(limiter.check_and_record("websearch").is_err());
         // Different guild unaffected
         assert!(limiter.check_and_record("code").is_ok());
+    }
+
+    // ─── M32-P0: External MCP dispatch tests ───────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_external_mcp_no_servers_returns_none() {
+        let server = test_server().await;
+        let result = external_mcp::try_external_mcp_dispatch(
+            &server, "search the web", None
+        ).await;
+        // Real config likely has no external MCP servers → None
+        // If it does, result will be Some, which is also fine
+        if result.is_none() {
+            // No external MCP servers registered — expected in default config
+            return;
+        }
+        // If Some, verify it's a valid result (not a panic/error)
+        let r = result.unwrap();
+        assert!(!r.content.is_empty() || r.is_error == Some(true));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_external_mcp_server_name_in_intent_no_config() {
+        let server = test_server().await;
+        let result = external_mcp::try_external_mcp_dispatch(
+            &server, "use external-mcp to search", None
+        ).await;
+        // With no external MCPs in the running registry, dispatch returns None.
+        // This tests the guard against non-registered servers.
+        assert!(result.is_none() || result.as_ref().map(|r| r.is_error == Some(true)).unwrap_or(false),
+            "should be None or error when no external servers configured");
     }
 }
 

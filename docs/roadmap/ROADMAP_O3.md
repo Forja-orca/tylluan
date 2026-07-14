@@ -311,7 +311,7 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
 | P0 | **Event Bridge bidireccional (`postMessage`)**: script puente inyectado en el iframe para que la app previsualizada mande mensajes de vuelta al kernel — llamar una sovereign tool, guardar estado en SilvaDB. Requiere un canal `window.addEventListener('message', ...)` en el padre + `parent.postMessage(...)` documentado como API para el código generado dentro del iframe. | Antigravity | ✅ 2026-07-14 |
-| P1 | **Recursos locales seguros en el sandbox**: la app dentro del iframe debe poder cargar imágenes/scripts de `scratch/` u otro directorio autorizado vía un endpoint del proxy que sanitice la ruta (reusar el patrón de `validate_path()` que ya existe para filesystem guild — no reinventar sanitización de paths). | Antigravity | ⬜ |
+| P1 | **Recursos locales seguros en el sandbox**: la app dentro del iframe debe poder cargar imágenes/scripts de `scratch/` u otro directorio autorizado vía un endpoint del proxy que sanitice la ruta (reusar el patrón de `validate_path()` que ya existe para filesystem guild — no reinventar sanitización de paths). | Antigravity | ✅ 2026-07-14 |
 
 **Criterio de cierre:** una app HTML/JS renderizada en el Canvas puede llamar `tylluan_remember` y ver el resultado sin salir del iframe, y puede cargar una imagen local de `scratch/` sin que el sandbox lo bloquee ni lo permita sin restricción (verificado con un ejemplo real, no solo revisión de código).
 
@@ -370,8 +370,8 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | **Dispatch real hacia external_mcp**: cuando `tylluan_do` no encuentra un guild interno que cubra el intent, o cuando se pide explícitamente, despachar la llamada al servidor MCP externo registrado (HTTP/SSE, ya hay cliente MCP en el kernel para federación — reusar, no reinventar el transporte). | Deep | ⬜ |
-| P1 | **Auditoría de llamadas externas**: cada invocación a un MCP externo debe quedar en el audit trail igual que una guild interna — es la superficie de mayor riesgo (código/datos fuera del proceso soberano). | Deep | ⬜ |
+| P0 | **Dispatch real hacia external_mcp**: cuando `tylluan_do` no encuentra un guild interno que cubra el intent, o cuando se pide explícitamente, despachar la llamada al servidor MCP externo registrado (HTTP/SSE, ya hay cliente MCP en el kernel para federación — reusar, no reinventar el transporte). | Deep | ✅ |
+| P1 | **Auditoría de llamadas externas**: cada invocación a un MCP externo debe quedar en el audit trail igual que una guild interna — es la superficie de mayor riesgo (código/datos fuera del proceso soberano). | Deep | ✅ |
 | P2 | **UI en dashboard**: panel de servidores MCP externos con estado de conexión y últimas llamadas (ya existe `list_mcp_servers_handler`, falta consumirlo visualmente). | Antigravity | ⬜ |
 
 **Criterio de cierre:** registrar un servidor MCP externo real (ej. un servidor de prueba local) y conseguir que `tylluan_do` lo invoque de verdad, con el resultado en el audit trail — no solo que aparezca en `GET /api/v1/mcp/external`.
