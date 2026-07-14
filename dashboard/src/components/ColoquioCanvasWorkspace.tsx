@@ -82,6 +82,14 @@ function buildSrcdoc(code: string, lang: string): string {
           requestId: requestId
         }, '*');
       });
+    },
+    resolveLocalAsset: function(path) {
+      const cleanPath = encodeURIComponent(path);
+      const token = parent.localStorage.getItem('tylluan_token') || '';
+      const baseUrl = parent.location.origin;
+      return token 
+        ? baseUrl + "/api/v1/sandbox/files/" + cleanPath + "?token=" + encodeURIComponent(token)
+        : baseUrl + "/api/v1/sandbox/files/" + cleanPath;
     }
   };
 
