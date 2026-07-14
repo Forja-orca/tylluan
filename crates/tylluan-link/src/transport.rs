@@ -243,7 +243,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_partitionable_partition_blocks_receive() {
-        let (mut inner_a, mut inner_b) = in_memory_pair();
+        let (mut inner_a, inner_b) = in_memory_pair();
         let mut pt = PartitionableTransport::new(inner_b);
         pt.set_mode(FaultMode::Partition);
 
