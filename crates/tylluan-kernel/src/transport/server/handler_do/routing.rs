@@ -234,7 +234,7 @@ pub(super) async fn run_agent_handshake(server: &TylluanServer, aid: &str) {
     let _ = server.mailbox.send_mail("kernel", aid, &msg.to_payload()).await;
 }
 
-pub(super) fn record_activity_trace(server: &TylluanServer, aid: &str, guild_name: &str, tool_name: &str, result_text_len: usize) {
+pub(crate) fn record_activity_trace(server: &TylluanServer, aid: &str, guild_name: &str, tool_name: &str, result_text_len: usize) {
     if result_text_len <= 100 { return; }
     let edge_meta = serde_json::json!({
         "tool": tool_name,
