@@ -293,3 +293,108 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 | I-3 | Mesh global (NAT traversal público, DHT cross-instance) | ADR pendiente | Post-v1.0 |
 | I-4 | Permisos asimétricos (criptografía Ed25519 para ACL distribuida) | Diseño interno | Post-v1.0 |
 | I-5 | Incremental PageRank: actualizar solo nodos afectados en lugar de recalc global O(V+E) | faer/nalgebra | Post-M21 |
+
+---
+
+## Ciclo 2026-07-14 — "Que Tylluan no se quede a medias"
+
+**Origen:** José pidió explícitamente un escaneo completo, no incremental: qué le falta a Tylluan frente al estado del arte 2026 en cuatro frentes (Canvas bidireccional, sandbox configurable, CLI harness, memoria de agentes), más un hallazgo suyo directo (bidireccionalidad MCP "perdida" desde ForjaMCPo3). Investigado con 3 agentes de investigación web en paralelo + verificación de código en ambos repos (ForjaMCPo3 y Tylluan) antes de escribir nada — ningún ítem de esta sección es una idea sin contrastar.
+
+**Hallazgo de partida (verificado en código, no de memoria):** ForjaMCPo3 cerró un "M25-B: Forja como cliente MCP bidireccional" en 2026-06-12, y Tylluan heredó la misma config (`external_mcp`) y los mismos endpoints (`list/add/remove/discover`). Pero en **ninguno de los dos repos** ese cliente MCP externo está cableado al dispatch real — `tylluan_do` no puede invocar una herramienta de un servidor MCP externo registrado, solo se puede listar/registrar/descubrir. No es una memoria falsa de José: es un gap real, heredado, nunca cerrado del todo en ninguno de los dos sitios (M32 abajo).
+
+### M25 — Canvas Event Bridge (v0.19.0)
+
+**Norte:** El Canvas (`ColoquioCanvasWorkspace.tsx`, verificado: iframe `srcDoc` sandboxed, `allow-scripts allow-same-origin allow-forms allow-modals`) hoy es de un solo sentido — el kernel renderiza HTML/JS en el preview, pero la app dentro no puede comunicarse de vuelta. José: no debe ser "el Knowledge Graph disfrazado", debe ser un entorno de trabajo real al estilo Claude Artifacts/Gemini Canvas.
+
+**Fases:**
+
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | **Event Bridge bidireccional (`postMessage`)**: script puente inyectado en el iframe para que la app previsualizada mande mensajes de vuelta al kernel — llamar una sovereign tool, guardar estado en SilvaDB. Requiere un canal `window.addEventListener('message', ...)` en el padre + `parent.postMessage(...)` documentado como API para el código generado dentro del iframe. | Antigravity | ⬜ |
+| P1 | **Recursos locales seguros en el sandbox**: la app dentro del iframe debe poder cargar imágenes/scripts de `scratch/` u otro directorio autorizado vía un endpoint del proxy que sanitice la ruta (reusar el patrón de `validate_path()` que ya existe para filesystem guild — no reinventar sanitización de paths). | Antigravity | ⬜ |
+
+**Criterio de cierre:** una app HTML/JS renderizada en el Canvas puede llamar `tylluan_remember` y ver el resultado sin salir del iframe, y puede cargar una imagen local de `scratch/` sin que el sandbox lo bloquee ni lo permita sin restricción (verificado con un ejemplo real, no solo revisión de código).
+
+---
+
+### M30 — Sandbox Configurable, No Prohibitivo (v0.20.0)
+
+**Norte (palabras de José):** "el sandbox debe ser totalmente configurable vía CLI o vía dashboard, el sandbox no debe ser prohibitivo, solo totalmente configurable." Hoy: `security.sandbox.enabled` es un booleano global (todo o nada) + capabilities declaradas por guild con enforcement opt-in (`process_execution`/`filesystem_scope`/`network_hosts`, ya cerrado M27-P3/P4). Investigación 2026 (Claude Code sandboxing docs, Landlock kernel docs, WASI capability model, E2B/gVisor/Firecracker) confirma el patrón correcto: **dos ejes separados** — aislamiento (dónde corre el código) y política (qué puede tocar), con la política como allowlist gradual, no un bool.
+
+**Fases:**
+
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | **Capabilities de bool a allowlist estructurada**: `filesystem_scope`/`network_hosts` ya son listas — falta que `process_execution` también sea granular (allowlist de subcomandos, no solo true/false) y que el enforcement se evalúe siempre, desacoplado del flag `sandbox.enabled` (que pasa a ser solo el selector de backend de aislamiento: none/docker/futuro gVisor). | Deep | ⬜ |
+| P1 | **Perfiles graduales predefinidos** (trusted/standard/untrusted/custom) que mapean a un set de capabilities por defecto, en vez de configurar guild por guild a mano. | Deep | ⬜ |
+| P2 | **Override jerárquico global → guild → sesión/agente**: precedencia tipo cascada (lo más específico gana), con el origen de cada regla auditado (para saber por qué una acción se permitió o no). | Deep | ⬜ |
+| P3 | **Motor de grants escalados**: cuando una acción excede la política, en vez de fallar duro, pedir aprobación una vez y ofrecer "permitir esta vez / esta sesión / siempre para este guild" — persistiendo el grant en el nivel elegido. Reusa `approve_action`/`list_pending_actions` ya existentes. | Deep | ⬜ |
+| P4 | **CLI + dashboard como front de la política**: `tylluan sandbox set <guild> <policy>`, `tylluan sandbox profile <session> untrusted`, `tylluan sandbox allow-path <guild> /data:rw` — mismo modelo de datos que los toggles del dashboard, el TOML deja de editarse a mano. | Deep + Antigravity | ⬜ |
+
+**Criterio de cierre:** un usuario puede pasar un guild de "prohibido" a "permitido con esta excepción concreta" sin editar TOML, desde CLI o dashboard, y ver por qué se bloqueó o permitió una acción concreta en el audit trail.
+
+**Fuentes de la investigación:** Claude Code sandboxing docs (code.claude.com/docs/sandboxing), Anthropic "How we built Claude Code auto mode", Linux kernel Landlock docs, WASI capability-based security model, comparativas E2B/gVisor/Firecracker 2026 (amux.io, northflank.com).
+
+---
+
+### M31 — Tylluan CLI Harness SOTA (v0.21.0)
+
+**Norte (palabras de José):** "quiero que tylluan tenga un cli como claude code pero adaptado para el proyecto." Tylluan no es un wrapper de LLM (no tiene agent loop propio, no edita archivos como Claude Code) — es un **sustrato de memoria multi-cliente**: sirve a Claude Code, Cursor, LM Studio y agentes propios simultáneamente vía MCP. El CLI debe explotar eso, no copiar ciegamente un CLI de codificación individual.
+
+**Fases:**
+
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | **Hooks pre/post sovereign-tool**: código determinista que puede allow/deny/modificar/inyectar contexto antes y después de cada llamada a `tylluan_do`/`tylluan_remember`/etc., configurable en TOML, con nombre de tool como vocabulario unificado. Único punto donde se puede validar/redactar PII/auto-etiquetar memoria **para todos los clientes MCP a la vez**, no solo para uno. | Deep | ⬜ |
+| P1 | **Permisos granulares por agent_id + audit trail**: cerrar el eslabón que falta entre `audit`/`approve_action` (ya existen) y una identidad de cliente real — hoy cualquier cliente MCP puede escribir/borrar memoria de otro (contaminación cruzada ya documentada 3 veces en la historia del proyecto). `tylluan connect --scope read-only` + reglas por agente. | Deep | ⬜ |
+| P2 | **"Plan mode" para `tylluan_do`**: `tylluan do --plan "<intent>"` devuelve la cadena guild+args propuesta para aprobación antes de ejecutar, sin disparar el guild real — evita respawns caros en guilds de inferencia CPU (minutos) y da control sobre acciones destructivas (git, filesystem, docker). Reusa `approve_action`. | Deep | ⬜ |
+| P3 | **Continuidad de sesión cross-cliente**: `tylluan resume` / `tylluan session --context <topic>` que sintetice contexto vía `agent_synthesize_context`/`silva_get_context` existentes y lo imprima o inyecte — un agente puede continuar exactamente donde otro cliente MCP lo dejó. Es la ventaja que ningún competidor tiene (memoria persistente real), el CLI debe hacerla trivial de usar. | Deep | ⬜ |
+| P4 | **Repo-map ligero al arrancar**: orquestar `code_graph`/`index_repository`/`get_architecture` (ya existen) para generar/refrescar un mapa de proyecto token-lean al arrancar el CLI en un directorio, sin re-escanear cada vez. | Deep | ⬜ |
+| P5 | **Skills como contexto reutilizable por-proyecto**: capa de prompts/flujos versionables invocables (`SKILL.md` con frontmatter, `/nombre`) que empaquetan combinaciones de guilds (ej. "ingesta+resume+graph de un repo") sin tocar las 5 sovereign tools — vía de extensibilidad que no viola CONTRACT-01. | Claude (spec) + Deep | ⬜ |
+| P6 | **Subagentes = guilds largos en background con contexto aislado**: lanzar tareas largas (deep_analysis, knowledge) en background desde el CLI, notificar al terminar — encaja con el principio ya establecido de timeouts largos en CPU. Reusa `agent_handoff`/canales coloquio existentes. | Deep | ⬜ |
+| P7 | **`tylluan doctor --fix` cierra el loop**: hoy `doctor_diagnose`/`doctor_repair` existen como tools separadas — el CLI debe encadenarlas automáticamente dado el historial de crash loops del proyecto (scheduler, guilds sin entry point, etc.). | Deep | ⬜ |
+
+**Descartado deliberadamente (verificado contra invariantes del proyecto):** agent loop propio con edición de archivos (Tylluan orquesta, no es un agente de codificación individual), ampliar las 5 sovereign tools (CONTRACT-01 inviolable).
+
+**Criterio de cierre:** un agente puede hacer `tylluan resume` en un proyecto nuevo y recuperar contexto real de una sesión anterior de OTRO cliente MCP sin ayuda humana; una acción destructiva pasa por plan-mode antes de ejecutarse por defecto.
+
+**Fuentes de la investigación:** Claude Code architecture (penligent.ai), "Claude Code: Skills, Subagents, Hooks, Plugins, Harnesses" (boringbot.substack.com), Aider repo-map (aider.chat), Cline context management (deepwiki.com/cline/cline).
+
+---
+
+### M32 — Cliente MCP Bidireccional Real (v0.20.0)
+
+**Norte:** Cerrar el gap heredado de ForjaMCPo3 M25-B — `external_mcp` existe como config y CRUD (`list/add/remove/discover`, verificado en `api_v1.rs` líneas 233-234) pero **nunca se cableó al dispatch real**. Un agente puede registrar un servidor MCP externo (GitHub, Slack, lo que sea) pero no puede realmente invocarlo como herramienta desde `tylluan_do`.
+
+**Fases:**
+
+| Fase | Descripción | Agente | Estado |
+|------|-------------|--------|--------|
+| P0 | **Dispatch real hacia external_mcp**: cuando `tylluan_do` no encuentra un guild interno que cubra el intent, o cuando se pide explícitamente, despachar la llamada al servidor MCP externo registrado (HTTP/SSE, ya hay cliente MCP en el kernel para federación — reusar, no reinventar el transporte). | Deep | ⬜ |
+| P1 | **Auditoría de llamadas externas**: cada invocación a un MCP externo debe quedar en el audit trail igual que una guild interna — es la superficie de mayor riesgo (código/datos fuera del proceso soberano). | Deep | ⬜ |
+| P2 | **UI en dashboard**: panel de servidores MCP externos con estado de conexión y últimas llamadas (ya existe `list_mcp_servers_handler`, falta consumirlo visualmente). | Antigravity | ⬜ |
+
+**Criterio de cierre:** registrar un servidor MCP externo real (ej. un servidor de prueba local) y conseguir que `tylluan_do` lo invoque de verdad, con el resultado en el audit trail — no solo que aparezca en `GET /api/v1/mcp/external`.
+
+---
+
+### M33 — Memoria de Agentes 2026 (backlog priorizado, sin versión fija)
+
+**Norte:** Escaneo honesto de qué prácticas de punta en sistemas de memoria de agentes (Mem0, Letta, Zep/Graphiti, Cognee, MemPalace) Tylluan todavía no tiene, más allá de lo ya cubierto por M25/M30/M31/M32. Cada ítem lleva su prioridad y — donde aplica — la advertencia explícita de qué NO está verificado con fuente primaria (no inflar esto como los benchmarks de M28).
+
+| # | Ítem | Prioridad | Qué aporta | Verificación de la fuente |
+|---|------|-----------|------------|---------------------------|
+| J-1 | **Defensa contra memory poisoning (read/write sandboxing)**: separar lecturas (snapshot validado) de escrituras (staging area) para que una inyección no afecte comportamiento inmediatamente. OWASP lo cataloga como ASI06 en su Agentic AI Top 10 2026. | CRÍTICO | Resistencia a "envenenar una vez, explotar siempre" — máxima prioridad por ser AGPL soberano sin cloud que mitigue. | Fuente primaria: OWASP Agentic AI Top 10. Cifras de tasa de ataque (MINJA 95%/99.8%) NO verificadas contra el paper original — no citar como dato duro. |
+| J-2 | **Sleep-time compute / consolidación proactiva en idle**: Letta ejecuta "reflective passes" en idle que consolidan memoria archival y reescriben bloques, moviendo cómputo fuera del path de usuario. Tylluan tiene `DreamCycle`/decay pero no reescritura activa. | CRÍTICO | Mejor calidad de memoria a largo plazo sin latencia añadida — encaja con NightConsolidation ya existente. | Fuente: Letta blog "sleep-time-compute", "Towards agents that learn". Verificado como feature de producción real. |
+| J-3 | **Soporte de protocolo A2A (Agent2Agent, Google → Linux Foundation)**: capa agente↔agente (delegación, Agent Cards de descubrimiento), distinta de MCP (agente↔herramienta). La federación P2P de Tylluan es propietaria y queda aislada del ecosistema interoperable emergente (150+ orgs adoptando A2A en 2026, ACP de IBM ya fusionado). | ALTO | Agentes Tylluan podrían descubrir/delegar a agentes externos sin protocolo propietario. | Fuente: Galileo A2A guide, Zylos Research. Verificado como estándar real con adopción medible. |
+| J-4 | **Memoria bi-temporal (validez en el tiempo, no solo timestamp de registro)**: Zep/Graphiti modela cuándo un hecho fue verdadero vs cuándo se registró. El knowledge graph de Tylluan guarda triples pero sin versionado temporal de validez. | ALTO | No confundir hechos obsoletos con vigentes; corregir sin borrar historia — relevante para el propio `consensus.rs` de resolución de conflictos. | Patrón verificado en Zep/Graphiti, documentación pública. |
+| J-5 | **Observabilidad OpenTelemetry GenAI semantic conventions**: esquema CNCF vendor-neutral para spans de LLM call/retrieval/tool (model, tokens, operación). M28-P2 ya expone `/metrics` Prometheus — extenderlo a spans OTel permitiría usar Phoenix/Langfuse (open source) sobre Tylluan sin más trabajo del lado observabilidad. | MEDIO | Trazas del "action chain" completo, base real para evaluación continua (J-6). | Fuente: OpenTelemetry GenAI blog oficial, Uptrace. |
+| J-6 | **Evaluación continua desde trazas reales**: convertir fallos de retrieval detectados en producción en evals de regresión automáticos (patrón "traces → datasets, failure modes → regression evals"). Tylluan tiene DST harness pero no este lazo de retroalimentación real→test. | MEDIO | Prevenir degradación silenciosa del recall entre versiones — exactamente el tipo de regresión que ya hemos cazado a mano varias veces esta sesión (M18-P3b, M28-P0). | Práctica descrita en múltiples fuentes de observabilidad de agentes 2026, sin un único estándar canónico. |
+| J-7 | **Explicabilidad de retrieval (por qué X y no Y)**: exponer los scores por componente (BGE-M3 vs BM25 vs graph boost) del recall híbrido ya existente, no solo el resultado final. | INVESTIGACIÓN | Confianza y depuración del ranking — diferenciador real dado que Tylluan ya hace fusión híbrida sofisticada. | No hay solución canónica de producción verificada — es dirección emergente, no práctica establecida. Tratar como exploratorio. |
+| J-8 | **Scopes multi-tenant jerárquicos (user/session/agent)**: Mem0 expone esta primitiva de aislamiento explícitamente. | MEDIO | Aislamiento real para despliegues con múltiples usuarios/agentes — relevante si M31-P1 (permisos por agent_id) avanza. | Patrón de Mem0 verificado; si Tylluan ya lo cubre parcialmente vía agent_id no se confirmó contra código en esta investigación — revisar antes de planificar en detalle. |
+| J-9 | **Auto-reflexión del agente sobre su propia memoria**: que el agente pueda editar/corregir activamente sus propios recuerdos vía tool call, no solo acumular. TRINITY (Verifier) ya existe como precedente de verificación. | ALTO | Memoria que se auto-corrige en vez de acumular ruido silencioso. | Patrón descrito en Letta "Memory Models" — dirección de producto real pero sin implementación de referencia pública detallada verificada. |
+| J-10 | **Memoria episódica por segmentación de eventos** (no por sesión): papers 2026 (ES-Mem, Memanto) proponen fronteras naturales de eventos en vez de límites de sesión/turno. | INVESTIGACIÓN | Recuerdos episódicos con fronteras naturales — mejora potencial sobre el esquema episódico actual (`coloquio:{channel}:{turn}`). | Papers arXiv recientes, sin evidencia de madurez en producción — no priorizar sobre J-1/J-2. |
+
+**Nota de integridad:** todo lo marcado "INVESTIGACIÓN" (J-7, J-10) es explícitamente terreno no maduro — no convertir en milestone con fecha hasta validar con un spike acotado, no directamente en producción. Todo lo demás tiene al menos una fuente primaria verificada por el agente de investigación (ver reporte completo en Coloquio si se publica, o pedir las fuentes exactas).
+
+---
