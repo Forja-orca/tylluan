@@ -99,13 +99,24 @@ pub struct GuildProcess {
 /// Destructive guilds can execute system commands or write outside their sandbox.
 /// Guilds without CAPABILITIES (null) are conservatively treated as non-destructive.
 pub fn is_destructive_guild(caps: &serde_json::Value) -> bool {
-    // process_execution: true or absent → can run commands
+    // process_execution:
+    //   true          → destructive (can run any command)
+    //   false         → not destructive via this axis
+    //   absent        → conservative: assume destructive
+    //   ["git", ..]   → non-empty allowlist → can execute SOME commands → destructive
+    //   []            → empty allowlist → no commands allowed → not destructive
     match caps.get("process_execution") {
         Some(v) => {
             if v.as_bool() == Some(true) {
                 return true;
             }
-            // false = explicitly denied, not destructive via this axis
+            if v.as_bool() == Some(false) {
+                // explicitly denied, not destructive via this axis
+            } else if let Some(arr) = v.as_array() {
+                if !arr.is_empty() {
+                    return true; // non-empty allowlist → can execute
+                }
+            }
         }
         None => return true, // not declared → assume destructive
     }
@@ -120,6 +131,25 @@ pub fn is_destructive_guild(caps: &serde_json::Value) -> bool {
     false
 }
 
+/// Extract the first word (binary) from a tool call's "command" argument.
+fn extract_requested_binary(params: &CallToolRequestParam) -> Option<String> {
+    params.arguments.as_ref()
+        .and_then(|a| a.get("command"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .and_then(|cmd| cmd.split_whitespace().next())
+        .map(|s| s.to_string())
+}
+
+/// Check if a tool name looks like it executes commands.
+fn is_exec_like_tool(params: &CallToolRequestParam) -> bool {
+    let tn: &str = params.name.as_ref();
+    tn.contains("execute") || tn.contains("run")
+        || tn.contains("exec") || tn.contains("spawn")
+        || tn.contains("shell") || tn.contains("command")
+}
+
 /// Deterministic capability enforcement — no config or catalog lookup.
 /// Returns Some(block_message) if the call violates declared capabilities.
 /// Guilds without capabilities (null) are never enforced.
@@ -129,22 +159,56 @@ pub fn enforce_capabilities(
     params: &CallToolRequestParam,
 ) -> Option<String> {
     // Check process_execution
-    if let Some(false) = caps.get("process_execution").and_then(|v| v.as_bool()) {
-        let tn: &str = params.name.as_ref();
-        let is_exec_tool = tn.contains("execute") || tn.contains("run")
-            || tn.contains("exec") || tn.contains("spawn")
-            || tn.contains("shell") || tn.contains("command");
-        let has_command_arg = params.arguments.as_ref()
-            .and_then(|a| a.get("command"))
-            .and_then(|v| v.as_str())
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
-        if is_exec_tool || has_command_arg {
-            return Some(format!(
-                "CAPABILITY_BLOCKED: guild '{}' declares process_execution=false. \
-                 This guild may not execute system commands.", guild_name
-            ));
+    match caps.get("process_execution") {
+        None => {} // absent → skip enforcement (same as before)
+        Some(v) if v.is_array() => {
+            let list: Vec<String> = v.as_array().unwrap()
+                .iter().filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            if list.is_empty() {
+                // Empty allowlist = no commands allowed, equivalent to false
+                if is_exec_like_tool(params) {
+                    return Some(format!(
+                        "CAPABILITY_BLOCKED: guild '{}' declares process_execution=[] (empty allowlist). \
+                         No commands are allowed.", guild_name
+                    ));
+                }
+            } else {
+                // Non-empty allowlist: extract requested command and check
+                if let Some(cmd) = extract_requested_binary(params) {
+                    if !list.iter().any(|allowed| allowed == &cmd) {
+                        return Some(format!(
+                            "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
+                             but command '{}' is not allowed. Allowed commands: {}.",
+                            guild_name, list, cmd, list.join(", ")
+                        ));
+                    }
+                }
+                // If no command arg but tool looks exec-like, also block
+                if is_exec_like_tool(params) && extract_requested_binary(params).is_none() {
+                    return Some(format!(
+                        "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
+                         but no command could be extracted to verify against the allowlist.",
+                        guild_name, list
+                    ));
+                }
+            }
         }
+        Some(v) if v.as_bool() == Some(false) => {
+            let is_exec_tool = is_exec_like_tool(params);
+            let has_command_arg = params.arguments.as_ref()
+                .and_then(|a| a.get("command"))
+                .and_then(|v| v.as_str())
+                .map(|s| !s.is_empty())
+                .unwrap_or(false);
+            if is_exec_tool || has_command_arg {
+                return Some(format!(
+                    "CAPABILITY_BLOCKED: guild '{}' declares process_execution=false. \
+                     This guild may not execute system commands.", guild_name
+                ));
+            }
+        }
+        _ => {} // true or unknown type → allow
     }
 
     // Check filesystem_scope

@@ -71,15 +71,21 @@ fn main() {
         }
     }
 
-    let ok = Command::new(npm)
+    let build_result = Command::new(npm)
         .args(["run", "build"])
         .current_dir(&dashboard_dir)
-        .status()
-        .unwrap_or_else(|e| panic!("npm not found: {e} — install Node.js"));
+        .status();
+    let ok = match build_result {
+        Ok(status) => status.success(),
+        Err(e) => {
+            println!("cargo:warning=npm not found: {e} — skipping dashboard build");
+            false
+        }
+    };
 
-    if !ok.success() {
-        panic!("Dashboard build failed — run 'npm run build' in dashboard/ to debug");
+    if ok {
+        std::fs::write(&stamp, &current).ok();
+    } else {
+        println!("cargo:warning=Dashboard build failed — using cached dist/ if available. Run 'npm run build' in dashboard/ to debug.");
     }
-
-    std::fs::write(&stamp, &current).ok();
 }
