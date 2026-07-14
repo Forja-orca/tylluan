@@ -96,6 +96,17 @@ pub async fn resolve(id: &str, level: GrantLevel) -> bool {
     }
 }
 
+/// Remove a grant without resolving it (receiver gets Canceled).
+/// Used when the approver rejects the request.
+pub async fn remove(id: &str) -> bool {
+    let mut locked = GRANT_REGISTRY
+        .get()
+        .expect("GrantRegistry not initialized")
+        .write()
+        .await;
+    locked.pending.remove(id).is_some()
+}
+
 pub async fn list_pending() -> Vec<serde_json::Value> {
     let locked = GRANT_REGISTRY
         .get()
@@ -133,4 +144,203 @@ pub fn spawn_reaper() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ensure_init() {
+        if GRANT_REGISTRY.get().is_none() {
+            init();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_register_and_resolve_this_time() {
+        ensure_init();
+        let (tx, rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "bash".into(),
+            tool_name: "bash_execute".into(),
+            agent_id: "test-agent".into(),
+            reason: "blocked by policy".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+        assert!(!id.is_empty());
+
+        let resolved = resolve(&id, GrantLevel::ThisTime).await;
+        assert!(resolved);
+
+        let decision = rx.await.unwrap();
+        assert_eq!(decision, GrantLevel::ThisTime);
+    }
+
+    #[tokio::test]
+    async fn test_register_and_resolve_this_session() {
+        ensure_init();
+        let (tx, rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "code".into(),
+            tool_name: "code_analysis".into(),
+            agent_id: "agent-x".into(),
+            reason: "filesystem scope exceeded".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+
+        assert!(resolve(&id, GrantLevel::ThisSession).await);
+        assert_eq!(rx.await.unwrap(), GrantLevel::ThisSession);
+    }
+
+    #[tokio::test]
+    async fn test_register_and_resolve_always_for_guild() {
+        ensure_init();
+        let (tx, rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "docker".into(),
+            tool_name: "docker_exec".into(),
+            agent_id: "devops".into(),
+            reason: "process execution blocked".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+
+        assert!(resolve(&id, GrantLevel::AlwaysForGuild).await);
+        assert_eq!(rx.await.unwrap(), GrantLevel::AlwaysForGuild);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_nonexistent_returns_false() {
+        ensure_init();
+        assert!(!resolve("nonexistent", GrantLevel::ThisTime).await);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_twice_returns_false_second_time() {
+        ensure_init();
+        let (tx, _rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "bash".into(),
+            tool_name: "bash_execute".into(),
+            agent_id: "tester".into(),
+            reason: "test".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+
+        assert!(resolve(&id, GrantLevel::ThisTime).await);
+        assert!(!resolve(&id, GrantLevel::ThisSession).await);
+    }
+
+    #[tokio::test]
+    async fn test_list_pending_after_register() {
+        ensure_init();
+        let (tx, _rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "websearch".into(),
+            tool_name: "web_search".into(),
+            agent_id: "agent-1".into(),
+            reason: "network blocked".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+
+        let pending = list_pending().await;
+        let found = pending.iter().any(|v| {
+            v.get("id").and_then(|i| i.as_str()) == Some(&id)
+                && v.get("guild").and_then(|g| g.as_str()) == Some("websearch")
+        });
+        assert!(found, "registered grant must appear in list_pending");
+
+        resolve(&id, GrantLevel::ThisTime).await;
+        let pending_after = list_pending().await;
+        let still_found = pending_after.iter().any(|v| {
+            v.get("id").and_then(|i| i.as_str()) == Some(&id)
+        });
+        assert!(!still_found, "resolved grant must not appear in list_pending");
+    }
+
+    #[tokio::test]
+    async fn test_cancelled_sender_returns_false() {
+        ensure_init();
+        let (tx, rx) = oneshot::channel();
+        let id = register(GrantRequest {
+            guild: "bash".into(),
+            tool_name: "bash_execute".into(),
+            agent_id: "anon".into(),
+            reason: "test".into(),
+            arguments: serde_json::Map::new(),
+            tx,
+            expires_at: tokio::time::Instant::now() + tokio::time::Duration::from_secs(60),
+        }).await;
+
+        // Drop the receiver to simulate cancellation
+        drop(rx);
+
+        // resolve should return false because the send failed (receiver dropped)
+        assert!(!resolve(&id, GrantLevel::ThisTime).await);
+    }
+
+    #[tokio::test]
+    async fn test_grant_level_as_str() {
+        assert_eq!(GrantLevel::ThisTime.as_str(), "this_time");
+        assert_eq!(GrantLevel::ThisSession.as_str(), "this_session");
+        assert_eq!(GrantLevel::AlwaysForGuild.as_str(), "always_for_guild");
+    }
+
+    #[tokio::test]
+    async fn test_reaper_removes_expired_grants() {
+        ensure_init();
+        let (tx1, _rx1) = oneshot::channel();
+        let (tx2, _rx2) = oneshot::channel();
+
+        let expired = tokio::time::Instant::now() - tokio::time::Duration::from_secs(1);
+        let future = tokio::time::Instant::now() + tokio::time::Duration::from_secs(3600);
+
+        let id1 = register(GrantRequest {
+            guild: "bash".into(),
+            tool_name: "bash_execute".into(),
+            agent_id: "a".into(),
+            reason: "expired".into(),
+            arguments: serde_json::Map::new(),
+            tx: tx1,
+            expires_at: expired,
+        }).await;
+
+        let id2 = register(GrantRequest {
+            guild: "code".into(),
+            tool_name: "code_analysis".into(),
+            agent_id: "b".into(),
+            reason: "future".into(),
+            arguments: serde_json::Map::new(),
+            tx: tx2,
+            expires_at: future,
+        }).await;
+
+        // Manually run the reaper logic
+        {
+            let store = GRANT_REGISTRY.get().unwrap();
+            let mut locked = store.write().await;
+            let now = tokio::time::Instant::now();
+            locked.pending.retain(|_, req| req.expires_at > now);
+        }
+
+        let pending = list_pending().await;
+        let expired_still_present = pending.iter().any(|v| {
+            v.get("id").and_then(|i| i.as_str()) == Some(&id1)
+        });
+        assert!(!expired_still_present, "expired grant must be reaped");
+
+        let future_still_present = pending.iter().any(|v| {
+            v.get("id").and_then(|i| i.as_str()) == Some(&id2)
+        });
+        assert!(future_still_present, "future grant must survive reaping");
+    }
 }

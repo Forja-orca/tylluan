@@ -1648,7 +1648,7 @@ code = "permissive"
     async fn test_session_override_set_and_clear() {
         // Start clean
         clear_session_override("test-agent").await;
-        let (profile, origin) = resolve_effective_profile("bash", "test-agent").await;
+        let (_profile, origin) = resolve_effective_profile("bash", "test-agent").await;
         assert_eq!(origin, "global");
 
         set_session_override("test-agent", SandboxProfile::Permissive).await;
@@ -1657,7 +1657,7 @@ code = "permissive"
         assert_eq!(origin, "session");
 
         clear_session_override("test-agent").await;
-        let (profile, origin) = resolve_effective_profile("bash", "test-agent").await;
+        let (_profile, origin) = resolve_effective_profile("bash", "test-agent").await;
         assert_eq!(origin, "global");
     }
 
@@ -1666,7 +1666,7 @@ code = "permissive"
         clear_session_override("boss-agent").await;
 
         // With no override, falls back to global
-        let (profile, origin) = resolve_effective_profile("nonexistent", "boss-agent").await;
+        let (_profile, origin) = resolve_effective_profile("nonexistent", "boss-agent").await;
         assert_eq!(origin, "global");
 
         // Session wins over everything
@@ -1683,7 +1683,7 @@ code = "permissive"
         set_session_override("docker-test", SandboxProfile::Permissive).await;
 
         // resolve_docker_profile should return global, not session
-        let (profile, origin) = resolve_docker_profile("bash").await;
+        let (_profile, origin) = resolve_docker_profile("bash").await;
         assert_eq!(origin, "global");
     }
 }
