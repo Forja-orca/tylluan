@@ -665,10 +665,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     // Spawn background sampler — fills the ring every 5 seconds.
     crate::metrics_ring::spawn_metrics_sampler(metrics_ring, registry_handle);
 
-    // Wire SSE notifier into the TylluanServer
+    // Wire SSE notifier into the TylluanServer and GrantRegistry
     if let Some(s) = &server {
         s.write().await.set_notifier(broadcast_tx.clone());
     }
+    crate::security::grants::set_notifier(broadcast_tx.clone());
 
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
     let (decay_enabled, decay_interval_secs, decay_half_life_hours) = {

@@ -381,12 +381,23 @@ impl super::TylluanServer {
             ),
             TylluanTool::new(
                 "approve_action",
-                "Approve or reject a pending tool call from the queue.",
+                concat!(
+                    "Approve or reject a pending tool call from the queue. ",
+                    "Use grant_level to escalate: 'this_time' (run once), ",
+                    "'this_session' (permissive for session), ",
+                    "'always_for_guild' (persist override).",
+                ),
                 serde_json::json!({
                     "type": "object",
                     "properties": {
                         "requestId": { "type": "string", "description": "ID of the pending request." },
-                        "approved": { "type": "boolean", "description": "True to execute, false to reject." }
+                        "approved": { "type": "boolean", "description": "True to execute, false to reject." },
+                        "grant_level": {
+                            "type": "string",
+                            "description": "Escalation level when approved (default: this_time).",
+                            "enum": ["this_time", "this_session", "always_for_guild"],
+                            "default": "this_time"
+                        }
                     },
                     "required": ["requestId", "approved"]
                 }),
