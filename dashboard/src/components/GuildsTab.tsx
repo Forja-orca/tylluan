@@ -112,6 +112,15 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   const [sandboxProfile, setSandboxProfile] = useState<'strict' | 'balanced' | 'permissive'>('balanced');
   const [isBackendMock, setIsBackendMock] = useState(false);
   const [fullConfig, setFullConfig] = useState<any>(null);
+  const [guildOverrides, setGuildOverrides] = useState<Record<string, 'inherited' | 'strict' | 'balanced' | 'permissive'>>({});
+
+  const getEffectiveProfile = (guildName: string) => {
+    const override = guildOverrides[guildName] || 'inherited';
+    if (override !== 'inherited') {
+      return { profile: override, source: 'guild override' };
+    }
+    return { profile: sandboxProfile, source: 'global' };
+  };
 
   useEffect(() => {
     setGuilds(globalGuilds);
@@ -437,6 +446,72 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             </div>
           );
         })()}
+
+        {/* Sandbox Override Selector */}
+        <div className={cn(
+          "mt-2 mb-3 pt-2 border-t border-slate-800/60 space-y-1.5 font-mono text-[9px]",
+          !sandboxEnabled && "opacity-60"
+        )}>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Effective Sandbox</span>
+            <div className="flex items-center gap-1">
+              <span className={cn(
+                "px-1 py-0.5 rounded text-[8px] font-bold uppercase",
+                !sandboxEnabled ? 'bg-slate-800 text-slate-500 border border-slate-700' :
+                getEffectiveProfile(guild.name).profile === 'strict' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                getEffectiveProfile(guild.name).profile === 'balanced' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+              )}>
+                {sandboxEnabled ? getEffectiveProfile(guild.name).profile : 'inactive'}
+              </span>
+              <span className="text-[8px] text-slate-600">
+                ({sandboxEnabled ? getEffectiveProfile(guild.name).source : 'global off'})
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Sandbox Override</span>
+            <select
+              value={guildOverrides[guild.name] || 'inherited'}
+              disabled={!sandboxEnabled}
+              onChange={async (e) => {
+                const val = e.target.value as 'inherited' | 'strict' | 'balanced' | 'permissive';
+                const previous = guildOverrides[guild.name] || 'inherited';
+                if (val === 'inherited') {
+                  notify(`Clearing a guild override isn't wired up yet — edit tylluan.toml directly or set another profile.`, 'error');
+                  return;
+                }
+                if (!bridge) {
+                  notify(`Cannot set guild override — no bridge connection`, 'error');
+                  return;
+                }
+                setGuildOverrides(prev => ({ ...prev, [guild.name]: val }));
+                try {
+                  const result = await bridge.setGuildSandboxOverride(guild.name, val);
+                  notify(
+                    result.restart_required
+                      ? `${guild.name} sandbox override set to ${val} — restart required to apply`
+                      : `${guild.name} sandbox override set to ${val}`,
+                    'info'
+                  );
+                } catch (err: any) {
+                  setGuildOverrides(prev => ({ ...prev, [guild.name]: previous }));
+                  notify(`Failed to set override for ${guild.name}: ${err.message}`, 'error');
+                }
+              }}
+              title={!sandboxEnabled ? "Enable global sandbox to configure overrides" : undefined}
+              className={cn(
+                "bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-[8px] text-slate-300 font-mono focus:border-emerald-500 focus:outline-none",
+                !sandboxEnabled && "cursor-not-allowed bg-slate-900 text-slate-600"
+              )}
+            >
+              <option value="inherited">Inherited</option>
+              <option value="strict">Strict</option>
+              <option value="balanced">Balanced</option>
+              <option value="permissive">Permissive</option>
+            </select>
+          </div>
+        </div>
 
         {/* Action Buttons */}
         <div className="flex gap-2">

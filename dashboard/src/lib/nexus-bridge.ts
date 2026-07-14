@@ -499,6 +499,13 @@ export class NexusBridge {
     });
   }
 
+  async setGuildSandboxOverride(guild: string, profile: 'strict' | 'balanced' | 'permissive'): Promise<{ restart_required: boolean }> {
+    return await this.fetch('/api/v1/config/sandbox-profile/guild', {
+      method: 'POST',
+      body: JSON.stringify({ guild, profile })
+    });
+  }
+
   async getSilvaGraph(limit = 300, cluster = false): Promise<GraphData> {
     const rawData = await this.fetch(`/api/v1/graph/viz?limit=${limit}&cluster=${cluster}`);
     return {

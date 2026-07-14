@@ -384,13 +384,10 @@ GuildLauncher::Python { module_path } => {
                     e
                 })?;
                 
-                // S1: Docker sandbox — profile-based
+                // S1: Docker sandbox — profile-based (guild-level only, no session)
                 // Strict: all guilds, Balanced: bash/code only, Permissive: none
-                //
-                // Inline the profile check + docker guard as a single expression.
-                // We cannot shadow-bind outside the if-let, so duplicate the check
-                // inside each branch (the logic is cheap — no I/O).
-                let profile = crate::config::load_sandbox_profile();
+                // Uses resolve_docker_profile which excludes session overrides intentionally.
+                let (profile, _origin) = crate::config::resolve_docker_profile(&self.name).await;
                 let should_docker = profile.is_strict()
                     || (profile.is_balanced() && (self.name == "bash" || self.name == "code"));
                 if should_docker && let Some(sb) = crate::config::load_sandbox_config()
@@ -497,12 +494,14 @@ GuildLauncher::Python { module_path } => {
 
     /// Check if a guild's capability declarations allow this tool call.
     /// Returns Some(error_message) if the call should be blocked, None if allowed.
-    /// Respects the active SandboxProfile:
-    ///   Strict    → always enforce, override caps with process_execution=false
-    ///   Balanced  → enforce per declared capabilities (current behavior)
-    ///   Permissive → advisory only, never block
-    fn check_capabilities(&self, params: &CallToolRequestParam) -> Option<String> {
-        let profile = crate::config::load_sandbox_profile();
+    /// Resolves the effective SandboxProfile via the hierarchical cascade:
+    ///   session (agent_id) > guild > global
+    async fn check_capabilities(&self, params: &CallToolRequestParam) -> Option<String> {
+        let agent_id = params.arguments.as_ref()
+            .and_then(|a| a.get("agent_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("anonymous");
+        let (profile, _origin) = crate::config::resolve_effective_profile(&self.name, agent_id).await;
 
         // Permissive: no enforcement
         if profile.is_permissive() {
@@ -556,20 +555,23 @@ GuildLauncher::Python { module_path } => {
     /// Returns a valid CallToolResult in ALL cases — never propagates errors.
     pub async fn call_tool_with_proxy(&self, params: CallToolRequestParam) -> CallToolResult {
         // Capability enforcement check before any proxy interaction
-        if let Some(msg) = self.check_capabilities(&params) {
+        if let Some(msg) = self.check_capabilities(&params).await {
             warn!("{}", msg);
             return error_result(&msg);
         }
 
         // Dry-run intercept: if config says dry_run=true and guild is destructive,
         // simulate the call without forwarding to the proxy.
-        // Destructive classification respects SandboxProfile:
-        //   Strict → everything is destructive, Permissive → nothing is,
-        //   Balanced → per declared capabilities (is_destructive_guild).
+        // Destructive classification respects the full hierarchical cascade:
+        //   session (agent_id) > guild > global
         if let Ok(cfg) = crate::config::TylluanConfig::load_cached() {
             if let Ok(locked) = cfg.try_read() {
                 if locked.guilds_dry_run() {
-                    let profile = crate::config::load_sandbox_profile();
+                    let agent_id = params.arguments.as_ref()
+                        .and_then(|a| a.get("agent_id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("anonymous");
+                    let (profile, _origin) = crate::config::resolve_effective_profile(&self.name, agent_id).await;
                     let is_destructive = match profile {
                         crate::config::SandboxProfile::Permissive => false,
                         crate::config::SandboxProfile::Strict => true,
@@ -1533,21 +1535,21 @@ mod tests {
         assert!(enforce_capabilities("test", &caps, &params).is_none());
     }
 
-    #[test]
-    fn test_check_capabilities_guild_not_in_catalog_returns_none() {
+    #[tokio::test]
+    async fn test_check_capabilities_guild_not_in_catalog_returns_none() {
         let launcher = GuildLauncher::Python { module_path: "nonexistent.module".to_string() };
         let guild = GuildProcess::new("no-such-guild", launcher, false, None, 3);
         let params = make_params("bash_execute", &[("command", "rm -rf /")]);
-        assert!(guild.check_capabilities(&params).is_none());
+        assert!(guild.check_capabilities(&params).await.is_none());
     }
 
-    #[test]
-    fn test_check_capabilities_default_config_returns_none() {
+    #[tokio::test]
+    async fn test_check_capabilities_default_config_returns_none() {
         // websearch has process_execution=false in catalog — but enforce is false by default
         let launcher = GuildLauncher::Python { module_path: "guilds.core.websearch".to_string() };
         let guild = GuildProcess::new("websearch", launcher, false, None, 3);
         let params = make_params("bash_execute", &[("command", "rm -rf /")]);
-        assert!(guild.check_capabilities(&params).is_none());
+        assert!(guild.check_capabilities(&params).await.is_none());
     }
 
     #[test]
