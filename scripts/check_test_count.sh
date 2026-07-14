@@ -20,13 +20,13 @@ sum_passed() {
     grep -oE '[0-9]+ passed' | awk '{sum += $1} END {print sum+0}'
 }
 
-echo "Running tylluan-kernel test suite (lib + integration)..."
-kernel_count=$(cargo test -p tylluan-kernel 2>&1 | tee /dev/stderr | sum_passed)
+echo "Running tylluan-kernel lib tests..."
+kernel_count=$(cargo test -p tylluan-kernel --lib 2>&1 | tee /dev/stderr | sum_passed)
 
-echo "Running tylluan-link test suite..."
+echo "Running tylluan-link lib tests..."
 link_count=$(cargo test -p tylluan-link --lib 2>&1 | tee /dev/stderr | sum_passed)
 
-echo "Running tylluan-fsrs test suite..."
+echo "Running tylluan-fsrs lib tests..."
 fsrs_count=$(cargo test -p tylluan-fsrs --lib 2>&1 | tee /dev/stderr | sum_passed)
 
 real_total=$((kernel_count + link_count + fsrs_count))
@@ -34,12 +34,12 @@ real_total=$((kernel_count + link_count + fsrs_count))
 echo ""
 echo "Real counts: kernel=$kernel_count link=$link_count fsrs=$fsrs_count total=$real_total"
 
-# README.md's claim looks like: "578 tests across Rust kernel (lib + integration), ..."
+# README.md's claim looks like: "402 tests across Rust kernel --lib, tylluan-link, and tylluan-fsrs ..."
 claimed_total=$(grep -oE '^[0-9]+ tests across Rust kernel' README.md | grep -oE '^[0-9]+' | head -1)
 
 if [ -z "$claimed_total" ]; then
     echo "❌ Could not find the test-count line in README.md (expected a line matching"
-    echo "   '<N> tests across Rust kernel (lib + integration), tylluan-link, and tylluan-fsrs')."
+    echo "   '<N> tests across Rust kernel --lib, tylluan-link, and tylluan-fsrs')."
     echo "   Did the wording change? Update this script's grep pattern to match."
     exit 1
 fi
@@ -51,10 +51,10 @@ if [ "$real_total" -ne "$claimed_total" ]; then
     echo "❌ MISMATCH: README.md says $claimed_total tests, but $real_total actually pass."
     echo ""
     echo "Fix: update the test-count line in README.md to $real_total, e.g.:"
-    echo "  $real_total tests across Rust kernel (lib + integration), tylluan-link, and tylluan-fsrs — all green."
+    echo "  $real_total tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green."
     echo ""
     echo "Also check STATUS.md's Commit/test-count line while you're there -- it has the"
-    echo "same kind of claim and the same drift risk."
+    echo "same kind of drift risk."
     exit 1
 fi
 

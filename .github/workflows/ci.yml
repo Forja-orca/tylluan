@@ -121,13 +121,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-      - name: Install ONNX Runtime (same version/layout as Dockerfile)
-        run: |
-          curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
-          tar -zxvf /tmp/onnxruntime.tgz -C /tmp
-          sudo mv /tmp/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so* /usr/lib/
-          sudo ldconfig
-          rm -rf /tmp/onnxruntime*
       - name: Verify README.md's claimed test count against a live run
         run: bash scripts/check_test_count.sh
 
