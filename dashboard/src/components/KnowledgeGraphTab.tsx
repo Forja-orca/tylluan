@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { 
   Search, 
   RefreshCw, 
@@ -18,8 +18,12 @@ import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
 import type { MemoryStats } from '../hooks/useNexus';
 import { useNexus } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
-import { HippocampusGraph } from './HippocampusGraph';
 import { IngestPanel } from './IngestPanel';
+
+// three.js/WebGL is heavy — only load it when the Knowledge tab is actually opened.
+const KnowledgeCortex3D = lazy(() =>
+  import('./graph/KnowledgeCortex3D').then((m) => ({ default: m.KnowledgeCortex3D }))
+);
 
 interface Props {
   bridge: NexusBridge | null;
@@ -212,7 +216,13 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           {bridge ? (
             <>
               <div className="flex-1 min-h-0 flex flex-col">
-                <HippocampusGraph bridge={bridge} events={events} />
+                <Suspense fallback={
+                  <div className="flex-1 min-h-0 rounded-xl border border-slate-800/80 bg-[#040918] flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Cargando cortex 3D...
+                  </div>
+                }>
+                  <KnowledgeCortex3D bridge={bridge} events={events} />
+                </Suspense>
               </div>
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
             </>

@@ -15,7 +15,8 @@ import {
   Check,
   Download,
   Share2,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -74,6 +75,20 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   // Real-time external MCP call log history
   const [calls, setCalls] = useState<any[]>([]);
   const lastProcessedEventTs = React.useRef<number>(0);
+
+  // Local state for sandbox grants (Mock/Pending integration log)
+  const [grants, setGrants] = useState<any[]>([]);
+
+  const fetchGrants = () => {
+    const data = JSON.parse(localStorage.getItem('tylluan_sandbox_grants') || '[]');
+    setGrants(data);
+  };
+
+  useEffect(() => {
+    fetchGrants();
+    window.addEventListener('tylluan_grant_updated', fetchGrants);
+    return () => window.removeEventListener('tylluan_grant_updated', fetchGrants);
+  }, []);
 
   // Listen to external_mcp_call SSE events
   React.useEffect(() => {
@@ -552,6 +567,82 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                           ERROR
                         </span>
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Sandbox Capability Grants History Log */}
+      <div className="border border-slate-800/80 bg-slate-900/30 rounded-2xl overflow-hidden backdrop-blur-md p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-amber-500 animate-pulse" />
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight font-mono">Sandbox Capability Grants Log</h3>
+            <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-tighter" title="Backend log is currently mock stub">
+              Local Audit Log Only
+            </span>
+          </div>
+          {grants.length > 0 && (
+            <button
+              onClick={() => {
+                localStorage.removeItem('tylluan_sandbox_grants');
+                setGrants([]);
+              }}
+              className="text-[10px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
+            >
+              Clear Log
+            </button>
+          )}
+        </div>
+
+        {grants.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+            <p className="text-xs font-mono">No grants approved in this session yet...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800/50 text-[9px] uppercase tracking-wider text-slate-500 font-mono font-bold">
+                  <th className="py-2 px-3">Timestamp</th>
+                  <th className="py-2 px-3">Request ID</th>
+                  <th className="py-2 px-3">Guild</th>
+                  <th className="py-2 px-3">Tool</th>
+                  <th className="py-2 px-3">Approved By</th>
+                  <th className="py-2 px-3 text-right">Scope</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/20 text-xs font-mono">
+                {grants.map((g, idx) => (
+                  <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
+                    <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                      {new Date(g.ts || Date.now()).toLocaleTimeString()}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-400">
+                      {g.id}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-300">
+                      {g.guild}
+                    </td>
+                    <td className="py-2.5 px-3 text-amber-400">
+                      {g.tool}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500">
+                      {g.approved_by}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase",
+                        g.scope === 'once' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                        g.scope === 'session' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                        'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      )}>
+                        {g.scope}
+                      </span>
                     </td>
                   </tr>
                 ))}

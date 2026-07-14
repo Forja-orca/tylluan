@@ -68,6 +68,14 @@ function App() {
   const [coloquioUnread, setColoquioUnread] = useState(0);
   const [activeMentions, setActiveMentions] = useState<Array<{ id: number, sender: string, channel: string, message: string, ts: Date }>>([]);
   const [showMentionsDropdown, setShowMentionsDropdown] = useState(false);
+  const [pendingGrant, setPendingGrant] = useState<{
+    requestId: string;
+    guild: string;
+    agentId: string;
+    tool: string;
+    blockedReason: string;
+    options: string[];
+  } | null>(null);
 
   const formatUptime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -81,6 +89,59 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
   }, []);
 
+  const GRANT_LEVEL_MAP = {
+    once: 'this_time',
+    session: 'this_session',
+    always: 'always_for_guild',
+  } as const;
+
+  const handleApproveGrant = async (scope: 'once' | 'session' | 'always') => {
+    if (!pendingGrant || !bridge) return;
+    const grant_level = GRANT_LEVEL_MAP[scope];
+    try {
+      const result = await bridge.fetchRaw('/api/v1/do', {
+        method: 'POST',
+        body: JSON.stringify({
+          tool: 'approve_action',
+          arguments: {
+            requestId: pendingGrant.requestId,
+            approved: true,
+            grant_level,
+          }
+        })
+      });
+      const isError = result?.content?.some?.((c: any) => c?.text?.includes('not found'))
+        || result?.isError;
+      if (isError) {
+        notify(`Grant '${pendingGrant.requestId}' ya no está pendiente (expiró o fue resuelto).`, 'error');
+        setPendingGrant(null);
+        return;
+      }
+
+      notify(
+        `Grant aprobado para '${pendingGrant.guild}' (${grant_level}).`,
+        'info',
+        'HITL Authorization'
+      );
+
+      const currentGrants = JSON.parse(localStorage.getItem('tylluan_sandbox_grants') || '[]');
+      const newGrant = {
+        id: pendingGrant.requestId,
+        guild: pendingGrant.guild,
+        tool: pendingGrant.tool,
+        scope: grant_level,
+        approved_by: 'Dashboard UI (HITL)',
+        ts: Date.now()
+      };
+      localStorage.setItem('tylluan_sandbox_grants', JSON.stringify([newGrant, ...currentGrants].slice(0, 10)));
+      window.dispatchEvent(new CustomEvent('tylluan_grant_updated'));
+
+      setPendingGrant(null);
+    } catch (e: any) {
+      notify(`Failed to approve grant: ${e.message}`, 'error');
+    }
+  };
+
   useEffect(() => {
     const handleMention = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -88,23 +149,41 @@ function App() {
       const { agent_id, channel, message, sender } = detail;
       
       if (agent_id === 'jose' || agent_id === 'antigravity' || agent_id === 'all') {
-        const newMention = {
-          id: Date.now(),
-          sender,
-          channel,
-          message,
-          ts: new Date()
-        };
-        setActiveMentions(prev => [newMention, ...prev].slice(0, 10));
-        notify(
-          `@${sender} te mencionó en #${channel}: "${message.length > 60 ? message.slice(0, 60) + '...' : message}"`,
-          'info',
-          `Mención: @${agent_id}`
-        );
+        const fullMsg = `${sender} en #${channel}: "${message}"`;
+        notify(fullMsg, 'info', 'Mención Recibida');
+        
+        setActiveMentions(prev => [
+          { id: Date.now(), sender, channel, message, ts: new Date() },
+          ...prev
+        ].slice(0, 10));
+        
+        setColoquioUnread(c => c + 1);
       }
     };
+    
+    // Backend: security/grants.rs::register() broadcasts
+    // { jsonrpc, method: "grant_required", params: {id, guild, tool_name, agent_id, reason} }
+    // nexus-bridge maps method -> ev.type, params -> ev.data, so this arrives as
+    // a `nexus_event_grant_required` CustomEvent with that params object as detail.
+    const handleCapabilityGrant = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.id) return;
+      setPendingGrant({
+        requestId: detail.id,
+        guild: detail.guild || 'unknown',
+        agentId: detail.agent_id || 'unknown',
+        tool: detail.tool_name || 'unknown',
+        blockedReason: detail.reason || 'Requisito de seguridad del sandbox',
+        options: ['once', 'session', 'always'],
+      });
+    };
+
     window.addEventListener('nexus_mention', handleMention);
-    return () => window.removeEventListener('nexus_mention', handleMention);
+    window.addEventListener('nexus_event_grant_required', handleCapabilityGrant);
+    return () => {
+      window.removeEventListener('nexus_mention', handleMention);
+      window.removeEventListener('nexus_event_grant_required', handleCapabilityGrant);
+    };
   }, [notify]);
 
   // Listen to new Event Bridge SSE events (dream_cycle_complete and federation_sync)
@@ -502,6 +581,79 @@ function App() {
           </Suspense>
         </main>
       </div>
+
+      {/* Immersive HITL Capability Grant Modal */}
+      {pendingGrant && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.15)] animate-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-slate-800 bg-amber-500/5 flex items-center gap-3">
+              <ShieldCheck className="w-6 h-6 text-amber-500 animate-pulse" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">Authorization Required</h3>
+                <p className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-tight">HITL Sandbox Gateway Clearance</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 font-mono text-[11px]">
+              <div className="space-y-1.5 p-3 rounded-lg bg-slate-950 border border-slate-800">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Guild Requested:</span>
+                  <span className="text-slate-200 font-bold">{pendingGrant.guild}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Target Tool:</span>
+                  <span className="text-slate-200 font-bold text-amber-400">{pendingGrant.tool}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Requested By:</span>
+                  <span className="text-slate-300">{pendingGrant.agentId}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-slate-500 uppercase font-black text-[9px]">Blocked Reason:</span>
+                <p className="p-3 bg-red-950/15 border border-red-500/20 text-red-400 rounded leading-normal">
+                  {pendingGrant.blockedReason}
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <span className="text-slate-500 uppercase font-black text-[9px] block">Authorize Scope Option:</span>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    onClick={() => handleApproveGrant('once')}
+                    className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                  >
+                    <span>Authorize Only This Time</span>
+                    <span className="text-[9px] opacity-60">scope: once</span>
+                  </button>
+                  <button
+                    onClick={() => handleApproveGrant('session')}
+                    className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                  >
+                    <span>Authorize For Current Session</span>
+                    <span className="text-[9px] opacity-60">scope: session</span>
+                  </button>
+                  <button
+                    onClick={() => handleApproveGrant('always')}
+                    className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
+                  >
+                    <span>Always Authorize For This Guild</span>
+                    <span className="text-[9px] opacity-60">scope: always</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setPendingGrant(null)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-bold transition-colors font-mono"
+              >
+                Deny Execution
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notifications Layer */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3">
