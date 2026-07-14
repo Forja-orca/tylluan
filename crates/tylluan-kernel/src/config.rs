@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 use std::fs;
@@ -1054,6 +1054,11 @@ pub struct SandboxConfig {
     pub enabled: bool,
     #[serde(default)]
     pub profile: SandboxProfile,
+    /// Per-guild overrides (level 2 in cascade).
+    /// Example: `{ "bash": "strict" }` overrides the global profile for the bash guild.
+    /// Stored in TOML under `[security.sandbox.guild_overrides]`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub guild_overrides: HashMap<String, SandboxProfile>,
     #[serde(default = "default_sandbox_image")]
     pub image: String,
     #[serde(default = "default_sandbox_memory")]
@@ -1069,6 +1074,7 @@ impl Default for SandboxConfig {
         Self {
             enabled: false,
             profile: SandboxProfile::default(),
+            guild_overrides: HashMap::new(),
             image: default_sandbox_image(),
             memory: default_sandbox_memory(),
             network: false,
@@ -1119,6 +1125,85 @@ pub fn load_sandbox_profile() -> SandboxProfile {
         }
     }
     SandboxProfile::Balanced
+}
+
+// ─── M30-P2: Hierarchical profile override (session > guild > global) ───
+
+/// In-memory session-level profile overrides, keyed by agent_id.
+/// NOT persisted — lives only while the kernel runs.
+static SESSION_OVERRIDES: OnceLock<RwLock<HashMap<String, SandboxProfile>>> = OnceLock::new();
+
+fn session_overrides() -> &'static RwLock<HashMap<String, SandboxProfile>> {
+    SESSION_OVERRIDES.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Set a session-level override for a given agent_id.
+pub async fn set_session_override(agent_id: &str, profile: SandboxProfile) {
+    session_overrides().write().await.insert(agent_id.to_string(), profile);
+}
+
+/// Remove a session-level override for a given agent_id.
+pub async fn clear_session_override(agent_id: &str) {
+    session_overrides().write().await.remove(agent_id);
+}
+
+/// Load the effective guild-level override from TOML config.
+fn load_guild_override(guild_name: &str) -> Option<SandboxProfile> {
+    if let Ok(cached) = TylluanConfig::load_cached() {
+        if let Ok(cfg) = cached.try_read() {
+            if cfg.security.sandbox.enabled {
+                let o = cfg.security.sandbox.guild_overrides.get(guild_name).copied();
+                if o.is_some() {
+                    return o;
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Resolve the effective sandbox profile using the hierarchical cascade:
+///   session (agent_id) > guild > global
+///
+/// Returns `(SandboxProfile, origin)` where origin is one of
+/// `"session"`, `"guild"`, or `"global"`.
+///
+/// ## Asymmetry (documented):
+/// Session-level overrides only affect enforcement (check_capabilities)
+/// and dry-run classification. They do NOT affect Docker spawn decisions —
+/// a guild is launched once per kernel start, not per-agent, so the guild
+/// and global levels are the only ones that can decide Docker isolation.
+pub async fn resolve_effective_profile(guild_name: &str, agent_id: &str) -> (SandboxProfile, &'static str) {
+    // 1. Session override (highest precedence)
+    {
+        let overrides = session_overrides().read().await;
+        if let Some(profile) = overrides.get(agent_id) {
+            return (*profile, "session");
+        }
+    }
+
+    // 2. Guild override
+    if let Some(profile) = load_guild_override(guild_name) {
+        return (profile, "guild");
+    }
+
+    // 3. Global default
+    let global = load_sandbox_profile();
+    (global, "global")
+}
+
+/// Load the effective Docker-scope profile for a guild.
+/// Session overrides are intentionally excluded — Docker isolation is a
+/// per-guild concern, not per-agent. See `resolve_effective_profile` docs.
+pub async fn resolve_docker_profile(guild_name: &str) -> (SandboxProfile, &'static str) {
+    // 1. Guild override
+    if let Some(profile) = load_guild_override(guild_name) {
+        return (profile, "guild");
+    }
+
+    // 2. Global default
+    let global = load_sandbox_profile();
+    (global, "global")
 }
 
 // ─── Defaults ───────────────────────────────────────────────────────
@@ -1448,5 +1533,85 @@ profile = "permissive"
         assert!(!SandboxProfile::Permissive.is_strict());
         assert!(!SandboxProfile::Permissive.is_balanced());
         assert!(SandboxProfile::Permissive.is_permissive());
+    }
+
+    // ─── M30-P2: Hierarchical cascade tests ─────────────────────────
+
+    #[test]
+    fn test_guild_overrides_deserialize_from_toml() {
+        let toml_str = r#"
+[security.sandbox]
+enabled = true
+profile = "balanced"
+
+[security.sandbox.guild_overrides]
+bash = "strict"
+code = "permissive"
+"#;
+        let config: TylluanConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.security.sandbox.enabled);
+        assert_eq!(config.security.sandbox.profile, SandboxProfile::Balanced);
+        assert_eq!(config.security.sandbox.guild_overrides.get("bash"), Some(&SandboxProfile::Strict));
+        assert_eq!(config.security.sandbox.guild_overrides.get("code"), Some(&SandboxProfile::Permissive));
+        assert_eq!(config.security.sandbox.guild_overrides.len(), 2);
+    }
+
+    #[test]
+    fn test_guild_overrides_roundtrip_skipped_when_empty() {
+        let cfg = SandboxConfig::default();
+        let toml_str = toml::to_string(&cfg).unwrap();
+        // Empty guild_overrides should be skipped by skip_serializing_if
+        assert!(!toml_str.contains("guild_overrides"));
+    }
+
+    #[test]
+    fn test_guild_overrides_present_when_not_empty() {
+        let mut cfg = SandboxConfig::default();
+        cfg.guild_overrides.insert("bash".into(), SandboxProfile::Strict);
+        let toml_str = toml::to_string(&cfg).unwrap();
+        assert!(toml_str.contains("guild_overrides"));
+    }
+
+    #[tokio::test]
+    async fn test_session_override_set_and_clear() {
+        // Start clean
+        clear_session_override("test-agent").await;
+        let (profile, origin) = resolve_effective_profile("bash", "test-agent").await;
+        assert_eq!(origin, "global");
+
+        set_session_override("test-agent", SandboxProfile::Permissive).await;
+        let (profile, origin) = resolve_effective_profile("bash", "test-agent").await;
+        assert_eq!(profile, SandboxProfile::Permissive);
+        assert_eq!(origin, "session");
+
+        clear_session_override("test-agent").await;
+        let (profile, origin) = resolve_effective_profile("bash", "test-agent").await;
+        assert_eq!(origin, "global");
+    }
+
+    #[tokio::test]
+    async fn test_session_precedence_over_guild_and_global() {
+        clear_session_override("boss-agent").await;
+
+        // With no override, falls back to global
+        let (profile, origin) = resolve_effective_profile("nonexistent", "boss-agent").await;
+        assert_eq!(origin, "global");
+
+        // Session wins over everything
+        set_session_override("boss-agent", SandboxProfile::Permissive).await;
+        // Even with global = strict, session takes priority
+        let (profile, origin) = resolve_effective_profile("any-guild", "boss-agent").await;
+        assert_eq!(profile, SandboxProfile::Permissive);
+        assert_eq!(origin, "session");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_docker_profile_excludes_session() {
+        clear_session_override("docker-test").await;
+        set_session_override("docker-test", SandboxProfile::Permissive).await;
+
+        // resolve_docker_profile should return global, not session
+        let (profile, origin) = resolve_docker_profile("bash").await;
+        assert_eq!(origin, "global");
     }
 }

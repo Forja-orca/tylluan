@@ -225,6 +225,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
         .route("/api/v1/config/sandbox-profile", post(set_sandbox_profile_handler))
+        .route("/api/v1/config/sandbox-profile/guild", post(set_guild_sandbox_override_handler))
+        .route("/api/v1/config/sandbox-profile/session", post(set_session_sandbox_override_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/setup-hint", get(setup_hint_handler))
         .route("/api/v1/bash", post(bash_execute_handler)) // DEPRECATED - usar tylluan_do

@@ -15,6 +15,18 @@ pub struct SetDeviceRequest { pub device: String }
 #[derive(Deserialize)]
 pub struct SetSandboxProfileRequest { pub profile: String }
 
+#[derive(Deserialize)]
+pub struct SetGuildSandboxOverrideRequest {
+    pub guild: String,
+    pub profile: String,
+}
+
+#[derive(Deserialize)]
+pub struct SetSessionSandboxOverrideRequest {
+    pub agent_id: String,
+    pub profile: String,
+}
+
 pub async fn get_config_handler() -> impl IntoResponse {
     match crate::config::TylluanConfig::load_cached() {
         Ok(c) => match c.try_read() {
@@ -143,6 +155,162 @@ pub async fn set_sandbox_profile_handler(Json(req): Json<SetSandboxProfileReques
     }
     (StatusCode::OK, Json(serde_json::json!({
         "profile": profile, "restart_required": false
+    }))).into_response()
+}
+
+/// POST /api/v1/config/sandbox-profile/guild — targeted edit of a single
+/// `guild_overrides.<key>` under `[security.sandbox.guild_overrides]`.
+/// Never round-trips the full config through the browser.
+pub async fn set_guild_sandbox_override_handler(
+    Json(req): Json<SetGuildSandboxOverrideRequest>,
+) -> impl IntoResponse {
+    let profile = req.profile.trim().to_lowercase();
+    if !["strict", "balanced", "permissive"].contains(&profile.as_str()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "profile must be one of: strict, balanced, permissive"
+        }))).into_response();
+    }
+    if req.guild.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "guild name must not be empty"
+        }))).into_response();
+    }
+
+    let config_path = crate::config::TylluanConfig::find_config_file()
+        .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    let raw = match fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    };
+
+    let guild_key = format!("guild_overrides.\"{}\"", req.guild.trim());
+    let target_line = format!("{} = \"{}\"", guild_key, profile);
+
+    let mut in_sandbox_section = false;
+    let mut in_guild_overrides = false;
+    let mut replaced = false;
+    let mut saw_sandbox_section = false;
+    let mut saw_guild_overrides = false;
+
+    let new_raw: String = raw.lines().map(|l| {
+        let trimmed = l.trim_start();
+        if trimmed.starts_with('[') {
+            in_sandbox_section = trimmed.starts_with("[security.sandbox]");
+            in_guild_overrides = trimmed.starts_with("[security.sandbox.guild_overrides]");
+            if in_sandbox_section { saw_sandbox_section = true; }
+            if in_guild_overrides { saw_guild_overrides = true; }
+        } else if in_guild_overrides && !replaced && trimmed.starts_with(&format!("\"{}\"", req.guild.trim())) && trimmed.contains('=') {
+            replaced = true;
+            return format!("{} = \"{}\"", guild_key, profile);
+        }
+        l.to_string()
+    }).collect::<Vec<_>>().join("\n");
+
+    let new_raw = if replaced {
+        new_raw
+    } else if saw_guild_overrides {
+        // Section exists but no entry for this guild — append inside the section.
+        // Find the last line of the section and insert before the next section header.
+        let mut out = String::new();
+        let mut inserted = false;
+        let mut in_override_section = false;
+        for l in new_raw.lines() {
+            let trimmed = l.trim_start();
+            if trimmed.starts_with("[security.sandbox.guild_overrides]") {
+                in_override_section = true;
+            } else if in_override_section && trimmed.starts_with('[') {
+                // Next section — insert right before
+                if !inserted {
+                    out.push_str(&format!("{}\n", target_line));
+                    inserted = true;
+                }
+                in_override_section = false;
+            }
+            out.push_str(l);
+            out.push('\n');
+        }
+        // If section was the last thing in the file, append at the end
+        if !inserted {
+            out.push_str(&format!("{}\n", target_line));
+        }
+        out
+    } else if saw_sandbox_section {
+        // Add guild_overrides section after [security.sandbox] entries
+        let mut out = String::new();
+        let mut inserted = false;
+        let mut in_sand = false;
+        for l in new_raw.lines() {
+            let trimmed = l.trim_start();
+            if trimmed.starts_with("[security.sandbox]") {
+                in_sand = true;
+            } else if in_sand && trimmed.starts_with('[') && !trimmed.starts_with("[security.sandbox.") {
+                // Next sibling section — insert before
+                if !inserted {
+                    out.push_str(&format!("\n[security.sandbox.guild_overrides]\n{}\n", target_line));
+                    inserted = true;
+                }
+                in_sand = false;
+            } else if in_sand && trimmed.starts_with('[') {
+                // Another [security.sandbox.*] sub-section — we'll insert before next
+            }
+            out.push_str(l);
+            out.push('\n');
+        }
+        if !inserted {
+            out.push_str(&format!("\n[security.sandbox.guild_overrides]\n{}\n", target_line));
+        }
+        out
+    } else {
+        // No sandbox section at all — append everything
+        format!("{}\n\n[security.sandbox]\n[security.sandbox.guild_overrides]\n{}\n", new_raw.trim_end(), target_line)
+    };
+
+    if let Err(e) = toml::from_str::<crate::config::TylluanConfig>(&new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("refusing to write invalid TOML: {}", e)
+        }))).into_response();
+    }
+    let tmp_path = config_path.with_extension("toml.tmp");
+    if let Err(e) = fs::write(&tmp_path, &new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = fs::rename(&tmp_path, &config_path) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return (StatusCode::OK, Json(serde_json::json!({
+            "guild": req.guild.trim(), "profile": profile, "restart_required": true,
+            "warning": format!("written to disk but in-memory reload failed: {e} — restart to apply")
+        }))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({
+        "guild": req.guild.trim(), "profile": profile, "restart_required": false
+    }))).into_response()
+}
+
+/// POST /api/v1/config/sandbox-profile/session — set in-memory per-agent_id
+/// override. NOT persisted to TOML — lives only while the kernel runs.
+pub async fn set_session_sandbox_override_handler(
+    Json(req): Json<SetSessionSandboxOverrideRequest>,
+) -> impl IntoResponse {
+    let profile = req.profile.trim().to_lowercase();
+    if !["strict", "balanced", "permissive"].contains(&profile.as_str()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "profile must be one of: strict, balanced, permissive"
+        }))).into_response();
+    }
+    let parsed = match profile.as_str() {
+        "strict" => crate::config::SandboxProfile::Strict,
+        "balanced" => crate::config::SandboxProfile::Balanced,
+        "permissive" => crate::config::SandboxProfile::Permissive,
+        _ => unreachable!(),
+    };
+
+    crate::config::set_session_override(&req.agent_id, parsed).await;
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "agent_id": req.agent_id, "profile": profile,
+        "scope": "session", "persisted": false
     }))).into_response()
 }
 
