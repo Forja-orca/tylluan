@@ -8,6 +8,7 @@ import {
 import { cn } from '../lib/utils';
 import { Tldraw } from '@tldraw/tldraw';
 import '@tldraw/tldraw/tldraw.css';
+import { useNexus } from '../hooks/useNexus';
 
 import { ColoquioMessage, CanvasNode, CanvasEdge } from './coloquio-types';
 
@@ -46,11 +47,78 @@ function extractCodeBlocks(messages: ColoquioMessage[]): CodeArtifact[] {
 }
 
 function buildSrcdoc(code: string, lang: string): string {
+  const bridgeHtml = `
+<script>
+(function() {
+  const pendingRequests = new Map();
+  let lastCallTime = 0;
+  const RATE_LIMIT_MS = 200; // max 5 calls per second
+
+  window.tylluan = {
+    call: function(tool, args) {
+      return new Promise((resolve, reject) => {
+        // Rate limiting check
+        const now = Date.now();
+        if (now - lastCallTime < RATE_LIMIT_MS) {
+          reject(new Error("Rate limit exceeded: max 5 calls per second."));
+          return;
+        }
+        lastCallTime = now;
+
+        // Security checklist: only allow the 5 sovereign tools
+        const allowedTools = ['tylluan_do', 'tylluan_remember', 'tylluan_recall', 'tylluan_think', 'tylluan_graph'];
+        if (!allowedTools.includes(tool)) {
+          reject(new Error("Security Error: Tool '" + tool + "' is not authorized."));
+          return;
+        }
+
+        const requestId = Math.random().toString(36).substring(2);
+        pendingRequests.set(requestId, { resolve, reject });
+        
+        parent.postMessage({
+          type: 'tylluan_call',
+          tool: tool,
+          args: args || {},
+          requestId: requestId
+        }, '*');
+      });
+    }
+  };
+
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'tylluan_response') {
+      const req = pendingRequests.get(event.data.requestId);
+      if (req) {
+        pendingRequests.delete(event.data.requestId);
+        if (event.data.error) {
+          req.reject(new Error(event.data.error));
+        } else {
+          req.resolve(event.data.result);
+        }
+      }
+    }
+  });
+})();
+</script>
+`;
+
   if (['html', 'htm', ''].includes(lang.toLowerCase())) {
-    return code;
+    // Inject at the beginning of head, html, or start of document
+    const headIdx = code.toLowerCase().indexOf('<head>');
+    if (headIdx !== -1) {
+      const insertPos = headIdx + 6;
+      return code.slice(0, insertPos) + bridgeHtml + code.slice(insertPos);
+    }
+    const htmlIdx = code.toLowerCase().indexOf('<html>');
+    if (htmlIdx !== -1) {
+      const insertPos = htmlIdx + 6;
+      return code.slice(0, insertPos) + bridgeHtml + code.slice(insertPos);
+    }
+    return bridgeHtml + code;
   }
   if (['js', 'javascript', 'ts', 'typescript'].includes(lang.toLowerCase())) {
     return `<!doctype html><html><head><meta charset="utf-8">
+${bridgeHtml}
 <style>body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:1rem;}</style>
 </head><body><script>
 try { ${code} } catch(e) { document.body.innerHTML = '<pre style="color:#f87171">' + e + '</pre>'; }
@@ -58,24 +126,97 @@ try { ${code} } catch(e) { document.body.innerHTML = '<pre style="color:#f87171"
   }
   if (['css'].includes(lang.toLowerCase())) {
     return `<!doctype html><html><head><meta charset="utf-8">
+${bridgeHtml}
 <style>body{background:#0f172a;color:#e2e8f0;font-family:monospace;padding:1rem;} ${code}</style>
 </head><body><p>CSS preview — add HTML elements to see styles applied.</p></body></html>`;
   }
   // Generic: show as formatted code
   const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<!doctype html><html><head><meta charset="utf-8">
+${bridgeHtml}
 <style>body{margin:0;background:#0f172a;} pre{padding:1rem;color:#e2e8f0;font-family:'Fira Code',monospace;font-size:13px;white-space:pre-wrap;word-break:break-all;}</style>
 </head><body><pre>${escaped}</pre></body></html>`;
 }
 
 // ── PREVIEW TAB ──────────────────────────────────────────────────────────────
 function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
+  const { bridge } = useNexus();
   const artifacts = useMemo(() => extractCodeBlocks(messages), [messages]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const selected = artifacts.find(a => a.id === selectedId) ?? artifacts[0] ?? null;
   const srcdoc = selected ? buildSrcdoc(selected.code, selected.lang) : null;
+
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      // Validate incoming target type
+      if (!event.data || event.data.type !== 'tylluan_call') return;
+
+      // Origin check
+      const allowedOrigins = [window.location.origin, 'null', ''];
+      if (!allowedOrigins.includes(event.origin)) {
+        console.warn('Rejected message from unauthorized origin:', event.origin);
+        return;
+      }
+
+      const { tool, args, requestId } = event.data;
+
+      // Restrict to the 5 sovereign tools
+      const allowedTools = ['tylluan_do', 'tylluan_remember', 'tylluan_recall', 'tylluan_think', 'tylluan_graph'];
+      if (!allowedTools.includes(tool)) {
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'tylluan_response',
+          requestId,
+          error: `Security Error: Tool '${tool}' is not authorized.`
+        }, '*');
+        return;
+      }
+
+      if (!bridge) {
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'tylluan_response',
+          requestId,
+          error: 'Nexus bridge client not available.'
+        }, '*');
+        return;
+      }
+
+      try {
+        const response = await bridge.fetchRaw('/api/v1/do', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tool,
+            query: args.query || args.intent || '',
+            intent: args.intent || '',
+            agent_id: 'dashboard-canvas',
+            ...args
+          })
+        });
+
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'tylluan_response',
+          requestId,
+          result: response
+        }, '*');
+      } catch (err: any) {
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'tylluan_response',
+          requestId,
+          error: err.message || 'Unknown error calling tool.'
+        }, '*');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [bridge]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -119,6 +260,7 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
       <div className="flex-1 relative overflow-hidden bg-white">
         {srcdoc ? (
           <iframe
+            ref={iframeRef}
             key={selected?.id}
             srcDoc={srcdoc}
             sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
