@@ -1,6 +1,6 @@
 ﻿use axum::{
     Json,
-    extract::State,
+    extract::{State, Path as AxumPath},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -143,4 +143,70 @@ pub async fn sandbox_sessions_handler(State(state): State<Arc<HttpState>>) -> im
         "count": running_guilds.len(),
         "ts": chrono::Utc::now().to_rfc3339()
     }))
+}
+
+/// GET /api/v1/sandbox/files/{path}
+/// Serves files from the workspace root with path traversal protection.
+/// Rejects paths that resolve outside the workspace root (canonicalize-based).
+pub async fn sandbox_files_handler(
+    AxumPath(file_path): AxumPath<String>,
+) -> impl IntoResponse {
+    let workspace_root = find_workspace_root();
+    // Axum URL-decodes path parameters automatically — no percent_encoding needed.
+    let decoded_path = std::path::Path::new(&file_path);
+
+    // Resolve and canonicalize (handles .. and symlinks)
+    let resolved = if decoded_path.is_absolute() {
+        decoded_path.to_path_buf()
+    } else {
+        workspace_root.join(decoded_path)
+    };
+    match resolved.canonicalize() {
+        Ok(canonical) => {
+            // Verify the resolved path is within workspace root
+            if !canonical.starts_with(&workspace_root) {
+                return (StatusCode::FORBIDDEN, "Access denied: path outside workspace root").into_response();
+            }
+            match tokio::fs::read(&canonical).await {
+                Ok(bytes) => {
+                    let ext = canonical.extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    let mime = match ext.as_str() {
+                        "png" => "image/png",
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "gif" => "image/gif",
+                        "webp" => "image/webp",
+                        "svg" => "image/svg+xml",
+                        "pdf" => "application/pdf",
+                        "txt" | "md" => "text/plain",
+                        "html" | "htm" => "text/html",
+                        "css" => "text/css",
+                        "js" => "application/javascript",
+                        "json" => "application/json",
+                        "woff2" => "font/woff2",
+                        "woff" => "font/woff",
+                        "ttf" => "font/ttf",
+                        "otf" => "font/otf",
+                        "ico" => "image/x-icon",
+                        "wasm" => "application/wasm",
+                        _ => "application/octet-stream",
+                    };
+                    (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, mime)], bytes).into_response()
+                }
+                Err(_) => (StatusCode::NOT_FOUND, "File not found").into_response(),
+            }
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "File not found").into_response(),
+    }
+}
+
+fn find_workspace_root() -> std::path::PathBuf {
+    let mut root = std::env::current_dir().unwrap_or_default();
+    for _ in 0..5 {
+        if root.join("tylluan.toml").exists() { return root; }
+        if let Some(parent) = root.parent() { root = parent.to_path_buf(); } else { break; }
+    }
+    std::env::current_dir().unwrap_or_default()
 }
