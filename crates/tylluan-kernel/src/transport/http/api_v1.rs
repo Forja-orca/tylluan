@@ -1256,7 +1256,20 @@ async fn silva_graph_handler(State(state): State<Arc<HttpState>>, Query(p): Quer
         }
         node_json
     }).collect();
+    // get_all_edges() returns every edge in SilvaDB regardless of the node
+    // limit above -- with a large graph (thousands of nodes, only `limit`
+    // returned by weight) most edges end up pointing at a source/target that
+    // isn't in `node_list` at all. Force-directed layout libraries choke on
+    // links referencing missing nodes (best case: silently dropped: worst
+    // case, depending on the client, the simulation stalls entirely) --
+    // filter to only edges where both ends are actually present.
+    let node_id_set: std::collections::HashSet<&str> = node_ids.iter().map(|s| s.as_str()).collect();
     let edges = state.silva.get_all_edges().await.unwrap_or_default();
+    let edges: Vec<serde_json::Value> = edges.into_iter().filter(|e| {
+        let source = e.get("source").and_then(|v| v.as_str()).unwrap_or_default();
+        let target = e.get("target").and_then(|v| v.as_str()).unwrap_or_default();
+        node_id_set.contains(source) && node_id_set.contains(target)
+    }).collect();
     Json(serde_json::json!({ "nodes": node_list, "links": edges }))
 }
 

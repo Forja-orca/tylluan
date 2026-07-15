@@ -60,10 +60,21 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
   const [data, setData] = useState<CortexData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
   const [paused, setPaused] = useState(false);
+  const [hoverNode, setHoverNode] = useState<any>(null);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   const lastInteractionRef = useRef(Date.now());
   const seenEventTsRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAutoFramedRef = useRef(false);
+
+  // Helper to check if a link is connected to the active focus node
+  const isLinkConnectedToActiveNode = useCallback((link: any) => {
+    if (!hoverNode && !selectedNode) return true;
+    const activeId = hoverNode?.id || selectedNode?.id;
+    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+    return sourceId === activeId || targetId === activeId;
+  }, [hoverNode, selectedNode]);
 
   // ── Sizing ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -99,16 +110,46 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
 
   useEffect(() => { load(false); }, [load]);
 
-  // The real graph is dense (content-ingest chunks chain heavily via next_chunk
-  // edges — hundreds of nodes, thousands of links is normal here, not a bug).
-  // Default d3-force charge is tuned for sparse demo graphs and never fully
-  // separates a graph this connected — bump repulsion once on data load.
+  // Adapt d3-force parameters once data is loaded using a retry-interval
+  // to avoid asynchrony race conditions before simulation mounts.
   useEffect(() => {
     if (data.nodes.length === 0) return;
-    const charge = fgRef.current?.d3Force?.('charge');
-    charge?.strength?.(-180);
-    const link = fgRef.current?.d3Force?.('link');
-    link?.distance?.(40);
+    const graph = fgRef.current;
+    if (!graph) return;
+
+    let attempts = 0;
+    const initForces = () => {
+      const charge = graph.d3Force('charge');
+      const link = graph.d3Force('link');
+
+      if (charge && link) {
+        // This is a genuinely dense graph (500 nodes, ~11k edges from
+        // next_chunk ingest chains -- ~22 edges/node average). d3-force's
+        // default link.strength() scales with node degree, so at this
+        // density the aggregate "spring" pull from thousands of edges
+        // overwhelms any reasonable charge repulsion and the whole graph
+        // contracts into a tight ball ("Thomson atom"), no matter how
+        // strong the repulsion is cranked. Fix: decouple link strength
+        // from degree (flat constant instead of the default formula).
+        //
+        // We do NOT touch the `center` force here. A previous attempt
+        // boosted center.strength() to hold disconnected orphans near the
+        // cluster -- but forceCenter recenters the WHOLE graph's centroid
+        // every tick, not just orphans, so cranking it up was actively
+        // fighting the charge repulsion and re-collapsing everything back
+        // toward the origin. It has a sane low default; leave it alone.
+        charge.strength(-220);
+        link.distance(60);
+        link.strength(0.04);
+
+        graph.d3ReheatSimulation();
+      } else if (attempts < 15) {
+        attempts++;
+        setTimeout(initForces, 80);
+      }
+    };
+
+    initForces();
   }, [data.nodes.length]);
 
   // Live updates: memory_added/memory_updated events only carry {id, node_type},
@@ -229,7 +270,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
     <div ref={containerRef} className="relative flex-1 min-h-0 rounded-xl border border-slate-800/80 overflow-hidden" style={{ background: CORTEX_BACKGROUND }}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs text-slate-500 font-mono z-10">
-          <RefreshCw className="w-4 h-4 animate-spin" /> Cargando cortex...
+          <RefreshCw className="w-4 h-4 animate-spin" /> Consultando SilvaDB...
         </div>
       )}
 
@@ -267,12 +308,28 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
         nodeThreeObject={nodeThreeObject}
         nodeThreeObjectExtend={false}
         nodeLabel={(n: any) => `${n.node_type || n.type || 'nodo'} · ${(n.content || n.label || n.id || '').toString().slice(0, 80)}`}
-        linkColor={() => 'rgba(148, 163, 184, 0.35)'}
-        linkWidth={0.4}
+        linkColor={(link: any) => {
+          const isConnected = isLinkConnectedToActiveNode(link);
+          if (hoverNode || selectedNode) {
+            return isConnected ? 'rgba(34, 211, 238, 0.85)' : 'rgba(148, 163, 184, 0.02)';
+          }
+          return 'rgba(148, 163, 184, 0.16)';
+        }}
+        linkWidth={(link: any) => {
+          const isConnected = isLinkConnectedToActiveNode(link);
+          if (hoverNode || selectedNode) {
+            return isConnected ? 1.25 : 0.08;
+          }
+          return 0.45;
+        }}
         linkDirectionalParticles={0}
         cooldownTime={8000}
         d3VelocityDecay={0.35}
-        onNodeClick={handleNodeClick}
+        onNodeHover={(node) => setHoverNode(node)}
+        onNodeClick={(node) => {
+          setSelectedNode(node);
+          handleNodeClick(node);
+        }}
         onEngineStop={() => {
           // Layout has settled (or hit the 8s time budget) — physics idle from
           // here until reheated by a new arrival. Frame the whole graph once,
