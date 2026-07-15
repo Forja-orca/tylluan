@@ -49,6 +49,21 @@ async fn main() -> anyhow::Result<()> {
     // 0. Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
 
+    // Register --config's path override BEFORE any TylluanConfig::load()/
+    // load_cached() call below -- CONFIG_PATH_OVERRIDE is a OnceLock, so
+    // whichever call reaches find_config_file() first wins permanently.
+    // This used to run after the pre-cache call further down, meaning
+    // --config only ever affected this file's local `config` variable and
+    // never HttpState.config (a separate global cache read by every sandbox/
+    // grants/setup-hint handler) -- the cache had already locked in the
+    // cwd/default-discovered file by the time the override was registered.
+    if let Some(pos) = args.iter().position(|r| r == "--config")
+        && let Some(config_path_str) = args.get(pos + 1) {
+            tylluan_kernel::config::TylluanConfig::set_config_path_override(
+                std::path::PathBuf::from(config_path_str)
+            );
+        }
+
     let cli_token = setup::get_cli_arg(&args, "--token");
 
     // BLOCK 2: Kernel is now headless-only (no TUI)
@@ -201,7 +216,9 @@ async fn main() -> anyhow::Result<()> {
             info!("🌐 Host override from CLI: {}", host_str);
         }
 
-    // Override config path from CLI if present
+    // Override config path from CLI if present. The path override itself is
+    // already registered earlier (before the pre-cache load_cached() call) --
+    // this just applies it to this file's local `config` variable too.
     if let Some(pos) = args.iter().position(|r| r == "--config")
         && let Some(config_path_str) = args.get(pos + 1) {
             info!("📄 Config path override from CLI: {}", config_path_str);

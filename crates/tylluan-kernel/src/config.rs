@@ -1335,6 +1335,7 @@ impl GuildWeight {
 // ─── Config Caching + Watcher ─────────────────────────────────────────
 
 static CONFIG_CACHE: std::sync::OnceLock<Arc<RwLock<TylluanConfig>>> = std::sync::OnceLock::new();
+static CONFIG_PATH_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
 impl TylluanConfig {
     pub fn security_intent_filter_enabled(&self) -> bool {
@@ -1408,7 +1409,25 @@ impl TylluanConfig {
         }
     }
 
+    /// Set by main.rs when `--config <path>` is passed on the CLI. Checked
+    /// first by find_config_file() so that both the initial boot AND any
+    /// later TylluanConfig::reload() call (e.g. from the sandbox-profile
+    /// admin endpoints) keep reading from the CLI-specified file instead of
+    /// silently falling back to cwd/default discovery. Without this, a
+    /// process started with `--config /etc/tylluan/tylluan.toml` (the Docker
+    /// image's setup) never actually applied that file to HttpState.config --
+    /// load_cached() is a separate global cache from main.rs's local,
+    /// CLI-overridden config variable, and would independently re-discover
+    /// (or default) via find_config_file() with no knowledge of --config.
+    pub fn set_config_path_override(path: PathBuf) {
+        CONFIG_PATH_OVERRIDE.set(path).ok();
+    }
+
     pub fn find_config_file() -> Option<PathBuf> {
+        if let Some(overridden) = CONFIG_PATH_OVERRIDE.get() {
+            return Some(overridden.clone());
+        }
+
         // Check current directory first
         let local = Path::new("tylluan.toml");
         if local.exists() {
