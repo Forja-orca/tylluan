@@ -248,6 +248,46 @@ export interface ProbeResult {
   endpoints: {
     http_streamable: string;
     sse_classic: string;
+  };
+}
+
+export interface DiagnosticReport {
+  timestamp: string;
+  status: 'healthy' | 'degraded' | 'critical';
+  guilds: Array<{
+    name: string;
+    running: boolean;
+    tools_count: number;
+    issues: string[];
+  }>;
+  storage: {
+    memory_db_ok: boolean;
+    silva_db_ok: boolean;
+    docs_count: number;
+    nodes_count: number;
+    memory_bytes: number;
+    silva_bytes: number;
+    recent_nodes: string[];
+  };
+  system: {
+    total_memory_mb: number;
+    used_memory_mb: number;
+    memory_percent: number;
+    cpu_usage_percent: number;
+    process_count: number;
+    thread_count: number;
+    status: string;
+    warnings: string[];
+  };
+  config_valid: boolean;
+  suggestions: string[];
+}
+
+export interface SetupHint {
+  profile: string;
+  endpoints: {
+    http_streamable: string;
+    sse_classic: string;
     health: string;
   };
   client_configs: {
@@ -598,6 +638,21 @@ export class NexusBridge {
 
   async health_detailed() {
     return await this.fetch('/api/v1/health/detailed');
+  }
+
+  async getDoctorReport(): Promise<DiagnosticReport> {
+    return await this.fetch('/api/v1/doctor');
+  }
+
+  // Real backend contract (crates/tylluan-kernel/src/transport/http/api_v1.rs,
+  // M31-P7, DoctorRepairResponse): field is `success`, not `ok`. Failures return
+  // HTTP 409 with the same shape, which this.fetch() turns into a thrown Error
+  // carrying `message` -- so callers only see the `{success:true,...}` shape here.
+  async repairDoctor(target: 'guild' | 'storage' | 'benchmark', name?: string): Promise<{ success: boolean; message: string }> {
+    return await this.fetch('/api/v1/doctor/repair', {
+      method: 'POST',
+      body: JSON.stringify({ target, name })
+    });
   }
 
   async probe(): Promise<ProbeResult | null> {
