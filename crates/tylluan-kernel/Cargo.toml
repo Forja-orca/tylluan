@@ -14,6 +14,7 @@ name = "tylluan_kernel"
 path = "src/lib.rs"
 
 [dependencies]
+regex = "1"
 tylluan-common = { path = "../tylluan-common" }
 tylluan_link = { path = "../tylluan-link", package = "tylluan-link" }
 tylluan-fsrs = { path = "../tylluan-fsrs" }

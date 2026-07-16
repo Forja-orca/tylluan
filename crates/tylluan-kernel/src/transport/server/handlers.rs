@@ -3,12 +3,21 @@ use crate::registry::proxy::error_result;
 use serde_json;
 use super::{handler_do, handler_remember, handler_recall, handler_think, handler_graph, handler_ingest, TylluanServer};
 
+/// The 5 sovereign tools plus tylluan_ingest -- the single dispatch point
+/// M31-P0's hooks apply to, so every MCP client (Claude Desktop, Claude
+/// Code, LM Studio, Qwen, ...) gets the same pre/post behavior regardless
+/// of which one it is, rather than per-client logic bolted on separately.
+const SOVEREIGN_TOOLS: [&str; 6] = [
+    "tylluan_do", "tylluan_remember", "tylluan_recall",
+    "tylluan_think", "tylluan_graph", "tylluan_ingest",
+];
+
 impl TylluanServer {
     /// Handle a kernel built-in tool call.
     pub async fn handle_kernel_tool(
         &self,
         name: &str,
-        arguments: Option<JsonObject>,
+        mut arguments: Option<JsonObject>,
     ) -> Result<CallToolResult, McpError> {
         // Auto-checkin to crash-safe journal
         let agent_id: String = arguments.as_ref()
@@ -20,7 +29,27 @@ impl TylluanServer {
             let _ = journal.checkin(&agent_id, &format!("tool:{}", name));
         }
 
-        let result = match name {
+        let is_sovereign_tool = SOVEREIGN_TOOLS.contains(&name);
+        let hook_rules: Vec<crate::security::hooks::HookRule> = if is_sovereign_tool {
+            match crate::config::TylluanConfig::load_cached() {
+                Ok(cfg) => cfg.read().await.hooks.clone(),
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+
+        if is_sovereign_tool && !hook_rules.is_empty() {
+            if let Some(ref mut args) = arguments {
+                if let crate::security::hooks::PreHookOutcome::Deny(msg) =
+                    crate::security::hooks::run_pre_hooks(&hook_rules, name, args)
+                {
+                    return Ok(error_result(&msg));
+                }
+            }
+        }
+
+        let mut result = match name {
             "tylluan_do" => handler_do::handle_tylluan_do(self, arguments).await,
             "tylluan_remember" => handler_remember::handle_tylluan_remember(self, arguments).await,
             "tylluan_recall" => handler_recall::handle_tylluan_recall(self, arguments).await,
@@ -164,6 +193,18 @@ impl TylluanServer {
             tokio::spawn(async move {
                 let _ = handler_do::log_audit_entry("", "kernel", &audit_tool, &audit_agent, audit_success, "");
             });
+        }
+
+        if is_sovereign_tool && !hook_rules.is_empty() {
+            if let Ok(ref mut res) = result {
+                let mut texts: Vec<String> = res.content.iter()
+                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                    .collect();
+                if !texts.is_empty() {
+                    crate::security::hooks::run_post_hooks(&hook_rules, name, &mut texts);
+                    res.content = texts.into_iter().map(Content::text).collect();
+                }
+            }
         }
 
         result
