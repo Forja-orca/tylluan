@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `2aa1f77` (`v0.13.0`) · 354 kernel lib + 61 link + 12 fsrs = **427 total** green (CI only tests --lib, integration tests with ONNX models run offline).
+**Commit:** `760862d` (`v0.13.0`) · 363 kernel lib + 61 link + 12 fsrs = **436 total** green (CI only tests --lib, integration tests with ONNX models run offline).
 
 ---
 
