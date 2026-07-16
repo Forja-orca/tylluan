@@ -88,10 +88,34 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // ── Resource disposal logic to prevent GPU memory leaks (Three.js WebGL) ────
+  const disposeThreeResources = useCallback(() => {
+    const scene = fgRef.current?.scene?.();
+    if (!scene) return;
+
+    scene.traverse((obj: any) => {
+      if (obj.isMesh && obj.userData?.__cortexMaterial) {
+        if (obj.geometry) {
+          obj.geometry.dispose();
+        }
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m: any) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      }
+    });
+  }, []);
+
   // ── Data loading ────────────────────────────────────────────────────────────
   const load = useCallback(async (reheat: boolean) => {
     if (!bridge) return;
     try {
+      // Free GPU memory from prior nodes before React replaces them
+      disposeThreeResources();
+
       const g = await bridge.getSilvaGraph(500, true);
       setData({
         nodes: (g.nodes as CortexNode[]) || [],
@@ -106,9 +130,16 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [bridge]);
+  }, [bridge, disposeThreeResources]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // Unmount cleanup
+  useEffect(() => {
+    return () => {
+      disposeThreeResources();
+    };
+  }, [disposeThreeResources]);
 
   // Adapt d3-force parameters once data is loaded using a retry-interval
   // to avoid asynchrony race conditions before simulation mounts.
@@ -190,10 +221,10 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
 
     const ringColor = clusterRingColor(n.cluster_id);
     if (ringColor) {
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(radius * 1.6, radius * 1.85, 24),
-        new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
-      );
+      const ringGeom = new THREE.RingGeometry(radius * 1.6, radius * 1.85, 24);
+      const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.userData.__cortexMaterial = true;
       ring.rotation.x = Math.PI / 2.4;
       group.add(ring);
     }
