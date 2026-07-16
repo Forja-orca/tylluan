@@ -68,10 +68,11 @@ pub async fn run_longmemeval_s(
     let effective_seed = seed.unwrap_or(42);
     const MAX_EVAL_QUERIES: usize = 200;
     let n = num_queries.unwrap_or(30).min(MAX_EVAL_QUERIES);
+    assert!(n <= MAX_EVAL_QUERIES, "n clamped to MAX_EVAL_QUERIES");
 
     let data = longmemeval_s::generate_dataset(n, effective_seed);
-    let mut points = Vec::with_capacity(n);
-    let mut query_map: Vec<(String, i64)> = Vec::with_capacity(n);
+    let mut points = Vec::new();
+    let mut query_map: Vec<(String, i64)> = Vec::new();
 
     // Phase 1: Write all documents, capture their DB IDs
     for doc in &data.documents {
@@ -90,7 +91,7 @@ pub async fn run_longmemeval_s(
     }
 
     // Phase 2: Query each fact and measure recall
-    let mut latencies = Vec::with_capacity(n);
+    let mut latencies = Vec::new();
     for (query_text, expected_id) in &query_map {
         let t0 = Instant::now();
         let results = memory.search(query_text, None, 10).await.unwrap_or_default();
