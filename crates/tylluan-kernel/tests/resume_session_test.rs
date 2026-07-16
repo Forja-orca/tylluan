@@ -106,7 +106,6 @@ fn build_test_app(state: Arc<HttpState>) -> axum::Router {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "integration")]
 async fn test_resume_endpoint_returns_found_true_for_existing_agent() {
     let state = test_state().await;
     let app = build_test_app(state.clone());
@@ -137,7 +136,6 @@ async fn test_resume_endpoint_returns_found_true_for_existing_agent() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "integration")]
 async fn test_resume_endpoint_returns_found_false_for_nonexistent_agent() {
     let state = test_state().await;
     let app = build_test_app(state);
@@ -157,7 +155,6 @@ async fn test_resume_endpoint_returns_found_false_for_nonexistent_agent() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "integration")]
 async fn test_resume_endpoint_returns_400_for_missing_agent_id() {
     let state = test_state().await;
     let app = build_test_app(state);
