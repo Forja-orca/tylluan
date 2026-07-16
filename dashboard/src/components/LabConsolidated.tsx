@@ -3,7 +3,8 @@ import { LaboratoryTab } from './LaboratoryTab';
 import { VisionTab } from './VisionTab';
 import { MaintenanceTab } from './MaintenanceTab';
 import { LogsTab } from './LogsTab';
-import { Beaker, Camera, ShieldAlert, Scroll } from 'lucide-react';
+import PlanModePanel from './PlanModePanel';
+import { Beaker, Camera, ShieldAlert, Scroll, ShieldCheck } from 'lucide-react';
 
 interface LabConsolidatedProps {
   bridge: any;
@@ -63,6 +64,17 @@ export function LabConsolidated(props: LabConsolidatedProps) {
           <Scroll className="w-3.5 h-3.5" />
           System Logs
         </button>
+        <button
+          onClick={() => setSubTab('plan')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+            subTab === 'plan'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Plan Mode
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -89,6 +101,12 @@ export function LabConsolidated(props: LabConsolidatedProps) {
           <LogsTab
             events={props.events}
             onClear={props.onClearLogs}
+          />
+        )}
+        {subTab === 'plan' && (
+          <PlanModePanel
+            bridge={props.bridge}
+            notify={props.notify}
           />
         )}
       </div>
