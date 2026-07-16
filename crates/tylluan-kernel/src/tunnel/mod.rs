@@ -24,12 +24,11 @@ impl TunnelManager {
     }
 
     /// Start all configured tunnels. Called once at kernel startup.
+    #[cfg(target_os = "windows")]
     pub fn start(&mut self) {
         if !self.config.enabled {
             return;
         }
-
-        #[cfg(target_os = "windows")]
         if self.config.wsl_bridge {
             match self.setup_wsl_bridge() {
                 Ok(()) => self.wsl_bridge_active = true,
@@ -38,14 +37,23 @@ impl TunnelManager {
         }
     }
 
-    /// Remove all tunnel rules. Called on graceful shutdown.
-    pub fn stop(&self) {
-        if !self.wsl_bridge_active { return; }
-        if !self.config.wsl_bridge_cleanup { return; }
+    /// Start all configured tunnels. No-op on non-Windows platforms
+    /// (future: rathole sidecar).
+    #[cfg(not(target_os = "windows"))]
+    pub fn start(&mut self) {}
 
-        #[cfg(target_os = "windows")]
+    /// Remove all tunnel rules. Called on graceful shutdown.
+    #[cfg(target_os = "windows")]
+    pub fn stop(&self) {
+        if !self.wsl_bridge_active || !self.config.wsl_bridge_cleanup {
+            return;
+        }
         self.teardown_wsl_bridge();
     }
+
+    /// Remove all tunnel rules. No-op on non-Windows platforms.
+    #[cfg(not(target_os = "windows"))]
+    pub fn stop(&self) {}
 
     #[cfg(target_os = "windows")]
     fn setup_wsl_bridge(&mut self) -> Result<()> {
