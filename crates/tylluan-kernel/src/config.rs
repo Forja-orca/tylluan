@@ -836,9 +836,9 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     // Encryption key MUST be the very first operation on the connection.
     // Applying PRAGMA journal_mode=WAL before the key would fail on an
     // already-encrypted database.
-    if let Ok(cfg_lock) = TylluanConfig::load_cached() {
-        if let Ok(cfg) = cfg_lock.try_read() {
-            if cfg.security.encrypt_at_rest {
+    if let Ok(cfg_lock) = TylluanConfig::load_cached()
+        && let Ok(cfg) = cfg_lock.try_read()
+            && cfg.security.encrypt_at_rest {
                 let data_dir = path.parent().unwrap_or(Path::new("."));
                 let key_hex = ensure_db_key(data_dir)?;
 
@@ -862,8 +862,6 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
                     let _ = key_hex;
                 }
             }
-        }
-    }
 
     // M21-P1: cache_size/mmap_size/synchronous tuning applied here so every
     // caller of open_db() benefits uniformly (15+ call sites: jobs, mailbox,
@@ -1031,6 +1029,7 @@ fn derive_key_argon2(seed: &[u8], data_dir: &Path) -> anyhow::Result<String> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SandboxProfile {
     /// Full isolation: Docker for all guilds, process_execution=false,
     /// network=none, filesystem=read-only workspace.
@@ -1038,6 +1037,7 @@ pub enum SandboxProfile {
     /// Moderate isolation: Docker for bash/code only, enforcement per
     /// declared capabilities, network/filesystem per guild declaration.
     /// This is the DEFAULT — backward compatible with pre-M30-P1 behavior.
+    #[default]
     Balanced,
     /// No isolation: no Docker, process_execution allowed, full network
     /// and filesystem access. Advisory-only capability declarations.
@@ -1050,9 +1050,6 @@ impl SandboxProfile {
     pub fn is_permissive(&self) -> bool { matches!(self, SandboxProfile::Permissive) }
 }
 
-impl Default for SandboxProfile {
-    fn default() -> Self { Self::Balanced }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
@@ -1097,6 +1094,17 @@ pub struct AclConfig {
     pub roles: HashMap<String, Vec<String>>,
     #[serde(default)]
     pub tokens: HashMap<String, String>,
+    /// M31-P1: Optional binding of bearer tokens to a fixed agent_id.
+    /// When set, requests using this token MUST supply the matching agent_id
+    /// in tool call arguments; cross-agent impersonation is denied.
+    #[serde(default)]
+    pub token_agent_bindings: HashMap<String, String>,
+    /// M31-P1: Per-agent_id permission rules, keyed by agent_id.
+    /// scope: "read-only", "read-write", or "admin"
+    /// denied_tools: tools this agent cannot call (by name, e.g. "tylluan_graph")
+    /// memory_isolation: if true, tylluan_recall only returns this agent's own episodes
+    #[serde(default)]
+    pub agent_permissions: HashMap<String, AgentPermission>,
 }
 
 impl Default for AclConfig {
@@ -1105,31 +1113,44 @@ impl Default for AclConfig {
             default_role: default_acl_default_role(),
             roles: HashMap::new(),
             tokens: HashMap::new(),
+            token_agent_bindings: HashMap::new(),
+            agent_permissions: HashMap::new(),
         }
     }
 }
 
+/// M31-P1: Per-agent permission rules.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPermission {
+    #[serde(default = "default_agent_scope")]
+    pub scope: String,
+    #[serde(default)]
+    pub denied_tools: Vec<String>,
+    #[serde(default)]
+    pub memory_isolation: bool,
+}
+
+fn default_agent_scope() -> String {
+    "read-write".to_string()
+}
+
 /// Load sandbox config from global cache if enabled.
 pub fn load_sandbox_config() -> Option<SandboxConfig> {
-    if let Ok(cached) = TylluanConfig::load_cached() {
-        if let Ok(cfg) = cached.try_read() {
-            if cfg.security.sandbox.enabled {
+    if let Ok(cached) = TylluanConfig::load_cached()
+        && let Ok(cfg) = cached.try_read()
+            && cfg.security.sandbox.enabled {
                 return Some(cfg.security.sandbox.clone());
             }
-        }
-    }
     None
 }
 
 /// Load the active sandbox profile, or default if sandbox is disabled.
 pub fn load_sandbox_profile() -> SandboxProfile {
-    if let Ok(cached) = TylluanConfig::load_cached() {
-        if let Ok(cfg) = cached.try_read() {
-            if cfg.security.sandbox.enabled {
+    if let Ok(cached) = TylluanConfig::load_cached()
+        && let Ok(cfg) = cached.try_read()
+            && cfg.security.sandbox.enabled {
                 return cfg.security.sandbox.profile;
             }
-        }
-    }
     SandboxProfile::Balanced
 }
 
@@ -1155,16 +1176,14 @@ pub async fn clear_session_override(agent_id: &str) {
 
 /// Load the effective guild-level override from TOML config.
 fn load_guild_override(guild_name: &str) -> Option<SandboxProfile> {
-    if let Ok(cached) = TylluanConfig::load_cached() {
-        if let Ok(cfg) = cached.try_read() {
-            if cfg.security.sandbox.enabled {
+    if let Ok(cached) = TylluanConfig::load_cached()
+        && let Ok(cfg) = cached.try_read()
+            && cfg.security.sandbox.enabled {
                 let o = cfg.security.sandbox.guild_overrides.get(guild_name).copied();
                 if o.is_some() {
                     return o;
                 }
             }
-        }
-    }
     None
 }
 

@@ -238,8 +238,8 @@ pub async fn handle_tylluan_do(
 
     if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
         let cfg = config_lock.read().await;
-        if cfg.security.intent_filter {
-            if let Some(reason) = check_dangerous_intent(&intent) {
+        if cfg.security.intent_filter
+            && let Some(reason) = check_dangerous_intent(&intent) {
                 tracing::warn!("⚠️ Intent blocked by safety filter: '{}' — reason: {}", intent, reason);
                 return Ok(error_result(&format!(
                     "Intent blocked by safety filter: {reason}. \
@@ -247,7 +247,6 @@ pub async fn handle_tylluan_do(
                      or use guild='bash' to bypass the router."
                 )));
             }
-        }
     }
 
     // Deterministic node/nodo prefix — Agent Node Router, bypasses semantic matcher
@@ -339,14 +338,13 @@ pub async fn handle_tylluan_do(
         Err(initial_err) => {
             // M32: External MCP dispatch — when no internal guild matches, try registered
             // external MCP servers before returning the "no guild found" error.
-            if guild_hint.is_none() {
-                if let Some(result) = external_mcp::try_external_mcp_dispatch(
+            if guild_hint.is_none()
+                && let Some(result) = external_mcp::try_external_mcp_dispatch(
                     server, &intent, agent_id.as_deref()
                 ).await {
                     info!("tylluan_do: dispatched to external MCP server");
                     return Ok(result);
                 }
-            }
             return Ok(initial_err);
         }
     };
@@ -374,6 +372,14 @@ pub async fn handle_tylluan_do(
                 warn!("{}", msg);
                 return Ok(error_result(&msg));
             }
+        }
+        // M31-P1: Enforce per-agent tool permissions & scope for tylluan_do
+        if !acl.agent_permissions.is_empty() {
+            let aid = agent_id.as_deref().unwrap_or("anonymous");
+            if aid != "anonymous"
+                && let Some(msg) = crate::transport::http::auth::check_agent_id_tool_allowed(aid, "tylluan_do", acl) {
+                    return Ok(error_result(&msg));
+                }
         }
     }
 
@@ -437,12 +443,11 @@ pub async fn handle_tylluan_do(
 
     // Bash/Git: extract clean command from NL wrapper ("run X", "execute X:", etc.)
     // so the guild receives "ls -la" instead of "execute bash command: ls -la".
-    if guild_name == "bash" || guild_name == "git" {
-        if let Some(obj) = tool_args.as_object_mut() {
+    if (guild_name == "bash" || guild_name == "git")
+        && let Some(obj) = tool_args.as_object_mut() {
             let clean = extract_command_from_intent(&intent);
             obj.insert("command".to_string(), serde_json::Value::String(clean.to_string()));
         }
-    }
 
     // Coloquio: extract structured params from intent BEFORE validation so channel_id
     // is populated when required_args check runs.
@@ -892,11 +897,10 @@ pub async fn handle_tylluan_do(
             let trace_clone = trace.clone();
             tokio::spawn(async move { let _ = silva_clone.auto_link_similar(&nid_clone, &trace_clone, 3, 0.3).await; });
         }
-        if let Some(emb) = embedding.as_deref() {
-            if let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
+        if let Some(emb) = embedding.as_deref()
+            && let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
                 warn!("⚠️ tylluan_do remember: embedding save failed for {}: {}", node_id, e);
             }
-        }
         server.notify("memory_added", serde_json::json!({
             "node_id": node_id, "type": "episode",
             "label": trace.chars().take(100).collect::<String>(),

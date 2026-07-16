@@ -220,6 +220,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/memory/reindex", post(reindex_handler))
         .route("/api/v1/memory/write", post(memory_write_handler))
         .route("/api/v1/memory/search", any(memory_search_handler))
+        // M31-P1: Audit trail query by agent_id
+        .route("/api/v1/audit", get(audit_log_handler))
         .route("/api/v1/tools", get(tools_list_handler))
         .route("/api/v1/capabilities", get(capabilities_handler))
         .route("/api/v1/audit/logs", get(audit_logs_handler))
@@ -1018,13 +1020,12 @@ async fn do_intent_handler(
     // Explicit `arguments` passthrough for kernel tools that need fields beyond
     // intent/query/guild/content (e.g. approve_action's requestId/approved/grant_level).
     // Named fields above still win on conflict — arguments only fills gaps.
-    if let Some(extra) = body_json.get("arguments").and_then(|v| v.as_object()) {
-        if let Some(args_obj) = args.as_object_mut() {
+    if let Some(extra) = body_json.get("arguments").and_then(|v| v.as_object())
+        && let Some(args_obj) = args.as_object_mut() {
             for (k, v) in extra {
                 args_obj.entry(k.clone()).or_insert_with(|| v.clone());
             }
         }
-    }
     let _ = state.broadcast_tx.send(serde_json::json!({ "type": "tool_call", "tool": tool, "intent": intent, "status": "started", "ts": chrono::Utc::now().timestamp_millis() }));
     let call_start = std::time::Instant::now();
     match server.handle_kernel_tool(&tool, args.as_object().cloned()).await {
@@ -1763,6 +1764,93 @@ async fn nodes_unregister_handler(
     (StatusCode::OK, Json(serde_json::json!({ "status": "unregistered", "agent_id": agent_id })))
 }
 
+// ─── M31-P1: Audit Log Query ──────────────────────────────────────────────
+
+/// GET /api/v1/audit — Query the audit trail with optional agent_id filter and hash-chain verification.
+async fn audit_log_handler(
+    State(_state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let agent_id = params.get("agent_id").map(|s| s.as_str()).unwrap_or("");
+    let limit: usize = params.get("limit").and_then(|v| v.parse().ok()).unwrap_or(50);
+    let offset: usize = params.get("offset").and_then(|v| v.parse().ok()).unwrap_or(0);
+
+    let db_path = std::path::Path::new("./data/audit.db");
+    match crate::config::open_db(db_path) {
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("Failed to open audit db: {e}")
+        }))),
+        Ok(conn) => {
+            // Ensure table exists
+            let _ = conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS guild_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL, guild TEXT NOT NULL,
+                    tool_name TEXT NOT NULL, agent_id TEXT NOT NULL DEFAULT '',
+                    intent TEXT, status TEXT NOT NULL DEFAULT 'ok',
+                    result_preview TEXT, prev_hash TEXT NOT NULL DEFAULT '',
+                    hash TEXT NOT NULL
+                );"
+            );
+            let (sql, bind): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if !agent_id.is_empty() {
+                (
+                    "SELECT id, timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash \
+                     FROM guild_audit_log WHERE agent_id = ?1 ORDER BY id DESC LIMIT ?2 OFFSET ?3".to_string(),
+                    vec![
+                        Box::new(agent_id.to_string()) as Box<dyn rusqlite::types::ToSql>,
+                        Box::new(limit as i64),
+                        Box::new(offset as i64),
+                    ],
+                )
+            } else {
+                (
+                    "SELECT id, timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash \
+                     FROM guild_audit_log ORDER BY id DESC LIMIT ?1 OFFSET ?2".to_string(),
+                    vec![
+                        Box::new(limit as i64) as Box<dyn rusqlite::types::ToSql>,
+                        Box::new(offset as i64),
+                    ],
+                )
+            };
+            match conn.prepare(&sql) {
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                    "error": format!("Query failed: {e}")
+                }))),
+                Ok(mut stmt) => {
+                    let bind_refs: Vec<&dyn rusqlite::types::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+                    let rows = stmt.query_map(bind_refs.as_slice(), |row| {
+                        Ok(serde_json::json!({
+                            "id": row.get::<_, i64>(0)?,
+                            "timestamp": row.get::<_, String>(1)?,
+                            "guild": row.get::<_, String>(2)?,
+                            "tool_name": row.get::<_, String>(3)?,
+                            "agent_id": row.get::<_, String>(4)?,
+                            "intent": row.get::<_, Option<String>>(5)?,
+                            "status": row.get::<_, String>(6)?,
+                            "result_preview": row.get::<_, String>(7)?,
+                            "prev_hash": row.get::<_, String>(8)?,
+                            "hash": row.get::<_, String>(9)?,
+                        }))
+                    });
+                    match rows {
+                        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                            "error": format!("Row fetch failed: {e}")
+                        }))),
+                        Ok(rows) => {
+                            let entries: Vec<serde_json::Value> = rows.filter_map(|r| r.ok()).collect();
+                            (StatusCode::OK, Json(serde_json::json!({
+                                "entries": entries,
+                                "count": entries.len(),
+                                "agent_id": if agent_id.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(agent_id.to_string()) },
+                            })))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ─── M14-B: Gossip Protocol ──────────────────────────────────────────────
 
 async fn gossip_handler(
@@ -1839,11 +1927,10 @@ async fn gossip_handler(
         }
         _ => {
             // Legacy plain push (no type tag) — keep backward compat
-            if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str()) {
-                if let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
+            if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str())
+                && let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
                     state.gossip_engine.write().await.record_peer_clock(sender_id, clock);
                 }
-            }
             if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
                 let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
                     .iter()

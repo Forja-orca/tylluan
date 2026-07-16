@@ -1,6 +1,6 @@
 use tylluan_kernel::transport::server::handler_do::check_dangerous_intent;
-use tylluan_kernel::transport::http::auth::acl_can_access;
-use tylluan_kernel::config::AclConfig;
+use tylluan_kernel::transport::http::auth::{acl_can_access, check_agent_id_tool_allowed, resolve_agent_id_for_token, agent_has_memory_isolation};
+use tylluan_kernel::config::{AclConfig, AgentPermission};
 use std::collections::HashMap;
 use tylluan_kernel::security::rate_limiter::RateLimiter;
 
@@ -75,6 +75,8 @@ fn make_acl(roles: HashMap<String, Vec<String>>) -> AclConfig {
         default_role: "reader".to_string(),
         roles,
         tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: HashMap::new(),
     }
 }
 
@@ -134,6 +136,8 @@ fn test_acl_default_role_applied_to_unknown_token() {
         default_role: "reader".to_string(),
         roles,
         tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: HashMap::new(),
     };
     // Unknown token falls back to default_role="reader"
     // acl_can_access uses role name directly; default_role is applied upstream.
@@ -241,4 +245,137 @@ fn test_emergency_kill_response_shape() {
 fn test_emergency_kill_localhost_required() {
     let expected_route = "/api/v1/admin/emergency-kill";
     assert!(expected_route.starts_with("/api/v1/admin/"));
+}
+
+// ── M31-P1: Granular agent_id Permissions ────────────────────────────────
+
+#[test]
+fn test_agent_id_tool_allowed_denied_tools_blocks() {
+    let mut perms = HashMap::new();
+    perms.insert("agent-reader".to_string(), AgentPermission {
+        scope: "read-write".to_string(),
+        denied_tools: vec!["tylluan_graph".to_string()],
+        memory_isolation: false,
+    });
+    let acl = AclConfig {
+        default_role: "reader".to_string(),
+        roles: HashMap::new(),
+        tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: perms,
+    };
+    assert!(
+        check_agent_id_tool_allowed("agent-reader", "tylluan_remember", &acl).is_none(),
+        "read-write agent should use tylluan_remember"
+    );
+    assert!(
+        check_agent_id_tool_allowed("agent-reader", "tylluan_graph", &acl).is_some(),
+        "denied_tools should block tylluan_graph"
+    );
+    assert!(
+        check_agent_id_tool_allowed("agent-reader", "tylluan_recall", &acl).is_none(),
+        "recall is not denied"
+    );
+}
+
+#[test]
+fn test_agent_id_read_only_scope_blocks_write_tools() {
+    let mut perms = HashMap::new();
+    perms.insert("agent-ro".to_string(), AgentPermission {
+        scope: "read-only".to_string(),
+        denied_tools: vec![],
+        memory_isolation: true,
+    });
+    let acl = AclConfig {
+        default_role: "reader".to_string(),
+        roles: HashMap::new(),
+        tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: perms,
+    };
+    // Read-only scope blocks tylluan_remember, tylluan_do, tylluan_graph
+    assert!(
+        check_agent_id_tool_allowed("agent-ro", "tylluan_remember", &acl).is_some(),
+        "read-only scope blocks remember"
+    );
+    assert!(
+        check_agent_id_tool_allowed("agent-ro", "tylluan_do", &acl).is_some(),
+        "read-only scope blocks do"
+    );
+    assert!(
+        check_agent_id_tool_allowed("agent-ro", "tylluan_graph", &acl).is_some(),
+        "read-only scope blocks graph"
+    );
+    // But allows recall and think
+    assert!(
+        check_agent_id_tool_allowed("agent-ro", "tylluan_recall", &acl).is_none(),
+        "read-only scope allows recall"
+    );
+    assert!(
+        check_agent_id_tool_allowed("agent-ro", "tylluan_think", &acl).is_none(),
+        "read-only scope allows think"
+    );
+}
+
+#[test]
+fn test_agent_id_memory_isolation_flag() {
+    let mut perms = HashMap::new();
+    perms.insert("agent-isolated".to_string(), AgentPermission {
+        scope: "read-write".to_string(),
+        denied_tools: vec![],
+        memory_isolation: true,
+    });
+    perms.insert("agent-open".to_string(), AgentPermission {
+        scope: "read-write".to_string(),
+        denied_tools: vec![],
+        memory_isolation: false,
+    });
+    let acl = AclConfig {
+        default_role: "reader".to_string(),
+        roles: HashMap::new(),
+        tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: perms,
+    };
+    assert!(agent_has_memory_isolation("agent-isolated", &acl), "isolated agent should have isolation");
+    assert!(!agent_has_memory_isolation("agent-open", &acl), "open agent should NOT have isolation");
+    assert!(!agent_has_memory_isolation("unknown-agent", &acl), "unknown agent should NOT have isolation");
+}
+
+#[test]
+fn test_resolve_agent_id_for_token_returns_binding() {
+    let mut bindings = HashMap::new();
+    bindings.insert("token-abc".to_string(), "agent-fixed".to_string());
+    let acl = AclConfig {
+        default_role: "reader".to_string(),
+        roles: HashMap::new(),
+        tokens: HashMap::new(),
+        token_agent_bindings: bindings,
+        agent_permissions: HashMap::new(),
+    };
+    assert_eq!(
+        resolve_agent_id_for_token("token-abc", &acl),
+        "agent-fixed",
+        "token with binding returns agent_id"
+    );
+    assert_eq!(
+        resolve_agent_id_for_token("unknown-token", &acl),
+        "",
+        "token without binding returns empty string"
+    );
+}
+
+#[test]
+fn test_agent_id_tool_allowed_unknown_agent_is_permitted() {
+    let acl = AclConfig {
+        default_role: "admin".to_string(),
+        roles: HashMap::new(),
+        tokens: HashMap::new(),
+        token_agent_bindings: HashMap::new(),
+        agent_permissions: HashMap::new(),
+    };
+    assert!(
+        check_agent_id_tool_allowed("unknown-agent", "tylluan_remember", &acl).is_none(),
+        "unknown agent with no permissions config should be allowed"
+    );
 }
