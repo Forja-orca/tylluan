@@ -204,6 +204,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/dream/status", get(dream_status_handler))
         .route("/api/v1/silva/nodes/{node_id}", delete(silva_delete_node_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
+        .route("/api/v1/sessions/resume", get(sessions_resume_handler))
         .route("/api/v1/sessions/{session_id}", get(session_detail_handler).delete(revoke_session_handler))
         .route("/api/v1/system/sessions", get(list_sessions_handler))
         .route("/api/v1/mailbox", get(mailbox_list_handler))

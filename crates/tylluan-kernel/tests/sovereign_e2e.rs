@@ -159,8 +159,8 @@ async fn test_tylluan_do_basic_intent() {
     let app = build_test_app(state);
     let res = mcp_call(app, "tools/call", "tylluan_do", serde_json::json!({"intent": "list files in /tmp"})).await;
     let result = &res["result"];
-    assert!(!result.is_null(), "Expected result object: {:?}", res);
-    assert!(res["error"].is_null(), "Expected no error: {:?}", res);
+    assert!(!result.is_null(), "Expected result object: {res:?}");
+    assert!(res["error"].is_null(), "Expected no error: {res:?}");
     let content = result["content"].as_array().expect("Content must be an array");
     assert!(!content.is_empty(), "Content should not be empty");
 }
@@ -181,7 +181,7 @@ async fn test_tylluan_do_routing_metadata_present() {
     let res = mcp_call(app, "tools/call", "tylluan_do", serde_json::json!({"intent": "check git status"})).await;
     let content = res["result"]["content"].as_array().expect("Content should be an array");
     let text = content.iter().filter_map(|c| c["text"].as_str()).collect::<String>();
-    assert!(text.contains("Routing:") || text.contains("guild="), "Metadata footer missing: {}", text);
+    assert!(text.contains("Routing:") || text.contains("guild="), "Metadata footer missing: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -241,13 +241,13 @@ async fn test_all_three_tools_sequential() {
     let app = build_test_app(state);
     
     let res1 = mcp_call(app.clone(), "tools/call", "tylluan_remember", serde_json::json!({"content": "Python decorators explained", "importance": 0.7})).await;
-    assert!(res1["error"].is_null(), "Error in remember: {:?}", res1);
+    assert!(res1["error"].is_null(), "Error in remember: {res1:?}");
     
     let res2 = mcp_call(app.clone(), "tools/call", "tylluan_do", serde_json::json!({"intent": "explain what we know about Python"})).await;
-    assert!(res2["error"].is_null(), "Error in do: {:?}", res2);
+    assert!(res2["error"].is_null(), "Error in do: {res2:?}");
     
     let res3 = mcp_call(app, "tools/call", "tylluan_recall", serde_json::json!({"query": "Python decorators"})).await;
-    assert!(res3["error"].is_null(), "Error in recall: {:?}", res3);
+    assert!(res3["error"].is_null(), "Error in recall: {res3:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
