@@ -148,6 +148,11 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => window.removeEventListener('nexus_polling_refresh', handlePollRefresh);
   }, [refreshData]);
 
+  const onlineRef = useRef(online);
+  useEffect(() => {
+    onlineRef.current = online;
+  }, [online]);
+
   useEffect(() => {
     const debouncedRefresh = (includeGraph: boolean) => {
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
@@ -186,7 +191,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     bridge.connectEvents();
 
     const healthInterval = setInterval(async () => {
-      if (bridgeRef.current && online && !pausedRef.current) {
+      if (bridgeRef.current && onlineRef.current && !pausedRef.current) {
         try {
           const h = await bridgeRef.current.health_detailed();
           setHealthDetailed(h);
@@ -198,7 +203,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       bridge.disconnect();
       clearInterval(healthInterval);
     };
-  }, [online]);
+  }, [refreshData, refreshGraph]);
 
   const setToken = (token: string) => {
     if (bridgeRef.current) {
