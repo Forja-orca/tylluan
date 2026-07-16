@@ -30,6 +30,200 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
 use std::time::Duration;
 
+/// Initializes the tracing subscriber (file + stderr/stdout layers depending on
+/// stdio-transport mode) and returns whether the kernel is running in `--stdio` mode.
+fn init_logging(args: &[String]) -> bool {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // Always initialize logging - keep stderr clean for human readability
+    let _ = std::fs::create_dir_all("./logs");
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("./logs/kernel.log")
+        .unwrap_or_else(|_| {
+            let fallback = format!("./kernel_{}.log", std::process::id());
+            std::fs::File::create(&fallback).unwrap_or_else(|e| {
+                eprintln!("FATAL: cannot create log file '{fallback}': {e}");
+                std::process::exit(1);
+            })
+        });
+
+    // Final Fix for ANSI/JSON-RPC corruption.
+    // In stdio mode, we MUST redirect all logs to stderr so stdout remains pure JSON.
+    let is_stdio = args.contains(&"--stdio".to_string());
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(log_file)
+        .with_ansi(false);
+
+    if is_stdio {
+        let stderr_layer = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(false);
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+    } else {
+        let stdout_layer = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(true);
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stdout_layer)
+            .init();
+    }
+
+    #[cfg(target_os = "windows")]
+    setup::setup_windows_job_object();
+
+    // Use eprintln for the startup message in stdio mode to stay off stdout
+    if is_stdio {
+        eprintln!("INFO: TylluanNexus kernel started (stdio mode)");
+    } else {
+        info!("TylluanNexus kernel started (headless mode) - logs written to ./logs/kernel.log");
+    }
+
+    is_stdio
+}
+
+/// Handles one-shot maintenance CLI commands (`--export`, `--import`,
+/// `--download-models`) that exit immediately without starting the kernel.
+/// Returns `Ok(true)` if a maintenance command was handled (caller should exit).
+async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
+    if args.contains(&"--export".to_string()) {
+        let output = setup::get_cli_arg(args, "--export")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("tylluan-sovereign-state.tar.gz"));
+
+        let config = tylluan_kernel::config::TylluanConfig::load()?;
+        let data_dir = PathBuf::from(&config.memory.db_path).parent().unwrap_or(Path::new("data")).to_path_buf();
+        let config_dir = PathBuf::from("config");
+        let models_dir = PathBuf::from("models");
+        let venv_dir = PathBuf::from(".venv");
+
+        let venv_arg = if venv_dir.exists() { Some(venv_dir.as_path()) } else { None };
+
+        tylluan_kernel::maintenance::export_state(&output, &data_dir, &config_dir, &models_dir, venv_arg)?;
+        return Ok(true);
+    }
+
+    if args.contains(&"--import".to_string()) {
+        let input = setup::get_cli_arg(args, "--import")
+            .map(PathBuf::from)
+            .ok_or_else(|| anyhow::anyhow!("Usage: --import <file.tar.gz>"))?;
+
+        tylluan_kernel::maintenance::import_state(&input, Path::new("."))?;
+        return Ok(true);
+    }
+
+    // Download missing models command
+    if args.contains(&"--download-models".to_string()) {
+        info!("📥 Downloading missing AI models...");
+        let models_dir = PathBuf::from("models");
+        let downloader = tylluan_kernel::maintenance::ModelDownloader::new();
+        match downloader.download_missing(&models_dir).await {
+            Ok(downloaded) => {
+                if downloaded.is_empty() {
+                    info!("✅ All models already present.");
+                } else {
+                    info!("✅ Downloaded models: {:?}", downloaded);
+                }
+            }
+            Err(e) => {
+                error!("❌ Model download failed: {}", e);
+            }
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+/// Anti-Orphan Protection, for non-technical users ("huérfanos de la informática"):
+/// 1. Write PID file so we can detect stale kernels
+/// 2. Kill any orphan Python guild processes from previous crashed sessions
+///
+/// Also runs P4 garbage collection of residual data from previous sessions/stress tests.
+fn anti_orphan_protection_and_gc() {
+    let pid_file = PathBuf::from("./data/tylluan-nexus.pid");
+    let _ = std::fs::create_dir_all("./data");
+
+    // Check for stale PID file (previous crash)
+    if pid_file.exists()
+        && let Ok(old_pid_str) = std::fs::read_to_string(&pid_file)
+            && let Ok(old_pid) = old_pid_str.trim().parse::<u32>() {
+                info!("🧹 Found stale PID file ({}). Cleaning up orphan processes...", old_pid);
+                cleanup::cleanup_orphan_guilds(old_pid);
+            }
+
+    // Write current PID
+    let _ = std::fs::write(&pid_file, std::process::id().to_string());
+
+    cleanup::cleanup_residual_data();
+}
+
+/// Detects low-memory environments (< 2 GB total RAM) via sysinfo when not
+/// already explicitly configured, so timeouts can be reduced downstream.
+fn detect_low_memory_mode(configured: bool) -> bool {
+    if configured {
+        return true;
+    }
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    let total_mem = sys.total_memory();
+    if total_mem > 0 {
+        let total_gb = total_mem as f64 / (1024.0 * 1024.0 * 1024.0);
+        if total_gb < 2.0 {
+            warn!("⚠️ RAM baja detectada: {:.1} GB. Timeouts reducidos al 50%.", total_gb);
+            return true;
+        }
+    }
+    false
+}
+
+/// Refuses to boot with an insecure LAN-exposed, unauthenticated configuration.
+/// See briefing 003 + memory/security_invariant_bind.md.
+fn enforce_security_guard(config: &TylluanConfig, cli_token: &Option<String>) {
+    let host = config.nexus.host.as_str();
+    let lan_exposed = host == "0.0.0.0" || host == "::" || host == "[::]";
+    let no_token = cli_token.as_ref().is_none_or(|t| t.is_empty())
+        && std::env::var("TYLLUAN_TOKEN").ok().filter(|s| !s.is_empty()).is_none();
+    let has_override = std::env::var("TYLLUAN_ALLOW_INSECURE").ok().as_deref() == Some("1");
+
+    if lan_exposed && config.nexus.dev_mode && no_token && !has_override {
+        eprintln!();
+        eprintln!("⛔ INSECURE CONFIG REFUSED");
+        eprintln!("   host = \"{host}\"  →  exposes the kernel on every network interface");
+        eprintln!("   dev_mode = true   →  bearer auth is disabled");
+        eprintln!("   TYLLUAN_TOKEN env   →  not set");
+        eprintln!();
+        eprintln!("   Combined, this is unauthenticated remote code execution on your LAN/WiFi.");
+        eprintln!();
+        eprintln!("   Choose ONE:");
+        eprintln!("     (a) Edit tylluan.toml: host = \"127.0.0.1\"   (recommended)");
+        eprintln!("     (b) Set env TYLLUAN_TOKEN=<strong-token> AND set dev_mode = false");
+        eprintln!("     (c) Set env TYLLUAN_ALLOW_INSECURE=1         (you accept the risk)");
+        eprintln!();
+        std::process::exit(1);
+    }
+
+    if lan_exposed && (config.nexus.dev_mode || no_token) && has_override {
+        warn!("⚠️ TYLLUAN_ALLOW_INSECURE=1 set — kernel running LAN-exposed without auth. You accepted the risk.");
+    }
+
+    // Additional guard: dev_mode=true on any non-localhost host (Hallazgo #7)
+    if config.nexus.dev_mode && host != "127.0.0.1" && host != "localhost" && !has_override {
+        panic!(
+            "UNSAFE CONFIG: dev_mode=true con host={host} expone el kernel sin autenticacion en la red. \
+             Usa host=\"127.0.0.1\" o desactiva dev_mode."
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env file if present
@@ -64,131 +258,15 @@ async fn main() -> anyhow::Result<()> {
 
     let cli_token = setup::get_cli_arg(&args, "--token");
 
-    // BLOCK 2: Kernel is now headless-only (no TUI)
-    
-    // 0.1 Initialize Logging Filter
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-    
-    // Always initialize logging - keep stderr clean for human readability
-    let _ = std::fs::create_dir_all("./logs");
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("./logs/kernel.log")
-        .unwrap_or_else(|_| {
-            let fallback = format!("./kernel_{}.log", std::process::id());
-            std::fs::File::create(&fallback).unwrap_or_else(|e| {
-                eprintln!("FATAL: cannot create log file '{fallback}': {e}");
-                std::process::exit(1);
-            })
-        });
-    
-    // BLOCK 3: Final Fix for ANSI/JSON-RPC corruption.
-    // In stdio mode, we MUST redirect all logs to stderr so stdout remains pure JSON.
-    let is_stdio = args.contains(&"--stdio".to_string());
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(log_file)
-        .with_ansi(false);
+    // Logging must come up before anything else logs; is_stdio also gates stdout usage below.
+    let is_stdio = init_logging(&args);
 
-    if is_stdio {
-        let stderr_layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_ansi(false);
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(file_layer)
-            .with(stderr_layer)
-            .init();
-    } else {
-        let stdout_layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stdout)
-            .with_ansi(true);
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(file_layer)
-            .with(stdout_layer)
-            .init();
-    }
-
-    #[cfg(target_os = "windows")]
-    setup::setup_windows_job_object();
-    
-    // Use eprintln for the startup message in stdio mode to stay off stdout
-    if is_stdio {
-        eprintln!("INFO: TylluanNexus kernel started (stdio mode)");
-    } else {
-        info!("TylluanNexus kernel started (headless mode) - logs written to ./logs/kernel.log");
-    }
-
-    // ─── Maintenance Commands ───────────────────────────────────────
-    if args.contains(&"--export".to_string()) {
-        let output = setup::get_cli_arg(&args, "--export")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("tylluan-sovereign-state.tar.gz"));
-        
-        let config = tylluan_kernel::config::TylluanConfig::load()?;
-        let data_dir = PathBuf::from(&config.memory.db_path).parent().unwrap_or(Path::new("data")).to_path_buf();
-        let config_dir = PathBuf::from("config");
-        let models_dir = PathBuf::from("models");
-        let venv_dir = PathBuf::from(".venv");
-        
-        let venv_arg = if venv_dir.exists() { Some(venv_dir.as_path()) } else { None };
-        
-        tylluan_kernel::maintenance::export_state(&output, &data_dir, &config_dir, &models_dir, venv_arg)?;
+    // One-shot maintenance commands exit immediately without starting the kernel.
+    if handle_maintenance_commands(&args).await? {
         return Ok(());
     }
 
-    if args.contains(&"--import".to_string()) {
-        let input = setup::get_cli_arg(&args, "--import")
-            .map(PathBuf::from)
-            .ok_or_else(|| anyhow::anyhow!("Usage: --import <file.tar.gz>"))?;
-        
-        tylluan_kernel::maintenance::import_state(&input, Path::new("."))?;
-        return Ok(());
-    }
-
-    // Download missing models command
-    if args.contains(&"--download-models".to_string()) {
-        info!("📥 Downloading missing AI models...");
-        let models_dir = PathBuf::from("models");
-        let downloader = tylluan_kernel::maintenance::ModelDownloader::new();
-        match downloader.download_missing(&models_dir).await {
-            Ok(downloaded) => {
-                if downloaded.is_empty() {
-                    info!("✅ All models already present.");
-                } else {
-                    info!("✅ Downloaded models: {:?}", downloaded);
-                }
-            }
-            Err(e) => {
-                error!("❌ Model download failed: {}", e);
-            }
-        }
-        return Ok(());
-    }
-
-    // ─── Anti-Orphan Protection ─────────────────────────────────────
-    // For non-technical users ("huérfanos de la informática"):
-    // 1. Write PID file so we can detect stale kernels
-    // 2. Kill any orphan Python guild processes from previous crashed sessions
-    let pid_file = PathBuf::from("./data/tylluan-nexus.pid");
-    let _ = std::fs::create_dir_all("./data");
-    
-    // Check for stale PID file (previous crash)
-    if pid_file.exists()
-        && let Ok(old_pid_str) = std::fs::read_to_string(&pid_file)
-            && let Ok(old_pid) = old_pid_str.trim().parse::<u32>() {
-                info!("🧹 Found stale PID file ({}). Cleaning up orphan processes...", old_pid);
-                cleanup::cleanup_orphan_guilds(old_pid);
-            }
-    
-    // Write current PID
-    let _ = std::fs::write(&pid_file, std::process::id().to_string());
-
-    // ─── P4: Garbage Collection ────────────────────────────────────
-    // Clean up residual data from previous sessions or stress tests
-    cleanup::cleanup_residual_data();
+    anti_orphan_protection_and_gc();
 
     // 1. Initial configuration (load once at startup)
     let mut config = TylluanConfig::load()
@@ -240,20 +318,7 @@ async fn main() -> anyhow::Result<()> {
     config.validate_security();
 
     // ─── Low Memory Detection ──────────────────────────────────────────
-    let mut low_memory_mode = config.low_memory_mode;
-    if !low_memory_mode {
-        // Try to detect low memory via sysinfo
-        let mut sys = sysinfo::System::new();
-        sys.refresh_memory();
-        let total_mem = sys.total_memory();
-        if total_mem > 0 {
-            let total_gb = total_mem as f64 / (1024.0 * 1024.0 * 1024.0);
-            if total_gb < 2.0 {
-                low_memory_mode = true;
-                warn!("⚠️ RAM baja detectada: {:.1} GB. Timeouts reducidos al 50%.", total_gb);
-            }
-        }
-    }
+    let low_memory_mode = detect_low_memory_mode(config.low_memory_mode);
 
     // ─── Tunnel Manager ────────────────────────────────────────────────────
     let mut tunnel_manager = tylluan_kernel::tunnel::TunnelManager::new(
@@ -263,43 +328,7 @@ async fn main() -> anyhow::Result<()> {
     tunnel_manager.start();
 
     // ─── Security guard: refuse LAN-exposed unauthenticated boot ───────────
-    // See briefing 003 + memory/security_invariant_bind.md
-    {
-        let host = config.nexus.host.as_str();
-        let lan_exposed = host == "0.0.0.0" || host == "::" || host == "[::]";
-        let no_token = cli_token.as_ref().is_none_or(|t| t.is_empty())
-            && std::env::var("TYLLUAN_TOKEN").ok().filter(|s| !s.is_empty()).is_none();
-        let has_override = std::env::var("TYLLUAN_ALLOW_INSECURE").ok().as_deref() == Some("1");
-
-        if lan_exposed && config.nexus.dev_mode && no_token && !has_override {
-            eprintln!();
-            eprintln!("⛔ INSECURE CONFIG REFUSED");
-            eprintln!("   host = \"{host}\"  →  exposes the kernel on every network interface");
-            eprintln!("   dev_mode = true   →  bearer auth is disabled");
-            eprintln!("   TYLLUAN_TOKEN env   →  not set");
-            eprintln!();
-            eprintln!("   Combined, this is unauthenticated remote code execution on your LAN/WiFi.");
-            eprintln!();
-            eprintln!("   Choose ONE:");
-            eprintln!("     (a) Edit tylluan.toml: host = \"127.0.0.1\"   (recommended)");
-            eprintln!("     (b) Set env TYLLUAN_TOKEN=<strong-token> AND set dev_mode = false");
-            eprintln!("     (c) Set env TYLLUAN_ALLOW_INSECURE=1         (you accept the risk)");
-            eprintln!();
-            std::process::exit(1);
-        }
-
-        if lan_exposed && (config.nexus.dev_mode || no_token) && has_override {
-            warn!("⚠️ TYLLUAN_ALLOW_INSECURE=1 set — kernel running LAN-exposed without auth. You accepted the risk.");
-        }
-
-        // Additional guard: dev_mode=true on any non-localhost host (Hallazgo #7)
-        if config.nexus.dev_mode && host != "127.0.0.1" && host != "localhost" && !has_override {
-            panic!(
-                "UNSAFE CONFIG: dev_mode=true con host={host} expone el kernel sin autenticacion en la red. \
-                 Usa host=\"127.0.0.1\" o desactiva dev_mode."
-            );
-        }
-    }
+    enforce_security_guard(&config, &cli_token);
 
     info!("--------------------------------------------------");
     info!("🛡️ TYLLUANNEXUS o3 KERNEL — Sovereignty Activated (HEADLESS)");
