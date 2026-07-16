@@ -3,7 +3,8 @@ import type { NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { MaintenanceTab } from './MaintenanceTab';
 import { LogsTab } from './LogsTab';
 import { ModelConfigPanel } from './ModelConfigPanel';
-import { Wrench, Terminal, Cpu } from 'lucide-react';
+import DoctorPanel from './DoctorPanel';
+import { Wrench, Terminal, Cpu, Stethoscope } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -14,12 +15,25 @@ interface Props {
 }
 
 export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
-  const [view, setView] = useState<'maintenance' | 'logs' | 'models'>('maintenance');
+  const [view, setView] = useState<'doctor' | 'maintenance' | 'logs' | 'models'>('doctor');
 
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Sub-navigation */}
       <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl w-max">
+        <button
+          type="button"
+          onClick={() => setView('doctor')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            view === 'doctor'
+              ? "bg-slate-800 text-slate-200 shadow-sm"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+          )}
+        >
+          <Stethoscope className="w-4 h-4" />
+          Doctor
+        </button>
         <button
           type="button"
           onClick={() => setView('maintenance')}
@@ -63,7 +77,9 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
 
       {/* Content */}
       <div className="flex-1 min-h-0">
-        {view === 'maintenance' ? (
+        {view === 'doctor' ? (
+          <DoctorPanel bridge={bridge} notify={notify} />
+        ) : view === 'maintenance' ? (
           <MaintenanceTab bridge={bridge} notify={notify} />
         ) : view === 'logs' ? (
           <LogsTab events={events} onClear={onClearLogs} />
