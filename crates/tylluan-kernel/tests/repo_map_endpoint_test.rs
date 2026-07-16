@@ -110,7 +110,6 @@ fn build_test_app(state: Arc<HttpState>) -> axum::Router {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "integration")]
 async fn test_repo_map_endpoint_returns_200() {
     let state = test_state().await;
     let app = build_test_app(state);
@@ -136,7 +135,6 @@ async fn test_repo_map_endpoint_returns_200() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "integration")]
 async fn test_repo_map_contains_rust_identifiers() {
     let state = test_state().await;
     let app = build_test_app(state);
