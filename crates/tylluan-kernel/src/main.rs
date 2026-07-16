@@ -916,6 +916,12 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // M31-P6: Wire JobQueue into TylluanServer and spawn background worker
+    server.set_jobs(jobs.clone());
+    if let Some(state) = crate::transport::server::background_jobs::BackgroundWorkerState::from_server(&server) {
+        crate::transport::server::background_jobs::spawn_background_worker(state);
+    }
+
     let server_arc = Arc::new(RwLock::new(server));
     let coloquio_for_fly = coloquio.clone(); // reserve clone for coloquio→SilvaDB flywheel
 
