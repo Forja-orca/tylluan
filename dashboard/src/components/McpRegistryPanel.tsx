@@ -281,7 +281,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
             <Plug className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight uppercase">MCP External Registry</h2>
+            <h2 className="text-lg font-bold text-slate-50 tracking-tight uppercase">MCP External Registry</h2>
             <p className="text-xs text-slate-500 font-mono">Configure external Model Context Protocol server links</p>
           </div>
         </div>
@@ -510,7 +510,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <RefreshCw className={cn("w-4 h-4 text-emerald-400", calls.length > 0 && "animate-pulse")} />
-            <h3 className="text-sm font-bold text-white uppercase tracking-tight font-mono">Live External MCP Call Log</h3>
+            <h3 className="text-sm font-bold text-slate-50 uppercase tracking-tight font-mono">Live External MCP Call Log</h3>
           </div>
           {calls.length > 0 && (
             <button
@@ -581,7 +581,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-500 animate-pulse" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-tight font-mono">Sandbox Capability Grants Log</h3>
+            <h3 className="text-sm font-bold text-slate-50 uppercase tracking-tight font-mono">Sandbox Capability Grants Log</h3>
             <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-tighter" title="Backend log is currently mock stub">
               Local Audit Log Only
             </span>
@@ -663,7 +663,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plug className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-md font-bold text-white uppercase tracking-tight">Register MCP Server</h3>
+                <h3 className="text-md font-bold text-slate-50 uppercase tracking-tight">Register MCP Server</h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -798,7 +798,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                   <Share2 className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-md font-bold text-white uppercase tracking-tight">Integrate Tylluan with your IDE / Client</h3>
+                  <h3 className="text-md font-bold text-slate-50 uppercase tracking-tight">Integrate Tylluan with your IDE / Client</h3>
                   <p className="text-xs text-slate-500 font-mono">Set up Tylluan as a Model Context Protocol (MCP) server</p>
                 </div>
               </div>
@@ -914,7 +914,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                           <button
                             type="button"
                             onClick={() => copyToClipboard(claudeDesktopSnippet, 'Claude Desktop')}
-                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 rounded-lg transition-all"
                             title="Copy config snippet"
                           >
                             {copiedType === 'Claude Desktop' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -926,7 +926,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                     {((setupHint?.active_tab || 'desktop') === 'cursor') && (
                       <div className="space-y-2 animate-in fade-in duration-150">
                         <div className="text-xs text-slate-400 leading-relaxed">
-                          Add a new MCP server in Cursor under <span className="text-white font-bold">Settings → Features → MCP</span>:
+                          Add a new MCP server in Cursor under <span className="text-slate-50 font-bold">Settings → Features → MCP</span>:
                         </div>
                         <div className="p-3 bg-slate-950/80 border border-slate-850 rounded-xl space-y-2 text-xs">
                           <div>
@@ -943,7 +943,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                             <button
                               type="button"
                               onClick={() => copyToClipboard(finalSseUrl, 'Cursor URL')}
-                              className="absolute top-1 right-0 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              className="absolute top-1 right-0 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 rounded-lg transition-all"
                               title="Copy URL"
                             >
                               {copiedType === 'Cursor URL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -965,7 +965,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                           <button
                             type="button"
                             onClick={() => copyToClipboard(vsCodeSnippet, 'VS Code')}
-                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                            className="absolute top-2 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 rounded-lg transition-all"
                             title="Copy config snippet"
                           >
                             {copiedType === 'VS Code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -978,7 +978,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                       <div className="space-y-3 animate-in fade-in duration-150">
                         <div>
                           <div className="text-xs text-slate-400 leading-relaxed mb-1.5">
-                            Run this command in your terminal to integrate with <span className="text-white font-bold">Claude Code</span>:
+                            Run this command in your terminal to integrate with <span className="text-slate-50 font-bold">Claude Code</span>:
                           </div>
                           <div className="relative group">
                             <pre className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-400/90 break-all pr-10">
@@ -987,7 +987,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                             <button
                               type="button"
                               onClick={() => copyToClipboard(claudeCodeCommand, 'Claude Code Command')}
-                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 rounded-lg transition-all"
                               title="Copy Command"
                             >
                               {copiedType === 'Claude Code Command' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -997,7 +997,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
                         <div>
                           <div className="text-xs text-slate-400 leading-relaxed mb-1.5">
-                            For <span className="text-white font-bold">LM Studio (SSE)</span> client setup:
+                            For <span className="text-slate-50 font-bold">LM Studio (SSE)</span> client setup:
                           </div>
                           <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] text-slate-300 break-all relative pr-10">
                             <span className="text-slate-500 block text-[9px] uppercase font-mono mb-0.5">LM Studio Endpoint</span>
@@ -1005,7 +1005,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                             <button
                               type="button"
                               onClick={() => copyToClipboard(finalSseUrl, 'LM Studio URL')}
-                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                              className="absolute top-2.5 right-2 p-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 rounded-lg transition-all"
                               title="Copy Endpoint"
                             >
                               {copiedType === 'LM Studio URL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1024,7 +1024,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
               <button
                 type="button"
                 onClick={() => setIsIntegrationModalOpen(false)}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700 active:scale-95"
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-50 rounded-xl text-xs font-bold transition-all border border-slate-700 active:scale-95"
               >
                 Close Panel
               </button>

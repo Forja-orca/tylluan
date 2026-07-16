@@ -183,7 +183,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <Link2 className="w-5 h-5 text-slate-950" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">Connectors & Discovery</h1>
+              <h1 className="text-2xl font-black text-slate-50 tracking-tight">Connectors & Discovery</h1>
               <p className="text-xs text-emerald-400/80 font-mono tracking-wider uppercase">Milestone M24 Sovereign Integrations</p>
             </div>
           </div>
@@ -212,7 +212,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           className={cn(
             "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
             activeSubTab === 'sessions' 
-              ? "border-emerald-500 text-white" 
+              ? "border-emerald-500 text-slate-50" 
               : "border-transparent text-slate-500 hover:text-slate-300"
           )}
         >
@@ -232,7 +232,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           className={cn(
             "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
             activeSubTab === 'catalog' 
-              ? "border-emerald-500 text-white" 
+              ? "border-emerald-500 text-slate-50" 
               : "border-transparent text-slate-500 hover:text-slate-300"
           )}
         >
@@ -252,7 +252,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           className={cn(
             "pb-3 text-sm font-bold tracking-tight transition-all border-b-2 relative -mb-[2px]",
             activeSubTab === 'guides' 
-              ? "border-emerald-500 text-white" 
+              ? "border-emerald-500 text-slate-50" 
               : "border-transparent text-slate-500 hover:text-slate-300"
           )}
         >
@@ -372,7 +372,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <div className="p-5 bg-gradient-to-br from-emerald-950/25 to-slate-900/50 border border-emerald-500/20 rounded-2xl shadow-md">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-4.5 h-4.5 text-emerald-400" />
-                  <h3 className="text-sm font-black text-white tracking-wide uppercase">Sovereign Contract (5 Tools)</h3>
+                  <h3 className="text-sm font-black text-slate-50 tracking-wide uppercase">Sovereign Contract (5 Tools)</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
                   CONTRACT-01 guarantees that clients always see exactly these 5 tools. Any guild work is requested through them, preventing context overload.
@@ -394,7 +394,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <div className="p-5 bg-slate-900/30 border border-slate-800 rounded-2xl space-y-4">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-black text-white uppercase tracking-wider">MCP Discovery Registry</h3>
+                  <h3 className="text-xs font-black text-slate-50 uppercase tracking-wider">MCP Discovery Registry</h3>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -426,7 +426,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Cpu className="w-4.5 h-4.5 text-blue-400" />
-                    <h3 className="text-sm font-black text-white tracking-wide uppercase">Active Guild Modules</h3>
+                    <h3 className="text-sm font-black text-slate-50 tracking-wide uppercase">Active Guild Modules</h3>
                   </div>
                   <span className="text-xs text-slate-500 font-mono">Total Underlying Tools: {capabilities?.all_guild_tools.length ?? 0}</span>
                 </div>
@@ -557,7 +557,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'cursor' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-white tracking-tight">Cursor MCP Integration</h3>
+                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Cursor MCP Integration</h3>
                     <p className="text-xs text-slate-400">Configure Cursor to connect to Tylluan's sovereign hub using standard MCP Stdio Client.</p>
                   </div>
 
@@ -593,7 +593,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'vscode' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-white tracking-tight">VS Code (Cline / Roo Code) Configuration</h3>
+                    <h3 className="text-base font-bold text-slate-50 tracking-tight">VS Code (Cline / Roo Code) Configuration</h3>
                     <p className="text-xs text-slate-400">Add TylluanNexus as a custom MCP server inside Cline or Roo Code extension settings.</p>
                   </div>
 
@@ -627,7 +627,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'claude' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-white tracking-tight">Claude Desktop Integration</h3>
+                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Claude Desktop Integration</h3>
                     <p className="text-xs text-slate-400">Integrate TylluanNexus into the official Anthropic Claude Desktop client.</p>
                   </div>
 
@@ -652,7 +652,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'custom' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-white tracking-tight">Custom REST Client / Script Integration</h3>
+                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Custom REST Client / Script Integration</h3>
                     <p className="text-xs text-slate-400">Call TylluanNexus directly via HTTP REST API from custom shell scripts, Python programs, or fetch calls.</p>
                   </div>
 

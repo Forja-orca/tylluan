@@ -98,8 +98,8 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-xl font-bold tracking-tight text-slate-50 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-500" />
             Audit Trail Logs
           </h2>
           <p className="text-xs text-slate-400">

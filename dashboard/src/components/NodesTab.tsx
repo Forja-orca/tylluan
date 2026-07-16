@@ -65,7 +65,7 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radio className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-xl font-bold text-white">Agent Nodes</h2>
+          <h2 className="text-xl font-bold text-slate-50">Agent Nodes</h2>
         </div>
         <div className="flex gap-2">
           <button onClick={fetchNodes} className="px-3 py-1.5 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700 flex items-center gap-1">
@@ -95,7 +95,7 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
               {nodes.map((n) => (
                 <div key={n.agent_id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
                   <div>
-                    <p className="text-sm font-medium text-white">{n.agent_id}</p>
+                    <p className="text-sm font-medium text-slate-50">{n.agent_id}</p>
                     <p className="text-xs text-slate-400">
                       {n.inbox_pending} pending · {n.rules} rules
                     </p>
@@ -119,7 +119,7 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
               <select
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
-                className="w-full bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700"
+                className="w-full bg-slate-800 text-slate-50 text-sm rounded-lg px-3 py-2 border border-slate-700"
               >
                 <option value="">Select agent...</option>
                 {nodes.filter(n => n.agent_id !== 'dashboard').map((n) => (
@@ -133,7 +133,7 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type a message..."
-                className="w-full bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700 h-20 resize-none"
+                className="w-full bg-slate-800 text-slate-50 text-sm rounded-lg px-3 py-2 border border-slate-700 h-20 resize-none"
               />
             </div>
             <button

@@ -116,7 +116,7 @@ export function BlackboardTab({ bridge }: BlackboardTabProps) {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl backdrop-blur-sm">
         <div>
-          <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-black text-slate-50 tracking-tight flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-emerald-400" />
             Collective Blackboard
           </h2>

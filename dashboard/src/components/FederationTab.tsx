@@ -356,7 +356,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
             <Network className="w-6 h-6 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight uppercase">Cognitive Federation Hub</h2>
+            <h2 className="text-xl font-bold text-slate-50 tracking-tight uppercase">Cognitive Federation Hub</h2>
             <p className="text-xs text-slate-400 font-mono mt-0.5">Synchronize shareable knowledge nodes across autonomous peer nodes</p>
           </div>
         </div>

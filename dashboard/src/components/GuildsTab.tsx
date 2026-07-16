@@ -719,7 +719,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Sandbox Security Profile</h3>
+                  <h3 className="text-xs font-bold text-slate-50 uppercase tracking-wider font-mono">Sandbox Security Profile</h3>
                   <p className="text-[10px] text-slate-500 font-mono">Configure execution isolation constraints for active guilds</p>
                 </div>
               </div>
