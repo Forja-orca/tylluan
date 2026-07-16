@@ -20,7 +20,7 @@ pub async fn dream_status_handler(State(state): State<Arc<HttpState>>) -> impl I
     let mut edges_by_type: HashMap<String, usize> = HashMap::new();
     let mut edge_node_ids: std::collections::HashSet<String> =
         std::collections::HashSet::with_capacity(total_edges * 2);
-    let mut contradictions = 0;
+    let mut contradictions: usize = 0;
     for e in &all_edges {
         let etype = e.get("type").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
         if etype == "contradicts" || etype == "contradiction" { contradictions += 1; }
@@ -34,14 +34,14 @@ pub async fn dream_status_handler(State(state): State<Arc<HttpState>>) -> impl I
     let routing_anchors = nodes_by_type.get("routing_anchor").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
     let knowledge_nodes = total_nodes.saturating_sub(routing_anchors);
     let knowledge_orphans = orphans.saturating_sub(routing_anchors);
-    let orphan_pct = if knowledge_nodes > 0 { 100 * knowledge_orphans / knowledge_nodes } else { 0 };
+    let orphan_pct = (100 * knowledge_orphans).checked_div(knowledge_nodes).unwrap_or(0);
 
     let nodes_with_embedding = state.silva.count_nodes_with_embedding().await.unwrap_or(0);
     let nodes_with_topic = state.silva.count_nodes_with_topic_key().await.unwrap_or(0);
 
-    let contradiction_pct = if total_edges > 0 { 100 * contradictions / total_edges } else { 0 };
-    let embedding_coverage = if total_nodes > 0 { 100 * nodes_with_embedding / total_nodes } else { 0 };
-    let topic_key_coverage = if total_nodes > 0 { 100 * nodes_with_topic / total_nodes } else { 0 };
+    let contradiction_pct = (100 * contradictions).checked_div(total_edges).unwrap_or(0);
+    let embedding_coverage = (100 * nodes_with_embedding).checked_div(total_nodes).unwrap_or(0);
+    let topic_key_coverage = (100 * nodes_with_topic).checked_div(total_nodes).unwrap_or(0);
 
     let canary_assertions = serde_json::json!({
         "orphan_pct_ok": orphan_pct < 35,
@@ -386,7 +386,7 @@ pub async fn canary_handler(State(state): State<Arc<HttpState>>) -> impl IntoRes
             }
             let orphans = ncount.saturating_sub(connected.len());
             let knowledge_orphans = orphans.saturating_sub(routing_anchors);
-            100 * knowledge_orphans / knowledge_nodes
+            (100 * knowledge_orphans).checked_div(knowledge_nodes).unwrap_or(100)
         } else { 100 };
         let ok = ncount > 0 && orphan_pct < 35;
         if ok { passed += 1; }

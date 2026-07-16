@@ -75,11 +75,10 @@ fn compiled(pattern: &str) -> Option<Regex> {
 /// Clear the compiled-regex cache. Call after a config reload in case hook
 /// patterns changed -- otherwise stale compiled regexes would keep running.
 pub fn clear_regex_cache() {
-    if let Some(cache) = REGEX_CACHE.get() {
-        if let Ok(mut w) = cache.write() {
+    if let Some(cache) = REGEX_CACHE.get()
+        && let Ok(mut w) = cache.write() {
             w.clear();
         }
-    }
 }
 
 fn rule_matches_tool(rule: &HookRule, tool_name: &str) -> bool {

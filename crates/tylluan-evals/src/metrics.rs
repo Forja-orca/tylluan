@@ -48,12 +48,12 @@ pub fn compute_query_result(
     relevant_ids: &[String],
 ) -> QueryResult {
     let retrieved_ids: Vec<&str> = retrieved.iter().map(|(id, _)| id.as_str()).collect();
-    let top1 = retrieved_ids.get(0).copied();
+    let top1 = retrieved_ids.first().copied();
     let top3: Vec<&str> = retrieved_ids.iter().take(3).copied().collect();
     let top5: Vec<&str> = retrieved_ids.iter().take(5).copied().collect();
     let top10: Vec<&str> = retrieved_ids.iter().take(10).copied().collect();
 
-    let correct_in_top1 = top1.map_or(false, |id| relevant_ids.contains(&id.to_string()));
+    let correct_in_top1 = top1.is_some_and(|id| relevant_ids.contains(&id.to_string()));
     let correct_in_top3 = top3.iter().any(|id| relevant_ids.contains(&id.to_string()));
     let correct_in_top5 = top5.iter().any(|id| relevant_ids.contains(&id.to_string()));
     let correct_in_top10 = top10.iter().any(|id| relevant_ids.contains(&id.to_string()));
@@ -221,6 +221,7 @@ pub fn print_report(report: &BenchmarkReport) {
 ///     to anything on the [QA-accuracy] leaderboard."
 ///   - Mem0's published number is contested: their own blog claims 94.4,
 ///     an independent measurement reports 49.0% for the same system.
+///
 /// None of these are verified by us against our own harness/dataset subset,
 /// so this prints them as unverified third-party claims with sources, never
 /// as a ranked comparison.

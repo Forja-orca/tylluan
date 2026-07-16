@@ -277,12 +277,11 @@ async fn main() -> Result<()> {
             // ── 3. Python version ──
             let python_check = || -> Option<String> {
                 for bin in &["python3", "python"] {
-                    if let Ok(out) = Command::new(bin).arg("--version").output() {
-                        if out.status.success() {
+                    if let Ok(out) = Command::new(bin).arg("--version").output()
+                        && out.status.success() {
                             let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
                             return Some(v);
                         }
-                    }
                 }
                 None
             };
@@ -309,7 +308,7 @@ async fn main() -> Result<()> {
             let guild_dir = PathBuf::from("guilds").join("core");
             if guild_dir.exists() {
                 let count = match std::fs::read_dir(&guild_dir) {
-                    Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().map_or(false, |x| x == "py" || x == "rs")).count(),
+                    Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "py" || x == "rs")).count(),
                     Err(_) => 0,
                 };
                 println!("[4/7] Guilds core: {} guilds at {} ... ✅", count, guild_dir.display());
@@ -320,7 +319,7 @@ async fn main() -> Result<()> {
 
             // ── 5. Embedding model cache ──
             let models_dir = PathBuf::from("models");
-            let model_cache_ok = models_dir.exists() && std::fs::read_dir(&models_dir).map_or(false, |mut e| e.next().is_some());
+            let model_cache_ok = models_dir.exists() && std::fs::read_dir(&models_dir).is_ok_and(|mut e| e.next().is_some());
             if model_cache_ok {
                 let size = models_dir_approx_size(&models_dir);
                 println!("[5/7] Embedding model: cached (~{} MB) ... ✅", size / 1024 / 1024);
@@ -351,8 +350,8 @@ async fn main() -> Result<()> {
                         println!("[7/7] Kernel: running ({}) ... ✅", status);
                         // Also fetch detailed doctor report
                         let doctor_url = format!("http://127.0.0.1:{}/api/v1/doctor", DEFAULT_PORT);
-                        if let Ok(resp) = client.get(&doctor_url).send().await {
-                            if let Ok(report) = resp.json::<serde_json::Value>().await {
+                        if let Ok(resp) = client.get(&doctor_url).send().await
+                            && let Ok(report) = resp.json::<serde_json::Value>().await {
                                 if let Some(guilds) = report["guilds"].as_array() {
                                     let down: Vec<_> = guilds.iter()
                                         .filter(|g| g["running"].as_bool() == Some(false))
@@ -362,8 +361,8 @@ async fn main() -> Result<()> {
                                         println!("       Guilds DOWN: {}", down.join(", "));
                                     }
                                 }
-                                if let Some(suggestions) = report["suggestions"].as_array() {
-                                    if !suggestions.is_empty() {
+                                if let Some(suggestions) = report["suggestions"].as_array()
+                                    && !suggestions.is_empty() {
                                         println!("\n   Suggestions:");
                                         for s in suggestions {
                                             if let Some(s) = s.as_str() {
@@ -371,9 +370,7 @@ async fn main() -> Result<()> {
                                             }
                                         }
                                     }
-                                }
                             }
-                        }
                     }
                     Ok(resp) => println!("[7/7] Kernel: error {} ... ❌", resp.status()),
                     Err(_) => println!("[7/7] Kernel: unreachable despite port open ... ❌"),
@@ -738,8 +735,8 @@ async fn main() -> Result<()> {
 
                 let guild_dir = std::path::Path::new("guilds").join("core");
                 let tests_dir = std::path::Path::new("tests").join("guilds");
-                let guild_path = guild_dir.join(format!("{}.py", &snake));
-                let test_path = tests_dir.join(format!("test_{}.py", &snake));
+                let guild_path = guild_dir.join(format!("{}.py", snake));
+                let test_path = tests_dir.join(format!("test_{}.py", snake));
 
                 if guild_path.exists() {
                     anyhow::bail!("Guild already exists at {}", guild_path.display());
@@ -833,14 +830,13 @@ def test_{snake}_tool_registered():
                             println!("🔒 Sandbox Profile");
                             println!("   Enabled: {}", sb["enabled"].as_bool().unwrap_or(false));
                             println!("   Global:  {}", sb["profile"].as_str().unwrap_or("balanced"));
-                            if let Some(overrides) = sb["guild_overrides"].as_object() {
-                                if !overrides.is_empty() {
+                            if let Some(overrides) = sb["guild_overrides"].as_object()
+                                && !overrides.is_empty() {
                                     println!("   Guild overrides:");
                                     for (guild, profile) in overrides {
                                         println!("     {} → {}", guild, profile.as_str().unwrap_or("?"));
                                     }
                                 }
-                            }
                         }
                         Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
                         Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),

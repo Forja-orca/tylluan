@@ -152,11 +152,10 @@ impl LongMemEvalBench {
                     warn!("Failed to upsert chunk {}: {:?}", chunk_id, e);
                     continue;
                 }
-                if let Some(ref engine) = engine {
-                    if let Ok(emb) = engine.embed(&context) {
+                if let Some(engine) = engine
+                    && let Ok(emb) = engine.embed(&context) {
                         let _ = db.save_embedding(&chunk_id, &emb, "bge-m3", None).await;
                     }
-                }
                 if is_answer_session {
                     answer_node_ids.push(chunk_id);
                 }
@@ -221,11 +220,10 @@ impl LongMemEvalBench {
                 continue;
             }
 
-            if let Some(ref engine) = engine {
-                if let Ok(emb) = engine.embed(&session_content) {
+            if let Some(engine) = engine
+                && let Ok(emb) = engine.embed(&session_content) {
                     let _ = db.save_embedding(&node_id, &emb, "bge-m3", None).await;
                 }
-            }
 
             if is_answer_session {
                 answer_node_ids.push(node_id);

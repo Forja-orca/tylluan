@@ -129,12 +129,11 @@ async fn test_consensus_hardening_stress() -> Result<()> {
     
     for i in 0..items.len() {
         let node_id = format!("stress_node_{i}");
-        if let Ok(Some(node)) = silva.get_node(&node_id).await {
-             if node.protected && node.weight < 1.0 {
+        if let Ok(Some(node)) = silva.get_node(&node_id).await
+             && node.protected && node.weight < 1.0 {
                  warn!("🛡️ PROTECT FAILURE: Node {} lost weight during decay!", node_id);
                  protected_ok = false;
              }
-        }
     }
 
     // Verify Synthesis nodes exist

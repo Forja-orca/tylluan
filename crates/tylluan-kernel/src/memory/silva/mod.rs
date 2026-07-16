@@ -156,8 +156,8 @@ impl SilvaDB {
     /// Try to load an existing .fjv1 mmap embedding store.
     /// Silently returns if file doesn't exist or is corrupt.
     async fn load_mmap_store(&self) {
-        if let Some(ref path) = self.mmap_path {
-            if path.exists() {
+        if let Some(ref path) = self.mmap_path
+            && path.exists() {
                 match crate::memory::mmap_store::MmapEmbeddingStore::load(path) {
                     Ok(store) => {
                         let searcher = crate::memory::ivf_index::IVFSearcher::new(
@@ -172,7 +172,6 @@ impl SilvaDB {
                     Err(e) => tracing::warn!("🌲 Failed to load .fjv1 mmap store (will rebuild on next consolidate): {}", e),
                 }
             }
-        }
     }
 
     /// Create an in-memory instance (for testing).

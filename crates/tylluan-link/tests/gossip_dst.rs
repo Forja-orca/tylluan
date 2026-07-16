@@ -35,7 +35,7 @@ async fn test_gossip_dst_normal_sync() {
 
     engine_a.advance_clock();
     let entry = engine_a.local_entry("127.0.0.1:9000", vec!["bash".into(), "git".into()], HardwareCaps::default());
-    engine_a.store_entries(&[entry.clone()]);
+    engine_a.store_entries(std::slice::from_ref(&entry));
 
     let (mut t_a, mut t_b) = in_memory_pair();
 

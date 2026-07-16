@@ -82,12 +82,11 @@ fn parse_args() -> (CliMode, Option<String>) {
                     i += 1;
                 }
             }
-            "--save" => {
-                if i + 1 < args.len() {
+            "--save"
+                if i + 1 < args.len() => {
                     save_path = Some(args[i + 1].clone());
                     i += 1;
                 }
-            }
             _ => {}
         }
         i += 1;
@@ -127,14 +126,11 @@ async fn main() {
 
     let (mode, save_path) = parse_args();
 
-    match &mode {
-        CliMode::GenerateOracle { db_path, output } => {
-            println!("  Mode: GENERATE IDLELAB ORACLE");
-            println!();
-            runner::generate_oracle(db_path, std::path::Path::new(output)).await;
-            return;
-        }
-        _ => {}
+    if let CliMode::GenerateOracle { db_path, output } = &mode {
+        println!("  Mode: GENERATE IDLELAB ORACLE");
+        println!();
+        runner::generate_oracle(db_path, std::path::Path::new(output)).await;
+        return;
     }
 
     println!("  Loading embedding engine (fastembed BGE-M3)...");

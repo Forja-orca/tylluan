@@ -284,7 +284,7 @@ mod tests {
         let r_neg = item.retrievability(-10.0);
         assert!((r_neg - 1.0).abs() < 1e-6);
         let r_far = item.retrievability(1_000_000.0);
-        assert!(r_far >= 0.0 && r_far < 1.0);
+        assert!((0.0..1.0).contains(&r_far));
     }
 
     #[test]

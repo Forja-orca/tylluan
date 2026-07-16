@@ -68,7 +68,7 @@ async fn baseline_v090_benchmark() {
     let mut correct_in_top5_count = 0;
     let mut total_precision_at_5 = 0.0f64;
 
-    for (_i, (query, relevant_ids)) in QUERIES.iter().enumerate() {
+    for (query, relevant_ids) in QUERIES.iter() {
         let emb = generate_embedding(query, 12);
         let start = Instant::now();
         let retrieved = db
@@ -277,7 +277,7 @@ async fn benchmark_v0_10_0_quality_delta() {
     let mut total_mrr = 0.0f64;
     let mut all_lat_ms: Vec<f64> = Vec::new();
 
-    for (_i, (query, relevant_ids)) in ALL_QUERIES.iter().enumerate() {
+    for (query, relevant_ids) in ALL_QUERIES.iter() {
         let emb = generate_embedding(query, 12);
         let start = Instant::now();
         let retrieved = db.search_hybrid(query, Some(&emb), 10, None, false)
@@ -314,7 +314,7 @@ async fn benchmark_v0_10_0_quality_delta() {
     let mut total_mrr_off = 0.0f64;
     let mut all_lat_ms_off: Vec<f64> = Vec::new();
 
-    for (_i, (query, relevant_ids)) in ALL_QUERIES.iter().enumerate() {
+    for (query, relevant_ids) in ALL_QUERIES.iter() {
         let emb = generate_embedding(query, 12);
         let start = Instant::now();
         let retrieved = db_off.search_hybrid(query, Some(&emb), 10, None, true)

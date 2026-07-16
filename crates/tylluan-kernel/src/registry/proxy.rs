@@ -629,17 +629,14 @@ impl SseMcpProxy {
         let tool_timeout = Duration::from_millis(timeout_ms);
 
         let validate_url = |url_str: &str| -> Result<()> {
-            if let Ok(url) = reqwest::Url::parse(url_str) {
-                if url.scheme() == "http" {
-                    if let Some(host) = url.host_str() {
-                        if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+            if let Ok(url) = reqwest::Url::parse(url_str)
+                && url.scheme() == "http"
+                    && let Some(host) = url.host_str()
+                        && host != "127.0.0.1" && host != "localhost" && host != "::1" {
                             return Err(anyhow::anyhow!(
                                 "Security violation: Cleartext transmission of sensitive information blocked for external host '{host}'. Use HTTPS instead."
                             ));
                         }
-                    }
-                }
-            }
             Ok(())
         };
         validate_url(sse_url)?;
@@ -949,18 +946,15 @@ impl SseMcpProxy {
     /// This mirrors connect()'s validate_url but runs on every request,
     /// making the guard visible to static analysis (CodeQL).
     fn guard_cleartext_transmission(url: &str) -> Result<()> {
-        if let Ok(parsed) = reqwest::Url::parse(url) {
-            if parsed.scheme() == "http" {
-                if let Some(host) = parsed.host_str() {
-                    if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+        if let Ok(parsed) = reqwest::Url::parse(url)
+            && parsed.scheme() == "http"
+                && let Some(host) = parsed.host_str()
+                    && host != "127.0.0.1" && host != "localhost" && host != "::1" {
                         return Err(anyhow::anyhow!(
                             "Security violation: Cleartext transmission of sensitive information \
                              blocked for external host '{host}'. Use HTTPS instead."
                         ));
                     }
-                }
-            }
-        }
         Ok(())
     }
 

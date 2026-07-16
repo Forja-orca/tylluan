@@ -208,7 +208,8 @@ impl super::SilvaDB {
                     })
                 })?.flatten().collect()
             } else {
-                let peer = source.unwrap();
+                // Reached only when source is Some(_) and not "local" (see the if-arm above).
+                let peer = source.unwrap_or_default();
                 let mut stmt = conn.prepare(
                     "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
                      FROM nodes WHERE federation_source = ?1 LIMIT ?2"

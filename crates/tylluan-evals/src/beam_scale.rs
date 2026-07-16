@@ -201,13 +201,11 @@ async fn evaluate_at_scale(
             continue;
         }
 
-        if use_embedding {
-            if let Some(eng) = engine {
-                if let Ok(emb) = eng.embed(content) {
+        if use_embedding
+            && let Some(eng) = engine
+                && let Ok(emb) = eng.embed(content) {
                     let _ = db.save_embedding(&node_id, &emb, "bge-m3", None).await;
                 }
-            }
-        }
 
         if *is_answer {
             answer_node_ids.push(node_id);
