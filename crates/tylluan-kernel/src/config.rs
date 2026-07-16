@@ -142,6 +142,11 @@ pub struct TylluanConfig {
     #[serde(default)]
     pub security: SecurityConfig,
 
+    /// M31-P0: deterministic pre/post hooks around the 5 sovereign tools.
+    /// `[[hooks]]` array-of-tables in TOML, see security::hooks::HookRule.
+    #[serde(default)]
+    pub hooks: Vec<crate::security::hooks::HookRule>,
+
     /// Category-specific guild timeouts and low-memory mode.
     #[serde(default)]
     pub timeouts: GuildTimeoutsConfig,

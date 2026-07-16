@@ -506,6 +506,18 @@ export class NexusBridge {
     });
   }
 
+  async clearGuildSandboxOverride(guild: string): Promise<{ success: boolean; restart_required?: boolean }> {
+    return await this.fetch(`/api/v1/config/sandbox-profile/guild/${encodeURIComponent(guild)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async clearSessionSandboxOverride(agentId: string): Promise<{ success: boolean }> {
+    return await this.fetch(`/api/v1/config/sandbox-profile/session/${encodeURIComponent(agentId)}`, {
+      method: 'DELETE'
+    });
+  }
+
   async getSilvaGraph(limit = 300, cluster = false): Promise<GraphData> {
     const rawData = await this.fetch(`/api/v1/graph/viz?limit=${limit}&cluster=${cluster}`);
     return {

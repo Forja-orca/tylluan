@@ -477,26 +477,49 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               onChange={async (e) => {
                 const val = e.target.value as 'inherited' | 'strict' | 'balanced' | 'permissive';
                 const previous = guildOverrides[guild.name] || 'inherited';
-                if (val === 'inherited') {
-                  notify(`Clearing a guild override isn't wired up yet — edit tylluan.toml directly or set another profile.`, 'error');
-                  return;
-                }
                 if (!bridge) {
-                  notify(`Cannot set guild override — no bridge connection`, 'error');
+                  notify(`Cannot update guild override — no bridge connection`, 'error');
                   return;
                 }
-                setGuildOverrides(prev => ({ ...prev, [guild.name]: val }));
+                setGuildOverrides(prev => {
+                  const copy = { ...prev };
+                  if (val === 'inherited') {
+                    delete copy[guild.name];
+                  } else {
+                    copy[guild.name] = val;
+                  }
+                  return copy;
+                });
+                
                 try {
-                  const result = await bridge.setGuildSandboxOverride(guild.name, val);
-                  notify(
-                    result.restart_required
-                      ? `${guild.name} sandbox override set to ${val} — restart required to apply`
-                      : `${guild.name} sandbox override set to ${val}`,
-                    'info'
-                  );
+                  if (val === 'inherited') {
+                    const result = await bridge.clearGuildSandboxOverride(guild.name);
+                    notify(
+                      result.restart_required
+                        ? `${guild.name} sandbox override cleared — restart required to apply`
+                        : `${guild.name} sandbox override cleared to default`,
+                      'info'
+                    );
+                  } else {
+                    const result = await bridge.setGuildSandboxOverride(guild.name, val);
+                    notify(
+                      result.restart_required
+                        ? `${guild.name} sandbox override set to ${val} — restart required to apply`
+                        : `${guild.name} sandbox override set to ${val}`,
+                      'info'
+                    );
+                  }
                 } catch (err: any) {
-                  setGuildOverrides(prev => ({ ...prev, [guild.name]: previous }));
-                  notify(`Failed to set override for ${guild.name}: ${err.message}`, 'error');
+                  // Revert the optimistic update — the backend call above failed
+                  // (e.g. the DELETE endpoint doesn't exist on this build yet),
+                  // so the UI must not claim a state it never actually applied.
+                  setGuildOverrides(prev => {
+                    const copy = { ...prev };
+                    if (previous === 'inherited') delete copy[guild.name];
+                    else copy[guild.name] = previous;
+                    return copy;
+                  });
+                  notify(`Failed to update override for ${guild.name}: ${err.message}`, 'error');
                 }
               }}
               title={!sandboxEnabled ? "Enable global sandbox to configure overrides" : undefined}

@@ -4483,6 +4483,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "rand 0.8.6",
+ "regex",
  "reqwest",
  "rmcp",
  "rusqlite",

@@ -104,6 +104,37 @@ admin = ["*"]
 # "my-reader-token-here" = "reader"
 # "my-writer-token-here" = "writer"
 
+# M31-P0: deterministic pre/post hooks around the 5 sovereign tools (tylluan_do,
+# tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph) plus tylluan_ingest.
+# Runs once for every MCP client (Claude Desktop, Claude Code, LM Studio, ...) --
+# a single choke point to allow/deny/redact/inject context, not per-client logic.
+# No LLM in this path by design: pure regex matching, deterministic and auditable.
+# `tool` accepts a specific sovereign tool name or "*" for all of them.
+# Changes here require a kernel restart to take effect (no hot-reload for hooks yet).
+#
+# Example: block anything that looks like a US SSN before it's ever written to memory.
+# [[hooks]]
+# tool = "tylluan_remember"
+# phase = "pre"
+# pattern = '\b\d{3}-\d{2}-\d{4}\b'
+# action = "deny"
+# message = "Blocked: content matches a PII pattern (SSN-shaped)."
+#
+# Example: redact API-key-shaped strings out of anything returned to the client.
+# [[hooks]]
+# tool = "*"
+# phase = "post"
+# pattern = 'sk-[A-Za-z0-9]{20,}'
+# action = "redact"
+# replacement = "[REDACTED_KEY]"
+#
+# Example: prepend a standing instruction to every tylluan_do call, for all clients.
+# [[hooks]]
+# tool = "tylluan_do"
+# phase = "pre"
+# action = "inject_context"
+# inject = "Remember: always cite sources when recalling factual claims."
+
 # External MCP Servers (Standard MCP protocol)
 # [[external_mcp]]
 # name = "postgresql"
