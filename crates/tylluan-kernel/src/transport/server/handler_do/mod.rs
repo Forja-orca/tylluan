@@ -215,6 +215,144 @@ async fn handle_forget_shortcut(
     })
 }
 
+/// M31-P5: @skill: prefix — project-scoped reusable skill context in SilvaDB.
+/// Bypasses the semantic router entirely.
+///
+/// Syntax:
+///   @skill:save:<name>: <content>   — save a skill with the given name
+///   @skill:get:<name>               — retrieve a skill by name
+///   @skill:list                     — list all skill names for this project
+///   @skill:delete:<name>            — delete a skill by name
+async fn handle_skill_prefix(
+    server: &TylluanServer,
+    intent: &str,
+    _agent_id: &Option<String>,
+) -> Option<Result<CallToolResult, McpError>> {
+    let trimmed = intent.trim();
+    if !trimmed.starts_with("@skill") {
+        return None;
+    }
+
+    let workspace_root = std::env::current_dir().unwrap_or_default();
+    let workspace_hash: u64 = workspace_root.to_string_lossy().as_bytes()
+        .iter()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64));
+
+    let after_prefix = trimmed.strip_prefix("@skill").unwrap_or("").trim();
+
+    // @skill:list (also bare @skill)
+    if after_prefix.is_empty() || after_prefix == ":list" || after_prefix == "list" {
+        let results = server.silva.get_nodes_by_types(&["project_skill"], 100).await.unwrap_or_default();
+        let escaped_root = workspace_root.to_string_lossy().replace('\\', "\\\\");
+        let project_skills: Vec<String> = results.iter()
+            .filter(|n| {
+                n.metadata.contains(&format!("\"project_root\":\"{escaped_root}\""))
+            })
+            .filter_map(|n| {
+                let name = n.id.rsplit(':').next()?;
+                Some(format!("  - {name}"))
+            })
+            .collect();
+        if project_skills.is_empty() {
+            return Some(Ok(CallToolResult {
+                content: vec![Content::text("No skills saved for this project. Use @skill:save:<name>: <content> to create one.")],
+                is_error: Some(false),
+            }));
+        }
+        return Some(Ok(CallToolResult {
+            content: vec![Content::text(format!("Project skills:\n{}", project_skills.join("\n")))],
+            is_error: Some(false),
+        }));
+    }
+
+    // @skill:delete:<name>
+    if after_prefix.starts_with(":delete:") || after_prefix.starts_with("delete:") {
+        let name = after_prefix.split_once(':')
+            .and_then(|(_, rest)| if rest.starts_with("delete:") { rest.strip_prefix("delete:") } else { None })
+            .or_else(|| after_prefix.strip_prefix(":delete:"))
+            .unwrap_or("")
+            .trim();
+        if name.is_empty() {
+            return Some(Ok(error_result("@skill:delete:<name> requires a non-empty skill name.")));
+        }
+        let skill_id = format!("skill:project:{workspace_hash:x}:{name}");
+        match server.silva.delete_node(&skill_id).await {
+            Ok(true) => return Some(Ok(CallToolResult {
+                content: vec![Content::text(format!("Skill '{name}' deleted."))],
+                is_error: Some(false),
+            })),
+            Ok(false) => return Some(Ok(error_result(&format!(
+                "Skill '{name}' not found or is protected."
+            )))),
+            Err(e) => return Some(Ok(error_result(&format!("delete failed: {e}")))),
+        }
+    }
+
+    // @skill:get:<name>
+    if after_prefix.starts_with(":get:") || after_prefix.starts_with("get:") {
+        let name = after_prefix.split_once(':')
+            .and_then(|(_, rest)| if rest.starts_with("get:") { rest.strip_prefix("get:") } else { None })
+            .or_else(|| after_prefix.strip_prefix(":get:"))
+            .unwrap_or("")
+            .trim();
+        if name.is_empty() {
+            return Some(Ok(error_result("@skill:get:<name> requires a non-empty skill name.")));
+        }
+        let skill_id = format!("skill:project:{workspace_hash:x}:{name}");
+        match server.silva.get_node(&skill_id).await {
+            Ok(Some(node)) => return Some(Ok(CallToolResult {
+                content: vec![Content::text(format!(
+                    "Skill '{name}':\n{}",
+                    node.content
+                ))],
+                is_error: Some(false),
+            })),
+            Ok(None) => return Some(Ok(error_result(&format!(
+                "Skill '{name}' not found in this project."
+            )))),
+            Err(e) => return Some(Ok(error_result(&format!("read failed: {e}")))),
+        }
+    }
+
+    // @skill:save:<name>: <content>
+    if after_prefix.starts_with(":save:") || after_prefix.starts_with("save:") {
+        let remainder = after_prefix.split_once(':')
+            .and_then(|(_, rest)| if rest.starts_with("save:") { rest.strip_prefix("save:") } else { None })
+            .or_else(|| after_prefix.strip_prefix(":save:"))
+            .unwrap_or("")
+            .trim();
+        let (name, content) = match remainder.split_once(':') {
+            Some((n, c)) => (n.trim(), c.trim()),
+            None => return Some(Ok(error_result(
+                "@skill:save:<name>: <content> requires a name and content separated by ':'."
+            ))),
+        };
+        if name.is_empty() || content.is_empty() {
+            return Some(Ok(error_result(
+                "@skill:save:<name>: <content> requires a non-empty name and content."
+            )));
+        }
+        let skill_id = format!("skill:project:{workspace_hash:x}:{name}");
+        let meta = serde_json::json!({
+            "project_root": workspace_root.to_string_lossy(),
+            "name": name,
+        }).to_string();
+
+        match server.silva.upsert_node(&skill_id, "project_skill", content, &meta).await {
+            Ok(()) => return Some(Ok(CallToolResult {
+                content: vec![Content::text(format!("Skill '{name}' saved."))],
+                is_error: Some(false),
+            })),
+            Err(e) => return Some(Ok(error_result(&format!("save failed: {e}")))),
+        }
+    }
+
+    // Fallback: unknown @skill subcommand
+    Some(Ok(error_result(&format!(
+        "Unknown @skill command: '{after_prefix}'. Available: :save:<name>: <content>, :get:<name>, :list, :delete:<name>"
+    ))))
+}
+
 pub async fn handle_tylluan_do(
     server: &TylluanServer,
     arguments: Option<serde_json::Map<String, serde_json::Value>>,
@@ -300,6 +438,11 @@ pub async fn handle_tylluan_do(
 
     // Sovereign shortcut: "forget: {node_id}" — delete a node without routing to a guild
     if let Some(result) = handle_forget_shortcut(server, &intent).await {
+        return result;
+    }
+
+    // M31-P5: @skill: prefix — project-scoped reusable skill context
+    if let Some(result) = handle_skill_prefix(server, &intent, &agent_id).await {
         return result;
     }
 
@@ -1627,5 +1770,102 @@ mod tests {
         // This tests the guard against non-registered servers.
         assert!(result.is_none() || result.as_ref().map(|r| r.is_error == Some(true)).unwrap_or(false),
             "should be None or error when no external servers configured");
+    }
+
+    // ─── M31-P5: @skill prefix tests ────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_skill_save_get_roundtrip() {
+        let server = test_server().await;
+        let result = handle_skill_prefix(&server, "@skill:save:test-skill: This is a test skill content", &None).await;
+        assert!(result.is_some(), "save should return Some");
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(false), "save should succeed");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("Skill"), "save response should mention 'Skill'");
+        assert!(text.contains("test-skill"), "save response should include skill name");
+
+        // Now get it back
+        let result2 = handle_skill_prefix(&server, "@skill:get:test-skill", &None).await;
+        assert!(result2.is_some(), "get should return Some");
+        let r2 = result2.unwrap().unwrap();
+        assert_eq!(r2.is_error, Some(false), "get should succeed");
+        let text2 = r2.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text2.contains("This is a test skill content"), "get should return saved content");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_skill_list_only_project_scoped() {
+        let server = test_server().await;
+        // Save a skill for the current project
+        let _ = handle_skill_prefix(&server, "@skill:save:my-skill: content for current project", &None).await;
+
+        // Manually insert a skill node with a DIFFERENT project_root (simulating another project)
+        let other_root = "E:/some-other-project";
+        let other_hash: u64 = other_root.as_bytes().iter()
+            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64));
+        let other_id = format!("skill:project:{other_hash:x}:other-skill");
+        let other_meta = serde_json::json!({
+            "project_root": other_root,
+            "name": "other-skill",
+        }).to_string();
+        server.silva.upsert_node(&other_id, "project_skill", "content from other project", &other_meta).await.unwrap();
+
+        // List: should only show current project's skills
+        let result = handle_skill_prefix(&server, "@skill:list", &None).await;
+        assert!(result.is_some(), "list should return Some");
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(false), "list should succeed");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("my-skill"), "list should include current project's skill");
+        assert!(!text.contains("other-skill"), "list should NOT include other project's skill");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_skill_delete_removes_node() {
+        let server = test_server().await;
+        // Save a skill
+        let _ = handle_skill_prefix(&server, "@skill:save:delete-me: content to be deleted", &None).await;
+        // Verify it exists
+        let get_before = handle_skill_prefix(&server, "@skill:get:delete-me", &None).await;
+        assert!(get_before.is_some());
+        let text_before = get_before.unwrap().unwrap().content.iter()
+            .filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text_before.contains("content to be deleted"), "skill should exist before delete");
+
+        // Delete it
+        let del = handle_skill_prefix(&server, "@skill:delete:delete-me", &None).await;
+        assert!(del.is_some(), "delete should return Some");
+        let d = del.unwrap().unwrap();
+        assert_eq!(d.is_error, Some(false), "delete should succeed");
+        let del_text = d.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(del_text.contains("deleted"), "delete response should mention deleted");
+
+        // Verify it's gone
+        let get_after = handle_skill_prefix(&server, "@skill:get:delete-me", &None).await;
+        assert!(get_after.is_some(), "get after delete should return Some");
+        let g = get_after.unwrap().unwrap();
+        assert_eq!(g.is_error, Some(true), "get after delete should report error/is_error");
+        let text_after = g.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text_after.contains("not found"), "get after delete should say 'not found'");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_skill_get_nonexistent_returns_clear_message() {
+        let server = test_server().await;
+        let result = handle_skill_prefix(&server, "@skill:get:nonexistent-skill", &None).await;
+        assert!(result.is_some(), "get nonexistent should return Some");
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(true), "get nonexistent should be error");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("not found"), "error message should say 'not found'");
+        assert!(!text.is_empty(), "should return a non-empty message, not a panic");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_skill_prefix_not_matched_returns_none() {
+        let server = test_server().await;
+        let result = handle_skill_prefix(&server, "list files in current directory", &None).await;
+        assert!(result.is_none(), "non-skill intents should return None");
     }
 }
