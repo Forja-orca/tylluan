@@ -4,7 +4,8 @@ import { VisionTab } from './VisionTab';
 import { MaintenanceTab } from './MaintenanceTab';
 import { LogsTab } from './LogsTab';
 import PlanModePanel from './PlanModePanel';
-import { Beaker, Camera, ShieldAlert, Scroll, ShieldCheck } from 'lucide-react';
+import ProjectSkillsPanel from './ProjectSkillsPanel';
+import { Beaker, Camera, ShieldAlert, Scroll, ShieldCheck, FileCode } from 'lucide-react';
 
 interface LabConsolidatedProps {
   bridge: any;
@@ -75,6 +76,17 @@ export function LabConsolidated(props: LabConsolidatedProps) {
           <ShieldCheck className="w-3.5 h-3.5" />
           Plan Mode
         </button>
+        <button
+          onClick={() => setSubTab('skills')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+            subTab === 'skills'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FileCode className="w-3.5 h-3.5" />
+          Project Skills
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -105,6 +117,12 @@ export function LabConsolidated(props: LabConsolidatedProps) {
         )}
         {subTab === 'plan' && (
           <PlanModePanel
+            bridge={props.bridge}
+            notify={props.notify}
+          />
+        )}
+        {subTab === 'skills' && (
+          <ProjectSkillsPanel
             bridge={props.bridge}
             notify={props.notify}
           />
