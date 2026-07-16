@@ -11,6 +11,11 @@ Transports supported:
 Security: Only servers explicitly listed in tylluan.toml [mcp_clients] are
 contacted when enforce_allowlist=True (default). Pass enforce_allowlist=False
 for ad-hoc dev usage.
+
+When enforce_allowlist=True (default), stdio:// commands are restricted to the
+built-in _STDIO_ALLOWLIST of known-safe binaries below. There is currently no
+tylluan.toml override for this list -- edit _STDIO_ALLOWLIST directly if a new
+external_mcp server needs a binary that isn't already covered.
 """
 
 import asyncio
@@ -38,6 +43,22 @@ _tools_cache: dict[str, list[dict]] = {}
 # Force all localhost references to 127.0.0.1.
 _LOCALHOST_RE = re.compile(r'(?i)(https?://)localhost\b')
 
+# Allowlist for stdio:// commands when enforce_allowlist=True.
+# Covers the external MCP servers defined in tylluan.toml [[external_mcp]].
+_STDIO_ALLOWLIST: frozenset[str] = frozenset({
+    "node", "npx", "uv", "python", "python3", "gk",
+})
+
+# Minimal environment variables for stdio subprocesses (avoids leaking
+# the parent's full env, including tokens and secrets).
+_MINIMAL_ENV: dict[str, str] = {
+    "PATH": os.environ.get("PATH", ""),
+    "HOME": os.environ.get("HOME", ""),
+    "USERPROFILE": os.environ.get("USERPROFILE", ""),
+    "APPDATA": os.environ.get("APPDATA", ""),
+    "TERM": os.environ.get("TERM", "xterm-256color"),
+}
+
 
 def _normalize_url(url: str) -> str:
     """Replace 'localhost' with '127.0.0.1' to avoid IPv6 resolution on Windows."""
@@ -52,13 +73,21 @@ async def _session_sse(server_url: str):
             yield session
 
 
-async def _session_stdio(command: str):
+async def _session_stdio(command: str, enforce_allowlist: bool = True):
     """Async context manager yielding a live ClientSession over stdio."""
     parts = shlex.split(command)
+    if not parts:
+        raise ValueError("Empty stdio command")
+    if enforce_allowlist and parts[0] not in _STDIO_ALLOWLIST:
+        raise ValueError(
+            f"🚫 BLOCKED by mcp_bridge allowlist: '{parts[0]}' is not allowed. "
+            f"Allowed: {', '.join(sorted(_STDIO_ALLOWLIST))}. "
+            "Pass enforce_allowlist=False to bypass (dev only)."
+        )
     params = StdioServerParameters(
         command=parts[0],
         args=parts[1:],
-        env={**os.environ},
+        env={**os.environ} if not enforce_allowlist else {**_MINIMAL_ENV},
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -67,7 +96,10 @@ async def _session_stdio(command: str):
 
 
 @mcp.tool()
-async def mcp_list_tools(server_url: str) -> str:
+async def mcp_list_tools(
+    server_url: str,
+    enforce_allowlist: bool = True,
+) -> str:
     """List all tools available on an external MCP server.
 
     Use for: mcp list tools, list remote tools, show mcp tools, mcp tools list,
@@ -76,14 +108,18 @@ async def mcp_list_tools(server_url: str) -> str:
     Args:
         server_url: SSE endpoint (http://host:port/sse) or stdio command
                     prefixed with 'stdio://' (e.g. 'stdio://python -m guild').
+        enforce_allowlist: If True (default), stdio:// commands must be in the
+                           allowed binaries list. Set False for ad-hoc dev usage.
 
     Returns:
         Newline-separated list of tool names and descriptions.
     """
     server_url = _normalize_url(server_url)
+    if server_url.startswith("stdio://") and not enforce_allowlist:
+        logging.warning("mcp_list_tools: enforce_allowlist=False — bypassing allowlist for stdio://")
     logging.info("mcp_list_tools: %s", server_url[:80])
     try:
-        tools = await _fetch_tools(server_url)
+        tools = await _fetch_tools(server_url, enforce_allowlist)
         if not tools:
             return f"⚠️ No tools found on {server_url}"
         lines = [f"🔧 {len(tools)} tools on {server_url}:"]
@@ -102,6 +138,7 @@ async def mcp_call(
     tool_name: str,
     arguments: dict | None = None,
     timeout_secs: int = 60,
+    enforce_allowlist: bool = True,
 ) -> str:
     """Call a tool on an external MCP server.
 
@@ -114,16 +151,20 @@ async def mcp_call(
         tool_name:  Name of the tool to call on the remote server.
         arguments:  JSON-serialisable dict of arguments for the tool.
         timeout_secs: Max seconds to wait for the remote call (default: 60).
+        enforce_allowlist: If True (default), stdio:// commands must be in the
+                           allowed binaries list. Set False for ad-hoc dev usage.
 
     Returns:
         Tool result as text, or error message.
     """
     server_url = _normalize_url(server_url)
+    if server_url.startswith("stdio://") and not enforce_allowlist:
+        logging.warning("mcp_call: enforce_allowlist=False — bypassing allowlist for stdio://")
     logging.info("mcp_call: server=%s tool=%s", server_url[:60], tool_name)
     args = arguments or {}
     try:
         result = await asyncio.wait_for(
-            _do_call(server_url, tool_name, args),
+            _do_call(server_url, tool_name, args, enforce_allowlist),
             timeout=timeout_secs,
         )
         return result
@@ -135,7 +176,10 @@ async def mcp_call(
 
 
 @mcp.tool()
-async def mcp_ping(server_url: str) -> str:
+async def mcp_ping(
+    server_url: str,
+    enforce_allowlist: bool = True,
+) -> str:
     """Check connectivity to an external MCP server.
 
     Use for: mcp ping, ping mcp server, check mcp connection, test mcp bridge,
@@ -143,14 +187,18 @@ async def mcp_ping(server_url: str) -> str:
 
     Args:
         server_url: SSE endpoint or 'stdio://command'.
+        enforce_allowlist: If True (default), stdio:// commands must be in the
+                           allowed binaries list. Set False for ad-hoc dev usage.
 
     Returns:
         Ping result with tool count and server info.
     """
     server_url = _normalize_url(server_url)
+    if server_url.startswith("stdio://") and not enforce_allowlist:
+        logging.warning("mcp_ping: enforce_allowlist=False — bypassing allowlist for stdio://")
     logging.info("mcp_ping: %s", server_url[:80])
     try:
-        tools = await asyncio.wait_for(_fetch_tools(server_url), timeout=10)
+        tools = await asyncio.wait_for(_fetch_tools(server_url, enforce_allowlist), timeout=10)
         return f"✅ {server_url} reachable — {len(tools)} tools available"
     except asyncio.TimeoutError:
         return f"⏰ {server_url} did not respond within 10s"
@@ -163,13 +211,13 @@ async def mcp_ping(server_url: str) -> str:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _fetch_tools(server_url: str) -> list[dict]:
+async def _fetch_tools(server_url: str, enforce_allowlist: bool = True) -> list[dict]:
     """Fetch tools list from remote server, with in-process cache."""
     if server_url in _tools_cache:
         return _tools_cache[server_url]
 
     tools: list[dict] = []
-    async for session in _safe_iter_session(server_url):
+    async for session in _safe_iter_session(server_url, enforce_allowlist):
         response = await session.list_tools()
         tools = [
             {"name": t.name, "description": t.description or ""}
@@ -181,9 +229,9 @@ async def _fetch_tools(server_url: str) -> list[dict]:
     return tools
 
 
-async def _do_call(server_url: str, tool_name: str, args: dict) -> str:
+async def _do_call(server_url: str, tool_name: str, args: dict, enforce_allowlist: bool = True) -> str:
     """Open a session, call the tool, return text content."""
-    async for session in _safe_iter_session(server_url):
+    async for session in _safe_iter_session(server_url, enforce_allowlist):
         result = await session.call_tool(tool_name, args)
         parts = []
         for block in (result.content or []):
@@ -195,18 +243,18 @@ async def _do_call(server_url: str, tool_name: str, args: dict) -> str:
     return "❌ Could not establish session"
 
 
-async def _iter_session(server_url: str):
+async def _iter_session(server_url: str, enforce_allowlist: bool = True):
     """Yield a single initialized ClientSession for the given URL/command."""
     if server_url.startswith("stdio://"):
         command = server_url[len("stdio://"):]
-        async for session in _session_stdio(command):
+        async for session in _session_stdio(command, enforce_allowlist):
             yield session
     else:
         async for session in _session_sse(server_url):
             yield session
 
 
-async def _safe_iter_session(server_url: str):
+async def _safe_iter_session(server_url: str, enforce_allowlist: bool = True):
     """Wrapper that catches ExceptionGroup from asyncio.TaskGroup inside MCP lib.
 
     The MCP client library uses asyncio.TaskGroup internally. When connecting
@@ -215,7 +263,7 @@ async def _safe_iter_session(server_url: str):
     exception message so callers don't need to handle ExceptionGroup everywhere.
     """
     try:
-        async for session in _iter_session(server_url):
+        async for session in _iter_session(server_url, enforce_allowlist):
             yield session
     except* Exception as eg:
         # Python 3.11+: unpack ExceptionGroup into the first underlying cause

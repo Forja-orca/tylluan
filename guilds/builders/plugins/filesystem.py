@@ -12,11 +12,15 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from guilds.core import utils
 from guilds.core._security import SKIP_DIRS, SKIP_FILES, SKIP_EXTENSIONS
+from guilds.builders.plugins.utils import validate_path
 
 mcp = FastMCP("tylluan-filesystem")
 
 MAX_READ_SIZE = 500_000  # 500KB max read
 MAX_SEARCH_RESULTS = 50
+
+# Default root — kernel CWD, overridable via env var
+_FS_ROOT = os.environ.get("TYLLUAN_ROOT", os.getcwd())
 
 
 @mcp.tool()
@@ -61,6 +65,8 @@ async def file_read(
                     end_line = int(m.group(1))
 
     file_path = Path(path).resolve()
+    if not validate_path(_FS_ROOT, str(file_path)):
+        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_FS_ROOT}'."
 
     if not file_path.exists():
         return f"❌ File not found: {file_path}"
@@ -135,6 +141,8 @@ async def file_write(
         return "❌ Missing path or content. Example: 'write file hello.txt with text: hello world'"
     
     file_path = Path(path).resolve()
+    if not validate_path(_FS_ROOT, str(file_path)):
+        return f"🚫 BLOCKED: Path '{file_path}' is outside the allowed root '{_FS_ROOT}'."
 
     # Safety guard: prevent accidental overwrites of existing non-empty files
     if file_path.exists() and file_path.stat().st_size > 0:
@@ -212,6 +220,8 @@ async def find_files(
 
     try:
         root = Path(directory).resolve()
+        if not validate_path(_FS_ROOT, str(root)):
+            return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
         if not root.is_dir():
             return f"❌ Directory not found: {directory}"
 
@@ -289,6 +299,8 @@ async def file_search(
 
     directory = os.path.abspath(directory) if directory else os.path.abspath(".")
     dir_path = Path(directory).resolve()
+    if not validate_path(_FS_ROOT, str(dir_path)):
+        return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
     if not dir_path.is_dir():
         return f"❌ Not a directory: {dir_path}"
 
@@ -349,6 +361,8 @@ async def file_list(directory: str, depth: int = 2) -> str:
         Tree-formatted directory listing.
     """
     dir_path = Path(directory).resolve()
+    if not validate_path(_FS_ROOT, str(dir_path)):
+        return f"🚫 BLOCKED: Directory '{directory}' is outside the allowed root '{_FS_ROOT}'."
     if not dir_path.is_dir():
         return f"❌ Not a directory: {dir_path}"
 

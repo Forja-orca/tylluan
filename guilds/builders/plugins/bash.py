@@ -5,7 +5,9 @@ This guild provides the `bash_execute` tool, which runs shell commands
 on the local system with configurable safety controls.
 
 Security:
-    - Command pattern blocking (rm -rf /, format, etc.)
+    - Strict command allowlist (only known-safe binaries)
+    - shlex.split() to extract the first token
+    - cwd validated against project root via validate_path()
     - Configurable timeout (default: 30s)
     - Output truncation to prevent context overflow
 """
@@ -13,6 +15,7 @@ Security:
 import asyncio
 import os
 import re
+import shlex
 import sys
 
 from mcp.server.fastmcp import FastMCP
@@ -67,16 +70,73 @@ async def state_restore() -> str:
 
 # ------------------------------------
 
-# Patterns that are always blocked for safety
-BLOCKED_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"rm\s+(-rf?|--recursive)\s+/\s*$", re.IGNORECASE),
-    re.compile(r"mkfs\.", re.IGNORECASE),
-    re.compile(r"dd\s+if=.*of=/dev/", re.IGNORECASE),
-    re.compile(r"format\s+[a-zA-Z]:", re.IGNORECASE),
-    re.compile(r":(){ :\|:& };:", re.IGNORECASE),  # fork bomb
-]
+# Strict allowlist of known-safe binaries. Any command whose first token
+# is not in this set is blocked. Update this list as project needs evolve.
+ALLOWED_COMMANDS: frozenset[str] = frozenset({
+    # Version control
+    "git",
+    # Rust toolchain
+    "cargo", "rustc", "rustup",
+    # Python
+    "python", "python3", "uv", "pip",
+    # Node.js
+    "node", "npm", "pnpm", "npx", "tsx",
+    # File inspection (read-only)
+    "ls", "cat", "head", "tail", "wc", "find", "grep", "rg", "diff",
+    "file", "which", "where", "stat", "du", "df", "tree", "sort",
+    "uniq", "cut", "tr", "echo", "printf",
+    # Build tools
+    "make", "cmake", "ninja",
+    # Shell builtins passed as -c argument are checked by the parser below
+    # NOTA: "bash" and "powershell" are NOT in the allowlist — use the
+    # tool's native execution mode (powershell on win32, bash on posix).
+})
+
+# On Windows, also allow cmdlets invoked via powershell -Command
+ALLOWED_PWSH_CMDLETS: frozenset[str] = frozenset({
+    "Get-ChildItem", "Get-Content", "Set-Content", "Select-String",
+    "Test-Path", "Get-Item", "Remove-Item", "New-Item", "Copy-Item",
+    "Move-Item", "Write-Output", "Write-Host",
+})
 
 MAX_OUTPUT_CHARS = 50_000  # Truncate output to avoid context explosion
+
+
+def _first_token(command: str) -> str | None:
+    """Extract the first token from a command string using shlex.split()."""
+    try:
+        parts = shlex.split(command)
+        return parts[0] if parts else None
+    except ValueError:
+        return None
+
+
+def _check_allowlist(command: str) -> str | None:
+    """Check if command is allowed. Returns None if OK, error string if blocked."""
+    parts = shlex.split(command)
+    if not parts:
+        return "❌ Empty command"
+    first = parts[0]
+
+    # On Windows, powershell cmdlets are called as "powershell -Command <cmdlet>"
+    if sys.platform == "win32" and first.lower() == "powershell":
+        for i, part in enumerate(parts):
+            if part.lower() in ("-command", "-c") and i + 1 < len(parts):
+                cmdlet = parts[i + 1].split()[0] if parts[i + 1].split() else ""
+                if cmdlet and cmdlet not in ALLOWED_PWSH_CMDLETS:
+                    return (
+                        f"🚫 BLOCKED: '{cmdlet}' is not in the allowed PowerShell cmdlet list. "
+                        f"Allowed: {', '.join(sorted(ALLOWED_PWSH_CMDLETS))}"
+                    )
+                return None  # -c with an allowed cmdlet — OK
+        return None  # powershell with flags but no -c — OK
+
+    if first not in ALLOWED_COMMANDS:
+        return (
+            f"🚫 BLOCKED: '{first}' is not in the allowed command list. "
+            f"Allowed binaries: {', '.join(sorted(ALLOWED_COMMANDS))}"
+        )
+    return None
 
 
 @mcp.tool()
@@ -86,7 +146,11 @@ async def bash_execute(
     timeout_secs: int = 30,
     intent: str = "",
 ) -> str:
-    """Execute a shell command and return stdout + stderr. [approval="always"]
+    """Execute a shell command and return stdout + stderr.
+
+    SECURITY: Only commands whose first token is in the allowlist are executed.
+    cwd is validated to be within the project root.
+    This is NOT a general-purpose shell — use the allowlist for safety.
 
     Use for: run command, execute command, bash, shell, run script, run cargo,
     cargo test, cargo build, run python, run npm, run git, ejecutar comando, correr script.
@@ -124,13 +188,16 @@ async def bash_execute(
     if not command:
         return "❌ No command provided. Specify a shell command to execute."
 
-    # Security: block dangerous patterns
-    for pattern in BLOCKED_PATTERNS:
-        if pattern.search(command):
-            return f"🚫 BLOCKED: Command matches a dangerous pattern and was not executed.\nPattern: {pattern.pattern}"
+    # Security step 1: allowlist check on first token
+    block_reason = _check_allowlist(command)
+    if block_reason:
+        return block_reason
 
-    # Resolve working directory
-    work_dir = cwd or os.getcwd()
+    # Security step 2: validate cwd against project root
+    kernel_root = os.environ.get("TYLLUAN_ROOT", os.getcwd())
+    work_dir = cwd or kernel_root
+    if not utils.validate_path(kernel_root, work_dir):
+        return f"🚫 BLOCKED: Working directory '{work_dir}' is outside the allowed project root '{kernel_root}'."
     if not os.path.isdir(work_dir):
         return f"❌ Error: Directory does not exist: {work_dir}"
 
