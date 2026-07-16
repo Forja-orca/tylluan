@@ -1497,14 +1497,7 @@ impl TylluanConfig {
             anyhow::bail!("Security violation: cannot persist auth token");
         }
 
-        info!("✅ New Master Token saved to .tylluan-token");
-        eprintln!();
-        eprintln!("🔐 A new auth token has been generated:");
-        eprintln!("   File: {}/.tylluan-token", std::env::current_dir().unwrap_or_default().display());
-        eprintln!("   Token: {}", new_token);
-        eprintln!("   Use it in your MCP client config:");
-        eprintln!("   {{ \"mcpServers\": {{ \"tylluan\": {{ \"type\": \"sse\", \"url\": \"http://127.0.0.1:3030/sse?token={}\" }} }} }}", new_token);
-        eprintln!();
+        info!("✅ New Master Token saved to {}.", token_path.display());
 
         Ok(Some(new_token))
     }

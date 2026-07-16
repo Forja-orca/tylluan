@@ -16,6 +16,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post, any},
 };
+use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,7 +25,7 @@ use tokio::sync::RwLock;
 use tracing::{info, error};
 use std::time::Instant;
 use dashmap::DashMap;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::CorsLayer;
 
 use crate::registry::actor::RegistryHandle;
 use crate::doctor::Doctor;
@@ -830,9 +831,16 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
 }
 
 fn build_router(state: Arc<HttpState>) -> Router {
-    // CORS: Only allow localhost:3000 and localhost:5173 (Vite/React dev)
+    // CORS: Only known localhost origins (dashboard dev:5173, prod:3030, kernel:3030)
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin([
+            "http://127.0.0.1:3030".parse::<HeaderValue>().unwrap(),
+            "http://localhost:3030".parse::<HeaderValue>().unwrap(),
+            "http://127.0.0.1:5173".parse::<HeaderValue>().unwrap(),
+            "http://localhost:5173".parse::<HeaderValue>().unwrap(),
+            "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
+            "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+        ])
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -841,7 +849,7 @@ fn build_router(state: Arc<HttpState>) -> Router {
             Method::OPTIONS,
             Method::PATCH,
         ])
-        .allow_headers(Any);
+        .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
 
     // 1. Public Routes
     let oauth_state = state.oauth.clone();

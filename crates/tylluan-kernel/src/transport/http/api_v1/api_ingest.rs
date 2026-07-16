@@ -6,10 +6,46 @@ use axum::{
 };
 use std::sync::Arc;
 use std::fs;
+use std::net::IpAddr;
 //
 use crate::transport::http::HttpState;
 use rmcp::model::CallToolRequestParam;
 use uuid;
+
+/// Validate a URL for SSRF safety: must be http/https, must not resolve to
+/// a private/loopback/link-local IP. Returns Ok(()) if safe.
+fn validate_url_for_ssrf(url_str: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url_str).map_err(|e| format!("Invalid URL: {}", e))?;
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        return Err(format!("Blocked scheme '{}': only http and https allowed", scheme));
+    }
+    let host = parsed.host_str().ok_or_else(|| "URL has no host".to_string())?;
+    // Resolve hostname to IPs
+    if let Ok(addrs) = std::net::ToSocketAddrs::to_socket_addrs(&(host, 0)) {
+        for addr in addrs {
+            match addr.ip() {
+                IpAddr::V4(ip) => {
+                    // RFC 1918 private: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+                    if ip.is_private()
+                        // Link-local: 169.254.0.0/16
+                        || (ip.octets()[0] == 169 && ip.octets()[1] == 254)
+                        // Loopback: 127.0.0.0/8
+                        || ip.is_loopback()
+                    {
+                        return Err(format!("Blocked private IP: {}", ip));
+                    }
+                }
+                IpAddr::V6(ip) => {
+                    if ip.is_loopback() {
+                        return Err(format!("Blocked loopback IPv6: {}", ip));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 #[derive(serde::Deserialize)]
 pub struct IngestQuery {
@@ -162,6 +198,9 @@ pub async fn ingest_handler(
         };
 
         if let Some(url_str) = json_val.get("url").and_then(|v| v.as_str()) {
+            if let Err(e) = validate_url_for_ssrf(url_str) {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response();
+            }
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
@@ -378,4 +417,43 @@ pub async fn ingest_handler(
         "status": final_status,
         "warnings": warnings
     }))).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ssrf_blocks_loopback() {
+        assert!(validate_url_for_ssrf("http://127.0.0.1/secret").is_err());
+        assert!(validate_url_for_ssrf("http://localhost/secret").is_err());
+    }
+
+    #[test]
+    fn test_ssrf_blocks_link_local_metadata_endpoint() {
+        // AWS/GCP/Azure cloud metadata endpoint -- the canonical SSRF target.
+        assert!(validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/").is_err());
+    }
+
+    #[test]
+    fn test_ssrf_blocks_private_rfc1918_ranges() {
+        assert!(validate_url_for_ssrf("http://10.0.0.1/").is_err());
+        assert!(validate_url_for_ssrf("http://172.16.0.1/").is_err());
+        assert!(validate_url_for_ssrf("http://192.168.1.1/").is_err());
+    }
+
+    #[test]
+    fn test_ssrf_blocks_non_http_schemes() {
+        assert!(validate_url_for_ssrf("file:///etc/passwd").is_err());
+        assert!(validate_url_for_ssrf("gopher://example.com/").is_err());
+    }
+
+    #[test]
+    fn test_ssrf_allows_public_https() {
+        // github.com resolves to a public IP -- should pass scheme+IP checks.
+        // (Network-dependent: if this fails in an offline CI sandbox with no
+        // DNS, that's a test-environment limitation, not a logic bug --
+        // the function only rejects on a successful private-IP resolution.)
+        assert!(validate_url_for_ssrf("https://github.com/").is_ok());
+    }
 }

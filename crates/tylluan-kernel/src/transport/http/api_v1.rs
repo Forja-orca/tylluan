@@ -1,6 +1,6 @@
 use axum::{
     Router, Json,
-    extract::{State, Query, Path},
+    extract::{State, Query, Path, DefaultBodyLimit},
     http::{StatusCode, HeaderMap, header::ACCEPT},
     response::{IntoResponse, Response},
     routing::{get, post, delete, any},
@@ -212,6 +212,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
 
         .route("/api/v1/ingest/upload", post(ingest_upload_handler))
         .route("/api/v1/ingest/files/{filename}", get(serve_ingested_file_handler))
+        // 100MB body limit for multipart uploads
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .route("/api/v1/docker/ps", get(docker_containers_handler))
         .route("/api/v1/docker/containers", get(docker_containers_handler))
         .route("/api/v1/system/status", get(system_status_handler))
