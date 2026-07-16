@@ -27,7 +27,7 @@ impl AgentMemoryManager {
     /// - initial `weight = importance.clamp(0.1, 5.0)`
     pub async fn record_memory(&self, agent_id: &str, content: &str, importance: f64) -> String {
         let node_id = format!("agent_memory:{}:{}", agent_id, Uuid::new_v4().simple());
-        let tagged = format!("[{}] {}", agent_id, content);
+        let tagged = format!("[{agent_id}] {content}");
         let meta = serde_json::json!({
             "agent_id": agent_id,
             "importance": importance,
@@ -61,7 +61,7 @@ impl AgentMemoryManager {
     /// More reliable than FTS search for exact agent_id retrieval:
     /// `SELECT ... FROM nodes WHERE type='agent_memory' AND content LIKE '[{agent_id}]%' ORDER BY weight DESC`
     pub async fn get_memories_raw(&self, agent_id: &str, limit: usize) -> Vec<GraphNode> {
-        let prefix = format!("[{}]", agent_id);
+        let prefix = format!("[{agent_id}]");
         self.silva
             .get_nodes_by_type_and_prefix("agent_memory", &prefix, limit)
             .await
@@ -162,7 +162,7 @@ impl AgentMemoryManager {
             candidates.extend(results);
         }
         candidates.into_iter()
-            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{}\"", agent_id)))
+            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")))
             .max_by_key(|n| n.created_at.clone())
     }
 

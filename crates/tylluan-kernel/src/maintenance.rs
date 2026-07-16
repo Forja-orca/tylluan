@@ -143,8 +143,8 @@ impl ModelDownloader {
         let mut stream = response.bytes_stream();
 
         while let Some(item) = stream.next().await {
-            let chunk = item.map_err(|e| anyhow!("Download error: {}", e))?;
-            file.write_all(&chunk).await.map_err(|e| anyhow!("Write error: {}", e))?;
+            let chunk = item.map_err(|e| anyhow!("Download error: {e}"))?;
+            file.write_all(&chunk).await.map_err(|e| anyhow!("Write error: {e}"))?;
             downloaded += chunk.len() as u64;
             
             if downloaded.is_multiple_of(10 * 1024 * 1024) {
@@ -216,7 +216,7 @@ pub fn export_state(
     info!("📦 TylluanNexus Export: Starting sovereign backup...");
     
     let file = File::create(output_path)
-        .context(format!("Failed to create export file at {:?}", output_path))?;
+        .context(format!("Failed to create export file at {output_path:?}"))?;
     
     let enc = GzEncoder::new(file, Compression::default());
     let mut tar = tar::Builder::new(enc);
@@ -268,7 +268,7 @@ pub fn import_state(input_path: &Path, target_dir: &Path) -> Result<()> {
     info!("📥 TylluanNexus Import: Restoring sovereign state (this may take time for 3GB+ backups)...");
 
     if !input_path.exists() {
-        return Err(anyhow!("Import file not found: {:?}", input_path));
+        return Err(anyhow!("Import file not found: {input_path:?}"));
     }
 
     let file = File::open(input_path)?;
@@ -281,7 +281,7 @@ pub fn import_state(input_path: &Path, target_dir: &Path) -> Result<()> {
     // Manually iterate entries for better error handling/reporting with large files
     for entry in archive.entries()? {
         let mut entry = entry?;
-        let path = entry.path()?.to_owned();
+        let path = entry.path()?.into_owned();
         info!("   📂 Unpacking: {:?}", path);
         entry.unpack_in(target_dir)?;
     }

@@ -92,14 +92,12 @@ async fn dispatch_to_external(
     if let Some(guild) = reg.guilds.get(server_name) {
         if !guild.is_running() {
             return Some(error_result(&format!(
-                "External MCP server '{}' is registered but not running. Use the MCP API to restart it.",
-                server_name
+                "External MCP server '{server_name}' is registered but not running. Use the MCP API to restart it."
             )));
         }
         if guild.tools.is_empty() {
             return Some(error_result(&format!(
-                "External MCP server '{}' has no tools available.",
-                server_name
+                "External MCP server '{server_name}' has no tools available."
             )));
         }
 
@@ -120,8 +118,7 @@ async fn dispatch_to_external(
         Some(do_external_call(server, server_name, &tool_name, intent, agent_id).await)
     } else {
         Some(error_result(&format!(
-            "External MCP server '{}' is registered in config but not in the guild registry.",
-            server_name
+            "External MCP server '{server_name}' is registered in config but not in the guild registry."
         )))
     }
 }
@@ -153,8 +150,7 @@ async fn do_external_call(
                 guild.call_tool_readonly(call_params).await
             }
             None => return error_result(&format!(
-                "External MCP server '{}' was removed before the call completed.",
-                server_name
+                "External MCP server '{server_name}' was removed before the call completed."
             )),
         }
     };
@@ -165,10 +161,10 @@ async fn do_external_call(
         .filter_map(|c| c.as_text())
         .map(|t| t.text.clone())
         .next().unwrap_or_default();
-    let guild_label = format!("external_mcp:{}", server_name);
+    let guild_label = format!("external_mcp:{server_name}");
 
     // Activity trace in SilvaDB (agent → external server edge)
-    if let Some(ref aid) = agent_id {
+    if let Some(aid) = agent_id {
         record_activity_trace(server, aid, &guild_label, tool_name, result_text.len());
     }
 
@@ -213,13 +209,13 @@ mod tests {
     fn test_keyword_score_reuses_existing_logic() {
         let tokens = tokenize("search the web");
         let score = keyword_score(&tokens, "Search the web for information", "web_search");
-        assert!(score > 0.4, "score should be > 0.4, got {}", score);
+        assert!(score > 0.4, "score should be > 0.4, got {score}");
     }
 
     #[test]
     fn test_keyword_score_low_for_unrelated() {
         let tokens = tokenize("compile rust project");
         let score = keyword_score(&tokens, "Search the web for information", "web_search");
-        assert!(score < 0.3, "score should be < 0.3, got {}", score);
+        assert!(score < 0.3, "score should be < 0.3, got {score}");
     }
 }

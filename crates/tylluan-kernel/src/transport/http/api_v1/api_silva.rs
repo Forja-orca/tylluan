@@ -50,7 +50,7 @@ pub async fn agents_list_handler(State(state): State<Arc<HttpState>>) -> impl In
         let srv = srv_arc.read().await;
         if let Some(ref ap) = srv.agent_profiles {
             match ap.lock() {
-                Ok(g) => match g.get_domain_reputation() { Ok(v) => v, Err(_) => vec![] },
+                Ok(g) => g.get_domain_reputation().unwrap_or_default(),
                 Err(_) => vec![],
             }
         } else { vec![] }

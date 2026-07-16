@@ -135,7 +135,7 @@ impl Mailbox {
         }
 
         let conn = crate::config::open_db(std::path::Path::new(db_path))
-            .with_context(|| format!("Failed to open Mailbox DB: {}", db_path))?;
+            .with_context(|| format!("Failed to open Mailbox DB: {db_path}"))?;
 
         let mailbox = Self { 
             conn: tokio::sync::Mutex::new(conn),
@@ -638,7 +638,7 @@ impl Mailbox {
             )?;
 
             // Append result summary to the payload (assuming it's either JSON or text)
-            let updated_payload = format!("{}\n\nRESULT: {}", payload, result_summary);
+            let updated_payload = format!("{payload}\n\nRESULT: {result_summary}");
 
             let _ = conn.execute(
                 "UPDATE agent_mail SET status = 'COMPLETED', payload = ?1 WHERE message_id = ?2",

@@ -29,9 +29,11 @@ impl AutoLinker {
     }
 
     pub async fn run(&self, engine: Option<&EmbeddingEngine>) -> AutoLinkReport {
-        let mut report = AutoLinkReport::default();
-        report.edges_before = self.silva.edge_count().await.unwrap_or(0) as usize;
-        report.nodes_total = self.silva.node_count().await.unwrap_or(0);
+        let mut report = AutoLinkReport {
+            edges_before: self.silva.edge_count().await.unwrap_or(0) as usize,
+            nodes_total: self.silva.node_count().await.unwrap_or(0),
+            ..Default::default()
+        };
 
         info!("[AutoLink] Starting CERO-LLM pass on {} nodes ({} edges before)", report.nodes_total, report.edges_before);
 
@@ -230,7 +232,7 @@ impl AutoLinker {
 
         // Build placeholders: (?1,?2,...,?N)
         let placeholders: Vec<String> = (1..=content_types.len())
-            .map(|i| format!("?{}", i))
+            .map(|i| format!("?{i}"))
             .collect();
         let placeholder_str = placeholders.join(",");
 
@@ -243,9 +245,8 @@ impl AutoLinker {
                 &format!(
                     "SELECT DISTINCT n.id, e.embedding FROM node_embeddings e
                      JOIN nodes n ON n.id = e.node_id
-                     WHERE n.type IN ({}) AND e.embedding IS NOT NULL
-                     LIMIT 5000",
-                    placeholder_str
+                     WHERE n.type IN ({placeholder_str}) AND e.embedding IS NOT NULL
+                     LIMIT 5000"
                 ),
             ) {
                 Ok(s) => s,

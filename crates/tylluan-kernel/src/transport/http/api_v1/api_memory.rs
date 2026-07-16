@@ -31,7 +31,7 @@ pub async fn memory_retention_handler(State(state): State<Arc<HttpState>>) -> im
     let silva = state.silva.clone();
     let memory = state.memory.clone();
     let node_count = silva.node_count().await.unwrap_or(0) as i64;
-    let edge_count = silva.edge_count().await.unwrap_or(0) as i64;
+    let edge_count = silva.edge_count().await.unwrap_or(0);
     let memory_stats = memory.stats().await.ok();
     let conn_guard = silva.conn_lock();
     let conn = conn_guard.lock().await;

@@ -94,7 +94,7 @@ impl HybridMemory {
         }
 
         let conn = crate::config::open_db(std::path::Path::new(db_path))
-            .with_context(|| format!("Failed to open HybridMemory DB: {:?}", db_path))?;
+            .with_context(|| format!("Failed to open HybridMemory DB: {db_path:?}"))?;
 
         let memory = Self { conn: Mutex::new(conn) };
         // We do a sync-ish initialization here since it's the constructor

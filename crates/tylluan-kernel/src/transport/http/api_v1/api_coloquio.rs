@@ -139,12 +139,11 @@ pub async fn coloquio_post_message(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "content cannot be empty" }))).into_response();
     }
     let mut role = req.role.clone();
-    if headers.contains_key("X-Agent-Id") || headers.contains_key("x-agent-id") {
-        if role == "human" {
+    if (headers.contains_key("X-Agent-Id") || headers.contains_key("x-agent-id"))
+        && role == "human" {
             tracing::warn!("⛔ Coloquio: HTTP client tried to claim 'human' role but sent agent header. Forcing role to 'agent'.");
             role = "agent".to_string();
         }
-    }
     match state.coloquio.post_message(&id, &req.author_id, &role, &req.content, &req.metadata).await {
         Ok(msg) => {
             let job_payload = serde_json::json!({
@@ -184,7 +183,7 @@ pub async fn coloquio_post_message(
                     body: format!("[coloquio #{} T{}] @{} te menciono: {}", id, msg.turn, msg.author_id, preview),
                     to: mention.clone(),
                     from: msg.author_id.clone(),
-                    thread_id: Some(format!("coloquio:{}", id)),
+                    thread_id: Some(format!("coloquio:{id}")),
                     priority: 4,
                 };
                 if state.mailbox.send_mail_with_ttl(&msg.author_id, mention, &bm.to_payload(), 86400).await.is_ok() {
@@ -261,7 +260,7 @@ pub async fn coloquio_delete_channel(
     if archive {
         match state.coloquio.get_channel_as_text(&id).await {
             Ok(text) if !text.is_empty() => {
-                let node_id = format!("coloquio_archive:{}", id);
+                let node_id = format!("coloquio_archive:{id}");
                 let metadata = serde_json::json!({
                     "source": "coloquio_archive",
                     "channel_id": id,

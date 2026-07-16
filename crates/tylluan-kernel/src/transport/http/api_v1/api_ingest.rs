@@ -15,10 +15,10 @@ use uuid;
 /// Validate a URL for SSRF safety: must be http/https, must not resolve to
 /// a private/loopback/link-local IP. Returns Ok(()) if safe.
 fn validate_url_for_ssrf(url_str: &str) -> Result<(), String> {
-    let parsed = reqwest::Url::parse(url_str).map_err(|e| format!("Invalid URL: {}", e))?;
+    let parsed = reqwest::Url::parse(url_str).map_err(|e| format!("Invalid URL: {e}"))?;
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
-        return Err(format!("Blocked scheme '{}': only http and https allowed", scheme));
+        return Err(format!("Blocked scheme '{scheme}': only http and https allowed"));
     }
     let host = parsed.host_str().ok_or_else(|| "URL has no host".to_string())?;
     // Resolve hostname to IPs
@@ -33,12 +33,12 @@ fn validate_url_for_ssrf(url_str: &str) -> Result<(), String> {
                         // Loopback: 127.0.0.0/8
                         || ip.is_loopback()
                     {
-                        return Err(format!("Blocked private IP: {}", ip));
+                        return Err(format!("Blocked private IP: {ip}"));
                     }
                 }
                 IpAddr::V6(ip) => {
                     if ip.is_loopback() {
-                        return Err(format!("Blocked loopback IPv6: {}", ip));
+                        return Err(format!("Blocked loopback IPv6: {ip}"));
                     }
                 }
             }
@@ -77,7 +77,7 @@ pub async fn ingest_upload_handler(
     let extension = std::path::Path::new(&original_name)
         .extension()
         .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e))
+        .map(|e| format!(".{e}"))
         .unwrap_or_default();
     if file_bytes.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "empty body"}))).into_response();

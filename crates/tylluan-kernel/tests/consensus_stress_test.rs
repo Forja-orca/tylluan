@@ -66,7 +66,7 @@ async fn test_consensus_hardening_stress() -> Result<()> {
             let items: Vec<serde_json::Value> = (0..500).map(|i| {
                 let agent = agents[i % agents.len()];
                 let topic = topics[i % topics.len()];
-                let content = format!("lesson: {} {} — iteration {}", agent, topic, i);
+                let content = format!("lesson: {agent} {topic} — iteration {i}");
                 serde_json::json!({"agent": agent, "payload": {"content": content}})
             }).collect();
             serde_json::Value::Array(items)
@@ -81,7 +81,7 @@ async fn test_consensus_hardening_stress() -> Result<()> {
         let _agent = item["agent"].as_str().unwrap();
         let payload = &item["payload"];
         let content = payload["content"].as_str().unwrap();
-        let node_id = format!("stress_node_{}", i);
+        let node_id = format!("stress_node_{i}");
         
         // Persist
         let payload_str = serde_json::to_string(payload)?;
@@ -90,15 +90,14 @@ async fn test_consensus_hardening_stress() -> Result<()> {
         
         // 2. Add weights - topics 0-13 have clear winners, topic 14 has close scores (synthesis)
         let topic_idx = i % 15;
-        let weight = if i < 14 { 10.0 } 
-                    else if i == 14 { 10.0 } 
+        let weight = if i <= 14 { 10.0 }
                     else if i == 29 { 9.0 } // 10% diff for topic 14 -> Synthesis
                     else { 1.0 }; 
         silva.set_weight(&node_id, weight).await?;
         
         // 3. Orthogonal embeddings per topic to guarantee perfect clustering
         let mut vector = vec![0.0; 1024];
-        vector[topic_idx as usize] = 1.0;
+        vector[topic_idx] = 1.0;
         silva.save_embedding(&node_id, &vector, "nomic-embed", None).await?;
 
         if (i + 1) % 100 == 0 {
@@ -125,11 +124,11 @@ async fn test_consensus_hardening_stress() -> Result<()> {
     silva.apply_decay(336).await?; // Standard decay (336h = 14d default)
     
     // Check nodes
-    let synthesis_count;
+    
     let mut protected_ok = true;
     
     for i in 0..items.len() {
-        let node_id = format!("stress_node_{}", i);
+        let node_id = format!("stress_node_{i}");
         if let Ok(Some(node)) = silva.get_node(&node_id).await {
              if node.protected && node.weight < 1.0 {
                  warn!("🛡️ PROTECT FAILURE: Node {} lost weight during decay!", node_id);
@@ -142,7 +141,7 @@ async fn test_consensus_hardening_stress() -> Result<()> {
     let conn_ref = silva.conn_lock();
     let conn = conn_ref.lock().await;
     let mut stmt = conn.prepare("SELECT count(*) FROM nodes WHERE type = 'synthesis'")?;
-    synthesis_count = stmt.query_row([], |r: &rusqlite::Row| r.get::<usize, i64>(0))?;
+    let synthesis_count = stmt.query_row([], |r: &rusqlite::Row| r.get::<usize, i64>(0))?;
     
     info!("📊 Validation Results:");
     info!("   - Total Nodes: {}", nodes_before);

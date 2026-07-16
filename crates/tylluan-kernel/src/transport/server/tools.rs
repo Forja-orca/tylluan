@@ -492,8 +492,8 @@ mod tests {
         let tools = TylluanServer::kernel_tools();
         for name in &sovereign {
             let t = tools.iter().find(|t| &t.name.as_str() == name)
-                .unwrap_or_else(|| panic!("sovereign tool {} not found", name));
-            assert!(!t.subtools.is_empty(), "{} must have subtools for fractal routing", name);
+                .unwrap_or_else(|| panic!("sovereign tool {name} not found"));
+            assert!(!t.subtools.is_empty(), "{name} must have subtools for fractal routing");
         }
     }
 

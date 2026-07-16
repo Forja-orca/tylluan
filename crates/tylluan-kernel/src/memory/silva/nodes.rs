@@ -65,24 +65,21 @@ impl super::SilvaDB {
     ) -> Result<()> {
         if !allow_drift && DRIFT_SENSITIVE_TYPES.contains(&node_type) {
             anyhow::bail!(
-                "DRIFT GUARD: node type '{}' is drift-sensitive and cannot be created through the public API. \
-                 Use allow_drift=true for internal paths (graph_rag, consensus, agent_memory).",
-                node_type
+                "DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through the public API. \
+                 Use allow_drift=true for internal paths (graph_rag, consensus, agent_memory)."
             );
         }
 
         let parsed_meta = serde_json::from_str::<serde_json::Value>(metadata).ok();
         let topic_key: Option<String> = if metadata.trim().starts_with('{') {
             parsed_meta.as_ref().and_then(|v| v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s))))
-        } else {
-            if metadata.trim().starts_with('"') {
-                if let Ok(s) = serde_json::from_str::<String>(metadata) {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                        v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s)))
-                    } else { None }
+        } else if metadata.trim().starts_with('"') {
+            if let Ok(s) = serde_json::from_str::<String>(metadata) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                    v.get("topic").and_then(|t| t.as_str().map(|s| self.normalize_topic_key(s)))
                 } else { None }
             } else { None }
-        };
+        } else { None };
         // Extract federation_source from metadata to store in the proper SQL column (M11-C)
         let federation_source: Option<String> = parsed_meta
             .as_ref()
@@ -639,7 +636,7 @@ impl super::SilvaDB {
             let (weight, last_touched) = match result {
                 Ok((w, Some(lt))) => (w, lt),
                 Ok((w, None)) => return Ok(w),
-                Err(_) => return Err(anyhow::anyhow!("Node not found: {}", node_id)),
+                Err(_) => return Err(anyhow::anyhow!("Node not found: {node_id}")),
             };
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -784,8 +781,7 @@ impl super::SilvaDB {
         let sql = format!(
             "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, \
              created_at, updated_at, shareable \
-             FROM nodes WHERE type IN ({}) ORDER BY weight DESC LIMIT {}",
-            placeholders, limit
+             FROM nodes WHERE type IN ({placeholders}) ORDER BY weight DESC LIMIT {limit}"
         );
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
@@ -833,20 +829,20 @@ impl super::SilvaDB {
 
     /// Create or update agent identity node.
     pub async fn update_agent_identity(&self, agent_id: &str, agent_name: &str, session_count: usize, first_seen: &str) -> Result<()> {
-        let node_id = format!("agent:{}", agent_id);
+        let node_id = format!("agent:{agent_id}");
         let metadata = serde_json::json!({
             "agent": agent_id, "name": agent_name,
             "sessions": session_count, "first_seen": first_seen,
             "last_active": chrono::Utc::now().to_rfc3339()
         }).to_string();
-        self.upsert_node(&node_id, "identity", &format!("Agent {} ({} sessions)", agent_name, session_count), &metadata).await?;
+        self.upsert_node(&node_id, "identity", &format!("Agent {agent_name} ({session_count} sessions)"), &metadata).await?;
         info!("SilvaDB: Agent identity updated for '{}' ({} sessions)", agent_name, session_count);
         Ok(())
     }
 
     /// Get agent identity node by agent_id.
     pub async fn get_agent_identity(&self, agent_id: &str) -> Result<Option<GraphNode>> {
-        let node_id = format!("agent:{}", agent_id);
+        let node_id = format!("agent:{agent_id}");
         self.get_node(&node_id).await
     }
 
@@ -957,7 +953,7 @@ impl super::SilvaDB {
     pub async fn get_nodes_by_type_and_prefix(&self, node_type: &str, content_prefix: &str, limit: usize) -> Result<Vec<GraphNode>> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let pattern = format!("{}%", content_prefix);
+            let pattern = format!("{content_prefix}%");
             let mut stmt = conn.prepare(
                 "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable \
                  FROM nodes WHERE type = ?1 AND content LIKE ?2 ORDER BY weight DESC, id DESC LIMIT ?3"
@@ -1032,8 +1028,8 @@ pub fn build_contextual_text(metadata_json: &str, content: &str) -> String {
         .or_else(|| meta.get("heading"))
         .and_then(|v| v.as_str());
     match (source, heading) {
-        (Some(s), Some(h)) => format!("[{} > {}]\n{}", s, h, content),
-        (Some(s), None)    => format!("[{}]\n{}", s, content),
+        (Some(s), Some(h)) => format!("[{s} > {h}]\n{content}"),
+        (Some(s), None)    => format!("[{s}]\n{content}"),
         _                  => content.to_string(),
     }
 }

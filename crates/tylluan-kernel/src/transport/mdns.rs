@@ -96,9 +96,9 @@ pub fn start_mdns_discovery(
 
                 let peer_name = format!("mdns-auto-{}", name.replace('.', "-"));
                 let url = if port == 443 {
-                    format!("https://{}:{}{}", ip, port, path)
+                    format!("https://{ip}:{port}{path}")
                 } else {
-                    format!("http://{}:{}{}", ip, port, path)
+                    format!("http://{ip}:{port}{path}")
                 };
 
                 let mut cfg = config.blocking_write();

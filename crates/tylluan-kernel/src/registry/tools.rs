@@ -217,9 +217,9 @@ pub fn enrich_tool(mut tool: rmcp::model::Tool) -> rmcp::model::Tool {
     
     let current_desc = &tool.description;
     let final_desc = if enriched_desc.is_empty() {
-        format!("{}— {}", prefix, current_desc)
+        format!("{prefix}— {current_desc}")
     } else {
-        format!("{}— {}\n(Original: {})", prefix, enriched_desc, current_desc)
+        format!("{prefix}— {enriched_desc}\n(Original: {current_desc})")
     };
     
     tool.description = final_desc.into();

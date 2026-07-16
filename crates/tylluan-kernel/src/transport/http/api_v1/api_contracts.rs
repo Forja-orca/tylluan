@@ -206,6 +206,12 @@ pub struct ContractRegistry {
     pub contracts: Arc<DashMap<String, WorkContract>>,
 }
 
+impl Default for ContractRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContractRegistry {
     pub fn new() -> Self {
         Self { contracts: Arc::new(DashMap::new()) }
@@ -223,7 +229,7 @@ pub async fn contract_create_handler(
     Json(req): Json<CreateContractRequest>,
 ) -> impl IntoResponse {
     let id = format!("bwc-{}", uuid::Uuid::new_v4());
-    let budget = req.budget.unwrap_or(15).max(1).min(100);
+    let budget = req.budget.unwrap_or(15).clamp(1, 100);
     let contract = WorkContract {
         id: id.clone(),
         task: req.task,
@@ -243,7 +249,7 @@ pub async fn contract_create_handler(
     state.contract_registry.contracts.insert(id.clone(), contract);
 
     if let Some(c) = state.contract_registry.contracts.get(&id) {
-        let _ = state.contract_db.persist(&*c);
+        let _ = state.contract_db.persist(&c);
     }
 
     (
@@ -277,7 +283,7 @@ pub async fn contract_tick_handler(
                 "ts": now_unix()
             }));
         }
-        let _ = state.contract_db.persist(&*entry);
+        let _ = state.contract_db.persist(&entry);
         return (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -292,7 +298,7 @@ pub async fn contract_tick_handler(
         entry.status = "in_progress".to_string();
     }
 
-    let _ = state.contract_db.persist(&*entry);
+    let _ = state.contract_db.persist(&entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -361,7 +367,7 @@ pub async fn contract_deliver_handler(
     let team_count = entry.team.len();
     let all_delivered = delivered_count >= team_count;
 
-    let _ = state.contract_db.persist(&*entry);
+    let _ = state.contract_db.persist(&entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -400,7 +406,7 @@ pub async fn contract_vote_handler(
             .collect();
         let mut sorted = approved_cycles.clone();
         sorted.sort();
-        let median = sorted.get(sorted.len() / 2).copied().unwrap_or(5).max(1).min(50);
+        let median = sorted.get(sorted.len() / 2).copied().unwrap_or(5).clamp(1, 50);
         entry.budget_remaining.store(median as i64, Ordering::Release);
         entry.extensions += 1;
         entry.status = "extended".to_string();
@@ -411,7 +417,7 @@ pub async fn contract_vote_handler(
             "extensions": entry.extensions,
             "ts": now_unix()
         }));
-        let _ = state.contract_db.persist(&*entry);
+        let _ = state.contract_db.persist(&entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -421,7 +427,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else if majority {
-        let _ = state.contract_db.persist(&*entry);
+        let _ = state.contract_db.persist(&entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -430,7 +436,7 @@ pub async fn contract_vote_handler(
             }))
         )
     } else {
-        let _ = state.contract_db.persist(&*entry);
+        let _ = state.contract_db.persist(&entry);
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -467,7 +473,7 @@ pub async fn contract_close_handler(
         "ts": now_unix()
     }));
 
-    let _ = state.contract_db.persist(&*entry);
+    let _ = state.contract_db.persist(&entry);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -692,7 +698,7 @@ mod tests {
             .collect();
         let mut sorted = approved_cycles.clone();
         sorted.sort();
-        let median = sorted.get(sorted.len() / 2).copied().unwrap_or(5).max(1).min(50);
+        let median = sorted.get(sorted.len() / 2).copied().unwrap_or(5).clamp(1, 50);
         entry.budget_remaining.store(median as i64, Ordering::Release);
         entry.extensions += 1;
         entry.status = "extended".to_string();

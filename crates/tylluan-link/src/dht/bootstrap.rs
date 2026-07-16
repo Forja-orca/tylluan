@@ -113,7 +113,7 @@ impl BootstrapConfig {
         // Layer 3: Manual seed nodes from config
         for seed in &self.seed_nodes {
             if let Ok(addr) = seed.parse::<SocketAddr>() {
-                let pid = format!("seed-{}", seed);
+                let pid = format!("seed-{seed}");
                 routing_table.insert(&pid, addr, vec!["seed".into()]);
                 all.push(DiscoveredPeer {
                     node_id: pid,
@@ -239,7 +239,7 @@ mod tests {
 
     fn tmp_dir(label: &str) -> std::path::PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+        std::env::temp_dir().join(format!("tylluan_{label}_{id}"))
     }
 
     fn test_identity() -> NodeIdentity {
@@ -292,6 +292,6 @@ mod tests {
             ..Default::default()
         };
         let peers = config.bootstrap(&mut rt).await.expect("bootstrap should not fail");
-        assert!(peers.is_empty() || true);
+        assert!(peers.is_empty());
     }
 }

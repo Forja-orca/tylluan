@@ -144,13 +144,13 @@ impl HormoneSystem {
         // High novelty and low stress = high energy
         let novelty = self.get_intensity("novelty");
         let stress = self.stress_level();
-        (0.5 + novelty - stress).max(0.0).min(1.0)
+        (0.5 + novelty - stress).clamp(0.0, 1.0)
     }
 
     pub fn focus_level(&self) -> f64 {
         // High intensity of any single signal reduces focus
         let total_intensity: f64 = self.signals.values().map(|s| s.intensity).sum();
         if total_intensity < 0.1 { return 1.0; }
-        (1.0 - (total_intensity / 5.0)).max(0.0).min(1.0)
+        (1.0 - (total_intensity / 5.0)).clamp(0.0, 1.0)
     }
 }

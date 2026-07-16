@@ -110,7 +110,7 @@ impl Doctor {
         let config_valid = self.check_config_valid(&mut issues, &mut suggestions);
 
         // 2. Check Guilds
-        let guilds = self.check_guilds(&mut issues, &mut suggestions).await;
+        let guilds = self.check_guilds(&mut suggestions).await;
         
         // 3. Check Storage
         let storage = self.check_storage(&mut issues, &mut suggestions).await;
@@ -178,7 +178,7 @@ impl Doctor {
     }
 
     /// Internal logic: Health check for all registered guilds.
-    async fn check_guilds(&self, _global_issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> Vec<GuildHealth> {
+    async fn check_guilds(&self, suggestions: &mut Vec<String>) -> Vec<GuildHealth> {
         // Use try_read_with_timeout to avoid deadlock if spawn_core_guilds holds write lock
         let reg = match tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -305,7 +305,7 @@ impl Doctor {
         
         // Process/Thread limits (toaster specs)
         if process_count > 500 {
-            warnings.push(format!("⚠️ High process count: {}", process_count));
+            warnings.push(format!("⚠️ High process count: {process_count}"));
         }
         
         SystemHealth {
@@ -328,8 +328,8 @@ impl Doctor {
                     info!("🩹 Repair: Restarting guild '{}'...", gname);
                     let mut reg = self.registry.write().await;
                     match reg.ensure_guild_running(gname).await {
-                        Ok(_) => Ok(format!("✅ Guild '{}' successfully restarted.", gname)),
-                        Err(e) => Err(format!("❌ Failed to repair guild '{}': {}", gname, e)),
+                        Ok(_) => Ok(format!("✅ Guild '{gname}' successfully restarted.")),
+                        Err(e) => Err(format!("❌ Failed to repair guild '{gname}': {e}")),
                     }
                 } else {
                     Err("Target 'guild' requires a 'name' parameter.".to_string())
@@ -340,13 +340,13 @@ impl Doctor {
                 let mut results = Vec::new();
                 
                 if let Err(e) = self.memory.vacuum().await {
-                    results.push(format!("Memory error: {}", e));
+                    results.push(format!("Memory error: {e}"));
                 } else {
                     results.push("Memory optimized".to_string());
                 }
                 
                 if let Err(e) = self.silva.vacuum().await {
-                    results.push(format!("Silva error: {}", e));
+                    results.push(format!("Silva error: {e}"));
                 } else {
                     results.push("Silva optimized".to_string());
                 }
@@ -362,14 +362,14 @@ impl Doctor {
                 let mut s = String::new();
                 for _ in 0..10000 { s.push('x'); }
                 let string_time = start.elapsed().as_millis();
-                output.push_str(&format!("String alloc (10k): {}ms\n", string_time));
+                output.push_str(&format!("String alloc (10k): {string_time}ms\n"));
                 
                 // Quick hashmap benchmark
                 let start = std::time::Instant::now();
                 let mut map = std::collections::HashMap::new();
                 for i in 0..10000 { map.insert(i, i * 2); }
                 let hashmap_time = start.elapsed().as_millis();
-                output.push_str(&format!("HashMap insert (10k): {}ms\n", hashmap_time));
+                output.push_str(&format!("HashMap insert (10k): {hashmap_time}ms\n"));
                 
                 // Storage stats
                 if let Ok(stats) = self.memory.stats().await {
@@ -379,9 +379,9 @@ impl Doctor {
                     output.push_str(&format!("Silva DB: {} bytes\n", stats.total_bytes));
                 }
                 
-                Ok(format!("✅ Benchmark results:\n{}", output))
+                Ok(format!("✅ Benchmark results:\n{output}"))
             }
-            _ => Err(format!("Unknown repair target: {}", target)),
+            _ => Err(format!("Unknown repair target: {target}")),
         }
     }
 
@@ -405,7 +405,7 @@ impl Doctor {
                 true
             }
             Err(e) => {
-                issues.push(format!("CRITICAL: tylluan.toml configuration is invalid or corrupt: {}", e));
+                issues.push(format!("CRITICAL: tylluan.toml configuration is invalid or corrupt: {e}"));
                 suggestions.push("Verify that tylluan.toml has correct syntax and structure.".to_string());
                 false
             }

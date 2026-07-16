@@ -36,9 +36,9 @@ pub fn resolve_model(embedding_model: &str) -> EmbeddingModel {
         EmbeddingModel::AllMiniLML6V2
     } else if lower.contains("bge-small") {
         EmbeddingModel::BGESmallENV15
-    } else if lower.contains("bge") {
-        EmbeddingModel::BGEM3
     } else {
+        // Covers "bge" (full-size BGE-M3) and any unrecognized model name, which
+        // defaults to BGE-M3 as the project's baseline embedding model.
         EmbeddingModel::BGEM3
     }
 }
@@ -115,7 +115,7 @@ impl EmbeddingEngine {
             .with_execution_providers(eps);
 
         let text_model = TextEmbedding::try_new(options)
-            .map_err(|e| anyhow!("FastEmbed init failed: {:?}", e))?;
+            .map_err(|e| anyhow!("FastEmbed init failed: {e:?}"))?;
 
         let model_type = resolve_model_type(model_name);
         info!("🧠 {} engine ready (ONNX)", model_type.to_uppercase());
@@ -139,7 +139,7 @@ impl EmbeddingEngine {
         if embedding_model.is_empty() || embedding_model == "none" {
             return None;
         }
-        Some(format!("models/{}", embedding_model))
+        Some(format!("models/{embedding_model}"))
     }
 
     /// Get the output vector dimension for this engine.
@@ -175,8 +175,8 @@ impl EmbeddingEngine {
             return Ok(Vec::new());
         }
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
-        let mut embeddings = model.embed(texts.to_vec(), None)
-            .map_err(|e| anyhow!("Batch inference failed: {:?}", e))?;
+        let mut embeddings = model.embed(texts, None)
+            .map_err(|e| anyhow!("Batch inference failed: {e:?}"))?;
 
         for vector in &mut embeddings {
             let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -258,7 +258,7 @@ impl RerankEngine {
         let options = RerankInitOptions::new(RerankerModel::JINARerankerV1TurboEn)
             .with_execution_providers(eps);
         let model = TextRerank::try_new(options)
-            .map_err(|e| anyhow!("Reranker init failed: {:?}", e))?;
+            .map_err(|e| anyhow!("Reranker init failed: {e:?}"))?;
         info!("🔀 Jina Turbo reranker ready");
         Ok(Self { model: Mutex::new(model) })
     }
@@ -268,7 +268,7 @@ impl RerankEngine {
         if documents.is_empty() { return Ok(vec![]); }
         let mut model = self.model.lock().map_err(|_| anyhow!("reranker mutex poisoned"))?;
         let results = model.rerank(query, documents, false, None)
-            .map_err(|e| anyhow!("Rerank failed: {:?}", e))?;
+            .map_err(|e| anyhow!("Rerank failed: {e:?}"))?;
         let mut indexed: Vec<(usize, f32)> = results.iter()
             .map(|r| (r.index, r.score))
             .collect();

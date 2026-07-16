@@ -126,7 +126,7 @@ impl SilvaDB {
             .with_extension("fjv1");
 
         let conn = crate::config::open_db(std::path::Path::new(db_path))
-            .with_context(|| format!("Failed to open SilvaDB: {}", db_path))?;
+            .with_context(|| format!("Failed to open SilvaDB: {db_path}"))?;
 
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),

@@ -21,14 +21,13 @@ pub(super) async fn resolve_guild_name(
         let known = server.matcher.available_guilds().iter().any(|g| g.name == hint)
             || server.registry.read().await.guilds.contains_key(&hint);
         if !known {
-            trace.push(format!("Guild hint '{}' rejected (unknown guild)", hint));
+            trace.push(format!("Guild hint '{hint}' rejected (unknown guild)"));
             return Err(error_result(&format!(
-                "Unknown guild '{}'. Use list_available_guilds to see valid options.",
-                hint,
+                "Unknown guild '{hint}'. Use list_available_guilds to see valid options.",
             )));
         }
         info!("🎯 tylluan_do: guild hint '{}' bypasses router", hint);
-        trace.push(format!("guild_hint='{}' bypasses router", hint));
+        trace.push(format!("guild_hint='{hint}' bypasses router"));
         Ok((hint, trace))
     } else {
         let intent_for_matching = if intent.chars().count() > 120 {
@@ -38,7 +37,7 @@ pub(super) async fn resolve_guild_name(
         };
 
         // M20: Proactive Cascade check — skip if this is already a coordinator dispatch
-        let is_coordinator_worker = agent_id.map_or(false, |a| a.starts_with("coordinator"));
+        let is_coordinator_worker = agent_id.is_some_and(|a| a.starts_with("coordinator"));
         if is_coordinator_worker {
             tracing::debug!("🔁 Coordinator worker dispatch — skipping proactive cascade");
         } else {
@@ -46,7 +45,7 @@ pub(super) async fn resolve_guild_name(
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
         if c_score >= 0.6 && registry_has_coordinator {
             info!("⚡ Proactive Cascade (score={:.2}): '{}' → coordinator", c_score, intent_for_matching);
-            trace.push(format!("proactive_cascade=coordinator score={:.2}", c_score));
+            trace.push(format!("proactive_cascade=coordinator score={c_score:.2}"));
             return Ok(("coordinator".to_string(), trace));
         }
         }
@@ -100,22 +99,20 @@ pub(super) async fn resolve_guild_name(
                             let _ = silva_c.apply_node_decay(&lk).await;
                         });
                         // Fall through to normal matcher
-                    } else {
-                        if let Some(guild) = node.content.split_whitespace()
-                            .find_map(|w| w.strip_prefix("guild:"))
-                            && server.matcher.available_guilds().iter().any(|g| g.name == guild) {
-                                // Trigger override: if a catalog trigger phrase matches a DIFFERENT guild,
-                                // it means the lesson is stale (guild was added after the lesson was written).
-                                if let Some(trigger) = server.matcher.trigger_match_pub(&intent_for_matching)
-                                    && trigger.score >= 0.7 && trigger.guild_name != guild {
-                                        info!("⚡ Trigger overrides stale lesson: '{}' → {} (was: {})", intent, trigger.guild_name, guild);
-                                        trace.push(format!("lesson overridden by trigger={}", trigger.guild_name));
-                                        return Ok((trigger.guild_name, trace));
-                                    }
-                                info!("🎯 Lesson prior: '{}' → guild='{}' (weight={})", intent, guild, node.weight);
-                                trace.push(format!("lesson_prior match='{}' (weight={})", guild, node.weight));
-                                return Ok((guild.to_string(), trace));
+                    } else if let Some(guild) = node.content.split_whitespace()
+                    .find_map(|w| w.strip_prefix("guild:"))
+                    && server.matcher.available_guilds().iter().any(|g| g.name == guild) {
+                        // Trigger override: if a catalog trigger phrase matches a DIFFERENT guild,
+                        // it means the lesson is stale (guild was added after the lesson was written).
+                        if let Some(trigger) = server.matcher.trigger_match_pub(&intent_for_matching)
+                            && trigger.score >= 0.7 && trigger.guild_name != guild {
+                                info!("⚡ Trigger overrides stale lesson: '{}' → {} (was: {})", intent, trigger.guild_name, guild);
+                                trace.push(format!("lesson overridden by trigger={}", trigger.guild_name));
+                                return Ok((trigger.guild_name, trace));
                             }
+                        info!("🎯 Lesson prior: '{}' → guild='{}' (weight={})", intent, guild, node.weight);
+                        trace.push(format!("lesson_prior match='{}' (weight={})", guild, node.weight));
+                        return Ok((guild.to_string(), trace));
                     }
                 }
             }
@@ -131,8 +128,8 @@ pub(super) async fn resolve_guild_name(
             }
 
         // Anchor fast-path: SilvaDB routing_anchor nodes beat semantic matcher when confident
-        if !is_coordinator_worker {
-            if let Some(ref emb) = query_embedding
+        if !is_coordinator_worker
+            && let Some(ref emb) = query_embedding
                 && let Ok(anchor_results) = server.silva.match_by_anchors(emb, 3).await
                     && let Some((best_guild, best_score)) = anchor_results.first() {
                         let second_score = anchor_results.get(1).map(|(_, s)| *s).unwrap_or(0.0);
@@ -140,11 +137,10 @@ pub(super) async fn resolve_guild_name(
                         if (*best_score >= 0.88 || (*best_score >= 0.70 && gap >= 0.05))
                             && server.matcher.available_guilds().iter().any(|g| &g.name == best_guild) {
                                 info!("⚓ Anchor fast-path: '{}' → {} (score={:.3}, gap={:.3})", intent, best_guild, best_score, gap);
-                                trace.push(format!("anchor_fast_path='{}' score={:.3} gap={:.3}", best_guild, best_score, gap));
+                                trace.push(format!("anchor_fast_path='{best_guild}' score={best_score:.3} gap={gap:.3}"));
                                 return Ok((best_guild.clone(), trace));
                             }
                     }
-        }
 
         match server.matcher.match_guild(&intent_for_matching, query_embedding.as_deref(), 0.25, ctx_ref) {
             Some(m) => {
@@ -209,7 +205,7 @@ pub(super) async fn resolve_guild_name(
 }
 
 pub(super) async fn run_agent_handshake(server: &TylluanServer, aid: &str) {
-    let node_id = format!("agent_identity_{}", aid);
+    let node_id = format!("agent_identity_{aid}");
     let meta = serde_json::json!({
         "agent_id": aid,
         "registered_at": chrono::Utc::now().to_rfc3339(),
@@ -218,14 +214,14 @@ pub(super) async fn run_agent_handshake(server: &TylluanServer, aid: &str) {
     let silva = server.silva.clone();
     let aid_c = aid.to_string();
     tokio::spawn(async move {
-        let _ = silva.upsert_node(&node_id, "agent_identity", &format!("Agente {} registrado en el colectivo", aid_c), &meta).await;
+        let _ = silva.upsert_node(&node_id, "agent_identity", &format!("Agente {aid_c} registrado en el colectivo"), &meta).await;
         let _ = silva.touch_node(&node_id, &aid_c, "handshake").await;
     });
     if let Ok(mut h) = server.hormones.lock() { h.emit_novelty(0.6); }
 
     let msg = BlackboardMessage {
         msg_type: "welcome".into(),
-        body: format!("Bienvenido al colectivo, {}. Tu identidad ha sido registrada.", aid),
+        body: format!("Bienvenido al colectivo, {aid}. Tu identidad ha sido registrada."),
         to: aid.to_string(),
         from: "kernel".into(),
         thread_id: None,

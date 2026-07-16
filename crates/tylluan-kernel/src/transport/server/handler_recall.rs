@@ -171,7 +171,7 @@ pub async fn handle_tylluan_recall(
                 }).collect::<Vec<_>>().join("\n");
                 Ok(CallToolResult { content: vec![Content::text(text)], is_error: Some(false) })
             },
-            Err(e) => Ok(error_result(&format!("Inbox retrieval failed: {}", e))),
+            Err(e) => Ok(error_result(&format!("Inbox retrieval failed: {e}"))),
         };
     }
 
@@ -184,7 +184,7 @@ pub async fn handle_tylluan_recall(
         if trimmed == "@coloquio" || trimmed == "@coloquio:list" {
             let channels = match coloquio.list_channels().await {
                 Ok(ch) => ch,
-                Err(e) => return Ok(error_result(&format!("Coloquio error: {}", e))),
+                Err(e) => return Ok(error_result(&format!("Coloquio error: {e}"))),
             };
             if channels.is_empty() {
                 return Ok(CallToolResult {
@@ -196,7 +196,7 @@ pub async fn handle_tylluan_recall(
                 format!("- **#{}**: {} messages (last turn: {})", c.channel_id, c.message_count, c.last_turn)
             }).collect::<Vec<_>>().join("\n");
             return Ok(CallToolResult {
-                content: vec![Content::text(format!("## Coloquio Channels\n\n{}", text))],
+                content: vec![Content::text(format!("## Coloquio Channels\n\n{text}"))],
                 is_error: Some(false),
             });
         }
@@ -204,7 +204,7 @@ pub async fn handle_tylluan_recall(
             let reader_id = rec_agent_id.as_deref().unwrap_or("agent");
             let summary = match coloquio.unread_summary(reader_id).await {
                 Ok(s) => s,
-                Err(e) => return Ok(error_result(&format!("Coloquio error: {}", e))),
+                Err(e) => return Ok(error_result(&format!("Coloquio error: {e}"))),
             };
             let mut results = Vec::new();
             for item in summary {
@@ -239,7 +239,7 @@ pub async fn handle_tylluan_recall(
             }
             let channels = match coloquio.list_channels().await {
                 Ok(ch) => ch,
-                Err(e) => return Ok(error_result(&format!("Coloquio error: {}", e))),
+                Err(e) => return Ok(error_result(&format!("Coloquio error: {e}"))),
             };
             let mut results = Vec::new();
             for ch in channels.iter().take(10) {
@@ -251,7 +251,7 @@ pub async fn handle_tylluan_recall(
             }
             if results.is_empty() {
                 return Ok(CallToolResult {
-                    content: vec![Content::text(format!("No matches for '{}' in any channel.", search_term))],
+                    content: vec![Content::text(format!("No matches for '{search_term}' in any channel."))],
                     is_error: Some(false),
                 });
             }
@@ -271,11 +271,11 @@ pub async fn handle_tylluan_recall(
                     let reader_id = rec_agent_id.as_deref().unwrap_or("agent");
                     let msgs = match coloquio.get_new_messages(cid, reader_id, limit as i64).await {
                         Ok(msgs) => msgs,
-                        Err(e) => return Ok(error_result(&format!("Coloquio read error: {}", e))),
+                        Err(e) => return Ok(error_result(&format!("Coloquio read error: {e}"))),
                     };
                     if msgs.is_empty() {
                         return Ok(CallToolResult {
-                            content: vec![Content::text(format!("No new messages in #{}", cid))],
+                            content: vec![Content::text(format!("No new messages in #{cid}"))],
                             is_error: Some(false),
                         });
                     }
@@ -288,18 +288,18 @@ pub async fn handle_tylluan_recall(
                         let _ = coloquio.mark_read(cid, reader_id, max_turn).await;
                     }
                     return Ok(CallToolResult {
-                        content: vec![Content::text(format!("## #{} — Unread Messages\n\n{}", cid, text))],
+                        content: vec![Content::text(format!("## #{cid} — Unread Messages\n\n{text}"))],
                         is_error: Some(false),
                     });
                 } else {
                     let keyword = parts[1];
                     let msgs = match coloquio.search_messages(cid, keyword, limit as i64).await {
                         Ok(msgs) => msgs,
-                        Err(e) => return Ok(error_result(&format!("Coloquio search error: {}", e))),
+                        Err(e) => return Ok(error_result(&format!("Coloquio search error: {e}"))),
                     };
                     if msgs.is_empty() {
                         return Ok(CallToolResult {
-                            content: vec![Content::text(format!("No matches for '{}' in #{}", keyword, cid))],
+                            content: vec![Content::text(format!("No matches for '{keyword}' in #{cid}"))],
                             is_error: Some(false),
                         });
                     }
@@ -307,7 +307,7 @@ pub async fn handle_tylluan_recall(
                         format!("[T{}] @{}: {}", m.turn, m.author_id, m.content)
                     }).collect::<Vec<_>>().join("\n\n");
                     return Ok(CallToolResult {
-                        content: vec![Content::text(format!("## #{} — Search: '{}'\n\n{}", cid, keyword, text))],
+                        content: vec![Content::text(format!("## #{cid} — Search: '{keyword}'\n\n{text}"))],
                         is_error: Some(false),
                     });
                 }
@@ -326,11 +326,11 @@ pub async fn handle_tylluan_recall(
             };
             let msgs = match coloquio.get_thread(cid, limit as i64, offset).await {
                 Ok(msgs) => msgs,
-                Err(e) => return Ok(error_result(&format!("Coloquio read error: {}", e))),
+                Err(e) => return Ok(error_result(&format!("Coloquio read error: {e}"))),
             };
             if msgs.is_empty() {
                 return Ok(CallToolResult {
-                    content: vec![Content::text(format!("#{} is empty.", cid))],
+                    content: vec![Content::text(format!("#{cid} is empty."))],
                     is_error: Some(false),
                 });
             }
@@ -338,7 +338,7 @@ pub async fn handle_tylluan_recall(
                 format!("[T{}] **@{}**: {}", m.turn, m.author_id, m.content)
             }).collect::<Vec<_>>().join("\n\n");
             return Ok(CallToolResult {
-                content: vec![Content::text(format!("## #{} — Messages (Limit: {}, Offset: {})\n\n{}", cid, limit, offset, text))],
+                content: vec![Content::text(format!("## #{cid} — Messages (Limit: {limit}, Offset: {offset})\n\n{text}"))],
                 is_error: Some(false),
             });
         }
@@ -371,7 +371,7 @@ if let Some(ref mut s) = stmt {
                             by_agent.entry(aid).or_insert_with(|| (content.chars().take(50).collect(), created));
                         }
                         for (aid, (content_snippet, _)) in by_agent {
-                            context_lines.push(format!("- {}: {}", aid, content_snippet));
+                            context_lines.push(format!("- {aid}: {content_snippet}"));
                         }
                     }
                 }
@@ -405,8 +405,7 @@ if let Some(ref mut s) = stmt {
             let (sql, bind): (String, RecallParams) = if let Some(assignee) = target_agent {
                 (
                     format!(
-                        "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"{}\"%' AND metadata LIKE ('%\"assigned_to\":\"' || ?1 || '\"%') ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC",
-                        status_filter
+                        "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"{status_filter}\"%' AND metadata LIKE ('%\"assigned_to\":\"' || ?1 || '\"%') ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC"
                     ),
                     RecallParams::Assignee(assignee.to_string()),
                 )
@@ -472,7 +471,7 @@ if let Some(ref mut s) = stmt {
     }
 
     let effective_query = match &rec_agent_id {
-        Some(aid) => format!("agent: {} {}", aid, query),
+        Some(aid) => format!("agent: {aid} {query}"),
         None => query.clone(),
     };
 
@@ -503,15 +502,15 @@ if let Some(ref mut s) = stmt {
         scored.truncate(limit);
         let showing = scored.len();
         
-        let header = format!("### Recall Results (Found {}, Showing top {})\n\n", total_found, showing);
+        let header = format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n");
         let summary_body = scored.iter().map(|(d, score)| {
             let age = d.created_at.as_deref().unwrap_or("?");
             let truncated_content = truncate_adaptive(&d.content, *score, compact);
             format!("- [score={:.2} weight={:.2} type={} age={}] {}", score, d.weight, d.node_type, age, truncated_content)
         }).collect::<Vec<_>>().join("\n");
-        let summary = format!("{}{}\n\n---\n🔍 Cache hit", header, summary_body);
+        let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
         let prefix = session_context.unwrap_or_default();
-        return Ok(CallToolResult { content: vec![Content::text(format!("{}{}", prefix, summary))], is_error: Some(false) });
+        return Ok(CallToolResult { content: vec![Content::text(format!("{prefix}{summary}"))], is_error: Some(false) });
     }
 
     let query_embedding = server.matcher.engine().and_then(|e| {
@@ -620,14 +619,14 @@ if let Some(ref mut s) = stmt {
             scored.retain(|(d, _)| d.node_type != "routing_anchor" && d.node_type != "session_digest");
 
             if let Some(aid_val) = rec_agent_id.as_ref() {
-                let aid_pattern = format!("\"agent_id\":\"{}\"", aid_val);
+                let aid_pattern = format!("\"agent_id\":\"{aid_val}\"");
                 let query_mentions_agent = query.to_lowercase().contains(&aid_val.to_lowercase());
                 for (node, score) in &mut scored {
                     // Only boost agent_memory nodes when the query explicitly mentions the agent.
                     // Boosting all nodes with a matching agent_id caused mega-nodes (sprint summaries
                     // that mention every keyword) to crowd out specialized nodes.
                     if node.node_type == "agent_memory" && query_mentions_agent
-                        && (node.metadata.contains(&aid_pattern) || node.content.contains(&format!("agent: {}", aid)))
+                        && (node.metadata.contains(&aid_pattern) || node.content.contains(&format!("agent: {aid}")))
                     {
                         *score += 0.25;
                     }
@@ -660,7 +659,7 @@ if let Some(ref mut s) = stmt {
             scored.truncate(limit);
             let showing = scored.len();
 
-            let header = format!("### Recall Results (Found {}, Showing top {})\n\n", total_found, showing);
+            let header = format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n");
 
             // WER — Weight Exposure in Recall (R21-4)
             // Expose score, weight, node_type and created_at so agents can audit
@@ -675,7 +674,7 @@ if let Some(ref mut s) = stmt {
                     )
                 })
                 .collect::<Vec<_>>().join("\n");
-            let mut summary = format!("{}{}", header, summary_body);
+            let mut summary = format!("{header}{summary_body}");
 
             if mode == "collective" {
                 let receiver = rec_agent_id.as_deref().unwrap_or("collective");
@@ -721,14 +720,14 @@ if let Some(ref mut s) = stmt {
                 "\n\n---\n⚠️ Búsqueda: solo texto (embeddings no cargados)"
             };
             let prefix = session_context.unwrap_or_default();
-            let full_summary = format!("{}{}{}", prefix, summary, footer);
+            let full_summary = format!("{prefix}{summary}{footer}");
 
             Ok(CallToolResult {
                 content: vec![Content::text(full_summary)],
                 is_error: Some(false),
             })
         }
-        Err(e) => Ok(error_result(&format!("Memory search failed: {}", e))),
+        Err(e) => Ok(error_result(&format!("Memory search failed: {e}"))),
     }
 }
 fn truncate_adaptive(content: &str, score: f32, compact: bool) -> String {
@@ -840,8 +839,8 @@ mod tests {
         let text = result.content[0].as_text().unwrap();
         
         // Debe encontrar el episódico pero no el de lección
-        assert!(text.text.contains("episódico"), "Debe retornar el nodo episódico: {:?}", text);
-        assert!(!text.text.contains("general"), "No debe retornar el nodo de lección: {:?}", text);
+        assert!(text.text.contains("episódico"), "Debe retornar el nodo episódico: {text:?}");
+        assert!(!text.text.contains("general"), "No debe retornar el nodo de lección: {text:?}");
         
         // 3. Invocar recall sin episodic (por defecto busca todo)
         let mut args_all = serde_json::Map::new();
@@ -849,6 +848,6 @@ mod tests {
         
         let result_all = handle_tylluan_recall(&server, Some(args_all)).await.unwrap();
         let text_all = result_all.content[0].as_text().unwrap();
-        assert!(text_all.text.contains("episódico") && text_all.text.contains("general"), "Debe contener ambos: {:?}", text_all);
+        assert!(text_all.text.contains("episódico") && text_all.text.contains("general"), "Debe contener ambos: {text_all:?}");
     }
 }

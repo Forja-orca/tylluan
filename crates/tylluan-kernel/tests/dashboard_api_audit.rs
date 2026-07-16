@@ -14,14 +14,14 @@ async fn test_golden_signals_endpoint_returns_data() {
     ];
 
     for route in routes {
-        assert!(route.starts_with("/api/v1/"), "Ruta válida: {}", route);
+        assert!(route.starts_with("/api/v1/"), "Ruta válida: {route}");
     }
 }
 
 /// Validates the /api/v1/docker/containers endpoint exists and returns a valid structure
 #[tokio::test]
 async fn test_docker_containers_endpoint_exists() {
-    let expected_keys = vec!["containers", "message"];
+    let expected_keys = ["containers", "message"];
     assert!(expected_keys.contains(&"containers"));
     assert!(expected_keys.contains(&"message"));
 }
@@ -58,7 +58,7 @@ async fn test_golden_signals_calculation_logic() {
     };
 
     // Verify the calculation is correct (approximate)
-    assert!(error_rate > 33.0 && error_rate < 34.0, "Error rate: {}", error_rate);
+    assert!(error_rate > 33.0 && error_rate < 34.0, "Error rate: {error_rate}");
 
     // Memory pressure: 150 nodes de 200 max = 75%
     let memory_pressure = (node_count as f64 / 200.0 * 100.0).min(100.0);
@@ -98,15 +98,13 @@ async fn test_dashboard_path_resolution() {
 /// Validates that frontend TypeScript contracts match the backend
 #[tokio::test]
 async fn test_frontend_backend_contracts_match() {
-    let golden_signals_fields = vec!["latency", "traffic", "errors", "saturation", "uptime_seconds", "slo_target"];
-    let guilds_util_fields = vec!["total", "active", "idle", "offline", "utilization_percent"];
-    let memory_ret_fields = vec!["silva", "hybrid_memory"];
-    let slo_fields = vec!["slo_target", "current_availability", "status"];
-
-    assert!(golden_signals_fields.len() > 0);
-    assert!(guilds_util_fields.len() > 0);
-    assert!(memory_ret_fields.len() > 0);
-    assert!(slo_fields.len() > 0);
+    // Golden-path contract fields expected on each dashboard API response shape.
+    // These are compile-time literals (not derived from a live response), so this
+    // test documents the expected contract rather than validating live JSON.
+    let _golden_signals_fields = ["latency", "traffic", "errors", "saturation", "uptime_seconds", "slo_target"];
+    let _guilds_util_fields = ["total", "active", "idle", "offline", "utilization_percent"];
+    let _memory_ret_fields = ["silva", "hybrid_memory"];
+    let _slo_fields = ["slo_target", "current_availability", "status"];
 }
 
 /// Validates SQL queries for memory retention

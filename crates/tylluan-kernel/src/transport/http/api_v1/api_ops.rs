@@ -72,7 +72,7 @@ pub async fn docker_containers_handler() -> impl IntoResponse {
         }
         Ok(Err(e)) => Json(DockerStatusResponse {
             status: "offline",
-            error: Some(format!("docker binary not found: {}", e)),
+            error: Some(format!("docker binary not found: {e}")),
             version: None,
         }).into_response(),
         Err(_) => Json(DockerStatusResponse {

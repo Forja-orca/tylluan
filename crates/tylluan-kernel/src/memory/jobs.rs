@@ -25,7 +25,7 @@ impl JobQueue {
             std::fs::create_dir_all(parent).ok();
         }
         let conn = crate::config::open_db(db_path)
-            .with_context(|| format!("Failed to open jobs DB: {:?}", db_path))?;
+            .with_context(|| format!("Failed to open jobs DB: {db_path:?}"))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tylluan_jobs (
                 id TEXT PRIMARY KEY,

@@ -164,13 +164,13 @@ async fn test_remember_then_recall_finds_node() {
 
     let res1 = mcp_call(app.clone(), "tools/call", "tylluan_remember",
         json!({"content": "Rust lifetime rules prevent dangling pointers", "importance": 0.9})).await;
-    assert!(res1["error"].is_null(), "remember failed: {:?}", res1);
+    assert!(res1["error"].is_null(), "remember failed: {res1:?}");
 
     let res2 = mcp_call(app, "tools/call", "tylluan_recall",
         json!({"query": "Rust lifetime"})).await;
     let text = extract_text(&res2);
     assert!(text.contains("Rust") || text.contains("lifetime"),
-        "recall no encontró el nodo: {}", text);
+        "recall no encontró el nodo: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -182,7 +182,7 @@ async fn test_remember_echoes_node_id() {
         json!({"content": "test content for echo", "importance": 0.5})).await;
     let text = extract_text(&res);
     assert!(text.contains("node_") || text.contains("Stored"),
-        "remember no devuelve node_id: {}", text);
+        "remember no devuelve node_id: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -200,9 +200,9 @@ async fn test_think_finds_remembered_nodes() {
         json!({"query": "Python generators"})).await;
     let text = extract_text(&res);
     assert!(!text.contains("No encontré conocimiento previo"),
-        "BUG-01 REGRESION: tylluan_think no encontró nodos existentes. text={}", text);
+        "BUG-01 REGRESION: tylluan_think no encontró nodos existentes. text={text}");
     assert!(text.contains("Python") || text.contains("generator") || text.contains("lazy"),
-        "tylluan_think no usa el contenido correcto: {}", text);
+        "tylluan_think no usa el contenido correcto: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -217,7 +217,7 @@ async fn test_recall_inbox_prefix() {
         json!({"query": "@inbox", "agent_id": "agent-test"})).await;
     let text = extract_text(&res);
     assert!(text.contains("agent-x") || text.contains("analyze") || text.contains("task"),
-        "recall @inbox no devuelve mensajes: {}", text);
+        "recall @inbox no devuelve mensajes: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -233,7 +233,7 @@ async fn test_graph_add_and_retrieve() {
         json!({"command": "list_neighbors", "entity": "Rust", "agent_id": "test"})).await;
     let text = extract_text(&res);
     assert!(text.contains("language") || text.contains("Rust"),
-        "graph neighbors no encontrado: {}", text);
+        "graph neighbors no encontrado: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -285,5 +285,5 @@ async fn test_think_shows_stigmergy_heat() {
         json!({"query": "Stigmergy concept", "agent_id": "agent-stig-test"})).await;
     let text = extract_text(&res);
     assert!(text.contains("accesos"),
-        "stigmergy heat: esperado 'accesos' en resultado, got: {}", text);
+        "stigmergy heat: esperado 'accesos' en resultado, got: {text}");
 }

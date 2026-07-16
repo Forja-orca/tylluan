@@ -45,7 +45,7 @@ pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Re
 
     let pid = match target_pid {
         Some(p) => p,
-        None => return Err(anyhow::anyhow!("Could not find child process for guild '{}'", guild_name)),
+        None => return Err(anyhow::anyhow!("Could not find child process for guild '{guild_name}'")),
     };
 
     unsafe {
@@ -72,7 +72,7 @@ pub fn isolate_guild_process(guild_name: &str, cpu_limit_pct: u32) -> anyhow::Re
         let process_handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
         if process_handle.is_null() {
             CloseHandle(job);
-            return Err(anyhow::anyhow!("OpenProcess failed for PID {}", pid));
+            return Err(anyhow::anyhow!("OpenProcess failed for PID {pid}"));
         }
 
         let assign_res = AssignProcessToJobObject(job, process_handle);

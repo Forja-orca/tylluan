@@ -68,7 +68,7 @@ pub async fn handle_tylluan_think(
         .take(5)
         .collect();
 
-    let mut synthesis = format!("## Pensamiento sobre: {}\n\n", query);
+    let mut synthesis = format!("## Pensamiento sobre: {query}\n\n");
 
     if nodes.is_empty() && related_mail.is_empty() {
         synthesis.push_str("No prior knowledge or recent activity found on this topic.\n");
@@ -80,7 +80,7 @@ pub async fn handle_tylluan_think(
                 let _ = server.silva.touch_node(&node.id, &agent_id_str, "tylluan_think").await;
                 let heat_suffix = if i < 3 {
                     match server.silva.get_trace_count_since(&node.id, since_24h).await {
-                        Ok(n) if n > 0 => format!(" [hot: {} accesos (24h)]", n),
+                        Ok(n) if n > 0 => format!(" [hot: {n} accesos (24h)]"),
                         _ => String::new(),
                     }
                 } else { String::new() };
@@ -201,7 +201,7 @@ pub async fn handle_tylluan_think(
                     member_preview.join(", ")
                 ));
                 if !summary_text.is_empty() {
-                    cluster_sections.push_str(&format!("  - Resumen: {}\n", summary_text));
+                    cluster_sections.push_str(&format!("  - Resumen: {summary_text}\n"));
                 }
             }
             if !cluster_sections.is_empty() {
@@ -245,21 +245,20 @@ pub async fn handle_tylluan_think(
                     .unwrap_or_else(|| hub_id.clone());
                 let display_name: String = hub_content.chars().take(55).collect();
                 let display_name = if hub_content.len() > 55 {
-                    format!("{}…", display_name)
+                    format!("{display_name}…")
                 } else {
                     display_name
                 };
                 let short_id = &hub_id[..hub_id.len().min(20)];
                 graph_insights.push_str(&format!(
-                    "\n\n### Nodo Hub (más conectado)\n**{}** ({} conexiones)\n*ref: {}*", 
-                    display_name, degree, short_id
+                    "\n\n### Nodo Hub (más conectado)\n**{display_name}** ({degree} conexiones)\n*ref: {short_id}*"
                 ));
             }
         
         if !graph_analysis.connected_path.is_empty() {
             graph_insights.push_str("\n\n### Camino conceptual\n");
             for step in &graph_analysis.connected_path {
-                graph_insights.push_str(&format!("-> {}\n", step));
+                graph_insights.push_str(&format!("-> {step}\n"));
             }
         }
         
@@ -310,7 +309,7 @@ pub async fn handle_tylluan_think(
 
         if let Some(guild_name) = synth_guild
             && server.registry.write().await.ensure_guild_running(&guild_name).await.is_ok() {
-                let think_depth = (nodes.len().max(2).min(5)) as i64;
+                let think_depth = nodes.len().clamp(2, 5) as i64;
                 let synth_params = rmcp::model::CallToolRequestParam {
                     name: "think".into(),
                     arguments: Some({
@@ -341,7 +340,7 @@ pub async fn handle_tylluan_think(
     }
 
     // STIGMERGY: Mark agent as actively reasoning
-    let agent_node_id = format!("agent:{}", agent_id_str);
+    let agent_node_id = format!("agent:{agent_id_str}");
     let _ = server.silva.touch_node(&agent_node_id, &agent_id_str, "tylluan_think").await;
 
     Ok(CallToolResult {
@@ -410,12 +409,10 @@ fn calculate_pagerank(
         for id in node_ids {
             if *out_degree.get(id).unwrap_or(&0) == 0 {
                 dangling_sum += pr[id];
-            } else {
-                if let Some(neighbors) = adj.get(id) {
-                    for neighbor in neighbors {
-                        if let Some(score) = next_pr.get_mut(neighbor) {
-                            *score += damping * pr[id] / out_degree[id] as f64;
-                        }
+            } else if let Some(neighbors) = adj.get(id) {
+                for neighbor in neighbors {
+                    if let Some(score) = next_pr.get_mut(neighbor) {
+                        *score += damping * pr[id] / out_degree[id] as f64;
                     }
                 }
             }

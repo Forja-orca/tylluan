@@ -334,7 +334,7 @@ async fn test_tylluan_do_agent_id_accepted_does_not_panic() {
     args.insert("intent".to_string(), serde_json::Value::from("list files"));
     args.insert("agent_id".to_string(), serde_json::Value::from("test-agent"));
     let result = server.handle_kernel_tool("tylluan_do", Some(args)).await;
-    assert!(result.is_ok(), "tylluan_do with agent_id must not return Err: {:?}", result);
+    assert!(result.is_ok(), "tylluan_do with agent_id must not return Err: {result:?}");
 }
 
 // ── tylluan_think ───────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ async fn test_tylluan_think_works() {
     let mut args = JsonObject::new();
     args.insert("query".to_string(), serde_json::Value::from("test knowledge"));
     let result = server.handle_kernel_tool("tylluan_think", Some(args)).await;
-    assert!(result.is_ok(), "tylluan_think must not return Err: {:?}", result);
+    assert!(result.is_ok(), "tylluan_think must not return Err: {result:?}");
     let r = result.unwrap();
     assert_eq!(r.is_error, Some(false), "tylluan_think with valid query must succeed");
 }
@@ -382,7 +382,7 @@ async fn test_tylluan_graph_stats_works() {
     let mut args = JsonObject::new();
     args.insert("command".to_string(), serde_json::Value::from("stats"));
     let result = server.handle_kernel_tool("tylluan_graph", Some(args)).await;
-    assert!(result.is_ok(), "tylluan_graph stats must not return Err: {:?}", result);
+    assert!(result.is_ok(), "tylluan_graph stats must not return Err: {result:?}");
     let r = result.unwrap();
     assert_eq!(r.is_error, Some(false), "tylluan_graph stats must succeed");
     let text = r.content.first().and_then(|c| c.as_text()).map(|t| t.text.as_str()).unwrap_or("");

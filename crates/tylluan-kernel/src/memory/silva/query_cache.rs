@@ -25,6 +25,12 @@ pub struct QueryEmbeddingCache {
     inner: Mutex<HashMap<String, Entry>>,
 }
 
+impl Default for QueryEmbeddingCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryEmbeddingCache {
     pub fn new() -> Self {
         Self {
@@ -98,6 +104,10 @@ impl QueryEmbeddingCache {
     pub fn len(&self) -> usize {
         self.inner.lock().map(|c| c.len()).unwrap_or(0)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +178,7 @@ mod tests {
         }
         // Allow overhead: 2ms per cache hit
         let avg_hit_ms = total_hit_ns as f64 / trials as f64 / 1_000_000.0;
-        assert!(avg_hit_ms < 2.0, "average cache hit latency {:.3}ms >= 2ms", avg_hit_ms);
+        assert!(avg_hit_ms < 2.0, "average cache hit latency {avg_hit_ms:.3}ms >= 2ms");
     }
 
     #[test]
@@ -176,7 +186,7 @@ mod tests {
         let cache = QueryEmbeddingCache::new();
         // Fill exactly to MAX_ENTRIES
         for i in 0..MAX_ENTRIES {
-            let q = format!("query_{}", i);
+            let q = format!("query_{i}");
             let _ = cache.get_or_embed(&q, |_| Ok(vec![i as f32])).unwrap();
         }
         assert_eq!(cache.len(), MAX_ENTRIES);

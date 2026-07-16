@@ -15,7 +15,7 @@ pub async fn handle_tylluan_graph(
     let agent_id = arguments.as_ref().and_then(|a| a.get("agent_id")).and_then(|v| v.as_str()).unwrap_or("tylluan_graph").to_string();
 
     // STIGMERGY: Mark agent as actively interacting with the graph
-    let agent_node_id = format!("agent:{}", agent_id);
+    let agent_node_id = format!("agent:{agent_id}");
     let _ = server.silva.touch_node(&agent_node_id, &agent_id, "tylluan_graph").await;
 
     match command.as_str() {
@@ -51,7 +51,7 @@ pub async fn handle_tylluan_graph(
                         is_error: Some(false)
                     })
                 }
-                Err(e) => Ok(error_result(&format!("Failed to add triple: {}", e))),
+                Err(e) => Ok(error_result(&format!("Failed to add triple: {e}"))),
             }
         }
         "query" => {
@@ -105,7 +105,7 @@ pub async fn handle_tylluan_graph(
                     content: vec![Content::text(serde_json::to_string_pretty(&stats).unwrap_or_default())],
                     is_error: Some(false)
                 }),
-                Err(e) => Ok(error_result(&format!("Failed to get stats: {}", e))),
+                Err(e) => Ok(error_result(&format!("Failed to get stats: {e}"))),
             }
         }
         "query_path" => {
@@ -133,7 +133,7 @@ pub async fn handle_tylluan_graph(
                         is_error: Some(false)
                     })
                 }
-                Err(e) => Ok(error_result(&format!("Failed to query path: {}", e))),
+                Err(e) => Ok(error_result(&format!("Failed to query path: {e}"))),
             }
         }
         "retrograde_extract" => {
@@ -257,9 +257,9 @@ pub async fn handle_tylluan_graph(
                         is_error: Some(false),
                     })
                 }
-                Err(e) => Ok(error_result(&format!("Failed to calculate personalized pagerank: {}", e))),
+                Err(e) => Ok(error_result(&format!("Failed to calculate personalized pagerank: {e}"))),
             }
         }
-        _ => Ok(error_result(&format!("Unknown tylluan_graph command: {}", command))),
+        _ => Ok(error_result(&format!("Unknown tylluan_graph command: {command}"))),
     }
 }

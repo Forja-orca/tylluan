@@ -207,11 +207,11 @@ pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Resul
             tracing::warn!("⛔ Federation: skipping unapproved peer '{}'", peer.name);
             continue;
         }
-        let encrypted = match crate::federation::encrypt_for_peer(&plain_body, &state.node_identity, &peer) {
+        let encrypted = match crate::federation::encrypt_for_peer(&plain_body, &state.node_identity, peer) {
             Ok(enc) => enc,
             Err(e) => { tracing::error!("Federation encrypt failed for '{}': {}", peer.name, e); continue; }
         };
-        let sync_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
+        let sync_url = peer_url_for_sync(peer, &client, "/api/v1/federation/sync/receive").await;
         let resp = client
             .post(&sync_url)
             .bearer_auth(&peer.auth_token)
@@ -689,16 +689,13 @@ pub async fn federation_sync_both(
                                     let remote_updated_at = envelope.node.get("updated_at")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("");
-                                    match crate::consensus::resolve_node_freshness(
+                                    if let crate::consensus::FreshnessResolution::AcceptRemote { .. } = crate::consensus::resolve_node_freshness(
                                         &local_hash, local_protected, &local_updated_at,
                                         remote_hash, 10, &peer.name, remote_updated_at,
                                     ) {
-                                        crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
-                                            if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
-                                                pulled += 1;
-                                            }
+                                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                            pulled += 1;
                                         }
-                                        _ => {}
                                     }
                                 }
                                 _ => {
@@ -824,7 +821,7 @@ pub async fn slo_summary_handler(State(state): State<Arc<HttpState>>) -> impl In
     let online_always_on = statuses.iter().filter(|s| s.always_on && s.running).count() as f64;
     let availability: f64 = if always_on_count > 0.0 { online_always_on / always_on_count * 100.0 } else { 100.0 };
     let node_count = silva.node_count().await.unwrap_or(0) as f64;
-    let error_budget_remaining = ((availability - 99.9) / 0.1 * 100.0).max(0.0_f64).min(100.0_f64);
+    let error_budget_remaining = ((availability - 99.9) / 0.1 * 100.0).clamp(0.0_f64, 100.0_f64);
     let slo_status = if availability >= 99.9 { "healthy" } else if availability >= 99.0 { "degraded" } else { "violated" };
     (StatusCode::OK, Json(serde_json::json!({
         "slo_target": 99.9,
@@ -855,7 +852,7 @@ pub async fn routing_anchors_list(
 pub async fn routing_anchors_reembed(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     match state.matcher.engine() {
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Embedding engine not ready yet"}))).into_response(),
-        Some(engine) => match state.silva.reembed_anchors(&*engine).await {
+        Some(engine) => match state.silva.reembed_anchors(&engine).await {
             Ok(n) => Json(serde_json::json!({"reembedded": n, "status": "ok"})).into_response(),
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
         }
@@ -1105,14 +1102,13 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                     continue;
                 }
 
-                if curr_mode == "push" || curr_mode == "both" {
-                    if !plain_body.is_empty() {
+                if (curr_mode == "push" || curr_mode == "both")
+                    && !plain_body.is_empty() {
                         match push_to_peer_internal(&state, peer, &client, &plain_body).await {
                             Ok(_) => tracing::info!("🔄 Auto-sync: successfully pushed to '{}'", peer.name),
                             Err(e) => tracing::error!("🔄 Auto-sync: push to '{}' failed: {e}", peer.name),
                         }
                     }
-                }
 
                 if curr_mode == "pull" || curr_mode == "both" {
                     match pull_from_peer_internal(&state, peer, &client).await {

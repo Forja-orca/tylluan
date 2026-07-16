@@ -99,7 +99,7 @@ pub async fn run_longmemeval_s(
         latencies.push(elapsed.as_secs_f64() * 1000.0);
 
         let rank = results.iter().position(|r| r.id == *expected_id);
-        let score = rank.and_then(|i| Some(results[i].score as f64));
+        let score = rank.map(|i| results[i].score as f64);
         points.push(EvalPoint {
             query: query_text.clone(),
             expected_id: *expected_id,
@@ -112,8 +112,8 @@ pub async fn run_longmemeval_s(
     // Phase 3: Aggregate
     let total = points.len() as f64;
     let recall_1 = if total > 0.0 { points.iter().filter(|p| p.rank == Some(1)).count() as f64 / total } else { 0.0 };
-    let recall_5 = if total > 0.0 { points.iter().filter(|p| p.rank.map_or(false, |r| r <= 5)).count() as f64 / total } else { 0.0 };
-    let recall_10 = if total > 0.0 { points.iter().filter(|p| p.rank.map_or(false, |r| r <= 10)).count() as f64 / total } else { 0.0 };
+    let recall_5 = if total > 0.0 { points.iter().filter(|p| p.rank.is_some_and(|r| r <= 5)).count() as f64 / total } else { 0.0 };
+    let recall_10 = if total > 0.0 { points.iter().filter(|p| p.rank.is_some_and(|r| r <= 10)).count() as f64 / total } else { 0.0 };
 
     latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let mean_latency = if latencies.is_empty() { 0.0 } else { latencies.iter().sum::<f64>() / latencies.len() as f64 };

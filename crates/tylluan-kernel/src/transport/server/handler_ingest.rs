@@ -42,16 +42,16 @@ pub async fn handle_tylluan_ingest(
             if content.trim().is_empty() {
                 return Ok(error_result("content is required when ingest_type is 'text'"));
             }
-            (content.clone(), format!("text:{}", name))
+            (content.clone(), format!("text:{name}"))
         }
         "file" => {
             let path = std::path::Path::new(&source);
             if !path.exists() {
-                return Ok(error_result(&format!("File does not exist: {}", source)));
+                return Ok(error_result(&format!("File does not exist: {source}")));
             }
             match tokio::fs::read_to_string(&source).await {
-                Ok(text) => (text, format!("file:{}", name)),
-                Err(e) => return Ok(error_result(&format!("Failed to read file: {}", e))),
+                Ok(text) => (text, format!("file:{name}")),
+                Err(e) => return Ok(error_result(&format!("Failed to read file: {e}"))),
             }
         }
         "url" => {
@@ -69,7 +69,7 @@ pub async fn handle_tylluan_ingest(
     let chunk_type = if ingest_type == "text" { "ingested" } else { "chunk" };
 
     for (idx, chunk) in chunks.iter().enumerate() {
-        let node_id = format!("ingested:{}:{}", name, idx);
+        let node_id = format!("ingested:{name}:{idx}");
         let meta = serde_json::json!({
             "source": actual_source,
             "chunk_index": idx,
@@ -87,7 +87,7 @@ pub async fn handle_tylluan_ingest(
         total_triples += triples.len();
 
         for (subject, predicate, object) in triples {
-            let _ = server.silva.add_edge(&subject, &object, &predicate, 0.8, &format!(r#"{{"source_node":"{}"}}"#, node_id)).await;
+            let _ = server.silva.add_edge(&subject, &object, &predicate, 0.8, &format!(r#"{{"source_node":"{node_id}"}}"#)).await;
         }
     }
 

@@ -54,9 +54,9 @@ pub async fn send_dispatch_request(
     request: &GuildDispatchRequest,
 ) -> Result<(), TransportError> {
     let json = serde_json::to_vec(request)
-        .map_err(|e| TransportError::Serialize(format!("dispatch request: {}", e)))?;
+        .map_err(|e| TransportError::Serialize(format!("dispatch request: {e}")))?;
     let encrypted = noise_encrypt_payload(&json, identity, peer_pubkey_hex)
-        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch: {}", e)))?;
+        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch: {e}")))?;
     transport.send(&encrypted).await
 }
 
@@ -68,9 +68,9 @@ pub async fn receive_dispatch_request(
 ) -> Result<GuildDispatchRequest, TransportError> {
     let encrypted = transport.receive().await?;
     let decrypted = noise_decrypt_payload(&encrypted, identity, expected_peer_pubkey_hex)
-        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch: {}", e)))?;
+        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch: {e}")))?;
     serde_json::from_slice(&decrypted)
-        .map_err(|e| TransportError::Deserialize(format!("dispatch request: {}", e)))
+        .map_err(|e| TransportError::Deserialize(format!("dispatch request: {e}")))
 }
 
 /// Encrypt a GuildDispatchResponse with Noise NK and send it over a transport.
@@ -81,9 +81,9 @@ pub async fn send_dispatch_response(
     response: &GuildDispatchResponse,
 ) -> Result<(), TransportError> {
     let json = serde_json::to_vec(response)
-        .map_err(|e| TransportError::Serialize(format!("dispatch response: {}", e)))?;
+        .map_err(|e| TransportError::Serialize(format!("dispatch response: {e}")))?;
     let encrypted = noise_encrypt_payload(&json, identity, peer_pubkey_hex)
-        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch response: {}", e)))?;
+        .map_err(|e| TransportError::Serialize(format!("noise encrypt dispatch response: {e}")))?;
     transport.send(&encrypted).await
 }
 
@@ -95,9 +95,9 @@ pub async fn receive_dispatch_response(
 ) -> Result<GuildDispatchResponse, TransportError> {
     let encrypted = transport.receive().await?;
     let decrypted = noise_decrypt_payload(&encrypted, identity, expected_peer_pubkey_hex)
-        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch response: {}", e)))?;
+        .map_err(|e| TransportError::Deserialize(format!("noise decrypt dispatch response: {e}")))?;
     serde_json::from_slice(&decrypted)
-        .map_err(|e| TransportError::Deserialize(format!("dispatch response: {}", e)))
+        .map_err(|e| TransportError::Deserialize(format!("dispatch response: {e}")))
 }
 
 // ─── Phase 2: DispatchRouter ────────────────────────────────────────────

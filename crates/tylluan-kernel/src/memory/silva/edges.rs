@@ -20,6 +20,7 @@ impl super::SilvaDB {
     }
 
     /// Add a typed edge with temporal validity constraints.
+    #[allow(clippy::too_many_arguments)] // mirrors the edge schema's own column set 1:1
     pub async fn add_edge_with_validity(
         &self,
         source: &str,
@@ -124,8 +125,7 @@ impl super::SilvaDB {
                     .join(",");
 
                 let nodes_query = format!(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable FROM nodes WHERE id IN ({})",
-                    placeholders
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable FROM nodes WHERE id IN ({placeholders})"
                 );
                 let mut stmt = conn.prepare(&nodes_query)?;
                 let nodes: Vec<GraphNode> = stmt.query_map(rusqlite::params_from_iter(current_level.clone()), |row| {
@@ -156,8 +156,7 @@ impl super::SilvaDB {
                 results.extend(nodes);
 
                 let edges_query = format!(
-                    "SELECT source, target FROM edges WHERE (source IN ({}) OR target IN ({})) AND (valid_until IS NULL OR valid_until >= strftime('%s', 'now'))",
-                    placeholders, placeholders
+                    "SELECT source, target FROM edges WHERE (source IN ({placeholders}) OR target IN ({placeholders})) AND (valid_until IS NULL OR valid_until >= strftime('%s', 'now'))"
                 );
                 let mut stmt = conn.prepare(&edges_query)?;
                 let all_ids: Vec<String> = current_level.clone();

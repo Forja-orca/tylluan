@@ -1,5 +1,3 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use tylluan_link::dispatch::{DispatchDecision, DispatchRouter, GuildDispatchRequest, GuildDispatchResponse};
 use tylluan_link::capability::CapabilityRegistry;
@@ -25,7 +23,7 @@ fn inject_peer_with_p2p(registry: &Arc<std::sync::Mutex<CapabilityRegistry>>, no
 }
 
 fn make_identity(tmp_dir: &std::path::Path, name: &str) -> NodeIdentity {
-    let path = tmp_dir.join(format!("identity_{}.json", name));
+    let path = tmp_dir.join(format!("identity_{name}.json"));
     NodeIdentity::load_or_create(&path).unwrap()
 }
 

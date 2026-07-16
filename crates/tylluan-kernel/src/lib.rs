@@ -2,8 +2,6 @@
 //!
 //! Shared logic, types, and AI engines for the TylluanNexus ecosystem.
 
-#![allow(clippy::all)]
-
 pub mod config;
 pub mod consensus;
 pub mod security;

@@ -54,9 +54,9 @@ async fn test_real_semantic_load() -> anyhow::Result<()> {
         let agent = agents[i % agents.len()];
         let is_es = i % 2 == 1;
         let content = if is_es { 
-            format!("{} [ID: {}]", es, i) 
+            format!("{es} [ID: {i}]") 
         } else { 
-            format!("{} [ID: {}]", en, i) 
+            format!("{en} [ID: {i}]") 
         };
         
         let payload = serde_json::json!({
@@ -84,7 +84,7 @@ async fn test_real_semantic_load() -> anyhow::Result<()> {
     for (i, msg) in messages.iter().enumerate() {
         let proposal: serde_json::Value = serde_json::from_str(&msg.payload)?;
         let content = proposal["content"].as_str().unwrap();
-        let p_id = format!("load_node_{}", i);
+        let p_id = format!("load_node_{i}");
         
         // Persist + Mark Conflicted
         silva.upsert_node(&p_id, "lesson", content, &msg.payload).await?;

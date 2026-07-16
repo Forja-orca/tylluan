@@ -2,8 +2,6 @@
 //!
 //! Sovereign Agentic MCP Hub — the Rust microkernel that powers TylluanMCP v3.
 
-#![allow(clippy::all)]
-
 mod setup;
 mod cleanup;
 
@@ -43,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     
     // SOVEREIGN FIX: Always operate from workspace root
     if let Err(e) = std::env::set_current_dir(&workspace_root) {
-        eprintln!("⚠️ Failed to set current dir to workspace root: {}", e);
+        eprintln!("⚠️ Failed to set current dir to workspace root: {e}");
     }
 
     // 0. Parse CLI arguments
@@ -81,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| {
             let fallback = format!("./kernel_{}.log", std::process::id());
             std::fs::File::create(&fallback).unwrap_or_else(|e| {
-                eprintln!("FATAL: cannot create log file '{}': {}", fallback, e);
+                eprintln!("FATAL: cannot create log file '{fallback}': {e}");
                 std::process::exit(1);
             })
         });
@@ -276,7 +274,7 @@ async fn main() -> anyhow::Result<()> {
         if lan_exposed && config.nexus.dev_mode && no_token && !has_override {
             eprintln!();
             eprintln!("⛔ INSECURE CONFIG REFUSED");
-            eprintln!("   host = \"{}\"  →  exposes the kernel on every network interface", host);
+            eprintln!("   host = \"{host}\"  →  exposes the kernel on every network interface");
             eprintln!("   dev_mode = true   →  bearer auth is disabled");
             eprintln!("   TYLLUAN_TOKEN env   →  not set");
             eprintln!();
@@ -297,9 +295,8 @@ async fn main() -> anyhow::Result<()> {
         // Additional guard: dev_mode=true on any non-localhost host (Hallazgo #7)
         if config.nexus.dev_mode && host != "127.0.0.1" && host != "localhost" && !has_override {
             panic!(
-                "UNSAFE CONFIG: dev_mode=true con host={} expone el kernel sin autenticacion en la red. \
-                 Usa host=\"127.0.0.1\" o desactiva dev_mode.",
-                host
+                "UNSAFE CONFIG: dev_mode=true con host={host} expone el kernel sin autenticacion en la red. \
+                 Usa host=\"127.0.0.1\" o desactiva dev_mode."
             );
         }
     }
@@ -397,7 +394,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
-    let mailbox_name = if prefix.contains("test") { format!("{}_mailbox.db", prefix) } else { "mailbox.db".to_string() };
+    let mailbox_name = if prefix.contains("test") { format!("{prefix}_mailbox.db") } else { "mailbox.db".to_string() };
 
     let silva_path = PathBuf::from(&config.silva.db_path);
     let mailbox_path = data_dir.join(mailbox_name);
@@ -694,7 +691,7 @@ async fn main() -> anyhow::Result<()> {
         let module = catalog.iter()
             .find(|d| &d.name == name)
             .map(|d| d.module_path.clone())
-            .unwrap_or_else(|| format!("guilds.core.{}", name));
+            .unwrap_or_else(|| format!("guilds.core.{name}"));
         if let Some(g) = registry_raw.guilds.get_mut(name) {
             g.always_on = true;
             if cpu_inference_guilds.contains(&name.as_str()) {
@@ -715,11 +712,9 @@ async fn main() -> anyhow::Result<()> {
                 let module_path = format!("{}.{}", base_path.replace("/", "."), guild_name);
                 if !registry_raw.guilds.contains_key(guild_name) {
                     registry_raw.register_v2(guild_name, &module_path, false, None, &gremioguilds.name, gremioguilds.agents.clone());
-                } else {
-                    if let Some(g) = registry_raw.guilds.get_mut(guild_name) {
-                        g.guild_id = Some(gremioguilds.name.clone());
-                        g.agent_roles = gremioguilds.agents.clone();
-                    }
+                } else if let Some(g) = registry_raw.guilds.get_mut(guild_name) {
+                    g.guild_id = Some(gremioguilds.name.clone());
+                    g.agent_roles = gremioguilds.agents.clone();
                 }
                 if gremioguilds.always_on
                     && let Some(g) = registry_raw.guilds.get_mut(guild_name) {
@@ -1073,9 +1068,9 @@ async fn main() -> anyhow::Result<()> {
                         if is_meaningful && (is_mision_activa || is_trazas_tareas || is_meta || has_target_prefix) {
                             let local_date = chrono::Local::now().format("%Y-%m-%d").to_string();
                             let mgr = tylluan_kernel::memory::agent_memory::AgentMemoryManager::new(silva_clone.clone(), 20);
-                            let formatted_content = format!("el {}: {}", local_date, content);
+                            let formatted_content = format!("el {local_date}: {content}");
                             let node_id = mgr.record_memory(author, &formatted_content, 1.2).await;
-                            let tagged_text = format!("[{}] {}", author, formatted_content);
+                            let tagged_text = format!("[{author}] {formatted_content}");
                             let embedding = matcher_clone.engine()
                                 .and_then(|e| e.embed(&tagged_text).ok());
                             if let Some(emb) = embedding {
@@ -1094,7 +1089,7 @@ async fn main() -> anyhow::Result<()> {
                                 }).to_string();
                                 let _ = memory_clone.add_document(&tagged_text, &metadata, None).await;
                             }
-                            let agent_node_id = format!("agent:{}", author);
+                            let agent_node_id = format!("agent:{author}");
                             let _ = silva_clone.add_edge(&agent_node_id, &node_id, "remembers", 0.9, "{}").await;
                         }
                     }
@@ -1130,7 +1125,7 @@ async fn main() -> anyhow::Result<()> {
         }
         eprintln!("  Press Ctrl+C to stop.");
         if let Some(wsl_url) = tunnel_manager.wsl_url() {
-            eprintln!("  🌉 WSL clients: {}", wsl_url);
+            eprintln!("  🌉 WSL clients: {wsl_url}");
         }
         eprintln!();
     }

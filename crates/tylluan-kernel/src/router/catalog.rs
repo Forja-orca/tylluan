@@ -211,7 +211,7 @@ fn name_to_description(name: &str) -> String {
         })
         .collect();
     let desc = words.join(" ");
-    if desc.len() > 10 { desc } else { format!("{} guild tools", name) }
+    if desc.len() > 10 { desc } else { format!("{name} guild tools") }
 }
 
 /// Extract trigger phrases from a guild's Python file by scanning for
@@ -341,16 +341,15 @@ fn extract_capabilities(content: &str) -> Option<serde_json::Value> {
         if !in_block {
             if let Some(pos) = trimmed.find("CAPABILITIES") {
                 let after_keyword = &trimmed[pos + 12..].trim();
-                if after_keyword.starts_with('=') {
-                    let after_eq = after_keyword[1..].trim();
-                    if after_eq.starts_with('{') {
+                if let Some(rest) = after_keyword.strip_prefix('=') {
+                    let after_eq = rest.trim();
+                    if let Some(rest) = after_eq.strip_prefix('{') {
                         in_block = true;
                         brace_depth = 1;
-                        result.push_str("{");
-                        let rest = &after_eq[1..];
+                        result.push('{');
                         if let Some(end_brace) = rest.rfind('}') {
                             result.push_str(&rest[..end_brace]);
-                            result.push_str("}");
+                            result.push('}');
                             break;
                         } else {
                             result.push_str(rest);
@@ -428,9 +427,9 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                 let trigger_phrases = extract_trigger_phrases(&content);
 
                 let module_path = if search_dir.ends_with("plugins") {
-                    format!("guilds.{}.plugins.{}", category_dir, file_stem)
+                    format!("guilds.{category_dir}.plugins.{file_stem}")
                 } else {
-                    format!("guilds.{}.{}", category_dir, file_stem)
+                    format!("guilds.{category_dir}.{file_stem}")
                 };
 
                 let description = name_to_description(&guild_name);
@@ -605,7 +604,7 @@ mod tests {
             eprintln!("--- End context ---");
         }
         let result = extract_trigger_phrases(&content);
-        eprintln!("knowledge file result: {:?}", result);
+        eprintln!("knowledge file result: {result:?}");
         assert!(!result.is_empty(), "Should extract phrases from knowledge.py");
     }
 
@@ -632,7 +631,7 @@ mod tests {
         let query = "check git status";
         let q_lower = query.to_lowercase();
         let result = matcher.match_guild(query, None, 0.3, None);
-        eprintln!("Result for '{}': {:?}", query, result);
+        eprintln!("Result for '{query}': {result:?}");
         // Manually check scores for key guilds
         let tokens = tokenize(query);
         for g in &catalog {
@@ -707,16 +706,14 @@ mod tests {
         assert!(
             missing_from_catalog.is_empty(),
             "Guild files exist but have NO catalog entry — tylluan_do cannot route to them!\n\
-             Add GuildDescriptor entries for: {:?}\n\
-             (Or move to NOT_GUILDS if they are utilities, not MCP servers)",
-            missing_from_catalog
+             Add GuildDescriptor entries for: {missing_from_catalog:?}\n\
+             (Or move to NOT_GUILDS if they are utilities, not MCP servers)"
         );
 
         assert!(
             missing_from_known.is_empty(),
             "Catalog has entries with no corresponding guild file — possible typo or deleted guild!\n\
-             Remove or rename: {:?}",
-            missing_from_known
+             Remove or rename: {missing_from_known:?}"
         );
     }
 }

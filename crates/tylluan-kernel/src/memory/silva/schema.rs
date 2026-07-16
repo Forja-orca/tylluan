@@ -158,7 +158,7 @@ impl super::SilvaDB {
                 tracing::info!("🌲 SilvaDB: added content_hash column (v14)");
             }
             if schema_version < SCHEMA_VERSION {
-                conn.execute_batch(&format!("PRAGMA user_version = {}", SCHEMA_VERSION))?;
+                conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
                 tracing::info!("🌲 SilvaDB schema migrado a v{}", SCHEMA_VERSION);
             }
 

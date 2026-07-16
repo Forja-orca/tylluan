@@ -79,7 +79,7 @@ impl McpProxy {
         let child_process = TokioChildProcess::new(&mut command)
             .with_context(|| {
                 error!("❌ TokioChildProcess::new() FAILED for guild '{}'", guild_name);
-                format!("Failed to spawn guild '{}' subprocess.", guild_name)
+                format!("Failed to spawn guild '{guild_name}' subprocess.")
             })?;
 
         info!("🔧 McpProxy: TokioChildProcess created for '{}'", guild_name);
@@ -99,8 +99,7 @@ impl McpProxy {
                 error!("❌ MCP handshake FAILED for guild '{}': {}. Cleaning up orphans...", guild_name, e);
                 Self::kill_abandoned_child(guild_name);
                 return Err(anyhow::anyhow!(
-                    "MCP handshake failed with guild '{}': {}. Is the server a valid MCP stdio server?",
-                    guild_name, e
+                    "MCP handshake failed with guild '{guild_name}': {e}. Is the server a valid MCP stdio server?"
                 ));
             }
             Err(_) => {
@@ -303,7 +302,7 @@ impl McpProxy {
 /// Create an error CallToolResult for returning errors to the client.
 pub fn error_result(message: &str) -> CallToolResult {
     CallToolResult {
-        content: vec![Content::text(format!("❌ Error: {}", message))],
+        content: vec![Content::text(format!("❌ Error: {message}"))],
         is_error: Some(true),
     }
 }
@@ -360,7 +359,7 @@ impl HttpMcpProxy {
             if base.ends_with("/messages") || base.ends_with("/mcp") || base.contains("/mcp-server/") {
                 base.to_string()
             } else {
-                format!("{}/messages", base)
+                format!("{base}/messages")
             }
         };
 
@@ -385,7 +384,7 @@ impl HttpMcpProxy {
             client.post(&endpoint).json(&init_body).send(),
         )
         .await
-        .map_err(|_| anyhow::anyhow!("Initialize timeout for HTTP MCP '{}'", guild_name))??;
+        .map_err(|_| anyhow::anyhow!("Initialize timeout for HTTP MCP '{guild_name}'"))??;
 
         let session_id = init_resp
             .headers()
@@ -406,7 +405,7 @@ impl HttpMcpProxy {
             let mut stream = init_resp.bytes_stream();
             let mut first_event = String::new();
             if let Some(chunk_result) = stream.next().await {
-                let chunk = chunk_result.map_err(|e| anyhow::anyhow!("SSE stream error: {}", e))?;
+                let chunk = chunk_result.map_err(|e| anyhow::anyhow!("SSE stream error: {e}"))?;
                 first_event = String::from_utf8_lossy(&chunk).to_string();
             }
             
@@ -415,22 +414,20 @@ impl HttpMcpProxy {
                 .lines()
                 .find(|l| l.starts_with("data: "))
                 .map(|l| &l[6..])
-                .ok_or_else(|| anyhow::anyhow!("Missing 'data:' in SSE init response for '{}'. Raw: {}", guild_name, first_event))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing 'data:' in SSE init response for '{guild_name}'. Raw: {first_event}"))?;
             
             serde_json::from_str(json_str).map_err(|e| {
-                anyhow::anyhow!("SSE JSON parse error for '{}': {} (raw: {})", guild_name, e, json_str)
+                anyhow::anyhow!("SSE JSON parse error for '{guild_name}': {e} (raw: {json_str})")
             })?
         } else {
             init_resp.json().await.map_err(|e| {
-                anyhow::anyhow!("Initialize response parse error for '{}': {}", guild_name, e)
+                anyhow::anyhow!("Initialize response parse error for '{guild_name}': {e}")
             })?
         };
 
         if let Some(err) = init_json.get("error") {
             return Err(anyhow::anyhow!(
-                "MCP initialize error from '{}': {}",
-                guild_name,
-                err
+                "MCP initialize error from '{guild_name}': {err}"
             ));
         }
 
@@ -508,7 +505,7 @@ impl HttpMcpProxy {
             let mut stream = resp.bytes_stream();
             let mut first_event = String::new();
             if let Some(chunk_result) = stream.next().await {
-                let chunk = chunk_result.map_err(|e| anyhow::anyhow!("SSE stream error during '{}': {}", method, e))?;
+                let chunk = chunk_result.map_err(|e| anyhow::anyhow!("SSE stream error during '{method}': {e}"))?;
                 first_event = String::from_utf8_lossy(&chunk).to_string();
             }
             
@@ -637,8 +634,7 @@ impl SseMcpProxy {
                     if let Some(host) = url.host_str() {
                         if host != "127.0.0.1" && host != "localhost" && host != "::1" {
                             return Err(anyhow::anyhow!(
-                                "Security violation: Cleartext transmission of sensitive information blocked for external host '{}'. Use HTTPS instead.",
-                                host
+                                "Security violation: Cleartext transmission of sensitive information blocked for external host '{host}'. Use HTTPS instead."
                             ));
                         }
                     }
@@ -668,7 +664,7 @@ impl SseMcpProxy {
         // Open the SSE stream — server sends an `endpoint` event first
         let sse_resp = tokio::time::timeout(tool_timeout, client.get(sse_url).send())
             .await
-            .map_err(|_| anyhow::anyhow!("SSE connect timeout for '{}'", guild_name))??;
+            .map_err(|_| anyhow::anyhow!("SSE connect timeout for '{guild_name}'"))??;
 
         if !sse_resp.status().is_success() {
             return Err(anyhow::anyhow!(
@@ -686,7 +682,7 @@ impl SseMcpProxy {
             loop {
                 if tokio::time::Instant::now() > parse_deadline {
                     return Err(anyhow::anyhow!(
-                        "Timeout waiting for SSE endpoint event from '{}'", guild_name
+                        "Timeout waiting for SSE endpoint event from '{guild_name}'"
                     ));
                 }
                 match stream.next().await {
@@ -696,8 +692,8 @@ impl SseMcpProxy {
                             break sid;
                         }
                     }
-                    Some(Err(e)) => return Err(anyhow::anyhow!("SSE stream error for '{}': {}", guild_name, e)),
-                    None => return Err(anyhow::anyhow!("SSE stream closed before endpoint event for '{}'", guild_name)),
+                    Some(Err(e)) => return Err(anyhow::anyhow!("SSE stream error for '{guild_name}': {e}")),
+                    None => return Err(anyhow::anyhow!("SSE stream closed before endpoint event for '{guild_name}'")),
                 }
             }
         };
@@ -959,8 +955,7 @@ impl SseMcpProxy {
                     if host != "127.0.0.1" && host != "localhost" && host != "::1" {
                         return Err(anyhow::anyhow!(
                             "Security violation: Cleartext transmission of sensitive information \
-                             blocked for external host '{}'. Use HTTPS instead.",
-                            host
+                             blocked for external host '{host}'. Use HTTPS instead."
                         ));
                     }
                 }

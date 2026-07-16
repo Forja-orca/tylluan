@@ -233,7 +233,7 @@ fn test_emergency_kill_response_shape() {
         "guilds_killed": 0
     });
     for key in &expected_keys {
-        assert!(response.get(key).is_some(), "key '{}' should be in kill switch response", key);
+        assert!(response.get(key).is_some(), "key '{key}' should be in kill switch response");
     }
 }
 

@@ -61,7 +61,7 @@ impl TunnelManager {
         let _ = std::process::Command::new("netsh")
             .args([
                 "interface", "portproxy", "delete", "v4tov4",
-                &format!("listenport={}", bridge_port),
+                &format!("listenport={bridge_port}"),
                 "listenaddress=0.0.0.0",
             ])
             .output();
@@ -70,13 +70,13 @@ impl TunnelManager {
         let out = std::process::Command::new("netsh")
             .args([
                 "interface", "portproxy", "add", "v4tov4",
-                &format!("listenport={}", bridge_port),
+                &format!("listenport={bridge_port}"),
                 "listenaddress=0.0.0.0",
-                &format!("connectport={}", kernel_port),
+                &format!("connectport={kernel_port}"),
                 "connectaddress=127.0.0.1",
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("netsh portproxy add failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("netsh portproxy add failed: {e}"))?;
 
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
@@ -94,7 +94,7 @@ impl TunnelManager {
                 return Ok(()); // Soft failure — don't crash the kernel
             }
             return Err(anyhow::anyhow!(
-                "netsh portproxy add error: {}", stderr
+                "netsh portproxy add error: {stderr}"
             ));
         }
 
@@ -106,7 +106,7 @@ impl TunnelManager {
                 "dir=in",
                 "action=allow",
                 "protocol=TCP",
-                &format!("localport={}", bridge_port),
+                &format!("localport={bridge_port}"),
             ])
             .output();
 
@@ -179,7 +179,7 @@ impl TunnelManager {
         let _ = std::process::Command::new("netsh")
             .args([
                 "interface", "portproxy", "delete", "v4tov4",
-                &format!("listenport={}", bridge_port),
+                &format!("listenport={bridge_port}"),
                 "listenaddress=0.0.0.0",
             ])
             .output();

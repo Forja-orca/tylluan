@@ -41,7 +41,7 @@ impl DreamCycle {
             return;
         }
         let silva = Arc::clone(&self.silva);
-        let interval_secs = (config.silva.decay_interval_hours * 3600) as u64;
+        let interval_secs = config.silva.decay_interval_hours * 3600;
         let prune_threshold = config.silva.decay_prune_threshold;
         let half_life = config.silva.decay_half_life_hours;
 
@@ -230,7 +230,7 @@ mod tests {
         let lambda = std::f64::consts::LN_2 / 1_209_600.0;
         let w0 = 1.0_f64;
         let w_half = w0 * (-lambda * 1_209_600.0_f64).exp();
-        assert!((w_half - 0.5).abs() < 0.001, "Half-life math incorrect: {}", w_half);
+        assert!((w_half - 0.5).abs() < 0.001, "Half-life math incorrect: {w_half}");
         let w_zero = w0 * (-lambda * 0.0_f64).exp();
         assert_eq!(w_zero, 1.0);
     }

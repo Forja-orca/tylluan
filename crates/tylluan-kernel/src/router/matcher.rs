@@ -1027,9 +1027,9 @@ mod tests {
         ];
         for intent in cases {
             let result = matcher.match_guild(intent, None, 0.15, None);
-            assert!(result.is_some(), "No match for: '{}'", intent);
+            assert!(result.is_some(), "No match for: '{intent}'");
             assert_eq!(result.unwrap().guild_name, "knowledge",
-                "Expected knowledge guild for: '{}'", intent);
+                "Expected knowledge guild for: '{intent}'");
         }
     }
 
@@ -1043,9 +1043,9 @@ mod tests {
         ];
         for intent in cases {
             let result = matcher.match_guild(intent, None, 0.15, None);
-            assert!(result.is_some(), "No match for: '{}'", intent);
+            assert!(result.is_some(), "No match for: '{intent}'");
             assert_eq!(result.unwrap().guild_name, "knowledge",
-                "Expected knowledge guild for: '{}'", intent);
+                "Expected knowledge guild for: '{intent}'");
         }
     }
 

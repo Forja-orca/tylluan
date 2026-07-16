@@ -145,7 +145,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<HttpState>) {
                         let tx_internal = tx_clone.clone();
                         tokio::spawn(async move {
                             if let CanvasIncomingMsg::RequestSync { channel_id } = &incoming {
-                                let node_id = format!("canvas_state:{}", channel_id);
+                                let node_id = format!("canvas_state:{channel_id}");
                                 if let Ok(Some(node)) = silva.get_node(&node_id).await
                                     && let Ok(state_data) = serde_json::from_str::<CanvasState>(&node.content) {
                                         let response_json = serde_json::json!({
@@ -159,7 +159,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<HttpState>) {
                                         }
                                     }
                                 // Send saved whiteboard state if exists
-                                let wb_node_id = format!("whiteboard_state:{}", channel_id);
+                                let wb_node_id = format!("whiteboard_state:{channel_id}");
                                 if let Ok(Some(node)) = silva.get_node(&wb_node_id).await {
                                     let response_json = serde_json::json!({
                                         "type": "whiteboard_update",
@@ -170,10 +170,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<HttpState>) {
                                         let _ = tx_internal.send(CanvasBroadcastMsg::Text(response_str));
                                     }
                                 }
-                            } else {
-                                if let Err(e) = handle_canvas_persistence(incoming, silva).await {
-                                    warn!("Failed to persist canvas state: {:?}", e);
-                                }
+                            } else if let Err(e) = handle_canvas_persistence(incoming, silva).await {
+                                warn!("Failed to persist canvas state: {:?}", e);
                             }
                         });
                     }
@@ -198,7 +196,7 @@ async fn handle_canvas_persistence(
     silva: Arc<crate::memory::silva::SilvaDB>,
 ) -> anyhow::Result<()> {
     if let CanvasIncomingMsg::WhiteboardUpdate { channel_id, snapshot } = incoming {
-        let node_id = format!("whiteboard_state:{}", channel_id);
+        let node_id = format!("whiteboard_state:{channel_id}");
         silva.upsert_node(&node_id, "whiteboard_state", &snapshot, "{}").await?;
         return Ok(());
     }
@@ -213,7 +211,7 @@ async fn handle_canvas_persistence(
         _ => return Ok(()),
     };
 
-    let node_id = format!("canvas_state:{}", channel_id);
+    let node_id = format!("canvas_state:{channel_id}");
     let mut state = if let Ok(Some(node)) = silva.get_node(&node_id).await {
         serde_json::from_str::<CanvasState>(&node.content).unwrap_or_else(|_| CanvasState { nodes: vec![], edges: vec![] })
     } else {
@@ -267,7 +265,7 @@ pub async fn canvas_create_node_handler(
     Json(payload): Json<CreateCanvasNodePayload>,
 ) -> impl IntoResponse {
     let silva = &state.silva;
-    let node_id = format!("canvas_state:{}", channel);
+    let node_id = format!("canvas_state:{channel}");
     
     // Load existing state
     let mut canvas_state = if let Ok(Some(node)) = silva.get_node(&node_id).await {

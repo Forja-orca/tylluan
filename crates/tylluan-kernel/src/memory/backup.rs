@@ -40,7 +40,7 @@ impl BackupManager {
         for (src_path, label) in databases {
             if !Path::new(src_path).exists() { continue; }
 
-            let target_filename = format!("{}_{}.db.bak", label, day_of_week);
+            let target_filename = format!("{label}_{day_of_week}.db.bak");
             let target_path = self.backup_dir.join(target_filename);
 
             // Strategy: Simple copy for now (Sovereign Portability).
@@ -64,7 +64,7 @@ impl BackupManager {
         }
 
         let conn = crate::config::open_db(std::path::Path::new(db_path))
-            .with_context(|| format!("Failed to open {} for integrity check", db_path))?;
+            .with_context(|| format!("Failed to open {db_path} for integrity check"))?;
         
         let status: String = conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0))?;
         

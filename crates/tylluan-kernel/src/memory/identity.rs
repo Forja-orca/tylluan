@@ -80,7 +80,7 @@ impl IdentityManager {
 
     /// Get agent identity (returns context prompt if found)
     pub async fn get_agent_context(&self, agent_id: &str) -> Option<String> {
-        let node_id = format!("agent:{}", agent_id);
+        let node_id = format!("agent:{agent_id}");
 
         if let Ok(Some(node)) = self.silva.get_node(&node_id).await {
             // Parse metadata to extract identity info
@@ -91,8 +91,7 @@ impl IdentityManager {
                 let born = meta.get("born_at").and_then(|v| v.as_str()).unwrap_or("2026");
 
                 return Some(format!(
-                    "You are {}. Your role is {}. You have been active since {}. Your current focus is: {}.",
-                    name, role, born, purpose
+                    "You are {name}. Your role is {role}. You have been active since {born}. Your current focus is: {purpose}."
                 ));
             }
         }
@@ -101,7 +100,7 @@ impl IdentityManager {
 
     /// Check if agent has identity registered
     pub async fn has_identity(&self, agent_id: &str) -> bool {
-        let node_id = format!("agent:{}", agent_id);
+        let node_id = format!("agent:{agent_id}");
         self.silva.get_node(&node_id).await.map(|n| n.is_some()).unwrap_or(false)
     }
 }

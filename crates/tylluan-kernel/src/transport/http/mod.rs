@@ -41,6 +41,9 @@ use rmcp::model::{CallToolRequestParam, Content};
 pub use tylluan_link::dispatch::DispatchQueue;
 use tylluan_link::p2p::{P2pSessionPool, P2pHandlerFn, start_p2p_listener_noise};
 
+/// Cached snapshot of guild statuses: (last-refreshed-at, statuses).
+type GuildStatusCache = Arc<std::sync::Mutex<Option<(Instant, Vec<crate::registry::guild_process::GuildStatus>)>>>;
+
 /// Shared application state for all HTTP handlers.
 pub struct HttpState {
     pub version: String,
@@ -58,7 +61,7 @@ pub struct HttpState {
     pub broadcast_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub download_progress_tx: tokio::sync::broadcast::Sender<crate::maintenance::DownloadProgress>,
     pub sessions: Arc<RwLock<HashMap<String, McpSession>>>,
-    pub guild_status_cache: Arc<std::sync::Mutex<Option<(Instant, Vec<crate::registry::guild_process::GuildStatus>)>>>,
+    pub guild_status_cache: GuildStatusCache,
     pub agent_rate_limiter: Arc<dashmap::DashMap<String, (u32, Instant)>>,
     /// Per-IP rate limiting, independent of the client-controlled `X-Agent-Id`
     /// header/query param used by `agent_rate_limiter`. A caller can omit or
@@ -249,13 +252,13 @@ pub async fn start_http_server(
                     old_port = Some(p as u16);
                 }
 
-    let listener = match tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await {
+    let listener = match tokio::net::TcpListener::bind(format!("{host}:{port}")).await {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
             info!("⚠️ Port {} is already in use. Searching for a free port...", port);
             let mut bound_listener = None;
             for candidate_port in (port + 1)..=(port + 100) {
-                let candidate_addr = format!("{}:{}", host, candidate_port);
+                let candidate_addr = format!("{host}:{candidate_port}");
                 match tokio::net::TcpListener::bind(&candidate_addr).await {
                     Ok(l) => {
                         info!("🎯 Found free port to bind: {}", candidate_port);
@@ -269,7 +272,7 @@ pub async fn start_http_server(
                 l
             } else {
                 info!("⚠️ No candidate ports in range free. Letting OS assign free port...");
-                tokio::net::TcpListener::bind(format!("{}:0", host)).await?
+                tokio::net::TcpListener::bind(format!("{host}:0")).await?
             }
         }
         Err(e) => return Err(e.into()),
@@ -310,7 +313,7 @@ pub async fn start_http_server(
             tokio::spawn(async move {
                 info!("🔌 Sending graceful shutdown signal to previous kernel on port {}...", op);
                 let client = reqwest::Client::new();
-                let shutdown_url = format!("http://127.0.0.1:{}/api/v1/admin/shutdown", op);
+                let shutdown_url = format!("http://127.0.0.1:{op}/api/v1/admin/shutdown");
                 let _ = tokio::time::timeout(
                     std::time::Duration::from_secs(3),
                     client.post(&shutdown_url).header("host", "127.0.0.1").send()
@@ -329,6 +332,7 @@ pub async fn start_http_server(
 /// Compatibility entry point \u{2014} called by main.rs.
 /// Constructs the full HttpState (broadcast channels, heartbeat, metrics broadcaster)
 /// then delegates to the modular start_http_server.
+#[allow(clippy::too_many_arguments)] // one-shot startup wiring called from a single site in main.rs
 pub async fn start_http_server_with_download(
     host: &str,
     port: u16,
@@ -359,7 +363,7 @@ pub async fn start_http_server_with_download(
 
     // Normalize 127.0.0.1 \u{2192} localhost so OAuth issuer matches what clients type
     let canonical_host = if host == "127.0.0.1" || host == "0.0.0.0" { "localhost" } else { host };
-    let base_url = format!("http://{}:{}", canonical_host, port);
+    let base_url = format!("http://{canonical_host}:{port}");
     // ─── Metrics Ring Buffer ─────────────────────────────────────────────────
     let metrics_ring = Arc::new(RwLock::new(crate::metrics_ring::MetricsRingBuffer::new()));
 
@@ -546,7 +550,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             let local_port = {
                 gossip_state.config.read().await.nexus.port
             };
-            let local_addr = format!("127.0.0.1:{}", local_port);
+            let local_addr = format!("127.0.0.1:{local_port}");
             let clock = {
                 gossip_state.gossip_engine.write().await.advance_clock()
             };
@@ -653,7 +657,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             // MutexGuard across an await boundary.
             let engine_snapshot = gossip_state.gossip_engine.read().await;
             let mut reg = gossip_state.capability_registry.lock().unwrap();
-            reg.ingest_from_engine(&*engine_snapshot);
+            reg.ingest_from_engine(&engine_snapshot);
             let pruned = reg.prune_expired();
             drop(reg);
             drop(engine_snapshot);
@@ -725,7 +729,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 match text {
                     Some(t) if !is_err => Ok(t),
                     Some(t) if t.contains("disconnected") || t.contains("GUILD_ERROR") =>
-                        Err(anyhow::anyhow!("knowledge guild error: {}", t)),
+                        Err(anyhow::anyhow!("knowledge guild error: {t}")),
                     Some(t) => Ok(t),
                     None => Err(anyhow::anyhow!("no content")),
                 }
@@ -827,7 +831,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
 
     start_http_server(host, port, state)
         .await
-        .map_err(|e| anyhow::anyhow!("{}", e))
+        .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 fn build_router(state: Arc<HttpState>) -> Router {
@@ -1118,7 +1122,7 @@ async fn force_utf8_middleware(
     if let Some(ct) = headers.get(header::CONTENT_TYPE)
         && let Ok(ct_str) = ct.to_str()
             && ct_str.contains("application/json") && !ct_str.contains("charset") {
-                let new_ct = format!("{}; charset=utf-8", ct_str);
+                let new_ct = format!("{ct_str}; charset=utf-8");
                 if let Ok(hv) = header::HeaderValue::from_str(&new_ct) {
                     headers.insert(header::CONTENT_TYPE, hv);
                 }

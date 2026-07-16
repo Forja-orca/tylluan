@@ -86,7 +86,7 @@ impl PeerAnnouncement {
 
         verifying_key
             .verify(payload.as_bytes(), &signature)
-            .map_err(|e| anyhow::anyhow!("announcement signature verification failed: {}", e))
+            .map_err(|e| anyhow::anyhow!("announcement signature verification failed: {e}"))
     }
 
     pub fn encode(&self) -> anyhow::Result<String> {
@@ -131,7 +131,7 @@ mod tests {
 
     fn tmp_dir(label: &str) -> std::path::PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+        std::env::temp_dir().join(format!("tylluan_{label}_{id}"))
     }
 
     fn test_identity() -> NodeIdentity {

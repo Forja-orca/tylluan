@@ -28,10 +28,10 @@ pub enum DispatchError {
 impl fmt::Display for DispatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DispatchError::Io(e) => write!(f, "IO error: {}", e),
+            DispatchError::Io(e) => write!(f, "IO error: {e}"),
             DispatchError::Timeout => write!(f, "dispatch timed out"),
-            DispatchError::Protocol(s) => write!(f, "protocol error: {}", s),
-            DispatchError::Serialize(s) => write!(f, "serialize error: {}", s),
+            DispatchError::Protocol(s) => write!(f, "protocol error: {s}"),
+            DispatchError::Serialize(s) => write!(f, "serialize error: {s}"),
         }
     }
 }
@@ -240,13 +240,13 @@ mod tests {
     #[test]
     fn test_dispatch_error_display_io() {
         let err = DispatchError::Io(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "conn refused"));
-        let msg = format!("{}", err);
+        let msg = format!("{err}");
         assert!(msg.contains("conn refused"));
     }
 
     #[test]
     fn test_dispatch_error_timeout() {
         let err = DispatchError::Timeout;
-        assert_eq!(format!("{}", err), "dispatch timed out");
+        assert_eq!(format!("{err}"), "dispatch timed out");
     }
 }

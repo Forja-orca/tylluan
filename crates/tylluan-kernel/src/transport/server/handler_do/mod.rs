@@ -28,7 +28,7 @@ use embedding::parse_content_for_embedding;
 fn routing_failure_id(intent: &str) -> String {
     let hash: u64 = intent.bytes()
         .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-    format!("lesson:routing_failure:{:x}", hash)
+    format!("lesson:routing_failure:{hash:x}")
 }
 
 pub async fn handle_tylluan_do(
@@ -58,10 +58,9 @@ pub async fn handle_tylluan_do(
             if let Some(reason) = check_dangerous_intent(&intent) {
                 tracing::warn!("⚠️ Intent blocked by safety filter: '{}' — reason: {}", intent, reason);
                 return Ok(error_result(&format!(
-                    "Intent blocked by safety filter: {}. \
+                    "Intent blocked by safety filter: {reason}. \
                      If this is intentional, disable the filter with [security] intent_filter = false in tylluan.toml, \
-                     or use guild='bash' to bypass the router.",
-                    reason
+                     or use guild='bash' to bypass the router."
                 )));
             }
         }
@@ -123,7 +122,7 @@ pub async fn handle_tylluan_do(
                         content: vec![Content::text(format!("Channel #{} created.", ch.channel_id))],
                         is_error: Some(false),
                     }),
-                    Err(e) => Ok(error_result(&format!("Failed to create channel: {}", e))),
+                    Err(e) => Ok(error_result(&format!("Failed to create channel: {e}"))),
                 };
             } else {
                 return Ok(error_result("Coloquio is not available."));
@@ -146,7 +145,7 @@ pub async fn handle_tylluan_do(
                 // Post to channel via remember
                 let mut args = serde_json::Map::new();
                 args.insert("content".to_string(), serde_json::Value::String(
-                    format!("@coloquio:{}:{}", channel_id, msg)
+                    format!("@coloquio:{channel_id}:{msg}")
                 ));
                 if let Some(ref aid) = agent_id {
                     args.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
@@ -156,7 +155,7 @@ pub async fn handle_tylluan_do(
                 // Read channel via recall
                 let mut args = serde_json::Map::new();
                 args.insert("query".to_string(), serde_json::Value::String(
-                    format!("@coloquio:{}", channel_id)
+                    format!("@coloquio:{channel_id}")
                 ));
                 return Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await;
             }
@@ -188,7 +187,7 @@ pub async fn handle_tylluan_do(
                 let res = router.broadcast(aid, &payload).await;
                 let count = res["recipients"].as_u64().unwrap_or(0);
                 Ok(CallToolResult {
-                    content: vec![Content::text(format!("Broadcast enviado a {} nodos.", count))],
+                    content: vec![Content::text(format!("Broadcast enviado a {count} nodos."))],
                     is_error: Some(false),
                 })
             }
@@ -223,23 +222,23 @@ pub async fn handle_tylluan_do(
                 let report = nodes.iter().map(|n| {
                     let agent_id = n["agent_id"].as_str().unwrap_or("?");
                     let pending = n["inbox_pending"].as_u64().unwrap_or(0);
-                    format!("- {}: {} pendientes", agent_id, pending)
+                    format!("- {agent_id}: {pending} pendientes")
                 }).collect::<Vec<_>>().join("\n");
                 Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodos conectados:\n{}", report))],
+                    content: vec![Content::text(format!("Nodos conectados:\n{report}"))],
                     is_error: Some(false),
                 })
             }
             NodeIntent::Register => {
                 Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodo '{}' registrado.", aid))],
+                    content: vec![Content::text(format!("Nodo '{aid}' registrado."))],
                     is_error: Some(false),
                 })
             }
             NodeIntent::Unregister => {
                 router.unregister(aid).await;
                 Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodo '{}' desregistrado.", aid))],
+                    content: vec![Content::text(format!("Nodo '{aid}' desregistrado."))],
                     is_error: Some(false),
                 })
             }
@@ -255,13 +254,13 @@ pub async fn handle_tylluan_do(
         }
         return match server.silva.delete_node(&node_id).await {
             Ok(true) => Ok(CallToolResult {
-                content: vec![Content::text(format!("Forgotten: node '{}' deleted.", node_id))],
+                content: vec![Content::text(format!("Forgotten: node '{node_id}' deleted."))],
                 is_error: Some(false),
             }),
             Ok(false) => Ok(error_result(&format!(
-                "Cannot forget '{}': node not found or is protected.", node_id
+                "Cannot forget '{node_id}': node not found or is protected."
             ))),
-            Err(e) => Ok(error_result(&format!("forget failed: {}", e))),
+            Err(e) => Ok(error_result(&format!("forget failed: {e}"))),
         };
     }
 
@@ -320,7 +319,7 @@ pub async fn handle_tylluan_do(
     if let Err(msg) = server.guild_rate_limiter.check_and_record(&guild_name) {
         warn!("Guild rate limit exceeded for '{}': {}", guild_name, msg);
         return Ok(error_result(&format!(
-            "Rate limit for guild '{}' exceeded. Try again later.", guild_name
+            "Rate limit for guild '{guild_name}' exceeded. Try again later."
         )));
     }
 
@@ -332,9 +331,8 @@ pub async fn handle_tylluan_do(
             let role = crate::transport::http::auth::current_acl_role();
             if !crate::transport::http::auth::acl_can_access(&role, &guild_name, acl) {
                 let msg = format!(
-                    "ACCESS_DENIED: role '{}' does not have access to guild '{}'. \
-                     Contact your administrator to update [security.acl] in tylluan.toml.",
-                    role, guild_name
+                    "ACCESS_DENIED: role '{role}' does not have access to guild '{guild_name}'. \
+                     Contact your administrator to update [security.acl] in tylluan.toml."
                 );
                 warn!("{}", msg);
                 return Ok(error_result(&msg));
@@ -344,7 +342,7 @@ pub async fn handle_tylluan_do(
 
     if let Err(e) = server.registry.write().await.ensure_guild_running(&guild_name).await {
         penalize_lesson(&intent, server.silva.clone());
-        return Ok(error_result(&format!("Failed to start guild '{}': {}", guild_name, e)));
+        return Ok(error_result(&format!("Failed to start guild '{guild_name}': {e}")));
     }
 
     let mut tool_name = {
@@ -365,7 +363,7 @@ pub async fn handle_tylluan_do(
 
     if tool_name.is_empty() {
         penalize_lesson(&intent, server.silva.clone());
-        return Ok(error_result(&format!("Guild '{}' has no tools.", guild_name)));
+        return Ok(error_result(&format!("Guild '{guild_name}' has no tools.")));
     }
 
     let path_hint = extract_path_from_intent(&intent);
@@ -386,7 +384,7 @@ pub async fn handle_tylluan_do(
             "."
         };
         let project_hint = {
-            let mut p = path_hint.replace('/', "-").replace('\\', "-").replace(':', "");
+            let mut p = path_hint.replace(['/', '\\'], "-").replace(':', "");
             while p.contains("--") { p = p.replace("--", "-"); }
             p.trim_matches('-').to_string()
         };
@@ -488,10 +486,9 @@ pub async fn handle_tylluan_do(
                 let missing_list = missing.join(", ");
                 let example = format!("tylluan_do(intent='...', {}<value>)", missing[0]);
                 return Ok(error_result(&format!(
-                    "Error: guild '{}' requires argument(s): {}. \
-                     Provide them explicitly: {}. \
-                     Check guild documentation for required fields.",
-                    guild_name, missing_list, example
+                    "Error: guild '{guild_name}' requires argument(s): {missing_list}. \
+                     Provide them explicitly: {example}. \
+                     Check guild documentation for required fields."
                 )));
             }
         }
@@ -529,11 +526,11 @@ pub async fn handle_tylluan_do(
             elapsed += heartbeat_secs;
             let remaining = timeout_secs.saturating_sub(elapsed);
             let msg = if remaining > 30 {
-                format!("Running... (timeout {}s, ~{}s remaining)", timeout_secs, remaining)
+                format!("Running... (timeout {timeout_secs}s, ~{remaining}s remaining)")
             } else if remaining > 0 {
-                format!("⏳ Last {}s...", remaining)
+                format!("⏳ Last {remaining}s...")
             } else {
-                format!("⚠️ Exceeded estimated timeout of {}s — waiting for response on local hardware", timeout_secs)
+                format!("⚠️ Exceeded estimated timeout of {timeout_secs}s — waiting for response on local hardware")
             };
             if let Some(ref tx) = progress_notifier {
                 let _ = tx.send(serde_json::json!({
@@ -582,7 +579,7 @@ pub async fn handle_tylluan_do(
             if let Some(guild) = reg.guilds.get(&guild_name) {
                 guild.call_tool_readonly(call_params).await
             } else {
-                error_result(&format!("Guild '{}' not found — use tylluan_do with a valid intent.", guild_name))
+                error_result(&format!("Guild '{guild_name}' not found — use tylluan_do with a valid intent."))
             }
         }
     ).await {
@@ -590,10 +587,9 @@ pub async fn handle_tylluan_do(
         Err(_) => {
             warn!("⌛ tylluan_do: guild call to '{}' timed out after {}ms", guild_name, call_timeout_ms);
             error_result(&format!(
-                "ERROR: guild '{}' timed out after {}ms. \
+                "ERROR: guild '{guild_name}' timed out after {call_timeout_ms}ms. \
                  The process may be saturated or has failed. \
-                 Try splitting the task or restarting the guild.",
-                guild_name, call_timeout_ms
+                 Try splitting the task or restarting the guild."
             ))
         }
     };
@@ -774,7 +770,7 @@ pub async fn handle_tylluan_do(
             let aid = agent_id.as_deref().unwrap_or("anonymous");
             let hash_input = result_text.chars().take(40).collect::<String>();
             let hash: u64 = hash_input.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-            let lesson_id = format!("lesson:{:x}", hash);
+            let lesson_id = format!("lesson:{hash:x}");
             let meta = serde_json::json!({
                 "source": "tylluan_do_lesson_drain", "guild": guild_name,
                 "agent_id": aid, "intent": intent
@@ -812,9 +808,9 @@ pub async fn handle_tylluan_do(
                 .and_then(|c| c.as_text()).map(|t| t.text.chars().take(200).collect::<String>())
                 .unwrap_or_default();
             let content = if preview.trim().len() > 20 {
-                format!("guild:{} tool:{} intent:{} -- {}", guild_name, tool_name, intent, preview)
+                format!("guild:{guild_name} tool:{tool_name} intent:{intent} -- {preview}")
             } else {
-                format!("guild:{} tool:{} intent:{}", guild_name, tool_name, intent)
+                format!("guild:{guild_name} tool:{tool_name} intent:{intent}")
             };
             let meta = serde_json::json!({
                 "source": "routing_lesson",
@@ -838,8 +834,8 @@ pub async fn handle_tylluan_do(
             .and_then(|c| c.as_text()).map(|t| t.text.chars().take(300).collect::<String>())
             .unwrap_or_default();
         let trace = match &agent_id {
-            Some(aid) => format!("tylluan_do episode | agent: {} | intent: {} | guild: {} | tool: {} | result: {}", aid, intent, guild_name, tool_name, output_preview),
-            None => format!("tylluan_do episode | intent: {} | guild: {} | tool: {} | result: {}", intent, guild_name, tool_name, output_preview),
+            Some(aid) => format!("tylluan_do episode | agent: {aid} | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
+            None => format!("tylluan_do episode | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
         };
         let meta = serde_json::json!({ "source": "tylluan_do", "guild": guild_name, "tool": tool_name, "agent_id": agent_id.as_deref().unwrap_or("anonymous") }).to_string();
         let embedding_target = distill_for_embedding(&intent, &output_preview);
@@ -882,9 +878,9 @@ pub async fn handle_tylluan_do(
 pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str) -> Result<(), String> {
     let db_path = std::path::Path::new("./data/audit.db");
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("audit mkdir: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("audit mkdir: {e}"))?;
     }
-    let conn = crate::config::open_db(db_path).map_err(|e| format!("audit open: {}", e))?;
+    let conn = crate::config::open_db(db_path).map_err(|e| format!("audit open: {e}"))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS guild_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -898,7 +894,7 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
             prev_hash TEXT NOT NULL DEFAULT '',
             hash TEXT NOT NULL
         );"
-    ).map_err(|e| format!("audit schema: {}", e))?;
+    ).map_err(|e| format!("audit schema: {e}"))?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let status = if success { "ok" } else { "error" };
@@ -911,7 +907,7 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
         .unwrap_or_default();
 
     // Chain hash: SHA-256 of (prev_hash || timestamp || guild || tool || agent_id || status)
-    let chain_input = format!("{}|{}|{}|{}|{}|{}", prev_hash, now, guild, tool, agent_id, status);
+    let chain_input = format!("{prev_hash}|{now}|{guild}|{tool}|{agent_id}|{status}");
     use sha2::Digest;
     let hash = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
 
@@ -919,7 +915,7 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
         "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash],
-    ).map_err(|e| format!("audit insert: {}", e))?;
+    ).map_err(|e| format!("audit insert: {e}"))?;
     Ok(())
 }
 
@@ -944,7 +940,7 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
     let mut stmt = conn.prepare(
         "SELECT id, timestamp, guild, tool_name, agent_id, status, prev_hash, hash \
          FROM guild_audit_log ORDER BY id ASC"
-    ).map_err(|e| format!("audit prepare: {}", e))?;
+    ).map_err(|e| format!("audit prepare: {e}"))?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -956,19 +952,19 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
             row.get::<_, String>(6)?,
             row.get::<_, String>(7)?,
         ))
-    }).map_err(|e| format!("audit query: {}", e))?;
+    }).map_err(|e| format!("audit query: {e}"))?;
 
     let mut prev = String::new();
     let mut ok = 0usize;
     let mut bad = 0usize;
     for row_res in rows {
-        let row = row_res.map_err(|e| format!("audit row: {}", e))?;
+        let row = row_res.map_err(|e| format!("audit row: {e}"))?;
         let (_id, ts, guild, tool_name, agent_id, status, stored_prev, stored_hash) = row;
         if stored_prev != prev {
             bad += 1;
             continue;
         }
-        let chain_input = format!("{}|{}|{}|{}|{}|{}", stored_prev, ts, guild, tool_name, agent_id, status);
+        let chain_input = format!("{stored_prev}|{ts}|{guild}|{tool_name}|{agent_id}|{status}");
         use sha2::Digest;
         let computed = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
         if computed != stored_hash {
@@ -979,6 +975,43 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
         ok += 1;
     }
     Ok((ok, bad))
+}
+
+/// Opt-in safety filter for dangerous intents.
+/// Returns Some(reason) if the intent matches a dangerous pattern.
+pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
+    let lower = intent.to_lowercase();
+
+    static PATTERNS: &[(&str, &str)] = &[
+        ("rm -rf /", "recursive deletion of root filesystem"),
+        ("rm -rf ~", "recursive deletion of home directory"),
+        ("rm -rf .", "recursive deletion of current directory"),
+        ("mkfs", "filesystem formatting"),
+        ("format c:", "disk formatting"),
+        ("format d:", "disk formatting"),
+        (":(){:|:&};:", "fork bomb"),
+        ("dd if=/dev/zero", "disk overwrite"),
+        ("dd if=/dev/random", "disk overwrite"),
+        ("> /dev/sda", "raw disk write"),
+        ("chmod -r 777 /", "recursive permission change on root"),
+        ("drop table", "SQL table deletion"),
+        ("drop database", "SQL database deletion"),
+        ("truncate table", "SQL table truncation"),
+        ("delete from", "SQL mass deletion"),
+        ("shutdown /s", "system shutdown"),
+        ("shutdown -h now", "system shutdown"),
+        ("reboot", "system reboot"),
+        ("init 0", "system halt"),
+        (":(){ :|:& };:", "fork bomb"),
+    ];
+
+    for (pattern, reason) in PATTERNS {
+        if lower.contains(pattern) {
+            return Some(reason);
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -1180,7 +1213,7 @@ mod tests {
         let result = handle_tylluan_do(&server, Some(args)).await.unwrap();
         assert!(result.is_error != Some(true));
         let text = result.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<Vec<_>>().join("");
-        assert!(text.contains("Forgotten"), "Expected 'Forgotten' in: {}", text);
+        assert!(text.contains("Forgotten"), "Expected 'Forgotten' in: {text}");
         assert!(server.silva.get_node("forget:test:node").await.unwrap().is_none());
     }
 
@@ -1521,41 +1554,4 @@ mod tests {
         assert!(result.is_none() || result.as_ref().map(|r| r.is_error == Some(true)).unwrap_or(false),
             "should be None or error when no external servers configured");
     }
-}
-
-/// Opt-in safety filter for dangerous intents.
-/// Returns Some(reason) if the intent matches a dangerous pattern.
-pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
-    let lower = intent.to_lowercase();
-
-    static PATTERNS: &[(&str, &str)] = &[
-        ("rm -rf /", "recursive deletion of root filesystem"),
-        ("rm -rf ~", "recursive deletion of home directory"),
-        ("rm -rf .", "recursive deletion of current directory"),
-        ("mkfs", "filesystem formatting"),
-        ("format c:", "disk formatting"),
-        ("format d:", "disk formatting"),
-        (":(){:|:&};:", "fork bomb"),
-        ("dd if=/dev/zero", "disk overwrite"),
-        ("dd if=/dev/random", "disk overwrite"),
-        ("> /dev/sda", "raw disk write"),
-        ("chmod -r 777 /", "recursive permission change on root"),
-        ("drop table", "SQL table deletion"),
-        ("drop database", "SQL database deletion"),
-        ("truncate table", "SQL table truncation"),
-        ("delete from", "SQL mass deletion"),
-        ("shutdown /s", "system shutdown"),
-        ("shutdown -h now", "system shutdown"),
-        ("reboot", "system reboot"),
-        ("init 0", "system halt"),
-        (":(){ :|:& };:", "fork bomb"),
-    ];
-
-    for (pattern, reason) in PATTERNS {
-        if lower.contains(pattern) {
-            return Some(reason);
-        }
-    }
-
-    None
 }

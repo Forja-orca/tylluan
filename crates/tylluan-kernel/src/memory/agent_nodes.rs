@@ -119,7 +119,7 @@ impl AgentNodeRouter {
         let msg_id = msg.id.clone();
 
         let mut nodes = self.nodes.write().await;
-        let target = nodes.get_mut(to).ok_or_else(|| format!("Nodo '{}' no registrado. Usa node register primero.", to))?;
+        let target = nodes.get_mut(to).ok_or_else(|| format!("Nodo '{to}' no registrado. Usa node register primero."))?;
 
         // Ejecutar reglas del programa del nodo destino
         let triggered_actions: Vec<NodeRuleAction> = target.rules.iter()
@@ -424,7 +424,7 @@ mod tests {
         router.register("b").await;
 
         for i in 0..NODE_INBOX_CAPACITY + 10 {
-            router.send("a", "b", &format!("msg {}", i), "direct").await.unwrap();
+            router.send("a", "b", &format!("msg {i}"), "direct").await.unwrap();
         }
 
         let inbox = router.drain_inbox("b").await;

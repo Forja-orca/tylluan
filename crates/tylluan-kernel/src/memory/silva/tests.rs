@@ -16,11 +16,11 @@ async fn test_silva() -> SilvaDB {
 
         // Similarity of orthogonal vectors should be 0.0
         let sim_12 = cosine_similarity(&v1, &v2);
-        assert!((sim_12 - 0.0).abs() < 1e-6, "Orthogonal similarity should be 0.0, got {}", sim_12);
+        assert!((sim_12 - 0.0).abs() < 1e-6, "Orthogonal similarity should be 0.0, got {sim_12}");
 
         // Similarity of identical vectors should be 1.0
         let sim_13 = cosine_similarity(&v1, &v3);
-        assert!((sim_13 - 1.0).abs() < 1e-6, "Identical similarity should be 1.0, got {}", sim_13);
+        assert!((sim_13 - 1.0).abs() < 1e-6, "Identical similarity should be 1.0, got {sim_13}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -472,7 +472,7 @@ async fn test_silva() -> SilvaDB {
 
         let combined = "ep1:ep2";
         let hash: u64 = combined.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-        let concept_id = format!("concept:merged:{:x}", hash);
+        let concept_id = format!("concept:merged:{hash:x}");
         let concept = db.get_node(&concept_id).await.unwrap().unwrap();
         assert_eq!(concept.node_type, "concept");
         assert!((concept.weight - 1.15).abs() < 0.01, "concept weight should be (1.0+1.0)/2*1.15 = 1.15");
@@ -860,7 +860,7 @@ fn test_exponential_decay_formula() {
     let hours_elapsed = 336.0_f64; // exactly one half-life
     let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
     // After exactly one half-life, weight should be 0.5
-    assert!((decayed - 0.5).abs() < 0.001, "Expected ~0.5, got {}", decayed);
+    assert!((decayed - 0.5).abs() < 0.001, "Expected ~0.5, got {decayed}");
 }
 
 #[test]
@@ -869,7 +869,7 @@ fn test_exponential_decay_two_halflives() {
     let half_life = 336.0_f64;
     let hours_elapsed = 672.0_f64; // 28 days = 2 half-lives
     let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
-    assert!((decayed - 0.25).abs() < 0.001, "Expected ~0.25, got {}", decayed);
+    assert!((decayed - 0.25).abs() < 0.001, "Expected ~0.25, got {decayed}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

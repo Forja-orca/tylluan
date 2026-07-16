@@ -130,7 +130,7 @@ impl TylluanServer {
         if bridge.len() >= 15 { bridge.pop_front(); }
         let truncated = if output.chars().count() > 800 { format!("{}... [TRUNCADO]", output.chars().take(800).collect::<String>()) } else { output.to_string() };
         bridge.push_back(BridgeEntry { guild: guild.to_string(), tool: tool.to_string(), output: truncated, timestamp: chrono::Local::now().to_rfc3339() });
-        self.thought(&format!("💡 Session Bridge: {} Result saved.", guild), 0.9);
+        self.thought(&format!("💡 Session Bridge: {guild} Result saved."), 0.9);
     }
 
     pub fn silva(&self) -> Arc<SilvaDB> { self.silva.clone() }

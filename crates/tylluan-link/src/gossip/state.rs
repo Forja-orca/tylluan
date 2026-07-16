@@ -370,7 +370,7 @@ mod tests {
         let state = GossipState::new(local.clone());
         let mut rt = RoutingTable::new(local.clone());
         for i in 0..10 {
-            let pid = node_id_from_bytes(format!("peer{}", i).as_bytes());
+            let pid = node_id_from_bytes(format!("peer{i}").as_bytes());
             rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec!["mesh".into()]);
         }
         let peers = state.select_peers(&rt, 3);

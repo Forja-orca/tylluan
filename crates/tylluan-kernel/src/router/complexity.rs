@@ -23,7 +23,7 @@ fn count_numbered_prefixes(text: &str) -> usize {
     for token in text.split_whitespace() {
         let trimmed = token.trim_matches(|c: char| c == '(' || c == '[' || c == '{');
         let has_number = trimmed
-            .trim_end_matches(|c: char| c == '.' || c == ')' || c == ']')
+            .trim_end_matches(['.', ')', ']'])
             .parse::<u32>()
             .is_ok();
         if has_number && trimmed.contains('.') || trimmed.contains(')') {

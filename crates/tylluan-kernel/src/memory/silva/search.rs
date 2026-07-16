@@ -305,7 +305,7 @@ impl super::SilvaDB {
             .collect();
         let terms: Vec<String> = sanitized.split_whitespace()
             .filter(|w| !w.is_empty())
-            .map(|w| format!("\"{}\"", w))
+            .map(|w| format!("\"{w}\""))
             .collect();
         if terms.is_empty() { String::new() } else { terms.join(" AND ") }
     }
@@ -335,10 +335,9 @@ impl super::SilvaDB {
                          FROM nodes_fts f
                          JOIN nodes n ON n.rowid = f.rowid
                          WHERE nodes_fts MATCH ?1
-                           AND n.type IN ({})
+                           AND n.type IN ({type_clause})
                          ORDER BY bm25(nodes_fts, 10.0, 5.0, 5.0)
-                         LIMIT {}",
-                        type_clause, max_results
+                         LIMIT {max_results}"
                     ), true)
                 } else {
                     (format!(
@@ -347,8 +346,7 @@ impl super::SilvaDB {
                          JOIN nodes n ON n.rowid = f.rowid
                          WHERE nodes_fts MATCH ?1
                          ORDER BY bm25(nodes_fts, 10.0, 5.0, 5.0)
-                         LIMIT {}",
-                        max_results
+                         LIMIT {max_results}"
                     ), false)
                 };
 
@@ -385,10 +383,9 @@ impl super::SilvaDB {
                 let sql = format!(
                     "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes
                      WHERE (LOWER(content) LIKE ?1 OR LOWER(metadata) LIKE ?1)
-                     AND type IN ({})
+                     AND type IN ({type_clause})
                      ORDER BY weight DESC
-                     LIMIT {}",
-                    type_clause, max_results
+                     LIMIT {max_results}"
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -422,8 +419,7 @@ impl super::SilvaDB {
                     "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes
                      WHERE (LOWER(content) LIKE ?1 OR LOWER(metadata) LIKE ?1)
                      ORDER BY weight DESC
-                     LIMIT {}",
-                    max_results
+                     LIMIT {max_results}"
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let rows = stmt.query_map(params![pattern], |row| {
@@ -453,7 +449,7 @@ impl super::SilvaDB {
     pub async fn search_content(&self, query: &str, limit: usize) -> Result<Vec<String>> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let pattern = format!("%{}%", query);
+            let pattern = format!("%{query}%");
             let mut stmt = conn.prepare(
                 "SELECT id FROM nodes WHERE content LIKE ?1 LIMIT ?2"
             )?;

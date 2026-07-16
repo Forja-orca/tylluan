@@ -170,7 +170,7 @@ async fn test_tylluan_do_missing_intent_returns_error() {
     let state = test_state().await;
     let app = build_test_app(state);
     let res = mcp_call(app, "tools/call", "tylluan_do", serde_json::json!({})).await;
-    assert!(!res["error"].is_null() || res["result"]["isError"].as_bool() == Some(true) || res["result"]["content"][0]["text"].as_str().unwrap_or("").contains("error"), "Expected error response: {:?}", res);
+    assert!(!res["error"].is_null() || res["result"]["isError"].as_bool() == Some(true) || res["result"]["content"][0]["text"].as_str().unwrap_or("").contains("error"), "Expected error response: {res:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -192,7 +192,7 @@ async fn test_tylluan_remember_stores_node() {
         "content": "Rust ownership rules",
         "importance": 0.9
     })).await;
-    assert!(res["error"].is_null(), "Expected no error in remember: {:?}", res);
+    assert!(res["error"].is_null(), "Expected no error in remember: {res:?}");
     
     // Verify node_count > 0 using SilvaDB directly
     let count = state.silva.node_count().await.unwrap();
@@ -204,7 +204,7 @@ async fn test_tylluan_remember_requires_content() {
     let state = test_state().await;
     let app = build_test_app(state);
     let res = mcp_call(app, "tools/call", "tylluan_remember", serde_json::json!({})).await;
-    assert!(!res["error"].is_null() || res["result"]["isError"].as_bool() == Some(true) || res["result"]["content"][0]["text"].as_str().unwrap_or("").to_lowercase().contains("missing"), "Expected error: {:?}", res);
+    assert!(!res["error"].is_null() || res["result"]["isError"].as_bool() == Some(true) || res["result"]["content"][0]["text"].as_str().unwrap_or("").to_lowercase().contains("missing"), "Expected error: {res:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -220,7 +220,7 @@ async fn test_tylluan_recall_returns_results() {
     
     // Recall
     let res = mcp_call(app, "tools/call", "tylluan_recall", serde_json::json!({"query": "test knowledge"})).await;
-    assert!(res["error"].is_null(), "Expected no error in recall: {:?}", res);
+    assert!(res["error"].is_null(), "Expected no error in recall: {res:?}");
     let content = res["result"]["content"].as_array().unwrap();
     let text = content.iter().filter_map(|c| c["text"].as_str()).collect::<String>();
     assert!(!text.is_empty(), "Recall should return non-empty text");

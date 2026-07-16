@@ -6,9 +6,9 @@ use axum::http::StatusCode;
 #[allow(unused_imports)]
 use serde_json::Value;
 
-/// Helper: make HTTP GET request (simulated - verifies route registration)
-/// In production, use `reqwest` against live kernel.
-/// These tests verify route registration and expected response structures.
+// Helper note: these tests are simulated (verify route registration and expected
+// response structures) rather than live HTTP calls. In production, use `reqwest`
+// against a live kernel for true end-to-end coverage.
 
 /// Test: /health is public (no token required)
 #[tokio::test]
@@ -25,8 +25,8 @@ async fn test_health_public_endpoint() {
     
     // Verify these are valid route patterns (no spaces, start with /)
     for route in &expected_routes {
-        assert!(route.starts_with('/'), "Route must start with /: {}", route);
-        assert!(!route.contains(' '), "Route must not contain spaces: {}", route);
+        assert!(route.starts_with('/'), "Route must start with /: {route}");
+        assert!(!route.contains(' '), "Route must not contain spaces: {route}");
     }
 }
 
@@ -45,7 +45,7 @@ async fn test_protected_routes_need_token() {
     ];
     
     for route in &protected_routes {
-        assert!(route.starts_with("/api/v1/"), "Must be v1 API: {}", route);
+        assert!(route.starts_with("/api/v1/"), "Must be v1 API: {route}");
     }
 }
 
@@ -173,6 +173,6 @@ async fn test_dashboard_contract_compliance() {
     for (method, route) in &contract {
         assert!(!method.is_empty(), "Method name required");
         assert!(route.starts_with("/api/") || *route == "/health", 
-            "Route must be valid API path: {}", route);
+            "Route must be valid API path: {route}");
     }
 }
