@@ -183,25 +183,27 @@ pub async fn set_guild_sandbox_override_handler(
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
     };
 
-    let guild_key = format!("guild_overrides.\"{}\"", req.guild.trim());
-    let target_line = format!("{} = \"{}\"", guild_key, profile);
+    // Bare key form, always used INSIDE the [security.sandbox.guild_overrides]
+    // bracket table -- never the dotted `guild_overrides."x"` form, which is
+    // only valid directly under [security.sandbox] and was previously mixed
+    // with the bracket-table form by mistake, producing invalid TOML anytime
+    // the table didn't already exist (verified via curl: "unknown variant
+    // `bash`, expected one of `strict`, `balanced`, `permissive`").
+    let quoted_guild = format!("\"{}\"", req.guild.trim());
+    let target_line = format!("{} = \"{}\"", quoted_guild, profile);
 
-    let mut in_sandbox_section = false;
     let mut in_guild_overrides = false;
     let mut replaced = false;
-    let mut saw_sandbox_section = false;
     let mut saw_guild_overrides = false;
 
     let new_raw: String = raw.lines().map(|l| {
         let trimmed = l.trim_start();
         if trimmed.starts_with('[') {
-            in_sandbox_section = trimmed.starts_with("[security.sandbox]");
             in_guild_overrides = trimmed.starts_with("[security.sandbox.guild_overrides]");
-            if in_sandbox_section { saw_sandbox_section = true; }
             if in_guild_overrides { saw_guild_overrides = true; }
-        } else if in_guild_overrides && !replaced && trimmed.starts_with(&format!("\"{}\"", req.guild.trim())) && trimmed.contains('=') {
+        } else if in_guild_overrides && !replaced && trimmed.starts_with(&quoted_guild) && trimmed.contains('=') {
             replaced = true;
-            return format!("{} = \"{}\"", guild_key, profile);
+            return target_line.clone();
         }
         l.to_string()
     }).collect::<Vec<_>>().join("\n");
@@ -234,35 +236,12 @@ pub async fn set_guild_sandbox_override_handler(
             out.push_str(&format!("{}\n", target_line));
         }
         out
-    } else if saw_sandbox_section {
-        // Add guild_overrides section after [security.sandbox] entries
-        let mut out = String::new();
-        let mut inserted = false;
-        let mut in_sand = false;
-        for l in new_raw.lines() {
-            let trimmed = l.trim_start();
-            if trimmed.starts_with("[security.sandbox]") {
-                in_sand = true;
-            } else if in_sand && trimmed.starts_with('[') && !trimmed.starts_with("[security.sandbox.") {
-                // Next sibling section — insert before
-                if !inserted {
-                    out.push_str(&format!("\n[security.sandbox.guild_overrides]\n{}\n", target_line));
-                    inserted = true;
-                }
-                in_sand = false;
-            } else if in_sand && trimmed.starts_with('[') {
-                // Another [security.sandbox.*] sub-section — we'll insert before next
-            }
-            out.push_str(l);
-            out.push('\n');
-        }
-        if !inserted {
-            out.push_str(&format!("\n[security.sandbox.guild_overrides]\n{}\n", target_line));
-        }
-        out
     } else {
-        // No sandbox section at all — append everything
-        format!("{}\n\n[security.sandbox]\n[security.sandbox.guild_overrides]\n{}\n", new_raw.trim_end(), target_line)
+        // No [security.sandbox.guild_overrides] table yet -- TOML doesn't
+        // care about section ordering, so it's always valid to just append
+        // a fresh table at the end of the file rather than hunting for the
+        // right sibling-section insertion point under [security.sandbox].
+        format!("{}\n\n[security.sandbox.guild_overrides]\n{}\n", new_raw.trim_end(), target_line)
     };
 
     if let Err(e) = toml::from_str::<crate::config::TylluanConfig>(&new_raw) {
@@ -312,6 +291,72 @@ pub async fn set_session_sandbox_override_handler(
         "agent_id": req.agent_id, "profile": profile,
         "scope": "session", "persisted": false
     }))).into_response()
+}
+
+/// DELETE /api/v1/config/sandbox-profile/guild/{guild} — removes that guild's
+/// entry from [security.sandbox.guild_overrides] via targeted line removal.
+/// Same never-round-trip-the-whole-file discipline as the POST handler above.
+pub async fn delete_guild_sandbox_override_handler(
+    Path(guild): Path<String>,
+) -> impl IntoResponse {
+    let config_path = crate::config::TylluanConfig::find_config_file()
+        .unwrap_or_else(|| std::path::PathBuf::from("tylluan.toml"));
+    let raw = match fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    };
+
+    let quoted_guild = format!("\"{}\"", guild.trim());
+    let mut in_guild_overrides = false;
+    let mut removed = false;
+    let new_raw: String = raw.lines().filter(|l| {
+        let trimmed = l.trim_start();
+        if trimmed.starts_with('[') {
+            in_guild_overrides = trimmed.starts_with("[security.sandbox.guild_overrides]");
+            return true;
+        }
+        if in_guild_overrides && trimmed.starts_with(&quoted_guild) && trimmed.contains('=') {
+            removed = true;
+            return false;
+        }
+        true
+    }).collect::<Vec<_>>().join("\n");
+
+    if !removed {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "guild": guild, "error": "no override found for this guild"
+        }))).into_response();
+    }
+
+    if let Err(e) = toml::from_str::<crate::config::TylluanConfig>(&new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("refusing to write invalid TOML: {}", e)
+        }))).into_response();
+    }
+    let tmp_path = config_path.with_extension("toml.tmp");
+    if let Err(e) = fs::write(&tmp_path, &new_raw) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = fs::rename(&tmp_path, &config_path) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response();
+    }
+    if let Err(e) = crate::config::TylluanConfig::reload().await {
+        return (StatusCode::OK, Json(serde_json::json!({
+            "guild": guild, "restart_required": true,
+            "warning": format!("written to disk but in-memory reload failed: {e} — restart to apply")
+        }))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "guild": guild, "restart_required": false }))).into_response()
+}
+
+/// DELETE /api/v1/config/sandbox-profile/session/{agent_id} — clears the
+/// in-memory session override. Never touches the TOML (it was never
+/// persisted there to begin with).
+pub async fn delete_session_sandbox_override_handler(
+    Path(agent_id): Path<String>,
+) -> impl IntoResponse {
+    crate::config::clear_session_override(&agent_id).await;
+    (StatusCode::OK, Json(serde_json::json!({ "agent_id": agent_id }))).into_response()
 }
 
 pub async fn save_config_handler(State(state): State<Arc<HttpState>>, Json(req): Json<SaveConfigRequest>) -> impl IntoResponse {

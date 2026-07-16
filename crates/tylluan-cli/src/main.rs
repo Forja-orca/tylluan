@@ -110,6 +110,46 @@ enum Commands {
         #[command(subcommand)]
         what: NewWhat,
     },
+    /// Manage the sandbox capability policy (global / per-guild / per-session)
+    Sandbox {
+        #[command(subcommand)]
+        action: SandboxCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum SandboxCommand {
+    /// Show the current effective sandbox profile and any active overrides
+    Status,
+    /// Set the global sandbox profile (persisted to tylluan.toml)
+    Set {
+        /// strict, balanced, or permissive
+        profile: String,
+    },
+    /// Set a guild-level override (persisted to tylluan.toml)
+    Guild {
+        /// Target guild name
+        name: String,
+        /// strict, balanced, or permissive
+        profile: String,
+    },
+    /// Set a session-level override (in-memory only, lost on kernel restart)
+    Session {
+        /// Target agent_id
+        agent_id: String,
+        /// strict, balanced, or permissive
+        profile: String,
+    },
+    /// Remove a guild-level override, falling back to the global profile
+    UnsetGuild {
+        /// Target guild name
+        name: String,
+    },
+    /// Clear a session-level override
+    UnsetSession {
+        /// Target agent_id
+        agent_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -778,6 +818,100 @@ def test_{snake}_tool_registered():
                 println!("   3. Your guild auto-registers on next kernel restart");
             }
         },
+        Commands::Sandbox { action } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()?;
+            let base = format!("http://127.0.0.1:{}", DEFAULT_PORT);
+            match action {
+                SandboxCommand::Status => {
+                    let url = format!("{}/api/v1/config", base);
+                    match client.get(&url).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            let config: serde_json::Value = resp.json().await?;
+                            let sb = &config["security"]["sandbox"];
+                            println!("🔒 Sandbox Profile");
+                            println!("   Enabled: {}", sb["enabled"].as_bool().unwrap_or(false));
+                            println!("   Global:  {}", sb["profile"].as_str().unwrap_or("balanced"));
+                            if let Some(overrides) = sb["guild_overrides"].as_object() {
+                                if !overrides.is_empty() {
+                                    println!("   Guild overrides:");
+                                    for (guild, profile) in overrides {
+                                        println!("     {} → {}", guild, profile.as_str().unwrap_or("?"));
+                                    }
+                                }
+                            }
+                        }
+                        Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+                SandboxCommand::Set { profile } => {
+                    let url = format!("{}/api/v1/config/sandbox-profile", base);
+                    match client.post(&url).json(&serde_json::json!({ "profile": profile })).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            let json: serde_json::Value = resp.json().await?;
+                            println!("✅ Global sandbox profile set to: {}", json["profile"]);
+                        }
+                        Ok(resp) => {
+                            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+                            println!("❌ {}", json["error"].as_str().unwrap_or("unknown error"));
+                        }
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+                SandboxCommand::Guild { name, profile } => {
+                    let url = format!("{}/api/v1/config/sandbox-profile/guild", base);
+                    match client.post(&url).json(&serde_json::json!({ "guild": name, "profile": profile })).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            let json: serde_json::Value = resp.json().await?;
+                            println!("✅ Guild '{}' sandbox override set to: {}", name, json["profile"]);
+                        }
+                        Ok(resp) => {
+                            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+                            println!("❌ {}", json["error"].as_str().unwrap_or("unknown error"));
+                        }
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+                SandboxCommand::Session { agent_id, profile } => {
+                    let url = format!("{}/api/v1/config/sandbox-profile/session", base);
+                    match client.post(&url).json(&serde_json::json!({ "agent_id": agent_id, "profile": profile })).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            println!("✅ Session override for agent '{}' set to: {} (in-memory, lost on restart)", agent_id, profile);
+                        }
+                        Ok(resp) => {
+                            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+                            println!("❌ {}", json["error"].as_str().unwrap_or("unknown error"));
+                        }
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+                SandboxCommand::UnsetGuild { name } => {
+                    let url = format!("{}/api/v1/config/sandbox-profile/guild/{}", base, name);
+                    match client.delete(&url).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            println!("✅ Guild '{}' override removed — falls back to global profile", name);
+                        }
+                        Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
+                            println!("ℹ️ Guild '{}' had no override set", name);
+                        }
+                        Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+                SandboxCommand::UnsetSession { agent_id } => {
+                    let url = format!("{}/api/v1/config/sandbox-profile/session/{}", base, agent_id);
+                    match client.delete(&url).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            println!("✅ Session override for '{}' cleared", agent_id);
+                        }
+                        Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                        Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+                    }
+                }
+            }
+        }
     }
 
     Ok(())
