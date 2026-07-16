@@ -860,7 +860,9 @@ pub async fn handle_tylluan_do(
             tokio::spawn(async move { let _ = silva_clone.auto_link_similar(&nid_clone, &trace_clone, 3, 0.3).await; });
         }
         if let Some(emb) = embedding.as_deref() {
-            let _ = server.silva.save_embedding(&node_id, emb, "nomic", None).await;
+            if let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
+                warn!("⚠️ tylluan_do remember: embedding save failed for {}: {}", node_id, e);
+            }
         }
         server.notify("memory_added", serde_json::json!({
             "node_id": node_id, "type": "episode",

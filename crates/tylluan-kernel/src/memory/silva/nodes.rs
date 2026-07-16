@@ -89,11 +89,15 @@ impl super::SilvaDB {
             .and_then(|v| v.get("federation_source").and_then(|s| s.as_str().map(String::from)));
 
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let mut conn = self.conn.blocking_lock();
             // Compute deterministic content hash (SHA-256) for SH-conflict detection (paper 1.3)
             use sha2::Digest;
             let content_hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
-            conn.execute(
+            // M31 audit fix: the node row and its FTS5 mirror were two separate
+            // execute() calls with no transaction -- a crash between them left
+            // the FTS index permanently out of sync with the real node content.
+            let tx = conn.transaction()?;
+            tx.execute(
                 "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_until, shareable, federation_source, content_hash)
                  VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, 0, ?7, ?8)
                  ON CONFLICT(id) DO UPDATE SET
@@ -112,13 +116,14 @@ impl super::SilvaDB {
                     updated_at = CURRENT_TIMESTAMP",
                 params![id, node_type, content, metadata, topic_key, valid_until, federation_source, content_hash],
             )?;
-            // Sync FTS5 index
-            if let Ok(rowid) = conn.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
-                let _ = conn.execute(
+            // Sync FTS5 index within the same transaction
+            if let Ok(rowid) = tx.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
+                let _ = tx.execute(
                     "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
                     params![rowid, id, content, metadata],
                 );
             }
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())
@@ -458,19 +463,26 @@ impl super::SilvaDB {
         }
         let communities = graph.find_communities();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
-            let mut stmt = conn.prepare(
-                "INSERT INTO node_communities (node_id, cluster_id, updated_at)
-                 VALUES (?1, ?2, CURRENT_TIMESTAMP)
-                 ON CONFLICT(node_id) DO UPDATE SET cluster_id = excluded.cluster_id, updated_at = CURRENT_TIMESTAMP"
-            )?;
-            for (node_id, cluster_id) in &communities {
-                stmt.execute(params![node_id, *cluster_id as i64])?;
+            let mut conn = self.conn.blocking_lock();
+            // M31 audit fix: node_communities and nodes.cluster_id are two
+            // separate tables updated in a loop -- a crash mid-loop left them
+            // inconsistent (some nodes tagged in one table, not the other).
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare(
+                    "INSERT INTO node_communities (node_id, cluster_id, updated_at)
+                     VALUES (?1, ?2, CURRENT_TIMESTAMP)
+                     ON CONFLICT(node_id) DO UPDATE SET cluster_id = excluded.cluster_id, updated_at = CURRENT_TIMESTAMP"
+                )?;
+                for (node_id, cluster_id) in &communities {
+                    stmt.execute(params![node_id, *cluster_id as i64])?;
+                }
+                let mut stmt_node = tx.prepare("UPDATE nodes SET cluster_id = ?2 WHERE id = ?1")?;
+                for (node_id, cluster_id) in &communities {
+                    stmt_node.execute(params![node_id, *cluster_id as i64])?;
+                }
             }
-            let mut stmt_node = conn.prepare("UPDATE nodes SET cluster_id = ?2 WHERE id = ?1")?;
-            for (node_id, cluster_id) in &communities {
-                stmt_node.execute(params![node_id, *cluster_id as i64])?;
-            }
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(communities)
@@ -510,16 +522,21 @@ impl super::SilvaDB {
     /// Merge `src` into `dst`: re-point all edges, then delete src.
     pub async fn merge_node_into(&self, src: &str, dst: &str) -> Result<()> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let mut conn = self.conn.blocking_lock();
+            // M31 audit fix: 6 sequential statements re-pointing edges then
+            // deleting src -- a crash mid-sequence left a "phantom" node with
+            // some edges re-pointed and others still dangling on the deleted id.
+            let tx = conn.transaction()?;
             // OR IGNORE: dst may already hold an identical edge (PK source,target,type) —
             // without it one collision aborts the whole merge (root cause of dedup never merging).
-            conn.execute("UPDATE OR IGNORE edges SET source = ?2 WHERE source = ?1 AND target != ?2", params![src, dst])?;
-            conn.execute("UPDATE OR IGNORE edges SET target = ?2 WHERE target = ?1 AND source != ?2", params![src, dst])?;
+            tx.execute("UPDATE OR IGNORE edges SET source = ?2 WHERE source = ?1 AND target != ?2", params![src, dst])?;
+            tx.execute("UPDATE OR IGNORE edges SET target = ?2 WHERE target = ?1 AND source != ?2", params![src, dst])?;
             // Drop src edges that collided (left in place by OR IGNORE) plus self-loops
-            conn.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![src])?;
-            conn.execute("DELETE FROM edges WHERE source = target", params![])?;
-            conn.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![src])?;
-            conn.execute("DELETE FROM nodes WHERE id = ?1", params![src])?;
+            tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![src])?;
+            tx.execute("DELETE FROM edges WHERE source = target", params![])?;
+            tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![src])?;
+            tx.execute("DELETE FROM nodes WHERE id = ?1", params![src])?;
+            tx.commit()?;
             Ok::<(), anyhow::Error>(())
         })?;
         Ok(())

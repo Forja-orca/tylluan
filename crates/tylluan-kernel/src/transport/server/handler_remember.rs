@@ -192,9 +192,25 @@ pub async fn handle_tylluan_remember(
                 task_meta["assigned_to"] = serde_json::Value::String(assign);
             }
 
-            let _ = server.silva.upsert_node(&task_id, "task", &content, &task_meta.to_string()).await;
-            let _ = server.silva.reinforce_node(&task_id, 1.1).await;
-            let _ = server.silva.touch_node(&task_id, aid, "task_created").await;
+            // M31 audit fix: these three calls each hit SilvaDB's own connection
+            // mutex independently (upsert_node/reinforce_node/touch_node_with_rating
+            // aren't composable into one SQL transaction without risking deadlock
+            // re-entering the same tokio::sync::Mutex<Connection>). Genuinely
+            // atomic composition would need a lower-level "run these 3 statements
+            // under one lock" primitive on SilvaDB that doesn't exist yet. The
+            // audit correctly rates this as low-severity (worst case: task node
+            // exists with weight=1.0 instead of 1.1, or missing its creation
+            // trace) -- not data corruption. Until this is silently swallowed,
+            // log failures so a partial write is at least visible/debuggable.
+            if let Err(e) = server.silva.upsert_node(&task_id, "task", &content, &task_meta.to_string()).await {
+                tracing::error!("Task node upsert failed for {}: {}", task_id, e);
+            }
+            if let Err(e) = server.silva.reinforce_node(&task_id, 1.1).await {
+                tracing::error!("Task node reinforce failed for {}: {}", task_id, e);
+            }
+            if let Err(e) = server.silva.touch_node(&task_id, aid, "task_created").await {
+                tracing::error!("Task node touch failed for {}: {}", task_id, e);
+            }
             tracing::info!("🧠 Memory reinforced (task): node={} agent={}", task_id, aid);
             task_id
         } else {
