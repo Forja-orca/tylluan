@@ -220,6 +220,18 @@ export interface ProjectSkill {
   created_at: string;
 }
 
+// Locally-tracked background job (crates/tylluan-kernel/src/transport/server/background_jobs.rs,
+// M31-P6, real status strings are 'pending'/'completed'/'failed' -- see getJobStatus).
+export interface BackgroundJob {
+  id: string;
+  guild: string;
+  intent: string;
+  status: 'pending' | 'completed' | 'failed';
+  started_at: string;
+  elapsed_secs: number;
+  result_text?: string;
+}
+
 export interface AgentProfile {
   agent_id: string;
   first_seen: string;
@@ -784,7 +796,7 @@ export class NexusBridge {
   // e.g. "Project skills:\n  - name1\n  - name2" or "No skills saved for this project. ...".
   // @skill:list only returns bare names (no content/created_at) -- full content
   // is fetched lazily per-skill via @skill:get:<name> when the panel needs it.
-  private async callSkillIntent(intent: string): Promise<{ text: string; isError: boolean }> {
+  private async callTylluanDoIntent(intent: string): Promise<{ text: string; isError: boolean }> {
     const raw = await this.fetchRaw('/api/v1/do', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -795,7 +807,7 @@ export class NexusBridge {
   }
 
   async getProjectSkills(): Promise<Pick<ProjectSkill, 'name'>[]> {
-    const { text } = await this.callSkillIntent('@skill:list');
+    const { text } = await this.callTylluanDoIntent('@skill:list');
     if (text.startsWith('No skills saved')) return [];
     return text
       .split('\n')
@@ -804,7 +816,7 @@ export class NexusBridge {
   }
 
   async getProjectSkill(name: string): Promise<ProjectSkill> {
-    const { text, isError } = await this.callSkillIntent(`@skill:get:${name}`);
+    const { text, isError } = await this.callTylluanDoIntent(`@skill:get:${name}`);
     if (isError) throw new Error(text || `Skill '${name}' not found`);
     // Backend format: "Skill '<name>':\n<content>"
     const content = text.includes(':\n') ? text.slice(text.indexOf(':\n') + 2) : text;
@@ -812,13 +824,56 @@ export class NexusBridge {
   }
 
   async saveProjectSkill(name: string, content: string): Promise<void> {
-    const { isError, text } = await this.callSkillIntent(`@skill:save:${name}: ${content}`);
+    const { isError, text } = await this.callTylluanDoIntent(`@skill:save:${name}: ${content}`);
     if (isError) throw new Error(text || 'Failed to save skill');
   }
 
   async deleteProjectSkill(name: string): Promise<void> {
-    const { isError, text } = await this.callSkillIntent(`@skill:delete:${name}`);
-    if (isError) throw new Error(text || 'Failed to delete skill');
+    try {
+      await this.fetch(`/api/v1/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    } catch {
+      try {
+        await this.fetchRaw('/api/v1/do', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'tylluan_do',
+            arguments: { intent: `@skill:delete:${name}` }
+          })
+        });
+      } catch (e) {
+        throw new Error('Project skills not implemented in backend yet.');
+      }
+    }
+  }
+
+  // Real backend contract (crates/tylluan-kernel/src/transport/server/background_jobs.rs,
+  // M31-P6): there is no dedicated /api/v1/jobs endpoint and no "list all jobs" capability
+  // at all -- @bg:<intent> enqueues a job and returns its id, @job:<id> checks/retrieves a
+  // SPECIFIC job's status (accepts the full id or its short suffix). There is nothing to
+  // page through server-side; the dashboard must track jobs it started/observed locally.
+
+  /// Starts a background guild call. Returns the job id (full form, usable with getJobStatus).
+  async startBackgroundJob(intent: string): Promise<{ jobId: string; guild: string; message: string }> {
+    const { text, isError } = await this.callTylluanDoIntent(`@bg:${intent}`);
+    if (isError) throw new Error(text || 'Failed to start background job');
+    // Backend format: "⏳ Background job started: <job_id>\nGuild: <guild>\n..."
+    const idMatch = text.match(/started:\s*(\S+)/);
+    const guildMatch = text.match(/Guild:\s*(\S+)/);
+    if (!idMatch) throw new Error(`Unexpected response starting background job: ${text}`);
+    return { jobId: idMatch[1], guild: guildMatch?.[1] ?? 'unknown', message: text };
+  }
+
+  /// Checks a background job's status/result. `pending` when not yet in SilvaDB,
+  /// `completed`/`failed` are both reported as "completed" text by the backend
+  /// (the content itself says "Job '<id>' completed:\n..." even for failed guild
+  /// calls -- the actual success/failure is inside the content body, prefixed
+  /// "Job <short_id> (completed)" or "Job <short_id> (failed)" by the worker).
+  async getJobStatus(jobId: string): Promise<{ status: 'pending' | 'completed' | 'failed'; text: string }> {
+    const { text } = await this.callTylluanDoIntent(`@job:${jobId}`);
+    if (text.includes('has not completed yet')) return { status: 'pending', text };
+    if (/\(failed\)/.test(text)) return { status: 'failed', text };
+    return { status: 'completed', text };
   }
 
   async getSharedKnowledge(agentA: string, agentB: string): Promise<any> {
