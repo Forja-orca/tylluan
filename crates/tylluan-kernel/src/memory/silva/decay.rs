@@ -183,11 +183,11 @@ impl super::SilvaDB {
                     }
                     Ok::<usize, anyhow::Error>(count)
                 }
-                Err(e) => Err(anyhow::anyhow!("prune_old_traces failed: {}", e)),
+                Err(e) => Err(anyhow::anyhow!("prune_old_traces failed: {e}")),
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("prune_old_traces spawn failed: {}", e))??;
+        .map_err(|e| anyhow::anyhow!("prune_old_traces spawn failed: {e}"))??;
         Ok(result)
     }
 
@@ -349,9 +349,8 @@ impl super::SilvaDB {
 
                 let sql = format!(
                     "SELECT node_id, COUNT(*) as c FROM node_traces \
-                     WHERE node_id IN ({}) AND touched_at >= ? \
-                     GROUP BY node_id",
-                    placeholders
+                     WHERE node_id IN ({placeholders}) AND touched_at >= ? \
+                     GROUP BY node_id"
                 );
 
                 let mut params: Vec<rusqlite::types::Value> = chunk
@@ -400,10 +399,9 @@ impl super::SilvaDB {
                     "SELECT t.node_id, t.agent_id FROM node_traces t \
                      INNER JOIN ( \
                          SELECT node_id, MAX(touched_at) as max_touch FROM node_traces \
-                         WHERE node_id IN ({}) AND touched_at >= ? \
+                         WHERE node_id IN ({placeholders}) AND touched_at >= ? \
                          GROUP BY node_id \
-                     ) m ON t.node_id = m.node_id AND t.touched_at = m.max_touch",
-                    placeholders
+                     ) m ON t.node_id = m.node_id AND t.touched_at = m.max_touch"
                 );
 
                 let mut params: Vec<rusqlite::types::Value> = chunk

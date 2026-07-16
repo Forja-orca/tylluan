@@ -169,8 +169,8 @@ pub fn enforce_capabilities(
                 // Empty allowlist = no commands allowed, equivalent to false
                 if is_exec_like_tool(params) {
                     return Some(format!(
-                        "CAPABILITY_BLOCKED: guild '{}' declares process_execution=[] (empty allowlist). \
-                         No commands are allowed.", guild_name
+                        "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=[] (empty allowlist). \
+                         No commands are allowed."
                     ));
                 }
             } else {
@@ -187,9 +187,8 @@ pub fn enforce_capabilities(
                 // If no command arg but tool looks exec-like, also block
                 if is_exec_like_tool(params) && extract_requested_binary(params).is_none() {
                     return Some(format!(
-                        "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
-                         but no command could be extracted to verify against the allowlist.",
-                        guild_name, list
+                        "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution allowlist {list:?}, \
+                         but no command could be extracted to verify against the allowlist."
                     ));
                 }
             }
@@ -203,8 +202,8 @@ pub fn enforce_capabilities(
                 .unwrap_or(false);
             if is_exec_tool || has_command_arg {
                 return Some(format!(
-                    "CAPABILITY_BLOCKED: guild '{}' declares process_execution=false. \
-                     This guild may not execute system commands.", guild_name
+                    "CAPABILITY_BLOCKED: guild '{guild_name}' declares process_execution=false. \
+                     This guild may not execute system commands."
                 ));
             }
         }
@@ -229,9 +228,8 @@ pub fn enforce_capabilities(
                     });
                     if !allowed {
                         return Some(format!(
-                            "CAPABILITY_BLOCKED: guild '{}' declares filesystem_scope={:?}, \
-                             but argument '{}' references path '{}' outside that scope.",
-                            guild_name, scope_paths, path_key, arg_val
+                            "CAPABILITY_BLOCKED: guild '{guild_name}' declares filesystem_scope={scope_paths:?}, \
+                             but argument '{path_key}' references path '{arg_val}' outside that scope."
                         ));
                     }
                 }
@@ -307,10 +305,10 @@ impl GuildProcess {
     /// Get a human-readable description of the guild.
     pub fn description(&self) -> String {
         match &self.launcher {
-            GuildLauncher::Python { module_path } => format!("Python guild: {}", module_path),
+            GuildLauncher::Python { module_path } => format!("Python guild: {module_path}"),
             GuildLauncher::External { command, args, .. } => format!("External: {} {}", command, args.join(" ")),
-            GuildLauncher::Http { url, .. } => format!("HTTP MCP: {}", url),
-            GuildLauncher::Sse { sse_url, .. } => format!("SSE MCP: {}", sse_url),
+            GuildLauncher::Http { url, .. } => format!("HTTP MCP: {url}"),
+            GuildLauncher::Sse { sse_url, .. } => format!("SSE MCP: {sse_url}"),
         }
     }
 
@@ -397,7 +395,7 @@ GuildLauncher::Python { module_path } => {
                     // Strip Windows UNC prefix (\\?\) that canonicalize() adds — Docker doesn't understand it
                     let ws_path = workspace_root.display().to_string();
                     let ws_clean = ws_path.strip_prefix(r"\\?\").unwrap_or(&ws_path);
-                    let volume_bind = format!("{}:/workspace:ro", ws_clean);
+                    let volume_bind = format!("{ws_clean}:/workspace:ro");
                     let mut docker_cmd = Command::new("docker");
                     docker_cmd.args([
                         "run", "--rm",
@@ -662,7 +660,7 @@ GuildLauncher::Python { module_path } => {
                             catalog.iter()
                                 .find(|d| d.name == self.name)
                                 .and_then(|d| d.capabilities.as_ref())
-                                .map(|caps| is_destructive_guild(caps))
+                                .map(is_destructive_guild)
                                 .unwrap_or(false)
                         }
                     };
@@ -910,7 +908,7 @@ impl GuildRegistry {
                         if !self.guilds.contains_key(&name) && name != "__init__" {
                             info!("🔍 [T24] Discovered unregistered Python guild: {}", name);
                             // Auto-register as python module
-                            self.register(&name, &format!("guilds.{}", name), false, None);
+                            self.register(&name, &format!("guilds.{name}"), false, None);
                             discovered.push(name);
                         }
                     }
@@ -1181,7 +1179,7 @@ impl GuildRegistry {
                 }
             }
         } else {
-            bail!("Unknown guild: '{}'", guild_name);
+            bail!("Unknown guild: '{guild_name}'");
         }
     }
 
@@ -1227,7 +1225,7 @@ impl GuildRegistry {
                 name: safe_name,
                 guild_type: guild_type.to_string(),
                 status: IngestStatus::AlreadyRegistered,
-                message: format!("Guild '{}' is already registered. Kill it first to re-ingest.", name),
+                message: format!("Guild '{name}' is already registered. Kill it first to re-ingest."),
             };
         }
 
@@ -1238,7 +1236,7 @@ impl GuildRegistry {
                 let module_name = safe_name.replace('-', "_");
                 let ep = if entry_point.is_empty() { "main" } else { entry_point };
                 // We use the guilds_workspace package under data/
-                let module_path = format!("guilds_workspace.{}.{}", module_name, ep);
+                let module_path = format!("guilds_workspace.{module_name}.{ep}");
 
                 self.register(&safe_name, &module_path, false, None);
                 info!("📦 [Ingest] Registered FastMCP Python guild '{}' → {}", safe_name, module_path);
@@ -1247,7 +1245,7 @@ impl GuildRegistry {
                     name: safe_name,
                     guild_type: guild_type.to_string(),
                     status: IngestStatus::Registered,
-                    message: format!("Registered as Python module '{}'", module_path),
+                    message: format!("Registered as Python module '{module_path}'"),
                 }
             }
             "node-mcp" => {
@@ -1268,7 +1266,7 @@ impl GuildRegistry {
                     name: safe_name,
                     guild_type: guild_type.to_string(),
                     status: IngestStatus::Registered,
-                    message: format!("Registered as Node MCP server (entry: {})", ep),
+                    message: format!("Registered as Node MCP server (entry: {ep})"),
                 }
             }
             other => {
@@ -1277,9 +1275,8 @@ impl GuildRegistry {
                     guild_type: other.to_string(),
                     status: IngestStatus::Unsupported,
                     message: format!(
-                        "Guild type '{}' is not yet supported for automatic registration. \
-                         Supported: fastmcp-python, node-mcp.",
-                        other
+                        "Guild type '{other}' is not yet supported for automatic registration. \
+                         Supported: fastmcp-python, node-mcp."
                     ),
                 }
             }
@@ -1414,9 +1411,8 @@ pub async fn find_python() -> Result<String> {
     }
 
     bail!(
-        "Python 3 not found. Tried: {:?}. \
-         Please install Python 3.10+ and ensure it's in your PATH.",
-        candidates
+        "Python 3 not found. Tried: {candidates:?}. \
+         Please install Python 3.10+ and ensure it's in your PATH."
     )
 }
 

@@ -130,7 +130,7 @@ impl JournalDb {
             .unwrap_or_default();
 
         // Chain hash: SHA-256 of (prev_hash || timestamp || agent_id || guild || tool || status)
-        let chain_input = format!("{}|{}|{}|{}|{}|{}", prev_hash, now, agent_id, guild, tool, status);
+        let chain_input = format!("{prev_hash}|{now}|{agent_id}|{guild}|{tool}|{status}");
         use sha2::Digest;
         let hash = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
 
@@ -218,7 +218,7 @@ impl JournalDb {
                 continue;
             }
             // Recompute hash
-            let chain_input = format!("{}|{}|{}|{}|{}|{}", stored_prev, ts, agent, guild, tool, status);
+            let chain_input = format!("{stored_prev}|{ts}|{agent}|{guild}|{tool}|{status}");
             use sha2::Digest;
             let computed = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
             if computed != stored_hash {

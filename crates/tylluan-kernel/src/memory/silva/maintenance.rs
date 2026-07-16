@@ -106,9 +106,9 @@ impl super::SilvaDB {
                     let weight_a = episodes[i].2;
                     let weight_b = episodes[j].2;
 
-                    let combined = format!("{}:{}", id_a, id_b);
+                    let combined = format!("{id_a}:{id_b}");
                     let hash: u64 = combined.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-                    let concept_id = format!("concept:merged:{:x}", hash);
+                    let concept_id = format!("concept:merged:{hash:x}");
 
                     let content = if episodes[i].1.len() >= episodes[j].1.len() {
                         episodes[i].1.clone()

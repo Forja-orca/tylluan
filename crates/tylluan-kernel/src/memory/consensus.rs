@@ -138,7 +138,7 @@ impl ConsensusEngine {
 
             if current_group.len() > 1 {
                 // Use the first node's ID as cluster identifier
-                let cluster_id = format!("semantic_cluster_{}", id_a);
+                let cluster_id = format!("semantic_cluster_{id_a}");
                 info!("⚖️ Semantic Cluster formed: {} ({} nodes)", cluster_id, current_group.len());
                 groups.insert(cluster_id, current_group);
             }

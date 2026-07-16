@@ -118,12 +118,8 @@ pub async fn bearer_auth_middleware(
 
     // Determine if request is authorized and resolve ACL role
     let is_authorized = {
-        // 1. Explicit Public Bypass
-        if is_public_bypass_path(uri) {
-            true
-        }
-        // 2. Dev Mode Bypass
-        else if state.dev_mode.unwrap_or(false) {
+        // 1. Explicit Public Bypass, or 2. Dev Mode Bypass
+        if is_public_bypass_path(uri) || state.dev_mode.unwrap_or(false) {
             true
         }
         // 3. Token Authentication (Header or Query)

@@ -119,7 +119,7 @@ pub fn run_pre_hooks(rules: &[HookRule], tool_name: &str, args: &mut serde_json:
                 };
                 if matched {
                     return PreHookOutcome::Deny(
-                        rule.message.clone().unwrap_or_else(|| format!("Blocked by pre-hook on '{}'", tool_name))
+                        rule.message.clone().unwrap_or_else(|| format!("Blocked by pre-hook on '{tool_name}'"))
                     );
                 }
             }
@@ -134,7 +134,7 @@ pub fn run_pre_hooks(rules: &[HookRule], tool_name: &str, args: &mut serde_json:
             }
             HookAction::InjectContext => {
                 if let Some(inject) = &rule.inject {
-                    let combined = format!("{}\n{}", inject, text);
+                    let combined = format!("{inject}\n{text}");
                     args.insert(field.to_string(), Value::String(combined));
                 }
             }
@@ -166,7 +166,7 @@ pub fn run_post_hooks(rules: &[HookRule], tool_name: &str, content_texts: &mut [
             HookAction::InjectContext => {
                 if let Some(inject) = &rule.inject {
                     for text in content_texts.iter_mut() {
-                        *text = format!("{}\n{}", inject, text);
+                        *text = format!("{inject}\n{text}");
                     }
                 }
             }

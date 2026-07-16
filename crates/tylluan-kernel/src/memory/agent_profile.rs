@@ -25,7 +25,7 @@ pub struct AgentProfileStore {
 impl AgentProfileStore {
     pub fn new(db_path: &str) -> Result<Self> {
         let conn = crate::config::open_db(std::path::Path::new(db_path))
-            .with_context(|| format!("Failed to open agent profile DB: {}", db_path))?;
+            .with_context(|| format!("Failed to open agent profile DB: {db_path}"))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS agent_profiles (
                 agent_id TEXT PRIMARY KEY,

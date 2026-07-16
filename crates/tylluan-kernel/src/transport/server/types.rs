@@ -193,7 +193,7 @@ impl TylluanTool {
     pub fn to_mcp(&self) -> Tool {
         let category_tag = serde_json::to_string(&self.category).unwrap_or_default().replace('"', "").to_uppercase();
         let risk_tag = serde_json::to_string(&self.risk).unwrap_or_default().replace('"', "").to_uppercase();
-        let tag = format!("[{}] [{}]", category_tag, risk_tag);
+        let tag = format!("[{category_tag}] [{risk_tag}]");
         
         let mut desc = format!("{} {}", tag, self.description);
         if !self.subtools.is_empty() {

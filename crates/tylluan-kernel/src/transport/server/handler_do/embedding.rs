@@ -56,7 +56,7 @@ pub(crate) fn distill_for_embedding(intent: &str, output_preview: &str) -> Strin
         }
     } else {
         let preview: String = output.chars().take(200).collect();
-        format!("{}: {}", intent, preview)
+        format!("{intent}: {preview}")
     }
 }
 

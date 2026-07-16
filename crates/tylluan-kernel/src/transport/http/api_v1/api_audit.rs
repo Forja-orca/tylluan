@@ -8,9 +8,9 @@ pub async fn audit_verify() -> impl axum::response::IntoResponse {
             let message = if ok == 0 && bad == 0 {
                 "No audit entries yet.".to_string()
             } else if bad == 0 {
-                format!("✅ Chain integrity verified — {} entries intact.", ok)
+                format!("✅ Chain integrity verified — {ok} entries intact.")
             } else {
-                format!("🚨 Chain broken — {} valid, {} tampered entries.", ok, bad)
+                format!("🚨 Chain broken — {ok} valid, {bad} tampered entries.")
             };
             (axum::http::StatusCode::OK, Json(serde_json::json!({
                 "ok": true,

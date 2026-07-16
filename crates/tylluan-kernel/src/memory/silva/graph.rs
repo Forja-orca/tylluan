@@ -204,8 +204,7 @@ impl super::SilvaDB {
                         .collect::<Vec<_>>()
                         .join(",");
                     let edges_query = format!(
-                        "SELECT source, target FROM edges WHERE source IN ({}) OR target IN ({})",
-                        placeholders, placeholders
+                        "SELECT source, target FROM edges WHERE source IN ({placeholders}) OR target IN ({placeholders})"
                     );
                     let mut stmt = conn.prepare(&edges_query)?;
                     let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter().chain(chunk.iter())))?;
@@ -238,7 +237,7 @@ impl super::SilvaDB {
                 let placeholders = std::iter::repeat_n("?", chunk.len())
                     .collect::<Vec<_>>()
                     .join(",");
-                let query = format!("SELECT source, target FROM edges WHERE source IN ({})", placeholders);
+                let query = format!("SELECT source, target FROM edges WHERE source IN ({placeholders})");
                 let mut stmt = conn.prepare(&query)?;
                 let mut rows = stmt.query(rusqlite::params_from_iter(chunk))?;
                 while let Some(row) = rows.next()? {
@@ -365,12 +364,10 @@ impl super::SilvaDB {
             for id in node_ids {
                 if *out_degree.get(id).unwrap_or(&0) == 0 {
                     dangling_sum += pr[id];
-                } else {
-                    if let Some(neighbors) = adj.get(id) {
-                        for neighbor in neighbors {
-                            if let Some(score) = next_pr.get_mut(neighbor) {
-                                *score += damping * pr[id] / out_degree[id] as f64;
-                            }
+                } else if let Some(neighbors) = adj.get(id) {
+                    for neighbor in neighbors {
+                        if let Some(score) = next_pr.get_mut(neighbor) {
+                            *score += damping * pr[id] / out_degree[id] as f64;
                         }
                     }
                 }
@@ -424,7 +421,7 @@ impl super::SilvaDB {
                     } else {
                         content.clone()
                     };
-                    summary.push_str(&format!("- {}\n", preview));
+                    summary.push_str(&format!("- {preview}\n"));
                 }
                 if contents.len() > 3 {
                     summary.push_str(&format!("  ... and {} more\n", contents.len() - 3));
@@ -459,6 +456,7 @@ impl super::SilvaDB {
     /// IVF Autobuild: builds cluster centroids from node_embeddings when:
     ///   - embedding count > IVF_MIN_VECTORS (50)
     ///   - cluster_centroids table is empty
+    ///
     /// Returns IvfBuildResult with skipped=true if conditions are not met.
     pub async fn consolidate_ivf_index(&self) -> anyhow::Result<IvfBuildResult> {
         use crate::memory::ivf_index::{kmeans_plus_plus, IVFOptions};
@@ -586,7 +584,7 @@ impl super::SilvaDB {
                     &node_ids,
                     &vectors,
                     dim,
-                    nlist as u32,
+                    nlist,
                     &centroids,
                     &assignments,
                 ) {
@@ -683,8 +681,7 @@ impl super::SilvaDB {
                     .collect::<Vec<_>>()
                     .join(",");
                 let sql = format!(
-                    "SELECT source, target FROM edges WHERE source IN ({}) OR target IN ({})",
-                    placeholders, placeholders
+                    "SELECT source, target FROM edges WHERE source IN ({placeholders}) OR target IN ({placeholders})"
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter().chain(chunk.iter())))?;
@@ -807,8 +804,8 @@ mod tests {
 
         // Insertar 200 nodos con embeddings sintéticos (1024-dim)
         for i in 0..200usize {
-            let node_id = format!("bench_node_{}", i);
-            db.upsert_node(&node_id, "bench", &format!("contenido bench {}", i), "{}").await.unwrap();
+            let node_id = format!("bench_node_{i}");
+            db.upsert_node(&node_id, "bench", &format!("contenido bench {i}"), "{}").await.unwrap();
             // Embedding sintético: vector con varianza real para que Louvain forme clusters
             let mut emb = vec![0.0f32; 1024];
             let cluster = i % 8;
@@ -844,8 +841,8 @@ mod tests {
 
         // 60 nodos con embeddings (supera el umbral de 50)
         for i in 0..60usize {
-            let node_id = format!("qtest_node_{}", i);
-            db.upsert_node(&node_id, "qtest", &format!("query test {}", i), "{}").await.unwrap();
+            let node_id = format!("qtest_node_{i}");
+            db.upsert_node(&node_id, "qtest", &format!("query test {i}"), "{}").await.unwrap();
             let mut emb = vec![0.0f32; 64];
             emb[i % 64] = 1.0;
             let emb_bytes: Vec<u8> = emb.iter().flat_map(|v| v.to_le_bytes()).collect();

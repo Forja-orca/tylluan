@@ -62,11 +62,11 @@ impl OAuthState {
             jti
         );
         let payload = URL_SAFE_NO_PAD.encode(claims.as_bytes());
-        let signing_input = format!("{}.{}", header, payload);
+        let signing_input = format!("{header}.{payload}");
         let mut mac = HmacSha256::new_from_slice(&self.inner.secret).expect("valid HMAC key");
         mac.update(signing_input.as_bytes());
         let sig = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-        format!("{}.{}", signing_input, sig)
+        format!("{signing_input}.{sig}")
     }
 
     pub fn validate_bearer(&self, token: &str) -> bool {

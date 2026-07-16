@@ -34,7 +34,7 @@ pub fn extract_triples_local(content: &str) -> Vec<(String, String, String)> {
             if subj.is_empty() || obj.is_empty() || subj.len() > 40 || obj.len() > 40 {
                 continue;
             }
-            let key = format!("{}|{}|{}", subj, predicate, obj);
+            let key = format!("{subj}|{predicate}|{obj}");
             if seen.insert(key) {
                 triples.push((subj, predicate.to_string(), obj));
             }

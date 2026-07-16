@@ -3,7 +3,7 @@ use serde::Serialize;
 /// Serialize a value to pretty JSON, returning a safe error string on failure.
 pub fn json_pretty(v: &impl Serialize) -> String {
     serde_json::to_string_pretty(v)
-        .unwrap_or_else(|e| format!("{{\"error\":\"serialization failed: {}\"}}", e))
+        .unwrap_or_else(|e| format!("{{\"error\":\"serialization failed: {e}\"}}"))
 }
 
 /// Extract the most likely filesystem path from a natural-language intent.

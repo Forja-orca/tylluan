@@ -10,7 +10,7 @@ static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn tmp_identity_path(tag: &str) -> PathBuf {
     let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("tylluan_mesh_{}_{}.key", tag, id))
+    std::env::temp_dir().join(format!("tylluan_mesh_{tag}_{id}.key"))
 }
 
 // ─── Unit-level identity tests ───────────────────────────────────────────────

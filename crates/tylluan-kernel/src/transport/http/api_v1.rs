@@ -543,7 +543,7 @@ pub async fn mcp_handler(
                 }
             }
             let _ = state.broadcast_tx.send(serde_json::json!({ "type": "tool_call", "status": "started", "tool": &tool_name, "intent": &intent, "agent_id": &mcp_agent_id, "ts": chrono::Utc::now().timestamp_millis() }));
-            let _ = state.silva.touch_node(&format!("agent:{}", mcp_agent_id), &mcp_agent_id, &format!("tool_call:{}", tool_name)).await;
+            let _ = state.silva.touch_node(&format!("agent:{mcp_agent_id}"), &mcp_agent_id, &format!("tool_call:{tool_name}")).await;
             let request = CallToolRequestParam { name: tool_name.clone().into(), arguments: Some(arguments.as_object().cloned().unwrap_or_default()) };
             
             // handle_call_internal is a trait method
@@ -941,8 +941,8 @@ async fn blackboard_task_done_handler(
             let task_id = msg_id.clone();
             let result = req.result.clone();
             tokio::spawn(async move {
-                let episode_id = format!("bb_episode:{}", task_id);
-                let content = format!("Blackboard task completed | id:{} | {}", task_id, result);
+                let episode_id = format!("bb_episode:{task_id}");
+                let content = format!("Blackboard task completed | id:{task_id} | {result}");
                 let meta = serde_json::json!({"source":"blackboard_drain","task_id": task_id}).to_string();
                 if let Err(e) = silva.upsert_node(&episode_id, "episode", &content, &meta).await {
                     tracing::warn!("blackboard drain failed: {}", e);

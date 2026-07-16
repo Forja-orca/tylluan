@@ -22,7 +22,7 @@ fn calculate_reputation(success_rate: f64, avg_latency_ms: f64, total_calls: u64
         success_rate * 0.40
     };
     let score = if avg_latency_ms > 5000.0 { score - 0.10 } else { score };
-    score.max(0.0).min(1.0)
+    score.clamp(0.0, 1.0)
 }
 
 pub async fn collective_pulse_handler(
@@ -194,7 +194,7 @@ pub async fn collective_suggest_handler(
         let srv = srv_arc.read().await;
         if let Some(ref ap) = srv.agent_profiles {
             match ap.lock() {
-                Ok(g) => match g.get_domain_reputation() { Ok(v) => v, Err(_) => vec![] },
+                Ok(g) => g.get_domain_reputation().unwrap_or_default(),
                 Err(_) => vec![],
             }
         } else { vec![] }

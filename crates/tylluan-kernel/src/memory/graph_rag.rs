@@ -101,7 +101,7 @@ impl GraphRagManager {
                 })
                 .cloned()
                 .unwrap_or_else(|| comp[0].clone());
-            let cluster_id = format!("cluster:{}", hub_id);
+            let cluster_id = format!("cluster:{hub_id}");
 
             let sample: Vec<String> = comp.into_iter().take(20).collect();
             let mut nodes = Vec::new();
@@ -125,7 +125,7 @@ impl GraphRagManager {
     /// Save a generated summary to both the nodes table and the cluster_summaries table.
     /// Bug fix: previous version had wrong add_edge argument order.
     pub async fn save_summary(&self, cluster_id: &str, summary: &str, member_ids: Vec<String>) -> Result<String> {
-        let node_id = format!("graphrag_summary:{}", cluster_id);
+        let node_id = format!("graphrag_summary:{cluster_id}");
         let metadata = serde_json::json!({
             "type": "cluster_summary",
             "member_count": member_ids.len(),

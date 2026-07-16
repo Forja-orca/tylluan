@@ -97,7 +97,7 @@ impl RegistryActor {
                             {
                                 let mut reg = registry.write().await;
                                 if !reg.guilds.contains_key(&guild_name) {
-                                    let _ = resp.send(Err(anyhow::anyhow!("Guild '{}' not found", guild_name)));
+                                    let _ = resp.send(Err(anyhow::anyhow!("Guild '{guild_name}' not found")));
                                     return;
                                 }
                                 if attempt > 0
@@ -151,7 +151,7 @@ impl RegistryActor {
                             // Step 3: Execute tool call outside of any lock!
                             let permit = semaphore.acquire()
                                 .await
-                                .map_err(|_| anyhow::anyhow!("Guild '{}' semaphore closed", guild_name));
+                                .map_err(|_| anyhow::anyhow!("Guild '{guild_name}' semaphore closed"));
 
                             let call_start = std::time::Instant::now();
                             let call_result = match permit {
@@ -161,10 +161,10 @@ impl RegistryActor {
                                         match tokio::time::timeout(timeout_dur, call_fut).await {
                                             Ok(Ok(res)) => res,
                                             Ok(Err(e)) => {
-                                                crate::registry::proxy::error_result(&format!("GUILD_ERROR|{}|{}", guild_name, e))
+                                                crate::registry::proxy::error_result(&format!("GUILD_ERROR|{guild_name}|{e}"))
                                             }
                                             Err(_) => {
-                                                crate::registry::proxy::error_result(&format!("GUILD_TIMEOUT|{}|{}s", guild_name, timeout_secs))
+                                                crate::registry::proxy::error_result(&format!("GUILD_TIMEOUT|{guild_name}|{timeout_secs}s"))
                                             }
                                         }
                                     } else {
@@ -175,13 +175,13 @@ impl RegistryActor {
                                         match call_fut.await {
                                             Ok(res) => res,
                                             Err(e) => {
-                                                crate::registry::proxy::error_result(&format!("GUILD_ERROR|{}|{}", guild_name, e))
+                                                crate::registry::proxy::error_result(&format!("GUILD_ERROR|{guild_name}|{e}"))
                                             }
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    crate::registry::proxy::error_result(&format!("Guild '{}' semaphore error: {}", guild_name, e))
+                                    crate::registry::proxy::error_result(&format!("Guild '{guild_name}' semaphore error: {e}"))
                                 }
                             };
                             let latency = call_start.elapsed().as_millis() as u64;
@@ -240,7 +240,7 @@ impl RegistryActor {
                             attempt += 1;
                         }
 
-                        let _ = resp.send(final_result.unwrap_or_else(|| Err(anyhow::anyhow!("Guild '{}' call failed after all retries", guild_name))));
+                        let _ = resp.send(final_result.unwrap_or_else(|| Err(anyhow::anyhow!("Guild '{guild_name}' call failed after all retries"))));
                     });
                 }
                 RegistryMessage::StatusAll { resp } => {
@@ -284,7 +284,7 @@ impl RegistryActor {
                     let result = if let Some(guild) = reg.guilds.get_mut(&name) {
                         guild.kill().await
                     } else {
-                        Err(anyhow::anyhow!("Guild '{}' not found", name))
+                        Err(anyhow::anyhow!("Guild '{name}' not found"))
                     };
                     let _ = resp.send(result);
                 }
@@ -300,7 +300,7 @@ impl RegistryActor {
                         info!("🔄 [T13] Backoff reset for guild '{}'", name);
                         Ok(())
                     } else {
-                        Err(anyhow::anyhow!("Guild '{}' not found", name))
+                        Err(anyhow::anyhow!("Guild '{name}' not found"))
                     };
                     let _ = resp.send(result);
                 }

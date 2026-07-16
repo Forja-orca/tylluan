@@ -144,7 +144,7 @@ async fn test_blackboard_post_task_creates_pending_node() {
         "content": "@pending:task_001 — analyze auth module",
         "importance": 0.9
     })).await;
-    assert!(res["error"].is_null(), "remember failed: {:?}", res);
+    assert!(res["error"].is_null(), "remember failed: {res:?}");
 
     let count = state.silva.node_count().await.unwrap();
     assert!(count > 0, "SilvaDB should have a node after remember");
@@ -163,7 +163,7 @@ async fn test_blackboard_recall_inbox_finds_pending() {
     })).await;
 
     let res = mcp_call(app, "tylluan_recall", json!({"query": "@pending"})).await;
-    assert!(res["error"].is_null(), "recall failed: {:?}", res);
+    assert!(res["error"].is_null(), "recall failed: {res:?}");
     let text = extract_text(&res);
     assert!(!text.is_empty(), "recall @pending should return non-empty text");
 }
@@ -180,7 +180,7 @@ async fn test_blackboard_context_prefix_accessible() {
 
     let res = mcp_call(app, "tylluan_recall", json!({"query": "@context sprint-o"})).await;
     let text = extract_text(&res);
-    assert!(!text.is_empty(), "recall @context should return content: {}", text);
+    assert!(!text.is_empty(), "recall @context should return content: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -194,7 +194,7 @@ async fn test_blackboard_completed_marks_task() {
     })).await;
 
     let res = mcp_call(app, "tylluan_recall", json!({"query": "@completed"})).await;
-    assert!(res["error"].is_null(), "recall failed: {:?}", res);
+    assert!(res["error"].is_null(), "recall failed: {res:?}");
     let count = state.silva.node_count().await.unwrap();
     assert!(count > 0, "silva should have the completed node");
 }
@@ -223,11 +223,11 @@ async fn test_blackboard_full_workflow() {
 
     // Step 4: recall @completed should surface task_analyze
     let res = mcp_call(app, "tylluan_recall", json!({"query": "@completed task_analyze"})).await;
-    assert!(res["error"].is_null(), "recall failed: {:?}", res);
+    assert!(res["error"].is_null(), "recall failed: {res:?}");
 
     // Step 5: at least 3 nodes
     let count = state.silva.node_count().await.unwrap();
-    assert!(count >= 3, "Expected >= 3 nodes, got {}", count);
+    assert!(count >= 3, "Expected >= 3 nodes, got {count}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -243,7 +243,7 @@ async fn test_blackboard_api_endpoint() {
     let status = resp.status().as_u16();
     // 200 if endpoint exists, 404 if not yet implemented — both are non-crash
     assert!(status == 200 || status == 404,
-        "Unexpected status {}: endpoint should either work or 404, not 500", status);
+        "Unexpected status {status}: endpoint should either work or 404, not 500");
 
     if status == 200 {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();

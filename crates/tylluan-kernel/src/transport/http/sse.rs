@@ -64,9 +64,9 @@ async fn sse_handler(
 
     let rx = state.broadcast_tx.subscribe();
     
-    let mut endpoint_url = format!("/messages?sessionId={}", session_id);
+    let mut endpoint_url = format!("/messages?sessionId={session_id}");
     if let Some(t) = &params.token {
-        endpoint_url.push_str(&format!("&token={}", t));
+        endpoint_url.push_str(&format!("&token={t}"));
     }
     
     let initial_event = Event::default()
@@ -290,6 +290,7 @@ async fn download_sse_handler(
 }
 
 /// Spawns the global heartbeat loop for SSE clients.
+#[allow(clippy::too_many_arguments)] // wires distinct kernel subsystems into one background task; grouping into a struct would just move the same coupling
 pub fn spawn_heartbeat(
     broadcast_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
     start_time: std::time::Instant,

@@ -50,31 +50,31 @@ pub fn noise_encrypt_payload(
     peer_pubkey_hex: &str,
 ) -> anyhow::Result<Vec<u8>> {
     let peer_ed = hex::decode(peer_pubkey_hex)
-        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {e}"))?;
     if peer_ed.len() != 32 {
         anyhow::bail!("peer pubkey must be 32 bytes");
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&peer_ed);
     let peer_pk = VerifyingKey::from_bytes(&arr)
-        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {e}"))?;
     let peer_x_pub = ed25519_pub_to_x25519(&peer_pk);
 
     let my_sk = ed25519_secret_to_x25519(identity.signing_key());
     let params: snow::params::NoiseParams = NK_PARAMS.parse()
-        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {e}"))?;
 
     let mut initiator: HandshakeState = Builder::new(params)
         .local_private_key(&my_sk)
-        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise local key: {e}"))?
         .remote_public_key(&peer_x_pub)
-        .map_err(|e| anyhow::anyhow!("Noise remote key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise remote key: {e}"))?
         .build_initiator()
-        .map_err(|e| anyhow::anyhow!("Noise NK initiator: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise NK initiator: {e}"))?;
 
     let mut buf = vec![0u8; data.len() + 100];
     let n = initiator.write_message(data, &mut buf)
-        .map_err(|e| anyhow::anyhow!("Noise NK encrypt: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise NK encrypt: {e}"))?;
     buf.truncate(n);
     Ok(buf)
 }
@@ -87,28 +87,28 @@ pub fn noise_decrypt_payload(
     peer_pubkey_hex: &str,
 ) -> anyhow::Result<Vec<u8>> {
     let peer_ed = hex::decode(peer_pubkey_hex)
-        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid peer pubkey hex: {e}"))?;
     if peer_ed.len() != 32 {
         anyhow::bail!("peer pubkey must be 32 bytes");
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&peer_ed);
     let _peer_pk = VerifyingKey::from_bytes(&arr)
-        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid peer Ed25519 pubkey: {e}"))?;
 
     let my_sk = ed25519_secret_to_x25519(identity.signing_key());
     let params: snow::params::NoiseParams = NK_PARAMS.parse()
-        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {e}"))?;
 
     let mut responder: HandshakeState = Builder::new(params)
         .local_private_key(&my_sk)
-        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise local key: {e}"))?
         .build_responder()
-        .map_err(|e| anyhow::anyhow!("Noise NK responder: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise NK responder: {e}"))?;
 
     let mut buf = vec![0u8; data.len() + 100];
     let n = responder.read_message(data, &mut buf)
-        .map_err(|e| anyhow::anyhow!("Noise NK decrypt: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise NK decrypt: {e}"))?;
     buf.truncate(n);
     Ok(buf)
 }
@@ -190,13 +190,13 @@ pub async fn noise_accept(
 ) -> Result<NoisedPipe, anyhow::Error> {
     let sk_bytes = ed25519_secret_to_x25519(identity.signing_key());
     let params: snow::params::NoiseParams = NOISE_PARAMS.parse()
-        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {e}"))?;
 
     let mut responder: HandshakeState = Builder::new(params)
         .local_private_key(&sk_bytes)
-        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise local key: {e}"))?
         .build_responder()
-        .map_err(|e| anyhow::anyhow!("Noise responder: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise responder: {e}"))?;
 
     let mut buf = [0u8; 4096];
 
@@ -211,11 +211,11 @@ pub async fn noise_accept(
     stream.read_exact(&mut msg).await?;
     let mut _payload = [0u8; 4096];
     responder.read_message(&msg, &mut _payload)
-        .map_err(|e| anyhow::anyhow!("Noise read msg1: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise read msg1: {e}"))?;
 
     // Write ←e, ee — with length prefix
     let n = responder.write_message(&[], &mut buf)
-        .map_err(|e| anyhow::anyhow!("Noise write msg2: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise write msg2: {e}"))?;
     let resp_len = (n as u16).to_be_bytes();
     stream.write_all(&resp_len).await?;
     stream.write_all(&buf[..n]).await?;
@@ -227,7 +227,7 @@ pub async fn noise_accept(
     let mut msg = vec![0u8; msg_len];
     stream.read_exact(&mut msg).await?;
     responder.read_message(&msg, &mut _payload)
-        .map_err(|e| anyhow::anyhow!("Noise read msg3: {} (len={})", e, msg_len))?;
+        .map_err(|e| anyhow::anyhow!("Noise read msg3: {e} (len={msg_len})"))?;
 
     // Extract initiator's X25519 static key before consuming handshake state.
     // In XK the responder learns the initiator's static key during msg3.
@@ -238,7 +238,7 @@ pub async fn noise_accept(
         .unwrap_or_else(|| "noise-peer".to_string());
 
     let state = responder.into_transport_mode()
-        .map_err(|e| anyhow::anyhow!("Noise transport mode: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise transport mode: {e}"))?;
 
     let peer_addr = stream.peer_addr().unwrap_or(SocketAddr::from(([0,0,0,0], 0)));
     info!("Noise handshake accepted from {} (peer_id: {})", peer_addr, peer_id);
@@ -257,33 +257,33 @@ pub async fn noise_connect(
     remote_pubkey_hex: &str,
 ) -> Result<NoisedPipe, anyhow::Error> {
     let remote_ed_pub = hex::decode(remote_pubkey_hex)
-        .map_err(|e| anyhow::anyhow!("invalid hex pubkey: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid hex pubkey: {e}"))?;
     if remote_ed_pub.len() != 32 {
         anyhow::bail!("pubkey must be 32 bytes");
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&remote_ed_pub);
     let remote_pk = VerifyingKey::from_bytes(&arr)
-        .map_err(|e| anyhow::anyhow!("invalid Ed25519 pubkey: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid Ed25519 pubkey: {e}"))?;
     let remote_x_pub = ed25519_pub_to_x25519(&remote_pk);
 
     let sk_bytes = ed25519_secret_to_x25519(identity.signing_key());
     let params: snow::params::NoiseParams = NOISE_PARAMS.parse()
-        .map_err(|e| anyhow::anyhow!("invalid Noise params: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid Noise params: {e}"))?;
 
     let mut initiator: HandshakeState = Builder::new(params)
         .local_private_key(&sk_bytes)
-        .map_err(|e| anyhow::anyhow!("Noise local key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise local key: {e}"))?
         .remote_public_key(&remote_x_pub)
-        .map_err(|e| anyhow::anyhow!("Noise remote key: {}", e))?
+        .map_err(|e| anyhow::anyhow!("Noise remote key: {e}"))?
         .build_initiator()
-        .map_err(|e| anyhow::anyhow!("Noise initiator: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise initiator: {e}"))?;
 
     let mut buf = [0u8; 4096];
 
     // Write →e, es — length-prefixed
     let n = initiator.write_message(&[], &mut buf)
-        .map_err(|e| anyhow::anyhow!("Noise write msg1: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise write msg1: {e}"))?;
     let msg_len = (n as u16).to_be_bytes();
     stream.write_all(&msg_len).await?;
     stream.write_all(&buf[..n]).await?;
@@ -297,18 +297,18 @@ pub async fn noise_connect(
     stream.read_exact(&mut msg).await?;
     let mut _payload = [0u8; 4096];
     initiator.read_message(&msg, &mut _payload)
-        .map_err(|e| anyhow::anyhow!("Noise read msg2: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise read msg2: {e}"))?;
 
     // Write →s, se — length-prefixed
     let n = initiator.write_message(&[], &mut buf)
-        .map_err(|e| anyhow::anyhow!("Noise write msg3: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise write msg3: {e}"))?;
     let msg_len = (n as u16).to_be_bytes();
     stream.write_all(&msg_len).await?;
     stream.write_all(&buf[..n]).await?;
     stream.flush().await?;
 
     let state = initiator.into_transport_mode()
-        .map_err(|e| anyhow::anyhow!("Noise transport mode: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Noise transport mode: {e}"))?;
 
     // Compute peer node_id the same way NodeIdentity does: SHA-256(ed25519_pubkey)[:16].
     let peer_id = node_id_from_ed25519_bytes(&arr);
@@ -334,7 +334,7 @@ mod tests {
 
     fn make_identity(label: &str) -> (NodeIdentity, std::path::PathBuf) {
         let id = NOISE_TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("tylluan_noise_{}_{}", label, id));
+        let dir = std::env::temp_dir().join(format!("tylluan_noise_{label}_{id}"));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("identity.key");
         let identity = NodeIdentity::load_or_create(&path).expect("should create identity");

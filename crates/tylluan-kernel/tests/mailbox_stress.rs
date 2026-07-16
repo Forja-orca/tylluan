@@ -28,8 +28,8 @@ mod stress {
         let db_path = "data/test_stress_mailbox.db";
         // Cleanup old
         let _ = std::fs::remove_file(db_path);
-        let _ = std::fs::remove_file(format!("{}-wal", db_path));
-        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+        let _ = std::fs::remove_file(format!("{db_path}-wal"));
+        let _ = std::fs::remove_file(format!("{db_path}-shm"));
         
         let mailbox = Arc::new(Mailbox::open(db_path).unwrap());
         mailbox.init().await.unwrap();
@@ -39,8 +39,8 @@ mod stress {
         // Small delay so SQLite releases WAL locks before cleanup
         tokio::time::sleep(Duration::from_millis(50)).await;
         let _ = std::fs::remove_file(db_path);
-        let _ = std::fs::remove_file(format!("{}-wal", db_path));
-        let _ = std::fs::remove_file(format!("{}-shm", db_path));
+        let _ = std::fs::remove_file(format!("{db_path}-wal"));
+        let _ = std::fs::remove_file(format!("{db_path}-shm"));
     }
 
     async fn run_stress_scenario(mailbox: Arc<Mailbox>, label: &str) {
@@ -54,9 +54,9 @@ mod stress {
         for p_id in 0..NUM_PRODUCERS {
             let mb = mailbox.clone();
             let handle = tokio::spawn(async move {
-                let sender = format!("producer-{}", p_id);
+                let sender = format!("producer-{p_id}");
                 for m_id in 0..MESSAGES_PER_PRODUCER {
-                    let payload = format!(r#"{{"data": "stress-test", "p": {}, "m": {}}}"#, p_id, m_id);
+                    let payload = format!(r#"{{"data": "stress-test", "p": {p_id}, "m": {m_id}}}"#);
                     mb.send_mail(&sender, "central-hub", &payload).await.expect("Producer failed to send mail");
                 }
             });

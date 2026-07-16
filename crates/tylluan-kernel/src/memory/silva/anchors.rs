@@ -32,8 +32,8 @@ impl super::SilvaDB {
     ) -> Result<()> {
         use sha2::{Sha256, Digest};
         let hash_bytes = Sha256::digest(intent.as_bytes());
-        let hash_str: String = hash_bytes[..6].iter().map(|b| format!("{:02x}", b)).collect();
-        let id = format!("routing_anchor:{}:{}", guild, hash_str);
+        let hash_str: String = hash_bytes[..6].iter().map(|b| format!("{b:02x}")).collect();
+        let id = format!("routing_anchor:{guild}:{hash_str}");
         let meta = serde_json::json!({"guild": guild, "source": source}).to_string();
         self.upsert_node(&id, "routing_anchor", intent, &meta).await?;
         if let Some(emb) = embedding {
@@ -102,7 +102,7 @@ impl super::SilvaDB {
                             topic_key, created_at, updated_at, last_touched, valid_from, valid_until, shareable
                      FROM nodes WHERE type = 'routing_anchor' AND metadata LIKE ?1 LIMIT ?2"
                 )?;
-                let pattern = format!("%\"guild\":\"{}\"%", g);
+                let pattern = format!("%\"guild\":\"{g}\"%");
                 stmt.query_map(params![pattern, limit as i64], |row| Ok(GraphNode {
                     id: row.get(0)?,
                     node_type: row.get(1)?,

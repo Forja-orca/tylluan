@@ -31,7 +31,7 @@ pub async fn get_config_handler() -> impl IntoResponse {
     match crate::config::TylluanConfig::load_cached() {
         Ok(c) => match c.try_read() {
             Ok(config) => Json(config.clone()).into_response(),
-            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Config lock poisoned: {}", e)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Config lock poisoned: {e}")).into_response(),
         },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
     }
@@ -57,7 +57,7 @@ pub async fn set_inference_device_handler(Json(req): Json<SetDeviceRequest>) -> 
     let new_raw: String = raw.lines().map(|l| {
         if !replaced && l.trim_start().starts_with("device") && l.contains('=') {
             replaced = true;
-            format!("device = \"{}\"", device)
+            format!("device = \"{device}\"")
         } else {
             l.to_string()
         }
@@ -111,7 +111,7 @@ pub async fn set_sandbox_profile_handler(Json(req): Json<SetSandboxProfileReques
             if in_sandbox_section { saw_sandbox_section = true; }
         } else if in_sandbox_section && !replaced && trimmed.starts_with("profile") && trimmed.contains('=') {
             replaced = true;
-            return format!("profile = \"{}\"", profile);
+            return format!("profile = \"{profile}\"");
         }
         l.to_string()
     }).collect::<Vec<_>>().join("\n");
@@ -126,7 +126,7 @@ pub async fn set_sandbox_profile_handler(Json(req): Json<SetSandboxProfileReques
             out.push_str(l);
             out.push('\n');
             if !inserted && l.trim_start().starts_with("[security.sandbox]") {
-                out.push_str(&format!("profile = \"{}\"\n", profile));
+                out.push_str(&format!("profile = \"{profile}\"\n"));
                 inserted = true;
             }
         }
@@ -190,7 +190,7 @@ pub async fn set_guild_sandbox_override_handler(
     // the table didn't already exist (verified via curl: "unknown variant
     // `bash`, expected one of `strict`, `balanced`, `permissive`").
     let quoted_guild = format!("\"{}\"", req.guild.trim());
-    let target_line = format!("{} = \"{}\"", quoted_guild, profile);
+    let target_line = format!("{quoted_guild} = \"{profile}\"");
 
     let mut in_guild_overrides = false;
     let mut replaced = false;
@@ -223,7 +223,7 @@ pub async fn set_guild_sandbox_override_handler(
             } else if in_override_section && trimmed.starts_with('[') {
                 // Next section — insert right before
                 if !inserted {
-                    out.push_str(&format!("{}\n", target_line));
+                    out.push_str(&format!("{target_line}\n"));
                     inserted = true;
                 }
                 in_override_section = false;
@@ -233,7 +233,7 @@ pub async fn set_guild_sandbox_override_handler(
         }
         // If section was the last thing in the file, append at the end
         if !inserted {
-            out.push_str(&format!("{}\n", target_line));
+            out.push_str(&format!("{target_line}\n"));
         }
         out
     } else {
@@ -822,7 +822,7 @@ pub async fn maintenance_export_handler(State(state): State<Arc<HttpState>>) -> 
     });
     (
         [
-            (CONTENT_DISPOSITION, format!("attachment; filename=\"tylluan-backup-{}.json\"", ts)),
+            (CONTENT_DISPOSITION, format!("attachment; filename=\"tylluan-backup-{ts}.json\"")),
             (CONTENT_TYPE, "application/json".to_string()),
         ],
         Json(body),

@@ -75,7 +75,7 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
 
     let req = CallToolRequestParam { name: tool.into(), arguments: args.as_object().cloned() };
     let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let _ = state.silva.touch_node(&format!("agent:{}", agent_id), agent_id, &format!("tool_call:{}", guild)).await;
+    let _ = state.silva.touch_node(&format!("agent:{agent_id}"), agent_id, &format!("tool_call:{guild}")).await;
     match state.registry.call_tool(&guild, req).await {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),

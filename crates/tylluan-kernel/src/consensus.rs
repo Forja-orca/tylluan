@@ -52,12 +52,12 @@ impl ConsensusEngine {
     }
 
     async fn find_similar(&self, content: &str, threshold: f64) -> Result<Option<(GraphNode, f64)>> {
-        let emb = self.silva.get_node_embedding(&format!("query:{}", content)).await?;
+        let emb = self.silva.get_node_embedding(&format!("query:{content}")).await?;
         let Some(emb) = emb else { return Ok(None); };
 
         let results = self.silva.search_vector(&emb, 5).await?;
         for (node, score) in results {
-            if score as f64 >= threshold && node.id != format!("query:{}", content) {
+            if score as f64 >= threshold && node.id != format!("query:{content}") {
                 return Ok(Some((node, score as f64)));
             }
         }
@@ -118,7 +118,7 @@ pub fn resolve_node_freshness(
     // Rule 2: Protected nodes are never overwritten.
     if local_protected {
         return FreshnessResolution::KeepLocal {
-            reason: format!("local node is protected"),
+            reason: "local node is protected".to_string(),
         };
     }
 
@@ -129,23 +129,23 @@ pub fn resolve_node_freshness(
     if remote_peer_priority > LOCAL_PEER_PRIORITY && remote_peer_priority <= 100 {
         // Remote has lower priority (higher number, in plausible range) → local wins
         return FreshnessResolution::KeepLocal {
-            reason: format!("local peer priority {} beats remote priority {}", LOCAL_PEER_PRIORITY, remote_peer_priority),
+            reason: format!("local peer priority {LOCAL_PEER_PRIORITY} beats remote priority {remote_peer_priority}"),
         };
     }
     if remote_peer_priority < LOCAL_PEER_PRIORITY && remote_peer_priority == 0 {
         // Remote has higher priority (0 = infra tier) → remote wins
         return FreshnessResolution::AcceptRemote {
-            reason: format!("remote peer priority {} beats local priority {}", remote_peer_priority, LOCAL_PEER_PRIORITY),
+            reason: format!("remote peer priority {remote_peer_priority} beats local priority {LOCAL_PEER_PRIORITY}"),
         };
     }
 
     // Rule 4: Timestamp comparison (ISO-8601 lexical works for same-length strings).
     match local_updated_at.cmp(remote_updated_at) {
         std::cmp::Ordering::Less => FreshnessResolution::AcceptRemote {
-            reason: format!("remote version is newer ({} > {})", remote_updated_at, local_updated_at),
+            reason: format!("remote version is newer ({remote_updated_at} > {local_updated_at})"),
         },
         std::cmp::Ordering::Greater => FreshnessResolution::KeepLocal {
-            reason: format!("local version is newer ({} > {})", local_updated_at, remote_updated_at),
+            reason: format!("local version is newer ({local_updated_at} > {remote_updated_at})"),
         },
         // Rule 5: Same timestamp → lexicographic peer ID tiebreak.
         std::cmp::Ordering::Equal => {
@@ -153,11 +153,11 @@ pub fn resolve_node_freshness(
             // Remote peer name is the tiebreaker.
             if remote_peer_name < "local" {
                 FreshnessResolution::AcceptRemote {
-                    reason: format!("tiebreak: remote peer '{}' < local", remote_peer_name),
+                    reason: format!("tiebreak: remote peer '{remote_peer_name}' < local"),
                 }
             } else {
                 FreshnessResolution::KeepLocal {
-                    reason: format!("tiebreak: local < remote peer '{}'", remote_peer_name),
+                    reason: format!("tiebreak: local < remote peer '{remote_peer_name}'"),
                 }
             }
         }

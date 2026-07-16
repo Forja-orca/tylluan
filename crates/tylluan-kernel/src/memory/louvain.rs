@@ -62,7 +62,7 @@ impl WeightedGraph {
                 let node_name = if phase == 1 {
                     current_graph.nodes[*current_comm].clone()
                 } else {
-                    format!("comm_{}", current_comm)
+                    format!("comm_{current_comm}")
                 };
                 if let Some(&new_comm) = refined_partition.get(&node_name) {
                     updated_final.insert(node_id.clone(), new_comm);
@@ -138,9 +138,9 @@ impl WeightedGraph {
 
         let mut partition: Vec<usize> = (0..n).collect();
         let mut k_i = vec![0.0; n];
-        for i in 0..n {
+        for (i, k) in k_i.iter_mut().enumerate() {
             for (_, w) in &self.adj[i] {
-                k_i[i] += w;
+                *k += w;
             }
         }
 
@@ -189,8 +189,8 @@ impl WeightedGraph {
         }
 
         let mut res = HashMap::new();
-        for i in 0..n {
-            res.insert(self.nodes[i].clone(), partition[i]);
+        for (i, node) in self.nodes.iter().enumerate() {
+            res.insert(node.clone(), partition[i]);
         }
         (res, improved_any)
     }
@@ -202,7 +202,7 @@ impl WeightedGraph {
 
         for &comm_id in partition.values() {
             if let std::collections::hash_map::Entry::Vacant(e) = community_nodes.entry(comm_id) {
-                let new_node_id = format!("comm_{}", comm_id);
+                let new_node_id = format!("comm_{comm_id}");
                 e.insert(new_nodes.len());
                 new_nodes.push(new_node_id);
             }
@@ -264,22 +264,22 @@ mod tests {
     fn test_louvain_simple_cliques() {
         // Create two cliques (communities)
         let mut nodes = Vec::new();
-        for i in 1..=4 { nodes.push(format!("a{}", i)); }
-        for i in 1..=4 { nodes.push(format!("b{}", i)); }
+        for i in 1..=4 { nodes.push(format!("a{i}")); }
+        for i in 1..=4 { nodes.push(format!("b{i}")); }
         
         let mut graph = WeightedGraph::new(nodes);
         
         // Clique A
         for i in 1..=4 {
             for j in i+1..=4 {
-                graph.add_edge(&format!("a{}", i), &format!("a{}", j), 1.0);
+                graph.add_edge(&format!("a{i}"), &format!("a{j}"), 1.0);
             }
         }
         
         // Clique B
         for i in 1..=4 {
             for j in i+1..=4 {
-                graph.add_edge(&format!("b{}", i), &format!("b{}", j), 1.0);
+                graph.add_edge(&format!("b{i}"), &format!("b{j}"), 1.0);
             }
         }
         
@@ -299,7 +299,7 @@ mod tests {
     fn test_louvain_hierarchical_aggregation() {
         // Test that it handles multiple phases (aggregation)
         let mut nodes = Vec::new();
-        for i in 1..=10 { nodes.push(format!("n{}", i)); }
+        for i in 1..=10 { nodes.push(format!("n{i}")); }
         let mut graph = WeightedGraph::new(nodes);
         
         // Create a chain of triangles (highly clustered)
@@ -318,8 +318,8 @@ mod tests {
     fn test_leiden_refinement_splits_disconnected_cliques() {
         // Create 2 completely disconnected cliques of nodes but pretend they are in the same community
         let mut nodes = Vec::new();
-        for i in 1..=3 { nodes.push(format!("c1_{}", i)); }
-        for i in 1..=3 { nodes.push(format!("c2_{}", i)); }
+        for i in 1..=3 { nodes.push(format!("c1_{i}")); }
+        for i in 1..=3 { nodes.push(format!("c2_{i}")); }
         
         let mut graph = WeightedGraph::new(nodes);
         
@@ -334,8 +334,8 @@ mod tests {
         // Let's create a partition mapping all of them to community 99
         let mut partition = HashMap::new();
         for i in 1..=3 {
-            partition.insert(format!("c1_{}", i), 99);
-            partition.insert(format!("c2_{}", i), 99);
+            partition.insert(format!("c1_{i}"), 99);
+            partition.insert(format!("c2_{i}"), 99);
         }
         
         let refined = graph.refine_partition(&partition);

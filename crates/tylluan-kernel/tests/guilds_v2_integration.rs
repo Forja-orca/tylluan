@@ -351,7 +351,7 @@ async fn test_guilds_v2_tylluan_do_with_backend_agent_id_does_not_panic() {
     args.insert("intent".to_string(), serde_json::Value::from("list files in src/"));
     args.insert("agent_id".to_string(), serde_json::Value::from("agent-backend-dev"));
     let result = server.handle_kernel_tool("tylluan_do", Some(args)).await;
-    assert!(result.is_ok(), "tylluan_do with backend-dev agent_id must not return Err: {:?}", result);
+    assert!(result.is_ok(), "tylluan_do with backend-dev agent_id must not return Err: {result:?}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -361,7 +361,7 @@ async fn test_guilds_v2_tylluan_do_with_guardian_agent_id_does_not_panic() {
     args.insert("intent".to_string(), serde_json::Value::from("audit system health check"));
     args.insert("agent_id".to_string(), serde_json::Value::from("guardian-warden"));
     let result = server.handle_kernel_tool("tylluan_do", Some(args)).await;
-    assert!(result.is_ok(), "tylluan_do with guardian agent_id must not return Err: {:?}", result);
+    assert!(result.is_ok(), "tylluan_do with guardian agent_id must not return Err: {result:?}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -483,8 +483,7 @@ fn test_guilds_v2_migration_core_plugins_still_accessible() {
         let alt_path = std::path::Path::new(plugin);
         assert!(
             path.exists() || alt_path.exists(),
-            "Migrated plugin '{}' must exist in the V2 reorganized structure",
-            plugin
+            "Migrated plugin '{plugin}' must exist in the V2 reorganized structure"
         );
     }
 }

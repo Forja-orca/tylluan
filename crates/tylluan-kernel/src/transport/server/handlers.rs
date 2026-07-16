@@ -26,7 +26,7 @@ impl TylluanServer {
             .unwrap_or("anonymous")
             .to_string();
         if let Some(ref journal) = self.journal {
-            let _ = journal.checkin(&agent_id, &format!("tool:{}", name));
+            let _ = journal.checkin(&agent_id, &format!("tool:{name}"));
         }
 
         let is_sovereign_tool = SOVEREIGN_TOOLS.contains(&name);
@@ -78,8 +78,8 @@ impl TylluanServer {
                 let query = arguments.as_ref().and_then(|a| a.get("query")).and_then(|v| v.as_str()).unwrap_or("");
                 if query.is_empty() { return Ok(error_result("Query required.")); }
                 match self.registry.write().await.ensure_guild_running(query).await {
-                    Ok(_) => Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{}' is now running.", query))], is_error: Some(false) }),
-                    Err(e) => Ok(error_result(&format!("Failed to load guild: {}", e))),
+                    Ok(_) => Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{query}' is now running."))], is_error: Some(false) }),
+                    Err(e) => Ok(error_result(&format!("Failed to load guild: {e}"))),
                 }
             }
             "unload_guild" => {
@@ -89,7 +89,7 @@ impl TylluanServer {
                     if guild.always_on { return Ok(error_result("Always-on guild cannot be unloaded.")); }
                     guild.kill().await.ok();
                     self.notify("notifications/tool/list_changed", serde_json::Value::Null);
-                    Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{}' unloaded.", name))], is_error: Some(false) })
+                    Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{name}' unloaded."))], is_error: Some(false) })
                 } else { Ok(error_result("Unknown guild.")) }
             }
             "doctor_diagnose" => {
@@ -182,7 +182,7 @@ impl TylluanServer {
                 }
                 Ok(CallToolResult { content: vec![Content::text("✅ Persona updated")], is_error: Some(false) })
             }
-            _ => Err(McpError::invalid_params(format!("Unknown kernel tool: {}", name), None)),
+            _ => Err(McpError::invalid_params(format!("Unknown kernel tool: {name}"), None)),
         };
 
         // Audit log: record every sovereign tool call fire-and-forget (tylluan_do has its own audit)

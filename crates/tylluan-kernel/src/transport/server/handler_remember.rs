@@ -26,13 +26,13 @@ fn clean_operational_wrapper(content: &str) -> String {
         if intent.is_some() || result.is_some() {
             let mut clean = String::new();
             if let Some(a) = agent {
-                clean.push_str(&format!("[Agente: {}] ", a));
+                clean.push_str(&format!("[Agente: {a}] "));
             }
             if let Some(i) = intent {
-                clean.push_str(&format!("Acción: {}\n", i));
+                clean.push_str(&format!("Acción: {i}\n"));
             }
             if let Some(r) = result {
-                clean.push_str(&format!("Resultado: {}", r));
+                clean.push_str(&format!("Resultado: {r}"));
             }
             if !clean.is_empty() {
                 return clean;
@@ -162,7 +162,7 @@ pub async fn handle_tylluan_remember(
     }
 
     let tagged_content = match &rem_agent_id {
-        Some(aid) => format!("memory | agent: {} | {}", aid, content),
+        Some(aid) => format!("memory | agent: {aid} | {content}"),
         None => content.clone(),
     };
     let node_id = if let Some(ref aid) = rem_agent_id {
@@ -256,7 +256,7 @@ pub async fn handle_tylluan_remember(
             .map(|prof| (prof.total_calls, prof.first_seen))
             .unwrap_or((0, String::new()));
         let _ = server.silva.update_agent_identity(aid, aid, real_calls as usize, &first_seen).await;
-        let agent_node_id = format!("agent:{}", aid);
+        let agent_node_id = format!("agent:{aid}");
         let _ = server.silva.add_edge(&agent_node_id, &nid, "remembers", 0.9, "{}").await;
         let _ = server.silva.touch_node(&agent_node_id, aid, "identity-refresh").await;
 
@@ -283,20 +283,20 @@ pub async fn handle_tylluan_remember(
         };
 
         if is_new {
-            let node_id = format!("agent_identity_{}", aid);
+            let node_id = format!("agent_identity_{aid}");
             let meta = serde_json::json!({
                 "agent_id": aid,
                 "registered_at": chrono::Utc::now().to_rfc3339(),
                 "role": "generalist"
             });
-            let _ = server.silva.upsert_node(&node_id, "agent_identity", &format!("Agente {} registrado en el colectivo", aid), &meta.to_string()).await;
+            let _ = server.silva.upsert_node(&node_id, "agent_identity", &format!("Agente {aid} registrado en el colectivo"), &meta.to_string()).await;
             let _ = server.silva.touch_node(&node_id, aid, "handshake").await;
             if let Ok(mut h) = server.hormones.lock() {
                 h.emit_novelty(0.6);
             }
             let msg = BlackboardMessage {
                 msg_type: "welcome".into(),
-                body: format!("Bienvenido al colectivo, {}. Tu identidad ha sido registrada.", aid),
+                body: format!("Bienvenido al colectivo, {aid}. Tu identidad ha sido registrada."),
                 to: aid.to_string(),
                 from: "kernel".into(),
                 thread_id: None,
@@ -367,10 +367,10 @@ pub async fn handle_tylluan_remember(
             }
             let preview = if content.chars().count() > 80 { format!("{}...", content.chars().take(80).collect::<String>()) } else { content.clone() };
             Ok(CallToolResult {
-                content: vec![Content::text(format!("Stored node {} (importance={:.2}): \"{}\"", node_id, importance, preview))],
+                content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
                 is_error: Some(false),
             })
         },
-        Err(e) => Ok(error_result(&format!("Memory write failed: {}", e))),
+        Err(e) => Ok(error_result(&format!("Memory write failed: {e}"))),
     }
 }

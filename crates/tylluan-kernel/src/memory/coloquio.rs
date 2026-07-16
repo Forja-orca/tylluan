@@ -320,7 +320,7 @@ impl ColoquioDb {
         let text = msgs.iter().map(|m| {
             format!("[T{}] @{}: {}", m.turn, m.author_id, m.content)
         }).collect::<Vec<_>>().join("\n\n");
-        Ok(format!("# Coloquio: {}\n\n{}", ch_id, text))
+        Ok(format!("# Coloquio: {ch_id}\n\n{text}"))
     }
 
     /// Repair NULL or non-UUID msg_ids in all channels.
@@ -380,7 +380,7 @@ impl ColoquioDb {
         let channel_id = channel_id.to_string();
         let author_id = if Self::PROTECTED_AUTHORS.contains(&author_id) && role != "human" {
             tracing::warn!("⛔ Coloquio: blocked impersonation attempt of protected author '{}'", author_id);
-            format!("agent-as-{}", author_id)
+            format!("agent-as-{author_id}")
         } else {
             author_id.to_string()
         };
@@ -406,8 +406,7 @@ impl ColoquioDb {
                 if !exists {
                     if !is_valid_channel_slug(&channel_id) {
                         anyhow::bail!(
-                            "channel '{}' does not exist and is not a valid slug (alphanumeric/-/_, max 64 chars). Create it first or use 'publica en coloquio <canal>: <mensaje>'",
-                            channel_id
+                            "channel '{channel_id}' does not exist and is not a valid slug (alphanumeric/-/_, max 64 chars). Create it first or use 'publica en coloquio <canal>: <mensaje>'"
                         );
                     }
                     conn.execute(
@@ -697,9 +696,9 @@ impl ColoquioDb {
                 |row| row.get(0),
             )?;
             let new_content = if current.ends_with('\n') || current.is_empty() {
-                format!("{}{}", current, section)
+                format!("{current}{section}")
             } else {
-                format!("{}\n{}", current, section)
+                format!("{current}\n{section}")
             };
             conn.execute(
                 "UPDATE collab_docs SET content = ?1, updated_by = ?2, version = version + 1, updated_at = unixepoch() WHERE doc_id = ?3",

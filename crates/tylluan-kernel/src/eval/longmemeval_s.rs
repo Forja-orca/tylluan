@@ -71,7 +71,7 @@ fn build_query(fact: &str) -> String {
         .trim_start_matches("the ")
         .trim_start_matches("a ")
         .trim_start_matches("an ");
-    format!("tell me about {}", without_prefix)
+    format!("tell me about {without_prefix}")
 }
 
 type FactAndCategory = (&'static str, &'static str);

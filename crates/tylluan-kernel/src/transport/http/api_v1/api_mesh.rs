@@ -138,7 +138,7 @@ pub async fn guild_dispatch_remote_handler(
         let reg = state.capability_registry.lock().unwrap();
         let all: Vec<_> = reg.all_peers().collect();
         all.into_iter()
-            .find(|(n, _)| **n == state.node_identity.node_id().to_string())
+            .find(|(n, _)| n.as_str() == state.node_identity.node_id())
             .map(|(_, (rec, _))| rec.hardware.clone())
             .unwrap_or_default()
     };
@@ -223,7 +223,7 @@ pub async fn guild_dispatch_remote_handler(
             }
         }
         DispatchDecision::Remote { ref addr, .. } => {
-            let url = format!("http://{}/api/v1/guilds/dispatch/execute", peer_addr);
+            let url = format!("http://{peer_addr}/api/v1/guilds/dispatch/execute");
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
                 .build()

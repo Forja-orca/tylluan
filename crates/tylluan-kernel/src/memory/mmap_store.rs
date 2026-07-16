@@ -249,7 +249,7 @@ impl MmapEmbeddingStore {
 /// Dynamic range scale calibration per dimension.
 pub fn calibrate_scales(vectors: &[Vec<f32>], dim: usize) -> Vec<f32> {
     let mut scales = vec![0.0f32; dim];
-    for d in 0..dim {
+    for (d, scale) in scales.iter_mut().enumerate() {
         let mut max_val = 0.0f32;
         for v in vectors {
             if let Some(&val) = v.get(d) {
@@ -260,7 +260,7 @@ pub fn calibrate_scales(vectors: &[Vec<f32>], dim: usize) -> Vec<f32> {
             }
         }
         // Scale for int8 ranges [-127, 127]
-        scales[d] = if max_val > 0.0 { max_val / 127.0 } else { 1.0 };
+        *scale = if max_val > 0.0 { max_val / 127.0 } else { 1.0 };
     }
     scales
 }

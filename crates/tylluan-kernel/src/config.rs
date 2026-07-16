@@ -883,17 +883,18 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     Ok(conn)
 }
 
-/// Resolve the DB encryption key with priority:
-/// 1. `TYLLUAN_DB_KEY` env var (64-char hex) — explicit operator override, e.g. injected
-///    from a vault/secrets manager in server/Docker deployments.
-/// 2. OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service).
-///    The key never touches the data directory — it is tied to the OS user account,
-///    so copying the DB file or the data directory alone does not leak the key.
-/// 3. File-based fallback (`.tylluan-db-key`, derived with Argon2id) — ONLY used when
-///    no keychain backend is available (e.g. headless Linux/Docker without a Secret
-///    Service daemon). This mode does NOT protect against filesystem/disk access —
-///    the seed lives next to the encrypted DB. Operators on server/Docker profiles
-///    should set `TYLLUAN_DB_KEY` explicitly for real at-rest protection.
+// Resolve the DB encryption key with priority:
+// 1. `TYLLUAN_DB_KEY` env var (64-char hex) — explicit operator override, e.g. injected
+//    from a vault/secrets manager in server/Docker deployments.
+// 2. OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service).
+//    The key never touches the data directory — it is tied to the OS user account,
+//    so copying the DB file or the data directory alone does not leak the key.
+// 3. File-based fallback (`.tylluan-db-key`, derived with Argon2id) — ONLY used when
+//    no keychain backend is available (e.g. headless Linux/Docker without a Secret
+//    Service daemon). This mode does NOT protect against filesystem/disk access —
+//    the seed lives next to the encrypted DB. Operators on server/Docker profiles
+//    should set `TYLLUAN_DB_KEY` explicitly for real at-rest protection.
+
 /// Quick check for DBus availability on Linux (fails fast in Docker/headless).
 /// Prevents keyring from hanging for ~25s on zbus connection timeout.
 fn dbus_is_available() -> bool {
@@ -949,7 +950,7 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
             Err(keyring::Error::NoEntry) => {
                 let mut raw = [0u8; 32];
                 OsRng.fill_bytes(&mut raw);
-                let key_hex: String = raw.iter().map(|b| format!("{:02x}", b)).collect();
+                let key_hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
                 match entry.set_password(&key_hex) {
                     Ok(()) => {
                         tracing::info!("🔑 Generated DB encryption key, stored in OS keychain (never written to disk)");
@@ -1001,7 +1002,7 @@ fn file_based_key_fallback(data_dir: &Path) -> anyhow::Result<String> {
 
     let mut seed = [0u8; 32];
     OsRng.fill_bytes(&mut seed);
-    fs::write(&key_path, &seed)
+    fs::write(&key_path, seed)
         .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
     tracing::info!("🔑 Generated file-based DB encryption key at {} (no keychain available)", key_path.display());
 
@@ -1023,9 +1024,9 @@ fn derive_key_argon2(seed: &[u8], data_dir: &Path) -> anyhow::Result<String> {
     let mut key = [0u8; 32];
     argon2
         .hash_password_into(seed, &salt, &mut key)
-        .map_err(|e| anyhow::anyhow!("Argon2id key derivation failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Argon2id key derivation failed: {e}"))?;
 
-    Ok(key.iter().map(|b| format!("{:02x}", b)).collect())
+    Ok(key.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1221,7 +1222,7 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
         .map_err(|e| format!("cannot read config: {e}"))?;
 
     let guild_key = format!("guild_overrides.\"{}\"", guild_name.trim());
-    let target_line = format!("{} = \"permissive\"", guild_key);
+    let target_line = format!("{guild_key} = \"permissive\"");
 
     let mut in_guild_overrides = false;
     let mut replaced = false;
@@ -1239,7 +1240,7 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
             && trimmed.contains('=')
         {
             replaced = true;
-            return format!("{} = \"permissive\"", guild_key);
+            return format!("{guild_key} = \"permissive\"");
         }
         l.to_string()
     }).collect::<Vec<_>>().join("\n");
@@ -1256,7 +1257,7 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
                 in_override_section = true;
             } else if in_override_section && trimmed.starts_with('[') {
                 if !inserted {
-                    out.push_str(&format!("{}\n", target_line));
+                    out.push_str(&format!("{target_line}\n"));
                     inserted = true;
                 }
                 in_override_section = false;
@@ -1264,7 +1265,7 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
             out.push_str(l);
             out.push('\n');
         }
-        if !inserted { out.push_str(&format!("{}\n", target_line)); }
+        if !inserted { out.push_str(&format!("{target_line}\n")); }
         out
     } else if saw_sandbox_section {
         // Append new section at the end

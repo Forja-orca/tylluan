@@ -40,7 +40,7 @@ impl GuardedTask {
             match timeout(current_timeout, &mut handle).await {
                 Ok(result) => {
                     // Task finished within timeout
-                    let join_res: Result<T> = result.map_err(|e| anyhow!("Task panic or cancel: {}", e))?;
+                    let join_res: Result<T> = result.map_err(|e| anyhow!("Task panic or cancel: {e}"))?;
                     return join_res;
                 }
                 Err(_) => {

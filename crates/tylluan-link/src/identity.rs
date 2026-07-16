@@ -37,7 +37,7 @@ impl NodeIdentity {
             keypair_bytes[32..].copy_from_slice(&public);
 
             let signing_key = SigningKey::from_keypair_bytes(&keypair_bytes)
-                .map_err(|e| anyhow::anyhow!("Failed to parse identity.key: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to parse identity.key: {e}"))?;
 
             let verifying_key = signing_key.verifying_key();
             let derived_public = verifying_key.to_bytes();
@@ -143,7 +143,7 @@ pub fn sign_node(
         .as_secs() as i64;
     let pubkey = identity.public_key_hex().to_string();
     let canonical = serde_json::to_string(node)?;
-    let message = format!("{}|{}|{}", canonical, timestamp, pubkey);
+    let message = format!("{canonical}|{timestamp}|{pubkey}");
     let sig = identity.sign(message.as_bytes());
     Ok(SignedEnvelope {
         node: node.clone(),
@@ -201,7 +201,7 @@ pub fn verify_envelope(
 
     verifying_key
         .verify(message.as_bytes(), &signature)
-        .map_err(|e| anyhow::anyhow!("signature verification failed: {}", e))
+        .map_err(|e| anyhow::anyhow!("signature verification failed: {e}"))
 }
 
 #[cfg(test)]
@@ -213,7 +213,7 @@ mod tests {
 
     fn tmp_dir(label: &str) -> std::path::PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("tylluan_{}_{}", label, id))
+        std::env::temp_dir().join(format!("tylluan_{label}_{id}"))
     }
 
     #[test]

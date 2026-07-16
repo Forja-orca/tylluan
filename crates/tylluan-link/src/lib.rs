@@ -153,7 +153,7 @@ pub async fn start_p2p_listener(
     peer_manager: Arc<PeerManager>,
     port: u16,
 ) -> task::JoinHandle<()> {
-    let addr = format!("0.0.0.0:{}", port);
+    let addr = format!("0.0.0.0:{port}");
     let listener = match TcpListenerAsync::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -281,7 +281,7 @@ pub async fn connect_to_peer(
     addr: String,
     port: u16,
 ) -> std::io::Result<()> {
-    let full_addr = format!("{}:{}", addr, port);
+    let full_addr = format!("{addr}:{port}");
     let mut stream = tokio::net::TcpStream::connect(&full_addr).await?;
 
     let req = serde_json::json!({"type": "handshake_request", "node_id": peer_manager.node_id.as_str()});

@@ -22,7 +22,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 fn test_dir(name: &str) -> String {
-    format!("./target/mcp_int_{}", name)
+    format!("./target/mcp_int_{name}")
 }
 
 async fn create_server(label: &str) -> TylluanServer {
@@ -64,7 +64,7 @@ async fn test_integration_tools_list_exactly_5() {
     assert_eq!(tools.len(), 5, "Expected exactly 5 sovereign tools");
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
     for expected in &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"] {
-        assert!(names.contains(expected), "Missing tool: {}", expected);
+        assert!(names.contains(expected), "Missing tool: {expected}");
     }
 }
 

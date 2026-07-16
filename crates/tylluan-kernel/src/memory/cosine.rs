@@ -46,7 +46,7 @@ mod tests {
         ) {
             let len = a.len().min(b.len());
             let sim = cosine_similarity(&a[..len], &b[..len]);
-            prop_assert!(sim >= -1.0 - 1e-5 && sim <= 1.0 + 1e-5,
+            prop_assert!((-1.0 - 1e-5..=1.0 + 1e-5).contains(&sim),
                 "cosine out of range: {}", sim);
         }
 

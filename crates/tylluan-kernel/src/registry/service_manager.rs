@@ -62,7 +62,7 @@ impl ServiceManager {
                     info!("Service '{}' is a remote URL ({}), no process to spawn.", name, url);
                     return Ok(());
                 }
-                return Err(anyhow!("Service '{}' has no command or URL", name));
+                return Err(anyhow!("Service '{name}' has no command or URL"));
             }
         };
 
@@ -99,13 +99,13 @@ impl ServiceManager {
                 Ok(())
             }
             Ok(Ok(Err(e))) => {
-                Err(anyhow!("Failed to spawn subprocess for '{}': {}. Command was: {}", name, e, cmd_str))
+                Err(anyhow!("Failed to spawn subprocess for '{name}': {e}. Command was: {cmd_str}"))
             }
             Ok(Err(e)) => {
-                Err(anyhow!("Spawn task failed for '{}': {}", name, e))
+                Err(anyhow!("Spawn task failed for '{name}': {e}"))
             }
             Err(_) => {
-                let err = anyhow!("Service '{}' spawn timed out after {}ms. The subprocess failed to start within the deadline.", name, timeout_ms);
+                let err = anyhow!("Service '{name}' spawn timed out after {timeout_ms}ms. The subprocess failed to start within the deadline.");
                 error!("🚨 {}", err);
                 Err(err)
             }
@@ -136,9 +136,9 @@ impl ServiceManager {
     pub async fn get_health_report(&self, name: &str) -> Option<String> {
         let (alive, code) = self.check_health(name).await;
         if alive {
-            Some(format!("Service '{}' is running", name))
+            Some(format!("Service '{name}' is running"))
         } else {
-            Some(format!("Service '{}' is dead (exit code: {:?})", name, code))
+            Some(format!("Service '{name}' is dead (exit code: {code:?})"))
         }
     }
 

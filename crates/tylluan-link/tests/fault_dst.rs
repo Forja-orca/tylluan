@@ -41,11 +41,9 @@ async fn respond_to_sync_with_timeout(
         .map_err(|_| ())?;
     let msg: GossipMessage = serde_json::from_slice(&raw).unwrap();
     responder.handle_incoming_message(transport, initiator_id, &msg).await.unwrap();
-    if let Ok(raw2) = tokio::time::timeout(timeout, transport.receive()).await {
-        if let Ok(data) = raw2 {
-            if let Ok(msg2) = serde_json::from_slice::<GossipMessage>(&data) {
-                responder.handle_incoming_message(transport, initiator_id, &msg2).await.ok();
-            }
+    if let Ok(Ok(data)) = tokio::time::timeout(timeout, transport.receive()).await {
+        if let Ok(msg2) = serde_json::from_slice::<GossipMessage>(&data) {
+            responder.handle_incoming_message(transport, initiator_id, &msg2).await.ok();
         }
     }
     Ok(())
@@ -129,7 +127,7 @@ async fn test_fault_dst_latency_injection() {
     // Push-pull does 2 sends minimum (Pull + PushResponse over the latency link).
     // Total should be > 200ms.
     assert!(elapsed >= Duration::from_millis(150),
-        "sync with 100ms latency should take >150ms, took {:?}", elapsed);
+        "sync with 100ms latency should take >150ms, took {elapsed:?}");
 
     assert!(
         engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a"),

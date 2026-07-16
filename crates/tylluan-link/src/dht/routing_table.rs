@@ -208,7 +208,7 @@ mod tests {
         let mut rt = RoutingTable::new(local.clone());
 
         for i in 0..10 {
-            let pid = node_id_from_hex(&format!("peer{}", i));
+            let pid = node_id_from_hex(&format!("peer{i}"));
             rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec![]);
         }
 
@@ -240,6 +240,6 @@ mod tests {
         let a = node_id_from_hex("aaaa");
         let b = node_id_from_hex("bbbb");
         let idx = RoutingTable::bucket_index(&a, &b);
-        assert!(idx < 256, "bucket index out of range: {}", idx);
+        assert!(idx < 256, "bucket index out of range: {idx}");
     }
 }
