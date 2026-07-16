@@ -307,7 +307,11 @@ mod tests {
         assert!(map.languages.contains_key("TOML"), "should detect TOML");
         assert!(!map.identifiers.is_empty(), "should extract Rust identifiers");
         assert!(map.key_files.iter().any(|f| f.path == "Cargo.toml"), "should find Cargo.toml");
-        assert!(map.build_duration_ms > 0, "should measure build time");
+        // build_duration_ms is not asserted > 0 here: a 2-file temp dir can
+        // legitimately build in under 1ms on fast hardware/CI runners, making
+        // that assertion flaky. The field's presence/type is guaranteed by
+        // the struct definition; its value on a real multi-thousand-file repo
+        // is exercised by repo_map_endpoint_test.rs instead.
     }
 
     #[test]
