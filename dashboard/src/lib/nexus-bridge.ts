@@ -481,6 +481,25 @@ export class NexusBridge {
     return { type: 'unknown', data: raw, source: 'raw', ts: Date.now() };
   }
 
+  async getAuditTrail(agentId?: string, limit?: number): Promise<{ entries: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (agentId) params.append('agent_id', agentId);
+    if (limit) params.append('limit', limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : '';
+    // Backend: GET /api/v1/audit (guild_audit_log, hash-chained) — rows shaped as
+    // { id, timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash },
+    // `count` is the current page size, not a true total (no COUNT(*) query server-side).
+    const raw = await this.fetch(`/api/v1/audit${query}`);
+    const entries = (raw.entries || []).map((row: any) => ({
+      agent_id: row.agent_id,
+      guild: row.guild,
+      intent_preview: row.intent || row.result_preview || '',
+      allowed: row.status === 'ok',
+      timestamp: row.timestamp,
+    }));
+    return { entries, total: raw.count ?? entries.length };
+  }
+
   async getConfig(): Promise<any> {
     return await this.fetch('/api/v1/config');
   }

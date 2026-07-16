@@ -36,6 +36,7 @@ const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
 const TeamConsolidated = lazy(() => import('./components/TeamConsolidated'))
 const GuildsConsolidated = lazy(() => import('./components/GuildsConsolidated'))
 const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
+const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 
 function App() {
   const {
@@ -190,10 +191,8 @@ function App() {
   useEffect(() => {
     const handleDreamCycle = (e: Event) => {
       const data = (e as CustomEvent).detail;
-      const nodesConsolidated = data?.nodes_consolidated || 0;
-      const contradictionsResolved = data?.contradictions_resolved || 0;
       notify(
-        `Ciclo de consolidación cognitiva (NREM) finalizado. Grafo optimizado: ${nodesConsolidated} nodos procesados, ${contradictionsResolved} contradicciones resueltas.`,
+        `Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: ${data?.duplicates_merged ?? 0}, nodos decaídos: ${data?.nodes_decayed ?? 0}.`,
         'info',
         'Consolidación NREM'
       );
@@ -307,6 +306,7 @@ function App() {
     { id: 'team', name: 'Team', icon: Users, badge: coloquioUnread > 0 ? coloquioUnread : null },
     { id: 'guilds', name: 'Guilds', icon: Cpu },
     { id: 'lab', name: 'Laboratory', icon: Beaker },
+    { id: 'audit', name: 'Audit Trail', icon: ShieldCheck },
   ];
 
   return (
@@ -574,6 +574,13 @@ function App() {
                     notify={notify}
                     events={events}
                     onClearLogs={clearLogs}
+                  />
+                </ErrorBoundary>
+              )}
+              {activeTab === 'audit' && mountedTabs.has('audit') && (
+                <ErrorBoundary>
+                  <AuditTrailPanel
+                    bridge={bridge}
                   />
                 </ErrorBoundary>
               )}
