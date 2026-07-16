@@ -880,6 +880,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ─── Grant Registry (M30-P3) ──────────────────────────────────
     tylluan_kernel::security::grants::init();
+    tylluan_kernel::security::grants::init_plan_store();
     tylluan_kernel::security::grants::spawn_reaper();
 
     // ─── Initialize MCP Server ──────────────────────────────────────

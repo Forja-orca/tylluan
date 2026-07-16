@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 use tokio::sync::{RwLock, oneshot};
 
+
 static GRANT_REGISTRY: OnceLock<RwLock<GrantStore>> = OnceLock::new();
 static GRANT_NOTIFIER: OnceLock<tokio::sync::broadcast::Sender<serde_json::Value>> = OnceLock::new();
 
@@ -39,6 +40,46 @@ pub struct GrantRequest {
 
 struct GrantStore {
     pending: HashMap<GrantId, GrantRequest>,
+}
+
+// M31-P2: Plan mode — stores resolved guild+tool+args for approval before execution
+static PLAN_STORE: OnceLock<RwLock<HashMap<String, PendingPlan>>> = OnceLock::new();
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PendingPlan {
+    pub guild: String,
+    pub tool: String,
+    pub args: serde_json::Map<String, serde_json::Value>,
+    pub agent_id: String,
+    pub intent: String,
+}
+
+pub fn init_plan_store() {
+    PLAN_STORE.set(RwLock::new(HashMap::new())).ok();
+}
+
+pub async fn store_plan(id: &str, guild: &str, tool: &str, args: &serde_json::Value, agent_id: &str, intent: &str) {
+    let store = PLAN_STORE.get_or_init(|| RwLock::new(HashMap::new()));
+    let mut locked = store.write().await;
+    locked.insert(id.to_string(), PendingPlan {
+        guild: guild.to_string(),
+        tool: tool.to_string(),
+        args: args.as_object().cloned().unwrap_or_default(),
+        agent_id: agent_id.to_string(),
+        intent: intent.to_string(),
+    });
+}
+
+pub async fn get_plan(id: &str) -> Option<PendingPlan> {
+    let store = PLAN_STORE.get()?;
+    let locked = store.read().await;
+    locked.get(id).cloned()
+}
+
+pub async fn remove_plan(id: &str) -> bool {
+    let Some(store) = PLAN_STORE.get() else { return false };
+    let mut locked = store.write().await;
+    locked.remove(id).is_some()
 }
 
 pub fn init() {
