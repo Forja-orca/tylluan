@@ -29,6 +29,24 @@ impl TylluanServer {
             let _ = journal.checkin(&agent_id, &format!("tool:{name}"));
         }
 
+        // M31-P1: Enforce agent_id matches the bearer token binding (if any)
+        if let Some(bound_agent) = crate::transport::http::auth::current_bound_agent_id()
+            && agent_id != bound_agent && agent_id != "anonymous" {
+                return Ok(error_result(&format!(
+                    "ACCESS_DENIED: this token is bound to agent '{bound_agent}', \
+                     cannot impersonate agent '{agent_id}'. Set agent_id='{bound_agent}' in your tool call."
+                )));
+            }
+        // M31-P1: Enforce per-agent tool permissions
+        if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
+            let cfg = config_lock.read().await;
+            let acl = &cfg.security.acl;
+            if !acl.agent_permissions.is_empty() && agent_id != "anonymous"
+                && let Some(msg) = crate::transport::http::auth::check_agent_id_tool_allowed(&agent_id, name, acl) {
+                    return Ok(error_result(&msg));
+                }
+        }
+
         let is_sovereign_tool = SOVEREIGN_TOOLS.contains(&name);
         let hook_rules: Vec<crate::security::hooks::HookRule> = if is_sovereign_tool {
             match crate::config::TylluanConfig::load_cached() {
@@ -39,15 +57,13 @@ impl TylluanServer {
             Vec::new()
         };
 
-        if is_sovereign_tool && !hook_rules.is_empty() {
-            if let Some(ref mut args) = arguments {
-                if let crate::security::hooks::PreHookOutcome::Deny(msg) =
+        if is_sovereign_tool && !hook_rules.is_empty()
+            && let Some(ref mut args) = arguments
+                && let crate::security::hooks::PreHookOutcome::Deny(msg) =
                     crate::security::hooks::run_pre_hooks(&hook_rules, name, args)
                 {
                     return Ok(error_result(&msg));
                 }
-            }
-        }
 
         let mut result = match name {
             "tylluan_do" => handler_do::handle_tylluan_do(self, arguments).await,
@@ -171,15 +187,14 @@ impl TylluanServer {
             "agent_set_persona" => {
                 let persona = arguments.as_ref().and_then(|a| a.get("persona")).and_then(|v| v.as_str()).unwrap_or("");
                 let preferences = arguments.as_ref().and_then(|a| a.get("preferences"));
-                if let Some(ref profiles) = self.agent_profiles {
-                    if let Ok(store) = profiles.lock() {
+                if let Some(ref profiles) = self.agent_profiles
+                    && let Ok(store) = profiles.lock() {
                         let _ = store.upsert_activity(&agent_id, "kernel", true, Some("set_persona"));
                         store.set_persona(&agent_id, persona).ok();
                         if let Some(prefs) = preferences {
                             store.set_preferences(&agent_id, prefs).ok();
                         }
                     }
-                }
                 Ok(CallToolResult { content: vec![Content::text("✅ Persona updated")], is_error: Some(false) })
             }
             _ => Err(McpError::invalid_params(format!("Unknown kernel tool: {name}"), None)),
@@ -195,8 +210,8 @@ impl TylluanServer {
             });
         }
 
-        if is_sovereign_tool && !hook_rules.is_empty() {
-            if let Ok(ref mut res) = result {
+        if is_sovereign_tool && !hook_rules.is_empty()
+            && let Ok(ref mut res) = result {
                 let mut texts: Vec<String> = res.content.iter()
                     .filter_map(|c| c.as_text().map(|t| t.text.clone()))
                     .collect();
@@ -205,7 +220,6 @@ impl TylluanServer {
                     res.content = texts.into_iter().map(Content::text).collect();
                 }
             }
-        }
 
         result
     }

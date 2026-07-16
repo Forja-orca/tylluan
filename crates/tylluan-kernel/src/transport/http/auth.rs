@@ -17,11 +17,23 @@ task_local! {
     /// Current ACL role for the request, set by bearer_auth_middleware.
     /// Defaults to "admin" when no ACL is configured (stdio/local access).
     pub static ACL_ROLE: String;
+    /// M31-P1: Bound agent_id for the request, resolved from the bearer token.
+    /// Empty if no binding is configured (backwards compatible — any agent_id allowed).
+    pub static ACL_AGENT_ID: String;
 }
 
 /// Get the current request's ACL role. Returns "admin" if unset (local/stdio access).
 pub fn current_acl_role() -> String {
     ACL_ROLE.try_with(|r| r.clone()).unwrap_or_else(|_| "admin".to_string())
+}
+
+/// Get the bound agent_id for the current request.
+/// Returns None if no token-agent binding is configured (any agent_id allowed).
+pub fn current_bound_agent_id() -> Option<String> {
+    ACL_AGENT_ID.try_with(|a| {
+        let s = a.as_str();
+        if s.is_empty() { None } else { Some(s.to_string()) }
+    }).ok().flatten()
 }
 
 /// Check if a role has access to a guild based on ACL config.
@@ -39,6 +51,31 @@ pub fn acl_can_access(role: &str, guild: &str, acl: &AclConfig) -> bool {
 /// If the token is not listed, returns the default_role.
 pub fn resolve_role_for_token(token: &str, acl: &AclConfig) -> String {
     acl.tokens.get(token).cloned().unwrap_or_else(|| acl.default_role.clone())
+}
+
+/// M31-P1: Resolve the bound agent_id for a token from ACL config.
+/// Returns empty string if no binding exists (backwards compatible).
+pub fn resolve_agent_id_for_token(token: &str, acl: &AclConfig) -> String {
+    acl.token_agent_bindings.get(token).cloned().unwrap_or_default()
+}
+
+/// M31-P1: Check if an agent_id is allowed to call a specific tool.
+/// Returns None if allowed, Some(error_message) if denied.
+pub fn check_agent_id_tool_allowed(agent_id: &str, tool_name: &str, acl: &AclConfig) -> Option<String> {
+    if let Some(perm) = acl.agent_permissions.get(agent_id) {
+        if perm.denied_tools.iter().any(|t| t == tool_name) {
+            return Some(format!("ACCESS_DENIED: agent '{agent_id}' is not allowed to use tool '{tool_name}'"));
+        }
+        if perm.scope == "read-only" && matches!(tool_name, "tylluan_remember" | "tylluan_do" | "tylluan_graph") {
+            return Some(format!("ACCESS_DENIED: agent '{agent_id}' has read-only scope, cannot use tool '{tool_name}'"));
+        }
+    }
+    None
+}
+
+/// M31-P1: Check if an agent's memory is isolated (only sees its own episodes).
+pub fn agent_has_memory_isolation(agent_id: &str, acl: &AclConfig) -> bool {
+    acl.agent_permissions.get(agent_id).map(|p| p.memory_isolation).unwrap_or(false)
 }
 
 /// Resolve ACL role from the current request state and bearer token.
@@ -218,13 +255,24 @@ pub async fn bearer_auth_middleware(
         }
     }
 
-    // Resolve ACL role for this request and process with role scope
+    // Resolve ACL role + bound agent_id for this request
     let query_str = request.uri().query().unwrap_or("");
     let bearer_token = extract_token(&headers, query_str);
 
     let acl_role = resolve_acl_role(&state, bearer_token.as_deref()).await;
+    let acl_agent_id = {
+        let config = state.config.read().await;
+        let acl = &config.security.acl;
+        match bearer_token {
+            Some(ref token) => resolve_agent_id_for_token(token, acl),
+            None => String::new(),
+        }
+    };
+
     ACL_ROLE.scope(acl_role, async move {
-        next.run(request).await
+        ACL_AGENT_ID.scope(acl_agent_id, async move {
+            next.run(request).await
+        }).await
     }).await
 }
 
