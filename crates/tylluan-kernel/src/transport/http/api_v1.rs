@@ -227,6 +227,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config/sandbox-profile", post(set_sandbox_profile_handler))
         .route("/api/v1/config/sandbox-profile/guild", post(set_guild_sandbox_override_handler))
         .route("/api/v1/config/sandbox-profile/session", post(set_session_sandbox_override_handler))
+        .route("/api/v1/config/sandbox-profile/guild/{guild}", delete(delete_guild_sandbox_override_handler))
+        .route("/api/v1/config/sandbox-profile/session/{agent_id}", delete(delete_session_sandbox_override_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/setup-hint", get(setup_hint_handler))
         .route("/api/v1/bash", post(bash_execute_handler)) // DEPRECATED - usar tylluan_do
@@ -1165,12 +1167,18 @@ async fn silva_edge_search_handler(State(state): State<Arc<HttpState>>, Json(q):
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     };
 
+    const MAX_EMBEDDING_BLOB: usize = 10_000_000;
     let results: Option<Vec<EdgeSearchResult>> = tokio::task::block_in_place(|| {
         let conn = state.silva.conn.blocking_lock();
         let mut stmt = conn.prepare("SELECT node_id, embedding FROM node_embeddings WHERE node_id LIKE 'edge::%'").ok()?;
         let rows = stmt.query_map([], |row| {
             let id: String = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
+            if blob.len() > MAX_EMBEDDING_BLOB {
+                return Err(rusqlite::Error::ToSqlConversionFailure(
+                    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "embedding blob exceeds maximum size"))
+                ));
+            }
             Ok((id, blob))
         }).ok()?;
 
