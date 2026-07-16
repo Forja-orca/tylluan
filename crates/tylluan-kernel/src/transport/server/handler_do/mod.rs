@@ -31,6 +31,190 @@ fn routing_failure_id(intent: &str) -> String {
     format!("lesson:routing_failure:{hash:x}")
 }
 
+/// Deterministic `@coloquio` prefix dispatch — bypasses the semantic router entirely.
+/// Returns `None` if `intent` doesn't start with `@coloquio` (caller should fall through).
+async fn handle_coloquio_prefix(
+    server: &TylluanServer,
+    intent: &str,
+    agent_id: &Option<String>,
+) -> Option<Result<CallToolResult, McpError>> {
+    if !intent.trim().starts_with("@coloquio") {
+        return None;
+    }
+    let rest = intent.trim().strip_prefix("@coloquio").unwrap_or("").trim();
+    if rest.is_empty() || rest == ":list" {
+        // list channels via recall
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("@coloquio".to_string()));
+        args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(20)));
+        return Some(Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await);
+    }
+    if let Some(create_name) = rest.strip_prefix(":create:") {
+        let channel_name = create_name.trim().to_string();
+        if channel_name.is_empty() {
+            return Some(Ok(error_result("Usage: @coloquio:create:<channel_name>")));
+        }
+        return Some(if let Some(ref coloquio) = server.coloquio {
+            match coloquio.create_channel(&channel_name, &channel_name).await {
+                Ok(ch) => Ok(CallToolResult {
+                    content: vec![Content::text(format!("Channel #{} created.", ch.channel_id))],
+                    is_error: Some(false),
+                }),
+                Err(e) => Ok(error_result(&format!("Failed to create channel: {e}"))),
+            }
+        } else {
+            Ok(error_result("Coloquio is not available."))
+        });
+    }
+    if let Some(channel_part) = rest.strip_prefix(':') {
+        let (channel_id, message) = if let Some(idx) = channel_part.find(':') {
+            let (cid, msg) = channel_part.split_at(idx);
+            (cid.trim().to_string(), Some(msg[1..].trim().to_string()))
+        } else {
+            (channel_part.trim().to_string(), None)
+        };
+        if channel_id.is_empty() {
+            return Some(Ok(error_result("Usage: @coloquio:<channel_id> (read) or @coloquio:<channel_id>:<message> (post)")));
+        }
+        if let Some(msg) = message {
+            if msg.is_empty() {
+                return Some(Ok(error_result("Message cannot be empty. Usage: @coloquio:<channel_id>:<message>")));
+            }
+            // Post to channel via remember
+            let mut args = serde_json::Map::new();
+            args.insert("content".to_string(), serde_json::Value::String(
+                format!("@coloquio:{channel_id}:{msg}")
+            ));
+            if let Some(aid) = agent_id {
+                args.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
+            }
+            return Some(Box::pin(handler_remember::handle_tylluan_remember(server, Some(args))).await);
+        } else {
+            // Read channel via recall
+            let mut args = serde_json::Map::new();
+            args.insert("query".to_string(), serde_json::Value::String(
+                format!("@coloquio:{channel_id}")
+            ));
+            return Some(Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await);
+        }
+    }
+    None
+}
+
+/// Deterministic nodo/node prefix — agent-to-agent messaging via `AgentNodeRouter`.
+/// Returns `None` if `intent` doesn't parse as a node command (caller should fall through).
+async fn handle_nodo_prefix(
+    server: &TylluanServer,
+    intent: &str,
+    agent_id: &Option<String>,
+) -> Option<Result<CallToolResult, McpError>> {
+    use crate::memory::agent_nodes::NodeIntent;
+    let nodo_intent = crate::memory::agent_nodes::parse_node_intent(intent)?;
+    let aid = agent_id.as_deref().unwrap_or("unknown");
+    let router = &server.node_router;
+
+    // Auto-register on any nodo command
+    router.register(aid).await;
+
+    Some(match nodo_intent {
+        NodeIntent::Send { to, payload } => {
+            let from = aid;
+            match router.send(from, &to, &payload, "direct").await {
+                Ok(res) => Ok(CallToolResult {
+                    content: vec![Content::text(format!("Mensaje enviado a {} (msg_id: {})", to, res["msg_id"]))],
+                    is_error: Some(false),
+                }),
+                Err(e) => Ok(error_result(&e)),
+            }
+        }
+        NodeIntent::Broadcast { payload } => {
+            let res = router.broadcast(aid, &payload).await;
+            let count = res["recipients"].as_u64().unwrap_or(0);
+            Ok(CallToolResult {
+                content: vec![Content::text(format!("Broadcast enviado a {count} nodos."))],
+                is_error: Some(false),
+            })
+        }
+        NodeIntent::DrainInbox | NodeIntent::PeekInbox => {
+            let msgs = match nodo_intent {
+                NodeIntent::DrainInbox => router.drain_inbox(aid).await,
+                _ => router.peek_inbox(aid).await,
+            };
+            if msgs.is_empty() {
+                return Some(Ok(CallToolResult {
+                    content: vec![Content::text("Buzón vacío.")],
+                    is_error: Some(false),
+                }));
+            }
+            let mut report = format!("Buzón de {} ({} mensajes):\n", aid, msgs.len());
+            for (i, m) in msgs.iter().enumerate() {
+                let preview = if m.payload.len() > 120 {
+                    format!("{}...", &m.payload[..120])
+                } else { m.payload.clone() };
+                report.push_str(&format!("{}. [{}] {}: {}\n", i + 1, m.msg_type, m.from, preview));
+            }
+            Ok(CallToolResult { content: vec![Content::text(report)], is_error: Some(false) })
+        }
+        NodeIntent::List => {
+            let nodes = router.list().await;
+            if nodes.is_empty() {
+                return Some(Ok(CallToolResult {
+                    content: vec![Content::text("No hay nodos conectados.")],
+                    is_error: Some(false),
+                }));
+            }
+            let report = nodes.iter().map(|n| {
+                let agent_id = n["agent_id"].as_str().unwrap_or("?");
+                let pending = n["inbox_pending"].as_u64().unwrap_or(0);
+                format!("- {agent_id}: {pending} pendientes")
+            }).collect::<Vec<_>>().join("\n");
+            Ok(CallToolResult {
+                content: vec![Content::text(format!("Nodos conectados:\n{report}"))],
+                is_error: Some(false),
+            })
+        }
+        NodeIntent::Register => {
+            Ok(CallToolResult {
+                content: vec![Content::text(format!("Nodo '{aid}' registrado."))],
+                is_error: Some(false),
+            })
+        }
+        NodeIntent::Unregister => {
+            router.unregister(aid).await;
+            Ok(CallToolResult {
+                content: vec![Content::text(format!("Nodo '{aid}' desregistrado."))],
+                is_error: Some(false),
+            })
+        }
+    })
+}
+
+/// Sovereign shortcut: "forget: {node_id}" / "delete node: {node_id}" — deletes a
+/// node directly without routing to a guild. Returns `None` if `intent` doesn't match.
+async fn handle_forget_shortcut(
+    server: &TylluanServer,
+    intent: &str,
+) -> Option<Result<CallToolResult, McpError>> {
+    let intent_lower = intent.trim().to_lowercase();
+    if !(intent_lower.starts_with("forget:") || intent_lower.starts_with("delete node:")) {
+        return None;
+    }
+    let node_id = intent.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
+    if node_id.is_empty() {
+        return Some(Ok(error_result("forget: requires a node_id. Usage: forget: {node_id}")));
+    }
+    Some(match server.silva.delete_node(&node_id).await {
+        Ok(true) => Ok(CallToolResult {
+            content: vec![Content::text(format!("Forgotten: node '{node_id}' deleted."))],
+            is_error: Some(false),
+        }),
+        Ok(false) => Ok(error_result(&format!(
+            "Cannot forget '{node_id}': node not found or is protected."
+        ))),
+        Err(e) => Ok(error_result(&format!("forget failed: {e}"))),
+    })
+}
+
 pub async fn handle_tylluan_do(
     server: &TylluanServer,
     arguments: Option<serde_json::Map<String, serde_json::Value>>,
@@ -102,166 +286,19 @@ pub async fn handle_tylluan_do(
     }
 
     // Deterministic @coloquio: prefix — bypass semantic router entirely
-    if intent.trim().starts_with("@coloquio") {
-        let rest = intent.trim().strip_prefix("@coloquio").unwrap_or("").trim();
-        if rest.is_empty() || rest == ":list" {
-            // list channels via recall
-            let mut args = serde_json::Map::new();
-            args.insert("query".to_string(), serde_json::Value::String("@coloquio".to_string()));
-            args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(20)));
-            return Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await;
-        }
-        if let Some(create_name) = rest.strip_prefix(":create:") {
-            let channel_name = create_name.trim().to_string();
-            if channel_name.is_empty() {
-                return Ok(error_result("Usage: @coloquio:create:<channel_name>"));
-            }
-            if let Some(ref coloquio) = server.coloquio {
-                return match coloquio.create_channel(&channel_name, &channel_name).await {
-                    Ok(ch) => Ok(CallToolResult {
-                        content: vec![Content::text(format!("Channel #{} created.", ch.channel_id))],
-                        is_error: Some(false),
-                    }),
-                    Err(e) => Ok(error_result(&format!("Failed to create channel: {e}"))),
-                };
-            } else {
-                return Ok(error_result("Coloquio is not available."));
-            }
-        }
-        if let Some(channel_part) = rest.strip_prefix(':') {
-            let (channel_id, message) = if let Some(idx) = channel_part.find(':') {
-                let (cid, msg) = channel_part.split_at(idx);
-                (cid.trim().to_string(), Some(msg[1..].trim().to_string()))
-            } else {
-                (channel_part.trim().to_string(), None)
-            };
-            if channel_id.is_empty() {
-                return Ok(error_result("Usage: @coloquio:<channel_id> (read) or @coloquio:<channel_id>:<message> (post)"));
-            }
-            if let Some(msg) = message {
-                if msg.is_empty() {
-                    return Ok(error_result("Message cannot be empty. Usage: @coloquio:<channel_id>:<message>"));
-                }
-                // Post to channel via remember
-                let mut args = serde_json::Map::new();
-                args.insert("content".to_string(), serde_json::Value::String(
-                    format!("@coloquio:{channel_id}:{msg}")
-                ));
-                if let Some(ref aid) = agent_id {
-                    args.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
-                }
-                return Box::pin(handler_remember::handle_tylluan_remember(server, Some(args))).await;
-            } else {
-                // Read channel via recall
-                let mut args = serde_json::Map::new();
-                args.insert("query".to_string(), serde_json::Value::String(
-                    format!("@coloquio:{channel_id}")
-                ));
-                return Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await;
-            }
-        }
+    if let Some(result) = handle_coloquio_prefix(server, &intent, &agent_id).await {
+        return result;
     }
 
     // Deterministic nodo/node prefix — agent-to-agent messaging
     // Uses existing AgentNodeRouter + parse_node_intent from agent_nodes.rs
-    if let Some(nodo_intent) = crate::memory::agent_nodes::parse_node_intent(&intent) {
-        use crate::memory::agent_nodes::NodeIntent;
-        let aid = agent_id.as_deref().unwrap_or("unknown");
-        let router = &server.node_router;
-
-        // Auto-register on any nodo command
-        router.register(aid).await;
-
-        return match nodo_intent {
-            NodeIntent::Send { to, payload } => {
-                let from = aid;
-                match router.send(from, &to, &payload, "direct").await {
-                    Ok(res) => Ok(CallToolResult {
-                        content: vec![Content::text(format!("Mensaje enviado a {} (msg_id: {})", to, res["msg_id"]))],
-                        is_error: Some(false),
-                    }),
-                    Err(e) => Ok(error_result(&e)),
-                }
-            }
-            NodeIntent::Broadcast { payload } => {
-                let res = router.broadcast(aid, &payload).await;
-                let count = res["recipients"].as_u64().unwrap_or(0);
-                Ok(CallToolResult {
-                    content: vec![Content::text(format!("Broadcast enviado a {count} nodos."))],
-                    is_error: Some(false),
-                })
-            }
-            NodeIntent::DrainInbox | NodeIntent::PeekInbox => {
-                let msgs = match nodo_intent {
-                    NodeIntent::DrainInbox => router.drain_inbox(aid).await,
-                    _ => router.peek_inbox(aid).await,
-                };
-                if msgs.is_empty() {
-                    return Ok(CallToolResult {
-                        content: vec![Content::text("Buzón vacío.")],
-                        is_error: Some(false),
-                    });
-                }
-                let mut report = format!("Buzón de {} ({} mensajes):\n", aid, msgs.len());
-                for (i, m) in msgs.iter().enumerate() {
-                    let preview = if m.payload.len() > 120 {
-                        format!("{}...", &m.payload[..120])
-                    } else { m.payload.clone() };
-                    report.push_str(&format!("{}. [{}] {}: {}\n", i + 1, m.msg_type, m.from, preview));
-                }
-                Ok(CallToolResult { content: vec![Content::text(report)], is_error: Some(false) })
-            }
-            NodeIntent::List => {
-                let nodes = router.list().await;
-                if nodes.is_empty() {
-                    return Ok(CallToolResult {
-                        content: vec![Content::text("No hay nodos conectados.")],
-                        is_error: Some(false),
-                    });
-                }
-                let report = nodes.iter().map(|n| {
-                    let agent_id = n["agent_id"].as_str().unwrap_or("?");
-                    let pending = n["inbox_pending"].as_u64().unwrap_or(0);
-                    format!("- {agent_id}: {pending} pendientes")
-                }).collect::<Vec<_>>().join("\n");
-                Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodos conectados:\n{report}"))],
-                    is_error: Some(false),
-                })
-            }
-            NodeIntent::Register => {
-                Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodo '{aid}' registrado."))],
-                    is_error: Some(false),
-                })
-            }
-            NodeIntent::Unregister => {
-                router.unregister(aid).await;
-                Ok(CallToolResult {
-                    content: vec![Content::text(format!("Nodo '{aid}' desregistrado."))],
-                    is_error: Some(false),
-                })
-            }
-        };
+    if let Some(result) = handle_nodo_prefix(server, &intent, &agent_id).await {
+        return result;
     }
 
     // Sovereign shortcut: "forget: {node_id}" — delete a node without routing to a guild
-    let intent_lower = intent.trim().to_lowercase();
-    if intent_lower.starts_with("forget:") || intent_lower.starts_with("delete node:") {
-        let node_id = intent.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
-        if node_id.is_empty() {
-            return Ok(error_result("forget: requires a node_id. Usage: forget: {node_id}"));
-        }
-        return match server.silva.delete_node(&node_id).await {
-            Ok(true) => Ok(CallToolResult {
-                content: vec![Content::text(format!("Forgotten: node '{node_id}' deleted."))],
-                is_error: Some(false),
-            }),
-            Ok(false) => Ok(error_result(&format!(
-                "Cannot forget '{node_id}': node not found or is protected."
-            ))),
-            Err(e) => Ok(error_result(&format!("forget failed: {e}"))),
-        };
+    if let Some(result) = handle_forget_shortcut(server, &intent).await {
+        return result;
     }
 
     use crate::transport::server::intent_enhancer;
