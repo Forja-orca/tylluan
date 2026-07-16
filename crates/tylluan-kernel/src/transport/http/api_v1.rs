@@ -1050,6 +1050,9 @@ async fn do_intent_handler(
                     }));
                 }
             }
+            let texts: Vec<String> = res.content.iter()
+                .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                .collect();
             let _ = state.broadcast_tx.send(serde_json::json!({
                 "type": "tool_call",
                 "tool": tool,
@@ -1060,7 +1063,17 @@ async fn do_intent_handler(
                 "error": if is_error { Some(format!("{:?}", res.content)) } else { None },
                 "ts": chrono::Utc::now().timestamp_millis()
             }));
-            (StatusCode::OK, Json(serde_json::json!({"status": "ok", "response": format!("{:?}", res.content)}))).into_response()
+            // `content`/`result` expose the real tool output text (and its parsed JSON when
+            // the tool returned a JSON string, e.g. plan mode / audit queries) so dashboard
+            // consumers don't have to scrape the Rust Debug-formatted `response` string.
+            let parsed_result = texts.first().and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok());
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "ok",
+                "response": format!("{:?}", res.content),
+                "content": texts,
+                "result": parsed_result,
+                "is_error": is_error,
+            }))).into_response()
         },
         Err(e) => {
             let latency_ms = call_start.elapsed().as_millis() as u64;
