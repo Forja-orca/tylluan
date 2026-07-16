@@ -162,8 +162,8 @@ pub fn kmeans_plus_plus(vectors: &[Vec<f32>], nlist: u32, max_iterations: usize)
         for c_idx in 0..nlist {
             let count = counts[c_idx];
             if count > 0 {
-                for d in 0..dim {
-                    new_centroids[c_idx][d] /= count as f32;
+                for v in new_centroids[c_idx].iter_mut().take(dim) {
+                    *v /= count as f32;
                 }
                 // Check shift/stabilization threshold
                 if l2_distance(&centroids[c_idx], &new_centroids[c_idx]) > 1e-4 {

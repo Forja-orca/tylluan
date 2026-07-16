@@ -562,7 +562,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 hardware: tylluan_link::gossip::HardwareCaps::default(),
             };
             // Store our own entry so it's available for Pull responses
-            gossip_state.gossip_engine.write().await.store_entries(&[local_entry.clone()]);
+            gossip_state.gossip_engine.write().await.store_entries(std::slice::from_ref(&local_entry));
 
             for peer_entry in &peers {
                 // Phase 1: Push our entry
@@ -587,9 +587,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                     Ok(resp) => {
                         gossip_state.gossip_engine.write().await.record_peer_clock(&peer_entry.node_id, clock);
                         // Process any entries pushed back in the response
-                        if let Ok(body) = resp.text().await {
-                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
-                                if let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
+                        if let Ok(body) = resp.text().await
+                            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&body)
+                                && let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
                                     let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
                                         .iter()
                                         .filter_map(|e| serde_json::from_value(e.clone()).ok())
@@ -604,8 +604,6 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                                         }
                                     }
                                 }
-                            }
-                        }
                     }
                     Err(e) => {
                         tracing::trace!("gossip push → {}: {}", peer_entry.addr, e);
@@ -627,9 +625,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                     .await
                 {
                     Ok(resp) => {
-                        if let Ok(body) = resp.text().await {
-                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
-                                if let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
+                        if let Ok(body) = resp.text().await
+                            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&body)
+                                && let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
                                     let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
                                         .iter()
                                         .filter_map(|e| serde_json::from_value(e.clone()).ok())
@@ -643,8 +641,6 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                                         }
                                     }
                                 }
-                            }
-                        }
                     }
                     Err(e) => {
                         tracing::trace!("gossip pull → {}: {}", peer_entry.addr, e);
@@ -932,8 +928,8 @@ fn build_router(state: Arc<HttpState>) -> Router {
                     }
                     // Static assets (JS/CSS/fonts) — serve from disk
                     let file_path = static_dir_inner.join(path.trim_start_matches('/'));
-                    if file_path.is_file() {
-                        if let Ok(bytes) = tokio::fs::read(&file_path).await {
+                    if file_path.is_file()
+                        && let Ok(bytes) = tokio::fs::read(&file_path).await {
                             let mime = match file_path.extension().and_then(|e| e.to_str()) {
                                 Some("js")   => "application/javascript; charset=utf-8",
                                 Some("css")  => "text/css; charset=utf-8",
@@ -953,7 +949,6 @@ fn build_router(state: Arc<HttpState>) -> Router {
                                 .unwrap();
                             return Ok(resp);
                         }
-                    }
                     // SPA client-side routes → index.html
                     #[cfg(feature = "bundled-dashboard")]
                     {

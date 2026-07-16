@@ -105,7 +105,7 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
                 });
             }
             done += 1;
-            if done % 10 == 0 {
+            if done.is_multiple_of(10) {
                 let _ = broadcast.send(serde_json::json!({
                     "type": "reindex_progress",
                     "done": done,

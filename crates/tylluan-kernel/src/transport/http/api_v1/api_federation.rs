@@ -143,19 +143,17 @@ pub async fn federation_approve_peer(
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(body) = resp.json::<serde_json::Value>().await {
                             // M12-B: fetch Ed25519 public key
-                            if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str()) {
-                                if !pubkey.is_empty() {
+                            if let Some(pubkey) = body.get("public_key").and_then(|v| v.as_str())
+                                && !pubkey.is_empty() {
                                     let _ = state.peer_db.update_ed25519_pubkey(&name, pubkey);
                                     tracing::info!("🔑 Auto-fetched Ed25519 pubkey for peer '{}'", name);
                                 }
-                            }
                             // M12-C: fetch external address for hole-punching
-                            if let Some(addr) = body.get("external_address").and_then(|v| v.as_str()) {
-                                if !addr.is_empty() {
+                            if let Some(addr) = body.get("external_address").and_then(|v| v.as_str())
+                                && !addr.is_empty() {
                                     let _ = state.peer_db.update_external_address(&name, addr);
                                     tracing::info!("🌐 Auto-fetched external address for peer '{}': {}", name, addr);
                                 }
-                            }
                             reload_peers_cache(&state).await;
                         }
                     }
@@ -519,13 +517,12 @@ pub async fn federation_sync_pull(
     let has_pubkey = !peer.ed25519_pubkey.is_empty();
 
     for envelope in &envelopes {
-        if has_pubkey {
-            if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+        if has_pubkey
+            && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
                 tracing::warn!("⛔ Pull: sig verify failed from '{}': {e}", peer.name);
                 skipped += 1;
                 continue;
             }
-        }
 
         let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
         if is_protected { skipped += 1; continue; }
@@ -655,19 +652,18 @@ pub async fn federation_sync_both(
     // Pull: peer's /export → local SilvaDB
     let mut pulled = 0u64;
     let export_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/export").await;
-    if let Ok(r) = client.get(&export_url).bearer_auth(&peer.auth_token).send().await {
-        if r.status().is_success() {
-            if let Ok(enc_bytes) = r.bytes().await {
-                if let Ok(plain) = crate::federation::decrypt_from_peer(&enc_bytes, &state.node_identity, &peer) {
-                    if let Ok(envelopes) = serde_json::from_slice::<Vec<tylluan_link::identity::SignedEnvelope>>(&plain) {
+    if let Ok(r) = client.get(&export_url).bearer_auth(&peer.auth_token).send().await
+        && r.status().is_success()
+            && let Ok(enc_bytes) = r.bytes().await
+                && let Ok(plain) = crate::federation::decrypt_from_peer(&enc_bytes, &state.node_identity, &peer)
+                    && let Ok(envelopes) = serde_json::from_slice::<Vec<tylluan_link::identity::SignedEnvelope>>(&plain) {
                         let has_pubkey = !peer.ed25519_pubkey.is_empty();
                         for envelope in &envelopes {
-                            if has_pubkey {
-                                if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+                            if has_pubkey
+                                && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
                                     tracing::warn!("⛔ Both sync: sig verify failed from '{}': {e}", peer.name);
                                     continue;
                                 }
-                            }
                             let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
                             if is_protected { continue; }
                             let node_id = envelope.node["id"].as_str().unwrap_or("");
@@ -692,11 +688,10 @@ pub async fn federation_sync_both(
                                     if let crate::consensus::FreshnessResolution::AcceptRemote { .. } = crate::consensus::resolve_node_freshness(
                                         &local_hash, local_protected, &local_updated_at,
                                         remote_hash, 10, &peer.name, remote_updated_at,
-                                    ) {
-                                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                    )
+                                        && state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
                                             pulled += 1;
                                         }
-                                    }
                                 }
                                 _ => {
                                     if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
@@ -706,10 +701,6 @@ pub async fn federation_sync_both(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
 
     let _ = state.peer_db.update_last_sync(&peer.name, now_secs());
     reload_peers_cache(&state).await;
@@ -966,12 +957,11 @@ async fn pull_from_peer_internal(
 
     for envelope in &envelopes {
         // M12-B: verify signature if peer has a pubkey on record
-        if has_pubkey {
-            if let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
+        if has_pubkey
+            && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
                 tracing::warn!("⛔ Pull internal: sig verify failed from '{}': {e}", peer.name);
                 continue;
             }
-        }
 
         let node_id = envelope.node["id"].as_str().unwrap_or("");
         let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");

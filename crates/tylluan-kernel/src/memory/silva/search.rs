@@ -368,9 +368,8 @@ impl super::SilvaDB {
                 Ok(results)
             })();
 
-            if let Ok(r) = results {
-                if !r.is_empty() { return Ok(r); }
-            }
+            if let Ok(r) = results
+                && !r.is_empty() { return Ok(r); }
 
             // Fallback: LIKE search (original behavior)
             let pattern = format!("%{}%", query.to_lowercase());

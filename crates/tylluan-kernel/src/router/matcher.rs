@@ -414,8 +414,8 @@ impl GuildMatcher {
         }
 
         // Apply guild category and role context bonuses
-        if let Some(ctx) = ctx {
-            if let Some(ref mut result) = keyword_result {
+        if let Some(ctx) = ctx
+            && let Some(ref mut result) = keyword_result {
                 let q_lower = query.to_lowercase();
                 if let Some(guild) = self.catalog.iter().find(|g| g.name == result.guild_name) {
                     let (cat_bonus, _) = guild_category_bonus(&q_lower, &guild.category);
@@ -425,7 +425,6 @@ impl GuildMatcher {
                     result.score = (result.score + cat_bonus + role_bonus).min(1.0);
                 }
             }
-        }
 
         // Stress-aware routing: if stress is high, penalize risky guilds and prefer stable ones
         if let Some(hormones) = &self.hormones
@@ -619,11 +618,10 @@ impl GuildMatcher {
                 score = 0.95;
             }
             // Verb match bonus (check guild name matches)
-            if let Some(vg) = verb_guild {
-                if guild.name == vg && score < 0.85 {
+            if let Some(vg) = verb_guild
+                && guild.name == vg && score < 0.85 {
                     score = 0.85;
                 }
-            }
             if score > best_score {
                 best_score = score;
                 best = Some(MatchResult {

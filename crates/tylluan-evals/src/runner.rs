@@ -228,7 +228,7 @@ async fn measure_oracle_recall(
         let expected = pair.expected_id.to_lowercase();
         let top5: Vec<_> = results.iter().take(EVAL_LIMIT).collect();
 
-        if top5.first().map_or(false, |(node, _)| node.id.to_lowercase() == expected) {
+        if top5.first().is_some_and(|(node, _)| node.id.to_lowercase() == expected) {
             hit1 += 1;
         }
         if top5.iter().any(|(node, _)| node.id.to_lowercase() == expected) {
@@ -323,7 +323,7 @@ pub async fn run_synthetic_benchmark(corpus: &SyntheticCorpus, engine: Option<&E
             .unwrap_or_else(|e| panic!("Failed to insert node {}: {:?}", node.id, e));
     }
 
-    if let Some(ref engine) = engine {
+    if let Some(engine) = engine {
         println!("  Computing embeddings for {} nodes...", corpus.nodes.len());
         for node in &corpus.nodes {
             match engine.embed(&node.content) {
@@ -364,7 +364,9 @@ pub async fn run_synthetic_benchmark(corpus: &SyntheticCorpus, engine: Option<&E
         None
     };
 
-    let report = metrics::compute_report(
+    
+
+    metrics::compute_report(
         "Synthetic Corpus",
         corpus.nodes.len(),
         corpus.edges.len(),
@@ -372,9 +374,7 @@ pub async fn run_synthetic_benchmark(corpus: &SyntheticCorpus, engine: Option<&E
         engine.is_some(),
         false,
         contradiction_accuracy,
-    );
-
-    report
+    )
 }
 
 async fn run_single_query(

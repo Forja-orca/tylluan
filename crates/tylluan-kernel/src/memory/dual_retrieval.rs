@@ -81,15 +81,14 @@ pub async fn dual_retrieve(
 }
 
 fn compute_degree(silva: &Arc<SilvaDB>, node_id: &str) -> i64 {
-    if let Ok(guard) = silva.conn_lock().try_lock() {
-        if let Ok(count) = guard.query_row(
+    if let Ok(guard) = silva.conn_lock().try_lock()
+        && let Ok(count) = guard.query_row(
             "SELECT COUNT(*) FROM edges WHERE source = ?1 OR target = ?1",
             rusqlite::params![node_id],
             |row| row.get::<_, i64>(0),
         ) {
             return count;
         }
-    }
     0
 }
 

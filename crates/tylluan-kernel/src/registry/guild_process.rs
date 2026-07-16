@@ -112,21 +112,19 @@ pub fn is_destructive_guild(caps: &serde_json::Value) -> bool {
             }
             if v.as_bool() == Some(false) {
                 // explicitly denied, not destructive via this axis
-            } else if let Some(arr) = v.as_array() {
-                if !arr.is_empty() {
+            } else if let Some(arr) = v.as_array()
+                && !arr.is_empty() {
                     return true; // non-empty allowlist → can execute
                 }
-            }
         }
         None => return true, // not declared → assume destructive
     }
 
     // filesystem_scope covering "/" → can write anywhere
-    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array()) {
-        if scope.iter().any(|v| v.as_str() == Some("/")) {
+    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array())
+        && scope.iter().any(|v| v.as_str() == Some("/")) {
             return true;
         }
-    }
 
     false
 }
@@ -175,15 +173,14 @@ pub fn enforce_capabilities(
                 }
             } else {
                 // Non-empty allowlist: extract requested command and check
-                if let Some(cmd) = extract_requested_binary(params) {
-                    if !list.iter().any(|allowed| allowed == &cmd) {
+                if let Some(cmd) = extract_requested_binary(params)
+                    && !list.iter().any(|allowed| allowed == &cmd) {
                         return Some(format!(
                             "CAPABILITY_BLOCKED: guild '{}' declares process_execution allowlist {:?}, \
                              but command '{}' is not allowed. Allowed commands: {}.",
                             guild_name, list, cmd, list.join(", ")
                         ));
                     }
-                }
                 // If no command arg but tool looks exec-like, also block
                 if is_exec_like_tool(params) && extract_requested_binary(params).is_none() {
                     return Some(format!(
@@ -211,8 +208,8 @@ pub fn enforce_capabilities(
     }
 
     // Check filesystem_scope
-    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array()) {
-        if !scope.is_empty() {
+    if let Some(scope) = caps.get("filesystem_scope").and_then(|v| v.as_array())
+        && !scope.is_empty() {
             let scope_paths: Vec<&str> = scope.iter()
                 .filter_map(|v| v.as_str())
                 .collect();
@@ -235,7 +232,6 @@ pub fn enforce_capabilities(
                 }
             }
         }
-    }
 
     None
 }
@@ -634,19 +630,18 @@ GuildLauncher::Python { module_path } => {
         //   this_time: run once without persisting
         //   this_session: set session override to permissive (in-memory)
         //   always_for_guild: persist guild override to permissive (TOML)
-        if let Some(msg) = self.check_capabilities(&params).await {
-            if let Some(result) = self.handle_capabilities_grant(&params, &msg).await {
+        if let Some(msg) = self.check_capabilities(&params).await
+            && let Some(result) = self.handle_capabilities_grant(&params, &msg).await {
                 return result;
             }
-        }
 
         // Dry-run intercept: if config says dry_run=true and guild is destructive,
         // simulate the call without forwarding to the proxy.
         // Destructive classification respects the full hierarchical cascade:
         //   session (agent_id) > guild > global
-        if let Ok(cfg) = crate::config::TylluanConfig::load_cached() {
-            if let Ok(locked) = cfg.try_read() {
-                if locked.guilds_dry_run() {
+        if let Ok(cfg) = crate::config::TylluanConfig::load_cached()
+            && let Ok(locked) = cfg.try_read()
+                && locked.guilds_dry_run() {
                     let agent_id = params.arguments.as_ref()
                         .and_then(|a| a.get("agent_id"))
                         .and_then(|v| v.as_str())
@@ -679,8 +674,6 @@ GuildLauncher::Python { module_path } => {
                         };
                     }
                 }
-            }
-        }
 
         let permit = self.concurrent_calls.acquire()
             .await

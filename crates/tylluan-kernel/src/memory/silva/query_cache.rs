@@ -58,11 +58,10 @@ impl QueryEmbeddingCache {
 
         let mut cache = self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
-        if let Some(entry) = cache.get(&key) {
-            if entry.inserted_at.elapsed() < CACHE_TTL {
+        if let Some(entry) = cache.get(&key)
+            && entry.inserted_at.elapsed() < CACHE_TTL {
                 return Ok(entry.embedding.clone());
             }
-        }
 
         let embedding = embed_fn(query)?;
 

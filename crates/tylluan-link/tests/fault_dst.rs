@@ -41,11 +41,10 @@ async fn respond_to_sync_with_timeout(
         .map_err(|_| ())?;
     let msg: GossipMessage = serde_json::from_slice(&raw).unwrap();
     responder.handle_incoming_message(transport, initiator_id, &msg).await.unwrap();
-    if let Ok(Ok(data)) = tokio::time::timeout(timeout, transport.receive()).await {
-        if let Ok(msg2) = serde_json::from_slice::<GossipMessage>(&data) {
+    if let Ok(Ok(data)) = tokio::time::timeout(timeout, transport.receive()).await
+        && let Ok(msg2) = serde_json::from_slice::<GossipMessage>(&data) {
             responder.handle_incoming_message(transport, initiator_id, &msg2).await.ok();
         }
-    }
     Ok(())
 }
 
@@ -166,12 +165,11 @@ async fn test_fault_dst_drop_rate_eventual_convergence() {
         let (sync_result, _) = tokio::join!(sync, handle);
 
         // sync_result is Ok(Ok(())) on success, Ok(Err(_)) or Err(timeout) on failure
-        if let Ok(Ok(())) = sync_result {
-            if engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a") {
+        if let Ok(Ok(())) = sync_result
+            && engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a") {
                 converged = true;
                 break;
             }
-        }
 
         if round == 10 {
             panic!("drop rate test: no convergence after 10 rounds with 30% loss");
