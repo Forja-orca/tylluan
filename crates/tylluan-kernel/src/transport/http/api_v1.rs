@@ -190,6 +190,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/guilds/{name}/reset-backoff", post(guild_reset_backoff_handler))
         .route("/api/v1/guilds/{guild_name}/tools/{tool_name}", post(guild_tool_call_handler))
         .route("/api/v1/doctor", get(doctor_diagnose_handler))
+        .route("/api/v1/doctor/repair", post(doctor_repair_handler))
         .route("/api/v1/silva/stats", get(silva_stats_handler))
         .route("/api/v1/silva/recent", get(silva_recent_handler))
         .route("/api/v1/silva/edge", post(silva_add_edge_handler))
@@ -1146,6 +1147,28 @@ async fn silva_stats_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
 
 async fn doctor_diagnose_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     Json(state.doctor.diagnose().await)
+}
+
+#[derive(serde::Deserialize)]
+struct DoctorRepairRequest {
+    target: String,
+    name: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct DoctorRepairResponse {
+    success: bool,
+    message: String,
+}
+
+async fn doctor_repair_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(payload): Json<DoctorRepairRequest>,
+) -> impl IntoResponse {
+    match state.doctor.repair(&payload.target, payload.name.as_deref()).await {
+        Ok(msg) => (StatusCode::OK, Json(DoctorRepairResponse { success: true, message: msg })).into_response(),
+        Err(e) => (StatusCode::CONFLICT, Json(DoctorRepairResponse { success: false, message: e })).into_response(),
+    }
 }
 
 async fn silva_recent_handler(State(state): State<Arc<HttpState>>, Query(q): Query<SilvaRecentQuery>) -> impl IntoResponse {
