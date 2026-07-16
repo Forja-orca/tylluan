@@ -22,7 +22,10 @@ import {
   Plug,
   Beaker,
   Bell,
-  Link2
+  Link2,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -39,6 +42,36 @@ const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
 const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 
 function App() {
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
+    return (localStorage.getItem('tylluan_theme') as 'dark' | 'light' | 'system') || 'system';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+    localStorage.setItem('tylluan_theme', theme);
+  }, [theme]);
+
+  // Listen to system theme changes in real-time if theme is set to 'system'
+  useEffect(() => {
+    if (theme !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const listener = (e: MediaQueryListEvent) => {
+      const root = window.document.documentElement;
+      root.classList.remove('light', 'dark');
+      root.classList.add(e.matches ? 'dark' : 'light');
+    };
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [theme]);
+
   const {
     online, events, guilds, stats, memoryStats, approvals,
     loading, error,
@@ -384,6 +417,40 @@ function App() {
             </span>
           </div>
           
+          {/* Theme Selector Toggle */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
+            <button
+              onClick={() => setTheme('light')}
+              className={cn(
+                "p-1.5 rounded-full transition-all cursor-pointer",
+                theme === 'light' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+              )}
+              title="Light Theme"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={cn(
+                "p-1.5 rounded-full transition-all cursor-pointer",
+                theme === 'dark' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+              )}
+              title="Dark Theme"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('system')}
+              className={cn(
+                "p-1.5 rounded-full transition-all cursor-pointer",
+                theme === 'system' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+              )}
+              title="System Theme"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Notifications Bell */}
           <div className="relative">
             <button
@@ -462,8 +529,8 @@ function App() {
 
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         {/* Sidebar Navigation */}
-        <aside className="w-64 border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto">
-          <div className="p-4 space-y-1">
+        <aside className="w-16 md:w-64 border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
+          <div className="p-2 md:p-4 space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
@@ -472,18 +539,18 @@ function App() {
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
+                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group",
                     active 
                       ? "bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/5" 
                       : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={cn("w-4 h-4 transition-colors", active ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300")} />
-                    <span>{tab.name}</span>
+                    <Icon className={cn("w-4 h-4 transition-colors shrink-0", active ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300")} />
+                    <span className="hidden md:inline">{tab.name}</span>
                   </div>
                   {tab.badge && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-bold min-w-[1.2rem] text-center border border-amber-500/30">
+                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-bold min-w-[1.2rem] text-center border border-amber-500/30">
                       {tab.badge}
                     </span>
                   )}
@@ -492,15 +559,15 @@ function App() {
             })}
           </div>
           
-          <div className="mt-auto p-4 border-t border-slate-800 bg-slate-900/20">
-             <div className="flex items-center gap-3 mb-3">
-               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">o3</div>
-               <div className="overflow-hidden">
+          <div className="mt-auto p-2 md:p-4 border-t border-slate-800 bg-slate-900/20 flex flex-col items-center md:items-stretch">
+             <div className="flex items-center gap-3 mb-1 md:mb-3">
+               <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700 shrink-0">o3</div>
+               <div className="overflow-hidden hidden md:block">
                  <p className="text-[10px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
                  <p className="text-[9px] text-slate-500 font-mono truncate">ID: 0x4F...7A</p>
                </div>
              </div>
-             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+             <div className="h-1 bg-slate-800 rounded-full overflow-hidden w-full hidden md:block">
                 <div className="h-full bg-emerald-500 w-3/4 animate-pulse" />
              </div>
           </div>

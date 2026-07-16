@@ -6,63 +6,124 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
- 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
- 
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
- 
     --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
- 
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
- 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
- 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
- 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
- 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
- 
     --radius: 0.5rem;
+
+    /* Light Mode (Inverted Slate, Darkened Colors) */
+    --slate-50: 229 84% 5%;
+    --slate-100: 222 47% 11%;
+    --slate-200: 221 38% 15%;
+    --slate-300: 217 33% 17%;
+    --slate-400: 215 25% 27%;
+    --slate-500: 215 19% 35%;
+    --slate-600: 215 16% 47%;
+    --slate-700: 215 20% 65%;
+    --slate-800: 213 27% 84%;
+    --slate-850: 214 32% 91%;
+    --slate-900: 210 40% 96%;
+    --slate-950: 210 40% 98%;
+    
+    --emerald-400: 161 94% 30%;
+    --emerald-500: 163 94% 24%;
+    --emerald-600: 163 94% 24%;
+    --emerald-700: 163 94% 24%;
+    
+    --amber-400: 38 92% 50%;
+    --amber-500: 38 92% 50%;
+    
+    --red-400: 0 84% 60%;
+    --red-500: 0 84% 60%;
+    
+    --rose-400: 347 77% 50%;
+    --rose-500: 345 83% 41%;
+    --rose-600: 345 83% 41%;
+    --rose-700: 345 83% 41%;
+    
+    --indigo-500: 243 75% 59%;
+    --indigo-600: 243 75% 59%;
+    
+    --violet-500: 262 83% 58%;
+    --violet-600: 262 83% 58%;
+    
+    --blue-400: 217 91% 60%;
+    --blue-500: 217 91% 60%;
   }
- 
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
- 
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
- 
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
- 
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
- 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
- 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
- 
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
- 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
- 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+
+    /* Dark Mode (Default Tailwind Values) */
+    --slate-50: 210 40% 98%;
+    --slate-100: 210 40% 96%;
+    --slate-200: 214 32% 91%;
+    --slate-300: 213 27% 84%;
+    --slate-400: 215 20% 65%;
+    --slate-500: 215 16% 47%;
+    --slate-600: 215 19% 35%;
+    --slate-700: 215 25% 27%;
+    --slate-800: 217 33% 17%;
+    --slate-850: 221 38% 15%;
+    --slate-900: 222 47% 11%;
+    --slate-950: 229 84% 5%;
+    
+    --emerald-400: 158 64% 52%;
+    --emerald-500: 160 84% 39%;
+    --emerald-600: 161 94% 30%;
+    --emerald-700: 163 94% 24%;
+    
+    --amber-400: 43 96% 56%;
+    --amber-500: 38 92% 50%;
+    
+    --red-400: 0 91% 71%;
+    --red-500: 0 84% 60%;
+    
+    --rose-400: 351 95% 71%;
+    --rose-500: 350 89% 60%;
+    --rose-600: 347 77% 50%;
+    --rose-700: 345 83% 41%;
+    
+    --indigo-500: 239 84% 67%;
+    --indigo-600: 243 75% 59%;
+    
+    --violet-500: 258 90% 66%;
+    --violet-600: 262 83% 58%;
+    
+    --blue-400: 213 94% 68%;
+    --blue-500: 217 91% 60%;
   }
 }
  
@@ -133,4 +194,18 @@ h1, h2, h3, h4 {
 /* Force Graph Container */
 .force-graph-container canvas {
   @apply cursor-grab active:cursor-grabbing;
+}
+
+/* Hide scrollbar for clean inputs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Terminal/Console text selection */
+::selection {
+  @apply bg-emerald-500/30 text-emerald-100;
 }

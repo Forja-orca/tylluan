@@ -65,7 +65,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Users className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-xl font-bold text-white tracking-tight">Access Management</h2>
+            <h2 className="text-xl font-bold text-slate-50 tracking-tight">Access Management</h2>
           </div>
           <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">Active Sovereign Sessions</p>
         </div>

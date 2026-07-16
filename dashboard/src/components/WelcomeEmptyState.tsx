@@ -108,7 +108,7 @@ export function WelcomeEmptyState({
         <div className="w-16 h-16 mx-auto bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
           <Database className="w-8 h-8 text-slate-950" />
         </div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-white uppercase">
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-50 uppercase">
           Welcome to Tylluan
         </h2>
         <p className="text-slate-400 text-sm max-w-md mx-auto">
@@ -168,7 +168,7 @@ export function WelcomeEmptyState({
               <div className="p-2 w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
                 <PlusCircle className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">1. Add Note</h3>
+              <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">1. Add Note</h3>
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Save a key-value or raw memory into your database.
               </p>
@@ -199,7 +199,7 @@ export function WelcomeEmptyState({
               <div className="p-2 w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
                 <Terminal className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">2. Connect Client</h3>
+              <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">2. Connect Client</h3>
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Configure your MCP workspace client to use Tylluan.
               </p>
@@ -225,7 +225,7 @@ export function WelcomeEmptyState({
               <div className="p-2 w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center">
                 <MessageSquare className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">3. Test Query</h3>
+              <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">3. Test Query</h3>
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Run a simulation test query against SilvaDB.
               </p>

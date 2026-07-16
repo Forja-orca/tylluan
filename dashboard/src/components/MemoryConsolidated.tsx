@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { KnowledgeGraphTab } from './KnowledgeGraphTab';
 import { NodesTab } from './NodesTab';
-import { BlackboardTab } from './BlackboardTab';
-import { Network, Radio, MessageSquare } from 'lucide-react';
+import { Network, Radio } from 'lucide-react';
 
 interface MemoryConsolidatedProps {
   bridge: any;
@@ -39,17 +38,6 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
           <Radio className="w-3.5 h-3.5" />
           Nodes
         </button>
-        <button
-          onClick={() => setSubTab('blackboard')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
-            subTab === 'blackboard'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          Blackboard
-        </button>
       </div>
 
       {/* Tab Panels */}
@@ -66,13 +54,6 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
             <NodesTab
               bridge={props.bridge}
               notify={props.notify}
-            />
-          </div>
-        )}
-        {subTab === 'blackboard' && (
-          <div className="flex-1 overflow-y-auto">
-            <BlackboardTab
-              bridge={props.bridge}
             />
           </div>
         )}

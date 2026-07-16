@@ -125,7 +125,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
             <Beaker className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-50 tracking-tight flex items-center gap-2">
               AutoResearch Calibration Lab
               <span className={cn(
                 "text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded-full border",
@@ -190,7 +190,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 1 (Precisión)</span>
                 <div className="flex items-baseline justify-between mt-2">
-                  <div className="text-2xl font-bold font-mono text-white">
+                  <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_1 * 100).toFixed(1)}%
                   </div>
                   <div className={cn(
@@ -212,7 +212,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 5 (Contexto)</span>
                 <div className="flex items-baseline justify-between mt-2">
-                  <div className="text-2xl font-bold font-mono text-white">
+                  <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_5 * 100).toFixed(1)}%
                   </div>
                   <div className="text-xs font-mono font-bold text-emerald-400">
@@ -231,7 +231,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Latencia Recuperación</span>
                 <div className="flex items-baseline justify-between mt-2">
-                  <div className="text-2xl font-bold font-mono text-white">
+                  <div className="text-2xl font-bold font-mono text-slate-50">
                     {data.metrics.current.latency_ms} ms
                   </div>
                   <div className={cn(
@@ -264,11 +264,11 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950/60 p-4 border border-purple-500/10 rounded-xl gap-4">
                 <div className="space-y-1">
                   <div className="text-xs font-mono text-purple-400 font-bold">{data.current_mutation.id}</div>
-                  <div className="text-sm text-white font-bold">{data.current_mutation.target}</div>
+                  <div className="text-sm text-slate-50 font-bold">{data.current_mutation.target}</div>
                 </div>
                 
                 <div className="flex items-center gap-4 text-sm font-mono bg-slate-900 px-4 py-2 rounded-lg border border-slate-800">
-                  <div className="text-slate-500">original: <span className="text-white font-bold">{data.current_mutation.original_val}</span></div>
+                  <div className="text-slate-500">original: <span className="text-slate-50 font-bold">{data.current_mutation.original_val}</span></div>
                   <ArrowRight className="w-4 h-4 text-purple-400" />
                   <div className="text-purple-400 font-bold">trial: {data.current_mutation.mutated_val}</div>
                 </div>
@@ -301,7 +301,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                         <span className="text-slate-500 font-mono">{item.target}</span>
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono mt-1">
-                        Valor Ensayo: <span className="text-white">{item.val}</span> | Recall@1: <span className="text-white font-bold">{(item.recall_1 * 100).toFixed(1)}%</span>
+                        Valor Ensayo: <span className="text-slate-50">{item.val}</span> | Recall@1: <span className="text-slate-50 font-bold">{(item.recall_1 * 100).toFixed(1)}%</span>
                       </div>
                     </div>
                     

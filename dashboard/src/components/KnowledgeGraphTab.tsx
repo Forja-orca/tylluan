@@ -181,7 +181,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <Network className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Cortex Knowledge</h2>
+            <h2 className="text-sm font-bold text-slate-50 uppercase tracking-wider">Cortex Knowledge</h2>
             <p className="text-[10px] text-slate-500 font-mono">SilvaDB visualizer & search engine</p>
           </div>
         </div>
@@ -255,7 +255,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 {searchQuery && (
                   <button
                     onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-50"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -266,7 +266,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
                   "p-2 rounded-lg border transition-all",
-                  showRecentSidebar ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-900 border-slate-800 text-slate-500 hover:text-white"
+                  showRecentSidebar ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-50"
                 )}
                 title="Últimas 24h"
               >
@@ -554,7 +554,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     <Clock className="w-4 h-4 text-emerald-400" />
                     <span className="text-[10px] font-bold text-slate-300 uppercase">Últimas 24h</span>
                   </div>
-                  <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-white">
+                  <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-slate-50">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

@@ -153,7 +153,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+          <h2 className="text-xl font-bold tracking-tight text-slate-50 flex items-center gap-2">
             <FileCode className="w-5 h-5 text-emerald-400" />
             Project Skills
           </h2>

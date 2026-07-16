@@ -205,8 +205,8 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-emerald-400" />
+        <h2 className="text-xl font-bold tracking-tight text-slate-50 flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-emerald-500" />
           Plan Mode Sandbox
         </h2>
         <p className="text-xs text-slate-400">
@@ -265,7 +265,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
               <button
                 onClick={handleExecuteForReal}
                 disabled={loading}
-                className="flex-1 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/80 text-white font-bold font-mono text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/80 text-slate-50 font-bold font-mono text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Play className="w-4 h-4 text-emerald-400" />
                 Execute for Real
