@@ -231,6 +231,9 @@ pub async fn handle_tylluan_do(
     let guild_hint = arguments.as_ref()
         .and_then(|a| a.get("guild")).and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let plan_mode = arguments.as_ref()
+        .and_then(|a| a.get("plan")).and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     if intent.trim().is_empty() {
         return Ok(error_result("tylluan_do requires a non-empty 'intent' argument."));
@@ -540,6 +543,36 @@ pub async fn handle_tylluan_do(
         arguments: Some(tool_args.as_object().cloned().unwrap_or_default()),
     };
     info!("🔀 tylluan_do: intent='{}' → guild='{}' → tool='{}'", intent, guild_name, tool_name);
+
+    // M31-P2: Plan mode — return resolved guild+tool+args for approval before executing
+    if plan_mode {
+        let plan_id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+        let risk_level = server.check_tool_risk(&tool_name).await;
+        let plan_info = serde_json::json!({
+            "status": "plan",
+            "plan_id": plan_id,
+            "guild": guild_name,
+            "tool": tool_name,
+            "risk_level": format!("{:?}", risk_level),
+            "intent": intent,
+            "arguments": tool_args,
+            "message": format!(
+                "Plan mode: would execute '{}' via guild '{}' tool '{}' (risk: {:?}). \
+                 To approve, call: tylluan_do(intent='approve action for plan {plan_id}') or \
+                 approve_action(requestId='{plan_id}', approved=true).",
+                intent, guild_name, tool_name, risk_level
+            ),
+        });
+        crate::security::grants::store_plan(
+            &plan_id, &guild_name, &tool_name, &tool_args,
+            agent_id.as_deref().unwrap_or("anonymous"), &intent,
+        ).await;
+        let result_text = serde_json::to_string_pretty(&plan_info).unwrap_or_default();
+        return Ok(CallToolResult {
+            content: vec![Content::text(result_text)],
+            is_error: Some(false),
+        });
+    }
 
     // Progress ticker: emit SSE events every heartbeat interval for long-running guild calls
     let progress_notifier = server.notifier.clone();

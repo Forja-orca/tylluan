@@ -159,6 +159,28 @@ impl TylluanServer {
                     };
                     resolved = crate::security::grants::resolve(request_id, level).await;
                 }
+                // M31-P2: Try plan store — execute the stored plan directly
+                if !resolved && approved
+                    && let Some(plan) = crate::security::grants::get_plan(request_id).await
+                {
+                    let call_params = rmcp::model::CallToolRequestParam {
+                        name: plan.tool.clone().into(),
+                        arguments: Some(plan.args.clone()),
+                    };
+                    let guild_name = plan.guild.clone();
+                    let result = {
+                        let reg = self.registry.read().await;
+                        match reg.guilds.get(&guild_name) {
+                            Some(guild) => guild.call_tool_readonly(call_params).await,
+                            None => error_result(&format!("Plan guild '{guild_name}' not found")),
+                        }
+                    };
+                    crate::security::grants::remove_plan(request_id).await;
+                    if !plan.agent_id.is_empty() && plan.agent_id != "anonymous" {
+                        let _ = self.journal.as_ref().map(|j| j.checkin(&plan.agent_id, "plan:executed"));
+                    }
+                    return Ok(result);
+                }
                 if !resolved && !approved {
                     // Reject by removing the grant without sending (receiver gets Canceled)
                     resolved = crate::security::grants::remove(request_id).await;

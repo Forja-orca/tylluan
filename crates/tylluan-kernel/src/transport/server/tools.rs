@@ -56,7 +56,8 @@ impl super::TylluanServer {
                         "guild":    { "type": "string", "description": "Optional. Force routing to a specific guild (e.g. 'bash', 'git', 'filesystem'). Skips the semantic router." },
                         "remember": { "type": "boolean", "default": false, "description": "If true, store the result in long-term memory so it can be retrieved later with tylluan_recall." },
                         "agent_id": { "type": "string", "description": "Optional. Your agent identity (e.g. 'agent-1', 'agent-2'). When set, episodes are auto-saved to your session history and retrievable later with tylluan_recall agent_id filter." },
-                        "explore":  { "type": "string", "description": "Optional. Explore a branch of the fractal tool tree. Use 'explore' to discover sub-tools without executing anything. Example: 'explore memory', 'explore graph'." }
+                        "explore":  { "type": "string", "description": "Optional. Explore a branch of the fractal tool tree. Use 'explore' to discover sub-tools without executing anything. Example: 'explore memory', 'explore graph'." },
+                        "plan":     { "type": "boolean", "default": false, "description": "M31-P2: Plan mode. When true, resolves the guild+tool+arguments and returns them for approval without executing. The returned plan_id can be used with approve_action to execute." }
                     },
                     "required": ["intent"]
                 }),

@@ -379,3 +379,68 @@ fn test_agent_id_tool_allowed_unknown_agent_is_permitted() {
         "unknown agent with no permissions config should be allowed"
     );
 }
+
+// ── M31-P2: Plan Mode ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_plan_store_and_retrieve_roundtrip() {
+    tylluan_kernel::security::grants::init_plan_store();
+    let plan_id = "test-plan-001";
+    let args = serde_json::json!({ "command": "ls -la", "intent": "list files" });
+    tylluan_kernel::security::grants::store_plan(
+        plan_id, "bash", "bash_execute", &args, "agent-1", "list files in current directory",
+    ).await;
+    let plan = tylluan_kernel::security::grants::get_plan(plan_id).await;
+    assert!(plan.is_some(), "stored plan should be retrievable");
+    let plan = plan.unwrap();
+    assert_eq!(plan.guild, "bash");
+    assert_eq!(plan.tool, "bash_execute");
+    assert_eq!(plan.agent_id, "agent-1");
+    assert_eq!(plan.intent, "list files in current directory");
+    assert_eq!(plan.args.get("command").and_then(|v| v.as_str()), Some("ls -la"));
+}
+
+#[tokio::test]
+async fn test_plan_remove_frees_plan() {
+    tylluan_kernel::security::grants::init_plan_store();
+    let plan_id = "test-plan-002";
+    let args = serde_json::json!({});
+    tylluan_kernel::security::grants::store_plan(
+        plan_id, "filesystem", "file_read", &args, "agent-2", "read a file",
+    ).await;
+    assert!(tylluan_kernel::security::grants::get_plan(plan_id).await.is_some());
+    let removed = tylluan_kernel::security::grants::remove_plan(plan_id).await;
+    assert!(removed, "remove_plan should return true for existing plan");
+    assert!(tylluan_kernel::security::grants::get_plan(plan_id).await.is_none(), "plan should be gone after remove");
+}
+
+#[tokio::test]
+async fn test_plan_get_nonexistent_returns_none() {
+    tylluan_kernel::security::grants::init_plan_store();
+    let plan = tylluan_kernel::security::grants::get_plan("no-such-plan").await;
+    assert!(plan.is_none(), "nonexistent plan should return None");
+}
+
+#[tokio::test]
+async fn test_plan_remove_nonexistent_returns_false() {
+    tylluan_kernel::security::grants::init_plan_store();
+    let removed = tylluan_kernel::security::grants::remove_plan("no-such-plan").await;
+    assert!(!removed, "remove on nonexistent plan should return false");
+}
+
+#[tokio::test]
+async fn test_plan_overwrite_replaces_existing() {
+    tylluan_kernel::security::grants::init_plan_store();
+    let plan_id = "test-plan-003";
+    let args1 = serde_json::json!({ "query": "hello" });
+    let args2 = serde_json::json!({ "query": "world" });
+    tylluan_kernel::security::grants::store_plan(
+        plan_id, "memory", "tylluan_recall", &args1, "agent-a", "first",
+    ).await;
+    tylluan_kernel::security::grants::store_plan(
+        plan_id, "memory", "tylluan_recall", &args2, "agent-b", "second",
+    ).await;
+    let plan = tylluan_kernel::security::grants::get_plan(plan_id).await.unwrap();
+    assert_eq!(plan.intent, "second", "overwrite should replace intent");
+    assert_eq!(plan.args.get("query").and_then(|v| v.as_str()), Some("world"), "overwrite should replace args");
+}
