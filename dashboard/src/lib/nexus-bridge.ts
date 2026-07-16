@@ -213,6 +213,13 @@ export interface AgentMemorySummary {
   node_id?: string;
   created_at?: string;
 }
+
+export interface ProjectSkill {
+  name: string;
+  content: string;
+  created_at: string;
+}
+
 export interface AgentProfile {
   agent_id: string;
   first_seen: string;
@@ -768,6 +775,50 @@ export class NexusBridge {
     } catch {
       return [];
     }
+  }
+
+  // Real backend contract (crates/tylluan-kernel/src/transport/server/handler_do/mod.rs,
+  // M31-P5, handle_skill_prefix): there is no dedicated /api/v1/skills endpoint --
+  // @skill:* is a deterministic tylluan_do intent prefix, same family as
+  // @coloquio/nodo/forget. Responses are human-readable plain text (not JSON),
+  // e.g. "Project skills:\n  - name1\n  - name2" or "No skills saved for this project. ...".
+  // @skill:list only returns bare names (no content/created_at) -- full content
+  // is fetched lazily per-skill via @skill:get:<name> when the panel needs it.
+  private async callSkillIntent(intent: string): Promise<{ text: string; isError: boolean }> {
+    const raw = await this.fetchRaw('/api/v1/do', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: 'tylluan_do', arguments: { intent } })
+    });
+    const text: string = Array.isArray(raw?.content) ? raw.content.join('') : (raw?.content?.[0] ?? '');
+    return { text, isError: !!raw?.is_error };
+  }
+
+  async getProjectSkills(): Promise<Pick<ProjectSkill, 'name'>[]> {
+    const { text } = await this.callSkillIntent('@skill:list');
+    if (text.startsWith('No skills saved')) return [];
+    return text
+      .split('\n')
+      .filter((line) => line.trim().startsWith('- '))
+      .map((line) => ({ name: line.trim().replace(/^- /, '') }));
+  }
+
+  async getProjectSkill(name: string): Promise<ProjectSkill> {
+    const { text, isError } = await this.callSkillIntent(`@skill:get:${name}`);
+    if (isError) throw new Error(text || `Skill '${name}' not found`);
+    // Backend format: "Skill '<name>':\n<content>"
+    const content = text.includes(':\n') ? text.slice(text.indexOf(':\n') + 2) : text;
+    return { name, content, created_at: '' };
+  }
+
+  async saveProjectSkill(name: string, content: string): Promise<void> {
+    const { isError, text } = await this.callSkillIntent(`@skill:save:${name}: ${content}`);
+    if (isError) throw new Error(text || 'Failed to save skill');
+  }
+
+  async deleteProjectSkill(name: string): Promise<void> {
+    const { isError, text } = await this.callSkillIntent(`@skill:delete:${name}`);
+    if (isError) throw new Error(text || 'Failed to delete skill');
   }
 
   async getSharedKnowledge(agentA: string, agentB: string): Promise<any> {
