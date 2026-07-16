@@ -115,6 +115,11 @@ enum Commands {
         #[command(subcommand)]
         action: SandboxCommand,
     },
+    /// Resume a previous agent session — retrieve the last session summary from memory
+    Resume {
+        /// Agent identity to resume (e.g. 'claude-code', 'qwen')
+        agent_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -190,14 +195,14 @@ async fn main() -> Result<()> {
                 .timeout(std::time::Duration::from_secs(2))
                 .build()?;
             let port = port.unwrap_or(DEFAULT_PORT);
-            let url = format!("http://127.0.0.1:{}/health", port);
+            let url = format!("http://127.0.0.1:{port}/health");
 
             for i in 1..=30 {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
-                        println!("✅ Kernel is ready at http://127.0.0.1:{}", port);
-                        println!("🌐 Connect your MCP client to http://127.0.0.1:{}/sse", port);
+                        println!("✅ Kernel is ready at http://127.0.0.1:{port}");
+                        println!("🌐 Connect your MCP client to http://127.0.0.1:{port}/sse");
                         break;
                     }
                     _ if i == 30 => {
@@ -214,7 +219,7 @@ async fn main() -> Result<()> {
             let mut found = false;
             for (pid, process) in sys.processes() {
                 if process.name().to_string_lossy().contains("tylluan-nexus") {
-                    println!("🛑 Stopping kernel process (PID {})...", pid);
+                    println!("🛑 Stopping kernel process (PID {pid})...");
                     process.kill();
                     found = true;
                 }
@@ -230,13 +235,13 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(5))
                 .build()?;
-            let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
                     println!("✅ Hub is OPERATIONAL (v{})", json["version"]);
                 }
-                _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{})", DEFAULT_PORT),
+                _ => println!("❌ Hub is OFFLINE or unreachable (http://127.0.0.1:{DEFAULT_PORT})"),
             }
         }
         Commands::Doctor => {
@@ -261,7 +266,7 @@ async fn main() -> Result<()> {
                 let p = config_paths.iter().find(|p| p.exists()).unwrap();
                 let raw = match std::fs::read_to_string(p) {
                     Ok(c) => c,
-                    Err(e) => { println!("❌ (read error: {})", e); all_ok = false; String::new() }
+                    Err(e) => { println!("❌ (read error: {e})"); all_ok = false; String::new() }
                 };
                 if !raw.is_empty() {
                     match raw.parse::<toml::Value>() {
@@ -291,9 +296,9 @@ async fn main() -> Result<()> {
                     let major_minor = v.split_whitespace().nth(1).unwrap_or("0.0")
                         .split('.').take(2).map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>();
                     if major_minor.len() == 2 && major_minor[0] >= 3 && major_minor[1] >= 11 {
-                        println!("[3/7] Python: {} ... ✅", v);
+                        println!("[3/7] Python: {v} ... ✅");
                     } else {
-                        println!("[3/7] Python: {} ... ❌ (need 3.11+)", v);
+                        println!("[3/7] Python: {v} ... ❌ (need 3.11+)");
                         all_ok = false;
                     }
                 }
@@ -331,9 +336,9 @@ async fn main() -> Result<()> {
             // ── 6. Port free ──
             let port_free = std::net::TcpListener::bind(("127.0.0.1", DEFAULT_PORT)).is_ok();
             if port_free {
-                println!("[6/7] Port {}: available ... ✅", DEFAULT_PORT);
+                println!("[6/7] Port {DEFAULT_PORT}: available ... ✅");
             } else {
-                println!("[6/7] Port {}: in use (kernel likely running) ... ✅", DEFAULT_PORT);
+                println!("[6/7] Port {DEFAULT_PORT}: in use (kernel likely running) ... ✅");
             }
 
             // ── 7. Kernel health (online check) ──
@@ -342,14 +347,14 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(5))
                     .build()?;
-                let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         let json: serde_json::Value = resp.json().await?;
                         let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("ok");
-                        println!("[7/7] Kernel: running ({}) ... ✅", status);
+                        println!("[7/7] Kernel: running ({status}) ... ✅");
                         // Also fetch detailed doctor report
-                        let doctor_url = format!("http://127.0.0.1:{}/api/v1/doctor", DEFAULT_PORT);
+                        let doctor_url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/doctor");
                         if let Ok(resp) = client.get(&doctor_url).send().await
                             && let Ok(report) = resp.json::<serde_json::Value>().await {
                                 if let Some(guilds) = report["guilds"].as_array() {
@@ -366,7 +371,7 @@ async fn main() -> Result<()> {
                                         println!("\n   Suggestions:");
                                         for s in suggestions {
                                             if let Some(s) = s.as_str() {
-                                                println!("   - {}", s);
+                                                println!("   - {s}");
                                             }
                                         }
                                     }
@@ -402,7 +407,7 @@ async fn main() -> Result<()> {
                 cmd.spawn()?.wait()?;
             } else {
                 let content = std::fs::read_to_string(&log_file)?;
-                println!("{}", content);
+                println!("{content}");
             }
         }
         Commands::DownloadModels => {
@@ -427,19 +432,19 @@ async fn main() -> Result<()> {
             match req.send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
-                    println!("✅ Connected to Tylluan at {}", base);
+                    println!("✅ Connected to Tylluan at {base}");
                     println!("   Node ID:    {}", json["node_id"].as_str().unwrap_or("?"));
                     println!("   Public Key: {}", json["public_key"].as_str().unwrap_or("?"));
                     println!("   Version:    {}", json["tylluan_version"].as_str().unwrap_or("?"));
                     if let Some(addr) = json["external_address"].as_str().filter(|a| !a.is_empty()) {
-                        println!("   External:   {}", addr);
+                        println!("   External:   {addr}");
                     }
                 }
                 Ok(resp) => {
                     anyhow::bail!("remote returned {} — check URL and auth token", resp.status());
                 }
                 Err(e) => {
-                    anyhow::bail!("could not reach {}: {}", base, e);
+                    anyhow::bail!("could not reach {base}: {e}");
                 }
             }
         }
@@ -448,7 +453,7 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
-            let verify_url = format!("http://127.0.0.1:{}/api/v1/audit/verify", DEFAULT_PORT);
+            let verify_url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/audit/verify");
             match client.get(&verify_url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
@@ -458,7 +463,7 @@ async fn main() -> Result<()> {
                         "tampered" => "🚨",
                         _ => "⚠️",
                     };
-                    println!("{} Chain integrity: {}", icon, status);
+                    println!("{icon} Chain integrity: {status}");
                     println!("   Valid entries:   {}", json["valid_count"]);
                     println!("   Tampered entries: {}", json["tampered_count"]);
                 }
@@ -472,7 +477,7 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(300))
                     .build()?;
-                let url = format!("http://127.0.0.1:{}/api/v1/eval/run", DEFAULT_PORT);
+                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/eval/run");
                 let body = serde_json::json!({
                     "benchmark": "longmemeval-s",
                     "num_queries": num_queries.unwrap_or(30),
@@ -491,12 +496,12 @@ async fn main() -> Result<()> {
                             let p95_lat = r["p95_latency_ms"].as_f64().unwrap_or(0.0);
                             let hash = r["result_hash"].as_str().unwrap_or("?");
                             let n = r["num_queries"].as_u64().unwrap_or(0);
-                            println!("✅ LongMemEval-S complete ({} queries):", n);
-                            println!("   Recall@1:  {:.1}%", recall_1);
-                            println!("   Recall@5:  {:.1}%", recall_5);
-                            println!("   Recall@10: {:.1}%", recall_10);
-                            println!("   Latency:   mean={:.0}ms p95={:.0}ms", mean_lat, p95_lat);
-                            println!("   Hash:      {}", hash);
+                            println!("✅ LongMemEval-S complete ({n} queries):");
+                            println!("   Recall@1:  {recall_1:.1}%");
+                            println!("   Recall@5:  {recall_5:.1}%");
+                            println!("   Recall@10: {recall_10:.1}%");
+                            println!("   Latency:   mean={mean_lat:.0}ms p95={p95_lat:.0}ms");
+                            println!("   Hash:      {hash}");
                             println!("   (Run 'tylluan eval list' to see all results)");
                         }
                     }
@@ -509,7 +514,7 @@ async fn main() -> Result<()> {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
                     .build()?;
-                let url = format!("http://127.0.0.1:{}/api/v1/eval/results", DEFAULT_PORT);
+                let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/eval/results");
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         let json: serde_json::Value = resp.json().await?;
@@ -526,9 +531,8 @@ async fn main() -> Result<()> {
                                 let hash = r["result_hash"].as_str().unwrap_or("?");
                                 let n = r["num_queries"].as_u64().unwrap_or(0);
                                 println!("   {}. {} ({} queries)", i + 1, r["benchmark"], n);
-                                println!("      R@1={:.1}% R@5={:.1}% R@10={:.1}%  lat={:.0}ms",
-                                    recall_1, recall_5, recall_10, mean_lat);
-                                println!("      hash: {}", hash);
+                                println!("      R@1={recall_1:.1}% R@5={recall_5:.1}% R@10={recall_10:.1}%  lat={mean_lat:.0}ms");
+                                println!("      hash: {hash}");
                             }
                         }
                     }
@@ -562,14 +566,14 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to write {}", config_path.display()))?;
 
             println!("✅ tylluan.toml written to {}", config_path.display());
-            println!("   Profile: {}", profile);
+            println!("   Profile: {profile}");
 
             if profile != InstallProfile::Portable {
                 let model_name = match profile {
                     InstallProfile::Clinic => "BGE-Small (67MB)",
                     _ => "BGE-M3 (1.2GB)",
                 };
-                println!("📥 Downloading {} embedding model...", model_name);
+                println!("📥 Downloading {model_name} embedding model...");
                 let exe_path = find_kernel_exe()?;
                 let status = Command::new(exe_path)
                     .arg("--download-models")
@@ -597,19 +601,19 @@ async fn main() -> Result<()> {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(2))
                 .build()?;
-            let url = format!("http://127.0.0.1:{}/health", DEFAULT_PORT);
+            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/health");
 
             for i in 1..=30 {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 match client.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         println!();
-                        println!("🎉 Tylluan is running at http://127.0.0.1:{}", DEFAULT_PORT);
+                        println!("🎉 Tylluan is running at http://127.0.0.1:{DEFAULT_PORT}");
                         println!();
                         println!("   Connect your MCP client:");
-                        println!("     Claude Desktop -> http://127.0.0.1:{}/sse", DEFAULT_PORT);
-                        println!("     Claude Code   -> /mcp add tylluan sse http://127.0.0.1:{}/sse", DEFAULT_PORT);
-                        println!("     curl          -> curl http://127.0.0.1:{}/health", DEFAULT_PORT);
+                        println!("     Claude Desktop -> http://127.0.0.1:{DEFAULT_PORT}/sse");
+                        println!("     Claude Code   -> /mcp add tylluan sse http://127.0.0.1:{DEFAULT_PORT}/sse");
+                        println!("     curl          -> curl http://127.0.0.1:{DEFAULT_PORT}/health");
                         break;
                     }
                     _ if i == 30 => {
@@ -631,7 +635,7 @@ async fn main() -> Result<()> {
                 .user_agent("tylluan-update/1.0")
                 .build()?;
 
-            let release_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+            let release_url = format!("https://api.github.com/repos/{repo}/releases/latest");
             let resp = client.get(&release_url).send().await?;
 
             if !resp.status().is_success() {
@@ -644,11 +648,11 @@ async fn main() -> Result<()> {
             let latest_ver = latest_tag.trim_start_matches('v');
 
             if latest_ver == current_ver {
-                println!("✅ Tylluan v{} is up to date.", current_ver);
+                println!("✅ Tylluan v{current_ver} is up to date.");
                 return Ok(());
             }
 
-            println!("📦 Update available: v{} → v{}", current_ver, latest_ver);
+            println!("📦 Update available: v{current_ver} → v{latest_ver}");
 
             if check {
                 println!("   Run 'tylluan update' without --check to download.");
@@ -657,17 +661,16 @@ async fn main() -> Result<()> {
 
             // Detect current platform
             let target = detect_update_target();
-            let archive_name = format!("tylluan-{}.tar.gz", target);
+            let archive_name = format!("tylluan-{target}.tar.gz");
             let download_url = format!(
-                "https://github.com/{}/releases/download/{}/{}",
-                repo, latest_tag, archive_name
+                "https://github.com/{repo}/releases/download/{latest_tag}/{archive_name}"
             );
 
-            println!("📥 Downloading {} ...", archive_name);
+            println!("📥 Downloading {archive_name} ...");
             let download_resp = client.get(&download_url).send().await?;
             if !download_resp.status().is_success() {
                 println!("❌ Download failed: HTTP {} — unsupported platform: {}", download_resp.status(), target);
-                println!("   Manual download: https://github.com/{}/releases", repo);
+                println!("   Manual download: https://github.com/{repo}/releases");
                 return Ok(());
             }
 
@@ -693,15 +696,15 @@ async fn main() -> Result<()> {
                     }
                 });
                 if found.is_none() {
-                    println!("❌ Could not find '{}' in archive.", exe_name);
-                    println!("   Manual download: https://github.com/{}/releases", repo);
+                    println!("❌ Could not find '{exe_name}' in archive.");
+                    println!("   Manual download: https://github.com/{repo}/releases");
                     return Ok(());
                 }
             }
 
             if !temp_path.exists() {
                 println!("❌ Could not extract binary from archive.");
-                println!("   Manual download: https://github.com/{}/releases", repo);
+                println!("   Manual download: https://github.com/{repo}/releases");
                 return Ok(());
             }
 
@@ -713,7 +716,7 @@ async fn main() -> Result<()> {
             }
             match std::fs::rename(&temp_path, &current_exe) {
                 Ok(()) => {
-                    println!("✅ Updated to Tylluan v{}", latest_ver);
+                    println!("✅ Updated to Tylluan v{latest_ver}");
                 }
                 Err(e) => {
                     // Windows: can't rename over running exe. Place beside it.
@@ -721,7 +724,7 @@ async fn main() -> Result<()> {
                     std::fs::rename(&temp_path, &fallback)?;
                     println!("✅ Downloaded Tylluan v{} to {}", latest_ver, fallback.display());
                     println!("   Replace {} manually with the new binary.", current_exe.display());
-                    println!("   Error was: {}", e);
+                    println!("   Error was: {e}");
                 }
             }
             println!("   Restart the kernel with 'tylluan start' for changes to take effect.");
@@ -730,13 +733,13 @@ async fn main() -> Result<()> {
             NewWhat::Guild { name } => {
                 let snake = name.trim().to_lowercase().replace(' ', "_");
                 if !snake.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                    anyhow::bail!("Guild name must be snake_case (letters, numbers, underscores only). Got: '{}'", name);
+                    anyhow::bail!("Guild name must be snake_case (letters, numbers, underscores only). Got: '{name}'");
                 }
 
                 let guild_dir = std::path::Path::new("guilds").join("core");
                 let tests_dir = std::path::Path::new("tests").join("guilds");
-                let guild_path = guild_dir.join(format!("{}.py", snake));
-                let test_path = tests_dir.join(format!("test_{}.py", snake));
+                let guild_path = guild_dir.join(format!("{snake}.py"));
+                let test_path = tests_dir.join(format!("test_{snake}.py"));
 
                 if guild_path.exists() {
                     anyhow::bail!("Guild already exists at {}", guild_path.display());
@@ -756,7 +759,7 @@ async fn main() -> Result<()> {
                 }).collect::<Vec<_>>().join(" ");
 
                 let guild_src = format!(
-                    r##"""TylluanNexus {} Guild — <description>
+                    r##"""TylluanNexus {display_name} Guild — <description>
 
 Status: draft
 """
@@ -770,7 +773,7 @@ CAPABILITIES = {{
 from mcp.server.fastmcp import FastMCP
 from guilds.core import utils
 
-mcp = FastMCP("tylluan-{}")
+mcp = FastMCP("tylluan-{snake}")
 
 
 @mcp.tool()
@@ -781,8 +784,7 @@ async def my_tool(query: str) -> str:
         query: Input parameter description.
     """
     return f"Hello from {snake}! You said: {{query}}"
-"##,
-                    display_name, snake
+"##
                 );
 
                 let test_src = format!(
@@ -819,10 +821,10 @@ def test_{snake}_tool_registered():
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()?;
-            let base = format!("http://127.0.0.1:{}", DEFAULT_PORT);
+            let base = format!("http://127.0.0.1:{DEFAULT_PORT}");
             match action {
                 SandboxCommand::Status => {
-                    let url = format!("{}/api/v1/config", base);
+                    let url = format!("{base}/api/v1/config");
                     match client.get(&url).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let config: serde_json::Value = resp.json().await?;
@@ -843,7 +845,7 @@ def test_{snake}_tool_registered():
                     }
                 }
                 SandboxCommand::Set { profile } => {
-                    let url = format!("{}/api/v1/config/sandbox-profile", base);
+                    let url = format!("{base}/api/v1/config/sandbox-profile");
                     match client.post(&url).json(&serde_json::json!({ "profile": profile })).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let json: serde_json::Value = resp.json().await?;
@@ -857,7 +859,7 @@ def test_{snake}_tool_registered():
                     }
                 }
                 SandboxCommand::Guild { name, profile } => {
-                    let url = format!("{}/api/v1/config/sandbox-profile/guild", base);
+                    let url = format!("{base}/api/v1/config/sandbox-profile/guild");
                     match client.post(&url).json(&serde_json::json!({ "guild": name, "profile": profile })).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             let json: serde_json::Value = resp.json().await?;
@@ -871,10 +873,10 @@ def test_{snake}_tool_registered():
                     }
                 }
                 SandboxCommand::Session { agent_id, profile } => {
-                    let url = format!("{}/api/v1/config/sandbox-profile/session", base);
+                    let url = format!("{base}/api/v1/config/sandbox-profile/session");
                     match client.post(&url).json(&serde_json::json!({ "agent_id": agent_id, "profile": profile })).send().await {
                         Ok(resp) if resp.status().is_success() => {
-                            println!("✅ Session override for agent '{}' set to: {} (in-memory, lost on restart)", agent_id, profile);
+                            println!("✅ Session override for agent '{agent_id}' set to: {profile} (in-memory, lost on restart)");
                         }
                         Ok(resp) => {
                             let json: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -884,28 +886,49 @@ def test_{snake}_tool_registered():
                     }
                 }
                 SandboxCommand::UnsetGuild { name } => {
-                    let url = format!("{}/api/v1/config/sandbox-profile/guild/{}", base, name);
+                    let url = format!("{base}/api/v1/config/sandbox-profile/guild/{name}");
                     match client.delete(&url).send().await {
                         Ok(resp) if resp.status().is_success() => {
-                            println!("✅ Guild '{}' override removed — falls back to global profile", name);
+                            println!("✅ Guild '{name}' override removed — falls back to global profile");
                         }
                         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
-                            println!("ℹ️ Guild '{}' had no override set", name);
+                            println!("ℹ️ Guild '{name}' had no override set");
                         }
                         Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
                         Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
                     }
                 }
                 SandboxCommand::UnsetSession { agent_id } => {
-                    let url = format!("{}/api/v1/config/sandbox-profile/session/{}", base, agent_id);
+                    let url = format!("{base}/api/v1/config/sandbox-profile/session/{agent_id}");
                     match client.delete(&url).send().await {
                         Ok(resp) if resp.status().is_success() => {
-                            println!("✅ Session override for '{}' cleared", agent_id);
+                            println!("✅ Session override for '{agent_id}' cleared");
                         }
                         Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
                         Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
                     }
                 }
+            }
+        }
+        Commands::Resume { agent_id } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()?;
+            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/sessions/resume");
+            match client.get(&url).query(&[("agent_id", &agent_id)]).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let json: serde_json::Value = resp.json().await?;
+                    if json["found"].as_bool().unwrap_or(false) {
+                        println!("📋 Resume session for agent: {}", json["agent_id"]);
+                        println!("   Summary: {}", json["summary"].as_str().unwrap_or("(empty)"));
+                        println!("   Node:    {} ({})", json["node_id"].as_str().unwrap_or("?"), json["node_type"].as_str().unwrap_or("?"));
+                        println!("   Created: {}", json["created_at"].as_str().unwrap_or("?"));
+                    } else {
+                        println!("📭 No session history found for agent '{agent_id}'");
+                    }
+                }
+                Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
             }
         }
     }
@@ -1080,7 +1103,7 @@ fn resolve_url(url: Option<String>, host: Option<String>) -> Result<String> {
         return Ok(base.to_string());
     }
     if let Some(h) = host {
-        let base = if h.contains("://") { h } else { format!("http://{}", h) };
+        let base = if h.contains("://") { h } else { format!("http://{h}") };
         return Ok(base.trim_end_matches('/').to_string());
     }
     Err(anyhow::anyhow!("Provide a URL or --host"))
@@ -1167,6 +1190,6 @@ fn detect_update_target() -> String {
         ("macos", "aarch64") => "aarch64-apple-darwin".into(),
         ("windows", "x86_64") => "x86_64-pc-windows-msvc".into(),
         ("windows", "aarch64") => "aarch64-pc-windows-msvc".into(),
-        _ => format!("{}-{}", arch, os),
+        _ => format!("{arch}-{os}"),
     }
 }

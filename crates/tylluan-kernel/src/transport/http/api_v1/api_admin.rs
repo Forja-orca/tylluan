@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{State, Path},
+    extract::{Query, State, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -704,6 +704,37 @@ pub async fn revoke_session_handler(
         StatusCode::OK
     } else {
         StatusCode::NOT_FOUND
+    }
+}
+
+/// M31-P3: GET /api/v1/sessions/resume?agent_id=<id>
+/// Returns the most recent session summary/digest for an agent.
+pub async fn sessions_resume_handler(
+    State(state): State<Arc<HttpState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let agent_id = match params.get("agent_id") {
+        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Missing or empty 'agent_id' query parameter"
+        }))).into_response(),
+    };
+
+    let manager = crate::memory::agent_memory::AgentMemoryManager::new(state.silva.clone(), 20);
+    match manager.get_summary(&agent_id).await {
+        Some(node) => (StatusCode::OK, Json(serde_json::json!({
+            "found": true,
+            "agent_id": agent_id,
+            "summary": node.content,
+            "node_id": node.id,
+            "node_type": node.node_type,
+            "created_at": node.created_at,
+            "weight": node.weight,
+        }))).into_response(),
+        None => (StatusCode::OK, Json(serde_json::json!({
+            "found": false,
+            "agent_id": agent_id,
+        }))).into_response(),
     }
 }
 
