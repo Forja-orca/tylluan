@@ -2,6 +2,7 @@ use rmcp::{Error as McpError, model::*};
 use serde_json;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::Ordering;
+use rusqlite::params;
 
 use crate::memory::silva::GraphNode;
 use crate::memory::idle_lab::{CANDIDATE_POOL_MULT, RERANK_WINDOW};
@@ -394,20 +395,31 @@ if let Some(ref mut s) = stmt {
                 ("completed", Some(yesterday.to_rfc3339()))
             };
 
-            let sql = if let Some(assignee) = target_agent {
-                format!(
-                    "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"{}\"%' AND metadata LIKE '%\"assigned_to\":\"{}\"%' ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC",
-                    status_filter, assignee
+            // M31 audit fix: assignee (and, previously, the date filter) were
+            // interpolated directly into the SQL string via format!() -- an
+            // agent_id containing '%', '_', or a quote could alter the LIKE
+            // pattern or break out of the string literal entirely. status_filter
+            // is safe to inline (one of two hardcoded literals, never user input);
+            // assignee and dt are now bound parameters instead.
+            enum RecallParams { Assignee(String), Date(String), None }
+            let (sql, bind): (String, RecallParams) = if let Some(assignee) = target_agent {
+                (
+                    format!(
+                        "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"{}\"%' AND metadata LIKE ('%\"assigned_to\":\"' || ?1 || '\"%') ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC",
+                        status_filter
+                    ),
+                    RecallParams::Assignee(assignee.to_string()),
+                )
+            } else if let Some(dt) = date_filter {
+                (
+                    "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"completed\"%' AND updated_at > ?1 ORDER BY updated_at DESC".to_string(),
+                    RecallParams::Date(dt),
                 )
             } else {
-                if let Some(dt) = date_filter {
-                    format!(
-                        "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"completed\"%' AND updated_at > '{}' ORDER BY updated_at DESC",
-                        dt
-                    )
-                } else {
-                    "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"pending\"%' ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC".to_string()
-                }
+                (
+                    "SELECT id, content, metadata FROM nodes WHERE type = 'task' AND metadata LIKE '%\"status\":\"pending\"%' ORDER BY CAST(json_extract(metadata, '$.priority') AS INTEGER) DESC, created_at ASC".to_string(),
+                    RecallParams::None,
+                )
             };
 
             let stmt = conn.prepare(&sql);
@@ -415,7 +427,12 @@ if let Some(ref mut s) = stmt {
             let mut count = 0;
 
             if let Ok(mut s) = stmt {
-                let mut rows = match s.query([]) {
+                let query_result = match &bind {
+                    RecallParams::Assignee(a) => s.query(params![a]),
+                    RecallParams::Date(d) => s.query(params![d]),
+                    RecallParams::None => s.query([]),
+                };
+                let mut rows = match query_result {
                     Ok(r) => r,
                     Err(_) => return Ok(error_result("Query failed")),
                 };

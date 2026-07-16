@@ -595,7 +595,9 @@ async fn main() -> anyhow::Result<()> {
                                     }
 
                                     // 2. Mark as conflicted
-                                    let _ = silva_hub.mark_conflicted(&p_id, true).await;
+                                    if let Err(e) = silva_hub.mark_conflicted(&p_id, true).await {
+                                        error!("[{}] ❌ SilvaDB: Failed to mark node '{}' conflicted: {}", trace_id, p_id, e);
+                                    }
 
                                     // 3. Generate embedding (if matcher ready)
                                     let silva_inner = silva_hub.clone();
