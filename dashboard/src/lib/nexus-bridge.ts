@@ -481,6 +481,23 @@ export class NexusBridge {
     return { type: 'unknown', data: raw, source: 'raw', ts: Date.now() };
   }
 
+  // Real backend contract (crates/tylluan-kernel/src/repo_map.rs, M31-P4):
+  // built once at kernel startup, served from cache -- not recomputed per request.
+  async getRepoMap(): Promise<{
+    root: string;
+    built_at_unix: number;
+    build_duration_ms: number;
+    total_files: number;
+    total_dirs: number;
+    total_lines: number;
+    languages: Record<string, { files: number; lines: number; pct: number }>;
+    top_level_dirs: Array<{ name: string; file_count: number; dir_count: number }>;
+    key_files: Array<{ path: string; kind: string }>;
+    identifiers: Record<string, string[]>;
+  }> {
+    return await this.fetch('/api/v1/repo-map');
+  }
+
   async getAuditTrail(agentId?: string, limit?: number): Promise<{ entries: any[]; total: number }> {
     const params = new URLSearchParams();
     if (agentId) params.append('agent_id', agentId);
