@@ -157,7 +157,7 @@ impl RepoMap {
             .filter(|(name, _)| !SKIP_DIRS.contains(&name.as_str()))
             .map(|(name, (file_count, dir_count))| DirEntry { name, file_count, dir_count })
             .collect();
-        top_level.sort_by(|a, b| b.file_count.cmp(&a.file_count));
+        top_level.sort_by_key(|d| std::cmp::Reverse(d.file_count));
 
         let key_files: Vec<FileEntry> = find_key_files(root);
 
