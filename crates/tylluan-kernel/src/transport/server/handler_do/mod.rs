@@ -8,7 +8,7 @@ use super::TylluanServer;
 use super::handler_recall;
 use super::handler_remember;
 
-mod routing;
+pub(crate) mod routing;
 mod embedding;
 mod coloquio_utils;
 mod timeout;
@@ -443,6 +443,16 @@ pub async fn handle_tylluan_do(
 
     // M31-P5: @skill: prefix — project-scoped reusable skill context
     if let Some(result) = handle_skill_prefix(server, &intent, &agent_id).await {
+        return result;
+    }
+
+    // M31-P6: @bg:<intent> — enqueue a guild call as a background job
+    if let Some(result) = crate::transport::server::background_jobs::handle_bg_prefix(server, &intent, &agent_id).await {
+        return result;
+    }
+
+    // M31-P6: @job:<id> — check status of a background job
+    if let Some(result) = crate::transport::server::background_jobs::handle_job_status(server, &intent).await {
         return result;
     }
 
@@ -1229,6 +1239,45 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
     }
 
     None
+}
+
+/// Test helper: minimal TylluanServer with in-memory stores, no guilds.
+/// Used by both handler_do's own tests and background_jobs tests.
+#[cfg(test)]
+pub(crate) async fn base_test_server(silva: std::sync::Arc<crate::memory::silva::SilvaDB>) -> TylluanServer {
+    use tokio::sync::broadcast;
+    use crate::router::matcher::GuildMatcher;
+    use crate::router::catalog::builtin_catalog;
+    use crate::memory::hybrid::HybridMemory;
+    use crate::memory::mailbox::Mailbox;
+    use crate::memory::agent_nodes::AgentNodeRouter;
+    use crate::registry::guild_process::GuildRegistry;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+    let registry = Arc::new(RwLock::new(reg));
+    let matcher = GuildMatcher::new(builtin_catalog());
+    let (tx, _) = broadcast::channel(16);
+    let node_router = AgentNodeRouter::new(tx.clone());
+    let doctor = Arc::new(crate::doctor::Doctor::new(
+        registry.clone(),
+        Arc::new(HybridMemory::in_memory().await.unwrap()),
+        silva.clone(),
+        Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
+    ));
+    let mut server = TylluanServer::new(
+        registry,
+        Arc::new(matcher),
+        Arc::new(HybridMemory::in_memory().await.unwrap()),
+        silva,
+        Arc::new(Mailbox::in_memory().await.unwrap()),
+        doctor,
+        node_router,
+    );
+    server.set_notifier(tx);
+    server
 }
 
 #[cfg(test)]

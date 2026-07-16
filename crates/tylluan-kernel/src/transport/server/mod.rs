@@ -10,6 +10,7 @@ pub mod handler_ingest;
 pub mod logic;
 pub mod utils;
 pub mod intent_enhancer;
+pub mod background_jobs;
 
 use types::*;
 use crate::registry::guild_process::GuildRegistry;
@@ -70,6 +71,7 @@ pub struct TylluanServer {
     pub node_router: Arc<AgentNodeRouter>,
     pub journal: Option<Arc<JournalDb>>,
     pub expose_guild_tools: bool,
+    pub jobs: Option<Arc<crate::memory::jobs::JobQueue>>,
 }
 
 impl TylluanServer {
@@ -122,7 +124,12 @@ impl TylluanServer {
             node_router,
             journal: None,
             expose_guild_tools: false,
+            jobs: None,
         }
+    }
+
+    pub fn set_jobs(&mut self, jobs: Arc<crate::memory::jobs::JobQueue>) {
+        self.jobs = Some(jobs);
     }
 
     pub async fn push_to_bridge(&self, guild: &str, tool: &str, output: &str) {

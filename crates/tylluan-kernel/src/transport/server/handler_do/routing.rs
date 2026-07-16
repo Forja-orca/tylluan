@@ -8,7 +8,7 @@ use crate::memory::mailbox::BlackboardMessage;
 use rmcp::model::CallToolRequestParam;
 use super::TylluanServer;
 
-pub(super) async fn resolve_guild_name(
+pub(crate) async fn resolve_guild_name(
     server: &TylluanServer,
     intent: &str,
     guild_hint: Option<String>,
