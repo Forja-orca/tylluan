@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { OverviewTab } from './OverviewTab';
 import { SystemTab } from './SystemTab';
 import { InteroceptionTab } from './InteroceptionTab';
+import ResumeSessionWidget from './ResumeSessionWidget';
 import { LayoutDashboard, Wrench, Activity, MessageSquare, ClipboardList, ChevronDown, ChevronUp, CheckCircle, Clock } from 'lucide-react';
 
 interface OverviewConsolidatedProps {
@@ -87,6 +88,8 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
             <TeamPulseWidget bridge={props.bridge} />
             {/* Task Registry Widget */}
             <TaskRegistryWidget bridge={props.bridge} />
+            {/* Resume Session Widget */}
+            <ResumeSessionWidget bridge={props.bridge} />
           </div>
         )}
         {subTab === 'interoception' && (
