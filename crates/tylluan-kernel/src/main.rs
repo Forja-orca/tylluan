@@ -450,7 +450,7 @@ async fn main() -> anyhow::Result<()> {
         "TylluanNexus o3 Universal Skill — qué puedo hacer en este sistema. ",
         "5 herramientas soberanas: tylluan_do (ejecuta cualquier tarea via guilds), ",
         "tylluan_remember (guarda en memoria a largo plazo SilvaDB), ",
-        "tylluan_recall (busca en memoria con BGE-M3 + Jina Reranker, 90% Recall@5), ",
+        "tylluan_recall (busca en memoria con BGE-M3 hybrid BM25+vector RRF, 82% Recall@5), ",
         "tylluan_think (razonamiento profundo PageRank + GraphRAG), ",
         "tylluan_graph (inspecciona y manipula el grafo SilvaDB). ",
         "Guilds activos: bash git filesystem monitor docker code coloquio memory knowledge web sequential_thinking vision deep_analysis. ",
@@ -458,7 +458,7 @@ async fn main() -> anyhow::Result<()> {
         "Protocolo: memoria compartida via SilvaDB, coordinacion via coloquio canal mision-activa, ",
         "NightConsolidation horario, soberania total sin cloud ni GPU. ",
         "Quick start: tylluan_recall('project status') -> tylluan_do('lee canal mision-activa') -> tylluan_remember('[AGENT] ready'). ",
-        "Benchmark: LongMemEval-S 50q Recall@5=90% CPU-only, empate Zep/Graphiti que requiere Neo4j."
+        "Benchmark: LongMemEval-S 50q Recall@5=82% CPU-only (Recall@10=90%), sin Neo4j ni dependencias cloud."
     );
     let _ = silva.upsert_node(
         skill_id,

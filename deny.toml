@@ -44,6 +44,13 @@ exceptions = []
 multiple-versions = "deny"
 wildcards = "warn"
 highlight = "all"
+# Sovereignty invariant: pure rustls only, no OpenSSL in the dependency tree.
+# A transitive dep silently pulling openssl-sys wouldn't fail CI before this --
+# now it does, backing the "no OpenSSL" claim with an actual build-time check.
+deny = [
+    { name = "openssl-sys" },
+    { name = "openssl" },
+]
 # Transitive duplicates from fastembed/rmcp/mdns-sd/rusqlite/rand ecosystem.
 # These cannot be unified without upstream changes — pin only the oldest extras.
 skip = [

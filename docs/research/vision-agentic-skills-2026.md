@@ -43,7 +43,7 @@ Investigación realizada por Qwen Desktop · Auditada por Claude Code · 2026-07
   - **Planning** — descompone tareas en sub-pasos antes de ejecutar
   - **Tool use** — MCP / function calling ✅ (Tylluan ya lo tiene vía guilds)
   - **Multi-agent** — coordinación entre agentes ✅ (flota Deep+Padawan+Qwen)
-- **Gap en Tylluan:** Reflection y Planning no están implementados explícitamente. Están implícitos en `forja_think` pero sin estructura formal.
+- **Gap en Tylluan:** Reflection y Planning no están implementados explícitamente. Están implícitos en `tylluan_think` pero sin estructura formal.
 - **Recomendación:** Reflection Pattern como guild wrapper en v0.12.0.
 
 ---

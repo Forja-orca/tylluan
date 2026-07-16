@@ -118,11 +118,11 @@ fn route(&self, request: &GuildDispatchRequest, caps: &CapabilityRegistry) -> Ro
 }
 ```
 
-**Ventaja:** El caller no cambia — `forja_do` sigue funcionando igual. El routing es transparente.
+**Ventaja:** El caller no cambia — `tylluan_do` sigue funcionando igual. El routing es transparente.
 **Desventaja:** El caller no sabe si la ejecución será remota o local. Para v0.11.0 esto es aceptable.
 
 #### Opción B (reservada v0.12.0): Endpoint explícito `dispatch/send`
-Nuevo tool `forja_send(to: str, intent: str)` que toma una `peer_id` explícita, salta el router, fuerza ejecución remota.
+Nuevo tool `tylluan_send(to: str, intent: str)` que toma una `peer_id` explícita, salta el router, fuerza ejecución remota.
 
 #### Opción C: Híbrida — no implementar
 Demasiada complejidad para v0.11.0. Re-evaluar si el caso de uso lo requiere.
