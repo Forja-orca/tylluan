@@ -161,6 +161,9 @@ async fn mesh_test_state() -> Arc<HttpState> {
     let _ = std::fs::remove_file(&identity_path);
     let node_identity = Arc::new(NodeIdentity::load_or_create(&identity_path).unwrap());
 
+    // Build default repo map for test
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
         version: "test".to_string(),
         auth_token: None,
@@ -207,6 +210,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
             std::time::Duration::from_secs(60),
         ))),
         dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
+        repo_map,
     })
 }
 
@@ -343,6 +347,9 @@ async fn dst_test_state(
     let (download_tx, _) = tokio::sync::broadcast::channel(10);
     let config = Arc::new(RwLock::new(TylluanConfig::default()));
 
+    // Build default repo map for test
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
         version: "test".to_string(),
         auth_token: None,
@@ -389,6 +396,7 @@ async fn dst_test_state(
             std::time::Duration::from_secs(60),
         ))),
         dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
+        repo_map,
     })
 }
 

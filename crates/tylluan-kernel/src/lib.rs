@@ -19,5 +19,6 @@ pub mod metrics_ring;
 #[cfg(feature = "observability")]
 pub mod metrics_exporter;
 pub mod federation;
+pub mod repo_map;
 pub mod process_isolation;
 pub mod eval;

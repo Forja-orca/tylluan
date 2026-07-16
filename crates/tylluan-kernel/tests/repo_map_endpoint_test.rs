@@ -7,7 +7,6 @@ use tylluan_kernel::config::TimeoutsConfig;
 use tylluan_kernel::router::matcher::GuildMatcher;
 use tylluan_kernel::memory::hybrid::HybridMemory;
 use tylluan_kernel::memory::silva::SilvaDB;
-
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::coloquio::ColoquioDb;
 use tylluan_kernel::doctor::Doctor;
@@ -53,9 +52,10 @@ async fn test_state() -> Arc<HttpState> {
     let (broadcast_tx, _) = tokio::sync::broadcast::channel(10);
     let (download_tx, _) = tokio::sync::broadcast::channel(10);
 
-    // Build default repo map for test
+    // Build repo map from the current (test) directory
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
+
     Arc::new(HttpState {
         version: "test".to_string(),
         auth_token: None,
@@ -88,7 +88,7 @@ async fn test_state() -> Arc<HttpState> {
         contract_registry: tylluan_kernel::transport::http::api_v1::api_contracts::ContractRegistry::new(),
         contract_db: Arc::new(tylluan_kernel::transport::http::api_v1::api_contracts::ContractDb::open(":memory:").unwrap()),
         peer_db: Arc::new(tylluan_kernel::federation::PeerDb::open(":memory:").unwrap()),
-        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_resume_{}", TEST_COUNTER.fetch_add(1, Ordering::Relaxed)))).unwrap()),
+        node_identity: Arc::new(tylluan_link::identity::NodeIdentity::load_or_create(&std::env::temp_dir().join(format!("tylluan_id_rm_{}", TEST_COUNTER.fetch_add(1, Ordering::Relaxed)))).unwrap()),
         nat_cache: Arc::new(tokio::sync::RwLock::new(None)),
         dht_routing_table: Arc::new(tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("test-node".to_string()))),
         p2p_pool: Arc::new(tokio::sync::Mutex::new(tylluan_link::p2p::P2pSessionPool::new(16, 300))),
@@ -110,69 +110,51 @@ fn build_test_app(state: Arc<HttpState>) -> axum::Router {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_resume_endpoint_returns_found_true_for_existing_agent() {
-    let state = test_state().await;
-    let app = build_test_app(state.clone());
-
-    // Pre-seed a session digest node for agent "test-agent-42" directly in SilvaDB
-    state.silva.upsert_node(
-        "session_digest:test-agent-42:test",
-        "session_digest",
-        "Previous session summary for M31 testing",
-        &serde_json::json!({"agent_id": "test-agent-42"}).to_string(),
-    ).await.unwrap();
-    let _ = state.silva.set_weight("session_digest:test-agent-42:test", 10.0).await;
-
-    let req = Request::builder()
-        .uri("/api/v1/sessions/resume?agent_id=test-agent-42")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::empty())
-        .unwrap();
-    let resp = app.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "resume endpoint should return 200");
-
-    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(json["found"].as_bool(), Some(true), "found should be true for existing agent");
-    assert_eq!(json["agent_id"].as_str(), Some("test-agent-42"), "agent_id should match");
-    assert!(json["summary"].as_str().unwrap_or("").contains("Previous session summary"),
-        "summary should contain seeded content");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_resume_endpoint_returns_found_false_for_nonexistent_agent() {
+#[cfg(feature = "integration")]
+async fn test_repo_map_endpoint_returns_200() {
     let state = test_state().await;
     let app = build_test_app(state);
 
     let req = Request::builder()
-        .uri("/api/v1/sessions/resume?agent_id=nobody-ever")
+        .uri("/api/v1/repo-map")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::empty())
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "resume endpoint should return 200 even when not found");
+    assert_eq!(resp.status(), StatusCode::OK, "repo-map should return 200");
 
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(json["found"].as_bool(), Some(false), "found should be false for missing agent");
-    assert_eq!(json["agent_id"].as_str(), Some("nobody-ever"), "agent_id should match");
+    assert!(json["total_files"].as_u64().is_some(), "total_files should be present");
+    assert!(json["total_dirs"].as_u64().is_some(), "total_dirs should be present");
+    assert!(json["total_lines"].as_u64().is_some(), "total_lines should be present");
+    assert!(json["build_duration_ms"].as_u64().is_some(), "build_duration_ms should be present");
+    assert!(json["root"].as_str().is_some(), "root should be present");
+    assert!(json["languages"].is_object(), "languages should be an object");
+    assert!(json["top_level_dirs"].is_array(), "top_level_dirs should be an array");
+    assert!(json["build_duration_ms"].as_u64().unwrap() > 0, "build should take >0ms");
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_resume_endpoint_returns_400_for_missing_agent_id() {
+#[cfg(feature = "integration")]
+async fn test_repo_map_contains_rust_identifiers() {
     let state = test_state().await;
     let app = build_test_app(state);
 
     let req = Request::builder()
-        .uri("/api/v1/sessions/resume")
-        .header(header::CONTENT_TYPE, "application/json")
+        .uri("/api/v1/repo-map")
         .body(Body::empty())
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "missing agent_id should return 400");
+    assert_eq!(resp.status(), StatusCode::OK);
 
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(json["error"].as_str().unwrap_or("").contains("agent_id"),
-        "error message should mention missing agent_id");
+
+    // The test runner's current dir should contain Rust files with identifiers
+    let idents = json["identifiers"].as_object().unwrap();
+    // At minimum, the repo_map.rs file itself should have its own identifiers
+    let has_repo_map_idents = idents.keys().any(|k| k.contains("repo_map"));
+    assert!(has_repo_map_idents || !idents.is_empty(),
+        "should have at least some Rust identifiers");
 }

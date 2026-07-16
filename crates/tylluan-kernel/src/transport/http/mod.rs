@@ -89,6 +89,7 @@ pub struct HttpState {
     pub dispatch_router: Arc<std::sync::Mutex<tylluan_link::dispatch::DispatchRouter>>,
     pub dispatch_queue: Arc<std::sync::Mutex<DispatchQueue>>,
     pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
+    pub repo_map: Arc<crate::repo_map::RepoMap>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -395,6 +396,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
 
     let p2p_pool = Arc::new(tokio::sync::Mutex::new(P2pSessionPool::new(16, 300)));
 
+    let repo_map = {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        tokio::task::spawn_blocking(move || {
+            crate::repo_map::RepoMap::build(&cwd)
+        }).await.unwrap_or_else(|_| {
+            crate::repo_map::RepoMap::build(&std::path::PathBuf::from("."))
+        })
+    };
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -458,6 +468,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         dispatch_router,
         dispatch_queue: Arc::new(std::sync::Mutex::new(DispatchQueue::new(1000))),
         p2p_pool: p2p_pool.clone(),
+        repo_map,
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),
@@ -465,6 +476,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             )
         )),
     });
+
+    info!("🗺️  Repo map built: {} files, {} dirs, {} lines ({}ms)",
+        state.repo_map.total_files, state.repo_map.total_dirs, state.repo_map.total_lines, state.repo_map.build_duration_ms);
 
     // Bootstrap federation peers: seed DB from TOML if empty, then load DB into config.
     {

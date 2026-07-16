@@ -58,6 +58,9 @@ async fn test_state() -> Arc<HttpState> {
     let (download_tx, _) = tokio::sync::broadcast::channel(10);
     let config = tylluan_kernel::config::TylluanConfig::load_cached()
         .unwrap_or_else(|_| Arc::new(RwLock::new(tylluan_kernel::config::TylluanConfig::default())));
+    // Build default repo map for test
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
         version: "test".to_string(),
         auth_token: None,
@@ -104,6 +107,7 @@ async fn test_state() -> Arc<HttpState> {
             std::time::Duration::from_secs(60),
         ))),
         dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
+        repo_map,
     })
 }
 

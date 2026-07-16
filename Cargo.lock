@@ -4496,6 +4496,7 @@ dependencies = [
  "subtle",
  "sysinfo 0.32.1",
  "tar",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -4510,6 +4511,7 @@ dependencies = [
  "tylluan-link",
  "urlencoding",
  "uuid",
+ "walkdir",
  "winapi",
 ]
 
