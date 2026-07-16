@@ -112,6 +112,17 @@ impl TylluanServer {
                 let diag = self.doctor.diagnose().await;
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&diag).unwrap_or_default())], is_error: Some(false) })
             }
+            "doctor_repair" => {
+                let target = arguments.as_ref().and_then(|a| a.get("target")).and_then(|v| v.as_str()).unwrap_or("");
+                if target.is_empty() {
+                    return Ok(error_result("doctor_repair requires a 'target' argument. Targets: 'guild', 'storage', 'benchmark'."));
+                }
+                let name = arguments.as_ref().and_then(|a| a.get("name")).and_then(|v| v.as_str());
+                match self.doctor.repair(target, name).await {
+                    Ok(msg) => Ok(CallToolResult { content: vec![Content::text(msg)], is_error: Some(false) }),
+                    Err(e) => Ok(error_result(&e)),
+                }
+            }
             "list_pending_actions" => {
                 let pending = self.pending_approvals.read().await;
                 let ids: Vec<String> = pending.keys().cloned().collect();
@@ -244,5 +255,75 @@ impl TylluanServer {
             }
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use crate::memory::silva::SilvaDB;
+
+    async fn test_server() -> TylluanServer {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        crate::transport::server::handler_do::base_test_server(silva).await
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_doctor_diagnose_returns_report() {
+        let server = test_server().await;
+        let result = server.handle_kernel_tool("doctor_diagnose", None).await;
+        assert!(result.is_ok(), "diagnose should succeed");
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(false));
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("status"), "should contain 'status' field");
+        assert!(text.contains("guilds"), "should contain 'guilds' field");
+        assert!(text.contains("storage"), "should contain 'storage' field");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_doctor_repair_benchmark_returns_results() {
+        let server = test_server().await;
+        let args = Some(serde_json::json!({"target": "benchmark"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("doctor_repair", args).await;
+        assert!(result.is_ok(), "repair benchmark should succeed");
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(false));
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("Benchmark"), "should contain benchmark results");
+        assert!(text.contains("String alloc"), "should contain string benchmark");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_doctor_repair_empty_target_returns_error() {
+        let server = test_server().await;
+        let args = Some(serde_json::json!({"target": ""}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("doctor_repair", args).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(true), "empty target should error");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_doctor_repair_storage_returns_result() {
+        let server = test_server().await;
+        let args = Some(serde_json::json!({"target": "storage"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("doctor_repair", args).await;
+        assert!(result.is_ok(), "repair storage should succeed");
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(false));
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("✅"), "should show success indicator");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_doctor_repair_unknown_target_returns_error() {
+        let server = test_server().await;
+        let args = Some(serde_json::json!({"target": "nonexistent"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("doctor_repair", args).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(true), "unknown target should error");
     }
 }
