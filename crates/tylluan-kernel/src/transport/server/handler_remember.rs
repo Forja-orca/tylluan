@@ -202,7 +202,7 @@ pub async fn handle_tylluan_remember(
             // exists with weight=1.0 instead of 1.1, or missing its creation
             // trace) -- not data corruption. Until this is silently swallowed,
             // log failures so a partial write is at least visible/debuggable.
-            if let Err(e) = server.silva.upsert_node(&task_id, "task", &content, &task_meta.to_string()).await {
+            if let Err(e) = server.silva.upsert_node_with_provenance(&task_id, "task", &content, &task_meta.to_string(), "agent_generated").await {
                 tracing::error!("Task node upsert failed for {}: {}", task_id, e);
             }
             if let Err(e) = server.silva.reinforce_node(&task_id, 1.1).await {
@@ -269,7 +269,7 @@ pub async fn handle_tylluan_remember(
         nid
     } else {
         let nid = format!("memory:{}", chrono::Utc::now().timestamp_millis());
-        if let Err(e) = server.silva.upsert_node_with_validity(&nid, "memory", &tagged_content, &metadata, valid_until, false).await {
+        if let Err(e) = server.silva.upsert_node_with_validity(&nid, "memory", &tagged_content, &metadata, crate::memory::silva::NodeWriteOptions::new("agent_generated").valid_until(valid_until)).await {
             tracing::warn!("⚠️ tylluan_remember: silva graph write failed: {}", e);
         }
         nid
@@ -289,7 +289,7 @@ pub async fn handle_tylluan_remember(
                 "registered_at": chrono::Utc::now().to_rfc3339(),
                 "role": "generalist"
             });
-            let _ = server.silva.upsert_node(&node_id, "agent_identity", &format!("Agente {aid} registrado en el colectivo"), &meta.to_string()).await;
+            let _ = server.silva.upsert_node_with_provenance(&node_id, "agent_identity", &format!("Agente {aid} registrado en el colectivo"), &meta.to_string(), "agent_generated").await;
             let _ = server.silva.touch_node(&node_id, aid, "handshake").await;
             if let Ok(mut h) = server.hormones.lock() {
                 h.emit_novelty(0.6);

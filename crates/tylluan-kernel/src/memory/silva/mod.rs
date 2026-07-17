@@ -32,6 +32,8 @@ pub mod query_cache;
 pub mod schema;
 pub mod sharing;
 
+pub use nodes::NodeWriteOptions;
+
 /// A node in the knowledge graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNode {
@@ -50,6 +52,7 @@ pub struct GraphNode {
     pub valid_until: Option<i64>,
     pub shareable: bool,
     pub content_hash: String,
+    pub provenance: String,
 }
 
 /// An edge in the knowledge graph.

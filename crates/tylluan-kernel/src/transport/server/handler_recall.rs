@@ -139,11 +139,17 @@ pub async fn handle_tylluan_recall(
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
     // Prepend agent session summary if available (using singleton manager)
+    // M34-P0: provenance-based trust gate — federation-sourced nodes carry a
+    // disclaimer instead of implicit high-authority framing (OWASP ASI06).
     let session_context: Option<String> = if let Some(ref aid) = rec_agent_id {
         if let Some(ref amm) = server.agent_memory {
             amm.get_summary(aid).await.map(|node| {
-                format!("### Contexto de sesiones anteriores\n{}\n\n---\n",
-                        node.content)
+                let header = if node.provenance == "federation_peer" {
+                    "### Contexto de sesiones anteriores (fuente: peer federado, sin verificar)"
+                } else {
+                    "### Contexto de sesiones anteriores"
+                };
+                format!("{header}\n{}\n\n---\n", node.content)
             })
         } else { None }
     } else { None };
@@ -572,6 +578,7 @@ if let Some(ref mut s) = stmt {
                         valid_until: None,
                         shareable: false,
                         content_hash: "".to_string(),
+                        provenance: "".to_string(),
                     }, doc.score));
                 }
             }

@@ -625,7 +625,7 @@ async fn test_silva() -> SilvaDB {
     async fn test_temporal_validity_field_persists() {
         let db = test_silva().await;
         let past = 1_000_000i64;
-        db.upsert_node_with_validity("test:expired", "lesson", "old info", "{}", Some(past), false).await.unwrap();
+        db.upsert_node_with_validity("test:expired", "lesson", "old info", "{}", crate::memory::silva::NodeWriteOptions::new("agent_generated").valid_until(Some(past))).await.unwrap();
         let node = db.get_node("test:expired").await.unwrap().unwrap();
         assert_eq!(node.valid_until, Some(past));
     }

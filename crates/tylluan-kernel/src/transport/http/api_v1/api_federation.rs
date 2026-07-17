@@ -362,7 +362,7 @@ pub async fn federation_sync_receive(
                     }
                     crate::consensus::FreshnessResolution::AcceptRemote { reason } => {
                         tracing::trace!("📋 [Federation] remote wins for '{}': {}", node_id, reason);
-                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                             received += 1;
                         } else { skipped += 1; }
                     }
@@ -374,7 +374,7 @@ pub async fn federation_sync_receive(
             }
             _ => {
                 // Node doesn't exist locally — accept unconditionally (first sync)
-                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                     received += 1;
                 } else { skipped += 1; }
             }
@@ -563,7 +563,7 @@ pub async fn federation_sync_pull(
                         skipped += 1;
                     }
                     crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
-                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                             received += 1;
                         } else { skipped += 1; }
                     }
@@ -573,7 +573,7 @@ pub async fn federation_sync_pull(
                 }
             }
             _ => {
-                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                     received += 1;
                 } else { skipped += 1; }
             }
@@ -689,12 +689,12 @@ pub async fn federation_sync_both(
                                         &local_hash, local_protected, &local_updated_at,
                                         remote_hash, 10, &peer.name, remote_updated_at,
                                     )
-                                        && state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                        && state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                                             pulled += 1;
                                         }
                                 }
                                 _ => {
-                                    if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                                    if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                                         pulled += 1;
                                     }
                                 }
@@ -1003,7 +1003,7 @@ async fn pull_from_peer_internal(
                     crate::consensus::FreshnessResolution::Identical
                     | crate::consensus::FreshnessResolution::KeepLocal { .. } => {}
                     crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
-                        if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                             received += 1;
                         }
                     }
@@ -1011,7 +1011,7 @@ async fn pull_from_peer_internal(
                 }
             }
             _ => {
-                if state.silva.upsert_node(node_id, node_type, content, &meta_str).await.is_ok() {
+                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
                     received += 1;
                 }
             }

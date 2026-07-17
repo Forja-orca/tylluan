@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 14;
+            const SCHEMA_VERSION: i32 = 15;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -156,6 +156,10 @@ impl super::SilvaDB {
                     }
                 }
                 tracing::info!("🌲 SilvaDB: added content_hash column (v14)");
+            }
+            if schema_version < 15 {
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN provenance TEXT NOT NULL DEFAULT 'unverified'", []);
+                tracing::info!("🌲 SilvaDB: added provenance column (v15)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

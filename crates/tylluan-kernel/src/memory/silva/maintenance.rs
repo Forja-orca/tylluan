@@ -257,6 +257,7 @@ impl super::SilvaDB {
                     updated_at: row.get(9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
+                    provenance: "".to_string(),
                     last_touched: Utc::now(),
                     valid_from: None,
                     valid_until: None,
