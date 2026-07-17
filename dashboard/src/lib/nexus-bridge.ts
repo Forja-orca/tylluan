@@ -81,6 +81,7 @@ export interface GraphNode {
   created_at?: string;
   updated_at?: string;
   last_agent?: string;
+  provenance?: string;
 }
 
 // Golden Signals — real metrics only, no placeholders
