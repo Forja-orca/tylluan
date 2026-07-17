@@ -59,6 +59,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   const [activeSubView, setActiveSubView] = useState<'graph' | 'list'>('graph');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GraphNode[]>([]);
+  const [edges, setEdges] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [view, setView] = useState<'grid' | 'table'>('grid');
   const [isDragging, setIsDragging] = useState(false);
@@ -101,6 +102,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
     try {
       const res = await bridge.getSilvaGraph(500, false);
       let loadedNodes = res.nodes as any || [];
+      let loadedEdges = res.edges as any || [];
       // If we loaded correctly but there are NO nodes (fresh DB) or API doesn't support provenance yet, inject mocks for testing:
       if (loadedNodes.length === 0 || !loadedNodes.some((n: any) => n.provenance)) {
         setSimulated(true);
@@ -110,12 +112,19 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
           { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
           { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
+          { id: 'mock:6', node_type: 'consolidated_summary', content: 'Mock consolidated synthesis node combining insights from multiple sources.', provenance: 'agent_generated', weight: 0.99 },
           ...loadedNodes
+        ];
+        loadedEdges = [
+          { source: 'mock:1', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
+          { source: 'mock:2', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
+          ...loadedEdges
         ];
       } else {
         setSimulated(false);
       }
       setResults(loadedNodes);
+      setEdges(loadedEdges);
     } catch (e) {
       notify('Failed to load recent memories', 'error');
       // Mock fallback on error
@@ -126,6 +135,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
         { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
         { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
+        { id: 'mock:6', node_type: 'consolidated_summary', content: 'Mock consolidated synthesis node combining insights from multiple sources.', provenance: 'agent_generated', weight: 0.99 },
+      ]);
+      setEdges([
+        { source: 'mock:1', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
+        { source: 'mock:2', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
       ]);
     }
     setSearching(false);
@@ -445,11 +459,13 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   const nodeType = (node as any).node_type || (node as any).type || 'entity';
                   const nodeContent = fixDoubleEncoding(node.content || (node as any).label || '—');
                   return (
-                    <div key={i} className={cn("group p-4 rounded-xl border bg-slate-900/50 hover:bg-slate-800/50 transition-all relative overflow-hidden", 
-                      (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]" : "border-slate-800"
+                    <div key={i} className={cn("group p-4 rounded-xl border transition-all relative overflow-hidden", 
+                      (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "bg-slate-900/50 hover:bg-slate-800/50 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]" :
+                      nodeType === 'consolidated_summary' ? "bg-indigo-950/10 hover:bg-indigo-900/20 border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.1)]" : "bg-slate-900/50 hover:bg-slate-800/50 border-slate-800"
                     )}>
                       <div className="flex items-center gap-2 mb-3">
                         <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
+                          nodeType === 'consolidated_summary' ? "bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]" :
                           nodeType === 'lesson' ? "bg-violet-500" :
                           nodeType === 'identity' ? "bg-emerald-500" :
                           nodeType === 'concept' ? "bg-blue-500" : "bg-amber-500"
@@ -479,10 +495,60 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                 </button>
                               </>
                             );
+                          } else if (compactMode && isExpanded) {
+                            return (
+                              <div className="flex flex-col gap-2">
+                                <span className="whitespace-pre-wrap">{nodeContent}</span>
+                                {nodeType === 'consolidated_summary' && (
+                                  <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
+                                    <span className="text-[10px] font-bold text-indigo-400 uppercase block mb-1">Fuentes Originales:</span>
+                                    <ul className="space-y-1">
+                                      {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
+                                        edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).map((edge, j) => (
+                                          <li key={j} className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 cursor-pointer hover:text-indigo-300" onClick={() => setQuery(edge.source)}>
+                                            <Network className="w-3 h-3 text-indigo-500" />
+                                            {edge.source}
+                                          </li>
+                                        ))
+                                      ) : (
+                                        <li className="text-[10px] text-slate-500 italic">No se encontraron fuentes cargadas</li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
+                                  }}
+                                  className="text-slate-500 hover:text-slate-300 mt-1 font-bold text-[10px] underline cursor-pointer self-start"
+                                >
+                                  [Minimizar]
+                                </button>
+                              </div>
+                            );
                           } else {
                             return (
-                              <>
+                              <div className="flex flex-col gap-2">
                                 <span className={cn(compactMode && "block")}>{nodeContent}</span>
+                                {nodeType === 'consolidated_summary' && (
+                                  <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
+                                    <span className="text-[10px] font-bold text-indigo-400 uppercase block mb-1">Fuentes Originales:</span>
+                                    <ul className="space-y-1">
+                                      {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
+                                        edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).map((edge, j) => (
+                                          <li key={j} className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 cursor-pointer hover:text-indigo-300" onClick={() => setQuery(edge.source)}>
+                                            <Network className="w-3 h-3 text-indigo-500" />
+                                            {edge.source}
+                                          </li>
+                                        ))
+                                      ) : (
+                                        <li className="text-[10px] text-slate-500 italic">No se encontraron fuentes cargadas</li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
                                 {compactMode && isExpanded && nodeContent.length > 500 && (
                                   <button
                                     type="button"
@@ -495,7 +561,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                     [Ver menos]
                                   </button>
                                 )}
-                              </>
+                              </div>
                             );
                           }
                         })()}
@@ -547,7 +613,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         <tr key={i} className="hover:bg-slate-800/30 transition-colors cursor-pointer" onClick={() => setQuery(node.id)}>
                           <td className="px-4 py-3 text-[10px] font-mono text-violet-400 max-w-[120px] truncate">{node.id}</td>
                           <td className="px-4 py-3">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold uppercase text-slate-400 border border-slate-700">{nodeType}</span>
+                            <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border",
+                              nodeType === 'consolidated_summary' ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" : "bg-slate-800 text-slate-400 border-slate-700"
+                            )}>
+                              {nodeType === 'consolidated_summary' ? 'SYNTHESIS' : nodeType}
+                            </span>
                             {node.content?.startsWith('[DEPRECATED by') && (
                               <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[8px] font-extrabold uppercase text-red-400 border border-red-500/20">DEPRECATED</span>
                             )}

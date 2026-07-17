@@ -225,7 +225,7 @@ function App() {
     const handleDreamCycle = (e: Event) => {
       const data = (e as CustomEvent).detail;
       notify(
-        `Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: ${data?.duplicates_merged ?? 0}, nodos decaídos: ${data?.nodes_decayed ?? 0}.`,
+        `Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: ${data?.duplicates_merged ?? 0}, clústeres consolidados: ${data?.clusters_consolidated ?? 0}, nodos decaídos: ${data?.nodes_decayed ?? 0}.`,
         'info',
         'Consolidación NREM'
       );
