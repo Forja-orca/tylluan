@@ -381,7 +381,7 @@ impl super::SilvaDB {
                     .collect();
                 let type_clause = placeholders.join(",");
                 let sql = format!(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance FROM nodes
                      WHERE (LOWER(content) LIKE ?1 OR LOWER(metadata) LIKE ?1)
                      AND type IN ({type_clause})
                      ORDER BY weight DESC
@@ -410,14 +410,14 @@ impl super::SilvaDB {
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
-                        provenance: "".to_string(),
+                        provenance: row.get(13)?,
                         last_touched: Utc::now(),
                     })
                 })?;
                 rows.filter_map(|r| r.ok()).collect()
             } else {
                 let sql = format!(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable FROM nodes
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance FROM nodes
                      WHERE (LOWER(content) LIKE ?1 OR LOWER(metadata) LIKE ?1)
                      ORDER BY weight DESC
                      LIMIT {max_results}"
@@ -439,7 +439,7 @@ impl super::SilvaDB {
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
-                        provenance: "".to_string(),
+                        provenance: row.get(13)?,
                         last_touched: Utc::now(),
                     })
                 })?;

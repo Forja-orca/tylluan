@@ -333,7 +333,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance
                  FROM nodes WHERE topic_key = ?1 ORDER BY weight DESC",
             )?;
             let rows = stmt.query_map(params![topic], |row| {
@@ -345,7 +345,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -360,7 +360,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance
                  FROM nodes WHERE conflicted = 1 ORDER BY updated_at DESC",
             )?;
             let rows = stmt.query_map([], |row| {
@@ -372,7 +372,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -642,7 +642,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance
                  FROM nodes WHERE protected = 1 ORDER BY updated_at DESC LIMIT ?1",
             )?;
             let rows = stmt.query_map(params![limit as i64], |row| {
@@ -654,7 +654,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -820,7 +820,7 @@ impl super::SilvaDB {
             .collect::<Vec<_>>().join(", ");
         let sql = format!(
             "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, \
-             created_at, updated_at, shareable \
+             created_at, updated_at, shareable, provenance \
              FROM nodes WHERE type IN ({placeholders}) ORDER BY weight DESC LIMIT {limit}"
         );
         tokio::task::block_in_place(|| {
@@ -836,7 +836,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 }),
             )?;
@@ -892,7 +892,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance
                  FROM nodes ORDER BY updated_at DESC LIMIT ?1"
             )?;
             let rows = stmt.query_map(params![limit as i64], |row| {
@@ -904,7 +904,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -919,7 +919,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable FROM nodes"
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance FROM nodes"
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(GraphNode {
@@ -930,7 +930,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -945,7 +945,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable \
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance \
                  FROM nodes WHERE weight >= ?1 ORDER BY weight DESC, id DESC LIMIT ?2"
             )?;
             let rows = stmt.query_map(rusqlite::params![min_weight, limit as i64], |row| {
@@ -957,7 +957,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -972,7 +972,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable \
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance \
                  FROM nodes ORDER BY id LIMIT ?1 OFFSET ?2"
             )?;
             let rows = stmt.query_map(rusqlite::params![limit as i64, offset as i64], |row| {
@@ -984,7 +984,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -1000,7 +1000,7 @@ impl super::SilvaDB {
             let conn = self.conn.blocking_lock();
             let pattern = format!("{content_prefix}%");
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable \
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance \
                  FROM nodes WHERE type = ?1 AND content LIKE ?2 ORDER BY weight DESC, id DESC LIMIT ?3"
             )?;
             let rows = stmt.query_map(rusqlite::params![node_type, pattern, limit as i64], |row| {
@@ -1012,7 +1012,7 @@ impl super::SilvaDB {
                     topic_key: row.get(7)?, created_at: read_timestamp(row, 8)?, updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(), valid_from: None, valid_until: None,
                 })
             })?;
@@ -1026,7 +1026,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable FROM nodes WHERE type = 'identity'"
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance FROM nodes WHERE type = 'identity'"
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(GraphNode {
@@ -1042,7 +1042,7 @@ impl super::SilvaDB {
                     updated_at: read_timestamp(row, 9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(),
                     valid_from: None,
                     valid_until: None,
