@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Layers,
   Network,
-  List
+  List,
+  ShieldAlert
 } from 'lucide-react';
 import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
 import type { MemoryStats } from '../hooks/useNexus';
@@ -30,6 +31,17 @@ interface Props {
   notify: (msg: string, type?: 'info' | 'error') => void;
   memoryStats?: MemoryStats | null;
 }
+
+const getProvenanceLabel = (prov?: string) => {
+  switch (prov) {
+    case 'user_direct': return 'Fuente: Usuario directo';
+    case 'agent_generated': return 'Fuente: Generado por agente';
+    case 'federation_peer': return 'Fuente: Peer federado (sin verificar)';
+    case 'guild_output': return 'Fuente: Salida de guild';
+    case 'unverified': return 'Fuente: No verificado';
+    default: return prov || 'Desconocido';
+  }
+};
 
 function fixDoubleEncoding(str: string): string {
   if (!str || str.indexOf('\xC3') === -1) return str || '';
@@ -58,6 +70,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   const [searchResults, setSearchResults] = useState<GraphNode[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [simulated, setSimulated] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Recent Sidebar State ---
@@ -87,9 +100,33 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
     setSearching(true);
     try {
       const res = await bridge.getSilvaGraph(500, false);
-      setResults(res.nodes as any || []);
+      let loadedNodes = res.nodes as any || [];
+      // If we loaded correctly but there are NO nodes (fresh DB) or API doesn't support provenance yet, inject mocks for testing:
+      if (loadedNodes.length === 0 || !loadedNodes.some((n: any) => n.provenance)) {
+        setSimulated(true);
+        loadedNodes = [
+          { id: 'mock:1', node_type: 'entity', content: 'Mock user direct node', provenance: 'user_direct', weight: 0.95 },
+          { id: 'mock:2', node_type: 'concept', content: 'Mock agent generated node', provenance: 'agent_generated', weight: 0.8 },
+          { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
+          { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
+          { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
+          ...loadedNodes
+        ];
+      } else {
+        setSimulated(false);
+      }
+      setResults(loadedNodes);
     } catch (e) {
       notify('Failed to load recent memories', 'error');
+      // Mock fallback on error
+      setSimulated(true);
+      setResults([
+        { id: 'mock:1', node_type: 'entity', content: 'Mock user direct node', provenance: 'user_direct', weight: 0.95 },
+        { id: 'mock:2', node_type: 'concept', content: 'Mock agent generated node', provenance: 'agent_generated', weight: 0.8 },
+        { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
+        { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
+        { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
+      ]);
     }
     setSearching(false);
   }, [bridge, notify]);
@@ -187,6 +224,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
 
         <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 gap-1 items-center shrink-0">
+          {simulated && (
+            <span className="mr-2 px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold rounded flex items-center gap-1">
+              <ShieldAlert className="w-3 h-3" /> [SIMULADO]
+            </span>
+          )}
           <button 
             type="button" 
             onClick={() => setActiveSubView('graph')} 
@@ -403,7 +445,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   const nodeType = (node as any).node_type || (node as any).type || 'entity';
                   const nodeContent = fixDoubleEncoding(node.content || (node as any).label || '—');
                   return (
-                    <div key={i} className="group p-4 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-800/50 transition-all relative overflow-hidden">
+                    <div key={i} className={cn("group p-4 rounded-xl border bg-slate-900/50 hover:bg-slate-800/50 transition-all relative overflow-hidden", 
+                      (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]" : "border-slate-800"
+                    )}>
                       <div className="flex items-center gap-2 mb-3">
                         <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
                           nodeType === 'lesson' ? "bg-violet-500" :
@@ -462,6 +506,17 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             <span className="text-[8px] text-slate-600 uppercase">Weight</span>
                             <span className="text-[10px] font-bold text-emerald-500">{(node.weight || 0).toFixed(2)}</span>
                           </div>
+                          {node.provenance && (
+                            <div className="flex flex-col border-l border-slate-700/50 pl-3">
+                              <span className="text-[8px] text-slate-600 uppercase">Provenance</span>
+                              <span className={cn("text-[9px] font-bold flex items-center gap-1", 
+                                (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "text-amber-500" : "text-slate-400"
+                              )}>
+                                {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && <ShieldAlert className="w-3 h-3" />}
+                                {getProvenanceLabel(node.provenance)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <button type="button" title="Search related" onClick={() => setQuery(node.id)} className="p-1 hover:bg-slate-700 rounded transition-colors">
                           <Search className="w-3 h-3 text-slate-500" />
@@ -495,6 +550,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold uppercase text-slate-400 border border-slate-700">{nodeType}</span>
                             {node.content?.startsWith('[DEPRECATED by') && (
                               <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[8px] font-extrabold uppercase text-red-400 border border-red-500/20">DEPRECATED</span>
+                            )}
+                            {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[8px] font-extrabold uppercase text-amber-500 border border-amber-500/20 inline-flex items-center gap-1">
+                                <ShieldAlert className="w-2.5 h-2.5" /> EXTERNAL
+                              </span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-400 max-w-md">
