@@ -119,6 +119,7 @@ impl super::SilvaDB {
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
                     content_hash: "".to_string(),
+                    provenance: "".to_string(),
                 }))?.flatten().collect()
             } else {
                 let mut stmt = conn.prepare(
@@ -142,6 +143,7 @@ impl super::SilvaDB {
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
                     content_hash: "".to_string(),
+                    provenance: "".to_string(),
                 }))?.flatten().collect()
             };
             Ok(nodes)
@@ -173,6 +175,7 @@ impl super::SilvaDB {
                     valid_until: row.get(11)?,
                     shareable: row.get::<_, i32>(12)? != 0,
                     content_hash: "".to_string(),
+                    provenance: "".to_string(),
                     last_touched: Utc::now(),
                 })
             })?;
@@ -204,6 +207,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
+                        provenance: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?.flatten().collect()
@@ -223,6 +227,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
+                        provenance: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?.flatten().collect()

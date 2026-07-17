@@ -1,4 +1,4 @@
-use crate::memory::silva::{GraphNode, SilvaDB};
+use crate::memory::silva::{GraphNode, SilvaDB, NodeWriteOptions};
 use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
@@ -33,7 +33,7 @@ impl AgentMemoryManager {
             "importance": importance,
         }).to_string();
 
-        if self.silva.upsert_node(&node_id, "agent_memory", &tagged, &meta).await.is_ok() {
+        if self.silva.upsert_node_with_provenance(&node_id, "agent_memory", &tagged, &meta, "agent_generated").await.is_ok() {
             let weight = importance.clamp(0.1, 5.0);
             let _ = self.silva.set_weight(&node_id, weight).await;
         }
@@ -138,7 +138,7 @@ impl AgentMemoryManager {
             "source_count": to_summarize.len(),
         }).to_string();
 
-        let _ = self.silva.upsert_node_with_validity(&summary_id, "agent_summary", &summary, &summary_meta, None, true).await;
+        let _ = self.silva.upsert_node_with_validity(&summary_id, "agent_summary", &summary, &summary_meta, NodeWriteOptions::new("agent_generated").drift_allowed(true)).await;
 
         let count = to_summarize.len();
 
@@ -202,7 +202,7 @@ impl AgentMemoryManager {
             "digest": true,
             "episode_count": meaningful.len(),
         }).to_string();
-        let _ = self.silva.upsert_node(&digest_id, "session_digest", &digest, &meta).await;
+        let _ = self.silva.upsert_node_with_provenance(&digest_id, "session_digest", &digest, &meta, "agent_generated").await;
         info!("📝 Session digest created for agent '{}': {} episodes", agent_id, meaningful.len());
     }
 }

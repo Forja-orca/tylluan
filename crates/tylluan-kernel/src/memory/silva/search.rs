@@ -294,6 +294,7 @@ impl super::SilvaDB {
             valid_from: row.get(10)?,
             valid_until: row.get(11)?,
             shareable: row.get::<_, i32>(12)? != 0,
+            provenance: row.get::<_, String>(13).unwrap_or_default(),
             content_hash: "".to_string(),
             last_touched: Utc::now(),
         })
@@ -331,7 +332,7 @@ impl super::SilvaDB {
                         .collect();
                     let type_clause = placeholders.join(",");
                     (format!(
-                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable
+                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable, n.provenance
                          FROM nodes_fts f
                          JOIN nodes n ON n.rowid = f.rowid
                          WHERE nodes_fts MATCH ?1
@@ -341,7 +342,7 @@ impl super::SilvaDB {
                     ), true)
                 } else {
                     (format!(
-                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable
+                        "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until, n.shareable, n.provenance
                          FROM nodes_fts f
                          JOIN nodes n ON n.rowid = f.rowid
                          WHERE nodes_fts MATCH ?1
@@ -409,6 +410,7 @@ impl super::SilvaDB {
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
+                        provenance: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?;
@@ -437,6 +439,7 @@ impl super::SilvaDB {
                         valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
+                        provenance: "".to_string(),
                         last_touched: Utc::now(),
                     })
                 })?;

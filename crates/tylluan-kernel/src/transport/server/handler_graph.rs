@@ -27,8 +27,8 @@ pub async fn handle_tylluan_graph(
                 return Ok(error_result("add_triple requires 'subject', 'predicate', and 'object'."));
             }
             let metadata = serde_json::json!({"timestamp": chrono::Utc::now().to_rfc3339(), "source": "tylluan_graph", "agent": agent_id}).to_string();
-            let _ = server.silva.upsert_node(&subject, "concept", &subject, &metadata).await;
-            let _ = server.silva.upsert_node(&object, "concept", &object, &metadata).await;
+            let _ = server.silva.upsert_node_with_provenance(&subject, "concept", &subject, &metadata, "agent_generated").await;
+            let _ = server.silva.upsert_node_with_provenance(&object, "concept", &object, &metadata, "agent_generated").await;
             match server.silva.add_edge(&subject, &object, &predicate, 1.0, &metadata).await {
                 Ok(_) => {
                     info!("🌲 tylluan_graph: added triple {} -[{}]-> {}", subject, predicate, object);

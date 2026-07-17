@@ -205,7 +205,7 @@ impl ConsensusEngine {
         }).to_string();
 
         // 1. Persist the synthesis node (allow_drift=true: Consensus is an internal cognitive module)
-        self.silva.upsert_node_with_validity(&synth_id, "synthesis", &unified_content, &metadata, None, true).await?;
+        self.silva.upsert_node_with_validity(&synth_id, "synthesis", &unified_content, &metadata, crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true)).await?;
         self.silva.reinforce_node(&synth_id, 1.25).await?;
         self.silva.set_protected(&synth_id, true).await?;
 
@@ -251,7 +251,7 @@ mod tests {
             // consolidate() is an internal cognitive module path — mirror that here
             // by writing via upsert_node_with_validity directly (bypasses drift guard,
             // not relevant for these node types, but keeps parity with production writers).
-            silva.upsert_node_with_validity(id, "note", "content", &metadata, None, true).await.unwrap();
+            silva.upsert_node_with_validity(id, "note", "content", &metadata, crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true)).await.unwrap();
             silva.set_weight(id, *weight).await.unwrap();
             silva.mark_conflicted(id, true).await.unwrap();
         }

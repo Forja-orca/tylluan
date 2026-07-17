@@ -317,6 +317,51 @@ mod tests {
         assert!(text.contains("✅"), "should show success indicator");
     }
 
+    // ── M34-P0: Provenance Tests ──────────────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_provenance_default_is_unverified() {
+        let server = test_server().await;
+        server.silva.upsert_node("p_test:default", "test", "default provenance", "{}").await.unwrap();
+        let node = server.silva.get_node("p_test:default").await.unwrap().unwrap();
+        assert_eq!(node.provenance, "unverified", "nodes written via upsert_node should default to 'unverified'");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_provenance_agent_generated_roundtrip() {
+        let server = test_server().await;
+        server.silva.upsert_node_with_provenance("p_test:agent", "test", "agent memory", "{}", "agent_generated").await.unwrap();
+        let node = server.silva.get_node("p_test:agent").await.unwrap().unwrap();
+        assert_eq!(node.provenance, "agent_generated");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_provenance_federation_peer_roundtrip() {
+        let server = test_server().await;
+        server.silva.upsert_node_with_provenance("p_test:fed", "test", "federated content", "{}", "federation_peer").await.unwrap();
+        let node = server.silva.get_node("p_test:fed").await.unwrap().unwrap();
+        assert_eq!(node.provenance, "federation_peer");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_provenance_fts_search_preserves_provenance() {
+        let server = test_server().await;
+        server.silva.upsert_node_with_provenance("p_test:fts", "lesson", "unique FTS token for provenance test 987654", "{}", "agent_generated").await.unwrap();
+        let results = server.silva.search("987654", 5, None).await.unwrap();
+        let found = results.into_iter().find(|n| n.id == "p_test:fts");
+        assert!(found.is_some(), "FTS should find the node");
+        assert_eq!(found.unwrap().provenance, "agent_generated", "FTS search should preserve provenance");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_provenance_migration_default_is_unverified() {
+        let server = test_server().await;
+        // Nodes inserted via standard upsert_node (legacy path) get 'unverified'
+        server.silva.upsert_node("p_test:migrated", "test", "old node", "{}").await.unwrap();
+        let node = server.silva.get_node("p_test:migrated").await.unwrap().unwrap();
+        assert_eq!(node.provenance, "unverified");
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_doctor_repair_unknown_target_returns_error() {
         let server = test_server().await;

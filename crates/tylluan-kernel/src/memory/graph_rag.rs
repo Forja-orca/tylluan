@@ -133,7 +133,7 @@ impl GraphRagManager {
         }).to_string();
 
         // 1. Upsert summary node (allow_drift=true: GraphRAG is an internal cognitive module)
-        self.silva.upsert_node_with_validity(&node_id, "summary", summary, &metadata, None, true).await?;
+        self.silva.upsert_node_with_validity(&node_id, "summary", summary, &metadata, crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true)).await?;
 
         // 2. Link members to summary (fixed arg order: source, target, edge_type, weight, metadata)
         let mut linked = 0usize;
