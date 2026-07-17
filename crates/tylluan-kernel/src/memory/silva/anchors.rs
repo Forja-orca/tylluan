@@ -99,7 +99,7 @@ impl super::SilvaDB {
             let nodes: Vec<GraphNode> = if let Some(ref g) = filter {
                 let mut stmt = conn.prepare(
                     "SELECT id, type, content, metadata, weight, protected, conflicted,
-                            topic_key, created_at, updated_at, last_touched, valid_from, valid_until, shareable
+                            topic_key, created_at, updated_at, last_touched, valid_from, valid_until, shareable, provenance
                      FROM nodes WHERE type = 'routing_anchor' AND metadata LIKE ?1 LIMIT ?2"
                 )?;
                 let pattern = format!("%\"guild\":\"{g}\"%");
@@ -119,12 +119,12 @@ impl super::SilvaDB {
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(14)?,
                 }))?.flatten().collect()
             } else {
                 let mut stmt = conn.prepare(
                     "SELECT id, type, content, metadata, weight, protected, conflicted,
-                            topic_key, created_at, updated_at, last_touched, valid_from, valid_until, shareable
+                            topic_key, created_at, updated_at, last_touched, valid_from, valid_until, shareable, provenance
                      FROM nodes WHERE type = 'routing_anchor' LIMIT ?1"
                 )?;
                 stmt.query_map(params![limit as i64], |row| Ok(GraphNode {
@@ -143,7 +143,7 @@ impl super::SilvaDB {
                     valid_until: row.get(12)?,
                     shareable: row.get::<_, i32>(13)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(14)?,
                 }))?.flatten().collect()
             };
             Ok(nodes)
@@ -155,7 +155,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance
                  FROM nodes
                  WHERE shareable = 1 AND federation_source IS NULL"
             )?;
@@ -175,7 +175,7 @@ impl super::SilvaDB {
                     valid_until: row.get(11)?,
                     shareable: row.get::<_, i32>(12)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(13)?,
                     last_touched: Utc::now(),
                 })
             })?;
@@ -195,7 +195,7 @@ impl super::SilvaDB {
             let conn = self.conn.blocking_lock();
             let nodes: Vec<GraphNode> = if source.is_none() || source == Some("local") {
                 let mut stmt = conn.prepare(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance
                      FROM nodes WHERE federation_source IS NULL LIMIT ?1"
                 )?;
                 stmt.query_map(rusqlite::params![limit as i64], |row| {
@@ -207,7 +207,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
-                        provenance: "".to_string(),
+                        provenance: row.get(13)?,
                         last_touched: Utc::now(),
                     })
                 })?.flatten().collect()
@@ -215,7 +215,7 @@ impl super::SilvaDB {
                 // Reached only when source is Some(_) and not "local" (see the if-arm above).
                 let peer = source.unwrap_or_default();
                 let mut stmt = conn.prepare(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance
                      FROM nodes WHERE federation_source = ?1 LIMIT ?2"
                 )?;
                 stmt.query_map(rusqlite::params![peer, limit as i64], |row| {
@@ -227,7 +227,7 @@ impl super::SilvaDB {
                         valid_from: row.get(10)?, valid_until: row.get(11)?,
                         shareable: row.get::<_, i32>(12)? != 0,
                         content_hash: "".to_string(),
-                        provenance: "".to_string(),
+                        provenance: row.get(13)?,
                         last_touched: Utc::now(),
                     })
                 })?.flatten().collect()

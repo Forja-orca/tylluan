@@ -239,7 +239,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable \
+                "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance \
                  FROM nodes WHERE content LIKE '[DEPRECATED by%' ORDER BY weight ASC LIMIT ?1"
             )?;
             let rows = stmt.query_map(
@@ -257,7 +257,7 @@ impl super::SilvaDB {
                     updated_at: row.get(9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: "".to_string(),
+                    provenance: row.get(11)?,
                     last_touched: Utc::now(),
                     valid_from: None,
                     valid_until: None,
