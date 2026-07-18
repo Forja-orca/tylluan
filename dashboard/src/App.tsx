@@ -639,8 +639,6 @@ function App() {
                   <LabConsolidated
                     bridge={bridge}
                     notify={notify}
-                    events={events}
-                    onClearLogs={clearLogs}
                   />
                 </ErrorBoundary>
               )}
