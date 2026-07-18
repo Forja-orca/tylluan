@@ -1040,3 +1040,92 @@ async fn test_search_hybrid_with_type_filter() {
     assert!(!ids_les.contains(&"n1"));
     assert!(ids_les.contains(&"n2"));
 }
+
+// ── M35: bi-temporal valid_from + supersession tests ────────────────────────
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_valid_from_write() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node_with_validity("m35:1", "test", "written with explicit from", "{}",
+        NodeWriteOptions::new("test").valid_from(Some(1000))).await.unwrap();
+    let node = db.get_node("m35:1").await.unwrap().expect("node should exist");
+    assert_eq!(node.valid_from, Some(1000),
+        "explicit valid_from=1000 must round-trip");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_valid_from_defaults_to_now() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    let before = chrono::Utc::now().timestamp();
+    db.upsert_node("m35:2", "test", "no explicit valid_from", "{}").await.unwrap();
+    let node = db.get_node("m35:2").await.unwrap().expect("node should exist");
+    let vf = node.valid_from.expect("valid_from should be Some after default");
+    assert!(vf >= before, "default valid_from ({vf}) should be >= test start ({before})");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_valid_from_in_bulk_read() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node_with_validity("m35:3", "test", "bulk-read check", "{}",
+        NodeWriteOptions::new("test").valid_from(Some(2000)).valid_until(Some(3000))).await.unwrap();
+    let nodes = db.get_nodes_limited(100, 0.0).await.unwrap();
+    let n = nodes.iter().find(|n| n.id == "m35:3").expect("node should be in get_nodes_limited");
+    assert_eq!(n.valid_from, Some(2000), "valid_from must survive bulk read");
+    assert_eq!(n.valid_until, Some(3000), "valid_until must survive bulk read");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_supersession_older_edge_closed() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("X", "test", "source", "{}").await.unwrap();
+    db.upsert_node("A", "test", "old target", "{}").await.unwrap();
+    db.upsert_node("B", "test", "new target", "{}").await.unwrap();
+    // edge_A is old (valid_from=100), edge_B is recent (valid_from=200)
+    db.add_edge_with_validity("X", "A", "knows", 1.0, "{}", Some(100), None).await.unwrap();
+    db.add_edge_with_validity("X", "B", "knows", 1.0, "{}", Some(200), None).await.unwrap();
+
+    let count = db.flag_contradiction_nodes().await.unwrap();
+    assert_eq!(count, 0, "supersession should NOT flag X as conflicted");
+
+    // Verify edge_A.valid_until == 200 (superseded by B)
+    let a_until: Option<i64> = tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.query_row(
+            "SELECT valid_until FROM edges WHERE source = 'X' AND target = 'A' AND type = 'knows'",
+            [], |row| row.get(0),
+        ).ok().flatten()
+    });
+    assert_eq!(a_until, Some(200), "old edge A must have valid_until set to B's valid_from");
+
+    // Verify edge_B.valid_until remains None (current truth)
+    let b_until: Option<i64> = tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.query_row(
+            "SELECT valid_until FROM edges WHERE source = 'X' AND target = 'B' AND type = 'knows'",
+            [], |row| row.get(0),
+        ).ok().flatten()
+    });
+    assert_eq!(b_until, None, "current edge B must remain open (valid_until IS NULL)");
+
+    // Verify X is NOT conflicted
+    let x_node = db.get_node("X").await.unwrap().unwrap();
+    assert!(!x_node.conflicted, "source X should NOT be conflicted after supersession");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_supersession_genuine_tie_flags_conflict() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("Y", "test", "source", "{}").await.unwrap();
+    db.upsert_node("C", "test", "old target", "{}").await.unwrap();
+    db.upsert_node("D", "test", "old target", "{}").await.unwrap();
+    // Both edges have SAME valid_from — genuine tie
+    db.add_edge_with_validity("Y", "C", "knows", 1.0, "{}", Some(100), None).await.unwrap();
+    db.add_edge_with_validity("Y", "D", "knows", 1.0, "{}", Some(100), None).await.unwrap();
+
+    let count = db.flag_contradiction_nodes().await.unwrap();
+    assert_eq!(count, 1, "genuine tie should flag Y as conflicted");
+
+    // Verify Y IS conflicted
+    let y_node = db.get_node("Y").await.unwrap().unwrap();
+    assert!(y_node.conflicted, "source Y MUST be conflicted after genuine tie");
+}
