@@ -31,11 +31,14 @@ pub struct NodeWriteOptions<'a> {
     pub valid_until: Option<i64>,
     pub allow_drift: bool,
     pub provenance: &'a str,
+    /// J-8: hierarchical scope tag, e.g. "user:alice/session:s1/agent:claude".
+    /// None = unscoped (visible regardless of scope filtering).
+    pub owner_scope: Option<&'a str>,
 }
 
 impl<'a> NodeWriteOptions<'a> {
     pub fn new(provenance: &'a str) -> Self {
-        Self { valid_from: None, valid_until: None, allow_drift: false, provenance }
+        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None }
     }
     pub fn drift_allowed(mut self, yes: bool) -> Self {
         self.allow_drift = yes;
@@ -47,6 +50,10 @@ impl<'a> NodeWriteOptions<'a> {
     }
     pub fn valid_from(mut self, from: Option<i64>) -> Self {
         self.valid_from = from;
+        self
+    }
+    pub fn owner_scope(mut self, scope: Option<&'a str>) -> Self {
+        self.owner_scope = scope;
         self
     }
 }
@@ -105,7 +112,7 @@ impl super::SilvaDB {
         metadata: &str,
         opts: NodeWriteOptions<'_>,
     ) -> Result<()> {
-        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance } = opts;
+        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope } = opts;
         if !allow_drift && DRIFT_SENSITIVE_TYPES.contains(&node_type) {
             anyhow::bail!(
                 "DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through the public API. \
@@ -140,8 +147,8 @@ impl super::SilvaDB {
             // the FTS index permanently out of sync with the real node content.
             let tx = conn.transaction()?;
             tx.execute(
-                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance)
-                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, ?7, 0, ?8, ?9, ?10)
+                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance, owner_scope)
+                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, ?7, 0, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
                     content = excluded.content,
                     metadata = excluded.metadata,
@@ -157,8 +164,9 @@ impl super::SilvaDB {
                     federation_source = COALESCE(excluded.federation_source, nodes.federation_source),
                     content_hash = COALESCE(excluded.content_hash, nodes.content_hash),
                     provenance = excluded.provenance,
+                    owner_scope = COALESCE(excluded.owner_scope, nodes.owner_scope),
                     updated_at = CURRENT_TIMESTAMP",
-                params![id, node_type, content, metadata, topic_key, vf, valid_until, federation_source, content_hash, provenance],
+                params![id, node_type, content, metadata, topic_key, vf, valid_until, federation_source, content_hash, provenance, owner_scope],
             )?;
             // Sync FTS5 index within the same transaction
             if let Ok(rowid) = tx.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
@@ -1039,6 +1047,36 @@ impl super::SilvaDB {
                     provenance: row.get(13)?,
                     last_touched: Utc::now(),
                 })
+            })?;
+            let mut results = Vec::new();
+            for row in rows { results.push(row?); }
+            Ok(results)
+        })
+    }
+
+    /// J-8: fetch lightweight (id, type, content, owner_scope) rows whose owner_scope starts
+    /// with `scope_prefix` (hierarchical prefix match — e.g. "user:alice" matches
+    /// "user:alice/session:s1/agent:claude"). Returns tuples instead of `GraphNode` to avoid
+    /// widening the struct's ~20 existing construction sites for this one filtered view.
+    pub async fn get_nodes_by_scope_prefix(
+        &self,
+        scope_prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, String, String, Option<String>)>> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare(
+                "SELECT id, type, content, owner_scope FROM nodes \
+                 WHERE owner_scope = ?1 OR owner_scope LIKE ?1 || '/%' \
+                 ORDER BY weight DESC LIMIT ?2"
+            )?;
+            let rows = stmt.query_map(rusqlite::params![scope_prefix, limit as i64], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
             })?;
             let mut results = Vec::new();
             for row in rows { results.push(row?); }

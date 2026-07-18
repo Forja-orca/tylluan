@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M36) · 410 kernel lib + 61 link + 12 fsrs = **483 total** green.
+**Commit:** pending (M37-P0 J-8 backend seed) · 411 kernel lib + 61 link + 12 fsrs = **484 total** green.
 
 ---
 

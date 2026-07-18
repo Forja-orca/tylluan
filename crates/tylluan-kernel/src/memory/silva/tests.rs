@@ -1075,6 +1075,25 @@ async fn test_valid_from_in_bulk_read() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_owner_scope_write_and_prefix_query() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node_with_validity("j8:1", "test", "alice session s1", "{}",
+        NodeWriteOptions::new("test").owner_scope(Some("user:alice/session:s1/agent:claude"))).await.unwrap();
+    db.upsert_node_with_validity("j8:2", "test", "alice session s2", "{}",
+        NodeWriteOptions::new("test").owner_scope(Some("user:alice/session:s2/agent:claude"))).await.unwrap();
+    db.upsert_node_with_validity("j8:3", "test", "bob unrelated", "{}",
+        NodeWriteOptions::new("test").owner_scope(Some("user:bob/session:s1/agent:claude"))).await.unwrap();
+    db.upsert_node("j8:4", "test", "unscoped node", "{}").await.unwrap();
+
+    let alice_nodes = db.get_nodes_by_scope_prefix("user:alice", 100).await.unwrap();
+    assert_eq!(alice_nodes.len(), 2, "prefix match should return both of alice's sessions, not bob's");
+    assert!(alice_nodes.iter().all(|(id, ..)| id.starts_with("j8:1") || id.starts_with("j8:2")));
+
+    let exact_session = db.get_nodes_by_scope_prefix("user:alice/session:s1/agent:claude", 100).await.unwrap();
+    assert_eq!(exact_session.len(), 1, "exact scope string should also match via the equality branch");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_supersession_older_edge_closed() {
     let db = SilvaDB::in_memory().await.unwrap();
     db.upsert_node("X", "test", "source", "{}").await.unwrap();
