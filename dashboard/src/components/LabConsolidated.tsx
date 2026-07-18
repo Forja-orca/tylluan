@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import { LaboratoryTab } from './LaboratoryTab';
 import { VisionTab } from './VisionTab';
-import { MaintenanceTab } from './MaintenanceTab';
-import { LogsTab } from './LogsTab';
 import PlanModePanel from './PlanModePanel';
 import ProjectSkillsPanel from './ProjectSkillsPanel';
 import BackgroundJobsPanel from './BackgroundJobsPanel';
-import { Beaker, Camera, ShieldAlert, Scroll, ShieldCheck, FileCode, Cpu } from 'lucide-react';
+import { Beaker, Camera, ShieldCheck, FileCode, Cpu } from 'lucide-react';
 
 interface LabConsolidatedProps {
   bridge: any;
   notify: (msg: string, type?: 'info' | 'error') => void;
-  events: any[];
-  onClearLogs: () => void;
 }
 
 export function LabConsolidated(props: LabConsolidatedProps) {
@@ -43,28 +39,6 @@ export function LabConsolidated(props: LabConsolidatedProps) {
         >
           <Camera className="w-3.5 h-3.5" />
           Vision
-        </button>
-        <button
-          onClick={() => setSubTab('maintenance')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
-            subTab === 'maintenance'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          Maintenance
-        </button>
-        <button
-          onClick={() => setSubTab('logs')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
-            subTab === 'logs'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Scroll className="w-3.5 h-3.5" />
-          System Logs
         </button>
         <button
           onClick={() => setSubTab('plan')}
@@ -113,18 +87,6 @@ export function LabConsolidated(props: LabConsolidatedProps) {
           <VisionTab
             bridge={props.bridge}
             notify={props.notify}
-          />
-        )}
-        {subTab === 'maintenance' && (
-          <MaintenanceTab
-            bridge={props.bridge}
-            notify={props.notify}
-          />
-        )}
-        {subTab === 'logs' && (
-          <LogsTab
-            events={props.events}
-            onClear={props.onClearLogs}
           />
         )}
         {subTab === 'plan' && (
