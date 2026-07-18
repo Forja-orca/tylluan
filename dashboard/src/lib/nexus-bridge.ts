@@ -1115,6 +1115,26 @@ export class NexusBridge {
     return Array.isArray(res) ? res : (res.nodes || []);
   }
 
+  async getAgentCard() {
+    return await this.fetch('/.well-known/agent-card.json');
+  }
+
+  async getA2aTaskStatus(taskId: string) {
+    const raw = await this.fetch('/a2a', {
+      method: 'POST',
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tasks/get',
+        params: { id: taskId },
+        id: Date.now()
+      })
+    });
+    if (raw.error) {
+      throw new Error(raw.error.message || 'JSON-RPC error');
+    }
+    return raw.result;
+  }
+
   async getCollectiveReputation(): Promise<{ reputation: any[], by_domain: Record<string, any[]> }> {
     try {
       return await this.fetch('/api/v1/collective/reputation');
