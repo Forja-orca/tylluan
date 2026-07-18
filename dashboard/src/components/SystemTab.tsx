@@ -5,7 +5,8 @@ import { LogsTab } from './LogsTab';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import DoctorPanel from './DoctorPanel';
 import { ScopesPanel } from './ScopesPanel';
-import { Wrench, Terminal, Cpu, Stethoscope, Layers } from 'lucide-react';
+import A2aPanel from './A2aPanel';
+import { Wrench, Terminal, Cpu, Stethoscope, Layers, Globe } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
-  const [view, setView] = useState<'doctor' | 'maintenance' | 'logs' | 'models' | 'scopes'>('doctor');
+  const [view, setView] = useState<'doctor' | 'maintenance' | 'logs' | 'models' | 'scopes' | 'a2a'>('doctor');
 
   return (
     <div className="flex flex-col h-full space-y-4">
@@ -87,6 +88,19 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           <Layers className="w-4 h-4" />
           Scopes
         </button>
+        <button
+          type="button"
+          onClick={() => setView('a2a')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            view === 'a2a'
+              ? "bg-slate-800 text-slate-200 shadow-sm"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+          )}
+        >
+          <Globe className="w-4 h-4" />
+          A2A Interop
+        </button>
       </div>
 
       {/* Content */}
@@ -99,8 +113,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           <LogsTab events={events} onClear={onClearLogs} />
         ) : view === 'models' ? (
           <ModelConfigPanel bridge={bridge} />
-        ) : (
+        ) : view === 'scopes' ? (
           <ScopesPanel bridge={bridge} notify={notify} />
+        ) : (
+          <A2aPanel notify={notify} />
         )}
       </div>
     </div>
