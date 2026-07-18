@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M38-P3, A2A HITL coverage + identity mitigation) · 419 kernel lib + 61 link + 12 fsrs + 3 integración (a2a HITL) = **495 total** green. Clippy clean en --all-targets (both toolchains).
+**Commit:** 366471e (M38-P3, A2A HITL coverage + identity mitigation) · 419 kernel lib + 61 link + 12 fsrs = **492 total** green (README/CI-tracked count; check_test_count.sh only sums `--lib` runs). Plus 3 a2a_hitl_test.rs integration tests (not counted by the script — separate `cargo test --test` binary). Clippy clean en --all-targets (both toolchains).
 
 ---
 
