@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M37-P3, closes ScopesPanel simulation gap) · 411 kernel lib + 61 link + 12 fsrs = **484 total** green.
+**Commit:** pending (M38 P0+P1, A2A server) · 419 kernel lib + 61 link + 12 fsrs = **492 total** green.
 
 ---
 

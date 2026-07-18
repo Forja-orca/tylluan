@@ -7,6 +7,7 @@ pub mod auth;
 pub mod oauth;
 pub mod sse;
 pub mod api_v1;
+pub mod a2a;
 
 use axum::{
     Router, Json,
@@ -90,6 +91,7 @@ pub struct HttpState {
     pub dispatch_queue: Arc<std::sync::Mutex<DispatchQueue>>,
     pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
     pub repo_map: Arc<crate::repo_map::RepoMap>,
+    pub a2a_task_manager: Arc<a2a::A2aTaskManager>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -405,6 +407,8 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         })
     };
 
+    let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new());
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -469,6 +473,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         dispatch_queue: Arc::new(std::sync::Mutex::new(DispatchQueue::new(1000))),
         p2p_pool: p2p_pool.clone(),
         repo_map,
+        a2a_task_manager: a2a_task_manager.clone(),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),
@@ -878,6 +883,7 @@ fn build_router(state: Arc<HttpState>) -> Router {
         .route("/health", get(health_handler))
         .route("/discovery", get(discovery_handler))
         .route("/api/v1/mcp/probe", get(api_v1::probe_handler))
+        .route("/.well-known/agent-card.json", get(a2a::agent_card_handler))
         .merge(oauth_routes);
 
     #[cfg(feature = "observability")]
@@ -889,6 +895,7 @@ fn build_router(state: Arc<HttpState>) -> Router {
         .route("/messages", any(api_v1::mcp_handler))
         .route("/mcp", any(api_v1::mcp_handler))
         .route("/api/v1/mcp", any(api_v1::mcp_handler))
+        .route("/a2a", post(a2a::a2a_jsonrpc_handler))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::bearer_auth_middleware,

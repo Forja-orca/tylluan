@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 16;
+            const SCHEMA_VERSION: i32 = 17;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -169,6 +169,22 @@ impl super::SilvaDB {
                     "CREATE INDEX IF NOT EXISTS idx_nodes_owner_scope ON nodes(owner_scope);"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added owner_scope column + index (v16)");
+            }
+            if schema_version < 17 {
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS a2a_tasks (
+                        id TEXT PRIMARY KEY,
+                        state TEXT NOT NULL DEFAULT 'submitted',
+                        client_agent_id TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        params_json TEXT NOT NULL,
+                        result_json TEXT,
+                        grant_id TEXT,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    );"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added a2a_tasks table (v17)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
