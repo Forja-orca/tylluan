@@ -167,7 +167,7 @@ The only time an LLM is involved is if you — the agent or human caller — dec
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-492 tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+495 tests across Rust kernel (lib), tylluan-link, tylluan-fsrs, and integration tests — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 

@@ -1,3 +1,20 @@
+//! # A2A (Agent-to-Agent) Protocol Handler
+//!
+//! Implements the A2A spec v0.3.0 (Linux Foundation) over JSON-RPC 2.0.
+//!
+//! ## Implemented methods
+//!
+//! - `message/send` — Create and execute a task from an intent.
+//! - `tasks/get` — Query task state and result.
+//! - `tasks/cancel` — Cancel a non-terminal task.
+//!
+//! ## Out of scope (M38)
+//!
+//! `message/stream` (SSE push) is intentionally **not implemented** in M38.
+//! See backlog item M33/J-3 for discussion. Only polling via `tasks/get` is
+//! available for result retrieval. SSE push notifications may be added later
+//! once the A2A task lifecycle is stabilized in production.
+
 use axum::{
     Json,
     extract::State,
@@ -6,12 +23,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
+use crate::memory::silva::SilvaDB;
 use crate::transport::http::HttpState;
 use crate::transport::server::TylluanServer;
 
@@ -45,14 +63,16 @@ pub struct AgentSkill {
     tags: Vec<String>,
 }
 
-pub async fn agent_card_handler(State(_state): State<Arc<HttpState>>) -> impl IntoResponse {
+pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let skills = build_skills_list();
+    let config = state.config.read().await;
+    let url = format!("http://{}:{}/a2a", config.nexus.host, config.nexus.port);
 
     let card = AgentCard {
         protocol_version: "0.3.0".into(),
         name: "Tylluan Sovereign Kernel".into(),
         description: "Agent-to-Agent protocol endpoint for the Tylluan MCP kernel. Accepts task delegation via JSON-RPC 2.0.".into(),
-        url: "/a2a".into(),
+        url,
         preferred_transport: "JSONRPC".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         capabilities: serde_json::json!({
@@ -126,7 +146,7 @@ pub struct JsonRpcResponse {
     pub id: serde_json::Value,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
@@ -202,37 +222,27 @@ pub struct A2aTask {
 // ─── Task Manager ───────────────────────────────────────────────────────────────
 
 pub struct A2aTaskManager {
-    tasks: Arc<RwLock<HashMap<String, A2aTask>>>,
-}
-
-impl Default for A2aTaskManager {
-    fn default() -> Self {
-        Self::new()
-    }
+    silva: Arc<SilvaDB>,
 }
 
 impl A2aTaskManager {
-    pub fn new() -> Self {
-        Self {
-            tasks: Arc::new(RwLock::new(HashMap::new())),
-        }
+    pub fn new(silva: Arc<SilvaDB>) -> Self {
+        Self { silva }
     }
 
     pub async fn create_task(&self, client_agent_id: &str, method: &str, params: &serde_json::Value) -> String {
-        let id = format!("a2a_{}", chrono::Utc::now().timestamp_millis());
+        let id = format!("a2a_{}", Uuid::new_v4().simple());
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-        let task = A2aTask {
-            id: id.clone(),
-            state: A2aTaskState::Submitted,
-            client_agent_id: client_agent_id.into(),
-            method: method.into(),
-            params_json: serde_json::to_string(params).unwrap_or_default(),
-            result_json: None,
-            grant_id: None,
-            created_at: now,
-            updated_at: now,
-        };
-        self.tasks.write().await.insert(id.clone(), task);
+        let params_str = serde_json::to_string(params).unwrap_or_default();
+        let state_str = A2aTaskState::Submitted.to_string();
+        let _ = tokio::task::block_in_place(|| {
+            let conn = self.silva.conn_lock();
+            let conn = conn.blocking_lock();
+            conn.execute(
+                "INSERT INTO a2a_tasks (id, state, client_agent_id, method, params_json, result_json, grant_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, ?7)",
+                params![id, state_str, client_agent_id, method, params_str, now, now],
+            )
+        });
         id
     }
 
@@ -244,44 +254,72 @@ impl A2aTaskManager {
         grant_id: Option<String>,
     ) -> bool {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-        let mut guard = self.tasks.write().await;
-        if let Some(task) = guard.get_mut(task_id) {
-            task.state = state;
-            task.updated_at = now;
-            if let Some(r) = result {
-                task.result_json = Some(serde_json::to_string(&r).unwrap_or_default());
-            }
-            if let Some(g) = grant_id {
-                task.grant_id = Some(g);
-            }
-            true
-        } else {
-            false
-        }
+        let state_str = state.to_string();
+        let result_str = result.map(|r| serde_json::to_string(&r).unwrap_or_default());
+        let grant_str = grant_id;
+        let affected = tokio::task::block_in_place(|| {
+            let conn = self.silva.conn_lock();
+            let conn = conn.blocking_lock();
+            conn.execute(
+                "UPDATE a2a_tasks SET state = ?1, updated_at = ?2, result_json = COALESCE(?3, result_json), grant_id = COALESCE(?4, grant_id) WHERE id = ?5",
+                params![state_str, now, result_str, grant_str, task_id],
+            ).unwrap_or(0)
+        });
+        affected > 0
     }
 
     pub async fn get_task(&self, task_id: &str) -> Option<A2aTask> {
-        let guard = self.tasks.read().await;
-        guard.get(task_id).cloned()
+        tokio::task::block_in_place(|| {
+            let conn = self.silva.conn_lock();
+            let conn = conn.blocking_lock();
+            conn.query_row(
+                "SELECT id, state, client_agent_id, method, params_json, result_json, grant_id, created_at, updated_at FROM a2a_tasks WHERE id = ?1",
+                params![task_id],
+                |row| {
+                    let state_str: String = row.get(1)?;
+                    Ok(A2aTask {
+                        id: row.get(0)?,
+                        state: serde_json::from_str(&format!("\"{state_str}\"")).unwrap_or(A2aTaskState::Unknown),
+                        client_agent_id: row.get(2)?,
+                        method: row.get(3)?,
+                        params_json: row.get(4)?,
+                        result_json: row.get(5)?,
+                        grant_id: row.get(6)?,
+                        created_at: row.get(7)?,
+                        updated_at: row.get(8)?,
+                    })
+                }
+            ).ok()
+        })
     }
 
     pub async fn cancel_task(&self, task_id: &str) -> Result<(), String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-        let mut guard = self.tasks.write().await;
-        if let Some(task) = guard.get_mut(task_id) {
-            match task.state {
-                A2aTaskState::Completed | A2aTaskState::Failed | A2aTaskState::Canceled | A2aTaskState::Rejected => {
-                    Err(format!("Task already in terminal state: {}", task.state))
+        let canceled = A2aTaskState::Canceled.to_string();
+        tokio::task::block_in_place(|| {
+            let conn = self.silva.conn_lock();
+            let conn = conn.blocking_lock();
+            let current_state: std::result::Result<String, rusqlite::Error> = conn.query_row(
+                "SELECT state FROM a2a_tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            );
+            match current_state {
+                Ok(ref s)
+                    if *s == "completed" || *s == "failed" || *s == "canceled" || *s == "rejected" =>
+                {
+                    Err(format!("Task already in terminal state: {s}"))
                 }
-                _ => {
-                    task.state = A2aTaskState::Canceled;
-                    task.updated_at = now;
+                Ok(_) => {
+                    conn.execute(
+                        "UPDATE a2a_tasks SET state = ?1, updated_at = ?2 WHERE id = ?3",
+                        params![canceled, now, task_id],
+                    ).map_err(|e| e.to_string())?;
                     Ok(())
                 }
+                Err(_) => Err("Task not found".into()),
             }
-        } else {
-            Err("Task not found".into())
-        }
+        })
     }
 }
 
@@ -321,6 +359,23 @@ async fn handle_message_send(
     };
 
     let agent_id = params.get("agent_id").and_then(|v| v.as_str()).unwrap_or("a2a-client");
+
+    // Auth cross-check: if the request is authenticated with a bound agent identity,
+    // verify the declared client_agent_id matches. Otherwise an authenticated client
+    // could impersonate any agent_id.
+    // NOTE: In dev_mode or without ACL tokens, current_bound_agent_id() returns None
+    // and the check is skipped. This is a known limitation — there is no mechanism
+    // today to bind an agent identity to a dev_mode session.
+    if let Some(bound_id) = crate::transport::http::auth::current_bound_agent_id()
+        && bound_id != agent_id
+    {
+        return Json(jsonrpc_error(
+            -32000,
+            &format!("client_agent_id '{agent_id}' does not match authenticated identity '{bound_id}'. The declared agent_id must match the authenticated bearer token."),
+            id,
+        ));
+    }
+
     let intent_str = params.get("intent")
         .and_then(|v| v.as_str())
         .unwrap_or_else(|| params.get("message").and_then(|v| v.as_str()).unwrap_or(""));
@@ -477,7 +532,14 @@ pub fn a2a_routes() -> Router<Arc<HttpState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::silva::SilvaDB;
     use crate::transport::server::TylluanServer;
+
+    async fn test_mgr() -> A2aTaskManager {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        silva.init().await.unwrap();
+        A2aTaskManager::new(silva)
+    }
 
     #[test]
     fn test_agent_card_has_5_skills_plus_guild_dispatch() {
@@ -514,9 +576,9 @@ mod tests {
         assert_eq!(resp.result.as_ref().unwrap().get("ok").unwrap(), true);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_message_send_creates_task() {
-        let mgr = A2aTaskManager::new();
+        let mgr = test_mgr().await;
         let params = serde_json::json!({"intent": "list files", "agent_id": "test-agent"});
         let task_id = mgr.create_task("test-agent", "message/send", &params).await;
         assert!(!task_id.is_empty());
@@ -525,9 +587,9 @@ mod tests {
         assert_eq!(task.client_agent_id, "test-agent");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_tasks_get_returns_real_state() {
-        let mgr = A2aTaskManager::new();
+        let mgr = test_mgr().await;
         let params = serde_json::json!({"intent": "hello"});
         let task_id = mgr.create_task("agent1", "message/send", &params).await;
         mgr.update_state(&task_id, A2aTaskState::Completed,
@@ -537,9 +599,9 @@ mod tests {
         assert!(task.result_json.is_some());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_tasks_cancel_rejects_completed() {
-        let mgr = A2aTaskManager::new();
+        let mgr = test_mgr().await;
         let params = serde_json::json!({"intent": "hello"});
         let task_id = mgr.create_task("agent1", "message/send", &params).await;
         mgr.update_state(&task_id, A2aTaskState::Completed, None, None).await;
@@ -547,9 +609,9 @@ mod tests {
         assert!(result.is_err(), "Should not cancel a completed task");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_tasks_cancel_accepts_working() {
-        let mgr = A2aTaskManager::new();
+        let mgr = test_mgr().await;
         let params = serde_json::json!({"intent": "hello"});
         let task_id = mgr.create_task("agent1", "message/send", &params).await;
         mgr.update_state(&task_id, A2aTaskState::Working, None, None).await;

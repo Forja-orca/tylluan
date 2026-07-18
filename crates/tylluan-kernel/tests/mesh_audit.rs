@@ -173,7 +173,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
         registry: registry_handle,
         doctor,
         memory,
-        silva,
+        silva: silva.clone(),
         mailbox,
         coloquio,
         broadcast_tx,
@@ -211,7 +211,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
         ))),
         dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
         repo_map,
-        a2a_task_manager: Arc::new(tylluan_kernel::transport::http::a2a::A2aTaskManager::new()),
+        a2a_task_manager: Arc::new(tylluan_kernel::transport::http::a2a::A2aTaskManager::new(silva)),
     })
 }
 
@@ -360,7 +360,7 @@ async fn dst_test_state(
         registry: registry_handle,
         doctor,
         memory,
-        silva,
+        silva: silva.clone(),
         mailbox,
         coloquio,
         broadcast_tx,
@@ -398,7 +398,7 @@ async fn dst_test_state(
         ))),
         dispatch_queue: Arc::new(std::sync::Mutex::new(tylluan_link::dispatch::DispatchQueue::new(1000))),
         repo_map,
-        a2a_task_manager: Arc::new(tylluan_kernel::transport::http::a2a::A2aTaskManager::new()),
+        a2a_task_manager: Arc::new(tylluan_kernel::transport::http::a2a::A2aTaskManager::new(silva)),
     })
 }
 

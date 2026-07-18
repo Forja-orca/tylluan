@@ -22,6 +22,8 @@ from mcp.server.fastmcp import FastMCP
 
 from guilds.builders.plugins import utils
 
+CAPABILITIES = {"process_execution": True}
+
 mcp = FastMCP("tylluan-bash")
 
 # --- Agentic Lifecycle Management ---
