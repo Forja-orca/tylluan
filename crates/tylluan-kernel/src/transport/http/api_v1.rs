@@ -214,6 +214,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/mailbox", get(mailbox_list_handler))
         .route("/api/v1/interoception", get(interoception_handler))
         .route("/api/v1/graph/viz", get(silva_graph_handler))
+        .route("/api/v1/graph/scope", get(graph_scope_handler))
 
         .route("/api/v1/ingest/upload", post(ingest_upload_handler))
         .route("/api/v1/ingest/files/{filename}", get(serve_ingested_file_handler))
@@ -1174,6 +1175,23 @@ async fn doctor_repair_handler(
 async fn silva_recent_handler(State(state): State<Arc<HttpState>>, Query(q): Query<SilvaRecentQuery>) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(20);
     Json(state.silva.get_recent_nodes(limit).await.unwrap_or_default())
+}
+
+#[derive(serde::Deserialize)]
+struct GraphScopeQuery {
+    prefix: Option<String>,
+    limit: Option<usize>,
+}
+
+/// J-8: list nodes under a hierarchical owner_scope prefix (e.g. "user:alice").
+async fn graph_scope_handler(State(state): State<Arc<HttpState>>, Query(q): Query<GraphScopeQuery>) -> impl IntoResponse {
+    let prefix = q.prefix.unwrap_or_default();
+    let limit = q.limit.unwrap_or(100);
+    let rows = state.silva.get_nodes_by_scope_prefix(&prefix, limit).await.unwrap_or_default();
+    let nodes: Vec<serde_json::Value> = rows.into_iter().map(|(id, node_type, content, owner_scope)| {
+        serde_json::json!({ "id": id, "node_type": node_type, "type": node_type, "content": content, "owner_scope": owner_scope })
+    }).collect();
+    Json(serde_json::json!({ "nodes": nodes }))
 }
 
 async fn list_contradictions_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
