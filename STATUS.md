@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-17 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓ [P0 MCP config 1-click, P1 mesh map, P2 badges, P3 tylluan new guild, P4 dry-run], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓, M34-P0 Trust Gate (provenance) ✓, M34-P1 Consolidated Topics ✓, M35 Bi-temporal Memory ✓)
+> Last updated: 2026-07-18 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓ [P0 MCP config 1-click, P1 mesh map, P2 badges, P3 tylluan new guild, P4 dry-run], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓, M34-P0 Trust Gate (provenance) ✓, M34-P1 Consolidated Topics ✓, M35 Bi-temporal Memory ✓, M36 Self-correction via @correct: ✓)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M35) · 403 kernel lib + 61 link + 12 fsrs = **476 total** green.
+**Commit:** pending (M36) · 410 kernel lib + 61 link + 12 fsrs = **483 total** green.
 
 ---
 

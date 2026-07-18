@@ -446,6 +446,11 @@ pub async fn handle_tylluan_do(
         return result;
     }
 
+    // M36: @correct:<node_id>:<content> — explicit self-correction of a memory node
+    if let Some(result) = handle_correct_prefix(server, &intent).await {
+        return result;
+    }
+
     // M31-P6: @bg:<intent> — enqueue a guild call as a background job
     if let Some(result) = crate::transport::server::background_jobs::handle_bg_prefix(server, &intent, &agent_id).await {
         return result;
@@ -1241,6 +1246,107 @@ pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
     None
 }
 
+/// M36: @correct:<node_id>:<content> — explicit self-correction of a memory node.
+/// Supersedes the old node via valid_until (M35 pattern), creates a new corrected
+/// node with provenance=agent_generated, and links via "corrects" edge.
+async fn handle_correct_prefix(
+    server: &TylluanServer,
+    intent: &str,
+) -> Option<Result<CallToolResult, McpError>> {
+    let trimmed = intent.trim();
+    if !trimmed.starts_with("@correct") {
+        return None;
+    }
+
+    // Parse @correct:<node_id>:<content> — node_id may contain colons,
+    // so we use rsplit_once(':') to find the last colon as content boundary.
+    let after = trimmed.strip_prefix("@correct").unwrap_or("").trim();
+    let after = match after.strip_prefix(':') {
+        Some(s) => s,
+        None => return Some(Ok(error_result(
+            "Usage: @correct:<node_id>:<contenido corregido>"
+        ))),
+    };
+    let (node_id, new_content) = match after.rsplit_once(':') {
+        Some((id, rest)) if !id.is_empty() && !rest.trim().is_empty() => (id.trim(), rest.trim()),
+        _ => return Some(Ok(error_result(
+            "Usage: @correct:<node_id>:<contenido corregido>"
+        ))),
+    };
+
+    let silva = &server.silva;
+
+    let node = match silva.get_node(node_id).await {
+        Ok(Some(n)) => n,
+        Ok(None) => return Some(Ok(error_result(&format!("Node '{node_id}' not found.")))),
+        Err(e) => return Some(Ok(error_result(&format!("Error reading node '{node_id}': {e}")))),
+    };
+
+    if node.protected {
+        return Some(Ok(error_result(
+            &format!("Cannot correct protected node '{node_id}': protected nodes are intentionally immutable.")
+        )));
+    }
+
+    if node.node_type == "identity" {
+        return Some(Ok(error_result(
+            &format!("Cannot correct identity node '{node_id}': identity nodes are intentionally immutable.")
+        )));
+    }
+
+    if node.valid_until.is_some() {
+        return Some(Ok(error_result(&format!(
+            "Node '{node_id}' already has a superseding correction (valid_until is set). Only the current version can be corrected."
+        ))));
+    }
+
+    let now_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    // Supersede old node via spawn_blocking to avoid blocking the async runtime
+    let silva_clone = silva.clone();
+    let nid = node_id.to_string();
+    if let Err(e) = tokio::task::spawn_blocking(move || {
+        let conn = silva_clone.conn.blocking_lock();
+        if let Err(e) = conn.execute(
+            "UPDATE nodes SET valid_until = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2 AND valid_until IS NULL",
+            rusqlite::params![now_timestamp, nid],
+        ) {
+            tracing::warn!("@correct: failed to set valid_until on '{}': {}", nid, e);
+        }
+    }).await {
+        tracing::warn!("@correct: spawn_blocking panicked: {}", e);
+    }
+
+    let new_id = format!("{node_id}:corrected:{now_timestamp}");
+
+    let mut meta: serde_json::Value = serde_json::from_str(&node.metadata).unwrap_or(serde_json::Value::Object(Default::default()));
+    if let (Some(tk), Some(obj)) = (node.topic_key.as_ref(), meta.as_object_mut()) {
+        obj.insert("topic".to_string(), serde_json::Value::String(tk.clone()));
+    }
+
+    if let Err(e) = silva.upsert_node_with_provenance(
+        &new_id, &node.node_type, new_content, &meta.to_string(), "agent_generated",
+    ).await {
+        return Some(Ok(error_result(&format!("Failed to create corrected node: {e}"))));
+    }
+
+    let _ = silva.set_weight(&new_id, node.weight).await;
+
+    if let Err(e) = silva.add_edge(&new_id, node_id, "corrects", 1.0, "").await {
+        tracing::warn!("@correct: failed to add edge {} -> {}: {}", new_id, node_id, e);
+    }
+
+    Some(Ok(CallToolResult {
+        content: vec![Content::text(format!(
+            "Corrected node '{node_id}'. New version created as '{new_id}'. Old version superseded (valid_until set)."
+        ))],
+        is_error: Some(false),
+    }))
+}
+
 /// Test helper: minimal TylluanServer with in-memory stores, no guilds.
 /// Used by both handler_do's own tests and background_jobs tests.
 #[cfg(test)]
@@ -1916,5 +2022,134 @@ mod tests {
         let server = test_server().await;
         let result = handle_skill_prefix(&server, "list files in current directory", &None).await;
         assert!(result.is_none(), "non-skill intents should return None");
+    }
+
+    // ─── M36: @correct: prefix tests ──────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_supersedes_and_creates_new() {
+        let server = test_server().await;
+        server.silva.upsert_node("m36:test:original", "concept", "original content", "{}").await.unwrap();
+
+        let result = handle_correct_prefix(&server, "@correct:m36:test:original:corrected content").await;
+        assert!(result.is_some(), "correct should return Some");
+        let r = result.unwrap().unwrap();
+        if r.is_error == Some(true) {
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            panic!("correct returned error: {text}");
+        }
+
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("Corrected"), "success response should mention 'Corrected'");
+        assert!(text.contains("m36:test:original"), "response should include original node id");
+
+        // Old node should have valid_until set
+        let old = server.silva.get_node("m36:test:original").await.unwrap().unwrap();
+        assert!(old.valid_until.is_some(), "old node should have valid_until set");
+
+        // New node should exist with corrected content
+        let all = server.silva.get_all_nodes().await.unwrap();
+        let new_node = all.iter().find(|n| n.id.contains("corrected")).unwrap();
+        assert_eq!(new_node.content, "corrected content", "new node should have corrected content");
+        assert_eq!(new_node.provenance, "agent_generated", "new node should have provenance=agent_generated");
+
+        // Edge should exist: new -> old
+        let new_id = &new_node.id;
+        let edges = server.silva.get_all_edges().await.unwrap();
+        assert!(edges.iter().any(|e|
+            e["source"].as_str() == Some(new_id.as_str()) &&
+            e["target"].as_str() == Some("m36:test:original") &&
+            e["type"].as_str() == Some("corrects")
+        ), "should have 'corrects' edge from new to old");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_rejects_protected() {
+        let server = test_server().await;
+        server.silva.upsert_node("m36:protected:node", "concept", "protected content", "{}").await.unwrap();
+        server.silva.protect_node("m36:protected:node").await.unwrap();
+
+        let result = handle_correct_prefix(&server, "@correct:m36:protected:node:new content").await;
+        assert!(result.is_some());
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(true), "protected correction should be error");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("protected"), "error should mention 'protected'");
+
+        // Original should not have valid_until set
+        let node = server.silva.get_node("m36:protected:node").await.unwrap().unwrap();
+        assert!(node.valid_until.is_none(), "protected node should not be superseded");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_rejects_identity() {
+        let server = test_server().await;
+        server.silva.upsert_node("agent:test-agent", "identity", "agent identity", "{}").await.unwrap();
+
+        let result = handle_correct_prefix(&server, "@correct:agent:test-agent:new identity").await;
+        assert!(result.is_some());
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(true), "identity correction should be error");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("identity"), "error should mention 'identity'");
+
+        let node = server.silva.get_node("agent:test-agent").await.unwrap().unwrap();
+        assert!(node.valid_until.is_none(), "identity node should not be superseded");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_rejects_already_superseded() {
+        let server = test_server().await;
+        server.silva.upsert_node("m36:old:node", "concept", "old content", "{}").await.unwrap();
+
+        // First correction
+        let r1 = handle_correct_prefix(&server, "@correct:m36:old:node:newer content").await;
+        assert!(r1.is_some(), "first correct should return Some");
+        let r1 = r1.unwrap().unwrap();
+        if r1.is_error == Some(true) {
+            let text = r1.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            panic!("first correct returned error: {text}");
+        }
+
+        // Second correction on same original should fail (already has valid_until)
+        let r2 = handle_correct_prefix(&server, "@correct:m36:old:node:even newer content").await;
+        assert!(r2.is_some());
+        let r2 = r2.unwrap().unwrap();
+        assert_eq!(r2.is_error, Some(true), "second correct on same node should be error");
+        let text = r2.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("already"), "error should mention 'already'");
+        // Only one corrected node should exist
+        let all = server.silva.get_all_nodes().await.unwrap();
+        let corrected: Vec<_> = all.iter().filter(|n| n.id.contains("corrected")).collect();
+        assert_eq!(corrected.len(), 1, "only one corrected node should exist");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_rejects_nonexistent_node() {
+        let server = test_server().await;
+        let result = handle_correct_prefix(&server, "@correct:nonexistent:node:some content").await;
+        assert!(result.is_some());
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(true), "nonexistent node should be error");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("not found"), "error should say 'not found'");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_parse_error_returns_usage() {
+        let server = test_server().await;
+        let result = handle_correct_prefix(&server, "@correct:").await;
+        assert!(result.is_some());
+        let r = result.unwrap().unwrap();
+        assert_eq!(r.is_error, Some(true), "empty correct should be error");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("Usage"), "error should show usage");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_prefix_not_matched_returns_none() {
+        let server = test_server().await;
+        let result = handle_correct_prefix(&server, "list files in current directory").await;
+        assert!(result.is_none(), "non-correct intents should return None");
     }
 }
