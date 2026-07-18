@@ -32,18 +32,19 @@ Most AI memory systems require an API key, a cloud subscription, or a vendor tha
 
 The result: an agent that ran on a Raspberry Pi 4 with 12,000 memories, federated with 3 peers over encrypted Noise XK — with no internet connection.
 
-### Why not Mem0 / Letta / Zep / Cognee?
+### Where Tylluan fits in the agent-memory space
 
-| Project | Tylluan delta |
-|---------|--------------|
-| **Mem0** | Mem0 is an API service. Tylluan is a local binary — no cloud, no API key, no vendor lock-in. |
-| **Letta (MemGPT)** | Letta's managed service costs $199/mo. Tylluan is MIT, free, and runs on a Raspberry Pi 4. |
-| **Zep** | Zep is cloud-first with a local Python option. Tylluan is Rust-native, single binary, no Python dependency for the kernel. |
-| **Cognee** | Cognee is Python-only. Tylluan is a Rust kernel with Python guilds — the critical path (memory, search, federation) is compiled, not interpreted. |
-| **Graphiti** | Graphiti is a knowledge graph library for Python. Tylluan is a full server with MCP, guilds, federation, mesh discovery — deploy it, agents connect via SSE. |
-| **A-MEM** | Research prototype (paper + Python notebook). Tylluan is a maintained binary release with CI, installers, and multiplatform builds. |
+There's a growing field of agent memory projects (Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others), each with its own tradeoffs and target use case — worth evaluating on their own merits for your needs.
 
-The common thread: Tylluan is the only project in this space that is **local-first, mesh P2P, single Rust binary, works on a Raspberry Pi 4, and federates knowledge without a coordinator node**. The tradeoff is maturity — most of these projects have years of community history that Tylluan doesn't. See [ROADMAP.md](ROADMAP.md) for status.
+What Tylluan specifically optimizes for:
+
+- **A single Rust binary** — the memory/search/federation critical path is compiled, not a Python runtime with a service dependency.
+- **Local-first by default** — designed to run fully offline, no API key or cloud account required to operate.
+- **Runs on modest hardware** — validated on a Raspberry Pi 4 with 12,000 memories.
+- **Mesh P2P federation** — peers share knowledge over encrypted Noise XK without a coordinator/broker node.
+- **MIT licensed** — open SQLite database underneath, readable with any standard tool, no lock-in to a proprietary format.
+
+The honest tradeoff: this space has several projects with years of community history, production hardening, and ecosystem integrations that Tylluan doesn't have yet. See [ROADMAP.md](ROADMAP.md) for what's actually shipped versus planned.
 
 ---
 
