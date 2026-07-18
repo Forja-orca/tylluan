@@ -69,7 +69,7 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
-                "SELECT DISTINCT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.shareable, n.provenance
+                "SELECT DISTINCT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted, n.topic_key, n.created_at, n.updated_at, n.shareable, n.valid_from, n.valid_until, n.provenance
                  FROM nodes n
                  INNER JOIN edges e1 ON e1.target = n.id
                  INNER JOIN edges e2 ON e2.target = n.id
@@ -93,10 +93,9 @@ impl super::SilvaDB {
                     updated_at: row.get(9)?,
                     shareable: row.get::<_, i32>(10)? != 0,
                     content_hash: "".to_string(),
-                    provenance: row.get(11)?,
+                    valid_from: row.get(11)?, valid_until: row.get(12)?,
+                    provenance: row.get(13)?,
                     last_touched: Utc::now(),
-                    valid_from: None,
-                    valid_until: None,
                 })
             })?;
             let mut results = Vec::new();
@@ -126,7 +125,7 @@ impl super::SilvaDB {
                     .join(",");
 
                 let nodes_query = format!(
-                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, provenance FROM nodes WHERE id IN ({placeholders})"
+                    "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, valid_from, valid_until, provenance FROM nodes WHERE id IN ({placeholders})"
                 );
                 let mut stmt = conn.prepare(&nodes_query)?;
                 let nodes: Vec<GraphNode> = stmt.query_map(rusqlite::params_from_iter(current_level.clone()), |row| {
@@ -143,10 +142,9 @@ impl super::SilvaDB {
                         updated_at: row.get(9)?,
                         shareable: row.get::<_, i32>(10)? != 0,
                         content_hash: "".to_string(),
-                        provenance: row.get(11)?,
+                        valid_from: row.get(11)?, valid_until: row.get(12)?,
+                        provenance: row.get(13)?,
                         last_touched: Utc::now(),
-                        valid_from: None,
-                        valid_until: None,
                     })
                 })?
                 .filter_map(|r| r.ok())
