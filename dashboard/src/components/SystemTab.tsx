@@ -4,7 +4,8 @@ import { MaintenanceTab } from './MaintenanceTab';
 import { LogsTab } from './LogsTab';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import DoctorPanel from './DoctorPanel';
-import { Wrench, Terminal, Cpu, Stethoscope } from 'lucide-react';
+import { ScopesPanel } from './ScopesPanel';
+import { Wrench, Terminal, Cpu, Stethoscope, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
-  const [view, setView] = useState<'doctor' | 'maintenance' | 'logs' | 'models'>('doctor');
+  const [view, setView] = useState<'doctor' | 'maintenance' | 'logs' | 'models' | 'scopes'>('doctor');
 
   return (
     <div className="flex flex-col h-full space-y-4">
@@ -73,6 +74,19 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           <Cpu className="w-4 h-4" />
           Models
         </button>
+        <button
+          type="button"
+          onClick={() => setView('scopes')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            view === 'scopes'
+              ? "bg-slate-800 text-slate-200 shadow-sm"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+          )}
+        >
+          <Layers className="w-4 h-4" />
+          Scopes
+        </button>
       </div>
 
       {/* Content */}
@@ -83,8 +97,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           <MaintenanceTab bridge={bridge} notify={notify} />
         ) : view === 'logs' ? (
           <LogsTab events={events} onClear={onClearLogs} />
-        ) : (
+        ) : view === 'models' ? (
           <ModelConfigPanel bridge={bridge} />
+        ) : (
+          <ScopesPanel bridge={bridge} notify={notify} />
         )}
       </div>
     </div>

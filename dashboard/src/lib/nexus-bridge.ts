@@ -82,6 +82,7 @@ export interface GraphNode {
   updated_at?: string;
   last_agent?: string;
   provenance?: string;
+  owner_scope?: string;
 }
 
 // Golden Signals — real metrics only, no placeholders
@@ -1106,6 +1107,12 @@ export class NexusBridge {
     } catch {
       return [];
     }
+  }
+
+  async getNodesByScopePrefix(prefix: string, limit = 100): Promise<GraphNode[]> {
+    // If the endpoint is implemented in the future, it should return a JSON like { "nodes": [...] }
+    const res = await this.fetch(`/api/v1/graph/scope?prefix=${encodeURIComponent(prefix)}&limit=${limit}`);
+    return Array.isArray(res) ? res : (res.nodes || []);
   }
 
   async getCollectiveReputation(): Promise<{ reputation: any[], by_domain: Record<string, any[]> }> {

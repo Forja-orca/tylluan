@@ -217,6 +217,13 @@ impl HybridMemory {
         query_embedding: Option<&[f32]>,
         limit: usize,
     ) -> Result<Vec<Document>> {
+        tracing::info!(
+            gen_ai.operation.name = "retrieval",
+            gen_ai.request.model = "hybrid/bge-m3+bm25",
+            gen_ai.request.max_results = limit as u64,
+            query = %query,
+            "Hybrid memory search"
+        );
         let safe_query = query.chars().take(1000).collect::<String>();
         let sanitized = sanitize_fts_query(&safe_query);
         let tier = classify_query_tier(&sanitized);
