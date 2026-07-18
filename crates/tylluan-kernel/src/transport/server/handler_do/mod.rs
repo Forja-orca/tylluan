@@ -586,6 +586,10 @@ pub async fn handle_tylluan_do(
         "server_url": url_hint, "url": url_hint,
         "timeout_secs": 30, "language": "", "depth": 2, "max_results": 50,
     });
+    // Forward agent_id to tool args so check_capabilities can enforce profiles
+    if let Some(ref aid) = agent_id {
+        tool_args["agent_id"] = serde_json::Value::String(aid.clone());
+    }
     // Only inject path fields when intent contains an actual path — passing "."
     // causes "Permission denied" in guilds that require filesystem access.
     if path_hint != "." {

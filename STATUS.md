@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M38 P0+P1, A2A server) · 419 kernel lib + 61 link + 12 fsrs = **492 total** green.
+**Commit:** pending (M38-P3, A2A HITL coverage + identity mitigation) · 419 kernel lib + 61 link + 12 fsrs + 3 integración (a2a HITL) = **495 total** green. Clippy clean en --all-targets (both toolchains).
 
 ---
 
@@ -80,7 +80,7 @@
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **291 kernel lib tests passing** + 61 link tests + 2 evals tests = **354 total** (verificado 2026-07-08)
+- **421 kernel lib tests passing** + 3 A2A HITL integration tests = **424 total** (verificado 2026-07-18)
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)

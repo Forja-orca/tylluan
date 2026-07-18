@@ -779,7 +779,9 @@ mod tests {
 
     #[test]
     fn test_keyword_match_shell_commands() {
-        let matcher = test_matcher();
+        let catalog = builtin_catalog();
+
+        let matcher = GuildMatcher::new(catalog);
         let result = matcher.match_guild("execute shell commands", None, 0.2, None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().guild_name, "bash");

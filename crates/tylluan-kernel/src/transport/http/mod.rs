@@ -407,7 +407,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         })
     };
 
-    let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new());
+    let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
 
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
