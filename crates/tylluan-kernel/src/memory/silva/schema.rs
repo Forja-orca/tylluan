@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 15;
+            const SCHEMA_VERSION: i32 = 16;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -160,6 +160,15 @@ impl super::SilvaDB {
             if schema_version < 15 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN provenance TEXT NOT NULL DEFAULT 'unverified'", []);
                 tracing::info!("🌲 SilvaDB: added provenance column (v15)");
+            }
+            if schema_version < 16 {
+                // J-8: hierarchical scope tag, format "user:<id>/session:<id>/agent:<id>"
+                // (any level may be omitted). NULL = unscoped (visible to all, current behavior).
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN owner_scope TEXT", []);
+                conn.execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_nodes_owner_scope ON nodes(owner_scope);"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added owner_scope column + index (v16)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
