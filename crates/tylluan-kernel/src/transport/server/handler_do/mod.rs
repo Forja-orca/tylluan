@@ -373,6 +373,13 @@ pub async fn handle_tylluan_do(
         .and_then(|a| a.get("plan")).and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    tracing::info!(
+        gen_ai.operation.name = "tylluan_do",
+        gen_ai.request.model = %guild_hint.as_deref().unwrap_or("semantic_router"),
+        intent = %intent,
+        "Handling tylluan_do"
+    );
+
     if intent.trim().is_empty() {
         return Ok(error_result("tylluan_do requires a non-empty 'intent' argument."));
     }

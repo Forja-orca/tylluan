@@ -345,6 +345,12 @@ impl RegistryHandle {
     }
 
     pub async fn call_tool(&self, guild_name: &str, params: rmcp::model::CallToolRequestParam) -> Result<rmcp::model::CallToolResult> {
+        tracing::info!(
+            gen_ai.operation.name = "tool_call",
+            gen_ai.request.model = %guild_name,
+            tool_name = %params.arguments.as_ref().and_then(|a| a.get("name")).and_then(|v| v.as_str()).unwrap_or("unknown"),
+            "Guild tool call dispatch"
+        );
         let (resp_tx, resp_rx) = oneshot::channel();
         self.sender.send(RegistryMessage::CallTool {
             guild_name: guild_name.to_string(),

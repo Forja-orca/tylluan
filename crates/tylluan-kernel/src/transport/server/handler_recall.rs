@@ -120,16 +120,26 @@ pub async fn handle_tylluan_recall(
 ) -> Result<CallToolResult, McpError> {
     let query = arguments.as_ref()
         .and_then(|a| a.get("query")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if query.trim().is_empty() {
-        return Ok(error_result("tylluan_recall requires a non-empty 'query' argument."));
-    }
     let limit = arguments.as_ref()
         .and_then(|a| a.get("limit")).and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-    let offset_arg = arguments.as_ref()
-        .and_then(|a| a.get("offset")).and_then(|v| v.as_u64()).map(|v| v as i64);
     let mode = arguments.as_ref()
         .and_then(|a| a.get("mode")).and_then(|v| v.as_str())
         .unwrap_or("personal").to_string();
+    let offset_arg = arguments.as_ref()
+        .and_then(|a| a.get("offset")).and_then(|v| v.as_u64()).map(|v| v as i64);
+
+    tracing::info!(
+        gen_ai.operation.name = "tylluan_recall",
+        gen_ai.request.model = "hybrid_memory",
+        gen_ai.request.max_results = limit as u64,
+        query = %query,
+        mode = %mode,
+        "Handling tylluan_recall"
+    );
+
+    if query.trim().is_empty() {
+        return Ok(error_result("tylluan_recall requires a non-empty 'query' argument."));
+    }
     let compact = arguments.as_ref()
         .and_then(|a| a.get("compact")).and_then(|v| v.as_bool()).unwrap_or(true);
     let episodic = arguments.as_ref()

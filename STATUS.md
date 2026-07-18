@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-18 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓ [P0 MCP config 1-click, P1 mesh map, P2 badges, P3 tylluan new guild, P4 dry-run], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓, M34-P0 Trust Gate (provenance) ✓, M34-P1 Consolidated Topics ✓, M35 Bi-temporal Memory ✓, M36 Self-correction via @correct: ✓)
+> Last updated: 2026-07-18 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓ [P0 MCP config 1-click, P1 mesh map, P2 badges, P3 tylluan new guild, P4 dry-run], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓, M34-P0 Trust Gate (provenance) ✓, M34-P1 Consolidated Topics ✓, M35 Bi-temporal Memory ✓, M36 Self-correction via @correct: ✓, M37-P1 OTel GenAI conventions ✓, M37-P2 Scopes panel ✓)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** pending (M37-P0 J-8 backend seed) · 411 kernel lib + 61 link + 12 fsrs = **484 total** green.
+**Commit:** pending (M37-P1) · 411 kernel lib + 61 link + 12 fsrs = **484 total** green.
 
 ---
 
@@ -106,6 +106,7 @@
 - Reindex button + amber progress bar driven by SSE events (P7 UX)
 - Dynamic BM25 banners with context-specific instructions per profile (P6 UX)
 - Empty State onboarding widget (M23-P1): welcome card + quick-start instructions when no memories or guilds are loaded
+- Hierarchical Scopes Panel (M37-P2): interface under System Tab to query nodes by hierarchical scope prefix (`user:id/session:id/agent:id`) and inspect multi-tenant node isolation.
 
 ### Integrations
 - MCP client configs in `integrations/` for: Claude Desktop, Claude Code, Cursor, VS Code, LM Studio (SSE), Qwen Desktop, Antigravity
