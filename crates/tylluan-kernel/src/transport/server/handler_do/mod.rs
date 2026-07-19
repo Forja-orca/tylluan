@@ -443,6 +443,36 @@ pub async fn handle_tylluan_do(
         return result;
     }
 
+    // Deterministic whoami/register_identity routing — these are real kernel
+    // tools (see handlers.rs) but are NOT in the 5-sovereign tools/list surface,
+    // by design (CONTRACT-01). A client that only ever discovers tools via
+    // tools/list (LM Studio, Qwen, generic MCP clients -- anything that isn't
+    // told the literal tool name out of band) could never reach them otherwise.
+    // Routing through tylluan_do's intent text keeps the 5-tool contract intact
+    // while making identity actually usable by the whole fleet, not just
+    // clients that happen to know the exact tool name.
+    {
+        let lower = intent.trim().to_lowercase();
+        let is_whoami = lower == "whoami" || lower.starts_with("whoami ")
+            || lower.contains("who am i") || lower.contains("quien soy") || lower.contains("quién soy")
+            || lower.contains("mi identidad") || lower.contains("my identity");
+        let is_register = lower == "register_identity" || lower.starts_with("register_identity ")
+            || lower.contains("register my identity") || lower.contains("registra mi identidad")
+            || lower.contains("register identity");
+        if is_whoami || is_register {
+            let mut kernel_args = arguments.clone().unwrap_or_default();
+            if let Some(aid) = &agent_id {
+                kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
+            }
+            let tool_name = if is_register { "register_identity" } else { "whoami" };
+            // Box::pin: handle_kernel_tool -> handle_tylluan_do -> handle_kernel_tool
+            // is a real call cycle (different tool name each time, so it terminates
+            // at runtime), but the compiler needs explicit indirection to size the
+            // recursive async fn.
+            return Box::pin(server.handle_kernel_tool(tool_name, Some(kernel_args))).await;
+        }
+    }
+
     // Sovereign shortcut: "forget: {node_id}" — delete a node without routing to a guild
     if let Some(result) = handle_forget_shortcut(server, &intent).await {
         return result;

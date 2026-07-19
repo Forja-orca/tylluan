@@ -281,6 +281,13 @@ impl TylluanServer {
                 let tz_error = requested_tz
                     .filter(|tz_name| tz_name.parse::<chrono_tz::Tz>().is_err())
                     .map(|tz_name| format!("Unknown IANA timezone '{tz_name}' -- use names like 'Asia/Tokyo', 'Europe/Madrid', 'America/New_York'."));
+
+                // Last in-progress task: JournalDb.recover() already tracks this on every
+                // tool call, but until now it only existed as a REST endpoint no agent
+                // ever called. An agent reconnecting should get its own "what was I doing"
+                // back without a separate round trip.
+                let last_task = self.journal.as_ref().and_then(|j| j.recover(target_id).ok().flatten());
+
                 let result = serde_json::json!({
                     "agent_id": target_id,
                     "registered": bio_context.is_some(),
@@ -292,6 +299,15 @@ impl TylluanServer {
                         "role": p.role,
                         "persona": p.persona,
                     })),
+                    "last_task": last_task.map(|t| {
+                        let (stale, stale_secs) = crate::transport::http::api_v1::api_journal::is_stale(t.updated_at);
+                        serde_json::json!({
+                            "task": t.task,
+                            "updated_at_unix": t.updated_at,
+                            "stale": stale,
+                            "stale_secs": stale_secs,
+                        })
+                    }),
                     "now": {
                         "utc": now.to_rfc3339(),
                         "unix_epoch": now.timestamp(),

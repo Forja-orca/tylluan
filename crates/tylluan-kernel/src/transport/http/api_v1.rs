@@ -503,6 +503,20 @@ pub async fn mcp_handler(
                     "context": context_prompt,
                 });
             }
+            // Last in-progress task: JournalDb already tracks this on every tool
+            // call (crash-safe checkpoint), but it only lived behind a REST
+            // endpoint nobody called. Hand it back at connect time, same as
+            // identity above -- this is "what was I doing" continuity, not just
+            // "who am I".
+            if let Ok(Some(entry)) = state.journal.recover(&bound_agent) {
+                let (stale, stale_secs) = crate::transport::http::api_v1::api_journal::is_stale(entry.updated_at);
+                result["result"]["last_task"] = serde_json::json!({
+                    "task": entry.task,
+                    "updated_at_unix": entry.updated_at,
+                    "stale": stale,
+                    "stale_secs": stale_secs,
+                });
+            }
         }
         // Temporal grounding: an agent reconnecting has no inherent sense of
         // "when" it is unless the kernel tells it. UTC reference plus a
