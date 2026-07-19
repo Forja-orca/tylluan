@@ -492,6 +492,18 @@ pub async fn mcp_handler(
         if let Some(info) = session_resumed_info {
             result["result"]["session"] = info;
         }
+        // Identity continuity: if this connection's bearer token is bound to a
+        // registered agent identity, hand it back at the exact moment the
+        // client connects instead of making the agent re-derive who it is.
+        if let Some(bound_agent) = crate::transport::http::auth::current_bound_agent_id() {
+            let identity_mgr = crate::memory::identity::IdentityManager::new(state.silva.clone());
+            if let Some(context_prompt) = identity_mgr.get_agent_context(&bound_agent).await {
+                result["result"]["identity"] = serde_json::json!({
+                    "agent_id": bound_agent,
+                    "context": context_prompt,
+                });
+            }
+        }
         return (StatusCode::OK, axum::Json(result)).into_response();
     }
 

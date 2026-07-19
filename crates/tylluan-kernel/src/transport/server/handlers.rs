@@ -47,6 +47,26 @@ impl TylluanServer {
                 }
         }
 
+        // Identity auto-bootstrap: an agent should never have to hand-register
+        // itself before it "exists" to the kernel. First contact from a real,
+        // already-authenticated agent_id (past the impersonation/ACL checks
+        // above) creates a minimal identity node so whoami never comes back
+        // empty; register_identity later just fills it in with real biography.
+        if agent_id != "anonymous" && name != "whoami" && name != "register_identity" {
+            let silva = self.silva.clone();
+            let bootstrap_id = agent_id.clone();
+            tokio::spawn(async move {
+                let identity_mgr = crate::memory::identity::IdentityManager::new(silva);
+                if !identity_mgr.has_identity(&bootstrap_id).await {
+                    let identity = crate::memory::identity::AgentIdentity::new(
+                        &bootstrap_id, &bootstrap_id, "unregistered",
+                        "Auto-bootstrapped on first contact -- call register_identity to fill in your real biography.",
+                    );
+                    let _ = identity_mgr.register_agent(&identity).await;
+                }
+            });
+        }
+
         let is_sovereign_tool = SOVEREIGN_TOOLS.contains(&name);
         let hook_rules: Vec<crate::security::hooks::HookRule> = if is_sovereign_tool {
             match crate::config::TylluanConfig::load_cached() {
