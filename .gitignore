@@ -219,7 +219,7 @@ tylluan.docker.toml
 
 # Build artifacts from alternative targets
 target_antigravity/
-d o c k e r - r e s e a r c h / s e a r x n g / s e t t i n g s . y m l  
+docker-research/
 
 # Team local notes & error protocol
 /team/
