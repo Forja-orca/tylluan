@@ -11,6 +11,7 @@ Tools:
 """
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -24,8 +25,22 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("coloquio_digest")
 
-KERNEL_BASE = "http://127.0.0.1:3030"
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _resolve_kernel_base() -> str:
+    if "KERNEL_BASE" in os.environ:
+        return os.environ["KERNEL_BASE"]
+    port_file = _REPO_ROOT / "data" / "active_port.json"
+    try:
+        data = json.loads(port_file.read_text())
+        port = data.get("port", 3030)
+        return f"http://127.0.0.1:{port}"
+    except Exception:
+        return "http://127.0.0.1:3030"
+
+
+KERNEL_BASE = _resolve_kernel_base()
 CHECKPOINT_DB = _REPO_ROOT / "data" / "coloquio_digest.db"
 _MIN_CONTENT_LENGTH = 15
 
