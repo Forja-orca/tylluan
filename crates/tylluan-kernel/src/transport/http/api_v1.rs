@@ -504,6 +504,30 @@ pub async fn mcp_handler(
                 });
             }
         }
+        // Temporal grounding: an agent reconnecting has no inherent sense of
+        // "when" it is unless the kernel tells it. UTC reference plus a
+        // curated world clock -- enough to answer "what time is it in Tokyo"
+        // without a round trip. whoami accepts an explicit `timezone` arg for
+        // any other IANA zone.
+        let now = chrono::Utc::now();
+        const WORLD_CLOCK_ZONES: [(&str, chrono_tz::Tz); 6] = [
+            ("Madrid", chrono_tz::Europe::Madrid),
+            ("London", chrono_tz::Europe::London),
+            ("New_York", chrono_tz::America::New_York),
+            ("Tokyo", chrono_tz::Asia::Tokyo),
+            ("Shanghai", chrono_tz::Asia::Shanghai),
+            ("Sydney", chrono_tz::Australia::Sydney),
+        ];
+        let world_clock: serde_json::Map<String, serde_json::Value> = WORLD_CLOCK_ZONES
+            .iter()
+            .map(|(label, tz)| (label.to_string(), serde_json::Value::String(now.with_timezone(tz).to_rfc3339())))
+            .collect();
+        result["result"]["now"] = serde_json::json!({
+            "utc": now.to_rfc3339(),
+            "unix_epoch": now.timestamp(),
+            "weekday": now.format("%A").to_string(),
+            "world_clock": world_clock,
+        });
         return (StatusCode::OK, axum::Json(result)).into_response();
     }
 

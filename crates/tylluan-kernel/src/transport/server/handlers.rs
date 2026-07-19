@@ -264,6 +264,23 @@ impl TylluanServer {
                     profiles.lock().ok().and_then(|store| store.get_profile(target_id).ok()).flatten()
                 } else { None };
 
+                let now = chrono::Utc::now();
+                let requested_tz = arguments.as_ref()
+                    .and_then(|a| a.get("timezone"))
+                    .and_then(|v| v.as_str());
+                let local = requested_tz.and_then(|tz_name| {
+                    tz_name.parse::<chrono_tz::Tz>().ok().map(|tz| {
+                        let local_time = now.with_timezone(&tz);
+                        serde_json::json!({
+                            "timezone": tz_name,
+                            "local_time": local_time.to_rfc3339(),
+                            "weekday": local_time.format("%A").to_string(),
+                        })
+                    })
+                });
+                let tz_error = requested_tz
+                    .filter(|tz_name| tz_name.parse::<chrono_tz::Tz>().is_err())
+                    .map(|tz_name| format!("Unknown IANA timezone '{tz_name}' -- use names like 'Asia/Tokyo', 'Europe/Madrid', 'America/New_York'."));
                 let result = serde_json::json!({
                     "agent_id": target_id,
                     "registered": bio_context.is_some(),
@@ -275,6 +292,13 @@ impl TylluanServer {
                         "role": p.role,
                         "persona": p.persona,
                     })),
+                    "now": {
+                        "utc": now.to_rfc3339(),
+                        "unix_epoch": now.timestamp(),
+                        "weekday": now.format("%A").to_string(),
+                        "local": local,
+                        "timezone_error": tz_error,
+                    },
                 });
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())], is_error: Some(false) })
             }

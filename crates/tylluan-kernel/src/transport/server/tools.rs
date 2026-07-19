@@ -483,11 +483,12 @@ impl super::TylluanServer {
             ),
             TylluanTool::new(
                 "whoami",
-                "Report your persistent identity as known to the kernel: biographical identity (name, role, purpose) if registered, plus activity stats (first seen, total calls, reputation) from the profile store. Call this on session start instead of re-deriving who you are each time.",
+                "Report your persistent identity as known to the kernel: biographical identity (name, role, purpose) if registered, plus activity stats (first seen, total calls, reputation) from the profile store, plus current UTC time (and local time if you pass a timezone). Call this on session start instead of re-deriving who you are each time.",
                 serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "agent_id": { "type": "string", "description": "Your agent identity." }
+                        "agent_id": { "type": "string", "description": "Your agent identity." },
+                        "timezone": { "type": "string", "description": "Optional. IANA timezone name (e.g. 'Asia/Tokyo', 'Europe/Madrid') to get local time alongside UTC." }
                     },
                     "required": ["agent_id"]
                 }),
