@@ -262,7 +262,7 @@ pub struct JournalEntry {
     pub stale_secs: Option<i64>,
 }
 
-fn is_stale(updated_at: i64) -> (bool, i64) {
+pub(crate) fn is_stale(updated_at: i64) -> (bool, i64) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
