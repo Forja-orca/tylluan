@@ -1002,6 +1002,10 @@ async fn main() -> anyhow::Result<()> {
     let ext_reg = registry_arc.clone();
     tokio::spawn(async move {
         for ext in ext_mcps {
+            if !ext.active {
+                info!("⏭️ [Startup] External MCP '{}' skipped (active=false)", ext.name);
+                continue;
+            }
             let ext_name = ext.name.clone();
             info!("🚀 [Startup] Spawning external MCP: {}", ext_name);
             if let Err(e) = ext_reg.write().await.ensure_guild_running(&ext_name).await {
