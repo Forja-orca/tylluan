@@ -81,6 +81,8 @@ impl super::TylluanServer {
                 "nodo_broadcast".into(),
                 "nodo_status".into(),
                 "nodo_list".into(),
+                "whoami".into(),
+                "register_identity".into(),
             ]),
             TylluanTool::new(
                 "tylluan_remember",
@@ -477,6 +479,36 @@ impl super::TylluanServer {
                     "required": ["persona"]
                 }),
                 ToolCategory::Memory,
+                RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "whoami",
+                "Report your persistent identity as known to the kernel: biographical identity (name, role, purpose) if registered, plus activity stats (first seen, total calls, reputation) from the profile store. Call this on session start instead of re-deriving who you are each time.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity." }
+                    },
+                    "required": ["agent_id"]
+                }),
+                ToolCategory::Kernel,
+                RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "register_identity",
+                "Declare your biographical identity once. Persisted as a protected node — never decays, survives kernel restarts. Call this the first time you connect under a given agent_id; whoami will report it from then on without needing to re-register.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity (e.g. 'claude-code', 'antigravity')." },
+                        "human_name": { "type": "string", "description": "Display name (e.g. 'Claude', 'Antigravity')." },
+                        "role": { "type": "string", "description": "Your role on the team (e.g. 'Tech Lead', 'Builder Frontend')." },
+                        "purpose": { "type": "string", "description": "Your current focus or mandate." },
+                        "philosophy": { "type": "string", "description": "Optional. Working principles or philosophy you hold." }
+                    },
+                    "required": ["agent_id", "human_name", "role", "purpose"]
+                }),
+                ToolCategory::Kernel,
                 RiskLevel::Low,
             ),
         ]
