@@ -78,6 +78,21 @@ impl IdentityManager {
         Ok(())
     }
 
+    /// Get the raw parsed identity, if registered.
+    pub async fn get_identity(&self, agent_id: &str) -> Option<AgentIdentity> {
+        let node_id = format!("agent:{agent_id}");
+        let node = self.silva.get_node(&node_id).await.ok()??;
+        let meta: serde_json::Value = serde_json::from_str(&node.metadata).ok()?;
+        Some(AgentIdentity {
+            agent_id: agent_id.to_string(),
+            human_name: meta.get("human_name")?.as_str()?.to_string(),
+            role: meta.get("role")?.as_str()?.to_string(),
+            purpose: meta.get("purpose")?.as_str()?.to_string(),
+            born_at: meta.get("born_at")?.as_str().and_then(|s| DateTime::parse_from_rfc3339(s).ok()).map(|d| d.with_timezone(&Utc))?,
+            philosophy: meta.get("philosophy").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        })
+    }
+
     /// Get agent identity (returns context prompt if found)
     pub async fn get_agent_context(&self, agent_id: &str) -> Option<String> {
         let node_id = format!("agent:{agent_id}");

@@ -230,6 +230,59 @@ impl TylluanServer {
                     }
                 Ok(CallToolResult { content: vec![Content::text("✅ Persona updated")], is_error: Some(false) })
             }
+            "whoami" => {
+                let target_id = arguments.as_ref()
+                    .and_then(|a| a.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&agent_id);
+
+                let identity_mgr = crate::memory::identity::IdentityManager::new(self.silva.clone());
+                let bio_context = identity_mgr.get_agent_context(target_id).await;
+
+                let profile = if let Some(ref profiles) = self.agent_profiles {
+                    profiles.lock().ok().and_then(|store| store.get_profile(target_id).ok()).flatten()
+                } else { None };
+
+                let result = serde_json::json!({
+                    "agent_id": target_id,
+                    "registered": bio_context.is_some(),
+                    "biography": bio_context,
+                    "activity": profile.map(|p| serde_json::json!({
+                        "first_seen": p.first_seen,
+                        "total_calls": p.total_calls,
+                        "reputation_score": p.reputation_score,
+                        "role": p.role,
+                        "persona": p.persona,
+                    })),
+                });
+                Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())], is_error: Some(false) })
+            }
+            "register_identity" => {
+                let target_id = arguments.as_ref()
+                    .and_then(|a| a.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&agent_id);
+                let human_name = arguments.as_ref().and_then(|a| a.get("human_name")).and_then(|v| v.as_str()).unwrap_or(target_id);
+                let role = arguments.as_ref().and_then(|a| a.get("role")).and_then(|v| v.as_str()).unwrap_or("Assistant");
+                let purpose = arguments.as_ref().and_then(|a| a.get("purpose")).and_then(|v| v.as_str()).unwrap_or("General assistance");
+                let philosophy = arguments.as_ref().and_then(|a| a.get("philosophy")).and_then(|v| v.as_str());
+
+                let identity_mgr = crate::memory::identity::IdentityManager::new(self.silva.clone());
+                let mut identity = crate::memory::identity::AgentIdentity::new(target_id, human_name, role, purpose);
+                // Preserve the original born_at on re-registration; only a first-time
+                // registration should set "active since" to today.
+                if let Some(existing) = identity_mgr.get_identity(target_id).await {
+                    identity.born_at = existing.born_at;
+                }
+                identity.philosophy = philosophy.map(|s| s.to_string());
+
+                match identity_mgr.register_agent(&identity).await {
+                    Ok(()) => Ok(CallToolResult { content: vec![Content::text(format!("✅ Identity registered for '{target_id}' — persisted, survives kernel restarts."))], is_error: Some(false) }),
+                    Err(e) => Ok(error_result(&format!("Failed to register identity: {e}"))),
+                }
+            }
             _ => Err(McpError::invalid_params(format!("Unknown kernel tool: {name}"), None)),
         };
 
