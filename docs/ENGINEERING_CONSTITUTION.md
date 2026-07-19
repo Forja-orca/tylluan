@@ -169,7 +169,8 @@ explícita para esa tarea concreta.
 ```
 main                        ← solo el humano mergea, siempre verde
 ├── arch/<topic>            ← Tech Lead: planes, briefings, docs
-├── backend/<topic>         ← Builder Backend
+├── backend/<topic>         ← Builder Backend (naming genérico: usa el nombre del núcleo
+│                              del proyecto — "kernel/", "server/", etc. — si encaja mejor)
 └── ui/<topic>              ← Builder Frontend
 ```
 
