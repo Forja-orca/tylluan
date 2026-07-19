@@ -604,17 +604,33 @@ pub async fn mcp_handler(
             serde_json::json!({
                 "jsonrpc": "2.0",
                 "result": {
-                    "prompts": [{
-                        "name": "tylluan_capabilities",
-                        "description": "What TylluanNexus can do ??? read this before your first call to understand the 5 sovereign tools and example intents"
-                    }]
+                    "prompts": [
+                        {
+                            "name": "tylluan_capabilities",
+                            "description": "What TylluanNexus can do ??? read this before your first call to understand the 5 sovereign tools and example intents"
+                        },
+                        {
+                            "name": "tylluan_engineering_constitution",
+                            "description": "Universal multi-agent engineering discipline (the 10 sins, red zones, briefing/handoff templates) ??? product-agnostic, useful for building on Tylluan or bootstrapping any new project"
+                        }
+                    ]
                 },
                 "id": id
             })
         }
         "prompts/get" => {
             let prompt_name = payload.get("params").and_then(|p| p.get("name")).and_then(|v| v.as_str()).unwrap_or("");
-            if prompt_name != "tylluan_capabilities" {
+            if prompt_name == "tylluan_engineering_constitution" {
+                const CONSTITUTION: &str = include_str!("../../../../../docs/ENGINEERING_CONSTITUTION.md");
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "description": "Universal multi-agent engineering constitution ??? product-agnostic discipline for any agent building on Tylluan or elsewhere",
+                        "messages": [{ "role": "user", "content": { "type": "text", "text": CONSTITUTION } }]
+                    },
+                    "id": id
+                })
+            } else if prompt_name != "tylluan_capabilities" {
                 serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "unknown prompt" }, "id": id })
             } else {
                 let text = "# TylluanNexus ??? 5 Sovereign Tools\n\n\
