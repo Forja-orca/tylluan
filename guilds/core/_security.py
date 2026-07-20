@@ -2,8 +2,9 @@
 Sovereign Security Configuration for TylluanNexus Guilds.
 Centralizes exclusion patterns and safety constants.
 """
-# ⚠️ DEPRECATED — not registered in tylluan.toml. Keep for reference only.
-# To reactivate: add to [guilds.core] lazy list in tylluan.toml
+# Not a standalone guild (not registered in tylluan.toml as an MCP server) --
+# imported directly as a shared utility module by filesystem.py and search.py
+# for their security-exclusion constants. This is intentional, not dead code.
 
 # Directories to skip during recursive filesystem operations
 SKIP_DIRS = {
