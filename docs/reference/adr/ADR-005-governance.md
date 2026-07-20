@@ -15,7 +15,7 @@ MIT license means any user can fork at any time. No CLA or copyright assignment 
 
 ### 2. Architecture Decision Records
 
-All architectural decisions that affect a successor's ability to understand the system are documented as ADRs in `docs/adr/`. This file (ADR-005) is one of them. Future ADRs must cover:
+All architectural decisions that affect a successor's ability to understand the system are documented as ADRs in `docs/reference/adr/`. This file (ADR-005) is one of them. Future ADRs must cover:
 
 - Why a given architecture was chosen over alternatives
 - What was considered and rejected

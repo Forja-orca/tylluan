@@ -16,8 +16,8 @@ def test_sovereign_count_is_five():
 
 
 def test_integrations_index_exists():
-    index = REPO_ROOT / "docs/integrations/README.md"
-    assert index.exists(), "docs/integrations/README.md is missing"
+    index = REPO_ROOT / "docs/reference/integrations/README.md"
+    assert index.exists(), "docs/reference/integrations/README.md is missing"
     content = index.read_text().lower()
     assert "openclaw" in content, "integrations/README.md must mention openclaw"
     assert "hermes" in content, "integrations/README.md must mention hermes"

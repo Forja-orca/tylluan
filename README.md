@@ -266,9 +266,9 @@ curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
 
 | Topic | Guide |
 |-------|-------|
-| Configuration, auth, troubleshooting | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
 | Python guilds (42 tools) | [guilds/README.md](guilds/README.md) |
-| Build from source | [docs/QUICKSTART.md#build-from-source](docs/QUICKSTART.md#build-from-source) |
+| Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles (portable/clinic/server) | `tylluan-cli install --profile=portable` |
 
@@ -414,7 +414,7 @@ Tylluan runs **real code on your machine**. Please read these before deploying:
 
 - [SECURITY.md](SECURITY.md) — Vulnerability reporting
 - [DISCLAIMER.md](DISCLAIMER.md) — Operator responsibilities
-- [docs/architecture/SECURITY.md](docs/architecture/SECURITY.md) — Threat model + OWASP ASI 2026 mapping
+- [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) — Threat model + OWASP ASI 2026 mapping
 
 Key defaults (do not change without understanding the implications):
 - `host = "127.0.0.1"` — localhost only
@@ -451,8 +451,8 @@ See [examples/](examples/) for full source code.
 | [STATUS.md](STATUS.md) | Verified technical state (source of truth) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
-| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Detailed setup guide |
-| [docs/architecture/FEDERATION_V3.md](docs/architecture/FEDERATION_V3.md) | Federation protocol spec |
+| [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) | Detailed setup guide |
+| [docs/concepts/FEDERATION_V3.md](docs/concepts/FEDERATION_V3.md) | Federation protocol spec |
 
 ## Star History
 

@@ -23,7 +23,7 @@ We aim to acknowledge reports within 48 hours and provide a fix or mitigation pl
 
 ## Security Model
 
-For a detailed analysis of Tylluan's security posture, including its mapping against the [OWASP Top 10 for Agentic Applications (2026)](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/), see [docs/architecture/SECURITY.md](docs/architecture/SECURITY.md).
+For a detailed analysis of Tylluan's security posture, including its mapping against the [OWASP Top 10 for Agentic Applications (2026)](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/), see [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md).
 
 ## Known Limitations
 

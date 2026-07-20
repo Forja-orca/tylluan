@@ -671,7 +671,7 @@ pub async fn mcp_handler(
         "prompts/get" => {
             let prompt_name = payload.get("params").and_then(|p| p.get("name")).and_then(|v| v.as_str()).unwrap_or("");
             if prompt_name == "tylluan_engineering_constitution" {
-                const CONSTITUTION: &str = include_str!("../../../../../docs/ENGINEERING_CONSTITUTION.md");
+                const CONSTITUTION: &str = include_str!("../../../../../docs/concepts/ENGINEERING_CONSTITUTION.md");
                 serde_json::json!({
                     "jsonrpc": "2.0",
                     "result": {

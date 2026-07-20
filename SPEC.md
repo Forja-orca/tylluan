@@ -29,7 +29,7 @@ Casos de uso:
 
 ### 3. Humanos (usuarios finales que instalan Tylluan para sí mismos)
 Casos de uso:
-- Instalación en <5 min siguiendo `docs/QUICKSTART.md`, sin necesidad de leer código
+- Instalación en <5 min siguiendo `docs/getting-started/QUICKSTART.md`, sin necesidad de leer código
 - Dashboard web (`:3030/` o `:5173` en dev) como punto de entrada visual, con wizard de primera vez (M23-P1)
 - Confiar en que sus datos nunca salen de su máquina (soberanía, AGPL/MIT sin telemetría oculta)
 

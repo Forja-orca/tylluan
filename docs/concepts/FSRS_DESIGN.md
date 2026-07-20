@@ -79,7 +79,7 @@ Rationale:
    each peer's memory model is sovereign
 
 This decision is documented here so the federation module doesn't need to
-re-derive it. See also: `docs/architecture/SECURITY_FEDERATION.md`.
+re-derive it. See also: `docs/concepts/SECURITY_FEDERATION.md`.
 
 ## Migration from v12
 
