@@ -113,8 +113,49 @@ def _first_token(command: str) -> str | None:
         return None
 
 
+# Shell metacharacters that let a command chain past the allowlist: the
+# allowlist only ever validated the FIRST token, but bash_execute passes the
+# raw command string to a real shell (`bash -c` / `powershell -Command`).
+# "echo x ; rm -rf /" passes the check (first token is "echo") and the shell
+# still runs "rm -rf /" as a second statement. Block on the raw string,
+# outside any quotes, before the allowlist check ever runs.
+_SHELL_METACHAR_PATTERN = re.compile(r'[;&|`\n]|\$\(|<\(|>\(')
+
+
+def _contains_shell_metacharacters(command: str) -> bool:
+    """True if the command has shell chaining/substitution syntax outside quotes.
+
+    This tool executes exactly one allowlisted binary with arguments, not a
+    script -- metacharacters are only ever a way to smuggle a second,
+    unvalidated command past the first-token check.
+    """
+    try:
+        # shlex with punctuation_chars="" (default) already treats quoted
+        # sections as opaque; re-split with posix=False to preserve quotes,
+        # then check only the unquoted segments for metacharacters.
+        lexer = shlex.shlex(command, posix=False)
+        lexer.whitespace_split = True
+        for token in lexer:
+            is_quoted = token[:1] in ("'", '"')
+            if is_quoted:
+                continue
+            if _SHELL_METACHAR_PATTERN.search(token):
+                return True
+        return False
+    except ValueError:
+        # Unbalanced quotes etc -- fail closed, treat as suspicious.
+        return True
+
+
 def _check_allowlist(command: str) -> str | None:
     """Check if command is allowed. Returns None if OK, error string if blocked."""
+    if _contains_shell_metacharacters(command):
+        return (
+            "🚫 BLOCKED: command chaining/substitution (';', '&&', '||', '|', '`', "
+            "'$()', newlines) is not allowed -- bash_execute runs exactly one "
+            "allowlisted binary with arguments, not a shell script. Run each "
+            "command separately."
+        )
     parts = shlex.split(command)
     if not parts:
         return "❌ Empty command"
