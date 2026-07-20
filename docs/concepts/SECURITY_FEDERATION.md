@@ -83,5 +83,5 @@ Sync traffic travels over Noise XK (TCP) or Noise NK (HTTP). Both use ChaCha20-P
 ## Related
 
 - [SPEC.md](../../SPEC.md) — project scope
-- [docs/architecture/FEDERATION_V3.md](FEDERATION_V3.md) — federation protocol spec
-- [docs/architecture/SECURITY.md](SECURITY.md) — general security model
+- [docs/concepts/FEDERATION_V3.md](FEDERATION_V3.md) — federation protocol spec
+- [docs/concepts/SECURITY.md](SECURITY.md) — general security model

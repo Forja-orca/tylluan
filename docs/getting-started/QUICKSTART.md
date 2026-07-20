@@ -1,7 +1,7 @@
 # Tylluan Advanced Setup Guide
 
 **Prerequisites:** Rust 1.88+, Python 3.12+, Git, 4GB RAM
-**Alternative to:** The 3-step binary install in [README.md](../README.md)
+**Alternative to:** The 3-step binary install in [README.md](../../README.md)
 
 ---
 
@@ -180,4 +180,4 @@ tylluan-cli
 - **Never** combine `host = "0.0.0.0"` + `dev_mode = true` (LAN RCE).
 - Federated peers authenticate via `shared_secret` — protect it like a password.
 
-See [SECURITY.md](../SECURITY.md) and [docs/architecture/SECURITY.md](architecture/SECURITY.md) for the full threat model.
+See [SECURITY.md](../../SECURITY.md) and [docs/concepts/SECURITY.md](../concepts/SECURITY.md) for the full threat model.

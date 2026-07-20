@@ -1,7 +1,7 @@
 # Tylluan — Roadmap Estratégico
 
 > **Última actualización:** 2026-07-06 · v0.11.0 (HEAD `2dd2b3e`) — M18 P0-P2 done, P3 pendiente
-> **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/architecture/`
+> **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
@@ -41,7 +41,7 @@ HEAD `945838c`. 4 fases entregadas (P0 install scripts, P1 setup-hint, P2 Docker
 HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, BGE-M3 + BM25). ADR-007: IdleLab INNECESARIO — defaults son óptimo local (0.0pp delta en 8 experimentos). P2 degree bias movido a backlog de investigación (no bloqueante).
 
 - ✅ P0: `benchmarks/benchmark_v0.12.0_bge.json` — R@5 82%, R@10 90%, p50 12.9ms
-- ✅ P1: ADR-007 `docs/architecture/ADR007_idle_lab_verdict.md` — INNECESARIO
+- ✅ P1: ADR-007 `docs/reference/adr/ADR007_idle_lab_verdict.md` — INNECESARIO
 - ↩ P2: degree bias comparison — backlog investigación
 
 ---
@@ -54,9 +54,9 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
-| P0 | `docs/integrations/openclaw.md` — guía completa | Claude | ✅ |
+| P0 | `docs/reference/integrations/openclaw.md` — guía completa | Claude | ✅ |
 | P1 | MCP E2E en coloquio: 5 tools, remember→recall 0.88 | Antigravity | ✅ |
-| P2 | `docs/integrations/README.md` + `test_mcp_contract.py` (3 passed in 0.34s) | Deep | ✅ |
+| P2 | `docs/reference/integrations/README.md` + `test_mcp_contract.py` (3 passed in 0.34s) | Deep | ✅ |
 
 **Rama B — Si OpenClaw no confirmado (o integración > 1 semana):**
 
@@ -127,7 +127,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 | P2 | **Profile wizard + hardware detection** ✅ (2026-07-13): `tylluan start --setup` → RAM real vía `sysinfo`, GPU vía probe real de `nvidia-smi` en PATH (sin fabricar señal si es inconcluso), recomienda perfil (<8GB→portable, ≥8GB sin GPU→clinic, ≥8GB con GPU→server — ajustado del texto original "≤8GB→clinic" que habría recomendado descargar un modelo a una máquina sin RAM para ello) → genera `tylluan.toml`. Nunca sobrescribe un TOML existente (verificado por lectura de código: `return` antes de cualquier escritura). Verificado manualmente end-to-end (detectó 221.9GB RAM + GPU NVIDIA real en esta máquina, generó perfil `server` correcto). | claude-code | ✅ |
 | P3 | **Instant start + background model download**: arrancar inmediatamente en BM25-only, descargar BGE-M3 en hilo separado con hot-swap via interior mutability. Anchor warmup detecta el cambio automáticamente. | Deep | ✅ 2026-07-13 |
 | P4 | `tylluan update` — comprueba release en GitHub (`Forja-orca/tylluan`), descarga binario correcto para la plataforma, atomic replace (rename). Flag `--check` para solo consultar. | Deep | ✅ 2026-07-13 |
-| P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. Spec ✅ ([ADR-009](../architecture/ADR009_agents_declarative_contract.md), 2026-07-13): `.tylluan/agents.toml` repo-local, agent_id→rol, reutiliza `AclConfig.roles` existente sin reinventar permisos, backward-compatible (sin fichero = sin cambio de comportamiento). Kernel implementation 🟡 pendiente Deep. | Claude (spec) ✅ + Deep (kernel) ⬜ | 🟡 parcial |
+| P5 | AGENTS.md como contrato declarativo estándar: cada agente define su perfil y permisos. Kernel lo lee al arrancar. Spec ✅ ([ADR-009](../reference/adr/ADR009_agents_declarative_contract.md), 2026-07-13): `.tylluan/agents.toml` repo-local, agent_id→rol, reutiliza `AclConfig.roles` existente sin reinventar permisos, backward-compatible (sin fichero = sin cambio de comportamiento). Kernel implementation 🟡 pendiente Deep. | Claude (spec) ✅ + Deep (kernel) ⬜ | 🟡 parcial |
 
 **Criterio de cierre:** Instalar, configurar y hacer la primera consulta MCP en < 3 minutos en máquina virgen, sin leer ningún documento. ✅ Cerrado 2026-07-13 (P0-P1-P3-P4, P5 spec, P2 queda para siguiente ciclo).
 

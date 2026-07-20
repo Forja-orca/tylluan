@@ -19,7 +19,7 @@ Usa este workflow como base. Los agentes del gremio pueden derivar workflows esp
 Actor: architect o backend-dev
 
 1. tylluan_recall("builders: features similares previas")
-2. Leer ADRs relevantes en docs/architecture/ARCHITECTURE_DECISIONS.md
+2. Leer ADRs relevantes en docs/reference/adr/ARCHITECTURE_DECISIONS.md
 3. Definir el alcance mínimo viable (MVP de la feature)
 4. Identificar qué archivos se tocarán (máx 5 para empezar)
 ```
