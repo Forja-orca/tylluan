@@ -57,7 +57,12 @@ impl super::TylluanServer {
                         "remember": { "type": "boolean", "default": false, "description": "If true, store the result in long-term memory so it can be retrieved later with tylluan_recall." },
                         "agent_id": { "type": "string", "description": "Optional. Your agent identity (e.g. 'agent-1', 'agent-2'). When set, episodes are auto-saved to your session history and retrievable later with tylluan_recall agent_id filter." },
                         "explore":  { "type": "string", "description": "Optional. Explore a branch of the fractal tool tree. Use 'explore' to discover sub-tools without executing anything. Example: 'explore memory', 'explore graph'." },
-                        "plan":     { "type": "boolean", "default": false, "description": "M31-P2: Plan mode. When true, resolves the guild+tool+arguments and returns them for approval without executing. The returned plan_id can be used with approve_action to execute." }
+                        "plan":     { "type": "boolean", "default": false, "description": "M31-P2: Plan mode. When true, resolves the guild+tool+arguments and returns them for approval without executing. The returned plan_id can be used with approve_action to execute." },
+                        "timezone": { "type": "string", "description": "Optional. Used when intent is 'whoami'/'quien soy' -- IANA timezone name (e.g. 'Asia/Tokyo') for local time alongside UTC." },
+                        "human_name": { "type": "string", "description": "Optional. Used when intent is 'register_identity'/'registra mi identidad' -- your display name." },
+                        "role":       { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your role (e.g. 'Builder Backend')." },
+                        "purpose":    { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your current focus, one sentence." },
+                        "philosophy": { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your working principles, if any." }
                     },
                     "required": ["intent"]
                 }),

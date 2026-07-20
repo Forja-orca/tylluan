@@ -259,6 +259,27 @@ impl TylluanServer {
 
                 let identity_mgr = crate::memory::identity::IdentityManager::new(self.silva.clone());
                 let bio_context = identity_mgr.get_agent_context(target_id).await;
+                // Self-documenting: if what's registered is still the auto-bootstrap
+                // placeholder (or nothing at all), tell the agent exactly how to fix
+                // it -- so the human never has to relay the calling convention by hand.
+                let raw_identity = identity_mgr.get_identity(target_id).await;
+                let needs_real_bio = raw_identity.as_ref().map(|i| i.role == "unregistered").unwrap_or(true);
+                let register_hint = if needs_real_bio {
+                    Some(serde_json::json!({
+                        "message": "Your biography is a placeholder. Call register_identity with real values to fix it.",
+                        "example_call": {
+                            "name": "register_identity",
+                            "arguments": {
+                                "agent_id": target_id,
+                                "human_name": "<your display name>",
+                                "role": "<your role, e.g. 'Builder Backend'>",
+                                "purpose": "<your current focus, one sentence>",
+                                "philosophy": "<optional>"
+                            }
+                        },
+                        "note": "These must be separate JSON arguments in the tool call -- text embedded inside `intent` is not parsed.",
+                    }))
+                } else { None };
 
                 let profile = if let Some(ref profiles) = self.agent_profiles {
                     profiles.lock().ok().and_then(|store| store.get_profile(target_id).ok()).flatten()
@@ -315,6 +336,7 @@ impl TylluanServer {
                         "local": local,
                         "timezone_error": tz_error,
                     },
+                    "register_identity_hint": register_hint,
                 });
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())], is_error: Some(false) })
             }
@@ -324,9 +346,25 @@ impl TylluanServer {
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
                     .unwrap_or(&agent_id);
-                let human_name = arguments.as_ref().and_then(|a| a.get("human_name")).and_then(|v| v.as_str()).unwrap_or(target_id);
-                let role = arguments.as_ref().and_then(|a| a.get("role")).and_then(|v| v.as_str()).unwrap_or("Assistant");
-                let purpose = arguments.as_ref().and_then(|a| a.get("purpose")).and_then(|v| v.as_str()).unwrap_or("General assistance");
+                let human_name_arg = arguments.as_ref().and_then(|a| a.get("human_name")).and_then(|v| v.as_str());
+                let role_arg = arguments.as_ref().and_then(|a| a.get("role")).and_then(|v| v.as_str());
+                let purpose_arg = arguments.as_ref().and_then(|a| a.get("purpose")).and_then(|v| v.as_str());
+                // If none of the biographical fields were passed as real JSON arguments,
+                // this is almost certainly a caller that put the info inside the `intent`
+                // text instead (e.g. via tylluan_do) -- reject with the exact shape
+                // needed instead of silently persisting a placeholder identity.
+                if human_name_arg.is_none() && role_arg.is_none() && purpose_arg.is_none() {
+                    return Ok(error_result(&format!(
+                        "register_identity needs human_name, role, and purpose as separate JSON arguments -- \
+                         they are not parsed out of the `intent` text. Call it like: \
+                         {{\"name\": \"register_identity\", \"arguments\": {{\"agent_id\": \"{target_id}\", \
+                         \"human_name\": \"<your display name>\", \"role\": \"<your role>\", \
+                         \"purpose\": \"<your current focus, one sentence>\"}}}}"
+                    )));
+                }
+                let human_name = human_name_arg.unwrap_or(target_id);
+                let role = role_arg.unwrap_or("Assistant");
+                let purpose = purpose_arg.unwrap_or("General assistance");
                 let philosophy = arguments.as_ref().and_then(|a| a.get("philosophy")).and_then(|v| v.as_str());
 
                 let identity_mgr = crate::memory::identity::IdentityManager::new(self.silva.clone());
