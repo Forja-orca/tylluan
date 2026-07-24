@@ -18,7 +18,7 @@ Es el producto público del equipo Forja — construido probando patrones primer
 Casos de uso:
 - Levantar el entorno de desarrollo: `cargo build -p tylluan-kernel`, `.\tylluan-mcp.bat`
 - Seguir `CONTRIBUTING.md` y `AGENTS.md` para el flujo de PRs
-- Leer `docs/internal/PROJECT.map` / `OPERATIONS.map` para navegar la arquitectura sin releer todo el repo
+- Leer `docs/concepts/ARCHITECTURE.md` / `docs/concepts/PROJECT_STRUCTURE.md` para navegar la arquitectura sin releer todo el repo
 - Respetar `AI_POLICY.md` si el contributor es un agente de IA
 
 ### 2. Agentes usuarios (clientes MCP de terceros que conectan a un Tylluan instalado)
@@ -31,7 +31,7 @@ Casos de uso:
 Casos de uso:
 - Instalación en <5 min siguiendo `docs/getting-started/QUICKSTART.md`, sin necesidad de leer código
 - Dashboard web (`:3030/` o `:5173` en dev) como punto de entrada visual, con wizard de primera vez (M23-P1)
-- Confiar en que sus datos nunca salen de su máquina (soberanía, AGPL/MIT sin telemetría oculta)
+- Confiar en que sus datos nunca salen de su máquina (soberanía, licencia MIT sin telemetría oculta)
 
 ## Documentación que falta (pendiente, priorizado)
 
@@ -44,9 +44,9 @@ Casos de uso:
 
 ---
 
-## Propiedades de Soberanía (Sovereign AI Manifiesto 2026)
+## Propiedades de Soberanía
 
-Tylluan actúa como una implementación de referencia del concepto de **IA Soberana (Sovereign AI)**, cumpliendo las 7 propiedades estructurales de la literatura de 2026:
+Tylluan sigue estas 7 propiedades como principios de diseño explícitos:
 
 1. **Localidad de Datos Física:** Toda la base de conocimiento (SilvaDB) reside localmente en archivos SQLite bajo el directorio del usuario. Cero dependencias de APIs en la nube en la ruta crítica.
 2. **Ejecución Hardware-Bound:** Optimizado específicamente para hardware con recursos limitados (Raspberry Pi 4 / ARM64). El motor híbrido (BM25 + fastembed ONNX) corre local sin requerir GPUs comerciales pesadas.
@@ -66,6 +66,6 @@ Tylluan actúa como una implementación de referencia del concepto de **IA Sober
 | **Optimización Edge (Pi 4)** | 🟢 Sí (fórmula exponencial FSRS) | 🔴 No (depende de llamadas OpenAI) | 🔴 No (alto consumo en base de datos) |
 | **Algoritmo de Olvido** | 🟢 FSRS-5 por nodo + Retrievability | 🔴 Peso estático (LIFO) | 🟡 Memoria jerárquica (L1/L2) con LLM |
 | **Federación P2P** | 🟢 Nativo (Kademlia + Noise XK) | 🔴 No | 🔴 Centralizado (Server-Client) |
-| **Consolidación** | 🟢 TrustMem (Auditor) + Episódico | 🔴 No | 🟡 Buffer de mensajes manual |
+| **Consolidación** | 🟢 DreamCycle (dedup/decay automático) + memoria episódica | 🔴 No | 🟡 Buffer de mensajes manual |
 | **Tooling** | 🟢 5 Sovereign Tools MCP | 🟡 Integración custom | 🟡 Agent-specific APIs |
 
