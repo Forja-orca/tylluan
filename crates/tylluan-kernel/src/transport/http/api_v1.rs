@@ -250,12 +250,6 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/mcp/external/{name}", delete(remove_mcp_server_handler).put(update_mcp_server_handler))
         .route("/api/v1/system/signals", get(golden_signals_handler))
 
-        .route("/api/v1/system/approvals", get(approval_list_handler))
-        .route("/api/v1/approval/list", get(approval_list_handler))
-        .route("/api/v1/system/approvals/{id}/approve", post(approval_approve_handler))
-        .route("/api/v1/approval/{id}/approve", post(approval_approve_handler))
-        .route("/api/v1/system/approvals/{id}/reject", post(approval_reject_handler))
-        .route("/api/v1/approval/{id}/reject", post(approval_reject_handler))
         .route("/api/v1/maintenance/status", get(maintenance_status_handler))
         .route("/api/v1/system/maintenance/status", get(maintenance_status_handler))
         .route("/api/v1/maintenance/export", post(maintenance_export_handler))

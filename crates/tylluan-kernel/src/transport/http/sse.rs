@@ -213,13 +213,6 @@ async fn dashboard_events_handler(
                             let confidence = json.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.5) as f32;
                             Some(NexusEvent::Thought { content, agent_id, confidence })
                         }
-                        "approval_required" => {
-                            let request_id = json.get("request_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            let tool = json.get("tool").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            let risk = json.get("risk").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                            let agent_id = json.get("agent_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            Some(NexusEvent::ApprovalRequired { request_id, tool, risk, agent_id })
-                        }
                         "edge_added" => {
                             let source = json.get("source").and_then(|v| v.as_str()).unwrap_or("").to_string();
                             let target = json.get("target").and_then(|v| v.as_str()).unwrap_or("").to_string();

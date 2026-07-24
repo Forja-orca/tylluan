@@ -1,11 +1,8 @@
 use rmcp::{Error as McpError, model::*};
-use tracing::{info, warn};
+use tracing::warn;
 use crate::registry::proxy::error_result;
 use crate::registry::tools::RiskLevel;
 use crate::security::guard::ExecutionGuard;
-use super::types::PendingAction;
-use uuid;
-use chrono;
 
 
 impl super::TylluanServer {
@@ -73,22 +70,9 @@ impl super::TylluanServer {
             return Ok(error_result(&guard_result.reason.unwrap_or_else(|| "Acceso denegado por política de seguridad.".to_string())));
         }
 
-        if guard_result.requires_hitl {
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            let request_id = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
-            {
-                let mut pending = self.pending_approvals.write().await;
-                pending.insert(request_id.clone(), PendingAction {
-                    name: tool_name.clone(), arguments: request.arguments.clone(), tx,
-                });
-            }
-            self.notify("approval_required", serde_json::json!({ "id": request_id, "tool": tool_name, "arguments": request.arguments, "risk_level": format!("{:?}", risk_level), "ts": chrono::Utc::now().timestamp_millis() }));
-            match rx.await {
-                Ok(Ok(_)) => info!("✅ [HITL] Approved."),
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Ok(error_result("Approval request cancelled.")),
-            }
-        }
+        // HITL approval lives in grants.rs (async grant registry with expiry/reaper).
+        // The old `requires_hitl` field and `PendingAction` oneshot mechanism have been
+        // removed — they were vestigial (never triggered by any guard rule).
 
         let is_kernel_tool = Self::kernel_tools().iter().any(|t| t.name == tool_name);
         if is_kernel_tool {
