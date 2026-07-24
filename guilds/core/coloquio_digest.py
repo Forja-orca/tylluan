@@ -138,29 +138,37 @@ def _post(path: str, body: dict, timeout: int = 30) -> dict:
         return json.loads(r.read())
 
 
-def _build_summary(channel_id: str, messages: list) -> str:
-    """Deterministic summary — no LLM required, preserves author attribution."""
+def _build_summary(channel_id: str, messages: list) -> tuple[str, list[str]]:
+    """Deterministic summary — no LLM required, preserves author attribution.
+
+    Returns (summary_text, distinct_authors) so callers can link the stored
+    node back to the real agent identities that contributed to it, instead
+    of author names only ever existing as plain text inside the content.
+    """
     if not messages:
-        return ""
+        return "", []
     filtered = []
     for m in messages:
         content = str(m.get("content") or m.get("message") or "").strip()
         if content and not _is_noise(content):
             filtered.append(m)
     if not filtered:
-        return ""
+        return "", []
+    authors: list[str] = []
     lines = [f"[coloquio_digest] #{channel_id} — {len(filtered)} messages (filtered from {len(messages)}):"]
     for m in filtered[:30]:
         author = m.get("author_id") or m.get("author") or "unknown"
+        if author not in authors:
+            authors.append(author)
         content = str(m.get("content") or m.get("message") or "").strip()
         preview = content[:280] + "…" if len(content) > 280 else content
         lines.append(f"  [{author}] {preview}")
-    return "\n".join(lines)[:3500]
+    return "\n".join(lines)[:3500], authors
 
 
 _HASH_CACHE: dict[str, bool] = {}
 
-def _store(content: str, channel_id: str = "") -> bool:
+def _store(content: str, channel_id: str = "", authors: list[str] | None = None) -> bool:
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     if content_hash in _HASH_CACHE:
         return True
@@ -169,7 +177,16 @@ def _store(content: str, channel_id: str = "") -> bool:
         _HASH_CACHE[content_hash] = True
         return True
     try:
-        _post("/api/v1/memory/write", {"content": content})
+        # agent_id: the primary (first) contributing author, so the node links
+        # to a real registered identity (memory/identity.rs) instead of being
+        # anonymous. owner_scope: coloquio:<channel> keeps digested nodes
+        # attributable to the channel they came from.
+        payload = {"content": content, "node_type": "coloquio_digest"}
+        if authors:
+            payload["agent_id"] = authors[0]
+        if channel_id:
+            payload["owner_scope"] = f"coloquio:{channel_id}"
+        _post("/api/v1/memory/write", payload)
         _store_hash(content_hash, channel_id or "unknown")
         _HASH_CACHE[content_hash] = True
         return True
@@ -208,11 +225,11 @@ def digest_channel(
     if not messages:
         return f"⏭ No new messages in '{channel_id}' since offset {offset}."
 
-    summary = _build_summary(channel_id, messages)
+    summary, authors = _build_summary(channel_id, messages)
     if not summary:
         return f"⏭ All {len(messages)} messages in '{channel_id}' filtered as noise or duplicates."
 
-    stored = _store(summary, channel_id)
+    stored = _store(summary, channel_id, authors)
     new_offset = offset + len(messages)
     _set_checkpoint(channel_id, new_offset)
 

@@ -14,8 +14,25 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
         Some(c) => c,
         None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "missing content" }))).into_response(),
     };
-    match state.silva.upsert_node("manual", "entity", content, "{}").await {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok" }))).into_response(),
+    // Previously hardcoded to node_id "manual" -- every single call to this
+    // endpoint (e.g. guilds/core/coloquio_digest.py's _store()) silently
+    // overwrote the same node instead of creating a new one, losing all
+    // prior content on each write. Generate a unique id per call, same
+    // pattern as handler_remember.rs's task_id/nid generation.
+    let node_id = format!("memory_write:{}", chrono::Utc::now().timestamp_millis());
+    // Accept optional agent_id/owner_scope/node_type so callers can attribute
+    // what they write instead of it landing as an anonymous "entity" node --
+    // closes the gap where coloquio_digest.py summaries had no structured
+    // link back to the contributing agent's identity.
+    let agent_id = req.get("agent_id").and_then(|v| v.as_str());
+    let owner_scope = req.get("owner_scope").and_then(|v| v.as_str());
+    let node_type = req.get("node_type").and_then(|v| v.as_str()).unwrap_or("entity");
+    let metadata = serde_json::json!({
+        "agent_id": agent_id,
+        "owner_scope": owner_scope,
+    }).to_string();
+    match state.silva.upsert_node_with_provenance(&node_id, node_type, content, &metadata, "agent_generated").await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "node_id": node_id }))).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "write failed" }))).into_response(),
     }
 }
