@@ -206,3 +206,67 @@ impl AgentMemoryManager {
         info!("📝 Session digest created for agent '{}': {} episodes", agent_id, meaningful.len());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::silva::SilvaDB;
+
+    /// End-to-end coverage for the Generative-Agents-style session summarization
+    /// pipeline (record -> create_session_digest -> get_summary), which was wired
+    /// end-to-end (sse.rs disconnect hook, tylluan_recall's session_context
+    /// prepend in handler_recall.rs) but had zero test coverage before this.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_digest_roundtrip_produces_a_retrievable_summary() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let agent_id = "test-agent-digest";
+
+        for i in 0..5 {
+            mgr.record_memory(agent_id, &format!("episode {i}: did something noteworthy"), 0.6).await;
+        }
+
+        // No digest yet — get_summary must not fabricate one.
+        assert!(mgr.get_summary(agent_id).await.is_none());
+
+        mgr.create_session_digest(agent_id, "session-abc123").await;
+
+        let summary = mgr.get_summary(agent_id).await
+            .expect("create_session_digest should produce a node get_summary can find");
+        assert_eq!(summary.node_type, "session_digest");
+        assert!(summary.content.contains("episodios relevantes"));
+        assert!(summary.content.contains("episode"));
+        assert!(summary.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")));
+    }
+
+    /// create_session_digest with no recorded memories must not create an empty
+    /// or garbage digest node -- get_summary should still report "nothing yet".
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_digest_with_no_memories_creates_nothing() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let agent_id = "test-agent-empty";
+
+        mgr.create_session_digest(agent_id, "session-empty").await;
+
+        assert!(mgr.get_summary(agent_id).await.is_none());
+    }
+
+    /// get_summary must not leak another agent's digest across the agent_id
+    /// boundary -- this is the same class of guarantee as the identity/
+    /// impersonation checks elsewhere in the kernel.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_digest_is_scoped_per_agent() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+
+        mgr.record_memory("agent-a", "agent-a's private episode", 0.6).await;
+        mgr.create_session_digest("agent-a", "session-a").await;
+
+        let summary_b = mgr.get_summary("agent-b").await;
+        assert!(summary_b.is_none(), "agent-b must not see agent-a's session digest");
+
+        let summary_a = mgr.get_summary("agent-a").await;
+        assert!(summary_a.is_some());
+    }
+}
