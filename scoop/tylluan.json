@@ -2,7 +2,7 @@
     "version": "0.13.0",
     "description": "Sovereign MCP kernel with SilvaDB memory, P2P mesh, and guild-based tool orchestration",
     "homepage": "https://github.com/Forja-orca/tylluan",
-    "license": "AGPL-3.0-or-later",
+    "license": "MIT",
     "notes": [
         "Run 'tylluan-nexus' to start the kernel server",
         "Requires Python 3.10+ for guild tools"

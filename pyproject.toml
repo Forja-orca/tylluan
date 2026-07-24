@@ -3,7 +3,7 @@ name = "tylluan-guilds"
 version = "3.0.0a1"
 description = "Python tool guilds for the TylluanNexus Sovereign Agentic Hub"
 readme = "README.md"
-license = "AGPL-3.0"
+license = "MIT"
 requires-python = ">=3.11"
 authors = [
     { name = "TylluanMCP Contributors" }
