@@ -29,7 +29,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024` en `tylluan.toml`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente (sin proxy en Tylluan — a diferencia de Forja).
-5. **AGPL soberanía:** sin dependencias cloud en el critical path.
+5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **n8n es OPCIONAL** — `n8n_bridge` en lazy, nunca en always_on.
 
 ---

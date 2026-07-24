@@ -94,7 +94,7 @@ cargo run -p tylluan-cli -- start
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
-5. **AGPL soberanía:** sin dependencias cloud en el critical path.
+5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **Degree penalty (no boost):** `local_query_graph` usa `pr_score / (1 + deg * 0.1)` — penaliza hubs genéricos. El boost (`*`) fue un bug corregido en v0.10.0.
 
 ---

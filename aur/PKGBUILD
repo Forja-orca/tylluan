@@ -10,7 +10,7 @@ pkgrel=1
 pkgdesc="Sovereign MCP kernel with SilvaDB memory, P2P mesh, and guild-based tool orchestration"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Forja-orca/tylluan"
-license=('AGPL-3.0-or-later')
+license=('MIT')
 depends=('python>=3.10')
 makedepends=('cargo' 'rust')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/Forja-orca/tylluan/archive/v$pkgver.tar.gz")

@@ -6,7 +6,7 @@ url = https://github.com/Forja-orca/tylluan
 install = 
 arch = x86_64
 arch = aarch64
-license = AGPL-3.0-or-later
+license = MIT
 depends = python>=3.10
 makedepends = cargo
 makedepends = rust
