@@ -321,6 +321,7 @@ impl TylluanServer {
                         "timezone_error": tz_error,
                     },
                     "register_identity_hint": register_hint,
+                    "world_grounding_hint": "This kernel deliberately does not auto-fetch world news at connect time (no LLM/network call in the critical path, by design). For current events or real-world context, call tylluan_do with guild='websearch' (request_guild first if not already loaded).",
                 });
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&result).unwrap_or_default())], is_error: Some(false) })
             }
