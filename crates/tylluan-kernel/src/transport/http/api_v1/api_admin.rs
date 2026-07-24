@@ -738,67 +738,7 @@ pub async fn sessions_resume_handler(
     }
 }
 
-// --- APPROVALS ---
-
-pub async fn approval_list_handler(State(state): State<Arc<HttpState>>) -> axum::response::Response {
-    let srv_arc = match state.server.as_ref() {
-        Some(s) => s,
-        None => return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "kernel server not initialized"}))
-        ).into_response(),
-    };
-    let server = srv_arc.read().await;
-    let pending = server.pending_approvals.read().await;
-    let approvals: Vec<serde_json::Value> = pending.iter().map(|(id, action)| {
-        serde_json::json!({
-            "id": id,
-            "tool": action.name,
-            "arguments": action.arguments,
-            "created_at": chrono::Utc::now().to_rfc3339(),
-        })
-    }).collect();
-    Json(serde_json::Value::Array(approvals)).into_response()
-}
-
-pub async fn approval_approve_handler(State(state): State<Arc<HttpState>>, Path(id): axum::extract::Path<String>) -> axum::response::Response {
-    let srv_arc = match state.server.as_ref() {
-        Some(s) => s,
-        None => return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "kernel server not initialized"}))
-        ).into_response(),
-    };
-    let server = srv_arc.read().await;
-    let mut pending = server.pending_approvals.write().await;
-    if let Some(action) = pending.remove(&id) {
-        let _ = action.tx.send(Ok(rmcp::model::CallToolResult {
-            content: vec![],
-            is_error: Some(false),
-        }));
-        StatusCode::OK.into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
-    }
-}
-
-pub async fn approval_reject_handler(State(state): State<Arc<HttpState>>, Path(id): axum::extract::Path<String>) -> axum::response::Response {
-    let srv_arc = match state.server.as_ref() {
-        Some(s) => s,
-        None => return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "kernel server not initialized"}))
-        ).into_response(),
-    };
-    let server = srv_arc.read().await;
-    let mut pending = server.pending_approvals.write().await;
-    if let Some(action) = pending.remove(&id) {
-        let _ = action.tx.send(Err(rmcp::Error::internal_error("AcciÃ³n rechazada por el usuario.", None)));
-        StatusCode::OK.into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
-    }
-}
+// --- GRANTS (HITL via grants.rs, not pending_approvals) ---
 
 // --- MAINTENANCE ---
 

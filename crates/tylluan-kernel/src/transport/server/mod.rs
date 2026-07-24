@@ -37,7 +37,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::sync::Mutex;
 
-use std::collections::{VecDeque, HashMap};
+use std::collections::{VecDeque};
 use crate::transport::server::handler_recall::{RecallCache, HotContext};
 
 /// The TylluanNexus MCP server. Routes tool calls to kernel builtins or guild proxies.
@@ -56,7 +56,6 @@ pub struct TylluanServer {
     pub guild_rate_limiter: Arc<RateLimiter>,
     pub breaker: Arc<CircuitBreaker>,
     pub doctor: Arc<Doctor>,
-    pub pending_approvals: Arc<RwLock<HashMap<String, PendingAction>>>,
     pub notifier: Option<tokio::sync::broadcast::Sender<serde_json::Value>>,
     pub session_bridge: Arc<RwLock<VecDeque<BridgeEntry>>>,
     pub hormones: Arc<Mutex<HormoneSystem>>,
@@ -110,7 +109,6 @@ impl TylluanServer {
             guild_rate_limiter: Arc::new(RateLimiter::new(Some(120))),
             breaker: Arc::new(CircuitBreaker::new()),
             doctor,
-            pending_approvals: Arc::new(RwLock::new(HashMap::new())),
             notifier: None,
             session_bridge: Arc::new(RwLock::new(VecDeque::with_capacity(15))),
             hormones: Arc::new(Mutex::new(HormoneSystem::new())),

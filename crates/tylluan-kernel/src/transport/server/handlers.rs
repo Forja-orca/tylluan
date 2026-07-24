@@ -144,19 +144,13 @@ impl TylluanServer {
                 }
             }
             "list_pending_actions" => {
-                let pending = self.pending_approvals.read().await;
-                let ids: Vec<String> = pending.keys().cloned().collect();
                 let grants = crate::security::grants::list_pending().await;
-                let mut entries: Vec<serde_json::Value> = ids.iter().map(|id| {
-                    serde_json::json!({ "id": id, "origin": "hitl" })
-                }).collect();
-                entries.extend(grants);
                 Ok(CallToolResult {
                     content: vec![Content::text(
-                        if entries.is_empty() {
+                        if grants.is_empty() {
                             "No pending actions.".to_string()
                         } else {
-                            serde_json::to_string_pretty(&entries).unwrap_or_default()
+                            serde_json::to_string_pretty(&grants).unwrap_or_default()
                         }
                     )],
                     is_error: Some(false),
@@ -169,26 +163,16 @@ impl TylluanServer {
                     .and_then(|a| a.get("grant_level"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("this_time");
-                let mut resolved = false;
-                // First try: pending_approvals (HITL path)
-                {
-                    let mut pending = self.pending_approvals.write().await;
-                    if let Some(action) = pending.remove(request_id) {
-                        let _ = action.tx.send(Ok(CallToolResult {
-                            content: vec![Content::text(if approved { "Approved" } else { "Rejected" }.to_string())],
-                            is_error: Some(!approved),
-                        }));
-                        resolved = true;
-                    }
-                }
-                if !resolved && approved {
-                    // Try grant registry — approve with level
+                let mut resolved;
+                if approved {
                     let level = match grant_level {
                         "this_session" => crate::security::grants::GrantLevel::ThisSession,
                         "always_for_guild" => crate::security::grants::GrantLevel::AlwaysForGuild,
                         _ => crate::security::grants::GrantLevel::ThisTime,
                     };
                     resolved = crate::security::grants::resolve(request_id, level).await;
+                } else {
+                    resolved = crate::security::grants::remove(request_id).await;
                 }
                 // M31-P2: Try plan store — execute the stored plan directly
                 if !resolved && approved

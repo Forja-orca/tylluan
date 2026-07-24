@@ -216,9 +216,3 @@ pub struct BridgeEntry {
     pub output: String,
     pub timestamp: String,
 }
-
-pub struct PendingAction {
-    pub name: String,
-    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
-    pub tx: tokio::sync::oneshot::Sender<Result<CallToolResult, rmcp::Error>>,
-}
