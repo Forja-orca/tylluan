@@ -243,6 +243,43 @@ pub async fn handle_tylluan_do(
         }
     }
 
+    // Ouroboros Loop — record half. Deterministic intent match so any client
+    // can persist a self-critique of an action's outcome via natural language,
+    // per-agent, without a new tool. The agent (the LLM) does the reflection and
+    // passes action/outcome/verdict/lesson as arguments; the kernel only stores.
+    {
+        let lower = intent.trim().to_lowercase();
+        let is_record_exp = lower.contains("record_experience")
+            || lower.contains("record experience") || lower.contains("registra experiencia")
+            || lower.contains("registrar experiencia") || lower.contains("aprendí de esto")
+            || lower.contains("log outcome");
+        if is_record_exp {
+            let aid = agent_id.as_deref().unwrap_or("anonymous");
+            if aid == "anonymous" {
+                return Ok(error_result("record_experience requires an agent_id (experiences are stored per-agent)."));
+            }
+            let arg = |k: &str| arguments.as_ref().and_then(|a| a.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let action = arg("action");
+            let outcome = arg("outcome");
+            let verdict = { let v = arg("verdict"); if v.is_empty() { "partial".to_string() } else { v } };
+            let lesson = arg("lesson");
+            if action.is_empty() || outcome.is_empty() {
+                return Ok(error_result(
+                    "record_experience needs `action` and `outcome` as arguments (and optionally `verdict`=worked|failed|partial, `lesson`). \
+                     The agent reflects; the kernel only stores.",
+                ));
+            }
+            if let Some(ref amm) = server.agent_memory {
+                let id = amm.record_experience(aid, &action, &outcome, &verdict, &lesson).await;
+                return Ok(CallToolResult {
+                    content: vec![Content::text(format!("✅ Experience recorded ({verdict}) as {id} — will surface in your future tylluan_think on related topics."))],
+                    is_error: Some(false),
+                });
+            }
+            return Ok(error_result("Agent memory subsystem not available."));
+        }
+    }
+
     // Sovereign shortcut: "forget: {node_id}" — delete a node without routing to a guild
     if let Some(result) = handle_forget_shortcut(server, &intent).await {
         return result;

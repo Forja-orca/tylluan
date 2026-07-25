@@ -62,7 +62,11 @@ impl super::TylluanServer {
                         "human_name": { "type": "string", "description": "Optional. Used when intent is 'register_identity'/'registra mi identidad' -- your display name." },
                         "role":       { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your role (e.g. 'Builder Backend')." },
                         "purpose":    { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your current focus, one sentence." },
-                        "philosophy": { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your working principles, if any." }
+                        "philosophy": { "type": "string", "description": "Optional. Used when intent is 'register_identity' -- your working principles, if any." },
+                        "action":  { "type": "string", "description": "Optional. Used when intent is 'record_experience'/'registra experiencia' -- what you attempted." },
+                        "outcome": { "type": "string", "description": "Optional. Used when intent is 'record_experience' -- what actually happened as a result." },
+                        "verdict": { "type": "string", "description": "Optional. Used when intent is 'record_experience' -- 'worked' | 'failed' | 'partial'. Failures are weighted highest (most actionable). Default 'partial'." },
+                        "lesson":  { "type": "string", "description": "Optional. Used when intent is 'record_experience' -- your takeaway, what you'd do differently next time." }
                     },
                     "required": ["intent"]
                 }),
