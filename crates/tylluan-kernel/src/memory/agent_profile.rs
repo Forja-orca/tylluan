@@ -372,7 +372,8 @@ mod tests {
 
     #[test]
     fn test_reputation_computation() {
-        let dir = std::env::temp_dir().join(format!("test_agent_reputation_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("test_agent_reputation_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         let db_path = dir.join("test_agent_profiles.db");
         let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();
@@ -402,7 +403,8 @@ mod tests {
 
     #[test]
     fn test_set_persona() {
-        let dir = std::env::temp_dir().join(format!("test_set_persona_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("test_set_persona_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         let db_path = dir.join("test_agent_profiles.db");
         let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();
@@ -417,7 +419,8 @@ mod tests {
 
     #[test]
     fn test_set_preferences() {
-        let dir = std::env::temp_dir().join(format!("test_set_preferences_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("test_set_preferences_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         let db_path = dir.join("test_agent_profiles.db");
         let store = AgentProfileStore::new(&db_path.to_string_lossy()).unwrap();

@@ -541,6 +541,21 @@ mod tests {
     }
 
     #[test]
+    fn contract_01_exactly_five_sovereign_tools() {
+        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"];
+        assert_eq!(sovereign.len(), 5, "CONTRACT-01: Must have exactly 5 sovereign tools");
+        let tools = TylluanServer::kernel_tools();
+        let found: Vec<&str> = tools.iter()
+            .filter(|t| sovereign.contains(&t.name.as_str()))
+            .map(|t| t.name.as_str())
+            .collect();
+        assert_eq!(found.len(), 5, "CONTRACT-01: Expected 5 sovereign tools, got {}: {:?}", found.len(), found);
+        for name in sovereign {
+            assert!(found.contains(name), "CONTRACT-01: Sovereign tool '{name}' not found in kernel_tools()");
+        }
+    }
+
+    #[test]
     fn explore_domain_memory_returns_memory_tools() {
         let tools = TylluanServer::kernel_tools();
         let domain = "memory";

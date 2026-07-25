@@ -893,4 +893,82 @@ mod tests {
         let text_all = result_all.content[0].as_text().unwrap();
         assert!(text_all.text.contains("episódico") && text_all.text.contains("general"), "Debe contener ambos: {text_all:?}");
     }
+
+    // ── Edge case tests ───────────────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_empty_query_returns_error() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(result.is_error.unwrap_or(false), "empty query must return error");
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("requires a non-empty"), "error must mention empty query");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_no_results_returns_empty_message() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("xyznonexistent_99".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false), "no results is not an error");
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("No memories found"), "must say no memories found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_filters_routing_anchor_nodes() {
+        let server = test_server().await;
+        server.silva.upsert_node("r1", "routing_anchor", "routing anchor data content", "{}").await.unwrap();
+        server.silva.upsert_node("n1", "concept", "normal concept node for routing anchor test", "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("routing anchor".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        // routing_anchor must be filtered out; result should not error
+        assert!(!text.text.contains("routing_anchor"), "routing_anchor must be filtered from recall");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_filters_session_digest_nodes() {
+        let server = test_server().await;
+        server.silva.upsert_node("d1", "session_digest", "session digest content for test filtering", "{}").await.unwrap();
+        server.silva.upsert_node("n1", "concept", "normal concept node for digest test", "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("session digest".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        assert!(!text.text.contains("session_digest"), "session_digest must be filtered from recall");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_honors_limit_parameter() {
+        let server = test_server().await;
+        for i in 0..5 {
+            let id = format!("limit_n{i}");
+            server.silva.upsert_node(&id, "concept", &format!("limit test node {i}"), "{}").await.unwrap();
+        }
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("limit test".to_string()));
+        args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(2u32)));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false));
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("Showing top 2"), "limit=2 must show top 2");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_with_agent_id_does_not_error() {
+        let server = test_server().await;
+        server.silva.upsert_node("a1", "concept", "agent scoped data recall test", "{}").await.unwrap();
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("recall".to_string()));
+        args.insert("agent_id".to_string(), serde_json::Value::String("test-agent-1".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false), "agent_id must not cause errors");
+    }
 }

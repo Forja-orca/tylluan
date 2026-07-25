@@ -863,4 +863,59 @@ mod tests {
         assert!(results.is_ok(), "IVF search debe funcionar tras autobuild: {:?}", results.err());
     }
 
+    // ── CONTRACT-01 invariants ─────────────────────────────────────
+
+    #[test]
+    fn contract_01_degree_penalty_formula() {
+        // CONTRACT-01: degree penalty uses DIVISION, not multiplication
+        // Formula: pr_score / (1.0 + degree * 0.1)
+        // High-degree hubs must be PENALIZED (lower score), not boosted
+        let hub_score: f64 = 0.9 / (1.0 + 10.0 * 0.1);  // deg=10 → 0.9/2.0 = 0.45
+        let leaf_score: f64 = 0.8 / (1.0 + 1.0 * 0.1);  // deg=1 → 0.8/1.1 ≈ 0.727
+
+        assert!(
+            hub_score < leaf_score,
+            "CONTRACT-01: Hub ({hub_score}) must be penalized below leaf ({leaf_score}). \
+             Division is correct; multiplication would be a bug."
+        );
+        // Verify the exact values for regression detection
+        assert!((hub_score - 0.45f64).abs() < 1e-10, "Hub should be exactly 0.45, got {hub_score}");
+        assert!((leaf_score - 0.8f64 / 1.1f64).abs() < 1e-10, "Leaf should be exactly 0.8/1.1, got {leaf_score}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn contract_01_degree_penalty_integration() {
+        // Real SilvaDB test: hub nodes appear lower in PPR results
+        let db = SilvaDB::in_memory().await.unwrap();
+
+        db.upsert_node("seed", "concept", "Seed", "{}").await.unwrap();
+        db.upsert_node("hub", "concept", "Hub with many edges", "{}").await.unwrap();
+        db.upsert_node("leaf", "concept", "Specific leaf node", "{}").await.unwrap();
+        db.upsert_node("orphan", "concept", "Irrelevant", "{}").await.unwrap();
+
+        // Hub connects to many dummy nodes (high degree)
+        for i in 0..10 {
+            let dummy = format!("dummy_{i}");
+            db.upsert_node(&dummy, "concept", &format!("Dummy {i}"), "{}").await.unwrap();
+            db.add_edge("hub", &dummy, "links_to", 1.0, "{}").await.unwrap();
+        }
+        db.add_edge("seed", "hub", "links_to", 1.0, "{}").await.unwrap();
+        db.add_edge("seed", "leaf", "links_to", 1.0, "{}").await.unwrap();
+        db.add_edge("hub", "leaf", "links_to", 1.0, "{}").await.unwrap();
+
+        let seeds = vec!["seed".to_string()];
+        let results = db.personalized_pagerank_local(&seeds, 0.85, 20, 10).await.unwrap();
+        let scores: std::collections::HashMap<String, f64> = results.into_iter().collect();
+
+        // Both hub and leaf should appear; leaf should outrank hub
+        assert!(scores.contains_key("hub"), "Hub must appear in PPR results");
+        assert!(scores.contains_key("leaf"), "Leaf must appear in PPR results");
+
+        // degree_penalty ensures leaf (degree ~2) outranks hub (degree ~11)
+        assert!(
+            scores["leaf"] > scores["hub"],
+            "CONTRACT-01: leaf ({}) should outrank hub ({}) due to degree penalty",
+            scores["leaf"], scores["hub"]
+        );
+    }
 }
