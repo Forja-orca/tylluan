@@ -1125,12 +1125,21 @@ mod tests {
 
         let _result = handle_tylluan_do(&server, Some(args)).await.unwrap();
 
-        // Wait for spawned tasks to finish
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-
-        // Verify that a "rejected" trace is recorded for the lesson node
-        let traces = silva.get_node_traces(lesson_key, 10).await.unwrap();
-        let has_rejected = traces.iter().any(|t| t.trace_type == "rejected");
+        // Poll for the spawned background task to record its trace, instead of
+        // a fixed sleep -- under full-suite parallel load (500+ concurrent
+        // tests) a flat 150ms was intermittently too short and made this test
+        // flaky (observed failing under a full `cargo test --lib` run,
+        // always passing in isolation).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut has_rejected = false;
+        while std::time::Instant::now() < deadline {
+            let traces = silva.get_node_traces(lesson_key, 10).await.unwrap();
+            if traces.iter().any(|t| t.trace_type == "rejected") {
+                has_rejected = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
         assert!(has_rejected, "Should record a 'rejected' trace when intent fails");
     }
 

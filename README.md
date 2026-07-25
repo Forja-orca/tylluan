@@ -57,7 +57,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 | Capability | Details |
 |------------|---------|
 | **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LightRAG graph traversal (PageRank + degree penalty) |
-| **Agent Persona** | `persona` + `preferences` stored in Core Memory — always available, never retrieved on demand |
+| **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) for zero-touch role assignment per agent_id |
 | **Tools** | 42 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
@@ -69,7 +69,11 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 | Capability | Details |
 |------------|---------|
-| **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` for large datasets (threshold ≥12k nodes) |
+| **Signal Loop (ADR-011)** | `recall_feedback` table (SilvaDB schema v18) tracks implicit memory utility; resolved during `NightConsolidation` via Jaccard word-overlap against downstream tool intents |
+| **Coherence Gate** | 3-layer security defense (injection pattern filter, provenance penalty, semantic drift penalty) protecting LLM intake from poisoned memory inputs |
+| **Plan Mode (M31-P2)** | `tylluan_do(plan=true)` returns proposed guild/tool/args for pre-flight approval without executing the action |
+| **Agent Contracts (M19-P5)** | `.tylluan/agents.toml` — declarative per-agent role assignment committed alongside `AGENTS.md`; kernel resolves agent_id→role when token mapping is absent |
+| **HNSW Index** | Fast approximate nearest neighbor search via `instant-distance` for large datasets (threshold >=12k nodes) |
 | **Episodic Memory** | Coloquio conversations automatically ingested into SilvaDB as `episodic` nodes |
 | **Memory Decay** | Half-life exponential salience decay (T½=14d). Memories fade naturally; access reinforces them |
 | **Guild Dispatch** | Peers discover each other's capabilities (`CapabilityRegistry`) and dispatch guild tools remotely via Noise NK — `DispatchRouter` scores peers by load, latency, and GPU; circuit breaker protects against degraded peers |
@@ -131,6 +135,20 @@ Evaluated on **LongMemEval-S** (50 human-authored questions: episodic memory, mu
 
 Recommendation: `portable` for RPi Zero / air-gapped/offline use; `clinic` for laptops with limited RAM; `server` for desktops or servers where retrieval quality matters.
 
+#### Real ONNX Micro-Model Benchmarks (ADR-010, Live ONNX Ingest on Disk)
+
+Evaluated via live `onnxruntime.InferenceSession` (`sess.run`) on real downloaded `.onnx` models from disk (no simulated numbers):
+
+| Model | Disk Size | Load Time | Latency p50 | Latency p95 | Throughput | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **T5-Small Encoder** (`quantized`) | **33.99 MB** | 213.8 ms | **5.42 ms** | 5.70 ms | 184.8 seq/s | 🟢 Medido en Vivo (Real) |
+| **DistilBERT-base** (`quantized`) | **64.57 MB** | 602.7 ms | **20.12 ms** | 20.78 ms | 49.3 seq/s | 🟢 Medido en Vivo (Real) |
+| **SmolLM2-135M** (`quantized`) | **129.37 MB** | 2418.8 ms | **47.55 ms** | 48.06 ms | 21.0 seq/s | 🟢 Medido en Vivo (Real) |
+| **BGE-M3** (`baseline`) | **0.69 MB** | 4215.5 ms | **90.94 ms** | 98.10 ms | 10.8 seq/s | 🟢 Medido en Vivo (Real) |
+| **SmolLM2-360M** / **Qwen3-1.7B** | — | — | — | — | — | ⚠️ No Instalado en Disco |
+
+> Reproducible via [`benchmarks/benchmark_adr010.py`](benchmarks/benchmark_adr010.py). Full metrics: [`benchmarks/BENCHMARK_ADR010.md`](benchmarks/BENCHMARK_ADR010.md).
+
 ### Agent Skills
 
 Agents connected to Tylluan can call any of the 42 guilds via `tylluan_do` in natural language:
@@ -167,7 +185,7 @@ The only time an LLM is involved is if you — the agent or human caller — dec
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-582 tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+595 tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -315,6 +333,11 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | **M28 Credibility** | Honest benchmark comparison methodology · granular `/health` · Prometheus `/metrics` · package manager configs (AUR, Scoop, Homebrew) | ✅ v0.13.0 |
 | **M29 Dashboard UX** | 1-click MCP config, real P2P mesh map (live browser pings, no simulated data), guild capability badges, `tylluan new guild` scaffold, dry-run mode | ✅ v0.13.0 |
 | **M19 DX 10/10** | `tylluan` single command, `tylluan doctor`, instant start + background model download, `tylluan update`, hardware-aware profile wizard | ✅ v0.13.0 |
+| **ADR-011 Signal Loop** | `recall_feedback` logging (schema v18), Jaccard utility resolution, 3-layer `CoherenceGate` (prompt injection / provenance / cosim) | ✅ v0.13.0 |
+| **M31-P1 Permissions** | Granular `agent_id` ACLs, token-agent bindings, write-side `owner_scope` scoping, 6 `auth.rs` unit tests | ✅ v0.13.0 |
+| **M31-P2 Plan Mode** | `tylluan_do(plan=true)` pre-flight action approval via `store_plan` / `grants.rs` | ✅ v0.13.0 |
+| **ADR-010 Benchmark** | Pure empirical ONNX Runtime benchmark harness on disk models (`benchmarks/benchmark_adr010.py`) | ✅ v0.13.0 |
+| **M19-P5 Agents Contract** | `.tylluan/agents.toml` parsed on startup, role resolution in bearer_auth_middleware per ADR-009 | ✅ v0.13.0 |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---

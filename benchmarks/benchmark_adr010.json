@@ -1,0 +1,94 @@
+{
+  "date": "2026-07-25",
+  "timestamp": 1785016736,
+  "hardware": {
+    "platform": "windows",
+    "cpu_cores": 56,
+    "physical_cores": 28,
+    "total_ram_gb": 221.9
+  },
+  "models": {
+    "bge_m3": {
+      "status": "measured",
+      "measured": true,
+      "path": ".fastembed_cache/models--BAAI--bge-m3/snapshots\\5617a9f61b028005a4858fdac845db406aefb181\\onnx\\model.onnx",
+      "model_file_size_mb": 0.69,
+      "load_time_ms": 4215.52,
+      "ram_footprint_mb": 1169.83,
+      "latency_stats_ms": {
+        "min": 88.9,
+        "p50": 90.94,
+        "p95": 98.1,
+        "p99": 102.49,
+        "max": 102.49,
+        "mean": 92.39,
+        "std": 3.39
+      },
+      "throughput_seq_sec": 10.8
+    },
+    "distilbert_base_uncased": {
+      "status": "measured",
+      "measured": true,
+      "path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--distilbert-base-uncased/snapshots\\5d73105e39e322b779ff7a8fcd11530fa579165b\\onnx\\model_quantized.onnx",
+      "model_file_size_mb": 64.57,
+      "load_time_ms": 602.69,
+      "ram_footprint_mb": 100.03,
+      "latency_stats_ms": {
+        "min": 19.82,
+        "p50": 20.12,
+        "p95": 20.78,
+        "p99": 22.16,
+        "max": 22.16,
+        "mean": 20.27,
+        "std": 0.43
+      },
+      "throughput_seq_sec": 49.3
+    },
+    "t5_small_encoder": {
+      "status": "measured",
+      "measured": true,
+      "path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--t5-small/snapshots\\4e0d91096b13cb313b43a14f35fdbb311a6d9728\\onnx\\encoder_model_quantized.onnx",
+      "model_file_size_mb": 33.99,
+      "load_time_ms": 213.83,
+      "ram_footprint_mb": 39.39,
+      "latency_stats_ms": {
+        "min": 5.16,
+        "p50": 5.42,
+        "p95": 5.7,
+        "p99": 5.78,
+        "max": 5.78,
+        "mean": 5.41,
+        "std": 0.14
+      },
+      "throughput_seq_sec": 184.8
+    },
+    "smollm2_135m": {
+      "status": "measured",
+      "measured": true,
+      "path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--onnx-community--SmolLM2-135M-Instruct-ONNX/snapshots\\b8a5c0f183b78c55955a5364f610c36668b5e681\\onnx\\model_quantized.onnx",
+      "model_file_size_mb": 129.37,
+      "load_time_ms": 2418.82,
+      "ram_footprint_mb": 205.31,
+      "latency_stats_ms": {
+        "min": 47.04,
+        "p50": 47.55,
+        "p95": 48.06,
+        "p99": 48.16,
+        "max": 48.16,
+        "mean": 47.53,
+        "std": 0.27
+      },
+      "throughput_seq_sec": 21.0
+    },
+    "smollm2_360m": {
+      "status": "not_downloaded",
+      "measured": false,
+      "error": "File not found matching C:\\Users\\FoRJa/.cache/huggingface/hub/models--onnx-community--SmolLM2-360M-Instruct-ONNX/snapshots/*/onnx/model_q4f16.onnx"
+    },
+    "qwen3_17b": {
+      "status": "not_downloaded",
+      "measured": false,
+      "error": "File not found matching C:\\Users\\FoRJa/.cache/huggingface/hub/models--onnx-community--Qwen3-1.7B-ONNX/snapshots/*/onnx/model_q4f16.onnx"
+    }
+  }
+}

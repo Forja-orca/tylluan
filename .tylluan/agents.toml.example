@@ -1,0 +1,29 @@
+# .tylluan/agents.toml — declarative agent profiles for this repo.
+#
+# This file is the machine-readable counterpart to AGENTS.md.
+# It assigns agent_ids to existing roles defined in tylluan.toml's
+# [security.acl.roles] table — it does NOT define new roles.
+#
+# If a referenced role doesn't exist in [security.acl.roles], the kernel
+# logs a warning and falls back to the default_role for that agent
+# (fails safe — never silently grants more access).
+#
+# Copy this to .tylluan/agents.toml and customize.
+# The .tylluan/agents.toml file IS meant to be committed to version
+# control (unlike tylluan.toml which contains secrets-adjacent config).
+
+[agents.claude-code]
+role = "admin"
+description = "Tech lead — orchestration, planning, cross-cutting fixes"
+
+[agents.deepseek-opencode]
+role = "contributor"
+description = "Rust/CLI implementation — bounded, briefed tasks"
+
+[agents.antigravity]
+role = "contributor"
+description = "Dashboard/UI — browser-based, MCP client"
+
+[agents.ci-bot]
+role = "readonly"
+description = "Automated CI checks, no write operations"

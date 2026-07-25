@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-18 (v0.13.0: M19 DX 10/10 ✓ [P0 tylluan cmd, P1 doctor, P3 instant start, P4 update], M21 Guild Warm Pool ✓, M21 Recall Cache Benchmark ✓, M28 Credibilidad Pública ✓, M29 Dashboard UX ✓ [P0 MCP config 1-click, P1 mesh map, P2 badges, P3 tylluan new guild, P4 dry-run], M22 Junior Onboarding ✓, M23-P1 "El Primer Minuto" auto-start ✓, M26 Sprint 1 Canvas/Docs ✓, M26 Sprint 2 tldraw consensus ✓, Security Hardening [P0-P4] ✓, M34-P0 Trust Gate (provenance) ✓, M34-P1 Consolidated Topics ✓, M35 Bi-temporal Memory ✓, M36 Self-correction via @correct: ✓, M37-P1 OTel GenAI conventions ✓, M37-P2 Scopes panel ✓)
+> Last updated: 2026-07-26 (v0.13.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** 39066d6 · **582 total** green (509 kernel lib + 61 link lib + 12 fsrs) — mismo número que README.md, verificado por `scripts/check_test_count.sh`. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 2, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **614 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** 39066d6 · **595 total** green (522 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +13 desde M19-P5 Agents Contract (6 agents_contract + 7 auth resolution tests). Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **616 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
 
 ---
 
