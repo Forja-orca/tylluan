@@ -614,8 +614,42 @@ pub struct InferenceConfig {
     pub providers: Vec<InferenceProvider>,
     #[serde(default = "default_model")]
     pub primary_model: String,
-    #[serde(default)]
+    // NOTE: field-level `#[serde(default)]` always wins over the parent
+    // struct's `impl Default` for THIS field specifically -- if a user's
+    // tylluan.toml has a partial [inference] section (e.g. sets primary_model
+    // but omits device), serde fills the missing `device` from
+    // InferenceDevice::default() (hardcoded Cpu), never from
+    // auto_select_device(). Using `default = "auto_select_device"` here makes
+    // the per-platform auto-detection apply to partial configs too, not just
+    // to a fully-absent [inference] section.
+    #[serde(default = "auto_select_device")]
     pub device: InferenceDevice,
+}
+
+/// Auto-detect the best inference device for the current platform.
+/// Returns the most capable GPU execution provider available on the OS,
+/// falling back to CPU when unavailable.
+pub fn auto_select_device() -> InferenceDevice {
+    #[cfg(target_os = "macos")]
+    {
+        tracing::info!("🍎 Detected macOS — auto-selecting CoreML inference device");
+        return InferenceDevice::Coreml;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        tracing::info!("🚀 Detected Windows — auto-selecting DirectML inference device");
+        return InferenceDevice::Directml;
+    }
+    #[cfg(feature = "cuda")]
+    {
+        tracing::info!("🚀 CUDA feature enabled on Linux — auto-selecting CUDA inference device");
+        return InferenceDevice::Cuda;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", feature = "cuda")))]
+    {
+        tracing::info!("🧠 No GPU execution provider available — falling back to CPU");
+        InferenceDevice::Cpu
+    }
 }
 
 impl Default for InferenceConfig {
@@ -623,7 +657,7 @@ impl Default for InferenceConfig {
         Self {
             providers: Vec::new(),
             primary_model: default_model(),
-            device: InferenceDevice::Cpu,
+            device: auto_select_device(),
         }
     }
 }
