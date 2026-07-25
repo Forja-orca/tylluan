@@ -1,0 +1,126 @@
+# Tylluan — Model Manifest
+#
+# Curated, hardware-tiered ONNX models for Tylluan's embedded micro-agent
+# slots. ONNX-only by design — `ort` (ONNX Runtime) is already integrated
+# in the kernel for BGE-M3 embeddings; this manifest reuses that same
+# inference path instead of adding a second runtime (GGUF/llama.cpp was
+# evaluated and deliberately not added, see docs/reference/adr/).
+#
+# Every entry below was verified with a real HTTP request to the
+# HuggingFace API (GET /api/models/{owner}/{repo} -> 200) on 2026-07-25,
+# not assumed from training data. Two candidates that sounded plausible
+# were checked and do NOT exist: onnx-community/TinyBERT_General_4L_312D
+# and onnx-community/SmolLM2-1.7B-Instruct-ONNX — do not re-add them
+# without re-verifying.
+#
+# Update policy: this file is versioned in git like any other source file.
+# There is no live external registry (that would be new infrastructure
+# to build and maintain) -- updates happen via PR/commit when the team
+# verifies a better model, same review discipline as any other change.
+# "auto" tier selection happens client-side (dashboard/kernel), this file
+# only curates what's known-good, it doesn't auto-fetch from elsewhere.
+
+[registry]
+version = "1.0.0"
+updated_at = "2026-07-25"
+format = "onnx-only"
+
+# ── Slot 1: Complexity classifier / low-confidence intent disambiguation ──
+# Non-generative encoder. Runs on the CPU-critical path (routing.rs
+# confidence gate, <20ms budget) — must stay tiny and fast.
+
+[[slots.complexity_scorer]]
+id = "distilbert-base-uncased-onnx"
+tier = "toaster"
+recommended = true
+url = "https://huggingface.co/Xenova/distilbert-base-uncased"
+onnx_file = "onnx/model_quantized.onnx"
+license = "apache-2.0"
+maintainer = "Xenova (transformers.js team)"
+size_mb = 68
+notes = "Safest default: pure encoder, minimal size, high adoption."
+
+[[slots.complexity_scorer]]
+id = "modernbert-base-onnx"
+tier = "balanced"
+recommended = false
+url = "https://huggingface.co/onnx-community/ModernBERT-base-ONNX"
+onnx_file = "onnx/model_quantized.onnx"
+license = "apache-2.0"
+maintainer = "onnx-community"
+notes = "Newer architecture, but low ONNX-export adoption (39 downloads at verification time) -- moderate abandonment risk. Base model itself (answerdotai/ModernBERT-base) is real and widely used (7M+ downloads); the ONNX export specifically is less battle-tested."
+
+# ── Slot 2: Consensus synthesis (offline, NightConsolidation pulse) ──
+# Generative. Reconciles contradictory SilvaDB nodes into coherent text.
+
+[[slots.consensus_synthesis]]
+id = "qwen3-0.6b-onnx"
+tier = "balanced"
+recommended = true
+url = "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX"
+onnx_file = "onnx/model_q4f16.onnx"
+license = "apache-2.0"
+maintainer = "onnx-community (base: Qwen team)"
+size_mb = 570
+notes = "Newer generation than SmolLM2 (April 2026 export), reasoning-capable. Primary recommendation for this slot."
+
+[[slots.consensus_synthesis]]
+id = "smollm2-360m-instruct-onnx"
+tier = "toaster"
+recommended = false
+url = "https://huggingface.co/onnx-community/SmolLM2-360M-Instruct-ONNX"
+license = "apache-2.0"
+maintainer = "onnx-community (base: HuggingFaceTB)"
+notes = "Ultra-lightweight fallback for constrained hardware where Qwen3-0.6B's ~570MB is too heavy."
+
+# ── Slot 3: Coloquio channel digest (offline, long-context summarization) ──
+
+[[slots.coloquio_digest]]
+id = "qwen3-1.7b-onnx"
+tier = "balanced"
+recommended = true
+url = "https://huggingface.co/onnx-community/Qwen3-1.7B-ONNX"
+onnx_file = "onnx/model_q4f16.onnx"
+license = "apache-2.0"
+maintainer = "onnx-community (base: Qwen team)"
+size_mb = 1430
+notes = "Best available 2026 candidate in this size class -- SmolLM2-1.7B has no ONNX export (verified absent), Qwen2.5-1.5B is a prior generation."
+
+[[slots.coloquio_digest]]
+id = "qwen2.5-1.5b-instruct-onnx"
+tier = "balanced"
+recommended = false
+url = "https://huggingface.co/onnx-community/Qwen2.5-1.5B-Instruct"
+license = "apache-2.0"
+maintainer = "onnx-community"
+notes = "Prior generation, kept as a known-stable fallback (verified 2025-03-06)."
+
+# ── Slot 4: High-end tier ("tower" -- GPU, >16GB RAM) ──
+# Optional, opt-in only. Not required for Tylluan to function.
+
+[[slots.tower_optional]]
+id = "qwen3-4b-onnx"
+tier = "tower"
+recommended = true
+url = "https://huggingface.co/onnx-community/Qwen3-4B-ONNX"
+license = "apache-2.0"
+maintainer = "onnx-community (base: Qwen team)"
+notes = "Multi-backend export (cpu/cuda/webgpu variants present) -- signals active maintenance."
+
+[[slots.tower_optional]]
+id = "phi-4-mini-instruct-onnx"
+tier = "tower"
+recommended = false
+url = "https://huggingface.co/microsoft/Phi-4-mini-instruct-onnx"
+license = "mit"
+maintainer = "Microsoft (official, first-party)"
+notes = "Lower adoption numbers don't apply as a risk signal here -- first-party Microsoft maintenance."
+
+[[slots.tower_optional]]
+id = "llama-3.2-3b-instruct-onnx"
+tier = "tower"
+recommended = false
+url = "https://huggingface.co/onnx-community/Llama-3.2-3B-Instruct-ONNX"
+license = "llama3.2"
+maintainer = "onnx-community (base: Meta)"
+notes = "Custom Meta license, NOT Apache/MIT -- has commercial-use restrictions above 700M MAU. Flag before recommending as default for any redistribution scenario."
