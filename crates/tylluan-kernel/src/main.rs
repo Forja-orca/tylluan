@@ -9,7 +9,7 @@ use tylluan_kernel::config::{TylluanConfig, load_guild_config};
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::transport;
 use tylluan_kernel::registry::{guild_process::GuildRegistry, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
-use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::{AgentProfileStore, sync_agent_reputation_to_silva}, agent_memory::AgentMemoryManager};
+use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::AgentProfileStore, agent_memory::AgentMemoryManager};
 use tylluan_kernel::memory::agent_nodes::AgentNodeRouter;
 use tylluan_kernel::memory::silva::nodes::build_contextual_text;
 use tylluan_kernel::router::{matcher::GuildMatcher, catalog::builtin_catalog, embeddings::{EmbeddingEngine, RerankEngine}};
@@ -1601,157 +1601,36 @@ async fn run_night_consolidation_loop(
     data_dir: PathBuf,
     matcher: Arc<GuildMatcher>,
 ) {
+    use tylluan_kernel::memory::night::{
+        PhaseOrchestrator, PhaseContext,
+        DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
+        DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase,
+    };
+
+    let orchestrator = PhaseOrchestrator::new(vec![
+        Box::new(DreamPhase),
+        Box::new(OuroborosPhase),
+        Box::new(AutoLinkPhase),
+        Box::new(GraphRagPhase),
+        Box::new(DecayPhase),
+        Box::new(AgentPhase),
+        Box::new(CurriculumPhase),
+        Box::new(IdleLabPhase),
+    ]);
+
+    let ctx = PhaseContext {
+        silva,
+        agent_profiles,
+        curriculum,
+        server,
+        data_dir,
+        matcher,
+    };
+
     let mut interval = tokio::time::interval(Duration::from_secs(1800));
     loop {
         interval.tick().await;
-        info!("🌙 NightConsolidation: starting hourly consolidation pass");
-
-        // Dream Cycle: dedup, decay, flag contradictions
-        let dream = tylluan_kernel::memory::dream_cycle::DreamCycle::new(silva.clone());
-        let dr = dream.run().await;
-        info!("🌙 DreamCycle: merged={} decayed={} contradictions={} exact_groups={} pairs={}/{} nodes graph={}n/{}e",
-            dr.duplicates_merged, dr.nodes_decayed, dr.contradictions_flagged,
-            dr.exact_content_groups, dr.pair_comparisons, dr.nodes_processed,
-            dr.graph_nodes_total, dr.graph_edges_total);
-        server.read().await.notify("dream_cycle_complete", serde_json::json!({
-            "duplicates_merged": dr.duplicates_merged,
-            "nodes_decayed": dr.nodes_decayed,
-            "contradictions_flagged": dr.contradictions_flagged,
-            "salience_pruned": dr.salience_pruned,
-            "graph_nodes_total": dr.graph_nodes_total,
-            "graph_edges_total": dr.graph_edges_total,
-            "ts": chrono::Utc::now().timestamp_millis()
-        }));
-
-        // Ouroboros harvest CERO-LLM: promote repeated audit-log failures into
-        // per-agent experience nodes, so an agent that keeps failing at the same
-        // thing accumulates it as retrievable self-knowledge without ever having
-        // to manually reflect. Runs on THIS existing pulse (no new timer).
-        // >= 3 failures on the same (agent, tool, intent-prefix) within 24h = a
-        // pattern worth remembering; anything less is a transient blip, ignored.
-        let harvested = tylluan_kernel::memory::agent_memory::harvest_failures_from_audit(
-            &silva, "./data/audit.db", 86_400, 3,
-        ).await;
-        if harvested > 0 {
-            info!("🐍 Ouroboros: {} repeated-failure pattern(s) promoted to per-agent experience", harvested);
-        }
-
-        // AutoLink CERO-LLM: connect orphan nodes, detect file refs, link by topic
-        let linker = tylluan_kernel::memory::auto_link::AutoLinker::new(silva.clone());
-        let lr = linker.run(matcher.engine().as_deref()).await;
-        if lr.edges_after > lr.edges_before {
-            info!("🔗 AutoLink: +{} edges (file_ref={} tool_ref={} topic={} orphan={})",
-                lr.edges_after - lr.edges_before,
-                lr.file_ref_edges, lr.tool_ref_edges, lr.topic_edges, lr.orphan_edges);
-        }
-
-        // GraphRAG: identify clusters and generate summaries
-        let rag = tylluan_kernel::memory::graph_rag::GraphRagManager::new(silva.clone());
-        match rag.identify_summarization_targets(3).await {
-            Err(e) => warn!("🧠 GraphRAG identify failed: {}", e),
-            Ok(targets) if targets.is_empty() => info!("🧠 GraphRAG: 0 targets (no components >= 3 nodes)"),
-            Ok(targets) => {
-                info!("🧠 GraphRAG: {} clusters to summarize", targets.len());
-                let mut saved = 0usize;
-                for target in &targets {
-                    let member_ids: Vec<String> = target.nodes.iter().map(|n| n.id.clone()).collect();
-                    let summary: String = target.nodes.iter()
-                        .map(|n| n.content.chars().take(150).collect::<String>())
-                        .collect::<Vec<_>>()
-                        .join("\n---\n");
-                    if summary.len() > 30 {
-                        match rag.save_summary(&target.cluster_id, &summary, member_ids).await {
-                            Ok(_) => saved += 1,
-                            Err(e) => warn!("🧠 GraphRAG save_summary error: {}", e),
-                        }
-                    }
-                }
-                info!("🧠 GraphRAG: saved {} cluster summaries", saved);
-            }
-        }
-
-        // Selective decay: decay nodes with weight < 0.5
-        if let Ok(nodes) = silva.get_nodes_limited(500, 0.01).await {
-            let mut decayed = 0usize;
-            for node in &nodes {
-                if node.weight < 0.5 && node.node_type != "identity" && node.node_type != "agent_summary" {
-                    let _ = silva.decay_node(&node.id, 43200).await;
-                    decayed += 1;
-                }
-            }
-            if decayed > 0 {
-                info!("🌙 NightConsolidation: decayed {} low-weight nodes", decayed);
-            }
-        }
-
-        // Per-agent memory consolidation
-        if let Some(ref ap_mutex) = agent_profiles {
-            let agent_ids: Vec<String> = {
-                let deadline = std::time::Instant::now() + Duration::from_secs(5);
-                loop {
-                    if let Ok(ap) = ap_mutex.try_lock() {
-                        break ap.list_profiles().unwrap_or_default().into_iter().map(|p| p.agent_id).collect();
-                    }
-                    if std::time::Instant::now() > deadline {
-                        warn!("⚠️ NightConsolidation: agent_profiles lock timeout (5s), skipping agent consolidation");
-                        break vec![];
-                    }
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                }
-            };
-            let amm = AgentMemoryManager::new(silva.clone(), 20);
-            for aid in &agent_ids {
-                amm.decay_agent_memories(aid).await;
-                amm.consolidate_if_needed(aid).await;
-            }
-            if !agent_ids.is_empty() {
-                info!("🌙 NightConsolidation: processed {} agents", agent_ids.len());
-            }
-        }
-
-        // Sync agent reputation scores to SilvaDB
-        if let Some(ref ap_mutex) = agent_profiles {
-            let profiles: Vec<_> = {
-                let deadline = std::time::Instant::now() + Duration::from_secs(5);
-                loop {
-                    if let Ok(ap) = ap_mutex.try_lock() {
-                        break ap.list_profiles().unwrap_or_default();
-                    }
-                    if std::time::Instant::now() > deadline {
-                        break vec![];
-                    }
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                }
-            };
-            if !profiles.is_empty() {
-                sync_agent_reputation_to_silva(&silva, &profiles).await;
-            }
-        }
-
-        // Curriculum disuse decay
-        if let Ok(mut learner) = curriculum.lock() {
-            match learner.apply_disuse_decay() {
-                Ok(n) if n > 0 => info!("🌙 NightConsolidation: decayed {} stale curriculum entries", n),
-                Err(e) => warn!("⚠️ Curriculum decay failed: {}", e),
-                _ => {}
-            }
-        }
-
-        // Auto-purge contaminated lesson nodes (weight < 0.15)
-        if let Ok(count) = silva.purge_deprecated_lessons().await
-            && count > 0 {
-                info!("🧹 Purged {} contaminated lesson nodes", count);
-            }
-
-        // IdleLab: hill-climb retrieval params during idle CPU cycles
-        {
-            use tylluan_kernel::memory::idle_lab::IdleLab;
-            let idle = IdleLab::new(silva.clone(), &data_dir);
-            let rerank_ref = server.read().await.reranker.clone();
-            idle.run_experiments(matcher.engine().as_deref(), rerank_ref.as_deref(), 9).await;
-        }
-
-        info!("🌙 NightConsolidation: pass complete");
+        orchestrator.run_all(&ctx).await;
     }
 }
 
