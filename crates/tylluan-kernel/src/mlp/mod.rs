@@ -95,13 +95,11 @@ fn cargo_workspace_root() -> Option<PathBuf> {
     let mut current = Some(manifest);
     while let Some(dir) = current {
         let cargo_toml = dir.join("Cargo.toml");
-        if cargo_toml.exists() {
-            if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
-                if content.contains("[workspace]") {
-                    return Some(dir.to_path_buf());
-                }
+        if cargo_toml.exists()
+            && let Ok(content) = std::fs::read_to_string(&cargo_toml)
+            && content.contains("[workspace]") {
+                return Some(dir.to_path_buf());
             }
-        }
         current = dir.parent();
     }
     None
