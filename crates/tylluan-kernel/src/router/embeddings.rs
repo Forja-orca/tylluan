@@ -235,6 +235,19 @@ fn build_execution_providers(device: &InferenceDevice) -> Vec<ExecutionProviderD
                 vec![]
             }
         }
+        InferenceDevice::Coreml => {
+            #[cfg(target_os = "macos")]
+            {
+                use ort::execution_providers::CoreMLExecutionProvider;
+                info!("🍎 Inference device: CoreML (Apple GPU/Neural Engine)");
+                vec![CoreMLExecutionProvider::default().build()]
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                warn!("⚠️  CoreML requested but not on macOS — falling back to CPU");
+                vec![]
+            }
+        }
     }
 }
 

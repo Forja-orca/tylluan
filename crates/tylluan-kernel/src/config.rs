@@ -604,6 +604,7 @@ pub enum InferenceDevice {
     Cpu,
     Directml,
     Cuda,
+    Coreml,
 }
 
 
