@@ -38,20 +38,30 @@ pub(crate) async fn resolve_guild_name(
 
         // M20: Proactive Cascade check — skip if this is already a coordinator dispatch
         let is_coordinator_worker = agent_id.is_some_and(|a| a.starts_with("coordinator"));
-        if is_coordinator_worker {
-            tracing::debug!("🔁 Coordinator worker dispatch — skipping proactive cascade");
-        } else {
-        let c_score = crate::router::complexity::score_complexity(&intent_for_matching);
-        let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
-        if c_score >= 0.6 && registry_has_coordinator {
-            info!("⚡ Proactive Cascade (score={:.2}): '{}' → coordinator", c_score, intent_for_matching);
-            trace.push(format!("proactive_cascade=coordinator score={c_score:.2}"));
-            return Ok(("coordinator".to_string(), trace));
-        }
-        }
 
         let query_embedding = server.matcher.engine()
             .and_then(|engine| engine.embed(&intent_for_matching).ok());
+        let c_score = crate::router::complexity::score_complexity(&intent_for_matching);
+        let mlp_features = crate::router::complexity::extract_mlp_features(&intent_for_matching);
+        let mlp_feats_f32: Vec<f32> = mlp_features.iter().map(|&v| v as f32).collect();
+        let mlp_score = server.mlp_scorer.as_ref()
+            .and_then(|s| s.score(&mlp_feats_f32));
+        let blended = crate::router::complexity::blend_with_mlp(c_score, mlp_score);
+        // Record experience for MLP training data (non-blocking, best-effort)
+        if let Some(ref replay) = server.mlp_replay {
+            if let Some(ref emb) = query_embedding {
+                if let Ok(mut buf) = replay.lock() {
+                    buf.record(&intent_for_matching, emb.clone(), "proactive_cascade", blended as f32, false, agent_id, 0);
+                }
+            }
+        }
+
+        let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
+        if !is_coordinator_worker && blended >= 0.6 && registry_has_coordinator {
+            info!("⚡ Proactive Cascade (score={:.2}, mlp={:?}): '{}' → coordinator", blended, mlp_score, intent_for_matching);
+            trace.push(format!("proactive_cascade=coordinator score={blended:.2}"));
+            return Ok(("coordinator".to_string(), trace));
+        }
 
         // Build agent context from role identifier if present
         let ctx = agent_id.map(GuildContext::from_agent_id);

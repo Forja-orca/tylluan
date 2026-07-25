@@ -26,6 +26,8 @@ use crate::transport::http::api_v1::api_journal::JournalDb;
 use crate::doctor::Doctor;
 use crate::hormones::HormoneSystem;
 use crate::memory::agent_profile::AgentProfileStore;
+use crate::mlp::MlpScorer;
+use crate::mlp::replay::ReplayBuffer;
 
 use rmcp::{
     Error as McpError,
@@ -36,6 +38,7 @@ use rmcp::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::sync::Mutex;
+use std::path::Path;
 
 use std::collections::{VecDeque};
 use crate::transport::server::handler_recall::{RecallCache, HotContext};
@@ -71,6 +74,8 @@ pub struct TylluanServer {
     pub journal: Option<Arc<JournalDb>>,
     pub expose_guild_tools: bool,
     pub jobs: Option<Arc<crate::memory::jobs::JobQueue>>,
+    pub mlp_scorer: Option<Arc<MlpScorer>>,
+    pub mlp_replay: Option<Arc<std::sync::Mutex<ReplayBuffer>>>,
 }
 
 impl TylluanServer {
@@ -123,7 +128,14 @@ impl TylluanServer {
             journal: None,
             expose_guild_tools: false,
             jobs: None,
+            mlp_scorer: None,
+            mlp_replay: None,
         }
+    }
+
+    pub fn set_mlp(&mut self, scorer: MlpScorer, data_dir: &Path) {
+        self.mlp_scorer = Some(Arc::new(scorer));
+        self.mlp_replay = Some(Arc::new(std::sync::Mutex::new(ReplayBuffer::new(data_dir))));
     }
 
     pub fn set_jobs(&mut self, jobs: Arc<crate::memory::jobs::JobQueue>) {
