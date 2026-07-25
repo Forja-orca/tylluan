@@ -98,23 +98,20 @@ pub fn resolve_acl_role_inner(
     };
 
     // Step 1: Explicit token mapping always wins (token is in acl.tokens)
-    if let Some(tok) = token {
-        if acl.tokens.contains_key(tok) {
+    if let Some(tok) = token
+        && acl.tokens.contains_key(tok) {
             return base_role;
         }
-    }
 
     // Step 2: If we hit default_role AND have an agent_id, check the contract
-    if base_role == acl.default_role {
-        if let Some(aid) = agent_id {
+    if base_role == acl.default_role
+        && let Some(aid) = agent_id {
             let contract_role = contract.get_role(aid);
-            if let Some(declared_role) = contract_role {
-                if acl.roles.contains_key(declared_role) || declared_role == "admin" {
+            if let Some(declared_role) = contract_role
+                && (acl.roles.contains_key(declared_role) || declared_role == "admin") {
                     return declared_role.to_string();
                 }
-            }
         }
-    }
 
     base_role
 }
