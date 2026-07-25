@@ -328,4 +328,15 @@ mod tests {
         assert_eq!(vector.len(), 384, "MiniLM should produce 384-dim vectors");
         assert_eq!(engine.dimension(), 384);
     }
+
+    // CONTRACT-01 invariant: BGE-M3 is ALWAYS 1024 dimensions
+    #[test]
+    fn contract_01_bge_m3_1024_dimensions() {
+        assert_eq!(resolve_dimension("bge-m3"), 1024);
+        assert_eq!(resolve_dimension("BGE-M3"), 1024);
+        assert_eq!(resolve_dimension("bge"), 1024);
+        assert_eq!(resolve_dimension("BGE"), 1024);
+        assert_eq!(resolve_dimension(""), 0);
+        assert_eq!(resolve_dimension("none"), 0);
+    }
 }

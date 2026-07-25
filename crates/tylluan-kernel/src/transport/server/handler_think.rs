@@ -365,6 +365,111 @@ pub async fn handle_tylluan_think(
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::agent_memory::AgentMemoryManager;
+    use crate::memory::agent_nodes::AgentNodeRouter;
+    use crate::memory::hybrid::HybridMemory;
+    use crate::memory::mailbox::Mailbox;
+    use crate::memory::silva::SilvaDB;
+    use crate::registry::guild_process::GuildRegistry;
+    use crate::router::catalog::builtin_catalog;
+    use crate::router::matcher::GuildMatcher;
+    use crate::transport::server::TylluanServer;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::{broadcast, RwLock};
+
+    async fn test_server() -> TylluanServer {
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
+        ));
+        TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn think_empty_query_returns_error() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("".to_string()));
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        assert!(result.is_error.unwrap_or(false), "empty query must return error");
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("requires a non-empty"), "error must mention empty query");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn think_empty_db_returns_no_knowledge() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("anything".to_string()));
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false), "empty db is not error");
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("No prior knowledge"), "must say no prior knowledge: {text:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn think_filters_experience_nodes() {
+        let server = test_server().await;
+        // Experience nodes are excluded from think output
+        server.silva.upsert_node("e1", "experience", "experience data here", r#"{"agent_id":"test-agent"}"#).await.unwrap();
+        server.silva.upsert_node("c1", "concept", "a real concept", "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("real".to_string()));
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        // Experience is filtered at line 35 (nodes.retain)
+        // concept should appear; experience should not
+        assert!(text.text.contains("real concept"), "concept must appear: {text:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn think_shows_ouroboros_experiences_for_agent() {
+        let amm = Arc::new(AgentMemoryManager::new(Arc::new(SilvaDB::in_memory().await.unwrap()), 20));
+        amm.record_experience("test-agent", "tried git merge without review", "broke main branch", "failed", "always create PR first").await;
+
+        let mut server = test_server().await;
+        server.agent_memory = Some(amm);
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("git merge".to_string()));
+        args.insert("agent_id".to_string(), serde_json::Value::String("test-agent".to_string()));
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("experiencia previa"), "must show previous experience: {text:?}");
+        assert!(text.text.contains("git merge"), "must contain the recorded experience content");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn think_chain_default_is_false() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("test".to_string()));
+        // chain not set — should default to false
+        let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false));
+    }
+}
+
 fn find_connected_components(node_ids: &[String], edges: &[(String, String)]) -> Vec<Vec<String>> {
     let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
     for id in node_ids {
