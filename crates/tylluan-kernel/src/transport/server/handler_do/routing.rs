@@ -48,13 +48,11 @@ pub(crate) async fn resolve_guild_name(
             .and_then(|s| s.score(&mlp_feats_f32));
         let blended = crate::router::complexity::blend_with_mlp(c_score, mlp_score);
         // Record experience for MLP training data (non-blocking, best-effort)
-        if let Some(ref replay) = server.mlp_replay {
-            if let Some(ref emb) = query_embedding {
-                if let Ok(mut buf) = replay.lock() {
-                    buf.record(&intent_for_matching, emb.clone(), "proactive_cascade", blended as f32, false, agent_id, 0);
-                }
+        if let Some(ref replay) = server.mlp_replay
+            && let Some(ref emb) = query_embedding
+            && let Ok(mut buf) = replay.lock() {
+                buf.record(&intent_for_matching, emb.clone(), "proactive_cascade", blended as f32, false, agent_id, 0);
             }
-        }
 
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
         if !is_coordinator_worker && blended >= 0.6 && registry_has_coordinator {
