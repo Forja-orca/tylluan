@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { NexusBridge } from '../lib/nexus-bridge';
-import { Save, AlertTriangle, RefreshCw, Cpu, Database, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Save, AlertTriangle, RefreshCw, Cpu, Database, Image as ImageIcon, Sparkles, Coffee, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { StatusPill } from './ui/StatusPill';
 
 interface Props {
   bridge: NexusBridge | null;
@@ -210,6 +211,69 @@ export function ModelConfigPanel({ bridge }: Props) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Hardware Tiers (models.toml) */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+            <Coffee className="w-4 h-4 text-amber-400" /> Embedded Models Hardware Tiers (`models.toml`)
+          </h3>
+          <StatusPill status="online" label="Manifiesto V1.0" />
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          Tylluan selecciona el modelo ONNX adecuado según la capacidad de tu hardware. Todos los modelos reutilizan el runtime `ort` de BGE-M3.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-950 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold font-mono text-amber-400 uppercase">☕ Toaster</span>
+                <span className="text-[10px] bg-amber-500/10 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/20 font-mono">Edge / RPi4</span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">DistilBERT & SmolLM2-360M</p>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Optimizado para hardware modesto. Memoria dedicada &lt;200 MB. Latencia sub-20ms en CPU.
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono">
+              models.toml: tier = "toaster"
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-emerald-500/30 p-3 rounded-lg flex flex-col justify-between ring-1 ring-emerald-500/20">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold font-mono text-emerald-400 uppercase">⚖️ Balanced</span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">Recomendado</span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">Qwen3-0.6B & Qwen3-1.7B</p>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Equilibrio óptimo para laptops y workstations modernas. Razonamiento denso y síntesis episódica.
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-emerald-400 font-mono">
+              models.toml: tier = "balanced" (default)
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-purple-500/30 p-3 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold font-mono text-purple-400 uppercase">⚡ Tower</span>
+                <span className="text-[10px] bg-purple-500/10 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/20 font-mono">GPU / High RAM</span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">Modelos Extendidos (&gt;1.5B)</p>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Para torres de cómputo con aceleración GPU (CUDA/DirectML) y &gt;16 GB RAM. Inferencia ultra-rápida.
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono">
+              models.toml: tier = "tower"
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Embedding Model Edit */}
