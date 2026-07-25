@@ -36,7 +36,7 @@ async fn adv_memory_poisoning_recall_returns_inert() {
         .unwrap();
     assert!(!passwd_results.is_empty(), "must find payload 3 (/etc/passwd)");
     assert!(passwd_results.iter().any(|(n, _)| n.content.contains("/etc/passwd")));
-    assert!(results.iter().all(|(n, _)| n.content.len() > 0));
+    assert!(results.iter().all(|(n, _)| !n.content.is_empty()));
 }
 
 // ── Vector 2: Cross-Scope Memory Leakage ──────────────────────────
@@ -129,8 +129,7 @@ async fn adv_graph_flood_dos_ppr_completes_under_budget() {
     assert!(result.is_ok(), "PPR must not crash on dense graph: {:?}", result.err());
     assert!(
         elapsed.as_millis() < 200,
-        "PPR on 200-node cyclic graph exceeded 200ms budget: {:?}",
-        elapsed
+        "PPR on 200-node cyclic graph exceeded 200ms budget: {elapsed:?}"
     );
 }
 

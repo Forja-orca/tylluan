@@ -6,6 +6,7 @@ mod decay_phase;
 mod agent_phase;
 mod curriculum_phase;
 mod idlelab_phase;
+mod feedback_signal_phase;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,6 +29,7 @@ pub use decay_phase::DecayPhase;
 pub use agent_phase::AgentPhase;
 pub use curriculum_phase::CurriculumPhase;
 pub use idlelab_phase::IdleLabPhase;
+pub use feedback_signal_phase::FeedbackSignalPhase;
 
 #[derive(Clone)]
 pub struct PhaseContext {

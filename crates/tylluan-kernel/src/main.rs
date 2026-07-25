@@ -1606,7 +1606,7 @@ async fn run_night_consolidation_loop(
     use tylluan_kernel::memory::night::{
         PhaseOrchestrator, PhaseContext,
         DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
-        DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase,
+        DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
     };
 
     let orchestrator = PhaseOrchestrator::new(vec![
@@ -1618,6 +1618,7 @@ async fn run_night_consolidation_loop(
         Box::new(AgentPhase),
         Box::new(CurriculumPhase),
         Box::new(IdleLabPhase),
+        Box::new(FeedbackSignalPhase),
     ]);
 
     let ctx = PhaseContext {

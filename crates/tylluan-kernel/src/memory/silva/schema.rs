@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 17;
+            const SCHEMA_VERSION: i32 = 18;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -185,6 +185,27 @@ impl super::SilvaDB {
                     );"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added a2a_tasks table (v17)");
+            }
+            if schema_version < 18 {
+                // ADR-011 §Signal Loop: implicit-usefulness feedback for recall results.
+                // useful: 0=unknown (still in resolution window), 1=useful, -1=not_useful.
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS recall_feedback (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        memory_id     TEXT NOT NULL,
+                        agent_id      TEXT NOT NULL,
+                        task_hash     TEXT NOT NULL,
+                        query_text    TEXT NOT NULL,
+                        rank_position INTEGER NOT NULL,
+                        useful        INTEGER NOT NULL DEFAULT 0,
+                        accessed_at   TEXT NOT NULL DEFAULT (datetime('now')),
+                        resolved_at   TEXT,
+                        UNIQUE(memory_id, task_hash)
+                    );
+                     CREATE INDEX IF NOT EXISTS idx_recall_feedback_agent ON recall_feedback(agent_id);
+                     CREATE INDEX IF NOT EXISTS idx_recall_feedback_useful ON recall_feedback(useful);"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added recall_feedback table (v18, ADR-011)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

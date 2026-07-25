@@ -10,6 +10,8 @@ pub mod rate_limiter;
 pub mod circuit_breaker;
 pub mod grants;
 pub mod hooks;
+pub mod coherence_gate;
+pub mod poison_patterns;
 
 #[cfg(test)]
 mod integration_tests;
