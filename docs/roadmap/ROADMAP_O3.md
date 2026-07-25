@@ -1,28 +1,29 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-06 · v0.11.0 (HEAD `2dd2b3e`) — M18 P0-P2 done, P3 pendiente
+> **Última actualización:** 2026-07-25 · v0.13.0 (HEAD `97866f9`) — M22/M23-P1/M26/M27/M28/M29/M34-M37 cerrados, ADR-011 implementado y verificado E2E, ADR-010 sigue PENDIENTE
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
 
-## Estado actual — v0.11.0 ✅
+## Estado actual — v0.13.0 ✅
 
-M15-M17 cerrados. M18 P0-P2 entregados, P3 pendiente (re-benchmark ≥30%). M20 Complexity Cascade integrado. 349 tests. Puertos: :3030-3032.
+M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M37 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue en estado PENDIENTE — solo comparativa documentada, benchmark real no ejecutado. 575 tests (502 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto: :3030 (Tylluan) — nunca confundir con ForjaMCPo3 :3030 en otro repo.
 
-Lo que ya tenemos (verificado 2026-07-06):
+Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
-- 5 sovereign tools MCP (tylluan_do/recall/remember/think/graph)
+- 5 sovereign tools MCP (tylluan_do/recall/remember/think/graph) — CONTRACT-01 intacto
 - BGE-M3 hybrid search: R@5 82% LongMemEval-S, R@10 90%, latency p50 12.9ms
 - M20 Complexity Cascade: score ≥0.6 → coordinator proactivo, ≥0.4 → fallback reactivo
-- M18 TRINITY Coordinator: Thinker/Worker/Verifier + synthesis fallback (P3 pendiente)
-- Embedding LRU cache 512 entries en router/embeddings.rs (routing) — silva/search.rs NO cachea
+- M18 TRINITY Coordinator: Thinker/Worker/Verifier + synthesis fallback — **CERRADO**, re-benchmark +62.0%/+57.7% supera el umbral 30%
+- NightConsolidation: 10 fases corriendo en paralelo (semáforo dimensionado por `available_parallelism()`, no secuencial) — Dream, Ouroboros, AutoLink, GraphRAG, Decay, Agent, Curriculum, IdleLab, FeedbackSignal (ADR-011), LightRerankerTrain (ADR-011)
+- ADR-011 Signal Loop: `recall_feedback` (schema v18) + Coherence Gate 3 capas en `tylluan_recall` (ambos caminos, incl. cache-hit) + LightReranker (ONNX y pesos nativos) — Fase 3-4 en scaffold, cutover real bloqueado por datos (≥5.000 filas resueltas), no por diseño
 - Node pruning: DreamCycle + decay `prune_by_salience(threshold)` operativo
-- Federation P2P completa: DHT Kademlia + Gossip + Noise XK + TCP dispatch (M14-F Phase 3 pendiente)
-- Security: 30 automated tests, rate limiter, circuit breaker, guard
-- `tylluan-cli start/stop/status/logs/connect/download-models/install`
-- CI: build + test + deny + security audit + Python lint + ARM64 portability + Docker smoke
-- Dashboard React con branding propio de Tylluan, build OK
+- Federation P2P completa: DHT Kademlia + Gossip + Noise XK + TCP dispatch — M14-F Phase 3 **cerrado** (test DST real)
+- Security: capabilities como allowlist estructurada (M30), grants escalados (M30-P3), Coherence Gate (ADR-011), 30+ tests de seguridad
+- `tylluan-cli start/stop/status/logs/connect/download-models/install` + `tylluan doctor`/`update` (M19)
+- CI: build + test + clippy -D warnings + deny + security audit + Python lint + ARM64 portability + Docker smoke
+- Dashboard React: Canvas bidireccional (M25), tldraw whiteboard (M26), mesh map + badges + dry-run (M29), Scopes panel (M37-P2)
 
 ---
 
@@ -92,7 +93,111 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M21 — Performance Foundation (v0.15.0) [NUEVO — antes de DX]
+### M22 — Junior Onboarding (v0.13.0) ✅ CERRADO
+
+**Norte:** Que un usuario nuevo ("junior", sin contexto del proyecto) pueda instalar y arrancar Tylluan sin tropezar con deuda heredada — puerto inconsistente, versión de Rust desactualizada en docs, artefactos GUI muertos en el repo.
+
+**Verificado por commits reales** (no hay tabla de fases detallada reconstruida — ver `git log --grep=m22`):
+- `68d1bc0` — cierre de todos los hallazgos BLOQUEA de instalación reportados en pruebas reales de onboarding.
+- `f475462` — unificación de puerto 4000→3030, Rust toolchain 1.85→1.88 en docs, limpieza de docs del dashboard.
+- `504339d` — limpieza de estructura raíz del repositorio.
+
+**Nota de numeración:** este M22 (onboarding) colisionó con un M22 distinto (hardening de seguridad: SQLCipher/rate-limit/capabilities) que ya existía en versiones previas de este documento. La colisión se resolvió (`e0b408a`) renombrando el de seguridad a **M27** — ver esa sección más abajo. Este M22 es exclusivamente onboarding.
+
+**Criterio de cierre:** instalación en máquina limpia sin hallazgos BLOQUEA. ✅ Cerrado, verificado por los commits de fix listados arriba.
+
+---
+
+### M23-P1 — "El Primer Minuto": Auto-start + Empty State (v0.13.0) ✅ CERRADO
+
+**Norte:** El dashboard no debe mostrarse vacío y mudo la primera vez — debe guiar al usuario en su primer minuto real de uso.
+
+- `910f15f` — auto-descarga de modelos + auto-arranque del kernel con poll de `/health`.
+- `bad7015` — widget de bienvenida (empty state) en el dashboard cuando no hay memorias/guilds cargadas.
+
+**Criterio de cierre:** primera consulta MCP posible en <1 minuto desde la instalación, sin pantalla vacía sin contexto. ✅ Cerrado.
+
+---
+
+### M26 — Canvas Sprints 1+2: tldraw + Consenso (v0.13.0) ✅ CERRADO (parcial respecto a M25)
+
+**Norte:** El Canvas Event Bridge de M25 dio el bridge bidireccional; M26 añade una superficie de trabajo real (whiteboard) en vez de solo HTML/JS renderizado.
+
+- `50da092` (m26-s2) — integración de tldraw como whiteboard interactivo en el workspace de Coloquio.
+- `8453cc0` — persistencia en tiempo real del whiteboard tldraw (P2).
+- `bbd7385` — corrección de una línea de STATUS.md que contradecía el propio cierre de M26 Sprint 2 (tldraw marcado "pendiente" cuando ya estaba cerrado).
+
+**Criterio de cierre:** varios agentes pueden co-editar un whiteboard tldraw en el mismo canal de Coloquio con persistencia real. ✅ Cerrado para Sprints 1-2; M25-P1 (recursos locales seguros en sandbox) sigue 🟡 parcial, sin relación directa con tldraw.
+
+---
+
+### M34 — Trust Gate + Sleep-Time Compute (v0.13.0) ✅ CERRADO — cierra J-1 (parcial) y J-2 de M33
+
+**Norte:** Cerrar dos ítems críticos del backlog M33: defensa de procedencia contra memoria no confiable (J-1, OWASP ASI06) y consolidación proactiva en idle en vez de solo decaimiento pasivo (J-2, patrón "sleep-time compute" de Letta).
+
+- `998d1bc` (M34-P0) — procedencia de nodo (`provenance`) + trust gate en tiempo de lectura para contexto de origen federado.
+- `c93b3c6` (M34-P0, fix real) — la procedencia estaba hardcodeada vacía en **21 de 22** puntos de lectura de `GraphNode` — solo uno la propagaba de verdad. Bug real encontrado durante la implementación, no solo la feature planeada.
+- `e9b0a4d` — indicador visual de procedencia en el Knowledge Graph del dashboard.
+- `7e2898c` (M34-P1) — reescritura activa en `DreamCycle` (sleep-time compute real, no solo decaimiento pasivo).
+
+**Nota de alcance:** J-1 (defensa de memory poisoning) queda **parcialmente** cerrado por el trust gate de procedencia — la pieza de coherencia semántica (¿el contenido en sí es coherente, no solo su origen?) llegó después, en ADR-011 (Coherence Gate, esta sesión, 2026-07-25). Las cifras de tasa de ataque MINJA citadas en el backlog original de M33 siguen sin verificar contra el paper primario — no citar como dato duro.
+
+**Criterio de cierre:** nodos de origen federado muestran su procedencia real en cada lectura (no solo en un punto), y NightConsolidation reescribe memoria activamente, no solo la decae. ✅ Cerrado.
+
+---
+
+### M35 — Memoria Bi-temporal (v0.13.0) ✅ CERRADO — cierra J-4 de M33
+
+**Norte:** Modelar cuándo un hecho fue verdadero, no solo cuándo se registró (patrón Zep/Graphiti).
+
+- `4342b49` — `valid_from` bi-temporal + supersesión para aristas en contradicción.
+
+**Criterio de cierre:** una arista puede marcarse como superseded sin borrar la historia de validez anterior. ✅ Cerrado.
+
+---
+
+### M36 — Auto-corrección Explícita vía `@correct:` (v0.13.0) ✅ CERRADO — cierra J-9 de M33
+
+**Norte:** Que un agente pueda corregir activamente su propia memoria en vez de solo acumular ruido silencioso.
+
+- `a5ab3f3` — intent `@correct:` permite supersesión explícita de un nodo por otro, con las mismas protecciones que ya existían (nodos protegidos, identidad, ya-superseded no se puede volver a superseder) — ver tests `test_correct_rejects_*` en `handler_do`.
+
+**Criterio de cierre:** un agente puede corregir un hecho propio marcándolo explícitamente obsoleto y vinculándolo al reemplazo, sin borrar el nodo original. ✅ Cerrado.
+
+---
+
+### M37 — OTel GenAI + Scopes Panel (v0.13.0) ✅ CERRADO — cierra J-5 y J-8 de M33
+
+**Norte:** J-5 (convenciones semánticas OTel GenAI para spans de LLM/retrieval/tool, esquema CNCF vendor-neutral) y J-8 (scopes jerárquicos multi-tenant user/session/agent, patrón Mem0) del backlog M33.
+
+- `51b24f1` (M37-P0) — columna `owner_scope` + query por prefijo, base de backend para J-8.
+- `1664f9e` (M37-P1 + M37-P2) — spans OTel GenAI reales (J-5) + panel de Scopes en el dashboard (J-8, primera versión).
+- `68d1cbf` (M37-P3) — `GET /api/v1/graph/scope`, cierra un hueco donde el panel de Scopes simulaba datos en vez de consultarlos de verdad.
+- `5aad5ab` — limpieza de hallazgos de auditoría de Antigravity sobre el dashboard de M37.
+
+**Criterio de cierre:** spans OTel GenAI reales exportables + un usuario puede consultar nodos por prefijo jerárquico de scope desde el dashboard, con datos reales, no simulados. ✅ Cerrado.
+
+---
+
+### ADR-010 — SLM Embebido: T5-Small vs SmolLM2 (🟡 PENDIENTE)
+
+Ver [ADR-010](../reference/adr/ADR010_embedded_sllm_t5_vs_smollm2.md). Comparativa arquitectónica documentada (T5 encoder-decoder vs SmolLM2 decoder-only) para 3 puntos de inserción (complejidad de routing, reconciliación de contradicciones, resumen episódico). §6 añade un eje ortogonal verificado contra fuente primaria (arXiv:2512.04695): un coordinador entrenado vía sep-CMA-ES (TRINITY/Sakana Fugu) sobre `guilds/core/coordinator.py`, independiente de la elección T5/SmolLM2 y más barato de prototipar (`cmaes`/`SepCMA`, ancla de coste ~$20-30 vía réplica independiente `tinyrouter`). **Ningún benchmark real ejecutado todavía** — sigue siendo comparativa de papel, no medición. No bloquea nada del roadmap actual; es investigación abierta para cuando el equipo decida priorizarla.
+
+---
+
+### ADR-011 — Signal Loop + Coherence Gate + LightReranker (🟢 Fase 1-3 CERRADAS, 🟡 Fase 4-5 bloqueadas por datos)
+
+Ver [ADR-011](../reference/adr/ADR011_learned_reranker_coherence_gate.md). Corrección de fondo de José durante esta sesión: un reranker aprendido no es el primer paso posible — sin señal de uso real no hay nada que entrenar. El ADR formaliza el orden correcto:
+
+- **Signal Loop** (`memory/silva/recall_feedback.rs`, schema v18): cada `tylluan_recall` registra qué memorias devolvió; `FeedbackSignalPhase` (NightConsolidation) resuelve útil/no-útil contra `guild_audit_log` por solapamiento léxico. **Verificado end-to-end contra el kernel real** por Antigravity (2026-07-25): migración v17→v18 automática al reiniciar, `recall_feedback` poblándose en vivo con datos reales de una sesión MCP real, no solo en tests.
+- **Coherence Gate** (`security/coherence_gate.rs`): 3 capas de defensa en la salida de `tylluan_recall` (patrones de inyección conocidos → eliminación silenciosa; procedencia no confiable → penalización; deriva semántica query-contenido vía embeddings ya almacenados → penalización). Cierra el "segundo salto" de envenenamiento de memoria (cuando un futuro LLM generativo post-ADR-010 consuma memoria recuperada como contexto) — documentado con literatura 2026 verificada paper por paper (ShadowMerge arXiv:2605.09033, eTAMP arXiv:2604.02623, Sleeper Memory Poisoning arXiv:2605.15338, MemLineage arXiv:2605.14421).
+- **LightReranker** (`router/light_reranker.rs` + `memory/night/light_reranker_train_phase.rs`): FFN 4→16→1, dos backends (ONNX y pesos nativos JSON), entrenable en CPU cada noche. **Fase 3 (entrenador) implementada y probada** — deliberadamente **NO** cortada sobre producción: `LightRerankerTrainPhase` rehúsa entrenar bajo 5.000 filas resueltas en `recall_feedback` (mismo criterio que el script Python equivalente).
+
+**Criterio de cierre restante:** ≥5.000 filas resueltas + mejora medida en modo sombra antes de que el reranker reemplace RRF puro en producción — es una cuestión de tiempo de uso real acumulado, no de código pendiente.
+
+---
+
+### M21 — Performance Foundation (v0.15.0) ✅ CERRADO (P0-P4 todas cerradas, nunca marcado en bloque)
 
 **Norte:** Eliminar los bottlenecks de rendimiento que afectan la experiencia real de usuario. El embedding LRU cubre el routing pero no el recall. El coordinator es serial. Las guilds tienen cold start de 1-2s.
 
@@ -133,7 +238,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M29 — Dashboard UX 2.0 (v0.16.1) [NUEVO — en paralelo con M19]
+### M29 — Dashboard UX 2.0 (v0.16.1) ✅ CERRADO
 
 **Norte:** El dashboard ya tiene KnowledgeGraphTab, GuildInspector, FederationPanel y HippocampusGraph. Falta conectarlos operativamente: P2P como mapa visual, MCP config exportable con 1 click, dry-run mode, y `tylluan-cli new guild` para bajar la barrera de contribución.
 
@@ -153,7 +258,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 ---
 
-### M27 — Security Hardening (v0.17.0) [NUEVO]
+### M27 — Security Hardening (v0.17.0) ✅ CERRADO (numeración reconciliada — este era el M22 original de seguridad, no confundir con M22 Junior Onboarding arriba)
 
 **Norte:** Eliminar los gaps de seguridad críticos antes de cualquier uso en equipo o publicación de benchmarks. Actualmente SQLCipher es opt-in y no hay capability system para guilds.
 
@@ -206,41 +311,42 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 ## Hoja de ruta visual
 
 ```
-v0.11.0 ── HEAD 2dd2b3e ──────────────────────────────────────── ACTUAL
-   │        M15✅ M16✅ M17✅ M18(P3 pendiente) M20✅
+v0.13.0 ── HEAD 97866f9 ──────────────────────────────────────── ACTUAL
+   │        M15✅ M16✅ M17✅ M18✅ M19✅ M20✅ M22✅ M23-P1✅
+   │        M26✅ M27✅ M28✅ M29✅ M34✅ M35✅ M36✅ M37✅
+   │        M14-F Phase 3✅ · ADR-011 Fase 1-3✅ (Fase 4-5 bloqueada por datos)
    │
    ▼
-M18-P3 ─── Coordinator Parallelism + Re-benchmark ─────── v0.14.0
-   │        ThreadPoolExecutor · delta ≥ 30% · cierra M18
+ADR-010 ── SLM embebido (T5 vs SmolLM2) + coordinador sep-CMA-ES ── 🟡 PENDIENTE
+   │        comparativa documentada, benchmark real no ejecutado — sin fecha
    │
    ▼
-M21 ─── Performance Foundation ─────────────────────────── v0.15.0
-   │    recall embedding cache · SQLite tuning · guild warm pool
+M21 ─── Performance Foundation ─────────────────────────── v0.15.0 (parcial, ver tabla)
+   │    recall embedding cache✅ · SQLite tuning✅ · warm pool✅ · P2P DST✅
    │
    ▼
-M19 ─── DX 10/10 ───────────────────────────────────────── v0.13.0 ✅ CERRADO
-    │    tylluan cmd · doctor · instant start · update          (P0-P4)
-    │
-    ▼
-M29 ─── Dashboard UX ───────────────────────────────────── v0.13.0 ✅ CERRADO
-    │    MCP 1-click · mesh map · guild scaffold · dry-run
+M25 ─── Canvas Event Bridge ─────────────────────────────── v0.19.0 (P0✅, P1 🟡 parcial)
    │
    ▼
-M27 ─── Security Hardening ─────────────────────────────── v0.17.0
-   │    SQLCipher default · input sanitization · capabilities
+M30 ─── Sandbox Configurable ────────────────────────────── v0.20.0 (P0-P3✅, P4⬜)
    │
    ▼
-M28 ─── Credibilidad Pública ────────────────────────────── v0.13.0 ✅ CERRADO
-   │    benchmarks comparativos · /health granular · brew install
+M31 ─── Tylluan CLI Harness SOTA ────────────────────────── v0.21.0 (P0✅, P1-P7⬜)
+   │
+   ▼
+M32 ─── Cliente MCP Bidireccional Real ─────────────────── v0.20.0 ✅ CERRADO
+   │
+   ▼
+M33 ─── Memoria de Agentes 2026 (backlog) ──────────────── sin versión fija
+   │    J-1 parcial(M34) · J-2✅(M34) · J-4✅(M35) · J-5✅(M37) · J-8✅(M37) · J-9✅(M36)
+   │    J-3 J-6 J-7 J-10 siguen abiertos, sin fecha
    ▼
 v1.0.0
 ```
 
-M14-F Phase 3 (P2P Kernel Wiring) ya está cerrado — retirado del flujo pendiente.
+M14-F Phase 3 (P2P Kernel Wiring) cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%). M22/M23-P1/M26/M27/M28/M29/M34-M37 cerrados esta sesión de reconciliación (2026-07-25) — estaban implementados y verificados en STATUS.md pero nunca reflejados aquí.
 
-M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo, luego M27 Security Hardening.
-
-**M19 y M29 son paralelos**: CLI (Deep) + Dashboard (Antigravity) — no se bloquean entre sí.
+**Próximo paso real, no reconciliación de docs:** M21 tiene fases sueltas ya cerradas individualmente pero la sección nunca se marcó CERRADA en bloque — revisar si el criterio de cierre completo ya se cumple. M30-P4 (CLI/dashboard como frente de la política de sandbox) y M31-P1 a P7 (permisos por agent_id, plan mode, resume cross-cliente, repo-map, skills, subagentes background, doctor --fix) son los bloques grandes de trabajo real todavía sin empezar. ADR-011's Fase 4-5 (cutover del LightReranker) no es "trabajo pendiente" en el sentido de código — es tiempo de uso real acumulando `recall_feedback`.
 
 ---
 
@@ -288,7 +394,7 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 
 | # | Hipótesis | Paper/fuente | Estado |
 |---|-----------|-------------|--------|
-| I-1 | Dynamic Agent Pool: GuildMatcher aprende selección de modelos vía RL | Conductor paper (arXiv:2512.04388) | Post-M21 |
+| I-1 | Dynamic Agent Pool: GuildMatcher aprende selección de modelos vía RL | Conductor paper (arXiv:2512.04388) | Post-M21 — **relacionado con ADR-010 §6** (coordinador entrenado vía sep-CMA-ES sobre `coordinator.py`, mismo espíritu que este ítem, investigado 2026-07-25 pero no prototipado) |
 | I-2 | Topologías dinámicas de guilds: grafos de comunicación entre guilds | Conductor paper | Post-M19 |
 | I-3 | Mesh global (NAT traversal público, DHT cross-instance) | ADR pendiente | Post-v1.0 |
 | I-4 | Permisos asimétricos (criptografía Ed25519 para ACL distribuida) | Diseño interno | Post-v1.0 |
@@ -382,18 +488,18 @@ M28 está cerrado (v0.13.0). Siguiente: M19 (CLI) + M29 (Dashboard) en paralelo,
 
 **Norte:** Escaneo honesto de qué prácticas de punta en sistemas de memoria de agentes (Mem0, Letta, Zep/Graphiti, Cognee, MemPalace) Tylluan todavía no tiene, más allá de lo ya cubierto por M25/M30/M31/M32. Cada ítem lleva su prioridad y — donde aplica — la advertencia explícita de qué NO está verificado con fuente primaria (no inflar esto como los benchmarks de M28).
 
-| # | Ítem | Prioridad | Qué aporta | Verificación de la fuente |
-|---|------|-----------|------------|---------------------------|
-| J-1 | **Defensa contra memory poisoning (read/write sandboxing)**: separar lecturas (snapshot validado) de escrituras (staging area) para que una inyección no afecte comportamiento inmediatamente. OWASP lo cataloga como ASI06 en su Agentic AI Top 10 2026. | CRÍTICO | Resistencia a "envenenar una vez, explotar siempre" — máxima prioridad por ser software soberano local-first sin cloud que mitigue. | Fuente primaria: OWASP Agentic AI Top 10. Cifras de tasa de ataque (MINJA 95%/99.8%) NO verificadas contra el paper original — no citar como dato duro. |
-| J-2 | **Sleep-time compute / consolidación proactiva en idle**: Letta ejecuta "reflective passes" en idle que consolidan memoria archival y reescriben bloques, moviendo cómputo fuera del path de usuario. Tylluan tiene `DreamCycle`/decay pero no reescritura activa. | CRÍTICO | Mejor calidad de memoria a largo plazo sin latencia añadida — encaja con NightConsolidation ya existente. | Fuente: Letta blog "sleep-time-compute", "Towards agents that learn". Verificado como feature de producción real. |
-| J-3 | **Soporte de protocolo A2A (Agent2Agent, Google → Linux Foundation)**: capa agente↔agente (delegación, Agent Cards de descubrimiento), distinta de MCP (agente↔herramienta). La federación P2P de Tylluan es propietaria y queda aislada del ecosistema interoperable emergente (150+ orgs adoptando A2A en 2026, ACP de IBM ya fusionado). | ALTO | Agentes Tylluan podrían descubrir/delegar a agentes externos sin protocolo propietario. | Fuente: Galileo A2A guide, Zylos Research. Verificado como estándar real con adopción medible. |
-| J-4 | **Memoria bi-temporal (validez en el tiempo, no solo timestamp de registro)**: Zep/Graphiti modela cuándo un hecho fue verdadero vs cuándo se registró. El knowledge graph de Tylluan guarda triples pero sin versionado temporal de validez. | ALTO | No confundir hechos obsoletos con vigentes; corregir sin borrar historia — relevante para el propio `consensus.rs` de resolución de conflictos. | Patrón verificado en Zep/Graphiti, documentación pública. |
-| J-5 | **Observabilidad OpenTelemetry GenAI semantic conventions**: esquema CNCF vendor-neutral para spans de LLM call/retrieval/tool (model, tokens, operación). M28-P2 ya expone `/metrics` Prometheus — extenderlo a spans OTel permitiría usar Phoenix/Langfuse (open source) sobre Tylluan sin más trabajo del lado observabilidad. | MEDIO | Trazas del "action chain" completo, base real para evaluación continua (J-6). | Fuente: OpenTelemetry GenAI blog oficial, Uptrace. |
-| J-6 | **Evaluación continua desde trazas reales**: convertir fallos de retrieval detectados en producción en evals de regresión automáticos (patrón "traces → datasets, failure modes → regression evals"). Tylluan tiene DST harness pero no este lazo de retroalimentación real→test. | MEDIO | Prevenir degradación silenciosa del recall entre versiones — exactamente el tipo de regresión que ya hemos cazado a mano varias veces esta sesión (M18-P3b, M28-P0). | Práctica descrita en múltiples fuentes de observabilidad de agentes 2026, sin un único estándar canónico. |
-| J-7 | **Explicabilidad de retrieval (por qué X y no Y)**: exponer los scores por componente (BGE-M3 vs BM25 vs graph boost) del recall híbrido ya existente, no solo el resultado final. | INVESTIGACIÓN | Confianza y depuración del ranking — diferenciador real dado que Tylluan ya hace fusión híbrida sofisticada. | No hay solución canónica de producción verificada — es dirección emergente, no práctica establecida. Tratar como exploratorio. |
-| J-8 | **Scopes multi-tenant jerárquicos (user/session/agent)**: Mem0 expone esta primitiva de aislamiento explícitamente. | MEDIO | Aislamiento real para despliegues con múltiples usuarios/agentes — relevante si M31-P1 (permisos por agent_id) avanza. | Patrón de Mem0 verificado; si Tylluan ya lo cubre parcialmente vía agent_id no se confirmó contra código en esta investigación — revisar antes de planificar en detalle. |
-| J-9 | **Auto-reflexión del agente sobre su propia memoria**: que el agente pueda editar/corregir activamente sus propios recuerdos vía tool call, no solo acumular. TRINITY (Verifier) ya existe como precedente de verificación. | ALTO | Memoria que se auto-corrige en vez de acumular ruido silencioso. | Patrón descrito en Letta "Memory Models" — dirección de producto real pero sin implementación de referencia pública detallada verificada. |
-| J-10 | **Memoria episódica por segmentación de eventos** (no por sesión): papers 2026 (ES-Mem, Memanto) proponen fronteras naturales de eventos en vez de límites de sesión/turno. | INVESTIGACIÓN | Recuerdos episódicos con fronteras naturales — mejora potencial sobre el esquema episódico actual (`coloquio:{channel}:{turn}`). | Papers arXiv recientes, sin evidencia de madurez en producción — no priorizar sobre J-1/J-2. |
+| # | Ítem | Prioridad | Qué aporta | Verificación de la fuente | Estado |
+|---|------|-----------|------------|---------------------------|--------|
+| J-1 | **Defensa contra memory poisoning (read/write sandboxing)**: separar lecturas (snapshot validado) de escrituras (staging area) para que una inyección no afecte comportamiento inmediatamente. OWASP lo cataloga como ASI06 en su Agentic AI Top 10 2026. | CRÍTICO | Resistencia a "envenenar una vez, explotar siempre" — máxima prioridad por ser software soberano local-first sin cloud que mitigue. | Fuente primaria: OWASP Agentic AI Top 10. Cifras de tasa de ataque (MINJA 95%/99.8%) NO verificadas contra el paper original — no citar como dato duro. | 🟡 **parcial** — trust gate de procedencia (M34-P0) + Coherence Gate de contenido (ADR-011, 2026-07-25). Read/write sandboxing en sí (staging area separado) no implementado. |
+| J-2 | **Sleep-time compute / consolidación proactiva en idle**: Letta ejecuta "reflective passes" en idle que consolidan memoria archival y reescriben bloques, moviendo cómputo fuera del path de usuario. Tylluan tiene `DreamCycle`/decay pero no reescritura activa. | CRÍTICO | Mejor calidad de memoria a largo plazo sin latencia añadida — encaja con NightConsolidation ya existente. | Fuente: Letta blog "sleep-time-compute", "Towards agents that learn". Verificado como feature de producción real. | ✅ **cerrado** — M34-P1, reescritura activa en `DreamCycle` (commit `7e2898c`). |
+| J-3 | **Soporte de protocolo A2A (Agent2Agent, Google → Linux Foundation)**: capa agente↔agente (delegación, Agent Cards de descubrimiento), distinta de MCP (agente↔herramienta). La federación P2P de Tylluan es propietaria y queda aislada del ecosistema interoperable emergente (150+ orgs adoptando A2A en 2026, ACP de IBM ya fusionado). | ALTO | Agentes Tylluan podrían descubrir/delegar a agentes externos sin protocolo propietario. | Fuente: Galileo A2A guide, Zylos Research. Verificado como estándar real con adopción medible. | ⬜ abierto |
+| J-4 | **Memoria bi-temporal (validez en el tiempo, no solo timestamp de registro)**: Zep/Graphiti modela cuándo un hecho fue verdadero vs cuándo se registró. El knowledge graph de Tylluan guarda triples pero sin versionado temporal de validez. | ALTO | No confundir hechos obsoletos con vigentes; corregir sin borrar historia — relevante para el propio `consensus.rs` de resolución de conflictos. | Patrón verificado en Zep/Graphiti, documentación pública. | ✅ **cerrado** — M35, `valid_from` + supersesión (commit `4342b49`). |
+| J-5 | **Observabilidad OpenTelemetry GenAI semantic conventions**: esquema CNCF vendor-neutral para spans de LLM call/retrieval/tool (model, tokens, operación). M28-P2 ya expone `/metrics` Prometheus — extenderlo a spans OTel permitiría usar Phoenix/Langfuse (open source) sobre Tylluan sin más trabajo del lado observabilidad. | MEDIO | Trazas del "action chain" completo, base real para evaluación continua (J-6). | Fuente: OpenTelemetry GenAI blog oficial, Uptrace. | ✅ **cerrado** — M37-P1, spans OTel GenAI reales (commit `1664f9e`). |
+| J-6 | **Evaluación continua desde trazas reales**: convertir fallos de retrieval detectados en producción en evals de regresión automáticos (patrón "traces → datasets, failure modes → regression evals"). Tylluan tiene DST harness pero no este lazo de retroalimentación real→test. | MEDIO | Prevenir degradación silenciosa del recall entre versiones — exactamente el tipo de regresión que ya hemos cazado a mano varias veces esta sesión (M18-P3b, M28-P0). | Práctica descrita en múltiples fuentes de observabilidad de agentes 2026, sin un único estándar canónico. | ⬜ abierto |
+| J-7 | **Explicabilidad de retrieval (por qué X y no Y)**: exponer los scores por componente (BGE-M3 vs BM25 vs graph boost) del recall híbrido ya existente, no solo el resultado final. | INVESTIGACIÓN | Confianza y depuración del ranking — diferenciador real dado que Tylluan ya hace fusión híbrida sofisticada. | No hay solución canónica de producción verificada — es dirección emergente, no práctica establecida. Tratar como exploratorio. | ⬜ abierto (investigación) |
+| J-8 | **Scopes multi-tenant jerárquicos (user/session/agent)**: Mem0 expone esta primitiva de aislamiento explícitamente. | MEDIO | Aislamiento real para despliegues con múltiples usuarios/agentes — relevante si M31-P1 (permisos por agent_id) avanza. | Patrón de Mem0 verificado; si Tylluan ya lo cubre parcialmente vía agent_id no se confirmó contra código en esta investigación — revisar antes de planificar en detalle. | ✅ **cerrado** — M37-P0/P2/P3, `owner_scope` + panel de Scopes con datos reales (commits `51b24f1`, `1664f9e`, `68d1cbf`). |
+| J-9 | **Auto-reflexión del agente sobre su propia memoria**: que el agente pueda editar/corregir activamente sus propios recuerdos vía tool call, no solo acumular. TRINITY (Verifier) ya existe como precedente de verificación. | ALTO | Memoria que se auto-corrige en vez de acumular ruido silencioso. | Patrón descrito en Letta "Memory Models" — dirección de producto real pero sin implementación de referencia pública detallada verificada. | ✅ **cerrado** — M36, intent `@correct:` (commit `a5ab3f3`). |
+| J-10 | **Memoria episódica por segmentación de eventos** (no por sesión): papers 2026 (ES-Mem, Memanto) proponen fronteras naturales de eventos en vez de límites de sesión/turno. | INVESTIGACIÓN | Recuerdos episódicos con fronteras naturales — mejora potencial sobre el esquema episódico actual (`coloquio:{channel}:{turn}`). | Papers arXiv recientes, sin evidencia de madurez en producción — no priorizar sobre J-1/J-2. | ⬜ abierto (investigación) |
 
 **Nota de integridad:** todo lo marcado "INVESTIGACIÓN" (J-7, J-10) es explícitamente terreno no maduro — no convertir en milestone con fecha hasta validar con un spike acotado, no directamente en producción. Todo lo demás tiene al menos una fuente primaria verificada por el agente de investigación (ver reporte completo en Coloquio si se publica, o pedir las fuentes exactas).
 
