@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Send, Radio, Users } from 'lucide-react';
+import { StatusPill } from './ui/StatusPill';
 
 interface NodeInfo {
   agent_id: string;
@@ -100,9 +101,10 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
                       {n.inbox_pending} pending · {n.rules} rules
                     </p>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${n.inbox_pending > 0 ? 'bg-amber-900/50 text-amber-300' : 'bg-emerald-900/50 text-emerald-300'}`}>
-                    {n.inbox_pending > 0 ? `${n.inbox_pending} msgs` : 'idle'}
-                  </span>
+                  <StatusPill 
+                    status={n.inbox_pending > 0 ? 'degraded' : 'online'} 
+                    label={n.inbox_pending > 0 ? `${n.inbox_pending} msgs` : 'idle'} 
+                  />
                 </div>
               ))}
             </div>

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { FleetTab } from './FleetTab';
-import { ColoquioTab } from './ColoquioTab';
-import { CollectiveTab } from './CollectiveTab';
-import { Users, MessageSquare, Shield } from 'lucide-react';
+import React, { useState, lazy, Suspense } from 'react';
+import { Users, MessageSquare, Shield, Loader2 } from 'lucide-react';
+
+const FleetTab = lazy(() => import('./FleetTab').then(m => ({ default: m.FleetTab })));
+const ColoquioTab = lazy(() => import('./ColoquioTab').then(m => ({ default: m.ColoquioTab })));
+const CollectiveTab = lazy(() => import('./CollectiveTab').then(m => ({ default: m.CollectiveTab })));
 
 interface TeamConsolidatedProps {
   bridge: any;
@@ -52,21 +53,28 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
 
       {/* Tab Panels */}
       <div className="flex-1 min-h-0 flex flex-col">
-        {subTab === 'fleet' && (
-          <div className="flex-1 overflow-y-auto">
-            <FleetTab />
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center py-12 text-slate-500 text-xs font-mono gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            <span>Cargando módulo de equipo...</span>
           </div>
-        )}
-        {subTab === 'coloquio' && (
-          <ColoquioTab
-            bridge={props.bridge}
-          />
-        )}
-        {subTab === 'agents' && (
-          <div className="flex-1 overflow-y-auto">
-            <CollectiveTab />
-          </div>
-        )}
+        }>
+          {subTab === 'fleet' && (
+            <div className="flex-1 overflow-y-auto">
+              <FleetTab />
+            </div>
+          )}
+          {subTab === 'coloquio' && (
+            <ColoquioTab
+              bridge={props.bridge}
+            />
+          )}
+          {subTab === 'agents' && (
+            <div className="flex-1 overflow-y-auto">
+              <CollectiveTab />
+            </div>
+          )}
+        </Suspense>
       </div>
     </div>
   );

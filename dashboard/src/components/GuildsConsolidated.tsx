@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { GuildsTab } from './GuildsTab';
-import { ConnectorsTab } from './ConnectorsTab';
-import { McpRegistryPanel } from './McpRegistryPanel';
-import { FederationTab } from './FederationTab';
-import { Cpu, Link2, Plug, Network } from 'lucide-react';
+import React, { useState, lazy, Suspense } from 'react';
+import { Cpu, Link2, Plug, Network, Loader2 } from 'lucide-react';
+
+const GuildsTab = lazy(() => import('./GuildsTab').then(m => ({ default: m.GuildsTab })));
+const ConnectorsTab = lazy(() => import('./ConnectorsTab').then(m => ({ default: m.ConnectorsTab })));
+const McpRegistryPanel = lazy(() => import('./McpRegistryPanel').then(m => ({ default: m.McpRegistryPanel })));
+const FederationTab = lazy(() => import('./FederationTab').then(m => ({ default: m.FederationTab })));
 
 interface GuildsConsolidatedProps {
   bridge: any;
@@ -66,31 +67,38 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
 
       {/* Tab Panels */}
       <div>
-        {subTab === 'guilds' && (
-          <GuildsTab
-            bridge={props.bridge}
-            notify={props.notify}
-            events={props.events}
-          />
-        )}
-        {subTab === 'connectors' && (
-          <ConnectorsTab
-            notify={props.notify}
-          />
-        )}
-        {subTab === 'mcp' && (
-          <McpRegistryPanel
-            bridge={props.bridge}
-            notify={props.notify}
-            events={props.events}
-          />
-        )}
-        {subTab === 'federation' && (
-          <FederationTab
-            bridge={props.bridge}
-            notify={props.notify}
-          />
-        )}
+        <Suspense fallback={
+          <div className="flex items-center justify-center py-12 text-slate-500 text-xs font-mono gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            <span>Cargando panel de guilds...</span>
+          </div>
+        }>
+          {subTab === 'guilds' && (
+            <GuildsTab
+              bridge={props.bridge}
+              notify={props.notify}
+              events={props.events}
+            />
+          )}
+          {subTab === 'connectors' && (
+            <ConnectorsTab
+              notify={props.notify}
+            />
+          )}
+          {subTab === 'mcp' && (
+            <McpRegistryPanel
+              bridge={props.bridge}
+              notify={props.notify}
+              events={props.events}
+            />
+          )}
+          {subTab === 'federation' && (
+            <FederationTab
+              bridge={props.bridge}
+              notify={props.notify}
+            />
+          )}
+        </Suspense>
       </div>
     </div>
   );
