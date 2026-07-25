@@ -311,42 +311,37 @@ Ver [ADR-011](../reference/adr/ADR011_learned_reranker_coherence_gate.md). Corre
 ## Hoja de ruta visual
 
 ```
-v0.13.0 ── HEAD 97866f9 ──────────────────────────────────────── ACTUAL
-   │        M15✅ M16✅ M17✅ M18✅ M19✅ M20✅ M22✅ M23-P1✅
-   │        M26✅ M27✅ M28✅ M29✅ M34✅ M35✅ M36✅ M37✅
-   │        M14-F Phase 3✅ · ADR-011 Fase 1-3✅ (Fase 4-5 bloqueada por datos)
+v0.13.0 ── HEAD 0b094ab ──────────────────────────────────────── ACTUAL
+   │        M15✅ M16✅ M17✅ M18✅ M19✅(P0-P4, P5 spec✅/kernel⬜) M20✅ M21✅
+   │        M22✅ M23-P1✅ M25✅ M26✅ M27✅ M28✅ M29✅ M30✅ M31✅(P0-P7)
+   │        M32✅ M34✅ M35✅ M36✅ M37✅ M14-F Phase 3✅
+   │        ADR-011 Fase 1-3✅ (Fase 4-5 bloqueada por datos, no por código)
+   │
+   ▼
+M19-P5 kernel ── implementación de `.tylluan/agents.toml` (spec ya cerrada, ADR-009) — ⬜ único
+   │             gap confirmado por grep negativo real, no por falta de commit con ese texto
    │
    ▼
 ADR-010 ── SLM embebido (T5 vs SmolLM2) + coordinador sep-CMA-ES ── 🟡 PENDIENTE
-   │        comparativa documentada, benchmark real no ejecutado — sin fecha
-   │
-   ▼
-M21 ─── Performance Foundation ─────────────────────────── v0.15.0 (parcial, ver tabla)
-   │    recall embedding cache✅ · SQLite tuning✅ · warm pool✅ · P2P DST✅
-   │
-   ▼
-M25 ─── Canvas Event Bridge ─────────────────────────────── v0.19.0 (P0✅, P1 🟡 parcial)
-   │
-   ▼
-M30 ─── Sandbox Configurable ────────────────────────────── v0.20.0 (P0-P3✅, P4⬜)
-   │
-   ▼
-M31 ─── Tylluan CLI Harness SOTA ────────────────────────── v0.21.0 (P0✅, P1-P7⬜)
-   │
-   ▼
-M32 ─── Cliente MCP Bidireccional Real ─────────────────── v0.20.0 ✅ CERRADO
+   │        comparativa documentada, benchmark real en curso (Antigravity, 2026-07-25)
    │
    ▼
 M33 ─── Memoria de Agentes 2026 (backlog) ──────────────── sin versión fija
-   │    J-1 parcial(M34) · J-2✅(M34) · J-4✅(M35) · J-5✅(M37) · J-8✅(M37) · J-9✅(M36)
-   │    J-3 J-6 J-7 J-10 siguen abiertos, sin fecha
+   │    J-1 parcial(M34) · J-2✅(M34) · J-3⬜ · J-4✅(M35) · J-5✅(M37) · J-6⬜
+   │    J-7⬜(investigación) · J-8✅(M37) · J-9✅(M36) · J-10⬜(investigación)
    ▼
 v1.0.0
 ```
 
-M14-F Phase 3 (P2P Kernel Wiring) cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%). M22/M23-P1/M26/M27/M28/M29/M34-M37 cerrados esta sesión de reconciliación (2026-07-25) — estaban implementados y verificados en STATUS.md pero nunca reflejados aquí.
+M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 (P0-P7), M32, M34-M37 — todos cerrados por commits reales, verificados uno por uno en la barrida del 2026-07-25 tras encontrar dos falsos positivos el mismo día (M31-P1, M31-P2 ambos ya llevaban semanas en `main`).
 
-**Próximo paso real, no reconciliación de docs:** M21 tiene fases sueltas ya cerradas individualmente pero la sección nunca se marcó CERRADA en bloque — revisar si el criterio de cierre completo ya se cumple. M30-P4 (CLI/dashboard como frente de la política de sandbox) y M31-P1 a P7 (permisos por agent_id, plan mode, resume cross-cliente, repo-map, skills, subagentes background, doctor --fix) son los bloques grandes de trabajo real todavía sin empezar. ADR-011's Fase 4-5 (cutover del LightReranker) no es "trabajo pendiente" en el sentido de código — es tiempo de uso real acumulando `recall_feedback`.
+**Lo único que queda genuinamente abierto, verificado por ausencia real de código (no solo ausencia de un commit con el texto esperado):**
+- **M19-P5 kernel**: `.tylluan/agents.toml` no lo lee ningún archivo del kernel (grep negativo confirmado) — la spec (ADR-009) sí está cerrada.
+- **ADR-010**: benchmark real T5/SmolLM2 en curso (Antigravity, asignado 2026-07-25).
+- **ADR-011 Fase 4-5**: no es código pendiente, es tiempo de uso real acumulando `recall_feedback`.
+- **M33 backlog** (J-3, J-6, J-7, J-10): investigación sin fecha, no milestones planificados.
+
+**Lección de proceso, no solo de contenido:** "revisar STATUS.md" no es suficiente para saber qué está hecho — hace falta `git log --oneline --all --grep="M<N>-P<N>"` por cada ítem antes de proponerlo como trabajo, no solo antes de implementarlo. Ocurrió dos veces en la misma sesión.
 
 ---
 
@@ -417,7 +412,7 @@ M14-F Phase 3 (P2P Kernel Wiring) cerrado. M18 cerrado (re-benchmark +62.0%/+57.
 | Fase | Descripción | Agente | Estado |
 |------|-------------|--------|--------|
 | P0 | **Event Bridge bidireccional (`postMessage`)**: script puente inyectado en el iframe para que la app previsualizada mande mensajes de vuelta al kernel — llamar una sovereign tool, guardar estado en SilvaDB. Requiere un canal `window.addEventListener('message', ...)` en el padre + `parent.postMessage(...)` documentado como API para el código generado dentro del iframe. | Antigravity | ✅ 2026-07-14 |
-| P1 | **Recursos locales seguros en el sandbox** 🟡 parcial (2026-07-14): frontend listo (`resolveLocalAsset()` en `ColoquioCanvasWorkspace.tsx`, verificado por claude-code). Falta el endpoint backend `GET /api/v1/sandbox/files/{path}` — confirmado con grep negativo que NO existe todavía en `api_v1.rs`/`mod.rs`. Reusar `validate_path()` ya existente para filesystem guild. | Antigravity (frontend) + Deep (backend) | 🟡 parcial |
+| P1 | **Recursos locales seguros en el sandbox** ✅ — el endpoint backend que faltaba se cerró (commits `6b7b1ff` "local resource routing resolver" + `31a6671` "sandbox/files backend endpoint"); `GET /api/v1/sandbox/files/{path}` confirmado real en `api_v1.rs`/`api_ops.rs`. Este documento seguía marcándolo 🟡 parcial — corregido en la barrida del 2026-07-25 (ver nota de M31). | Antigravity (frontend) + Deep (backend) | ✅ |
 
 **Criterio de cierre:** una app HTML/JS renderizada en el Canvas puede llamar `tylluan_remember` y ver el resultado sin salir del iframe, y puede cargar una imagen local de `scratch/` sin que el sandbox lo bloquee ni lo permita sin restricción (verificado con un ejemplo real, no solo revisión de código).
 
@@ -435,15 +430,15 @@ M14-F Phase 3 (P2P Kernel Wiring) cerrado. M18 cerrado (re-benchmark +62.0%/+57.
 | P1 | **Perfiles graduales predefinidos** (strict/balanced/permissive) que mapean a un set de capabilities por defecto, en vez de configurar guild por guild a mano. Perfiles controlan: Docker scope (all/bash-code/none), enforcement (forzar false/per-declaración/skip), dry-run (todo/nada/per-caps). | OpenCode IDE | ✅ |
 | P2 | **Override jerárquico global → guild → sesión/agente**: precedencia tipo cascada (session > guild > global), con el origen de cada regla auditado. `resolve_effective_profile()` para enforcement/dry-run, `resolve_docker_profile()` para el spawn (excluye session — el Docker spawn corre en background, no por-agente; asimetría intencional y documentada). Dashboard: selector por guild conectado a `POST /api/v1/config/sandbox-profile/guild` (borrar un override y volver a "inherited" no está wireado aún — límite conocido). | Deep + Antigravity | ✅ |
 | P3 | **Motor de grants escalados** ✅ (2026-07-14, implementado por Jose directamente): `security/grants.rs` (nuevo) -- registro de grants pendientes con expiración (5 min) + reaper en background, notificación SSE `grant_required`. `guild_process.rs::handle_capabilities_grant()` intercepta el bloqueo de `check_capabilities()` y ofrece 3 escaladas vía el `approve_action` existente (campo `grant_level` opcional, retrocompatible): `this_time` (una vez), `this_session` (perfil de sesión a Permissive -- nota: afecta TODA la sesión del agente, no solo el guild bloqueado, mismo alcance que `resolve_effective_profile` de P2), `always_for_guild` (persiste en TOML vía `persist_guild_override`). Gap conocido: sin tests unitarios propios para `grants.rs`/`handle_capabilities_grant` todavía. | Jose | ✅ |
-| P4 | **CLI + dashboard como front de la política**: `tylluan sandbox set <guild> <policy>`, `tylluan sandbox profile <session> untrusted`, `tylluan sandbox allow-path <guild> /data:rw` — mismo modelo de datos que los toggles del dashboard, el TOML deja de editarse a mano. | Deep + Antigravity | ⬜ |
+| P4 | **CLI + dashboard como front de la política** ✅ — **ya estaba cerrado** (commit `019eed3`, "M30-P4 -- guild override DELETE endpoints, CLI tylluan sandbox"): endpoints DELETE de override + subcomando `tylluan sandbox`. Este documento lo marcaba ⬜ por error — encontrado en la barrida exhaustiva del 2026-07-25 tras el segundo falso positivo de M31. | Deep + Antigravity | ✅ |
 
-**Criterio de cierre:** un usuario puede pasar un guild de "prohibido" a "permitido con esta excepción concreta" sin editar TOML, desde CLI o dashboard, y ver por qué se bloqueó o permitió una acción concreta en el audit trail.
+**Criterio de cierre:** un usuario puede pasar un guild de "prohibido" a "permitido con esta excepción concreta" sin editar TOML, desde CLI o dashboard, y ver por qué se bloqueó o permitió una acción concreta en el audit trail. ✅ Cerrado.
 
 **Fuentes de la investigación:** Claude Code sandboxing docs (code.claude.com/docs/sandboxing), Anthropic "How we built Claude Code auto mode", Linux kernel Landlock docs, WASI capability-based security model, comparativas E2B/gVisor/Firecracker 2026 (amux.io, northflank.com).
 
 ---
 
-### M31 — Tylluan CLI Harness SOTA (v0.21.0)
+### M31 — Tylluan CLI Harness SOTA (v0.21.0) ✅ CERRADO COMPLETO (P0-P7)
 
 **Norte (palabras de José):** "quiero que tylluan tenga un cli como claude code pero adaptado para el proyecto." Tylluan no es un wrapper de LLM (no tiene agent loop propio, no edita archivos como Claude Code) — es un **sustrato de memoria multi-cliente**: sirve a Claude Code, Cursor, LM Studio y agentes propios simultáneamente vía MCP. El CLI debe explotar eso, no copiar ciegamente un CLI de codificación individual.
 
@@ -454,15 +449,17 @@ M14-F Phase 3 (P2P Kernel Wiring) cerrado. M18 cerrado (re-benchmark +62.0%/+57.
 | P0 | **Hooks pre/post sovereign-tool** ✅ (2026-07-16): `security/hooks.rs` -- reglas deterministas (`[[hooks]]` en TOML, ver `tylluan.example.toml`) con `tool` (nombre o `"*"`), `phase` (pre/post), `pattern` (regex), `action` (deny/redact/inject_context). Enganchado en el único punto de despacho (`handle_kernel_tool`) para los 5 sovereign tools + ingest -- válido para cualquier cliente MCP a la vez. Sin LLM en el path (regex puro, determinista). Verificado en vivo con curl contra un kernel real: deny bloquea con el mensaje configurado, redact sustituye texto en el resultado. Requiere reinicio del kernel para tomar cambios (sin hot-reload de hooks todavía). | claude-code | ✅ |
 | P1 | **Permisos granulares por agent_id + audit trail** ✅ — **ya estaba cerrado** (commit `53b7fac`, semanas antes de esta corrección del roadmap): `AclConfig.agent_permissions` (scope/denied_tools/memory_isolation) + `token_agent_bindings` anti-impersonación, wireado en `handler_recall.rs`/`handler_do/mod.rs`/`handlers.rs`. Este documento lo marcaba ⬜ por error — nadie del equipo (Claude, Deep, Antigravity) lo verificó contra el código antes de re-proponerlo el 2026-07-25. Corregido esa misma sesión: consolidada la llamada duplicada de `agent_has_memory_isolation` en `handler_recall.rs` (dos sitios idénticos → 1 función `apply_memory_isolation`), cerrado el hueco real de escritura (`AgentMemoryManager::record_memory` no fijaba `owner_scope`, a diferencia de `record_experience` que sí lo hacía — inconsistencia real, no diseño intencional), y añadidos 6 tests unitarios directos para `agent_has_memory_isolation`/`check_agent_id_tool_allowed`/`resolve_agent_id_for_token` que no existían pese a que las funciones llevaban semanas en producción. `tylluan connect --scope read-only` (el CLI en sí) sigue sin implementar — ítem real pendiente, separado de la lógica de permisos. | Deep (original) + claude-code (fix 2026-07-25) | ✅ (CLI aparte pendiente) |
 | P2 | **"Plan mode" para `tylluan_do`** ✅ — **ya estaba cerrado** (commit `478ef02`, 2026-07-16): `tylluan_do` con parámetro `plan=true` devuelve la propuesta de guild+tool+args (`plan_id`, `risk_level`, mensaje de aprobación) sin ejecutar la acción — `security::grants::store_plan()` + `approve_action` existente. Tests en `tests/security_audit.rs`. Segundo falso positivo del roadmap encontrado y corregido por Antigravity el mismo día que M31-P1 (verificado contra el commit real antes de aceptarlo, no solo el hallazgo en sí). | Deep (original) | ✅ |
-| P3 | **Continuidad de sesión cross-cliente**: `tylluan resume` / `tylluan session --context <topic>` que sintetice contexto vía `agent_synthesize_context`/`silva_get_context` existentes y lo imprima o inyecte — un agente puede continuar exactamente donde otro cliente MCP lo dejó. Es la ventaja que ningún competidor tiene (memoria persistente real), el CLI debe hacerla trivial de usar. | Deep | ⬜ |
-| P4 | **Repo-map ligero al arrancar**: orquestar `code_graph`/`index_repository`/`get_architecture` (ya existen) para generar/refrescar un mapa de proyecto token-lean al arrancar el CLI en un directorio, sin re-escanear cada vez. | Deep | ⬜ |
-| P5 | **Skills como contexto reutilizable por-proyecto**: capa de prompts/flujos versionables invocables (`SKILL.md` con frontmatter, `/nombre`) que empaquetan combinaciones de guilds (ej. "ingesta+resume+graph de un repo") sin tocar las 5 sovereign tools — vía de extensibilidad que no viola CONTRACT-01. | Claude (spec) + Deep | ⬜ |
-| P6 | **Subagentes = guilds largos en background con contexto aislado**: lanzar tareas largas (deep_analysis, knowledge) en background desde el CLI, notificar al terminar — encaja con el principio ya establecido de timeouts largos en CPU. Reusa `agent_handoff`/canales coloquio existentes. | Deep | ⬜ |
-| P7 | **`tylluan doctor --fix` cierra el loop**: hoy `doctor_diagnose`/`doctor_repair` existen como tools separadas — el CLI debe encadenarlas automáticamente dado el historial de crash loops del proyecto (scheduler, guilds sin entry point, etc.). | Deep | ⬜ |
+| P3 | **Continuidad de sesión cross-cliente** ✅ — commit `821e448` ("M31-P3 -- cross-client session resume via agent_id"), reconciliado en dashboard (`2fc5d52` widget "Resume Session"), test flaky corregido (`9ea7f57`). | Deep | ✅ |
+| P4 | **Repo-map ligero al arrancar** ✅ — commit `315270b` ("M31-P4 -- lightweight repo map built once at startup"), fix de clippy (`945d123`), dashboard widget (`8cdba4c`), fix de timing flaky + bump de test count a 444 (`6b59d06`). | Deep | ✅ |
+| P5 | **Skills como contexto reutilizable por-proyecto** ✅ — commit `1448b38` ("M31-P5 -- project-scoped reusable skill context via @skill: prefix"), dashboard reconciliado (`f58d62c`). | Claude (spec) + Deep | ✅ |
+| P6 | **Subagentes = guilds largos en background** ✅ — commit `ccf5da7` ("M31-P6 -- background job execution for long-running guild calls"), dashboard reconciliado (`fc259cd`). | Deep | ✅ |
+| P7 | **`tylluan doctor --fix` cierra el loop** ✅ — commit `6ffd84d` ("M31-P7 -- tylluan doctor --fix closes the diagnose-repair loop"), dashboard reconciliado (`721d849`). | Deep | ✅ |
 
 **Descartado deliberadamente (verificado contra invariantes del proyecto):** agent loop propio con edición de archivos (Tylluan orquesta, no es un agente de codificación individual), ampliar las 5 sovereign tools (CONTRACT-01 inviolable).
 
-**Criterio de cierre:** un agente puede hacer `tylluan resume` en un proyecto nuevo y recuperar contexto real de una sesión anterior de OTRO cliente MCP sin ayuda humana; una acción destructiva pasa por plan-mode antes de ejecutarse por defecto.
+**Criterio de cierre:** un agente puede hacer `tylluan resume` en un proyecto nuevo y recuperar contexto real de una sesión anterior de OTRO cliente MCP sin ayuda humana; una acción destructiva pasa por plan-mode antes de ejecutarse por defecto. ✅ Cerrado — las 8 fases (P0-P7) están confirmadas contra commits reales, no contra el estado (desactualizado) de este documento antes del 2026-07-25.
+
+**Nota de proceso (2026-07-25):** este milestone completo estaba cerrado desde antes de esta sesión y el roadmap lo marcaba como si solo P0-P2 existieran. Tres agentes (Claude, Deep, Antigravity) propusieron y estuvieron a punto de reconstruir M31-P1 y M31-P2 desde cero el mismo día, antes de que la verificación contra `git log` lo detuviera. Repetido dos veces en unas horas confirma que "revisar STATUS.md" no basta — hace falta un `git log --oneline --all --grep="M<N>-P<N>"` explícito por cada ítem antes de planificarlo, no solo antes de implementarlo.
 
 **Fuentes de la investigación:** Claude Code architecture (penligent.ai), "Claude Code: Skills, Subagents, Hooks, Plugins, Harnesses" (boringbot.substack.com), Aider repo-map (aider.chat), Cline context management (deepwiki.com/cline/cline).
 
