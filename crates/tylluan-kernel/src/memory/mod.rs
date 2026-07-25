@@ -35,3 +35,4 @@ pub mod autoresearch;
 pub mod mmap_store;
 pub mod ivf_index;
 pub mod agent_nodes;
+pub mod night;
