@@ -33,6 +33,64 @@ fn count_numbered_prefixes(text: &str) -> usize {
     count
 }
 
+/// Extract the 6 features used by the MLP complexity model.
+/// Returns [word_count_norm, has_multi_step, numbered_norm,
+///          has_complex_verb, compound_ratio, is_simple].
+pub fn extract_mlp_features(intent: &str) -> [f64; 6] {
+    let lower = intent.trim().to_lowercase();
+    let word_count = lower.split_whitespace().count();
+
+    let multi_step_signals = [
+        "and then", "then ", "after that", "finally", "meanwhile",
+        "y luego", "luego ", "después", "despues", "finalmente",
+        "meanwhile", "subsequently", "following that", "next ",
+        "in parallel", "simultaneously", "at the same time",
+        "once that", "once done",
+    ];
+    let has_multi_step = if multi_step_signals.iter().any(|s| lower.contains(s)) { 1.0 } else { 0.0 };
+
+    let numbered = count_numbered_prefixes(&lower);
+    let numbered_norm = if numbered >= 2 { 1.0 } else if numbered == 1 { 0.5 } else { 0.0 };
+
+    let enum_words = ["first", "second", "third", "fourth", "next", "last",
+                       "primero", "segundo", "tercero", "siguiente", "último",
+                       "step 1", "step 2", "paso 1", "paso 2",
+                       "firstly", "secondly", "thirdly"];
+    let has_enumeration = if enum_words.iter().any(|w| lower.contains(w)) { 1.0 } else { 0.0 };
+
+    let synthesis_signals = [
+        "synthesize", "synthesise", "synthesis",
+        "summarize", "summarise", "summary", "sum up",
+        "combine", "merge", "unify", "consolidate",
+        "wrap up", "conclude", "finalize", "recap",
+        "put it together", "collect results",
+        "generar resumen", "resumir", "sintetiza", "sintetizar",
+        "combinar", "unificar", "consolidar",
+        "dame un resumen", "resume todo", "resume", "resuma",
+    ];
+    let has_synthesis = if synthesis_signals.iter().any(|s| lower.contains(s)) { 1.0 } else { 0.0 };
+    let has_complex_verb = if has_enumeration > 0.0 || has_synthesis > 0.0 { 1.0 } else { 0.0 };
+
+    let and_count = lower.matches(" and ").count();
+    let comma_count = lower.matches(", ").count();
+    let compound_actions = (and_count + comma_count) as f64;
+    let compound_ratio = (compound_actions / word_count.max(1) as f64).clamp(0.0, 1.0);
+
+    let word_count_norm = (word_count as f64 / 30.0).clamp(0.0, 1.0);
+
+    let simple_triggers = [
+        "list ", "show ", "run ", "echo ", "pwd ", "ls ", "cat ",
+        "status", "health", "ping",
+        "busca ", "encuentra ", "lista ", "muestra ",
+        "ejecuta ", "compila ",
+    ];
+    let is_shell_cmd = lower.len() < 30 && !lower.contains(' ');
+    let is_simple_verb = simple_triggers.iter().any(|t| lower.starts_with(t)) && word_count <= 5;
+    let is_simple = if is_shell_cmd || is_simple_verb { 1.0 } else { 0.0 };
+
+    [word_count_norm, has_multi_step, numbered_norm, has_complex_verb, compound_ratio, is_simple]
+}
+
 /// Score intent complexity on a 0.0–1.0 scale.
 /// Higher = more likely multi-step / synthesis / complex.
 pub fn score_complexity(intent: &str) -> f64 {
@@ -143,6 +201,23 @@ pub fn cascade_action(score: f64) -> CascadeAction {
     }
 }
 
+/// Blend heuristic complexity score with MLP-derived score.
+/// Gracefully degrades to heuristic-only when mlp_score is None.
+///
+/// The blend is conservative: MLP adds at most 40% weight, heuristic
+/// retains at least 60% weight. This ensures the MLP can only refine,
+/// never override, the heuristic's safety bounds.
+pub fn blend_with_mlp(heuristic: f64, mlp: Option<f64>) -> f64 {
+    const HEURISTIC_WEIGHT: f64 = 0.6;
+    const MLP_WEIGHT: f64 = 0.4;
+    match mlp {
+        Some(m) if m >= 0.0 && m <= 1.0 => {
+            (HEURISTIC_WEIGHT * heuristic + MLP_WEIGHT * m).clamp(0.0, 1.0)
+        }
+        _ => heuristic,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CascadeAction {
     /// Route directly to coordinator — intent is clearly complex
@@ -235,5 +310,48 @@ mod tests {
     fn test_very_long_simple_still_boosted() {
         let s = score_complexity("show me the current git status of the main branch in the repository");
         assert!(s >= 0.1, "long sentence gets length bonus");
+    }
+
+    #[test]
+    fn test_blend_mlp_absent_falls_back_to_heuristic() {
+        assert_eq!(blend_with_mlp(0.5, None), 0.5);
+        assert_eq!(blend_with_mlp(0.0, None), 0.0);
+        assert_eq!(blend_with_mlp(0.8, None), 0.8);
+    }
+
+    #[test]
+    fn test_blend_mlp_valid_combines_correctly() {
+        let result = blend_with_mlp(0.5, Some(0.5));
+        let expected = 0.6 * 0.5 + 0.4 * 0.5;
+        assert!((result - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_blend_mlp_out_of_range_ignored() {
+        assert_eq!(blend_with_mlp(0.5, Some(-0.1)), 0.5);
+        assert_eq!(blend_with_mlp(0.5, Some(1.5)), 0.5);
+    }
+
+    #[test]
+    fn test_blend_mlp_clamps_to_unit_interval() {
+        let result = blend_with_mlp(0.9, Some(0.9));
+        assert!(result <= 1.0);
+        assert!(result >= 0.0);
+    }
+
+    #[test]
+    fn test_blend_with_mlp_heuristic_dominant() {
+        let high_heuristic_low_mlp = blend_with_mlp(0.8, Some(0.2));
+        let low_heuristic_high_mlp = blend_with_mlp(0.2, Some(0.8));
+        assert!(high_heuristic_low_mlp > low_heuristic_high_mlp,
+            "heuristic (60%) should dominate over mlp (40%)");
+    }
+
+    #[test]
+    fn test_blend_mlp_preserves_cascade_boundaries() {
+        let near_proactive = blend_with_mlp(0.55, Some(0.68));
+        assert!(near_proactive >= 0.6, "blend near proactive boundary should cross it: {near_proactive}");
+        let near_direct = blend_with_mlp(0.35, Some(0.0));
+        assert!(near_direct < 0.4, "blend near direct boundary should stay under: {near_direct}");
     }
 }

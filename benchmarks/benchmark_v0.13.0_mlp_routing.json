@@ -1,0 +1,216 @@
+{
+  "date": "2026-07-25",
+  "heuristic_only": {
+    "accuracy_pct": 61.11,
+    "correct": 11
+  },
+  "heuristic_plus_mlp": {
+    "accuracy_pct": 61.11,
+    "correct": 11,
+    "delta_pct": 0.0
+  },
+  "mlp_active": true,
+  "notes": "Real ONNX model loaded from models/complexity_mlp.onnx (61.1% accuracy, Δ+0.0%)",
+  "num_cases": 18,
+  "per_case": [
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.03,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "list files in current directory",
+      "label": "simple ls variant",
+      "mlp_raw": 0.074
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "show git status",
+      "label": "simple git variant",
+      "mlp_raw": 0.073
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "run cargo check",
+      "label": "simple build variant",
+      "mlp_raw": 0.073
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "echo hello world",
+      "label": "trivial command",
+      "mlp_raw": 0.073
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "ping localhost",
+      "label": "simple ping",
+      "mlp_raw": 0.072
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "cat Cargo.toml",
+      "label": "simple file read",
+      "mlp_raw": 0.072
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "pwd",
+      "label": "short path command",
+      "mlp_raw": 0.072
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.123,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "check disk usage on C:",
+      "label": "simple monitor",
+      "mlp_raw": 0.309
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.029,
+      "expected": "Direct",
+      "heuristic_action": "Direct",
+      "heuristic_correct": true,
+      "heuristic_score": 0.0,
+      "intent": "list running containers",
+      "label": "simple docker",
+      "mlp_raw": 0.073
+    },
+    {
+      "blended_action": "Reactive",
+      "blended_score": 0.476,
+      "expected": "Reactive",
+      "heuristic_action": "Reactive",
+      "heuristic_correct": true,
+      "heuristic_score": 0.45,
+      "intent": "check git status, run tests, then push to main",
+      "label": "compound git workflow",
+      "mlp_raw": 0.516
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.216,
+      "expected": "Reactive",
+      "heuristic_action": "Direct",
+      "heuristic_correct": false,
+      "heuristic_score": 0.1,
+      "intent": "search for FIXME in src, list the files found",
+      "label": "compound search",
+      "mlp_raw": 0.391
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.21,
+      "expected": "Reactive",
+      "heuristic_action": "Direct",
+      "heuristic_correct": false,
+      "heuristic_score": 0.1,
+      "intent": "run tests and show coverage report",
+      "label": "compound test+coverage",
+      "mlp_raw": 0.374
+    },
+    {
+      "blended_action": "Direct",
+      "blended_score": 0.213,
+      "expected": "Reactive",
+      "heuristic_action": "Direct",
+      "heuristic_correct": false,
+      "heuristic_score": 0.1,
+      "intent": "find large files in tmp, sort by size",
+      "label": "compound find+sort",
+      "mlp_raw": 0.384
+    },
+    {
+      "blended_action": "Proactive",
+      "blended_score": 0.674,
+      "expected": "Proactive",
+      "heuristic_action": "Proactive",
+      "heuristic_correct": true,
+      "heuristic_score": 0.7,
+      "intent": "research Rust async patterns, then implement a proof of concept, then write tests, and finally document the results",
+      "label": "full research pipeline",
+      "mlp_raw": 0.635
+    },
+    {
+      "blended_action": "Reactive",
+      "blended_score": 0.412,
+      "expected": "Proactive",
+      "heuristic_action": "Direct",
+      "heuristic_correct": false,
+      "heuristic_score": 0.35,
+      "intent": "analyze the codebase, identify slow functions, propose optimizations, and create a report",
+      "label": "code analysis pipeline",
+      "mlp_raw": 0.504
+    },
+    {
+      "blended_action": "Reactive",
+      "blended_score": 0.488,
+      "expected": "Proactive",
+      "heuristic_action": "Reactive",
+      "heuristic_correct": false,
+      "heuristic_score": 0.45,
+      "intent": "synthesize the results from all experiments and generate a summary table",
+      "label": "synthesis task",
+      "mlp_raw": 0.545
+    },
+    {
+      "blended_action": "Reactive",
+      "blended_score": 0.474,
+      "expected": "Proactive",
+      "heuristic_action": "Reactive",
+      "heuristic_correct": false,
+      "heuristic_score": 0.4,
+      "intent": "1. install dependencies 2. configure the database 3. run migrations 4. start the server",
+      "label": "numbered deployment steps",
+      "mlp_raw": 0.586
+    },
+    {
+      "blended_action": "Reactive",
+      "blended_score": 0.563,
+      "expected": "Proactive",
+      "heuristic_action": "Reactive",
+      "heuristic_correct": false,
+      "heuristic_score": 0.538,
+      "intent": "gather metrics from all nodes, merge the datasets, and produce a unified dashboard",
+      "label": "multi-node data pipeline",
+      "mlp_raw": 0.602
+    }
+  ],
+  "version": "v0.13.0-mlp"
+}

@@ -905,6 +905,11 @@ async fn main() -> anyhow::Result<()> {
     server.agent_memory = Some(Arc::new(AgentMemoryManager::new(silva.clone(), 20)));
     server.coloquio = Some(coloquio.clone());
     server.low_memory_mode = low_memory_mode;
+    // MLP scorer: optional ONNX model for learned complexity scoring
+    let models_dir = data_dir.join("models");
+    std::fs::create_dir_all(&models_dir).ok();
+    let mlp_scorer = tylluan_kernel::mlp::MlpScorer::new(&models_dir);
+    server.set_mlp(mlp_scorer, data_dir);
     server.expose_guild_tools = config.nexus.expose_guild_tools;
 
     // Wire crash-safe journal from HttpState into TylluanServer
