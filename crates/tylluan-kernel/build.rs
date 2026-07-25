@@ -36,6 +36,21 @@ fn main() {
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../.git/refs/heads/main");
 
+    // Only build the dashboard when the bundled-dashboard feature is actually
+    // enabled (Cargo sets CARGO_FEATURE_<NAME> for build scripts when a
+    // feature is active). Every plain `cargo check`/`test`/`clippy` run --
+    // including CI's Rust-only jobs, which never enable this feature --
+    // was unconditionally shelling out to `npm install` in dashboard/ for no
+    // reason, wasting time and (as of 2026-07-24) breaking outright when npm's
+    // fresh registry resolution hit a transiently-unpublished dependency
+    // version that the project's actual pnpm-lock.yaml has correctly pinned.
+    // The dashboard itself is still built and verified by its own dedicated
+    // pnpm CI job -- this only skips the redundant, less-correct npm path.
+    if std::env::var("CARGO_FEATURE_BUNDLED_DASHBOARD").is_err() {
+        println!("cargo:warning=bundled-dashboard feature not enabled — skipping UI build");
+        return;
+    }
+
     let dashboard_dir = manifest_dir.join("..").join("..").join("dashboard");
 
     if !dashboard_dir.exists() {
