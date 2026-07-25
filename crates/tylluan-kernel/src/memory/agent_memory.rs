@@ -40,6 +40,65 @@ impl AgentMemoryManager {
         node_id
     }
 
+    /// Ouroboros Loop — record half. The agent (the LLM) performs its own
+    /// reflection on an action's outcome (Reflexion, Shinn et al. NeurIPS 2023)
+    /// and passes the verdict; the kernel only persists it, never judges — no
+    /// LLM in Tylluan's critical path. Stored per-agent (owner_scope=agent:{id})
+    /// so an agent consults ITS OWN past experience, not a shared pool.
+    ///
+    /// `verdict`: "worked" | "failed" | "partial". Failures are weighted
+    /// HIGHER than successes — the most actionable lesson is what not to repeat.
+    pub async fn record_experience(
+        &self,
+        agent_id: &str,
+        action: &str,
+        outcome: &str,
+        verdict: &str,
+        lesson: &str,
+    ) -> String {
+        let node_id = format!("experience:{}:{}", agent_id, Uuid::new_v4().simple());
+        let content = format!("[{verdict}] {action} → {outcome}");
+        let content = if lesson.trim().is_empty() {
+            content
+        } else {
+            format!("{content} | lección: {lesson}")
+        };
+        let meta = serde_json::json!({
+            "agent_id": agent_id,
+            "verdict": verdict,
+            "kind": "experience",
+        }).to_string();
+        let scope = format!("agent:{agent_id}");
+        let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
+        if self.silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
+            // Reflexion weighting: failures persist longest (they're the
+            // actionable "don't do this again" lessons), partial next, wins least.
+            let weight = match verdict {
+                "failed" => 2.0,
+                "partial" => 1.2,
+                _ => 0.8,
+            };
+            let _ = self.silva.set_weight(&node_id, weight).await;
+        }
+        node_id
+    }
+
+    /// Ouroboros Loop — retrieve half. Returns this agent's own past
+    /// experiences most relevant to `query`, weight-ordered (so failures,
+    /// weighted higher, surface first). Consulted by tylluan_think before the
+    /// agent reasons about what to do — "have I tried this before, how did it go".
+    pub async fn get_relevant_critiques(&self, agent_id: &str, query: &str, limit: usize) -> Vec<GraphNode> {
+        let mut results = self.silva
+            .search(query, limit * 3, Some(&["experience"]))
+            .await
+            .unwrap_or_default();
+        // Scope to THIS agent only — never leak another agent's experience.
+        results.retain(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")));
+        results.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(limit);
+        results
+    }
+
     /// Retrieve memories for an agent, ordered by weight descending.
     ///
     /// Uses FTS search for agent_id in content/metadata, filtered by
@@ -268,5 +327,61 @@ mod tests {
 
         let summary_a = mgr.get_summary("agent-a").await;
         assert!(summary_a.is_some());
+    }
+
+    /// Ouroboros: recording an experience and retrieving it back for the same
+    /// agent, with the agent's verdict and lesson preserved.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn experience_roundtrip_preserves_verdict_and_lesson() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let agent = "test-ouroboros";
+
+        mgr.record_experience(
+            agent,
+            "run git reset --hard on shared branch",
+            "lost 2 hours of uncommitted work",
+            "failed",
+            "stash before any destructive git op",
+        ).await;
+
+        let crit = mgr.get_relevant_critiques(agent, "git reset destructive", 5).await;
+        assert!(!crit.is_empty(), "agent must be able to retrieve its own recorded experience");
+        let node = &crit[0];
+        assert_eq!(node.node_type, "experience");
+        assert!(node.content.contains("[failed]"));
+        assert!(node.content.contains("stash before"));
+        assert!(node.metadata.contains(&format!("\"agent_id\":\"{agent}\"")));
+    }
+
+    /// Reflexion weighting: a failed experience outranks a successful one, so
+    /// "what not to repeat" surfaces first when critiques are retrieved.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_experiences_outrank_successful_ones() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let agent = "test-weight";
+
+        mgr.record_experience(agent, "deploy config X", "worked fine", "worked", "").await;
+        mgr.record_experience(agent, "deploy config X", "broke prod", "failed", "validate config X first").await;
+
+        let crit = mgr.get_relevant_critiques(agent, "deploy config X", 5).await;
+        assert!(crit.len() >= 2);
+        assert!(crit[0].content.contains("[failed]"), "the failure must surface first");
+    }
+
+    /// An agent's experiences never leak into another agent's critique lookup.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn experiences_are_scoped_per_agent() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+
+        mgr.record_experience("agent-x", "did something", "it failed", "failed", "avoid").await;
+
+        let for_y = mgr.get_relevant_critiques("agent-y", "did something", 5).await;
+        assert!(for_y.is_empty(), "agent-y must not see agent-x's experience");
+
+        let for_x = mgr.get_relevant_critiques("agent-x", "did something", 5).await;
+        assert!(!for_x.is_empty());
     }
 }

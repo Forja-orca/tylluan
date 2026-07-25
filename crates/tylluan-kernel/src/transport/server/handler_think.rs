@@ -32,7 +32,7 @@ pub async fn handle_tylluan_think(
 
     // M20-D: exclude machinery nodes — same filter as handler_recall to prevent routing_anchor
     // and session_digest from appearing in think synthesis
-    nodes.retain(|n| n.node_type != "routing_anchor" && n.node_type != "session_digest");
+    nodes.retain(|n| n.node_type != "routing_anchor" && n.node_type != "session_digest" && n.node_type != "experience");
 
     // BLOQUE A: PageRank Re-ranking
     if !nodes.is_empty() {
@@ -69,6 +69,22 @@ pub async fn handle_tylluan_think(
         .collect();
 
     let mut synthesis = format!("## Pensamiento sobre: {query}\n\n");
+
+    // Ouroboros Loop — retrieve half. Before reasoning about what to do, surface
+    // THIS agent's own past experiences relevant to the query (Reflexion):
+    // "have I done something like this before, and how did it go?". Failures,
+    // weighted higher, appear first. Skipped for anonymous (no per-agent history).
+    if agent_id_str != "anonymous"
+        && let Some(ref amm) = server.agent_memory {
+            let critiques = amm.get_relevant_critiques(&agent_id_str, &query, 3).await;
+            if !critiques.is_empty() {
+                synthesis.push_str("### Tu experiencia previa relevante\n");
+                for c in &critiques {
+                    synthesis.push_str(&format!("- {}\n", c.content));
+                }
+                synthesis.push('\n');
+            }
+        }
 
     if nodes.is_empty() && related_mail.is_empty() {
         synthesis.push_str("No prior knowledge or recent activity found on this topic.\n");
