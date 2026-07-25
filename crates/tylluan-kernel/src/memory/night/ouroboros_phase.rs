@@ -12,9 +12,12 @@ impl Phase for OuroborosPhase {
     async fn run(&self, ctx: &PhaseContext) -> PhaseReport {
         let audit_path = ctx.data_dir.join("audit.db");
         let audit_str = audit_path.to_string_lossy();
-        let harvested = harvest_failures_from_audit(&ctx.silva, &audit_str, 86_400, 3).await;
+        let engine = ctx.matcher.engine();
+        let harvested = harvest_failures_from_audit(
+            &ctx.silva, &audit_str, 86_400, 3, engine.as_deref(),
+        ).await;
         let detail = if harvested > 0 {
-            format!("{} repeated-failure pattern(s) promoted", harvested)
+            format!("{harvested} repeated-failure pattern(s) promoted")
         } else {
             "no failure patterns found".to_string()
         };

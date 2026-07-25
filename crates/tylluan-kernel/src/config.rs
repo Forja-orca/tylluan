@@ -633,17 +633,17 @@ pub fn auto_select_device() -> InferenceDevice {
     #[cfg(target_os = "macos")]
     {
         tracing::info!("🍎 Detected macOS — auto-selecting CoreML inference device");
-        return InferenceDevice::Coreml;
+        InferenceDevice::Coreml
     }
     #[cfg(target_os = "windows")]
     {
         tracing::info!("🚀 Detected Windows — auto-selecting DirectML inference device");
-        return InferenceDevice::Directml;
+        InferenceDevice::Directml
     }
     #[cfg(feature = "cuda")]
     {
         tracing::info!("🚀 CUDA feature enabled on Linux — auto-selecting CUDA inference device");
-        return InferenceDevice::Cuda;
+        InferenceDevice::Cuda
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", feature = "cuda")))]
     {

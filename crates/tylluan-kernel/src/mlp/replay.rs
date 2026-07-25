@@ -47,6 +47,10 @@ impl ReplayBuffer {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn is_full(&self) -> bool {
         self.entries.len() >= self.capacity
     }
@@ -63,7 +67,7 @@ impl ReplayBuffer {
         let mut count = 0;
         for entry in &self.entries {
             let line = serde_json::to_string(entry).unwrap_or_default();
-            writeln!(writer, "{}", line)?;
+            writeln!(writer, "{line}")?;
             count += 1;
         }
         info!("Exported {} training experiences to {:?}", count, self.export_path);
@@ -75,6 +79,7 @@ impl ReplayBuffer {
     }
 
     /// Record a routing outcome — shorthand for push with timestamp auto-fill.
+    #[allow(clippy::too_many_arguments)]
     pub fn record(
         &mut self,
         intent: &str,

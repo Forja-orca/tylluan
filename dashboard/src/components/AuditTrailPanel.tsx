@@ -73,7 +73,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       setIsMock(false);
     } catch (err: any) {
       // Fallback to local mock data on 404 or connection failure
-      console.warn("Audit Trail GET /api/v1/security/audit failed, using mock:", err.message);
+      console.warn("Audit Trail GET /api/v1/audit failed, using mock:", err.message);
       
       // Filter mock entries locally
       const filteredMock = MOCK_AUDIT_ENTRIES.filter(e => 

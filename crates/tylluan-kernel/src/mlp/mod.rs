@@ -3,7 +3,9 @@ pub mod replay;
 use ndarray::Array2;
 use ort::session::Session;
 use ort::value::TensorRef;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(not(test))]
+use std::path::PathBuf;
 use tracing::info;
 
 pub struct MlpScorer {
@@ -60,7 +62,6 @@ impl MlpScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_mlp_no_model_graceful_degradation() {
@@ -87,6 +88,7 @@ mod tests {
 }
 
 /// Resolve the workspace root by navigating up from CARGO_MANIFEST_DIR.
+#[cfg(not(test))]
 fn cargo_workspace_root() -> Option<PathBuf> {
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     // Walk up until we find a directory containing a top-level Cargo.toml with [workspace]
