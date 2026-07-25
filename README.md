@@ -243,20 +243,26 @@ curl -s http://127.0.0.1:3030/health
 ### Step 4 — Try it (5 seconds)
 
 ```bash
-export TYLLUAN_TOKEN=$(cat ~/.tylluan/.tylluan-token)
+export TYLLUAN_TOKEN=$(cat .tylluan-token)
 
 # Store a memory
-curl -X POST http://127.0.0.1:3030/api/v1/memory/remember \
+curl -X POST http://127.0.0.1:3030/api/v1/memory/write \
   -H "Authorization: Bearer $TYLLUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content": "Tylluan is running local graph RAG."}'
 
 # Retrieve it
-curl -X POST http://127.0.0.1:3030/api/v1/memory/recall \
-  -H "Authorization: Bearer $TYLLUAN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How does Tylluan query graphs?"}'
+curl "http://127.0.0.1:3030/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
+  -H "Authorization: Bearer $TYLLUAN_TOKEN"
 ```
+
+<details>
+<summary>PowerShell equivalent (Windows)</summary>
+
+```powershell
+$env:TYLLUAN_TOKEN = Get-Content .tylluan-token
+```
+</details>
 
 > **⚠️ Experimental research software.** Tylluan executes real code on your machine. It is a research lab, not an enterprise product. Read [DISCLAIMER.md](DISCLAIMER.md) before deploying.
 
