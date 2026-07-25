@@ -11,7 +11,7 @@ impl Phase for CurriculumPhase {
     async fn run(&self, ctx: &PhaseContext) -> PhaseReport {
         if let Ok(mut learner) = ctx.curriculum.lock() {
             match learner.apply_disuse_decay() {
-                Ok(n) if n > 0 => PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: format!("decayed {} stale entries", n) },
+                Ok(n) if n > 0 => PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: format!("decayed {n} stale entries") },
                 Err(e) => PhaseReport { name: self.name(), duration_ms: 0, ok: false, detail: format!("decay failed: {e}") },
                 _ => PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: "no stale entries".to_string() },
             }

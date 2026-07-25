@@ -1,21 +1,30 @@
+use crate::memory::cosine::cosine_similarity;
 use crate::memory::silva::{GraphNode, SilvaDB, NodeWriteOptions};
+use crate::router::embeddings::EmbeddingEngine;
 use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
+const SEMANTIC_CLUSTER_THRESHOLD: f32 = 0.85;
+
 /// Ouroboros Loop — autonomous harvest half. Runs on the existing
 /// NightConsolidation pulse (no new timer). Scans the guild_audit_log for
-/// REPEATED failures (same agent + tool + intent-prefix failing >= min_failures
-/// times within `lookback_secs`) and promotes each PATTERN — not one-off blips —
-/// into a per-agent `experience` node (verdict=failed). Pure ground truth from
-/// the audit chain: "this call errored" is a fact, no LLM judgment. Idempotent:
+/// REPEATED failures (same agent + tool failing >= min_failures times within
+/// `lookback_secs`) and promotes each PATTERN — not one-off blips — into a
+/// per-agent `experience` node (verdict=failed). Pure ground truth from the
+/// audit chain: "this call errored" is a fact, no LLM judgment. Idempotent:
 /// a deterministic node id means re-harvesting updates rather than duplicates.
+///
+/// When `embedding_engine` is provided, intents are grouped by BGE-M3 semantic
+/// similarity instead of naive first-4-word prefix, catching patterns like
+/// "list files" and "show directory contents" as the same failure class.
 /// Returns the number of failure-patterns harvested.
 pub async fn harvest_failures_from_audit(
     silva: &Arc<SilvaDB>,
     audit_db_path: &str,
     lookback_secs: i64,
     min_failures: i64,
+    embedding_engine: Option<&EmbeddingEngine>,
 ) -> usize {
     let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(lookback_secs)).to_rfc3339();
     // Collect (agent_id, tool, intent) error rows synchronously — a rusqlite
@@ -44,40 +53,101 @@ pub async fn harvest_failures_from_audit(
         }
     };
 
-    // Group by (agent, tool, first-4-words-of-intent) and count.
-    use std::collections::HashMap;
-    let mut counts: HashMap<(String, String, String), i64> = HashMap::new();
-    for (agent, tool, intent) in rows {
-        let prefix: String = intent.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
-        *counts.entry((agent, tool, prefix)).or_insert(0) += 1;
-    }
-
     let mut harvested = 0usize;
-    for ((agent, tool, prefix), count) in counts {
-        if count < min_failures {
-            continue;
+    if let Some(engine) = embedding_engine {
+        // Semantic grouping: embed intents, cluster by cosine similarity
+        use std::collections::HashMap;
+        // Group rows by (agent, tool) first, then semantically cluster within each group
+        let mut by_agent_tool: HashMap<(String, String), Vec<(String, Option<Vec<f32>>)>> = HashMap::new();
+        for (agent, tool, intent) in rows {
+            let emb = engine.embed(&intent).ok();
+            by_agent_tool.entry((agent, tool)).or_default().push((intent, emb));
         }
-        // Deterministic id → idempotent upsert (re-harvest updates, no dupes).
-        let key_hash: u64 = format!("{tool}|{prefix}").bytes()
-            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-        let node_id = format!("experience:{agent}:auto:{key_hash:x}");
-        let content = format!(
-            "[failed] {tool} for '{prefix}' → falló {count}x en las últimas {}h (auto-detectado del audit log)",
-            lookback_secs / 3600
-        );
-        let meta = serde_json::json!({
-            "agent_id": agent, "verdict": "failed", "kind": "experience",
-            "auto_harvested": true, "failure_count": count,
-        }).to_string();
-        let scope = format!("agent:{agent}");
-        let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
-        if silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
-            let _ = silva.set_weight(&node_id, 2.0).await; // failures weigh highest
-            harvested += 1;
+
+        // Greedy threshold clustering per (agent, tool) group
+        for ((agent, tool), entries) in by_agent_tool {
+            let mut clusters: Vec<(Vec<f32>, Vec<usize>)> = Vec::new();
+            for (idx, (_intent, emb_opt)) in entries.iter().enumerate() {
+                let Some(emb) = emb_opt else { continue };
+                let mut assigned = false;
+                for (centroid_members, member_indices) in &mut clusters {
+                    if cosine_similarity(centroid_members, emb) >= SEMANTIC_CLUSTER_THRESHOLD {
+                        // Update centroid as running average
+                        for (c, e) in centroid_members.iter_mut().zip(emb.iter()) {
+                            *c = (*c * member_indices.len() as f32 + e) / (member_indices.len() + 1) as f32;
+                        }
+                        member_indices.push(idx);
+                        assigned = true;
+                        break;
+                    }
+                }
+                if !assigned {
+                    clusters.push((emb.clone(), vec![idx]));
+                }
+            }
+
+            for (_centroid, member_indices) in &clusters {
+                if member_indices.len() < min_failures as usize {
+                    continue;
+                }
+                let count = member_indices.len() as i64;
+                // Use the first intent in the cluster as the representative prefix
+                let representative = &entries[member_indices[0]].0;
+                let prefix: String = representative.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
+                let key_hash: u64 = format!("{tool}|{prefix}|semantic").bytes()
+                    .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                let node_id = format!("experience:{agent}:auto:{key_hash:x}");
+                let content = format!(
+                    "[failed] {tool} for '{prefix}' → falló {count}x en las últimas {}h (agrupado semánticamente, {} miembros en cluster)",
+                    lookback_secs / 3600, member_indices.len()
+                );
+                let meta = serde_json::json!({
+                    "agent_id": agent, "verdict": "failed", "kind": "experience",
+                    "auto_harvested": true, "failure_count": count, "cluster_size": member_indices.len(),
+                    "semantic_grouping": true,
+                }).to_string();
+                let scope = format!("agent:{agent}");
+                let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
+                if silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
+                    let _ = silva.set_weight(&node_id, 2.0).await;
+                    harvested += 1;
+                }
+            }
+        }
+    } else {
+        // Fallback: group by (agent, tool, first-4-words-of-intent) as before.
+        use std::collections::HashMap;
+        let mut counts: HashMap<(String, String, String), i64> = HashMap::new();
+        for (agent, tool, intent) in rows {
+            let prefix: String = intent.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
+            *counts.entry((agent, tool, prefix)).or_insert(0) += 1;
+        }
+
+        for ((agent, tool, prefix), count) in counts {
+            if count < min_failures {
+                continue;
+            }
+            let key_hash: u64 = format!("{tool}|{prefix}").bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+            let node_id = format!("experience:{agent}:auto:{key_hash:x}");
+            let content = format!(
+                "[failed] {tool} for '{prefix}' → falló {count}x en las últimas {}h (auto-detectado del audit log)",
+                lookback_secs / 3600
+            );
+            let meta = serde_json::json!({
+                "agent_id": agent, "verdict": "failed", "kind": "experience",
+                "auto_harvested": true, "failure_count": count,
+            }).to_string();
+            let scope = format!("agent:{agent}");
+            let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
+            if silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
+                let _ = silva.set_weight(&node_id, 2.0).await;
+                harvested += 1;
+            }
         }
     }
     if harvested > 0 {
-        info!("🐍 Ouroboros harvest: promoted {} repeated-failure pattern(s) to per-agent experience", harvested);
+        info!("🐍 Ouroboros harvest: promoted {harvested} repeated-failure pattern(s) to per-agent experience");
     }
     harvested
 }
@@ -488,7 +558,7 @@ mod tests {
             conn.execute("INSERT INTO guild_audit_log (timestamp,guild,tool_name,agent_id,intent,status) VALUES (?1,'bash','run','agent-r','ls the temp dir','error')", rusqlite::params![now]).unwrap();
         }
 
-        let harvested = harvest_failures_from_audit(&silva, &audit_str, 86400, 2).await;
+        let harvested = harvest_failures_from_audit(&silva, &audit_str, 86400, 2, None).await;
         assert_eq!(harvested, 1, "only the repeated pattern should be harvested, not the one-off");
 
         let mgr = AgentMemoryManager::new(silva, 1000);
@@ -498,7 +568,7 @@ mod tests {
         assert!(crit[0].metadata.contains("\"auto_harvested\":true"));
 
         // Idempotency: re-harvesting the same audit produces no NEW nodes.
-        let again = harvest_failures_from_audit(&mgr_silva_clone(&mgr), &audit_str, 86400, 2).await;
+        let again = harvest_failures_from_audit(&mgr_silva_clone(&mgr), &audit_str, 86400, 2, None).await;
         assert_eq!(again, 1, "re-harvest upserts the same node, still reports the pattern (no duplicate node)");
 
         std::fs::remove_dir_all(&dir).ok();

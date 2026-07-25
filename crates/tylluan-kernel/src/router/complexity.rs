@@ -211,7 +211,7 @@ pub fn blend_with_mlp(heuristic: f64, mlp: Option<f64>) -> f64 {
     const HEURISTIC_WEIGHT: f64 = 0.6;
     const MLP_WEIGHT: f64 = 0.4;
     match mlp {
-        Some(m) if m >= 0.0 && m <= 1.0 => {
+        Some(m) if (0.0..=1.0).contains(&m) => {
             (HEURISTIC_WEIGHT * heuristic + MLP_WEIGHT * m).clamp(0.0, 1.0)
         }
         _ => heuristic,

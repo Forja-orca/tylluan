@@ -21,14 +21,14 @@ impl Phase for DecayPhase {
                 }
             }
             if decayed > 0 {
-                details.push(format!("decayed {} low-weight nodes", decayed));
+                details.push(format!("decayed {decayed} low-weight nodes"));
             }
         }
 
         // Auto-purge contaminated lesson nodes
         if let Ok(count) = ctx.silva.purge_deprecated_lessons().await
             && count > 0 {
-                details.push(format!("purged {} contaminated lesson nodes", count));
+                details.push(format!("purged {count} contaminated lesson nodes"));
             }
 
         let detail = if details.is_empty() { "no decay needed".to_string() } else { details.join(", ") };

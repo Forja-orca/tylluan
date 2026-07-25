@@ -32,7 +32,7 @@ impl Phase for GraphRagPhase {
                         }
                     }
                 }
-                PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: format!("{} clusters summarized", saved) }
+                PhaseReport { name: self.name(), duration_ms: 0, ok: true, detail: format!("{saved} clusters summarized") }
             }
         }
     }
