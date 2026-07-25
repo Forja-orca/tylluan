@@ -40,8 +40,20 @@ async fn adv_memory_poisoning_recall_returns_inert() {
 }
 
 // ── Vector 2: Cross-Scope Memory Leakage ──────────────────────────
+//
+// Renamed 2026-07-25 (was `adv_cross_scope_leakage_agent_filtered`, a name
+// that claimed the opposite of what this test demonstrates). This calls
+// SilvaDB::search_hybrid directly, bypassing handler_recall.rs entirely —
+// the real per-agent isolation (M31-P1, commit 53b7fac, already shipped
+// weeks before this rename) lives one layer up, gated behind
+// `agent_permissions.<id>.memory_isolation = true` in AclConfig, and is
+// unit-tested directly in transport/http/auth.rs's
+// test_agent_has_memory_isolation_* tests. This test's job is narrower and
+// still real: confirm the raw DB layer has no *implicit* isolation of its
+// own to accidentally rely on — an agent_id in a node's metadata is just
+// data, not an access boundary, unless a caller enforces it.
 #[tokio::test(flavor = "multi_thread")]
-async fn adv_cross_scope_leakage_agent_filtered() {
+async fn adv_cross_scope_leakage_undefended_at_db_layer() {
     let db = SilvaDB::in_memory().await.unwrap();
     let alice_memories = [
         "Alice private key: sk-1234abcd",

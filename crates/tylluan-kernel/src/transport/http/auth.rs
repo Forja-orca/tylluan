@@ -371,4 +371,83 @@ mod tests {
         // 4. No token
         assert_eq!(extract_token(&headers_empty, "foo=bar&baz=123"), None);
     }
+
+    // M31-P1 (2026-07-25): these functions were implemented and wired weeks
+    // ago (commit 53b7fac) but had zero direct unit coverage — only exercised
+    // indirectly through handler-level integration paths. Added here as the
+    // real remaining gap, not a new feature.
+
+    use crate::config::AgentPermission;
+
+    fn acl_with_permission(agent_id: &str, perm: AgentPermission) -> AclConfig {
+        let mut acl = AclConfig::default();
+        acl.agent_permissions.insert(agent_id.to_string(), perm);
+        acl
+    }
+
+    #[test]
+    fn test_agent_has_memory_isolation_true_when_configured() {
+        let acl = acl_with_permission("alice", AgentPermission {
+            scope: "read-write".to_string(),
+            denied_tools: vec![],
+            memory_isolation: true,
+        });
+        assert!(agent_has_memory_isolation("alice", &acl));
+    }
+
+    #[test]
+    fn test_agent_has_memory_isolation_false_by_default() {
+        let acl = AclConfig::default();
+        assert!(!agent_has_memory_isolation("alice", &acl), "unconfigured agent must not be isolated");
+
+        let acl_no_isolation = acl_with_permission("alice", AgentPermission {
+            scope: "read-write".to_string(),
+            denied_tools: vec![],
+            memory_isolation: false,
+        });
+        assert!(!agent_has_memory_isolation("alice", &acl_no_isolation));
+    }
+
+    #[test]
+    fn test_check_agent_id_tool_allowed_denies_listed_tool() {
+        let acl = acl_with_permission("bob", AgentPermission {
+            scope: "read-write".to_string(),
+            denied_tools: vec!["tylluan_graph".to_string()],
+            memory_isolation: false,
+        });
+        assert!(check_agent_id_tool_allowed("bob", "tylluan_graph", &acl).is_some());
+        assert!(check_agent_id_tool_allowed("bob", "tylluan_recall", &acl).is_none());
+    }
+
+    #[test]
+    fn test_check_agent_id_tool_allowed_denies_write_tools_for_readonly_scope() {
+        let acl = acl_with_permission("readonly-bot", AgentPermission {
+            scope: "read-only".to_string(),
+            denied_tools: vec![],
+            memory_isolation: false,
+        });
+        assert!(check_agent_id_tool_allowed("readonly-bot", "tylluan_remember", &acl).is_some());
+        assert!(check_agent_id_tool_allowed("readonly-bot", "tylluan_do", &acl).is_some());
+        assert!(check_agent_id_tool_allowed("readonly-bot", "tylluan_graph", &acl).is_some());
+        assert!(check_agent_id_tool_allowed("readonly-bot", "tylluan_recall", &acl).is_none(), "read-only scope must still allow recall");
+    }
+
+    #[test]
+    fn test_check_agent_id_tool_allowed_allows_unconfigured_agent() {
+        let acl = AclConfig::default();
+        assert!(check_agent_id_tool_allowed("nobody", "tylluan_remember", &acl).is_none(), "backward compat: no config means no restriction");
+    }
+
+    #[test]
+    fn test_resolve_agent_id_for_token_returns_empty_when_unbound() {
+        let acl = AclConfig::default();
+        assert_eq!(resolve_agent_id_for_token("some-token", &acl), "");
+    }
+
+    #[test]
+    fn test_resolve_agent_id_for_token_returns_bound_agent() {
+        let mut acl = AclConfig::default();
+        acl.token_agent_bindings.insert("tok-123".to_string(), "alice".to_string());
+        assert_eq!(resolve_agent_id_for_token("tok-123", &acl), "alice");
+    }
 }
