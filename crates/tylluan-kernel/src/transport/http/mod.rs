@@ -92,6 +92,11 @@ pub struct HttpState {
     pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
     pub repo_map: Arc<crate::repo_map::RepoMap>,
     pub a2a_task_manager: Arc<a2a::A2aTaskManager>,
+    /// M19-P5: Declarative agent contract loaded from `.tylluan/agents.toml`.
+    /// Empty contract when the file doesn't exist (fully optional feature).
+    /// Used as a third-tier role resolution source after explicit token mappings
+    /// and static ACL config — never overrides an already-resolved role.
+    pub agents_contract: Arc<crate::security::agents_contract::AgentsContract>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -409,6 +414,12 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
 
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
 
+    // M19-P5: Load declarative agent contract from .tylluan/agents.toml
+    let workspace_root = std::env::current_dir().unwrap_or_default();
+    let agents_contract = Arc::new(
+        crate::security::agents_contract::AgentsContract::load(&workspace_root)
+    );
+
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth_token,
@@ -480,6 +491,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 gossip_cfg.clone(),
             )
         )),
+        agents_contract,
     });
 
     info!("🗺️  Repo map built: {} files, {} dirs, {} lines ({}ms)",

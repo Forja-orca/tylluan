@@ -221,6 +221,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
         jobs: Arc::new(
             tylluan_kernel::memory::jobs::JobQueue::open(std::path::Path::new(":memory:")).unwrap()
         ),
+        agents_contract: Arc::new(tylluan_kernel::security::agents_contract::AgentsContract::empty()),
         cancel_token: tokio_util::sync::CancellationToken::new(),
         node_router,
         health_ready: Arc::new(std::sync::atomic::AtomicBool::new(true)),

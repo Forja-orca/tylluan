@@ -12,6 +12,7 @@ pub mod grants;
 pub mod hooks;
 pub mod coherence_gate;
 pub mod poison_patterns;
+pub mod agents_contract;
 
 #[cfg(test)]
 mod integration_tests;

@@ -85,6 +85,7 @@ async fn test_state() -> Arc<HttpState> {
         oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3030".to_string())),
         metrics_ring: Arc::new(RwLock::new(tylluan_kernel::metrics_ring::MetricsRingBuffer::new())),
         jobs: Arc::new(tylluan_kernel::memory::jobs::JobQueue::open(std::path::Path::new(":memory:")).unwrap()),
+        agents_contract: Arc::new(tylluan_kernel::security::agents_contract::AgentsContract::empty()),
         cancel_token: tokio_util::sync::CancellationToken::new(),
         node_router,
         health_ready: Arc::new(std::sync::atomic::AtomicBool::new(true)),

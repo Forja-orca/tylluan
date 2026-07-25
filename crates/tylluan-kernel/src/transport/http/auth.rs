@@ -78,14 +78,60 @@ pub fn agent_has_memory_isolation(agent_id: &str, acl: &AclConfig) -> bool {
     acl.agent_permissions.get(agent_id).map(|p| p.memory_isolation).unwrap_or(false)
 }
 
-/// Resolve ACL role from the current request state and bearer token.
-async fn resolve_acl_role(state: &Arc<HttpState>, bearer_token: Option<&str>) -> String {
-    let config = state.config.read().await;
-    let acl = &config.security.acl;
-    match bearer_token {
-        Some(token) => resolve_role_for_token(token, acl),
+/// Pure resolution logic: resolve ACL role from token, config, contract, and agent_id.
+/// Extracted as a pure function for testability (M19-P5 / ADR-009).
+///
+/// Resolution order:
+/// 1. Explicit token mapping in `acl.tokens` → use that role (always wins).
+/// 2. Token resolves to `default_role` AND agent_id is supplied → consult
+///    `agents_contract` for the agent's declared role if valid in `acl.roles`.
+/// 3. Otherwise → `acl.default_role` (unchanged fallback).
+pub fn resolve_acl_role_inner(
+    token: Option<&str>,
+    agent_id: Option<&str>,
+    acl: &AclConfig,
+    contract: &crate::security::agents_contract::AgentsContract,
+) -> String {
+    let base_role = match token {
+        Some(tok) => resolve_role_for_token(tok, acl),
         None => acl.default_role.clone(),
+    };
+
+    // Step 1: Explicit token mapping always wins (token is in acl.tokens)
+    if let Some(tok) = token {
+        if acl.tokens.contains_key(tok) {
+            return base_role;
+        }
     }
+
+    // Step 2: If we hit default_role AND have an agent_id, check the contract
+    if base_role == acl.default_role {
+        if let Some(aid) = agent_id {
+            let contract_role = contract.get_role(aid);
+            if let Some(declared_role) = contract_role {
+                if acl.roles.contains_key(declared_role) || declared_role == "admin" {
+                    return declared_role.to_string();
+                }
+            }
+        }
+    }
+
+    base_role
+}
+
+/// Resolve ACL role from the current request state, bearer token, and optional agent_id.
+async fn resolve_acl_role(
+    state: &Arc<HttpState>,
+    bearer_token: Option<&str>,
+    agent_id: Option<&str>,
+) -> String {
+    let config = state.config.read().await;
+    resolve_acl_role_inner(
+        bearer_token,
+        agent_id,
+        &config.security.acl,
+        &state.agents_contract,
+    )
 }
 
 /// Paths that bypass bearer auth entirely, regardless of dev_mode. Kept as a
@@ -226,7 +272,7 @@ pub async fn bearer_auth_middleware(
             }
         }
 
-    if let Some(aid) = agent_id {
+    if let Some(aid) = &agent_id {
         let max_req = {
             let config = state.config.read().await;
             config.limits.max_requests_per_agent_per_min
@@ -259,7 +305,7 @@ pub async fn bearer_auth_middleware(
     let query_str = request.uri().query().unwrap_or("");
     let bearer_token = extract_token(&headers, query_str);
 
-    let acl_role = resolve_acl_role(&state, bearer_token.as_deref()).await;
+    let acl_role = resolve_acl_role(&state, bearer_token.as_deref(), agent_id.as_deref()).await;
     let acl_agent_id = {
         let config = state.config.read().await;
         let acl = &config.security.acl;
@@ -449,5 +495,94 @@ mod tests {
         let mut acl = AclConfig::default();
         acl.token_agent_bindings.insert("tok-123".to_string(), "alice".to_string());
         assert_eq!(resolve_agent_id_for_token("tok-123", &acl), "alice");
+    }
+
+    // ── M19-P5: AgentsContract resolution tests ──────────────────────────
+
+    use crate::security::agents_contract::{AgentsContract, AgentContractEntry};
+
+    fn contract_with_entry(agent_id: &str, role: &str) -> AgentsContract {
+        let mut agents = std::collections::HashMap::new();
+        agents.insert(agent_id.to_string(), AgentContractEntry {
+            role: role.to_string(),
+            description: String::new(),
+        });
+        AgentsContract { agents }
+    }
+
+    fn acl_with_role(role_name: &str, guilds: Vec<&str>) -> AclConfig {
+        let mut roles = std::collections::HashMap::new();
+        roles.insert(role_name.to_string(), guilds.iter().map(|s| s.to_string()).collect());
+        AclConfig { default_role: "viewer".to_string(), roles, ..Default::default() }
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_explicit_token_wins() {
+        // Explicitly-mapped token must always take precedence over any contract role.
+        let contract = contract_with_entry("deep", "admin");
+        let mut acl = acl_with_role("contributor", vec!["bash", "git"]);
+        acl.tokens.insert("tok-admin".to_string(), "admin".to_string());
+        acl.default_role = "viewer".to_string();
+
+        let role = resolve_acl_role_inner(Some("tok-admin"), Some("deep"), &acl, &contract);
+        assert_eq!(role, "admin", "explicit token mapping must win over contract");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_contract_applied_when_default_token() {
+        // Unmapped token + contract entry for agent_id → use contract role.
+        let contract = contract_with_entry("deep", "contributor");
+        let acl = acl_with_role("contributor", vec!["bash", "git"]);
+
+        let role = resolve_acl_role_inner(Some("some-generic-token"), Some("deep"), &acl, &contract);
+        assert_eq!(role, "contributor", "contract role must apply when token is not explicitly mapped");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_no_contract_no_agent_falls_back() {
+        let contract = AgentsContract::empty();
+        let acl = acl_with_role("contributor", vec!["bash"]);
+
+        let role = resolve_acl_role_inner(Some("unknown-token"), None, &acl, &contract);
+        assert_eq!(role, "viewer", "must fall back to default_role when no contract match");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_contract_applied_with_no_token() {
+        // No bearer token at all + agent_id with contract entry → use contract role.
+        let contract = contract_with_entry("ci-bot", "contributor");
+        let acl = acl_with_role("contributor", vec!["bash"]);
+
+        let role = resolve_acl_role_inner(None, Some("ci-bot"), &acl, &contract);
+        assert_eq!(role, "contributor", "contract must apply even without a bearer token");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_contract_unknown_agent_id_falls_back() {
+        let contract = contract_with_entry("known-agent", "admin");
+        let acl = acl_with_role("contributor", vec!["bash"]);
+
+        let role = resolve_acl_role_inner(Some("tok"), Some("unknown-agent"), &acl, &contract);
+        assert_eq!(role, "viewer", "unlisted agent_id must get default_role");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_invalid_contract_role_falls_back() {
+        // Agent declares a role that doesn't exist in acl.roles → fails safe to default_role.
+        let contract = contract_with_entry("deep", "nonexistent-role");
+        let acl = acl_with_role("contributor", vec!["bash"]);
+
+        let role = resolve_acl_role_inner(Some("tok"), Some("deep"), &acl, &contract);
+        assert_eq!(role, "viewer", "nonexistent contract role must fall back safely");
+    }
+
+    #[test]
+    fn test_resolve_acl_role_inner_missing_file_is_noop() {
+        // Empty contract (equivalent to missing .tylluan/agents.toml) must not change behavior.
+        let contract = AgentsContract::empty();
+        let acl = acl_with_role("contributor", vec!["bash"]);
+
+        let role = resolve_acl_role_inner(Some("tok"), Some("any-agent"), &acl, &contract);
+        assert_eq!(role, "viewer", "empty contract must not apply any role");
     }
 }
