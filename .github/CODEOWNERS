@@ -1,0 +1,31 @@
+# CODEOWNERS — enforced on `tylluan-montaraz` (community branch) via branch
+# protection's "require code owner reviews". A community PR touching any of
+# these paths cannot merge without a review from the team account, regardless
+# of how many other approvals it has.
+#
+# Rationale (2026-07-26): this repo now accepts external community
+# contributions via fork+PR into `tylluan-montaraz`. CI workflows and
+# security-critical code are the two places a malicious or careless PR could
+# do real damage (secret exfiltration via a modified workflow, an ACL/gate
+# bypass in security code) — see docs/reference/security/github_agent_incidents.md
+# for the documented 2025-2026 incidents this defends against
+# (tj-actions/changed-files, pull_request_nightmare, CamoLeak, GitLost).
+#
+# Everything NOT listed here can be approved by any reviewer with write access.
+
+# CI/CD — the single highest-risk surface for a public repo taking PRs.
+# A workflow change is how a fork PR would try to exfiltrate secrets or
+# escalate to RCE on a runner (see pull_request_nightmare, tj-actions).
+/.github/workflows/          @Forja-orca
+/.github/CODEOWNERS          @Forja-orca
+
+# Security-critical kernel code — ACL, sandbox, coherence gate, signal loop,
+# agent contracts. A subtle change here is the hardest kind of bug to catch
+# in review if it isn't required review.
+/crates/tylluan-kernel/src/security/  @Forja-orca
+/crates/tylluan-kernel/src/transport/http/auth.rs  @Forja-orca
+
+# Repo-level config that affects every build/release.
+/Cargo.toml                  @Forja-orca
+/deny.toml                   @Forja-orca
+/.tylluan/                   @Forja-orca
