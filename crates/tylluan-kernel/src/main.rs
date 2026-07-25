@@ -1448,6 +1448,7 @@ async fn main() -> anyhow::Result<()> {
     // Collective memory consensus scheduler (runs every 1 hour)
     // Optimized: Uses 60s tick instead of 1s to save CPU on toaster hardware
     let silva_consensus = silva.clone();
+    let matcher_consensus = matcher.clone();
     tokio::spawn(async move {
         let mut consensus_interval = tokio::time::interval(Duration::from_secs(60));
         let mut secs_to_consensus: u64 = 3600;
@@ -1460,10 +1461,11 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 secs_to_consensus = 3600;
                 let silva_inner = silva_hub_consensus.clone();
+                let embedding_engine = matcher_consensus.engine();
                 let guard = GuardedTask::new("Memory Consensus", Duration::from_secs(120));
                 let _ = guard.run(async move {
                     let engine = ConsensusEngine::new(silva_inner);
-                    engine.consolidate(None).await.map(|_| ())?;
+                    engine.consolidate_with_engine(None, embedding_engine.as_deref()).await.map(|_| ())?;
                     Ok::<(), anyhow::Error>(())
                 }).await;
             }
