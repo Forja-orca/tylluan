@@ -11,3 +11,4 @@ pub mod catalog;
 pub mod matcher;
 pub mod complexity;
 pub mod embeddings;
+pub mod light_reranker;

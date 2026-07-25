@@ -493,17 +493,35 @@ if let Some(ref mut s) = stmt {
 
     // Jaccard LRU cache: skip expensive embedding + search if similar query exists
     let mut cache = server.recall_cache.lock().await;
-    if let Some(cached) = cache.get(&effective_query) {
-        let mut scored: Vec<(GraphNode, f32)> = cached.clone();
+    let cached_docs = cache.get(&effective_query).cloned();
+    drop(cache);
+
+    let query_embedding = server.matcher.engine().and_then(|e| {
+        server.silva.query_embed_cache
+            .get_or_embed(&effective_query, |q| e.embed(q))
+            .ok()
+    });
+
+    if let Some(cached) = cached_docs {
+        let mut scored: Vec<(GraphNode, f32)> = cached;
         let aid = rec_agent_id.as_deref().unwrap_or("anonymous");
+
+        // ADR-011 Coherence Gate: the cache stores raw (pre-gate) candidates,
+        // so a cache hit must still be gated — otherwise a poisoned node
+        // that made it into the cache once would bypass the gate forever.
+        let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
+            scored, &server.silva, query_embedding.as_deref(),
+        ).await;
+        scored = gated;
+        let gate_warning = gate_stats.should_warn();
+
         for (node, _) in &scored {
             let _ = server.silva.reinforce_node(&node.id, 1.02).await;
             let _ = server.silva.touch_node(&node.id, aid, "recall").await;
         }
-        drop(cache);
 
         let total_found = scored.len();
-        
+
         // Filter out decayed nodes for display (weight < 0.15), keeping at least one if all are decayed.
         // Reranker candidates use a lower threshold (0.05) so weak-but-relevant nodes (e.g. Jina episode
         // at w=0.12) survive to be scored by Jina before being cut.
@@ -530,8 +548,26 @@ if let Some(ref mut s) = stmt {
 
         scored.truncate(limit);
         let showing = scored.len();
-        
-        let header = format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n");
+
+        if let Some(ref aid_val) = rec_agent_id {
+            let task_hash: String = format!("{effective_query}|{aid_val}").bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64))
+                .to_string();
+            for (rank, (node, _)) in scored.iter().enumerate() {
+                let _ = server.silva.log_recall_feedback(
+                    &node.id, aid_val, &task_hash, &effective_query, rank as i64,
+                ).await;
+            }
+        }
+
+        let header = if gate_warning {
+            format!(
+                "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
+                gate_stats.eliminated + gate_stats.penalized
+            )
+        } else {
+            format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
+        };
         let summary_body = scored.iter().map(|(d, score)| {
             let age = d.created_at.as_deref().unwrap_or("?");
             let truncated_content = truncate_adaptive(&d.content, *score, compact);
@@ -541,12 +577,6 @@ if let Some(ref mut s) = stmt {
         let prefix = session_context.unwrap_or_default();
         return Ok(CallToolResult { content: vec![Content::text(format!("{prefix}{summary}"))], is_error: Some(false) });
     }
-
-    let query_embedding = server.matcher.engine().and_then(|e| {
-        server.silva.query_embed_cache
-            .get_or_embed(&effective_query, |q| e.embed(q))
-            .ok()
-    });
 
     // M6: Dual-level retrieval (LightRAG pattern) — opt-in via mode="dual"
     let mut candidates = if mode == "dual" {
@@ -624,10 +654,24 @@ if let Some(ref mut s) = stmt {
         }),
         Ok(docs) => {
             // Cache the full results before filtering
-            cache.put(effective_query.clone(), docs.clone());
-            drop(cache);
+            server.recall_cache.lock().await.put(effective_query.clone(), docs.clone());
             let mut scored: Vec<(GraphNode, f32)> = docs;
             let aid = rec_agent_id.as_deref().unwrap_or("anonymous");
+
+            // ADR-011 Coherence Gate: eliminate/penalize before anything downstream
+            // (stigmergy reinforcement, hot context, eventual generative consumption)
+            // trusts these nodes further.
+            let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
+                scored, &server.silva, query_embedding.as_deref(),
+            ).await;
+            scored = gated;
+            let gate_warning = gate_stats.should_warn();
+            if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
+                tracing::info!(
+                    "🛡️ Coherence Gate: {} eliminated, {} penalized of {} candidates",
+                    gate_stats.eliminated, gate_stats.penalized, gate_stats.total
+                );
+            }
 
             // STIGMERGY: Reinforce recalled nodes
             for (node, _) in &scored {
@@ -702,7 +746,28 @@ if let Some(ref mut s) = stmt {
             scored.truncate(limit);
             let showing = scored.len();
 
-            let header = format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n");
+            // ADR-011 Signal Loop: log which memories were actually shown to this
+            // agent, so NightConsolidation's FeedbackSignalPhase can later resolve
+            // whether they were referenced. Fire-and-forget, never blocks recall.
+            if let Some(ref aid_val) = rec_agent_id {
+                let task_hash: String = format!("{effective_query}|{aid_val}").bytes()
+                    .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64))
+                    .to_string();
+                for (rank, (node, _)) in scored.iter().enumerate() {
+                    let _ = server.silva.log_recall_feedback(
+                        &node.id, aid_val, &task_hash, &effective_query, rank as i64,
+                    ).await;
+                }
+            }
+
+            let header = if gate_warning {
+                format!(
+                    "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
+                    gate_stats.eliminated + gate_stats.penalized
+                )
+            } else {
+                format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
+            };
 
             // WER — Weight Exposure in Recall (R21-4)
             // Expose score, weight, node_type and created_at so agents can audit

@@ -365,6 +365,87 @@ pub async fn handle_tylluan_think(
     })
 }
 
+fn find_connected_components(node_ids: &[String], edges: &[(String, String)]) -> Vec<Vec<String>> {
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    for id in node_ids {
+        adj.entry(id.as_str()).or_default();
+    }
+    for (s, t) in edges {
+        if node_ids.contains(s) && node_ids.contains(t) {
+            adj.entry(s.as_str()).or_default().push(t.as_str());
+            adj.entry(t.as_str()).or_default().push(s.as_str());
+        }
+    }
+    let mut visited: HashSet<&str> = HashSet::new();
+    let mut components = Vec::new();
+    for id in node_ids {
+        if visited.contains(id.as_str()) { continue; }
+        let mut stack = vec![id.as_str()];
+        let mut comp = Vec::new();
+        while let Some(cur) = stack.pop() {
+            if !visited.insert(cur) { continue; }
+            comp.push(cur.to_string());
+            if let Some(neighbors) = adj.get(cur) {
+                for n in neighbors {
+                    if !visited.contains(n) {
+                        stack.push(n);
+                    }
+                }
+            }
+        }
+        components.push(comp);
+    }
+    components
+}
+
+fn calculate_pagerank(
+    node_ids: &[String],
+    edges: &[(String, String)],
+    iterations: usize,
+    damping: f64,
+) -> HashMap<String, f64> {
+    let n = node_ids.len();
+    if n == 0 { return HashMap::new(); }
+
+    let mut pr: HashMap<String, f64> = node_ids.iter().map(|id| (id.clone(), 1.0 / n as f64)).collect();
+    let mut out_degree: HashMap<String, usize> = HashMap::new();
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+
+    for (s, t) in edges {
+        if node_ids.contains(s) && node_ids.contains(t) {
+            adj.entry(s.clone()).or_default().push(t.clone());
+            *out_degree.entry(s.clone()).or_insert(0) += 1;
+        }
+    }
+
+    for _ in 0..iterations {
+        let mut next_pr: HashMap<String, f64> = node_ids.iter().map(|id| (id.clone(), (1.0 - damping) / n as f64)).collect();
+        let mut dangling_sum = 0.0;
+
+        for id in node_ids {
+            if *out_degree.get(id).unwrap_or(&0) == 0 {
+                dangling_sum += pr[id];
+            } else if let Some(neighbors) = adj.get(id) {
+                for neighbor in neighbors {
+                    if let Some(score) = next_pr.get_mut(neighbor) {
+                        *score += damping * pr[id] / out_degree[id] as f64;
+                    }
+                }
+            }
+        }
+
+        for id in node_ids {
+            if let Some(score) = next_pr.get_mut(id) {
+                *score += damping * dangling_sum / n as f64;
+            }
+        }
+
+        pr = next_pr;
+    }
+
+    pr
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,85 +549,4 @@ mod tests {
         let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
         assert!(!result.is_error.unwrap_or(false));
     }
-}
-
-fn find_connected_components(node_ids: &[String], edges: &[(String, String)]) -> Vec<Vec<String>> {
-    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
-    for id in node_ids {
-        adj.entry(id.as_str()).or_default();
-    }
-    for (s, t) in edges {
-        if node_ids.contains(s) && node_ids.contains(t) {
-            adj.entry(s.as_str()).or_default().push(t.as_str());
-            adj.entry(t.as_str()).or_default().push(s.as_str());
-        }
-    }
-    let mut visited: HashSet<&str> = HashSet::new();
-    let mut components = Vec::new();
-    for id in node_ids {
-        if visited.contains(id.as_str()) { continue; }
-        let mut stack = vec![id.as_str()];
-        let mut comp = Vec::new();
-        while let Some(cur) = stack.pop() {
-            if !visited.insert(cur) { continue; }
-            comp.push(cur.to_string());
-            if let Some(neighbors) = adj.get(cur) {
-                for n in neighbors {
-                    if !visited.contains(n) {
-                        stack.push(n);
-                    }
-                }
-            }
-        }
-        components.push(comp);
-    }
-    components
-}
-
-fn calculate_pagerank(
-    node_ids: &[String],
-    edges: &[(String, String)],
-    iterations: usize,
-    damping: f64,
-) -> HashMap<String, f64> {
-    let n = node_ids.len();
-    if n == 0 { return HashMap::new(); }
-    
-    let mut pr: HashMap<String, f64> = node_ids.iter().map(|id| (id.clone(), 1.0 / n as f64)).collect();
-    let mut out_degree: HashMap<String, usize> = HashMap::new();
-    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
-    
-    for (s, t) in edges {
-        if node_ids.contains(s) && node_ids.contains(t) {
-            adj.entry(s.clone()).or_default().push(t.clone());
-            *out_degree.entry(s.clone()).or_insert(0) += 1;
-        }
-    }
-    
-    for _ in 0..iterations {
-        let mut next_pr: HashMap<String, f64> = node_ids.iter().map(|id| (id.clone(), (1.0 - damping) / n as f64)).collect();
-        let mut dangling_sum = 0.0;
-        
-        for id in node_ids {
-            if *out_degree.get(id).unwrap_or(&0) == 0 {
-                dangling_sum += pr[id];
-            } else if let Some(neighbors) = adj.get(id) {
-                for neighbor in neighbors {
-                    if let Some(score) = next_pr.get_mut(neighbor) {
-                        *score += damping * pr[id] / out_degree[id] as f64;
-                    }
-                }
-            }
-        }
-        
-        for id in node_ids {
-            if let Some(score) = next_pr.get_mut(id) {
-                *score += damping * dangling_sum / n as f64;
-            }
-        }
-        
-        pr = next_pr;
-    }
-    
-    pr
 }

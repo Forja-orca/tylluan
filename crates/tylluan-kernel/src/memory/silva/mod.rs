@@ -29,6 +29,7 @@ pub mod autolink;
 pub mod hnsw;
 pub mod maintenance;
 pub mod query_cache;
+pub mod recall_feedback;
 pub mod schema;
 pub mod sharing;
 

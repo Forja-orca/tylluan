@@ -53,12 +53,14 @@ pub async fn harvest_failures_from_audit(
         }
     };
 
+    type AgentToolGroups = std::collections::HashMap<(String, String), Vec<(String, Option<Vec<f32>>)>>;
+
     let mut harvested = 0usize;
     if let Some(engine) = embedding_engine {
         // Semantic grouping: embed intents, cluster by cosine similarity
         use std::collections::HashMap;
         // Group rows by (agent, tool) first, then semantically cluster within each group
-        let mut by_agent_tool: HashMap<(String, String), Vec<(String, Option<Vec<f32>>)>> = HashMap::new();
+        let mut by_agent_tool: AgentToolGroups = HashMap::new();
         for (agent, tool, intent) in rows {
             let emb = engine.embed(&intent).ok();
             by_agent_tool.entry((agent, tool)).or_default().push((intent, emb));
