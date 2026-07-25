@@ -742,6 +742,42 @@ if let Some(ref mut s) = stmt {
                 }
             }
 
+            // ADR-011 LightReranker: reorder by learned score when model available.
+            // Additive, opt-in — if no trained model exists, scored is unchanged.
+            if crate::router::light_reranker::LightReranker::exists(&server.models_dir) {
+                let reranker = crate::router::light_reranker::LightReranker::new(&server.models_dir);
+                if reranker.is_active() {
+                    let candidates: Vec<(crate::router::light_reranker::RerankFeatures, usize)> = scored.iter()
+                        .enumerate()
+                        .map(|(idx, (node, score))| {
+                            let days = chrono::Utc::now()
+                                .signed_duration_since(
+                                    node.created_at
+                                        .as_deref()
+                                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                                        .map(|dt| dt.naive_utc().and_utc())
+                                        .unwrap_or_else(chrono::Utc::now),
+                                )
+                                .num_days()
+                                .max(0) as f32;
+                            (crate::router::light_reranker::RerankFeatures {
+                                score_rrf: *score,
+                                score_graph: *score,
+                                recency_score: 1.0 / (1.0 + days),
+                                agent_affinity: 0.0,
+                            }, idx)
+                        })
+                        .collect();
+                    let order = reranker.rerank(candidates);
+                    if order.len() == scored.len() {
+                        scored = order.into_iter().filter_map(|i| {
+                            if i < scored.len() { Some(scored[i].clone()) } else { None }
+                        }).collect();
+                        tracing::info!("🎯 LightReranker reordered {} candidates", scored.len());
+                    }
+                }
+            }
+
             // Always truncate to the requested limit at the very end
             scored.truncate(limit);
             let showing = scored.len();

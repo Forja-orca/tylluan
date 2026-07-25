@@ -3,24 +3,33 @@
 //! using a feature vector RRF alone can't see: per-agent affinity learned
 //! from the Signal Loop (`recall_feedback`).
 //!
-//! Same load/degrade shape as `mlp::MlpScorer` from the complexity-cascade
-//! experiment: if no trained model exists yet (which is the honest default
-//! state until `recall_feedback` accumulates the >=5,000 resolved rows
-//! ADR-011 §3.3 requires), `score()` returns `None` and callers fall back
-//! to RRF untouched. Not wired into `search_hybrid`'s signature — with no
-//! real trained model yet, changing a 17-call-site function signature for
-//! an always-None reranker is exactly the premature-complexity this project
-//! avoids. `rerank()` is an additive, opt-in wrapper any call site can adopt
-//! once ADR-011's Fase 3-4 data threshold is actually met.
+//! Two backends tried in order at construction:
+//! 1. ONNX model at `models_dir/light_reranker.onnx`
+//! 2. Native JSON weights at `models_dir/light_reranker.weights`
+//!
+//! If neither exists the reranker is inactive and all calls are no-ops
+//! (RRF order preserved).
 
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 use ort::session::Session;
 use ort::value::TensorRef;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Serializable weights produced by the NightConsolidation trainer.
+/// FFN: 4 inputs → hidden_size → 1 output.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LightRerankerWeights {
+    pub w1: Vec<f32>,
+    pub b1: Vec<f32>,
+    pub w2: Vec<f32>,
+    pub b2: Vec<f32>,
+    pub hidden_size: usize,
+}
+
 /// Feature vector for one recall candidate, in the exact order the ONNX
-/// model expects. `agent_affinity` defaults to 0.0 until the trainer (not
-/// built yet — depends on real recall_feedback data) computes it.
+/// model expects. `agent_affinity` defaults to 0.0 until the trainer
+/// computes it from resolved recall_feedback data.
 pub struct RerankFeatures {
     pub score_rrf: f32,
     pub score_graph: f32,
@@ -36,39 +45,71 @@ impl RerankFeatures {
 
 pub struct LightReranker {
     session: Option<std::sync::Mutex<Session>>,
+    weights: Option<LightRerankerWeights>,
 }
 
 impl LightReranker {
+    /// Check if ANY reranker model file exists (ONNX or weights).
+    pub fn exists(models_dir: &Path) -> bool {
+        models_dir.join("light_reranker.onnx").exists()
+            || models_dir.join("light_reranker.weights").exists()
+    }
+
     pub fn new(models_dir: &Path) -> Self {
         let path = models_dir.join("light_reranker.onnx");
-        if !path.exists() {
-            return Self { session: None };
-        }
-        match Session::builder().and_then(|b| b.commit_from_file(&path)) {
-            Ok(session) => {
-                tracing::info!("LightReranker loaded from {:?}", path);
-                Self { session: Some(std::sync::Mutex::new(session)) }
-            }
-            Err(e) => {
-                tracing::info!("LightReranker failed to load from {:?}: {e} — reranking disabled", path);
-                Self { session: None }
+        if path.exists() {
+            match Session::builder().and_then(|b| b.commit_from_file(&path)) {
+                Ok(session) => {
+                    tracing::info!("LightReranker loaded from {:?}", path);
+                    return Self { session: Some(std::sync::Mutex::new(session)), weights: None };
+                }
+                Err(e) => {
+                    tracing::info!("LightReranker failed to load from {:?}: {e} — trying native weights", path);
+                }
             }
         }
+
+        let weights_path = models_dir.join("light_reranker.weights");
+        if weights_path.exists() {
+            match std::fs::read_to_string(&weights_path) {
+                Ok(json) => match serde_json::from_str::<LightRerankerWeights>(&json) {
+                    Ok(weights) => {
+                        tracing::info!("LightReranker loaded native weights from {:?}", weights_path);
+                        return Self { session: None, weights: Some(weights) };
+                    }
+                    Err(e) => {
+                        tracing::info!("LightReranker failed to parse weights from {:?}: {e}", weights_path);
+                    }
+                },
+                Err(e) => {
+                    tracing::info!("LightReranker failed to read weights from {:?}: {e}", weights_path);
+                }
+            }
+        }
+
+        Self { session: None, weights: None }
     }
 
     pub fn is_active(&self) -> bool {
-        self.session.is_some()
+        self.session.is_some() || self.weights.is_some()
     }
 
     pub fn score(&self, features: &RerankFeatures) -> Option<f32> {
-        let session = self.session.as_ref()?;
-        let mut guard = session.lock().ok()?;
-        let arr = features.to_array();
-        let input = Array2::from_shape_vec((1, 4), arr.to_vec()).ok()?;
-        let tensor = TensorRef::from_array_view(input.view()).ok()?;
-        let outputs = guard.run(ort::inputs![tensor]).ok()?;
-        let (_shape, data) = outputs[0].try_extract_tensor::<f32>().ok()?;
-        data.first().copied()
+        if let Some(ref session) = self.session {
+            let mut guard = session.lock().ok()?;
+            let arr = features.to_array();
+            let input = Array2::from_shape_vec((1, 4), arr.to_vec()).ok()?;
+            let tensor = TensorRef::from_array_view(input.view()).ok()?;
+            let outputs = guard.run(ort::inputs![tensor]).ok()?;
+            let (_shape, data) = outputs[0].try_extract_tensor::<f32>().ok()?;
+            return data.first().copied();
+        }
+
+        if let Some(ref w) = self.weights {
+            return Some(score_native(features, w));
+        }
+
+        None
     }
 
     /// Reorders `candidates` by `score()` when active, else returns them
@@ -85,6 +126,26 @@ impl LightReranker {
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         scored.into_iter().map(|(_, idx)| idx).collect()
     }
+}
+
+/// Native forward pass: 4 → hidden_size (ReLU) → 1 (sigmoid).
+fn score_native(features: &RerankFeatures, w: &LightRerankerWeights) -> f32 {
+    let x = Array1::from_vec(features.to_array().to_vec());
+    let w1 = match Array2::from_shape_vec((4, w.hidden_size), w.w1.clone()) {
+        Ok(m) => m,
+        _ => return features.score_rrf,
+    };
+    let w2 = match Array2::from_shape_vec((w.hidden_size, 1), w.w2.clone()) {
+        Ok(m) => m,
+        _ => return features.score_rrf,
+    };
+    let b1 = Array1::from_vec(w.b1.clone());
+
+    let hidden = x.dot(&w1) + &b1;
+    let hidden = hidden.mapv(|v| v.max(0.0));
+    let logit_arr = hidden.dot(&w2);
+    let logit = logit_arr[0] + w.b2[0];
+    1.0 / (1.0 + (-logit).exp())
 }
 
 #[cfg(test)]
@@ -109,5 +170,75 @@ mod tests {
     fn rerank_features_to_array_preserves_order() {
         let f = RerankFeatures { score_rrf: 1.0, score_graph: 2.0, recency_score: 3.0, agent_affinity: 4.0 };
         assert_eq!(f.to_array(), [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn native_weights_score_produces_valid_output() {
+        let weights = LightRerankerWeights {
+            w1: vec![0.1; 64],
+            b1: vec![0.0; 16],
+            w2: vec![0.2; 16],
+            b2: vec![0.0],
+            hidden_size: 16,
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let weights_path = tmp.path().join("light_reranker.weights");
+        std::fs::write(&weights_path, serde_json::to_vec(&weights).unwrap()).unwrap();
+
+        let reranker = LightReranker::new(tmp.path());
+        assert!(reranker.is_active(), "should be active with native weights file");
+
+        let score = reranker.score(&RerankFeatures { score_rrf: 0.5, score_graph: 0.3, recency_score: 0.9, agent_affinity: 0.2 });
+        assert!(score.is_some(), "native weights must produce a score");
+        let s = score.unwrap();
+        assert!((0.0..=1.0).contains(&s), "sigmoid output must be in [0,1], got {s}");
+    }
+
+    #[test]
+    fn native_weights_gives_higher_score_for_better_features() {
+        let weights = LightRerankerWeights {
+            w1: vec![1.0; 64],
+            b1: vec![0.0; 16],
+            w2: vec![1.0; 16],
+            b2: vec![0.0],
+            hidden_size: 16,
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("light_reranker.weights"), serde_json::to_vec(&weights).unwrap()).unwrap();
+        let reranker = LightReranker::new(tmp.path());
+
+        let low = reranker.score(&RerankFeatures { score_rrf: 0.1, score_graph: 0.1, recency_score: 0.1, agent_affinity: 0.1 }).unwrap();
+        let high = reranker.score(&RerankFeatures { score_rrf: 0.9, score_graph: 0.9, recency_score: 0.9, agent_affinity: 0.9 }).unwrap();
+        assert!(high > low, "better features must produce higher score: low={low} high={high}");
+    }
+
+    #[test]
+    fn corrupted_weights_file_falls_back_gracefully() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("light_reranker.weights"), b"not valid json").unwrap();
+        let reranker = LightReranker::new(tmp.path());
+        assert!(!reranker.is_active(), "corrupted weights must not activate the reranker");
+    }
+
+    #[test]
+    fn rerank_active_with_weights_reorders_by_score() {
+        let weights = LightRerankerWeights {
+            w1: vec![1.0; 64],
+            b1: vec![0.0; 16],
+            w2: vec![1.0; 16],
+            b2: vec![0.0],
+            hidden_size: 16,
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("light_reranker.weights"), serde_json::to_vec(&weights).unwrap()).unwrap();
+        let reranker = LightReranker::new(tmp.path());
+        assert!(reranker.is_active());
+
+        let candidates = vec![
+            (RerankFeatures { score_rrf: 0.1, score_graph: 0.1, recency_score: 0.1, agent_affinity: 0.1 }, 0),
+            (RerankFeatures { score_rrf: 0.9, score_graph: 0.9, recency_score: 0.9, agent_affinity: 0.9 }, 1),
+        ];
+        let reordered = reranker.rerank(candidates);
+        assert_eq!(reordered, vec![1, 0], "higher-score candidate should be ranked first");
     }
 }
