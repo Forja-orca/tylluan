@@ -30,7 +30,7 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.13.0
 
-**Tests:** 575 total (502 kernel lib + 61 link lib + 12 fsrs, CI-tracked) — 607 incluyendo tests de integración (link all-targets 88, evals 2, a2a_hitl 3) · 0 fallos  
+**Tests:** 582 total (509 kernel lib + 61 link lib + 12 fsrs, CI-tracked) — 614 incluyendo tests de integración (link all-targets 88, evals 2, a2a_hitl 3) · 0 fallos  
 **HEAD commit:** `bee6ac5` (main) · **tag: v0.13.0** (en progreso)
 
 ### En progreso — ninguno (v0.12.0 cerrado, próximo: M16 BGE-M3 Benchmark)

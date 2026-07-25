@@ -114,6 +114,21 @@ impl RecallCache {
     }
 }
 
+/// M31-P1: Memory isolation — if `agent_id` has memory_isolation=true,
+/// filter out nodes that don't belong to it. Was duplicated verbatim across
+/// the cache-hit and live-query paths; consolidated into one call site.
+async fn apply_memory_isolation(scored: &mut Vec<(GraphNode, f32)>, agent_id: &Option<String>) {
+    let Some(aid) = agent_id else { return };
+    let Ok(config_lock) = crate::config::TylluanConfig::load_cached() else { return };
+    let cfg = config_lock.read().await;
+    if crate::transport::http::auth::agent_has_memory_isolation(aid, &cfg.security.acl) {
+        let aid_pattern = format!("\"agent_id\":\"{aid}\"");
+        let before = scored.len();
+        scored.retain(|(n, _)| n.metadata.contains(&aid_pattern));
+        tracing::info!("🧊 Memory isolation: {before}→{} nodes for agent '{aid}'", scored.len());
+    }
+}
+
 pub async fn handle_tylluan_recall(
     server: &TylluanServer,
     arguments: Option<serde_json::Map<String, serde_json::Value>>,
@@ -533,18 +548,7 @@ if let Some(ref mut s) = stmt {
         // M20-D: Filter out machinery nodes that pollute recall results
         scored.retain(|(d, _)| d.node_type != "routing_anchor" && d.node_type != "session_digest");
 
-        // M31-P1: Memory isolation — if this agent has memory_isolation=true,
-        // filter out nodes that don't belong to this agent
-        if let Some(aid) = &rec_agent_id
-            && let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
-                let cfg = config_lock.read().await;
-                if crate::transport::http::auth::agent_has_memory_isolation(aid, &cfg.security.acl) {
-                    let aid_pattern = format!("\"agent_id\":\"{aid}\"");
-                    let before = scored.len();
-                    scored.retain(|(n, _)| n.metadata.contains(&aid_pattern));
-                    tracing::info!("🧊 Memory isolation: {before}→{} nodes for agent '{aid}'", scored.len());
-                }
-            }
+        apply_memory_isolation(&mut scored, &rec_agent_id).await;
 
         scored.truncate(limit);
         let showing = scored.len();
@@ -692,18 +696,7 @@ if let Some(ref mut s) = stmt {
             // M20-D: Filter out machinery nodes that pollute recall results
             scored.retain(|(d, _)| d.node_type != "routing_anchor" && d.node_type != "session_digest");
 
-            // M31-P1: Memory isolation — if this agent has memory_isolation=true,
-            // filter out nodes that don't belong to this agent
-            if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
-                let cfg = config_lock.read().await;
-                if let Some(aid) = &rec_agent_id
-                    && crate::transport::http::auth::agent_has_memory_isolation(aid, &cfg.security.acl) {
-                        let aid_pattern = format!("\"agent_id\":\"{aid}\"");
-                        let before = scored.len();
-                        scored.retain(|(n, _)| n.metadata.contains(&aid_pattern));
-                        tracing::info!("🧊 Memory isolation: {before}→{} nodes for agent '{aid}'", scored.len());
-                    }
-            }
+            apply_memory_isolation(&mut scored, &rec_agent_id).await;
 
             if let Some(aid_val) = rec_agent_id.as_ref() {
                 let aid_pattern = format!("\"agent_id\":\"{aid_val}\"");

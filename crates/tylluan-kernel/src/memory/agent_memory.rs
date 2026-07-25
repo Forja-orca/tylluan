@@ -176,6 +176,14 @@ impl AgentMemoryManager {
     /// - `metadata` containing `agent_id` and `importance`
     /// - `content` prefixed with `[agent_id]` so search can find it
     /// - initial `weight = importance.clamp(0.1, 5.0)`
+    ///
+    /// M31-P1 (write-side gap closed 2026-07-25): mirrors record_experience's
+    /// existing owner_scope tagging — that function already scoped its nodes
+    /// to `agent:{id}` unconditionally, this one didn't, an inconsistency that
+    /// left `tylluan_remember`-written memories unprotected by memory_isolation
+    /// even when it was configured for an agent (isolation is enforced by
+    /// filtering on owner_scope/metadata at read time; a node with no scope
+    /// can't be excluded from anyone's results).
     pub async fn record_memory(&self, agent_id: &str, content: &str, importance: f64) -> String {
         let node_id = format!("agent_memory:{}:{}", agent_id, Uuid::new_v4().simple());
         let tagged = format!("[{agent_id}] {content}");
@@ -183,8 +191,10 @@ impl AgentMemoryManager {
             "agent_id": agent_id,
             "importance": importance,
         }).to_string();
+        let scope = format!("agent:{agent_id}");
+        let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
 
-        if self.silva.upsert_node_with_provenance(&node_id, "agent_memory", &tagged, &meta, "agent_generated").await.is_ok() {
+        if self.silva.upsert_node_with_validity(&node_id, "agent_memory", &tagged, &meta, opts).await.is_ok() {
             let weight = importance.clamp(0.1, 5.0);
             let _ = self.silva.set_weight(&node_id, weight).await;
         }
