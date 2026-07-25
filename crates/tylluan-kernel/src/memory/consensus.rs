@@ -9,10 +9,28 @@
 
 use crate::memory::silva::{SilvaDB, GraphNode};
 use crate::memory::cosine::cosine_similarity;
+use crate::router::embeddings::EmbeddingEngine;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;
 use tracing::{info, warn};
+
+/// Below this average cosine similarity against its own sources, a
+/// synthesis node is flagged as semantically incoherent rather than
+/// trusted outright. Same threshold Ouroboros uses for cluster
+/// membership (SEMANTIC_CLUSTER_THRESHOLD) — one bar for "is this text
+/// actually about what it claims to be about" across the codebase.
+const SYNTHESIS_COHERENCE_THRESHOLD: f32 = 0.85;
+
+/// Average cosine similarity of `target` against each vector in `sources`.
+/// `None` when `sources` is empty — "no data to compare against", not "0.0 similarity".
+fn average_cosine_to_sources(target: &[f32], sources: &[Vec<f32>]) -> Option<f32> {
+    if sources.is_empty() {
+        return None;
+    }
+    let sum: f32 = sources.iter().map(|s| cosine_similarity(target, s)).sum();
+    Some(sum / sources.len() as f32)
+}
 
 pub struct ConsensusEngine {
     silva: std::sync::Arc<SilvaDB>,
@@ -24,6 +42,24 @@ impl ConsensusEngine {
     }
 
     pub async fn consolidate(&self, topic_key: Option<&str>) -> Result<usize> {
+        self.consolidate_with_engine(topic_key, None).await
+    }
+
+    /// Same as [`consolidate`], but when an `EmbeddingEngine` is provided,
+    /// synthesis nodes (Case B: close-score automatic synthesis) are
+    /// cross-verified with BGE-M3 before being trusted: the synthesized
+    /// content is re-embedded and compared against each source node's
+    /// stored embedding. This is the same encoder/decoder cross-check
+    /// pattern Ouroboros uses for cluster membership — today's synthesis
+    /// is literal source concatenation so it should always pass, but the
+    /// gate exists so that when synthesis becomes generative (ADR-010),
+    /// a hallucinated synthesis has to fool BOTH the generator and BGE-M3
+    /// to be trusted, not just the generator.
+    pub async fn consolidate_with_engine(
+        &self,
+        topic_key: Option<&str>,
+        embedding_engine: Option<&EmbeddingEngine>,
+    ) -> Result<usize> {
         let tx_id = format!("tx_{}", uuid::Uuid::new_v4().to_string().split('-').next().expect("UUID should have dashes"));
         let mut resolved_count = 0;
         
@@ -75,7 +111,7 @@ impl ConsensusEngine {
             else if win_percent >= 5.0 {
                 // Case B: Automatic Synthesis (5% - 15%)
                 info!("[{}] 🔮 Synthesis: scores close ({:.1}%). Generating unified node...", tx_id, win_percent);
-                let synth_id = self.apply_synthesis(&topic, &nodes, &tx_id).await?;
+                let synth_id = self.apply_synthesis(&topic, &nodes, &tx_id, embedding_engine).await?;
                 resolved_count += 1;
                 info!("[{}] ✅ Resolved: synthesis created='{}'", tx_id, synth_id);
             }
@@ -185,9 +221,15 @@ impl ConsensusEngine {
     }
 
     /// Creates a synthesis node combining knowledge from a close-score cluster.
-    async fn apply_synthesis(&self, topic: &str, nodes: &[GraphNode], tx_id: &str) -> Result<String> {
+    async fn apply_synthesis(
+        &self,
+        topic: &str,
+        nodes: &[GraphNode],
+        tx_id: &str,
+        embedding_engine: Option<&EmbeddingEngine>,
+    ) -> Result<String> {
         let synth_id = format!("sync_{}_{}", topic.replace(' ', "_"), uuid::Uuid::new_v4().to_string().split('-').next().expect("UUID should have dashes"));
-        
+
         info!("[{}] 🔮 Synthesis: generating node '{}' as knowledge bridge", tx_id, synth_id);
 
         // Build synthesized content (initially: technical concatenation)
@@ -196,12 +238,27 @@ impl ConsensusEngine {
             unified_content.push_str(&format!("- [{}] {}\n", node.id, node.content));
         }
 
+        let coherence = self.verify_synthesis_coherence(&unified_content, nodes, embedding_engine).await;
+        if let Some(score) = coherence {
+            if score < SYNTHESIS_COHERENCE_THRESHOLD {
+                warn!(
+                    "[{}] 🚨 Synthesis coherence check FAILED for '{}': avg cosine {:.4} < {:.2} — \
+                     synthesized content has drifted from its sources, flagging as unverified",
+                    tx_id, synth_id, score, SYNTHESIS_COHERENCE_THRESHOLD
+                );
+            } else {
+                info!("[{}] ✅ Synthesis coherence verified: avg cosine {:.4}", tx_id, score);
+            }
+        }
+
         let metadata = json!({
             "type": "synthesis",
             "topic": topic,
             "sources": nodes.iter().map(|n| n.id.clone()).collect::<Vec<String>>(),
             "synthesized_at": chrono::Utc::now().to_rfc3339(),
-            "tx_id": tx_id
+            "tx_id": tx_id,
+            "coherence_score": coherence,
+            "verified_coherent": coherence.map(|s| s >= SYNTHESIS_COHERENCE_THRESHOLD),
         }).to_string();
 
         // 1. Persist the synthesis node (allow_drift=true: Consensus is an internal cognitive module)
@@ -218,6 +275,31 @@ impl ConsensusEngine {
         }
 
         Ok(synth_id)
+    }
+
+    /// Cross-verifies synthesized content against its sources via BGE-M3.
+    ///
+    /// Embeds `unified_content` and compares it against each source node's
+    /// already-stored embedding (`get_node_embedding`), returning the
+    /// average cosine similarity. Returns `None` (not a failure) when no
+    /// engine is available or no source has a stored embedding yet — the
+    /// caller treats that as "unverifiable", not "incoherent".
+    async fn verify_synthesis_coherence(
+        &self,
+        unified_content: &str,
+        nodes: &[GraphNode],
+        embedding_engine: Option<&EmbeddingEngine>,
+    ) -> Option<f32> {
+        let engine = embedding_engine?;
+        let synth_emb = engine.embed(unified_content).ok()?;
+
+        let mut source_embs = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            if let Ok(Some(source_emb)) = self.silva.get_node_embedding(&node.id).await {
+                source_embs.push(source_emb);
+            }
+        }
+        average_cosine_to_sources(&synth_emb, &source_embs)
     }
 
     /// Manual override by the sovereign (the operator).
@@ -323,6 +405,34 @@ mod tests {
         let sources: Vec<String> = synth_meta.get("sources").unwrap()
             .as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(sources.contains(&"a".to_string()) && sources.contains(&"b".to_string()));
+
+        // No embedding engine passed via consolidate() -> coherence is unverifiable,
+        // not "incoherent". null, not false.
+        assert!(synth_meta.get("coherence_score").unwrap().is_null());
+        assert!(synth_meta.get("verified_coherent").unwrap().is_null());
+    }
+
+    #[test]
+    fn test_average_cosine_empty_sources_is_none() {
+        assert_eq!(average_cosine_to_sources(&[1.0, 0.0], &[]), None);
+    }
+
+    #[test]
+    fn test_average_cosine_identical_vectors_is_one() {
+        let target = vec![1.0, 0.0, 0.0];
+        let sources = vec![vec![1.0, 0.0, 0.0], vec![1.0, 0.0, 0.0]];
+        let avg = average_cosine_to_sources(&target, &sources).unwrap();
+        assert!((avg - 1.0).abs() < 1e-6, "identical vectors should average to ~1.0, got {avg}");
+    }
+
+    #[test]
+    fn test_average_cosine_orthogonal_vector_pulls_average_down() {
+        let target = vec![1.0, 0.0];
+        // One source matches exactly (cos=1.0), one is orthogonal (cos=0.0) -> avg 0.5
+        let sources = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let avg = average_cosine_to_sources(&target, &sources).unwrap();
+        assert!((avg - 0.5).abs() < 1e-6, "expected avg ~0.5, got {avg}");
+        assert!(avg < SYNTHESIS_COHERENCE_THRESHOLD, "0.5 must fall below the coherence gate");
     }
 
     #[tokio::test(flavor = "multi_thread")]

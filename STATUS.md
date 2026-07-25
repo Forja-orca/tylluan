@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** bee6ac5 · **508 total** green (435 kernel lib + 61 link lib + 12 fsrs) — mismo número que README.md, verificado por `scripts/check_test_count.sh`. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 2, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **540 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** bed2841 · **511 total** green (438 kernel lib + 61 link lib + 12 fsrs) — mismo número que README.md, verificado por `scripts/check_test_count.sh`. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 2, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **543 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
 
 ---
 
