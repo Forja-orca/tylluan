@@ -3,6 +3,85 @@ use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
+/// Ouroboros Loop — autonomous harvest half. Runs on the existing
+/// NightConsolidation pulse (no new timer). Scans the guild_audit_log for
+/// REPEATED failures (same agent + tool + intent-prefix failing >= min_failures
+/// times within `lookback_secs`) and promotes each PATTERN — not one-off blips —
+/// into a per-agent `experience` node (verdict=failed). Pure ground truth from
+/// the audit chain: "this call errored" is a fact, no LLM judgment. Idempotent:
+/// a deterministic node id means re-harvesting updates rather than duplicates.
+/// Returns the number of failure-patterns harvested.
+pub async fn harvest_failures_from_audit(
+    silva: &Arc<SilvaDB>,
+    audit_db_path: &str,
+    lookback_secs: i64,
+    min_failures: i64,
+) -> usize {
+    let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(lookback_secs)).to_rfc3339();
+    // Collect (agent_id, tool, intent) error rows synchronously — a rusqlite
+    // Connection is not Send across an await, so we drain into a Vec first.
+    let rows: Vec<(String, String, String)> = {
+        let conn = match crate::config::open_db(std::path::Path::new(audit_db_path)) {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        let stmt = conn.prepare(
+            "SELECT agent_id, tool_name, COALESCE(intent,'') FROM guild_audit_log \
+             WHERE status = 'error' AND timestamp > ?1 \
+             AND agent_id != '' AND agent_id != 'anonymous'",
+        );
+        match stmt {
+            Ok(mut s) => {
+                let mapped = s.query_map(rusqlite::params![cutoff], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+                });
+                match mapped {
+                    Ok(iter) => iter.flatten().collect(),
+                    Err(_) => return 0,
+                }
+            }
+            Err(_) => return 0,
+        }
+    };
+
+    // Group by (agent, tool, first-4-words-of-intent) and count.
+    use std::collections::HashMap;
+    let mut counts: HashMap<(String, String, String), i64> = HashMap::new();
+    for (agent, tool, intent) in rows {
+        let prefix: String = intent.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
+        *counts.entry((agent, tool, prefix)).or_insert(0) += 1;
+    }
+
+    let mut harvested = 0usize;
+    for ((agent, tool, prefix), count) in counts {
+        if count < min_failures {
+            continue;
+        }
+        // Deterministic id → idempotent upsert (re-harvest updates, no dupes).
+        let key_hash: u64 = format!("{tool}|{prefix}").bytes()
+            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+        let node_id = format!("experience:{agent}:auto:{key_hash:x}");
+        let content = format!(
+            "[failed] {tool} for '{prefix}' → falló {count}x en las últimas {}h (auto-detectado del audit log)",
+            lookback_secs / 3600
+        );
+        let meta = serde_json::json!({
+            "agent_id": agent, "verdict": "failed", "kind": "experience",
+            "auto_harvested": true, "failure_count": count,
+        }).to_string();
+        let scope = format!("agent:{agent}");
+        let opts = NodeWriteOptions::new("agent_generated").owner_scope(Some(&scope));
+        if silva.upsert_node_with_validity(&node_id, "experience", &content, &meta, opts).await.is_ok() {
+            let _ = silva.set_weight(&node_id, 2.0).await; // failures weigh highest
+            harvested += 1;
+        }
+    }
+    if harvested > 0 {
+        info!("🐍 Ouroboros harvest: promoted {} repeated-failure pattern(s) to per-agent experience", harvested);
+    }
+    harvested
+}
+
 /// Manages per-agent memory nodes in SilvaDB.
 ///
 /// Agent memories are stored as `node_type = "agent_memory"` nodes with
@@ -383,5 +462,49 @@ mod tests {
 
         let for_x = mgr.get_relevant_critiques("agent-x", "did something", 5).await;
         assert!(!for_x.is_empty());
+    }
+
+    /// Autonomous harvest: a REPEATED failure pattern in the audit log becomes a
+    /// per-agent experience node; a one-off failure does NOT (anti-noise rule).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn harvest_promotes_repeated_failures_not_one_offs() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let dir = std::env::temp_dir().join(format!("tylluan_audit_test_{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let audit_path = dir.join("audit.db");
+        let audit_str = audit_path.to_string_lossy().to_string();
+
+        {
+            let conn = crate::config::open_db(&audit_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE guild_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, guild TEXT, tool_name TEXT, agent_id TEXT, intent TEXT, status TEXT, result_preview TEXT, prev_hash TEXT, hash TEXT);"
+            ).unwrap();
+            let now = chrono::Utc::now().to_rfc3339();
+            // agent-r: same tool+intent failed 3 times → a pattern
+            for _ in 0..3 {
+                conn.execute("INSERT INTO guild_audit_log (timestamp,guild,tool_name,agent_id,intent,status) VALUES (?1,'git','commit','agent-r','commit to main branch','error')", rusqlite::params![now]).unwrap();
+            }
+            // agent-r: a one-off failure on a different action → must be ignored
+            conn.execute("INSERT INTO guild_audit_log (timestamp,guild,tool_name,agent_id,intent,status) VALUES (?1,'bash','run','agent-r','ls the temp dir','error')", rusqlite::params![now]).unwrap();
+        }
+
+        let harvested = harvest_failures_from_audit(&silva, &audit_str, 86400, 2).await;
+        assert_eq!(harvested, 1, "only the repeated pattern should be harvested, not the one-off");
+
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let crit = mgr.get_relevant_critiques("agent-r", "commit main branch", 5).await;
+        assert!(!crit.is_empty(), "the harvested failure pattern must be retrievable by the agent");
+        assert!(crit[0].content.contains("falló 3x"));
+        assert!(crit[0].metadata.contains("\"auto_harvested\":true"));
+
+        // Idempotency: re-harvesting the same audit produces no NEW nodes.
+        let again = harvest_failures_from_audit(&mgr_silva_clone(&mgr), &audit_str, 86400, 2).await;
+        assert_eq!(again, 1, "re-harvest upserts the same node, still reports the pattern (no duplicate node)");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn mgr_silva_clone(mgr: &AgentMemoryManager) -> Arc<SilvaDB> {
+        mgr.silva.clone()
     }
 }

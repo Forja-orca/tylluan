@@ -1618,6 +1618,19 @@ async fn run_night_consolidation_loop(
             "ts": chrono::Utc::now().timestamp_millis()
         }));
 
+        // Ouroboros harvest CERO-LLM: promote repeated audit-log failures into
+        // per-agent experience nodes, so an agent that keeps failing at the same
+        // thing accumulates it as retrievable self-knowledge without ever having
+        // to manually reflect. Runs on THIS existing pulse (no new timer).
+        // >= 3 failures on the same (agent, tool, intent-prefix) within 24h = a
+        // pattern worth remembering; anything less is a transient blip, ignored.
+        let harvested = tylluan_kernel::memory::agent_memory::harvest_failures_from_audit(
+            &silva, "./data/audit.db", 86_400, 3,
+        ).await;
+        if harvested > 0 {
+            info!("🐍 Ouroboros: {} repeated-failure pattern(s) promoted to per-agent experience", harvested);
+        }
+
         // AutoLink CERO-LLM: connect orphan nodes, detect file refs, link by topic
         let linker = tylluan_kernel::memory::auto_link::AutoLinker::new(silva.clone());
         let lr = linker.run(matcher.engine().as_deref()).await;
