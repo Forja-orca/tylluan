@@ -348,16 +348,24 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header Panel */}
-      <div className="flex items-center justify-between gap-4 flex-wrap bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 backdrop-blur-md">
+    <div className="space-y-8 font-sans">
+      {/* Sovereign Substrate Header Panel */}
+      <div className="flex items-center justify-between gap-4 flex-wrap bg-[#0B0F17]/90 p-6 rounded-2xl border border-slate-800/80">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
-            <Network className="w-6 h-6 text-emerald-400" />
+          <div className="w-12 h-12 bg-[#00F5D4]/10 border border-[#00F5D4]/30 rounded-xl flex items-center justify-center">
+            <Network className="w-6 h-6 text-[#00F5D4]" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-50 tracking-tight uppercase">Cognitive Federation Hub</h2>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">Synchronize shareable knowledge nodes across autonomous peer nodes</p>
+            <div className="flex items-center gap-2 font-mono mb-1">
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/30 rounded">
+                Noise XK Encrypted
+              </span>
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
+                STUN NAT Mesh
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-slate-100 tracking-tight uppercase font-mono">Cognitive Federation Mesh</h2>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">ChaCha20-Poly1305 encrypted peer sync &amp; Noise XK Session Pool telemetry</p>
           </div>
         </div>
 
@@ -365,23 +373,19 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
           <button
             onClick={handleRefreshAll}
             disabled={peersLoading || nodesLoading}
-            className="p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-950/50 hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-all active:scale-95 disabled:opacity-50"
+            className="p-2.5 rounded-xl border border-slate-800 hover:border-[#00F5D4]/50 bg-slate-950/50 hover:bg-slate-900 text-slate-300 transition-all active:scale-95 disabled:opacity-50"
             title="Refresh details"
           >
-            <RefreshCw className={cn("w-4 h-4", (peersLoading || nodesLoading) && "animate-spin")} />
+            <RefreshCw className={cn("w-4 h-4 text-[#00F5D4]", (peersLoading || nodesLoading) && "animate-spin")} />
           </button>
 
           <button
             onClick={handleSyncAll}
-            disabled={syncing || peers.length === 0}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-500/10 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold bg-[#00F5D4]/10 hover:bg-[#00F5D4]/20 border border-[#00F5D4]/40 text-[#00F5D4] shadow-sm transition-all disabled:opacity-50"
           >
-            {syncing ? (
-              <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-            ) : (
-              <Share2 className="w-4 h-4 text-slate-950" />
-            )}
-            Sync Peer Network
+            <Share2 className={cn("w-4 h-4", syncing && "animate-spin")} />
+            <span>{syncing ? 'Syncing Mesh...' : 'Sync Federation Mesh'}</span>
           </button>
         </div>
       </div>
