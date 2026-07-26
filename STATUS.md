@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-26 (v0.13.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
+> Last updated: 2026-07-27 (v0.14.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
 
 ## CI
 
@@ -22,7 +22,7 @@
 
 ## Version
 
-**v0.13.0** (Cargo.toml) — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.14.0** (Cargo.toml) — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 
