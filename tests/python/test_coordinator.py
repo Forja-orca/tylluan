@@ -3,7 +3,7 @@ import sys
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent.parent))
 
-from guilds.core.coordinator import _split_intent, _is_failure
+from guilds.core.coordinator import _split_intent, _is_failure, MAX_TASKS
 
 
 def test_split_then_connector():
@@ -24,9 +24,12 @@ def test_split_single_intent():
     assert parts[0] == "run git status"
 
 
-def test_split_max_three():
-    parts = _split_intent("do A then do B then do C then do D then do E")
-    assert len(parts) <= 3
+def test_split_caps_at_max_tasks():
+    # MAX_TASKS was raised 3->5 in 1c10da5 (M18-P3a, real parallel execution)
+    # -- this test hardcoded 3 and went stale until 2026-07-26 dogfooding
+    # caught it failing in CI. Reference the constant so it can't drift again.
+    parts = _split_intent("do A then do B then do C then do D then do E then do F then do G")
+    assert len(parts) <= MAX_TASKS
 
 
 def test_split_spanish_connector():
