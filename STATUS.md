@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** df99c58 · **604 total** green (531 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +5 desde fix bash_execute fallback (is_bash_state_intent tests). Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **625 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** ae3339f · **606 total** green (533 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +2 desde fix find_workspace_root() para AgentsContract/RepoMap (test de regresión CWD anidado). `scripts/check_test_count.sh --fix` (2026-07-26) ahora corrige README.md en un comando en vez de edición manual -- este check ha fallado 4 veces en una tarde por la velocidad de commits paralelos durante la semana de dogfooding. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **627 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
 
 ---
 
