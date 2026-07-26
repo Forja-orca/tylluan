@@ -1,0 +1,44 @@
+{
+  "date": "2026-07-26",
+  "mode": "real_http_eval_v2",
+  "kernel": "http://127.0.0.1:4000",
+  "passed": false,
+  "wins": 1,
+  "losses": 2,
+  "ties": 0,
+  "win_rate": 0.3333333333333333,
+  "mlp_mean_fitness": 0.5839452170868671,
+  "fixed_mean_fitness": 0.614375648941686,
+  "scenarios": [
+    {
+      "label": "cpu_and_disk",
+      "intent": "check system CPU usage and then check system disk usage",
+      "n_tasks": 2,
+      "fixed_fitness": 0.606998916091236,
+      "mlp_fitness": 0.6154110875103723,
+      "winner": "MLP",
+      "fixed_warm": 589.7197001613677,
+      "mlp_warm": 644.047100096941
+    },
+    {
+      "label": "cpu_and_memory",
+      "intent": "check system CPU usage and then check system memory usage",
+      "n_tasks": 2,
+      "fixed_fitness": 0.6284547333902133,
+      "mlp_fitness": 0.5511427394597416,
+      "winner": "FIXED",
+      "fixed_warm": 617.4528999254107,
+      "mlp_warm": 619.3054998293519
+    },
+    {
+      "label": "three_metrics",
+      "intent": "check system CPU usage and then check system memory usage and then check system disk usage",
+      "n_tasks": 3,
+      "fixed_fitness": 0.6076732973436085,
+      "mlp_fitness": 0.5852818242904875,
+      "winner": "FIXED",
+      "fixed_warm": 687.2872998937964,
+      "mlp_warm": 683.0386002548039
+    }
+  ]
+}
