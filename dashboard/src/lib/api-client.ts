@@ -55,6 +55,7 @@ export interface Guild {
   running: boolean;
   always_on: boolean;
   tools_count: number;
+  description?: string;
   idle_seconds?: number;
   launcher_type?: 'python' | 'stdio' | 'http';
   last_latency_ms?: number;
