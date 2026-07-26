@@ -230,7 +230,14 @@ mod tests {
         ];
         let targets = vec![1.0, 1.0, 1.0, 0.0, 0.0, 0.0];
 
-        let weights = train_ffn_with_epochs(&inputs, &targets, 500);
+        // 500 epochs was flaky under CI (unseeded random weight init in
+        // train_ffn_with_epochs occasionally lands in a local minimum that
+        // doesn't fully separate near-identical inputs in that few steps --
+        // reproduced 2026-07-26: passed 5/5 locally but failed once in CI).
+        // Production keeps true randomness (retraining benefits from it);
+        // this test just needs enough epochs to converge reliably on such a
+        // trivially separable toy dataset.
+        let weights = train_ffn_with_epochs(&inputs, &targets, 3000);
 
         let scores: Vec<f32> = inputs.iter().map(|x| {
             let h_pre: Vec<f32> = (0..HIDDEN_SIZE)
