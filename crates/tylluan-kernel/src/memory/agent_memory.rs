@@ -372,6 +372,7 @@ impl AgentMemoryManager {
     }
 
     /// Get the most recent summary node for an agent (agent_summary or session_digest).
+    /// Filters out decayed summaries with weight < 0.15 to avoid prompt clutter.
     pub async fn get_summary(&self, agent_id: &str) -> Option<GraphNode> {
         let mut candidates = Vec::new();
         for node_type in &["agent_summary", "session_digest"] {
@@ -382,16 +383,16 @@ impl AgentMemoryManager {
             candidates.extend(results);
         }
         candidates.into_iter()
-            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")))
+            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")) && n.weight >= 0.15)
             .max_by_key(|n| n.created_at.clone())
     }
 
     /// Called at session end. Creates a "session_digest" node with the most
-    /// relevant episodes from this session (highest weight, most recent).
+    /// relevant episodes from this session (highest weight, most recent, weight >= 0.15).
     pub async fn create_session_digest(&self, agent_id: &str, session_id: &str) {
         let memories = self.get_memories(agent_id, 100).await;
         let mut recent: Vec<&GraphNode> = memories.iter()
-            .filter(|n| n.node_type == "agent_memory")
+            .filter(|n| n.node_type == "agent_memory" && n.weight >= 0.15)
             .collect();
         recent.sort_by(|a, b| {
             b.created_at.cmp(&a.created_at)
