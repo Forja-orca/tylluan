@@ -198,7 +198,7 @@ export function TylluanLogo({
             ringPadding[size]
           )}
         >
-          {/* Base Layer: Official Owl Image or SVG Base */}
+          {/* Base Layer: Official Owl Image */}
           <div className={cn('w-full h-full flex items-center justify-center relative z-10', animated && 'animate-owl-body-loop')}>
             {imgLoaded ? (
               <img
@@ -221,6 +221,26 @@ export function TylluanLogo({
               </svg>
             )}
           </div>
+
+          {/* Layer 1.5: Professional Vector Feather Lines Overlay (Cyan Neon Geometric Wings & Contour) */}
+          <svg viewBox="0 0 100 100" className={cn("absolute inset-0 w-full h-full z-15 pointer-events-none transition-opacity duration-500", animated && 'animate-owl-body-loop')}>
+            {/* Wing Feather Structural Facets */}
+            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.75" opacity="0.6" strokeDasharray="4 2" />
+            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.75" opacity="0.6" strokeDasharray="4 2" />
+            <path d="M28,45 L32,65 L50,55 L40,32 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
+            <path d="M72,45 L68,65 L50,55 L60,32 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
+
+            {/* Chest Memory Lattice */}
+            <polygon points="42,42 58,42 50,55" fill="none" stroke={MAGENTA_FLASH} strokeWidth="0.75" opacity="0.5" />
+            <polygon points="50,55 32,65 50,74 68,65" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
+            
+            {/* Precision Eye Retina Rings (Superimposed Exactly over Logo Eyes at 42,42 & 58,42) */}
+            <circle cx="42" cy="42" r="4.5" fill="none" stroke={MAGENTA_FLASH} strokeWidth="1.2" opacity="0.95" />
+            <circle cx="42" cy="42" r="1.5" fill={MAGENTA_FLASH} className="animate-ping" style={{ animationDuration: '2.5s' }} />
+            
+            <circle cx="58" cy="42" r="4.5" fill="none" stroke={MAGENTA_FLASH} strokeWidth="1.2" opacity="0.95" />
+            <circle cx="58" cy="42" r="1.5" fill={MAGENTA_FLASH} className="animate-ping" style={{ animationDuration: '2.5s' }} />
+          </svg>
 
           {/* SVG Overlay Layer: 12 Granular Nodes + Staggered Trajectories + Constellation Lines */}
           <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none overflow-visible">
