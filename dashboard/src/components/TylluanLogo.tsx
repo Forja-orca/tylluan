@@ -80,30 +80,36 @@ export function TylluanLogo({
           }
         }
 
-        /* Owl Body Progressive Opacity: Phase 1 flat at 1.0, Phase 2 decays, Phase 3 low, Phase 4 returns */
+        /* Owl Body Progressive Opacity: Phase 1 flat at 1.0, Phase 2 COMPLETELY DISSOLVES to 0, Phase 3 invisible (only nodes exist), Phase 4 returns */
         @keyframes owl-body-progressive {
-          0%, 15.8% {
-            /* Phase 1 (1.5s): Completely static owl base */
+          0%, 12% {
+            /* Phase 1 (1.1s): Solid owl base logo */
             opacity: 1;
             transform: scale(1);
             filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.5));
           }
-          47.4%, 68.4% {
-            /* Phase 2 & 3: Decayed body opacity */
-            opacity: 0.15;
-            transform: scale(1);
-            filter: drop-shadow(0 0 2px rgba(0, 245, 212, 0.2));
+          35% {
+            /* Phase 2: COMPLETE DISSOLUTION - Owl image dissolves to 0 as nodes emerge */
+            opacity: 0;
+            transform: scale(0.92);
+            filter: drop-shadow(0 0 0px transparent);
           }
-          94.7% {
-            /* Phase 4: Full opacity recovered */
+          70% {
+            /* Phase 3: Pure Constellation Mode - Image remains COMPLETELY INVISIBLE (opacity 0) */
+            opacity: 0;
+            transform: scale(0.92);
+            filter: drop-shadow(0 0 0px transparent);
+          }
+          92% {
+            /* Phase 4: Nodes collapse back into owl shape and solid image RE-EMERGES */
             opacity: 1;
             transform: scale(1);
             filter: drop-shadow(0 0 12px rgba(0, 245, 212, 0.8));
           }
-          97.8% {
-            /* Micro-Flash Seal at end of cycle (200ms) */
+          96% {
+            /* Micro-Flash Pulse when solid owl solidifies completely */
             opacity: 1;
-            transform: scale(1.05);
+            transform: scale(1.04);
             filter: drop-shadow(0 0 25px rgba(255, 46, 147, 0.95));
           }
           100% {
@@ -290,25 +296,35 @@ export function TylluanLogo({
                   {/* Per-node keyframes */}
                   <style>{`
                     @keyframes ${nodeAnimName} {
-                      0%, ${pFlyOutStart}% {
-                        /* Phase 1: Flat at home inside owl base */
+                      0%, 12% {
+                        /* Phase 1: Nodes active at 1.0 opacity on owl home position, forming the node-owl silhouette */
                         transform: translate(0px, 0px);
-                        opacity: 0.1;
+                        opacity: 0.9;
                       }
-                      ${pFlyOutEnd}% {
-                        /* Phase 2 end: Reaches constellation position */
+                      28% {
+                        /* Phase 2a: As image dissolves to 0, nodes shine bright at 1.0 forming pure node-owl */
+                        transform: translate(0px, 0px);
+                        opacity: 1;
+                      }
+                      45% {
+                        /* Phase 2b: Nodes fly out staggered to constellation mesh position */
                         transform: translate(${dx}px, ${dy}px);
                         opacity: 1;
                       }
-                      ${pFlyInStart}% {
-                        /* Phase 3: Soft spring micro-oscillation in constellation position */
+                      70% {
+                        /* Phase 3: Soft float in constellation mesh */
                         transform: translate(${dx}px, ${dy + (node.id % 2 === 0 ? 1.5 : -1.5)}px);
                         opacity: 1;
                       }
-                      ${pFlyInEnd}%, 100% {
-                        /* Phase 4: Elastic overshoot return to home position */
+                      88% {
+                        /* Phase 4a: Nodes return and re-assemble into owl shape */
                         transform: translate(0px, 0px);
-                        opacity: 0.1;
+                        opacity: 1;
+                      }
+                      96%, 100% {
+                        /* Phase 4b: Solid image re-emerges over nodes */
+                        transform: translate(0px, 0px);
+                        opacity: 0.9;
                       }
                     }
 
