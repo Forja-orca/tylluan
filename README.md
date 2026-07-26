@@ -443,7 +443,7 @@ Tylluan runs **real code on your machine**. Please read these before deploying:
 
 - [SECURITY.md](SECURITY.md) — Vulnerability reporting
 - [DISCLAIMER.md](DISCLAIMER.md) — Operator responsibilities
-- [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) — Threat model + OWASP ASI 2026 mapping
+- [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) — Threat model + OWASP ASI 2026 mapping, including the **Coherence Gate** (ADR-011): a 3-layer defense against memory-poisoning attacks on every `tylluan_recall`
 
 Key defaults (do not change without understanding the implications):
 - `host = "127.0.0.1"` — localhost only
@@ -454,20 +454,22 @@ Key defaults (do not change without understanding the implications):
 
 ```bash
 # Memory basics: remember, recall, think
-python examples/01_memory_basics.py --port 3030
+python examples/01_memory_basics.py
 
 # Multi-agent communication via coloquio
-python examples/02_multi_agent_coloquio.py --port 3030
+python examples/02_multi_agent_coloquio.py
 
 # Knowledge graph exploration
-python examples/03_knowledge_graph.py --port 3030
+python examples/03_knowledge_graph.py
 
 # Autonomous multi-hop chain — no orchestrator, no API keys needed
-python examples/multi_model_coloquio/run.py --kernel http://127.0.0.1:3030
+python examples/multi_model_coloquio/run.py
 
 # Bounded Work Contract — 3 agents, shared budget, finite iterations
-python examples/bounded_work_contract/run.py --kernel http://127.0.0.1:3030
+python examples/bounded_work_contract/run.py
 ```
+
+> **Port Resolution**: All examples automatically resolve the active kernel port from `data/active_port.json` or `TYLLUAN_PORT` (defaulting to `3030`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
 
 See [examples/](examples/) for full source code.
 

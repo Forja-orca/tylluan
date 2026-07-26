@@ -234,19 +234,34 @@ class AgentWatcher(threading.Thread):
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+def resolve_kernel(user_kernel: str) -> str:
+    if user_kernel and user_kernel != "http://127.0.0.1:3030":
+        return user_kernel
+    env_port = os.environ.get("TYLLUAN_PORT")
+    if env_port:
+        return f"http://127.0.0.1:{env_port}"
+    port_file = Path("data/active_port.json")
+    if port_file.exists():
+        try:
+            data = json.loads(port_file.read_text())
+            port = data.get("port", 3030)
+            return f"http://127.0.0.1:{port}"
+        except Exception:
+            pass
+    return user_kernel or "http://127.0.0.1:3030"
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Tylluan autonomous @mention chain demo",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument("--kernel", default="http://127.0.0.1:3033",
-                        help="Tylluan kernel URL (default: http://127.0.0.1:3033)")
+    parser = argparse.ArgumentParser(description="Autonomous Multi-Model Coloquio Demo")
+    parser.add_argument("--kernel", default="http://127.0.0.1:3030",
+                        help="Tylluan kernel URL (default: auto-detected or http://127.0.0.1:3030)")
     parser.add_argument("--llm-url", default=None,
-                        help="OpenAI-compatible endpoint, e.g. http://localhost:1234/v1")
-    parser.add_argument("--model", default="local-model",
-                        help="Model ID to request from the LLM endpoint")
-    parser.add_argument("--channel", default="demo-chain",
+                        help="OpenAI-compatible LLM endpoint (LM Studio / Ollama)")
+    parser.add_argument("--model", default="default",
+                        help="Model ID to pass to LLM endpoint")
+    parser.add_argument("--channel", default="autonomous-demo",
                         help="Coloquio channel to use (created if absent)")
     parser.add_argument("--token", default=None,
                         help="Bearer token (leave empty when dev_mode = true)")
@@ -254,6 +269,7 @@ def main() -> None:
                         help="Seconds to wait for chain to complete (default: 25)")
     args = parser.parse_args()
 
+    args.kernel = resolve_kernel(args.kernel)
     mode = f"LLM via {args.llm_url}" if args.llm_url else "echo mode (no LLM required)"
 
     print()
