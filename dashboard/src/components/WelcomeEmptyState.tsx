@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Database, Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
+import { TylluanLogo } from './TylluanLogo';
 
 interface WelcomeEmptyStateProps {
   bridge: any;
@@ -102,14 +103,14 @@ export function WelcomeEmptyState({
 }`;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-8 animate-in fade-in duration-500">
+    <div className="max-w-5xl mx-auto space-y-8 py-8 animate-in fade-in duration-500 font-sans">
       {/* Hero Section */}
       <div className="text-center space-y-3">
-        <div className="w-16 h-16 mx-auto bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <Database className="w-8 h-8 text-slate-950" />
+        <div className="flex justify-center mb-2">
+          <TylluanLogo size="xl" animated={true} showText={false} />
         </div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-50 uppercase">
-          Welcome to Tylluan
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-50 uppercase font-mono">
+          Welcome to <span className="text-cyan-400">Tylluan</span>
         </h2>
         <p className="text-slate-400 text-sm max-w-md mx-auto">
           Your sovereign AI memory is ready. SilvaDB is initialized and listening local.

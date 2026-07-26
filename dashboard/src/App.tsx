@@ -34,6 +34,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 
 import React, { lazy, Suspense } from 'react'
 import { OverviewConsolidated } from './components/OverviewConsolidated'
+import { TylluanLogo } from './components/TylluanLogo'
 
 const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
 const TeamConsolidated = lazy(() => import('./components/TeamConsolidated'))
@@ -344,27 +345,12 @@ function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
+      <header className="h-16 border-b border-slate-800/80 bg-[#0B0F17]/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 group cursor-pointer" onClick={() => handleTabChange('overview')}>
-            <div className="relative">
-              <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-lg shadow-lg shadow-emerald-500/20 flex items-center justify-center transform group-hover:rotate-12 transition-transform">
-                <LayoutDashboard className="w-5 h-5 text-slate-950" />
-              </div>
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-slate-950 rounded-full flex items-center justify-center">
-                <div className={cn("w-2 h-2 rounded-full", online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-sm font-bold tracking-tight text-white uppercase">TylluanNexus <span className="text-emerald-400">o3</span></h1>
-              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                <span>Kernel Dashboard v3.0</span>
-                <span className="opacity-50">·</span>
-                <span className={online ? "text-emerald-500/80" : "text-red-500/80"}>{online ? 'Sovereign' : 'Offline'}</span>
-              </div>
-            </div>
+            <TylluanLogo size="md" showText={true} animated={true} />
           </div>
         </div>
 
