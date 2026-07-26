@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.13.0-blue.svg" alt="v0.13.0">
+  <img src="https://img.shields.io/badge/version-0.14.0-blue.svg" alt="v0.14.0">
   <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -227,7 +227,7 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 1.2 GB
-✅ Tylluan v0.13.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.14.0 running at http://127.0.0.1:3030
 ```
 
 Verify it's up:
@@ -298,7 +298,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 
 ---
 
-## Status: v0.13.0 — current release
+## Status: v0.14.0 — current release
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|

@@ -4,7 +4,102 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [Unreleased] — since v0.13.0 (2026-07-11) — Coordinator hardening · Federation verified · Event Bridge · M26 Canvas
+## [v0.14.0] — 2026-07-27 — A2A protocol · Signal Loop + Coherence Gate · Dashboard Sovereign Substrate GUI
+
+269 commits since v0.13.0 (2026-07-09), including a full week of production dogfooding
+("vivir Tylluan") where the fleet used the kernel as its own working memory/coordination
+substrate instead of only building it — several real bugs below were found exactly that way,
+not by test coverage.
+
+**A2A (Agent2Agent, Linux Foundation) interoperability — M38**
+- Real Agent Card + JSON-RPC 2.0 server (`message/send`, `tasks/get`, `tasks/cancel`) on a single
+  endpoint — deliberately not REST, to stay compatible with official A2A SDKs. Orthogonal to
+  Tylluan's own P2P mesh (peer sync between trusted Tylluan instances); A2A is for delegating
+  to/from any external agent framework (LangGraph, CrewAI, etc.).
+- HITL grant coverage for `input-required` task states + mitigation for `client_agent_id`
+  spoofing. Dashboard panel: Agent Card viewer, task inspector, approval flow.
+
+**ADR-011 — Signal Loop + Coherence Gate + LightReranker**
+- `recall_feedback` table (SilvaDB schema v18) logs which memories `tylluan_recall` returns per
+  agent; `FeedbackSignalPhase` (NightConsolidation) resolves implicit usefulness via Jaccard
+  word-overlap against subsequent tool calls.
+- `CoherenceGate`: 3-layer recall-path defense against memory poisoning (ShadowMerge, eTAMP,
+  Sleeper Memory Poisoning — 2025-2026 literature) — known injection patterns eliminated
+  silently, untrusted federation provenance and query/content semantic drift penalized. Wired
+  into both the live-query and cache-hit recall paths (the cache initially stored pre-gate
+  candidates — fixed before merge).
+- `LightReranker` (FFN 4→16→1, <10KB ONNX) scaffolded and unit-tested; deliberately not cut over
+  into `search_hybrid` yet — needs ≥5,000 resolved `recall_feedback` rows before training, which
+  is real production usage time, not more code.
+- Dashboard: live Coherence Gate + Signal Loop telemetry panel (cumulative gate counters,
+  progress bar toward the 5,000-row training threshold).
+
+**ADR-010 — Embedded SLM research + sep-CMA-ES/TRINITY spike (closed NO-GO)**
+- Real ONNX Runtime benchmarks (no simulated numbers) for T5-Small, DistilBERT, SmolLM2-135M,
+  BGE-M3 on live hardware.
+- sep-CMA-ES spike to replace `coordinator.py`'s fixed Thinker/Worker/Verifier role assignment
+  with a trained coordinator: closed as an honest null result (33.3% win rate vs. HTTP-real
+  fitness, below the 60% threshold) — the pipeline works end-to-end, but the MLP trained on
+  simulated fitness learned "parallelize everything," which loses against the fixed pipeline on
+  real wall-clock for small tasks. T5-Small vs. SmolLM2 (the ADR's original question) remains open.
+
+**M25/M29-M32 — Canvas, sandbox, DX, CLI harness**
+- M25: bidirectional Canvas↔dashboard event bridge + sandboxed local resource routing.
+- M29: 1-click MCP config, real (non-simulated) P2P mesh map, guild capability badges,
+  `tylluan new guild` scaffold, dry-run mode.
+- M30: graduated sandbox profiles (Strict/Balanced/Permissive), hierarchical override
+  (session > guild > global), escalated capability grant engine, CLI `tylluan sandbox`.
+- M31 (P0-P7): deterministic pre/post hooks around sovereign tools, granular per-`agent_id`
+  ACLs, `tylluan_do(plan=true)` pre-flight dry-run, cross-client session resume, repo map widget,
+  project-scoped `@skill:` context, background `@job:` execution, `tylluan doctor --fix`.
+- M32: real bidirectional MCP client — Tylluan can call out to external MCP servers, not just
+  serve as one.
+
+**M34-M37 — 2026 SOTA gap-closing (agent memory research backlog)**
+- M34: read-time trust gate for federation-sourced context (OWASP ASI06) + active rewriting in
+  `DreamCycle` (sleep-time compute).
+- M35: bi-temporal `valid_from` + supersession for contradiction edges in the knowledge graph.
+- M36: explicit self-correction via `@correct:` intent — an agent can edit its own past memory,
+  not only accumulate.
+- M37: OpenTelemetry GenAI-semantic spans + hierarchical `owner_scope` multi-tenant scopes,
+  with a real dashboard panel (not simulated data).
+
+**M19-P5 / ADR-009 — Declarative agent contracts**
+- `.tylluan/agents.toml` — per-`agent_id` role assignment, resolved in the bearer-auth middleware
+  with explicit precedence (explicit token mapping > contract role > default role).
+
+**Persistent agent identity, Ouroboros Loop, and other fixes from 2026-07-20 → 07-25 below.**
+
+**Real bugs found living the system, not by test coverage (2026-07-26 → 07-27)**
+- `tylluan_recall` timed out on any shell command reading stdin (`git status`, `git --version`) —
+  `run_command()` spawned children without `stdin=DEVNULL`, so they inherited the guild
+  process's stdin and blocked waiting for an EOF that never came.
+- On Windows, a timed-out command left orphaned grandchild processes running — `process.kill()`
+  only signals the immediate child (`powershell.exe`), not `git.exe`/`cargo.exe` it spawned.
+  Fixed with `taskkill /T /F` to kill the whole process tree.
+- Coloquio's channel-list intent matcher used `lower.contains("lista")`, a substring match
+  against the *entire* message body — any post mentioning "listando"/"artista" anywhere in its
+  text got silently rerouted to `list_channels` and discarded instead of posted.
+- `.tylluan/agents.toml` (M19-P5) silently loaded empty when the kernel's working directory was
+  nested (e.g. `crates/tylluan-kernel`, the real layout when started via `tylluan-mcp.bat`) —
+  `AgentsContract::load()` used `current_dir()` instead of the existing `find_workspace_root()`
+  helper (which already correctly resolves the dashboard's static asset path the same way).
+- `guilds/core/coordinator.py`'s `_split_intent` cap (`MAX_TASKS`) was raised 3→5 for real
+  parallel execution but a test kept asserting the old limit — passed trivially without
+  exercising the cap. Two more pre-existing, unrelated broken Python tests (a stale import path
+  after a guild reorg; a flaky unseeded-RNG FFN training test) also repaired.
+- `scripts/check_test_count.sh --fix` — the README/STATUS.md test-count sync check failed 4
+  times in one afternoon from fast parallel commits; the flag now corrects the file in one
+  command instead of a manual edit each time.
+
+**Dashboard — Sovereign Substrate GUI**
+- New visual identity replacing the generic default template look: deep slate (`#0B0F17`),
+  neon cyan (`#00F5D4`), defensive crimson (`#FF2E93`), monospace tactical typography — plus the
+  official animated Tylluan owl logo.
+- New/rebuilt panels: Coherence Gate + Signal Loop telemetry, HITL Plan Mode cockpit
+  (pre-flight preview + destructive-action risk badges), interactive 42-guild tester, Federation
+  + Mesh node view with live Noise XK badges, Overview header — all reading real kernel data,
+  zero mocked metrics.
 
 ### 2026-07-20 → 2026-07-25 — Persistent agent identity · Ouroboros Loop · docs reorg
 
