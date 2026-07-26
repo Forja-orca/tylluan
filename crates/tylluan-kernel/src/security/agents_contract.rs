@@ -49,7 +49,7 @@ impl AgentsContract {
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                tracing::debug!(
+                tracing::info!(
                     "AgentsContract: {} not found — using empty contract (feature is optional).",
                     path.display()
                 );
@@ -185,5 +185,37 @@ description = "Rust/CLI implementation"
         assert_eq!(ids.len(), 2);
         assert!(ids.contains(&&"alice".to_string()));
         assert!(ids.contains(&&"bob".to_string()));
+    }
+
+    #[test]
+    fn test_load_from_nested_cwd_regression() {
+        let tmp = std::env::temp_dir().join("test_agents_contract_nested_cwd");
+        let _ = std::fs::create_dir_all(tmp.join(".tylluan"));
+        let _ = std::fs::create_dir_all(tmp.join("crates").join("tylluan-kernel"));
+
+        std::fs::write(tmp.join("tylluan.toml"), "[nexus]\nport = 4000\n").unwrap();
+        let agents_toml = r#"
+[agents.deep]
+role = "contributor"
+description = "Rust implementation"
+"#;
+        std::fs::write(tmp.join(".tylluan").join("agents.toml"), agents_toml).unwrap();
+
+        let saved_cwd = std::env::current_dir().ok();
+
+        let nested = tmp.join("crates").join("tylluan-kernel");
+        std::env::set_current_dir(&nested).expect("cd to nested dir");
+
+        let root = crate::transport::http::find_workspace_root();
+        assert_eq!(root, tmp, "find_workspace_root must walk up to the dir with tylluan.toml");
+
+        let contract = AgentsContract::load(&root);
+        assert_eq!(contract.len(), 1, "contract must load from found workspace root");
+        assert_eq!(contract.get_role("deep"), Some("contributor"));
+
+        if let Some(cwd) = saved_cwd {
+            let _ = std::env::set_current_dir(&cwd);
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

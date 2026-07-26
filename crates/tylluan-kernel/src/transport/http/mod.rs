@@ -404,9 +404,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     let p2p_pool = Arc::new(tokio::sync::Mutex::new(P2pSessionPool::new(16, 300)));
 
     let repo_map = {
-        let cwd = std::env::current_dir().unwrap_or_default();
+        let root = find_workspace_root();
         tokio::task::spawn_blocking(move || {
-            crate::repo_map::RepoMap::build(&cwd)
+            crate::repo_map::RepoMap::build(&root)
         }).await.unwrap_or_else(|_| {
             crate::repo_map::RepoMap::build(&std::path::PathBuf::from("."))
         })
@@ -415,7 +415,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
 
     // M19-P5: Load declarative agent contract from .tylluan/agents.toml
-    let workspace_root = std::env::current_dir().unwrap_or_default();
+    // Use find_workspace_root() (walks up from CWD searching for tylluan.toml)
+    // instead of current_dir() — otherwise the contract loads silently empty
+    // when the kernel process runs from a subdirectory (e.g. crates/tylluan-kernel
+    // via tylluan-mcp.bat). Found during 2026-07-26 dogfooding.
+    let workspace_root = find_workspace_root();
     let agents_contract = Arc::new(
         crate::security::agents_contract::AgentsContract::load(&workspace_root)
     );
@@ -1132,7 +1136,7 @@ async fn discovery_handler() -> impl IntoResponse {
     })))
 }
 
-fn find_workspace_root() -> std::path::PathBuf {
+pub(crate) fn find_workspace_root() -> std::path::PathBuf {
     let mut root = std::env::current_dir().unwrap_or_default();
     for _ in 0..5 {
         if root.join("tylluan.toml").exists() { return root; }
@@ -1171,5 +1175,46 @@ impl<T: Serialize> IntoResponse for Utf8Json<T> {
             HeaderValue::from_static("application/json; charset=utf-8"),
         );
         response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_workspace_root_from_nested_cwd() {
+        let temp = tempfile::tempdir().unwrap();
+        let root_path = temp.path();
+
+        // 1. Create root markers: tylluan.toml and .tylluan/agents.toml
+        std::fs::write(root_path.join("tylluan.toml"), "[silva]\n").unwrap();
+        let tylluan_dir = root_path.join(".tylluan");
+        std::fs::create_dir_all(&tylluan_dir).unwrap();
+        std::fs::write(
+            tylluan_dir.join("agents.toml"),
+            "[agents.claude-code]\nrole = \"tech-lead\"\n",
+        ).unwrap();
+
+        // 2. Create nested CWD simulating tylluan-mcp.bat spawn (crates/tylluan-kernel)
+        let nested = root_path.join("crates").join("tylluan-kernel");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        // 3. Save original CWD and switch to nested CWD
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&nested).unwrap();
+
+        // 4. Test find_workspace_root() traverses up to root_path
+        let found_root = find_workspace_root();
+        
+        // 5. Test AgentsContract::load() successfully loads .tylluan/agents.toml from found_root
+        let contract = crate::security::agents_contract::AgentsContract::load(&found_root);
+
+        // Restore original CWD before assertions
+        let _ = std::env::set_current_dir(&orig_cwd);
+
+        assert_eq!(found_root.canonicalize().unwrap(), root_path.canonicalize().unwrap());
+        assert_eq!(contract.agents.len(), 1);
+        assert!(contract.agents.contains_key("claude-code"));
     }
 }

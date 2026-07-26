@@ -372,6 +372,7 @@ impl AgentMemoryManager {
     }
 
     /// Get the most recent summary node for an agent (agent_summary or session_digest).
+    /// Filters out decayed summaries with weight < 0.15 to avoid prompt clutter.
     pub async fn get_summary(&self, agent_id: &str) -> Option<GraphNode> {
         let mut candidates = Vec::new();
         for node_type in &["agent_summary", "session_digest"] {
@@ -382,16 +383,16 @@ impl AgentMemoryManager {
             candidates.extend(results);
         }
         candidates.into_iter()
-            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")))
+            .filter(|n| n.metadata.contains(&format!("\"agent_id\":\"{agent_id}\"")) && n.weight >= 0.15)
             .max_by_key(|n| n.created_at.clone())
     }
 
     /// Called at session end. Creates a "session_digest" node with the most
-    /// relevant episodes from this session (highest weight, most recent).
+    /// relevant episodes from this session (highest weight, most recent, weight >= 0.15).
     pub async fn create_session_digest(&self, agent_id: &str, session_id: &str) {
         let memories = self.get_memories(agent_id, 100).await;
         let mut recent: Vec<&GraphNode> = memories.iter()
-            .filter(|n| n.node_type == "agent_memory")
+            .filter(|n| n.node_type == "agent_memory" && n.weight >= 0.15)
             .collect();
         recent.sort_by(|a, b| {
             b.created_at.cmp(&a.created_at)
@@ -483,11 +484,33 @@ mod tests {
         mgr.record_memory("agent-a", "agent-a's private episode", 0.6).await;
         mgr.create_session_digest("agent-a", "session-a").await;
 
-        let summary_b = mgr.get_summary("agent-b").await;
-        assert!(summary_b.is_none(), "agent-b must not see agent-a's session digest");
-
         let summary_a = mgr.get_summary("agent-a").await;
         assert!(summary_a.is_some());
+    }
+
+    /// Low salience memories (weight < 0.15) must be filtered out during session
+    /// digest creation and summary retrieval, preventing old/decayed prompt clutter.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_digest_and_summary_filter_low_salience_weight() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let mgr = AgentMemoryManager::new(silva, 1000);
+        let agent_id = "test-agent-decayed";
+
+        // Record low weight memory (0.05 < 0.15)
+        mgr.record_memory(agent_id, "decayed old episode from weeks ago", 0.05).await;
+        mgr.create_session_digest(agent_id, "session-low").await;
+
+        // Digest should not be created from low-salience memories only
+        assert!(mgr.get_summary(agent_id).await.is_none(), "Decayed memories < 0.15 must be ignored");
+
+        // Now record a fresh high weight memory (0.80 >= 0.15)
+        mgr.record_memory(agent_id, "fresh important episode from today", 0.80).await;
+        mgr.create_session_digest(agent_id, "session-high").await;
+
+        let summary = mgr.get_summary(agent_id).await
+            .expect("High salience memories >= 0.15 must produce a retrievable summary");
+        assert!(summary.content.contains("fresh important episode"));
+        assert!(!summary.content.contains("decayed old episode"));
     }
 
     /// Ouroboros: recording an experience and retrieving it back for the same

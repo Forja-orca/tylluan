@@ -8,8 +8,14 @@
 # accurate. This script is that force: it runs the actual test suites,
 # counts real passes, and fails CI if README.md's number doesn't match.
 #
-# Usage: scripts/check_test_count.sh
+# Usage: scripts/check_test_count.sh [--fix]
 # Exit 0 if README.md matches reality, exit 1 (with a diff) otherwise.
+# --fix: rewrite README.md's count in place instead of just reporting the
+#        mismatch. Added 2026-07-26 after this exact check failed 4 times in
+#        one afternoon during the "vivir Tylluan" dogfooding week -- fast
+#        parallel commits kept outrunning the manual README edit. Doesn't
+#        touch CI (which stays read-only, as a safety net); this just saves
+#        the human/agent from typing the same one-line edit by hand again.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -48,10 +54,17 @@ echo "README.md claims: $claimed_total"
 echo ""
 
 if [ "$real_total" -ne "$claimed_total" ]; then
+    if [ "${1:-}" = "--fix" ]; then
+        sed -i -E "s/^[0-9]+ tests across Rust kernel/${real_total} tests across Rust kernel/" README.md
+        echo "✅ Fixed: README.md now says ${real_total} tests (was ${claimed_total})."
+        echo "   Remember to check STATUS.md's Commit/test-count line too -- not covered by this flag."
+        exit 0
+    fi
     echo "❌ MISMATCH: README.md says $claimed_total tests, but $real_total actually pass."
     echo ""
     echo "Fix: update the test-count line in README.md to $real_total, e.g.:"
     echo "  $real_total tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green."
+    echo "  Or just run: scripts/check_test_count.sh --fix"
     echo ""
     echo "Also check STATUS.md's Commit/test-count line while you're there -- it has the"
     echo "same kind of drift risk."
