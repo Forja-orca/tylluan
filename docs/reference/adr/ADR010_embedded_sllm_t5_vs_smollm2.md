@@ -1,7 +1,7 @@
 # ADR-010: Evaluación de SLLMs Embebidos — T5-Small vs. SmolLM2
 
-- **Estado:** 🟡 **PENDIENTE DE DECISIÓN (DECISION PENDING)**
-- **Fecha:** 2026-07-25 (revisado 2026-07-25: añadido eje ortogonal sep-CMA-ES/TRINITY, §6)
+- **Estado:** 🟡 **§2-5 (T5-Small vs SmolLM2) PENDIENTE DE DECISIÓN** — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
+- **Fecha:** 2026-07-25 (revisado 2026-07-26: spike §6 ejecutado y cerrado con HTTP real, ver §6.5.9-6.5.10)
 - **Autores:** Flota de Agentes Soberanos (Antigravity, Claude Code, Deep, Qwen)
 - **Ámbito:** Kernel Rust (`crates/tylluan-kernel`), ONNX Runtime (`ort 2.0.0-rc.10`), Sociedad de Micro-Agentes Internos.
 
@@ -127,4 +127,165 @@ Esta decisión se mantiene en estado **PENDIENTE** a la espera de ejecutar el be
 
 ---
 
-> *Este documento constituye el artefacto de referencia arquitectónica para la selección del SLLM embebido de Tylluan. No presupone un ganador y sirve como base objetiva para los benchmarks del equipo. §6 amplía el alcance a un eje ortogonal (orquestación entrenada, no generación local) tras verificación directa contra fuente primaria — no es una decisión, es la munición que faltaba para tomarla con el mismo rigor que el resto del documento.*
+### 6.5 Plan de Implementación del Spike sep-CMA-ES (2026-07-26)
+
+**Autor:** Deep (OpenCode)  
+**Estado:** 🟡 Pendiente de aprobación explícita antes de gastar presupuesto API
+
+#### 6.5.1 Objetivo del spike
+
+Sustituir **únicamente** la función `_plan()` en `guilds/core/coordinator.py` (línea 63-82 actual) por una cabeza MLP de ~1K-10K parámetros entrenada con `SepCMA` de `cmaes`. El resto del pipeline (Thinker: `_split_intent`, Worker: `_dispatch_with_retry`, Verifier: `_is_failure`) permanece intacto como scaffolding — cero riesgo para el camino de producción.
+
+**Qué cambia exactamente:**
+
+| Componente | Actual (fijo) | Propuesto (spike) |
+|---|---|---|
+| `_split_intent()` | Regex de conectores + listas numeradas | **Sin cambios.** El spike no toca la descomposición. |
+| `_plan()` | Heurística: `_needs_prior_context()` + `_is_synthesis_intent()` → parallel/sequential | **MLP entrenado via sep-CMA-ES** que asigna cada sub-tarea a `parallel` o `sequential` basado en features del intent. |
+| `_dispatch_with_retry()` | HTTP Keep-Alive con retry | **Sin cambios.** |
+| `_is_failure()` | Heurística de strings | **Sin cambios.** |
+
+#### 6.5.2 Features por sub-tarea (input del MLP)
+
+Para cada sub-tarea `t_i` de un intent compuesto, el MLP recibe:
+
+| Feature | Tipo | Descripción | Origen |
+|---------|------|-------------|--------|
+| `f1` | `f32` | Longitud normalizada del texto (chars / 500) | `len(t_i)` |
+| `f2` | `f32` | ¿Contiene referencia a contexto previo? (0.0 o 1.0) | `_CTX_REFS_PATTERN.search(t_i)` |
+| `f3` | `f32` | ¿Es intent de síntesis? (0.0 o 1.0) | `_is_synthesis_intent(t_i)` |
+| `f4` | `f32` | Posición en la secuencia (i / n, normalizada) | Índice en `_split_intent()` |
+| `f5` | `f32` | ¿Hay sub-tareas pendientes después de esta? (0.0 o 1.0) | `i < n-1` |
+| `f6-f10` | `[f32; 5]` | Embedding comprimido de la sub-tarea (PCA 1024→5 sobre BGE-M3 del kernel) | `_dispatch` ya llama al kernel que tiene BGE-M3 cargado |
+
+Total: **10 features por sub-tarea**. Con un MLP 10→8→1 (~97 params), el vector de pesos completo es <1KB.
+
+#### 6.5.3 Función de fitness (reward por rollout)
+
+Para cada intent multi-paso `I` con sub-tareas `[t_0, ..., t_{n-1}]`:
+
+```
+fitness(I) = (n_success / n) * (1.0 - α * max(0, n - n_success)) / (wall_time_ms / 1000 + 1)
+```
+
+Donde:
+- `n_success` = número de sub-tareas completadas sin error (según `_is_failure`)
+- `n` = número total de sub-tareas
+- `wall_time_ms` = tiempo total de ejecución del intent completo
+- `α = 0.5` = penalización por fallo (no lineal — fallar 2 de 5 penaliza más que fallar 1 de 5)
+
+**Propiedades:**
+- Máximo reward cuando todas las sub-tareas se completan rápido y sin errores
+- Penaliza fallos exponencialmente (un solo fallo en una tarea secuencial bloquea el resto)
+- Recompensa el paralelismo real (menos wall_time con mismo n_success → mejor fitness)
+
+#### 6.5.4 Conjunto held-out (construcción)
+
+**Fuente:** `data/audit.db` → tabla `guild_audit_log` (274 filas, 2026-07-26).
+
+**Procedimiento:**
+1. Extraer todos los intents multi-paso desde `guild_audit_log` donde `guild = 'coloquio'` y `status = 'ok'` — estos son intents reales que el coordinador ya ejecutó exitosamente.
+2. Filtrar los que contienen conectores de secuencia (`then`, `after that`, `y luego`, `despues`, `finalmente`) o listas numeradas (`1.`, `2.`) — mismos patrones que `_split_intent()`.
+3. Seleccionar 20-50 ejemplos con ≥2 sub-tareas, diversidad de guilds (bash, filesystem, git, websearch, coloquio), y balance de intents "parallelizables" vs "secuenciales".
+4. Dividir: **train (60%)** para optimización sep-CMA-ES, **held-out (40%)** para evaluación final contra el pipeline fijo.
+
+**Candidatos disponibles hoy (de los 274 registros en audit.db):**
+
+Los intents con múltiples pasos visibles en el log incluyen patrones como comandos multi-guild (bash + coloquio + filesystem), búsquedas compuestas ("search X AND Y"), y tareas encadenadas explícitas. El conjunto exacto se construye durante el spike, no antes.
+
+#### 6.5.5 Hiperparámetros sep-CMA-ES
+
+| Parámetro | Valor | Justificación |
+|-----------|-------|---------------|
+| `λ` (population size) | 15 | 4 + 3*log(d) para d≈97 → ~15. Población pequeña = menos llamadas API. |
+| `generations` | ≤100 | Cota superior de presupuesto. Early stop si no mejora en 20 generaciones. |
+| `σ₀` (initial step size) | 0.3 | Exploración inicial amplia (los pesos empiezan en ~0, necesitan moverse). |
+| `d` (dimensiones) | ~97 | 10→8→1 MLP: (10×8 + 8) + (8×1 + 1) = 88 + 9 = 97 weights+biases. |
+| **Presupuesto API máximo** | **~$20-30** | λ=15 × ≤100 gens = ≤1500 rollouts. Cada rollout = 1 llamada HTTP al kernel (no API externa, la llamada es local). El coste real viene de los guilds que el coordinador invoca (websearch, coloquio, etc. que a su vez llaman APIs). Estimado ~$0.01-0.02 por rollout → $15-30 total. |
+| **Presupuesto tiempo** | **6-10 horas** | 4-6h de implementación + 2-4h de entrenamiento (dominado por latencia de guilds, no por cómputo del MLP). |
+
+#### 6.5.6 Tooling
+
+| Componente | Paquete | Versión | Notas |
+|-----------|---------|---------|-------|
+| sep-CMA-ES | `cmaes` (PyPI) | ≥0.10.0 | Clase `SepCMA`, API mínima, mantenido por CyberAgentAILab |
+| Embeddings | Kernel `tylluan_recall` o BGE-M3 directo | Ya cargado | Reutilizar `matcher.engine()` del kernel para embedder sub-tareas |
+| Evaluación | `coordinator.py` actual (sin tocar) | En main | El pipeline fijo es la baseline, se ejecuta tal cual para comparar |
+| Registro | `guild_audit_log` (ya existe) | `data/audit.db` | Cada rollout del spike escribe en el mismo log para trazabilidad |
+
+#### 6.5.7 Criterio de éxito
+
+El MLP entrenado debe superar al pipeline fijo en **≥60% de los ejemplos held-out** en la métrica `fitness` definida en §6.5.3.
+
+- **Si supera:** Se integra como modo `"trained"` en `coordinator.py`, manteniendo `"fixed"` como fallback. Se programa reentrenamiento periódico (semanal) con nuevos datos de `guild_audit_log`.
+- **Si no supera:** Se documenta el null result en este ADR, se archiva el código del spike en `benchmarks/spikes/sep_cma_es_coordinator/`, y se cierra la línea de investigación sin tocar producción.
+- **En ningún caso:** El spike modifica `coordinator.py` en main antes de validación.
+
+#### 6.5.8 Lo que este spike NO hace
+
+- NO reemplaza `_split_intent()` — la descomposición sigue siendo heurística (regex).
+- NO toca guilds existentes — solo cambia la decisión de planificación en el coordinador.
+- NO requiere descargar modelos nuevos — BGE-M3 ya está en el kernel.
+- NO modifica `tylluan_recall` ni `search_hybrid` — el embedding de sub-tareas es una llamada de lectura al kernel existente.
+- NO compite con ADR-011 (LightReranker) — son puntos de inserción distintos (orquestación vs recall).
+
+#### 6.5.9 Resultado del Spike (2026-07-26, actualizado)
+
+**Estado:** 🟡 Null result — FAIL en fitness simulada (56.2%) y real (33.3%) contra threshold 60%
+
+**Spike ejecutado en dos fases:**
+
+**Fase A — Fitness simulada:**
+| Métrica | Train (24) | Held-out (16) |
+|---------|-----------|---------------|
+| Win rate | 29.2% (7W/0L/17T) | **56.2%** (9W/0L/7T) |
+| MLP mean fitness | 0.5726 | 0.4830 |
+| Fixed mean fitness | 0.5232 | 0.4006 |
+| Generaciones | 20 (early stop) | — |
+
+El MLP aprendió "paralelizar todo" (todos los scores 0.33-0.45, por debajo del umbral 0.5). En simulación sin fallos reales, esto es óptimo — paralelizar siempre gana.
+
+**Fase B — Fitness REAL (HTTP al kernel en :4000):**
+| Escenario | Winner | MLP fitness | Fixed fitness |
+|-----------|--------|-------------|---------------|
+| cpu_and_disk | MLP | 0.615 | 0.607 |
+| cpu_and_memory | FIXED | 0.551 | 0.628 |
+| three_metrics | FIXED | 0.585 | 0.608 |
+| **Total** | **1W/2L (33.3%)** | **0.584** | **0.614** |
+
+Con HTTP real, la estrategia "paralelizar todo" del MLP pierde contra el pipeline fijo: el `ThreadPoolExecutor` introduce overhead, y la conexión HTTP reutilizada del pipeline secuencial es más rápida para tareas pequeñas como métricas de sistema (sub-300ms). La diferencia es pequeña (Δ ~0.03) pero consistente.
+
+**Conclusión final del spike:**
+
+- ✅ El pipeline SepCMA+MLP funciona end-to-end: construye planes, entrena, evalúa.
+- ✅ La integración HTTP es real: `compute_fitness()` despacha tareas al kernel via `POST /api/v1/do`, mide wall-clock y fallos reales.
+- ✅ El puerto se resuelve dinámicamente desde `data/active_port.json` (patrón `coordinator.py`).
+- ❌ Con los pesos entrenados en simulación, el MLP no supera al pipeline fijo en ejecución real (33.3% vs 60% threshold).
+- 🔄 **El camino correcto si se quiere reintentar:** entrenar SepCMA directamente con fitness real (HTTP), no con simulación. Esto es caro en tiempo (~12min/gen × 20 gens ≈ 4 horas) y requiere hacer ~7,200 llamadas HTTP al kernel, pero produciría un MLP que aprende de latencias y fallos reales en lugar de una fórmula simulada. El código ya soporta este modo (quitar `--dry-run` en entrenamiento).
+
+**Archivos generados:**
+
+| Archivo | Contenido |
+|---------|-----------|
+| `benchmarks/spikes/sep_cma_es_coordinator/heldout_set.json` | 40 escenarios (24 train / 16 held-out) desde `guild_audit_log` |
+| `benchmarks/spikes/sep_cma_es_coordinator/spike_train.py` | Script completo del spike (SepCMA + MLP + evaluación) |
+| `benchmarks/spikes/sep_cma_es_coordinator/results/best_weights.npy` | Pesos del mejor MLP (97 params) |
+| `benchmarks/spikes/sep_cma_es_coordinator/results/training_history.json` | Historial de fitness por generación |
+| `benchmarks/spikes/sep_cma_es_coordinator/results/evaluation.json` | Resultado completo de evaluación |
+
+#### 6.5.10 Estado final del spike (2026-07-26)
+
+**Spike cerrado con null result honesto.** El código y los resultados quedan archivados en `benchmarks/spikes/sep_cma_es_coordinator/`:
+
+| Archivo | Contenido |
+|---------|-----------|
+| `heldout_set.json` | 40 escenarios desde `guild_audit_log` |
+| `spike_train.py` | SepCMA + MLP + fitness real (HTTP a kernel) + simulada |
+| `real_eval_v2.py` | Evaluación HTTP real contra kernel en vivo |
+| `analyze_decisions.py` | Comparación de planes MLP vs Fixed |
+| `results/real_eval_v2.json` | Resultados finales con HTTP real (33.3% win rate) |
+
+**Si se quiere reintentar en el futuro:**
+1. Reentrenar SepCMA con fitness real (`compute_fitness`, no `compute_fitness_simulated`): ~7,200 llamadas HTTP, ~4 horas.
+2. Ampliar el held-out set con escenarios donde paralelismo real marque diferencia (guilds de inferencia pesada, web search multi-source) — las métricas de sistema son demasiado rápidas para que el paralelismo gane.
+3. Considerar features adicionales: tamaño esperado de respuesta, latencia histórica del guild, carga actual del kernel.

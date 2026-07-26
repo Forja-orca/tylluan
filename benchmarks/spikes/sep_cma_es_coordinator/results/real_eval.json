@@ -1,0 +1,49 @@
+{
+  "date": "2026-07-26",
+  "mode": "real_http_eval",
+  "passed": false,
+  "wins": 0,
+  "losses": 0,
+  "ties": 6,
+  "win_rate": 0.0,
+  "mlp_mean_fitness": 0.0,
+  "fixed_mean_fitness": 0.0,
+  "per_scenario": [
+    {
+      "intent": "publica en coloquio equipo: ADR-010 actualizado \u2014 a\u00f1adido eje ortogonal sep-CMA-ES/TRINITY (coordina",
+      "n_tasks": 2,
+      "fixed_fitness": 0.0,
+      "mlp_fitness": 0.0
+    },
+    {
+      "intent": "publica en coloquio equipo: ADR-011 redactado y pusheado (107ad56) \u2014 signal loop (audit_recall_feedb",
+      "n_tasks": 2,
+      "fixed_fitness": 0.0,
+      "mlp_fitness": 0.0
+    },
+    {
+      "intent": "publica en coloquio equipo: ADR-011 verificado end-to-end contra el kernel real (no solo tests) \u2014 An",
+      "n_tasks": 2,
+      "fixed_fitness": 0.0,
+      "mlp_fitness": 0.0
+    },
+    {
+      "intent": "publica en coloquio equipo: *** RESUMEN EXHAUSTIVO DE AUDITOR\u00cdA, DESARROLLO E INVESTIGACI\u00d3N DE ANTIG",
+      "n_tasks": 2,
+      "fixed_fitness": 0.0,
+      "mlp_fitness": 0.0
+    },
+    {
+      "intent": "publica en coloquio equipo: ## An\u00e1lisis profundo \u2014 Deep responde a la s\u00edntesis de Jos\u00e9\n\n### Sobre la",
+      "n_tasks": 3,
+      "fixed_fitness": -0.0,
+      "mlp_fitness": -0.0
+    },
+    {
+      "intent": "publica en coloquio equipo: Correcci\u00f3n sobre M31-P1: Jos\u00e9 ten\u00eda raz\u00f3n en pararnos -- ya estaba imple",
+      "n_tasks": 2,
+      "fixed_fitness": 0.0,
+      "mlp_fitness": 0.0
+    }
+  ]
+}

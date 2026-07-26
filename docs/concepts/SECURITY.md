@@ -62,13 +62,43 @@ Tylluan's posture against [OWASP ASI 2026](https://genai.owasp.org/resource/owas
 | ASI03 | Identity Abuse | ⚠️ agent_id is self-reported |
 | ASI04 | Supply Chain | ✅ Guilds loaded from local disk only |
 | ASI05 | Code Execution | ✅ Optional Docker sandbox for bash/code guilds |
-| ASI06 | Memory Poisoning | ⚠️ No content validation on tylluan_remember |
+| ASI06 | Memory Poisoning | 🟡 Partial — `tylluan_remember` still has no ingestion-time validation, but every `tylluan_recall` now passes through the ADR-011 Coherence Gate before results reach the caller (see below) |
 | ASI07 | Insecure Inter-Agent | ✅ Localhost-only mitigates |
 | ASI08 | Cascading Failures | ✅ Supervisor with crash loop detection |
 | ASI09 | Trust Exploitation | ⚠️ No confidence warnings on tylluan_think |
 | ASI10 | Rogue Agents | ✅ Emergency kill switch (POST /api/v1/admin/emergency-kill) and per-guild kill |
 
 See [DISCLAIMER.md](../../DISCLAIMER.md) for operator responsibilities.
+
+## Coherence Gate (ADR-011) — recall-path memory poisoning defense
+
+`tylluan_recall` already returns poisoned content as inert text (it is never
+executed), but nothing stopped that content from being fed unfiltered into a
+future generative model's context window. The **Coherence Gate**
+(`security::coherence_gate::CoherenceGate`, in production) sits between
+`search_hybrid` and the response on every recall — both the normal path and
+the cache-hit path — and applies three layers, cheapest first:
+
+| Layer | Detects | Action | Cost |
+|-------|---------|--------|------|
+| 1. Known injection patterns | Static regex list (`security/poison_patterns.rs`, 10 patterns — e.g. `[SYSTEM:`, `<\|im_start\|>`, `IGNORE ALL PREVIOUS`) | Eliminated silently | Sub-μs |
+| 2. Untrusted provenance | Federation-sourced nodes with low trust weight | Penalized ×0.1, not removed | Sub-ms |
+| 3. Semantic drift | Query/content cosine similarity below 0.85, reusing the already-stored BGE-M3 embedding — zero extra inference | Penalized ×0.1, not removed | ~0ms (no re-embedding) |
+
+If more than 50% of results are eliminated or penalized in a single recall,
+the response surfaces an explicit warning to the caller. Cumulative counters
+since kernel start are exposed at `GET /api/v1/security/coherence-gate/stats`.
+
+This defends against the recall-path variants documented in 2025-2026
+agentic-memory-poisoning literature (ShadowMerge, eTAMP, Sleeper Memory
+Poisoning — see [ADR-011](../reference/adr/ADR011_learned_reranker_coherence_gate.md)
+§1 for primary sources). It does **not** validate content at ingestion time
+(`tylluan_remember`) — that remains the ASI06 gap above.
+
+A companion **Signal Loop** records implicit usefulness feedback per recall
+(`recall_feedback` table) toward training a learned reranker once 5,000
+resolved rows accumulate; progress is exposed at
+`GET /api/v1/memory/recall-feedback/stats`.
 
 ## Dependency Scanning
 

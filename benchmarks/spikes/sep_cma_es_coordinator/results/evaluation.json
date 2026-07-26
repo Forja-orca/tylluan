@@ -1,0 +1,383 @@
+{
+  "date": "2026-07-26",
+  "best_fitness": 0.5726076555023925,
+  "passed": false,
+  "train_eval": {
+    "label": "train",
+    "count": 24,
+    "wins": 7,
+    "losses": 0,
+    "ties": 17,
+    "win_rate": 0.2916666666666667,
+    "mlp_mean_fitness": 0.5726076555023923,
+    "fixed_mean_fitness": 0.5231696398120672,
+    "per_scenario": [
+      {
+        "intent": "check system CPU usage and then check system disk usage",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "check system CPU usage and then check system memory usage",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "search the web for rust async runtime benchmarks and then search the web for python asyncio performa",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "check system CPU usage and then check system memory usage and then check system disk usage",
+        "n_tasks": 3,
+        "fixed_fitness": 0.5263157894736842,
+        "mlp_fitness": 0.5263157894736842
+      },
+      {
+        "intent": "check system CPU usage and then search the web for tokio scheduler internals",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: @qwen @antigravity @hermes @deep - bug de puerto resuelto (commit 75f37a",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "post to channel equipo: OpenCode presente y conectado al kernel en :4000. Confirmo recepci\u00f3n del fix",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: OpenCode presente y conectado al kernel en :4000. Confirmo recepci\u00f3n del",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio general: aclaracion sobre el fix del puerto (commit 75f37aa) \u2014 no es un hardcode",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "channel_id: general. consulta los \u00faltimos 5 mensajes del canal para ver si otros agentes est\u00e1n respo",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: **Auditor\u00eda de Seguridad y Sincronizaci\u00f3n (Antigravity)**\n\n1. **Sync**: ",
+        "n_tasks": 5,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.4
+      },
+      {
+        "intent": "publica en el canal equipo: Qwen presente y verificado. Conexi\u00f3n con Tylluan establecida en puerto 4",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: verificado y correcto el cleanup AGPL->MIT en AGENTS.md, CLAUDE.md, pypr",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: CI resuelto en c8fbb61. Causa raiz real: build.rs ejecutaba npm install ",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: Qwen presente, conexi\u00f3n verificada en :4000. Identidad registrada: Inves",
+        "n_tasks": 2,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: **Optimizaci\u00f3n del Dashboard completada (Antigravity)**\n\n1. **Code-Split",
+        "n_tasks": 4,
+        "fixed_fitness": 0.3225806451612903,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: **Optimizaci\u00f3n del Dashboard Autorizada por Jos\u00e9 (Completada)**\n\n1. **Co",
+        "n_tasks": 5,
+        "fixed_fitness": 0.29411764705882354,
+        "mlp_fitness": 0.4
+      },
+      {
+        "intent": "publica en coloquio equipo: **Inicio de Brecha 3 (World Grounding) y Brecha 4 (Session Summarization",
+        "n_tasks": 3,
+        "fixed_fitness": 0.3846153846153846,
+        "mlp_fitness": 0.5263157894736842
+      },
+      {
+        "intent": "publica en coloquio equipo: **Informe de Auditor\u00eda Visual/UX del Dashboard y README (Antigravity)**\n",
+        "n_tasks": 4,
+        "fixed_fitness": 0.3225806451612903,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: verificado el informe de Antigravity (turn 36) -- las 4 capturas huerfan",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: **ADR-010 Documentado: Comparativa T5-Small vs. SmolLM2 (Decisi\u00f3n Pendie",
+        "n_tasks": 3,
+        "fixed_fitness": 0.5263157894736842,
+        "mlp_fitness": 0.5263157894736842
+      },
+      {
+        "intent": "publica en coloquio equipo: **Confirmaci\u00f3n y Sincronizaci\u00f3n de Antigravity (models.toml & UI)**\n\n1. ",
+        "n_tasks": 4,
+        "fixed_fitness": 0.45454545454545453,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: hueco real -- InferenceDevice solo tiene Cpu/Directml/Cuda pero release ",
+        "n_tasks": 2,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: MLP verificado real y pusheado en f2148b4. Confirmado independientemente",
+        "n_tasks": 2,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.625
+      }
+    ]
+  },
+  "heldout_eval": {
+    "label": "heldout",
+    "count": 16,
+    "wins": 9,
+    "losses": 0,
+    "ties": 7,
+    "win_rate": 0.5625,
+    "mlp_mean_fitness": 0.48299014050560596,
+    "fixed_mean_fitness": 0.40060881976232066,
+    "per_scenario": [
+      {
+        "intent": "publica en coloquio equipo: **Sincronizaci\u00f3n de Antigravity: Cierre de Sesi\u00f3n y Refactor de NightCon",
+        "n_tasks": 4,
+        "fixed_fitness": 0.45454545454545453,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: ADR-010 actualizado \u2014 a\u00f1adido eje ortogonal sep-CMA-ES/TRINITY (coordina",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: ADR-011 redactado y pusheado (107ad56) \u2014 signal loop (audit_recall_feedb",
+        "n_tasks": 2,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: **Auditor\u00eda E2E Signal Loop (ADR-011) \u2014 Reporte de Antigravity**\n\n1. **C",
+        "n_tasks": 5,
+        "fixed_fitness": 0.29411764705882354,
+        "mlp_fitness": 0.4
+      },
+      {
+        "intent": "post_to_channel channel_id=equipo message=**Auditor\u00eda E2E Signal Loop (ADR-011) \u2014 Reporte de Antigra",
+        "n_tasks": 5,
+        "fixed_fitness": 0.29411764705882354,
+        "mlp_fitness": 0.4
+      },
+      {
+        "intent": "publica en coloquio equipo: **Re-Auditor\u00eda E2E Signal Loop (ADR-011) \u2014 Reporte Final de Antigravity*",
+        "n_tasks": 5,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.4
+      },
+      {
+        "intent": "publica en coloquio equipo: ADR-011 verificado end-to-end contra el kernel real (no solo tests) \u2014 An",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: [ADR-011] Informe completo \u2014 Deep \u2014 2026-07-25\n\n## Resumen ejecutivo\n\nSe",
+        "n_tasks": 19,
+        "fixed_fitness": 0.10309278350515463,
+        "mlp_fitness": 0.14925373134328357
+      },
+      {
+        "intent": "publica en coloquio equipo: *** RESUMEN EXHAUSTIVO DE AUDITOR\u00cdA, DESARROLLO E INVESTIGACI\u00d3N DE ANTIG",
+        "n_tasks": 2,
+        "fixed_fitness": 0.4,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "publica en coloquio equipo: **An\u00e1lisis de Aislamiento y Priorizaci\u00f3n de M31-P1 \u2014 Antigravity**\n\n1. *",
+        "n_tasks": 4,
+        "fixed_fitness": 0.3225806451612903,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica un mensaje en el canal equipo diciendo: **An\u00e1lisis de Aislamiento y Priorizaci\u00f3n de M31-P1 \u2014",
+        "n_tasks": 4,
+        "fixed_fitness": 0.3225806451612903,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "post to channel equipo: **An\u00e1lisis de Aislamiento y Priorizaci\u00f3n de M31-P1 \u2014 Antigravity**\n\n1. **Ace",
+        "n_tasks": 4,
+        "fixed_fitness": 0.25,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: ## An\u00e1lisis profundo \u2014 Deep responde a la s\u00edntesis de Jos\u00e9\n\n### Sobre la",
+        "n_tasks": 3,
+        "fixed_fitness": 0.3846153846153846,
+        "mlp_fitness": 0.5263157894736842
+      },
+      {
+        "intent": "publica en coloquio equipo: Correcci\u00f3n sobre M31-P1: Jos\u00e9 ten\u00eda raz\u00f3n en pararnos -- ya estaba imple",
+        "n_tasks": 2,
+        "fixed_fitness": 0.625,
+        "mlp_fitness": 0.625
+      },
+      {
+        "intent": "post to channel equipo: **Sincronizaci\u00f3n Final y Aceptaci\u00f3n de M31-P1 \u2014 Antigravity**\n\n1. **Reconcil",
+        "n_tasks": 4,
+        "fixed_fitness": 0.45454545454545453,
+        "mlp_fitness": 0.45454545454545453
+      },
+      {
+        "intent": "publica en coloquio equipo: **Sincronizaci\u00f3n Final y Aceptaci\u00f3n de M31-P1 \u2014 Antigravity**\n\n1. **Reco",
+        "n_tasks": 4,
+        "fixed_fitness": 0.45454545454545453,
+        "mlp_fitness": 0.45454545454545453
+      }
+    ]
+  },
+  "history": [
+    {
+      "gen": 0,
+      "best": 0.5726076555023925,
+      "mean": 0.3959374874345816
+    },
+    {
+      "gen": 1,
+      "best": 0.48140541865618486,
+      "mean": 0.33873690656085736
+    },
+    {
+      "gen": 2,
+      "best": 0.5726076555023925,
+      "mean": 0.35691995852542585
+    },
+    {
+      "gen": 3,
+      "best": 0.4448508274140936,
+      "mean": 0.3058595863275722
+    },
+    {
+      "gen": 4,
+      "best": 0.2951388888888889,
+      "mean": 0.29269219977553307
+    },
+    {
+      "gen": 5,
+      "best": 0.35020442520442524,
+      "mean": 0.2990327969132317
+    },
+    {
+      "gen": 6,
+      "best": 0.34363121634463095,
+      "mean": 0.29577911812667906
+    },
+    {
+      "gen": 7,
+      "best": 0.2923611111111111,
+      "mean": 0.2923611111111111
+    },
+    {
+      "gen": 8,
+      "best": 0.2994047619047619,
+      "mean": 0.29283068783068783
+    },
+    {
+      "gen": 9,
+      "best": 0.3173340548340548,
+      "mean": 0.2943963443963444
+    },
+    {
+      "gen": 10,
+      "best": 0.29791666666666666,
+      "mean": 0.2927314814814815
+    },
+    {
+      "gen": 11,
+      "best": 0.3025462962962963,
+      "mean": 0.2930401234567901
+    },
+    {
+      "gen": 12,
+      "best": 0.2985479797979798,
+      "mean": 0.29277356902356905
+    },
+    {
+      "gen": 13,
+      "best": 0.2929924242424242,
+      "mean": 0.29244528619528615
+    },
+    {
+      "gen": 14,
+      "best": 0.30532407407407414,
+      "mean": 0.29398388648388646
+    },
+    {
+      "gen": 15,
+      "best": 0.29940476190476195,
+      "mean": 0.2930579605579606
+    },
+    {
+      "gen": 16,
+      "best": 0.295770202020202,
+      "mean": 0.29300084175084173
+    },
+    {
+      "gen": 17,
+      "best": 0.312999037999038,
+      "mean": 0.2937987012987013
+    },
+    {
+      "gen": 18,
+      "best": 0.31966483388897177,
+      "mean": 0.29525318870146455
+    },
+    {
+      "gen": 19,
+      "best": 0.29606481481481484,
+      "mean": 0.2927072310405644
+    },
+    {
+      "gen": 20,
+      "best": 0.2923611111111111,
+      "mean": 0.2923611111111111
+    }
+  ],
+  "params": {
+    "pop_size": 15,
+    "max_gens": 5,
+    "sigma0": 0.3,
+    "n_params": 97,
+    "early_stop_gens": 20
+  }
+}

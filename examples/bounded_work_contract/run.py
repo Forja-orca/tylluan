@@ -232,17 +232,42 @@ class ContractAgent(threading.Thread):
         return f"{prefix} Working on {self.role}. Progress nominal.{handoff}"
 
 
+import os
+from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+def resolve_kernel(user_kernel: str) -> str:
+    if user_kernel and user_kernel != "http://127.0.0.1:3030" and user_kernel != "http://127.0.0.1:3033":
+        return user_kernel
+    env_port = os.environ.get("TYLLUAN_PORT")
+    if env_port:
+        return f"http://127.0.0.1:{env_port}"
+    port_file = Path("data/active_port.json")
+    if port_file.exists():
+        try:
+            data = json.loads(port_file.read_text())
+            port = data.get("port", 3030)
+            return f"http://127.0.0.1:{port}"
+        except Exception:
+            pass
+    return user_kernel or "http://127.0.0.1:3030"
+
 # -- Main --------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="M10 Bounded Work Contract demo")
-    parser.add_argument("--kernel", default="http://127.0.0.1:3033")
+    parser.add_argument("--kernel", default="http://127.0.0.1:3030",
+                        help="Tylluan kernel URL (default: auto-detected or http://127.0.0.1:3030)")
     parser.add_argument("--channel", default="demo-bwc")
     parser.add_argument("--budget", type=int, default=5,
                         help="Total cycle budget (try --budget 3 to force extension)")
     parser.add_argument("--token", default=None)
     parser.add_argument("--wait", type=int, default=30)
     args = parser.parse_args()
+
+    args.kernel = resolve_kernel(args.kernel)
 
     print()
     print("Tylluan M10 -- Bounded Work Contract")
