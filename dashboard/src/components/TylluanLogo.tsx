@@ -33,7 +33,6 @@ export function TylluanLogo({
   };
 
   // Sovereign Color Tokens (Immutable)
-  const SOVEREIGN_BG = '#0B0F17';
   const CYAN_NEON = '#00F5D4';
   const MAGENTA_FLASH = '#FF2E93';
 
@@ -69,34 +68,40 @@ export function TylluanLogo({
 
   return (
     <div className={cn('flex items-center gap-3 select-none', className)}>
-      {/* Dynamic 60FPS Organic Keyframe Engine */}
+      {/* Synchronized 60FPS organic 4-phase keyframe engine */}
       <style>{`
         /* Phase 1: Base State Ambient Aura Breathe */
         @keyframes sovereign-aura-breathe {
           0%, 100% {
-            box-shadow: 0 0 12px rgba(0, 245, 212, 0.4), inset 0 0 8px rgba(0, 245, 212, 0.2);
+            box-shadow: 0 0 10px rgba(0, 245, 212, 0.35), inset 0 0 6px rgba(0, 245, 212, 0.2);
           }
           50% {
-            box-shadow: 0 0 24px rgba(0, 245, 212, 0.75), inset 0 0 16px rgba(0, 245, 212, 0.4);
+            box-shadow: 0 0 22px rgba(0, 245, 212, 0.7), inset 0 0 14px rgba(0, 245, 212, 0.4);
           }
         }
 
-        /* Phase 2 to 4: Owl Body Progressive Fade (1.0 -> 0.15 -> 1.0) */
+        /* Owl Body Progressive Opacity: Phase 1 flat at 1.0, Phase 2 decays, Phase 3 low, Phase 4 returns */
         @keyframes owl-body-progressive {
           0%, 15.8% {
+            /* Phase 1 (1.5s): Completely static owl base */
             opacity: 1;
+            transform: scale(1);
             filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.5));
           }
           47.4%, 68.4% {
+            /* Phase 2 & 3: Decayed body opacity */
             opacity: 0.15;
+            transform: scale(1);
             filter: drop-shadow(0 0 2px rgba(0, 245, 212, 0.2));
           }
           94.7% {
+            /* Phase 4: Full opacity recovered */
             opacity: 1;
+            transform: scale(1);
             filter: drop-shadow(0 0 12px rgba(0, 245, 212, 0.8));
           }
           97.8% {
-            /* Micro-flash seal at 200ms end of loop */
+            /* Micro-Flash Seal at end of cycle (200ms) */
             opacity: 1;
             transform: scale(1.05);
             filter: drop-shadow(0 0 25px rgba(255, 46, 147, 0.95));
@@ -108,28 +113,48 @@ export function TylluanLogo({
           }
         }
 
-        /* Laser Connection Lines Opacity Pulse */
-        @keyframes constellation-lines-fade {
+        /* Outer HUD Rings: Synchronized strictly with the 4 phases (Static in Phase 1, Spins in Phase 2 & 3, Decelerates in Phase 4) */
+        @keyframes hud-ring-sync-cw {
           0%, 15.8% {
-            opacity: 0.05;
+            transform: rotate(0deg);
           }
-          47.4%, 68.4% {
-            opacity: 0.45;
-            stroke-dashoffset: 0;
+          47.4% {
+            transform: rotate(180deg);
+          }
+          68.4% {
+            transform: rotate(360deg);
           }
           94.7%, 100% {
-            opacity: 0.05;
+            transform: rotate(540deg);
           }
         }
 
-        /* Rotating Outer HUD Rings */
-        @keyframes hud-spin-cw {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        @keyframes hud-ring-sync-ccw {
+          0%, 15.8% {
+            transform: rotate(0deg);
+          }
+          47.4% {
+            transform: rotate(-180deg);
+          }
+          68.4% {
+            transform: rotate(-360deg);
+          }
+          94.7%, 100% {
+            transform: rotate(-540deg);
+          }
         }
-        @keyframes hud-spin-ccw {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(-360deg); }
+
+        /* Constellation Lines Opacity */
+        @keyframes constellation-lines-fade {
+          0%, 15.8% {
+            opacity: 0;
+          }
+          47.4%, 68.4% {
+            opacity: 0.45;
+          }
+          94.7%, 100% {
+            opacity: 0;
+          }
         }
 
         .animate-sovereign-aura {
@@ -137,33 +162,32 @@ export function TylluanLogo({
         }
 
         .animate-owl-body-loop {
-          animation: owl-body-progressive 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-          transform-origin: center center;
+          animation: owl-body-progressive 9.5s linear infinite;
+        }
+
+        .animate-hud-ring-cw {
+          animation: hud-ring-sync-cw 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .animate-hud-ring-ccw {
+          animation: hud-ring-sync-ccw 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .animate-constellation-lines {
           animation: constellation-lines-fade 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
-
-        .animate-hud-ring-cw {
-          animation: hud-spin-cw 16s linear infinite;
-        }
-
-        .animate-hud-ring-ccw {
-          animation: hud-spin-ccw 22s linear infinite;
-        }
       `}</style>
 
-      {/* Cybernetic Owl Avatar Canvas Container */}
+      {/* Cybernetic Owl Avatar Container */}
       <div className={cn('relative flex items-center justify-center group', containerSizes[size])}>
-        {/* Outer Rotating HUD Ring 1 (Cian Neón) */}
+        {/* Outer Synchronized HUD Ring 1 */}
         {animated && (
-          <div className="absolute -inset-1.5 rounded-2xl border border-dashed border-[#00F5D4]/35 animate-hud-ring-cw pointer-events-none" />
+          <div className="absolute -inset-1.5 rounded-2xl border border-dashed border-[#00F5D4]/40 animate-hud-ring-cw pointer-events-none" />
         )}
 
-        {/* Outer Counter-Rotating HUD Ring 2 (Magenta Flash) */}
+        {/* Outer Synchronized HUD Ring 2 */}
         {animated && (
-          <div className="absolute -inset-3 rounded-full border border-dotted border-[#FF2E93]/25 animate-hud-ring-ccw pointer-events-none" />
+          <div className="absolute -inset-3 rounded-full border border-dotted border-[#FF2E93]/30 animate-hud-ring-ccw pointer-events-none" />
         )}
 
         {/* Sovereign Card Base */}
@@ -174,7 +198,7 @@ export function TylluanLogo({
             ringPadding[size]
           )}
         >
-          {/* Base Layer: Official Owl Image or SVG Base (Fades 1.0 -> 0.15 -> 1.0) */}
+          {/* Base Layer: Official Owl Image or SVG Base */}
           <div className={cn('w-full h-full flex items-center justify-center relative z-10', animated && 'animate-owl-body-loop')}>
             {imgLoaded ? (
               <img
@@ -198,7 +222,7 @@ export function TylluanLogo({
             )}
           </div>
 
-          {/* SVG Overlay Layer: 12 Granular Nodes + Bezier Flight Trajectories + Constellation Lines */}
+          {/* SVG Overlay Layer: 12 Granular Nodes + Staggered Trajectories + Constellation Lines */}
           <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none overflow-visible">
             {/* Constellation Connecting Lines (Soft White rgba(255,255,255,0.3)) */}
             <g className={cn(animated && 'animate-constellation-lines')}>
@@ -220,55 +244,62 @@ export function TylluanLogo({
               })}
             </g>
 
-            {/* 12 Individual Nodes with Custom Staggered Bezier CSS Trajectories */}
+            {/* 12 Individual Nodes with Staggered Flight Trajectories */}
             {nodesData.map((node) => {
-              // Custom CSS animation keyframe for this specific node
-              const nodeAnimName = `node-bezier-flight-${node.id}`;
+              const nodeAnimName = `node-granular-flight-${node.id}`;
               const totalLoopSecs = 9.5;
 
-              // Calculate timing percentages for Phase 2 (Fly Out) and Phase 4 (Fly In) with 120ms Stagger
-              const flyOutStartMs = 1500 + node.delay;
-              const flyOutEndMs = flyOutStartMs + 1200; // 1.2s flight duration
+              // Timing Percentages for 9.5s Total Loop
+              const flyOutStartMs = 1500 + node.delay; // Phase 2 start (staggered)
+              const flyOutEndMs = 4500;                // Phase 2 end
 
-              const reverseDelay = 1320 - node.delay; // Reverse order for return
+              const reverseDelay = 1320 - node.delay;  // Phase 4 reverse order start
               const flyInStartMs = 6500 + reverseDelay;
-              const flyInEndMs = flyInStartMs + 1200; // 1.2s return flight duration
+              const flyInEndMs = 9000;                 // Phase 4 end
 
               const pFlyOutStart = ((flyOutStartMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
               const pFlyOutEnd = ((flyOutEndMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
               const pFlyInStart = ((flyInStartMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
               const pFlyInEnd = ((flyInEndMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
 
+              const dx = node.cx - node.hx;
+              const dy = node.cy - node.hy;
+
               return (
                 <g key={node.id}>
-                  {/* Inline keyframe for node flight */}
+                  {/* Per-node keyframes */}
                   <style>{`
                     @keyframes ${nodeAnimName} {
                       0%, ${pFlyOutStart}% {
+                        /* Phase 1: Flat at home inside owl base */
                         transform: translate(0px, 0px);
-                        opacity: 0.2;
+                        opacity: 0.1;
                       }
-                      ${pFlyOutEnd}%, ${pFlyInStart}% {
-                        /* Constellation Position (Phase 2 & 3) */
-                        transform: translate(${node.cx - node.hx}px, ${node.cy - node.hy}px);
+                      ${pFlyOutEnd}% {
+                        /* Phase 2 end: Reaches constellation position */
+                        transform: translate(${dx}px, ${dy}px);
+                        opacity: 1;
+                      }
+                      ${pFlyInStart}% {
+                        /* Phase 3: Soft spring micro-oscillation in constellation position */
+                        transform: translate(${dx}px, ${dy + (node.id % 2 === 0 ? 1.5 : -1.5)}px);
                         opacity: 1;
                       }
                       ${pFlyInEnd}%, 100% {
-                        /* Overshoot Elastic Return to Home (Phase 4) */
+                        /* Phase 4: Elastic overshoot return to home position */
                         transform: translate(0px, 0px);
-                        opacity: 0.2;
+                        opacity: 0.1;
                       }
                     }
 
-                    .node-anim-${node.id} {
+                    .node-granular-${node.id} {
                       animation: ${nodeAnimName} ${totalLoopSecs}s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
                       transform-origin: ${node.hx}px ${node.hy}px;
                     }
                   `}</style>
 
-                  {/* SVG Node Circle */}
-                  <g className={cn(animated && `node-anim-${node.id}`)}>
-                    {/* Node Core */}
+                  {/* SVG Node Vertex */}
+                  <g className={cn(animated && `node-granular-${node.id}`)}>
                     <circle
                       cx={node.hx}
                       cy={node.hy}
@@ -276,7 +307,6 @@ export function TylluanLogo({
                       fill={node.isEye ? MAGENTA_FLASH : CYAN_NEON}
                     />
 
-                    {/* Node Pulse Outer Glow Ring */}
                     <circle
                       cx={node.hx}
                       cy={node.hy}
@@ -284,7 +314,7 @@ export function TylluanLogo({
                       fill="none"
                       stroke={node.isEye ? MAGENTA_FLASH : CYAN_NEON}
                       strokeWidth="0.8"
-                      opacity="0.6"
+                      opacity={node.isEye ? '0.85' : '0.5'}
                     />
                   </g>
                 </g>
