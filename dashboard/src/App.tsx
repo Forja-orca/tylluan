@@ -40,6 +40,7 @@ const TeamConsolidated = lazy(() => import('./components/TeamConsolidated'))
 const GuildsConsolidated = lazy(() => import('./components/GuildsConsolidated'))
 const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
 const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
+const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
 
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
@@ -644,9 +645,14 @@ function App() {
               )}
               {activeTab === 'audit' && mountedTabs.has('audit') && (
                 <ErrorBoundary>
-                  <AuditTrailPanel
-                    bridge={bridge}
-                  />
+                  <div className="space-y-8">
+                    <AuditTrailPanel
+                      bridge={bridge}
+                    />
+                    <CoherenceGatePanel
+                      bridge={bridge}
+                    />
+                  </div>
                 </ErrorBoundary>
               )}
             </div>

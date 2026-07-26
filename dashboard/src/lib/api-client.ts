@@ -9,6 +9,7 @@ import * as a2a from './api/a2a';
 import * as scopes from './api/scopes';
 import * as system from './api/system';
 import * as memory from './api/memory';
+import * as security from './api/security';
 
 // ============ CONTRACTS (TypeScript Interfaces) ============
 export interface Session {
@@ -595,6 +596,8 @@ export class NexusBridge {
   async getSessions() { return system.getSessions(this); }
   async revokeSession(id: string) { return system.revokeSession(this, id); }
   async getAuditTrail(agentId?: string, limit?: number) { return system.getAuditTrail(this, agentId, limit); }
+  async getCoherenceGateStats() { return security.getCoherenceGateStats(this); }
+  async getRecallFeedbackStats() { return security.getRecallFeedbackStats(this); }
   async getConfig() { return system.getConfig(this); }
   async saveConfig(content: string) { return system.saveConfig(this, content); }
   async setSandboxProfile(profile: 'strict' | 'balanced' | 'permissive') { return system.setSandboxProfile(this, profile); }
