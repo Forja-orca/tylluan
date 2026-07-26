@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** dfaf0e0 · **599 total** green (526 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. Deriva acumulada durante la semana de dogfooding "vivir Tylluan" (2026-07-26): coherence-gate/recall-feedback stats endpoints, fix de misrouting en coloquio_utils.rs, salience filter en agent_memory.rs, fallback bash_execute en el router. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **620 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** df99c58 · **604 total** green (531 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +5 desde fix bash_execute fallback (is_bash_state_intent tests). Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **625 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
 
 ---
 
