@@ -6,12 +6,17 @@ pub(super) fn parse_coloquio_intent(intent: &str) -> (Option<String>, Option<Str
     let lower = trimmed.to_lowercase();
 
     // ── List channels ──
-    if lower.contains("lista")
-        || lower == "list channels"
-        || lower == "ver canales"
-        || lower == "list canales"
-        || lower == "mostrar canales"
-    {
+    // Word-boundary prefix match, not substring: `contains("lista")` used to match
+    // "listando" / "listado" / "artista" anywhere in a long post body (e.g. a status
+    // report that mentions "filesystem listando raiz"), silently rerouting a real
+    // post_to_channel into list_channels and swallowing the message.
+    let list_triggers = [
+        "lista canales", "lista los canales", "lista de canales",
+        "list channels", "list canales",
+        "ver canales", "ver los canales",
+        "mostrar canales", "mostrar los canales", "muestra los canales",
+    ];
+    if list_triggers.iter().any(|t| lower.starts_with(t) || lower == *t) {
         return (None, None, "list");
     }
 
@@ -169,4 +174,37 @@ fn _parse_pagination_value(lower: &str, keywords: &[&str]) -> i64 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn post_intent_containing_listando_is_not_misrouted_to_list() {
+        // Regression: "lower.contains(\"lista\")" used to match the substring inside
+        // "listando" anywhere in a long post body, silently discarding the post and
+        // rerouting to list_channels instead. Found 2026-07-26 living the real flow --
+        // this exact sentence misrouted a real Coloquio post.
+        let intent = "publica en coloquio equipo: filesystem listando raiz en vez de subdirectorio";
+        let (channel, content, tool) = parse_coloquio_intent(intent);
+        assert_eq!(tool, "post", "must route to post, not list, despite containing 'lista' as a substring of 'listando'");
+        assert_eq!(channel.as_deref(), Some("equipo"));
+        assert!(content.unwrap().contains("filesystem listando raiz"));
+    }
+
+    #[test]
+    fn explicit_list_channels_intent_still_routes_to_list() {
+        for intent in ["lista canales", "list channels", "ver canales", "mostrar canales", "Lista los canales"] {
+            let (_, _, tool) = parse_coloquio_intent(intent);
+            assert_eq!(tool, "list", "'{intent}' should still route to list");
+        }
+    }
+
+    #[test]
+    fn post_intent_with_artista_substring_is_not_misrouted_to_list() {
+        let intent = "publica en coloquio equipo: el artista dashboard quedo listo";
+        let (_, _, tool) = parse_coloquio_intent(intent);
+        assert_eq!(tool, "post", "'artista' also contains 'lista' as a substring -- must not misroute");
+    }
 }
