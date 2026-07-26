@@ -458,6 +458,28 @@ pub async fn handle_tylluan_do(
             obj.insert("command".to_string(), serde_json::Value::String(clean.to_string()));
         }
 
+    // Bash: if keyword_score matched state_checkpoint/state_restore but the
+    // intent is clearly a shell command (not a state operation), override to
+    // bash_execute. Fixes "git status" -> state_restore ambiguity found in
+    // real fleet usage (2026-07-26 cycle).
+    if guild_name == "bash" && tool_name != "bash_execute" {
+        let lower = intent.trim().to_lowercase();
+        let is_state_op = lower == "state_restore" || lower == "restore state"
+            || lower == "state_checkpoint" || lower == "checkpoint state"
+            || lower == "state save" || lower == "save state"
+            || lower.starts_with("state_restore ") || lower.starts_with("state_checkpoint ")
+            || lower.starts_with("restore ") && lower.contains("checkpoint")
+            || lower.starts_with("save ") && lower.contains("checkpoint");
+        if !is_state_op {
+            let old_tool = tool_name.clone();
+            tool_name = "bash_execute".to_string();
+            tracing::debug!(
+                "bash: overriding tool '{}' -> 'bash_execute' (intent '{}' is a command, not a state op)",
+                old_tool, intent
+            );
+        }
+    }
+
     // Coloquio: extract structured params from intent BEFORE validation so channel_id
     // is populated when required_args check runs.
     if guild_name == "coloquio" {
