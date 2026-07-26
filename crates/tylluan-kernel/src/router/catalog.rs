@@ -140,7 +140,7 @@ fn name_override(stem: &str) -> Option<&'static str> {
 fn description_override(name: &str) -> Option<&'static str> {
     Some(match name {
         "bash" => "Shell command execution: build, test, compile, run scripts",
-        "filesystem" => "Read and write files, find and list directories",
+        "filesystem" => "List files, find files, listar archivos, read and write files, find and list directories, search files, show directory contents",
         "memory" => "Store and retrieve knowledge from long-term memory",
         "git" => "Git source control: status, diff, log, commits, checkout, branches",
         "docker" => "Docker container management and database services",
