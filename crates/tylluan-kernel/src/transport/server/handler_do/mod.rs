@@ -35,6 +35,18 @@ use routing::{resolve_guild_name, run_agent_handshake, record_activity_trace};
 #[cfg(test)]
 use embedding::parse_content_for_embedding;
 
+/// Returns true if the intent explicitly asks for a bash state restore/checkpoint
+/// operation (not a shell command). Used to disambiguate bash guild routing.
+pub(crate) fn is_bash_state_intent(intent: &str) -> bool {
+    let lower = intent.trim().to_lowercase();
+    lower == "state_restore" || lower == "restore state"
+        || lower == "state_checkpoint" || lower == "checkpoint state"
+        || lower == "state save" || lower == "save state"
+        || lower.starts_with("state_restore ") || lower.starts_with("state_checkpoint ")
+        || (lower.starts_with("restore ") && lower.contains("checkpoint"))
+        || (lower.starts_with("save ") && lower.contains("checkpoint"))
+}
+
 /// Deterministic nodo/node prefix — agent-to-agent messaging via `AgentNodeRouter`.
 /// Returns `None` if `intent` doesn't parse as a node command (caller should fall through).
 async fn handle_nodo_prefix(
@@ -462,22 +474,13 @@ pub async fn handle_tylluan_do(
     // intent is clearly a shell command (not a state operation), override to
     // bash_execute. Fixes "git status" -> state_restore ambiguity found in
     // real fleet usage (2026-07-26 cycle).
-    if guild_name == "bash" && tool_name != "bash_execute" {
-        let lower = intent.trim().to_lowercase();
-        let is_state_op = lower == "state_restore" || lower == "restore state"
-            || lower == "state_checkpoint" || lower == "checkpoint state"
-            || lower == "state save" || lower == "save state"
-            || lower.starts_with("state_restore ") || lower.starts_with("state_checkpoint ")
-            || lower.starts_with("restore ") && lower.contains("checkpoint")
-            || lower.starts_with("save ") && lower.contains("checkpoint");
-        if !is_state_op {
-            let old_tool = tool_name.clone();
-            tool_name = "bash_execute".to_string();
-            tracing::debug!(
-                "bash: overriding tool '{}' -> 'bash_execute' (intent '{}' is a command, not a state op)",
-                old_tool, intent
-            );
-        }
+    if guild_name == "bash" && tool_name != "bash_execute" && !is_bash_state_intent(&intent) {
+        let old_tool = tool_name.clone();
+        tool_name = "bash_execute".to_string();
+        tracing::debug!(
+            "bash: overriding tool '{}' -> 'bash_execute' (intent '{}' is a command, not a state op)",
+            old_tool, intent
+        );
     }
 
     // Coloquio: extract structured params from intent BEFORE validation so channel_id
@@ -1787,5 +1790,48 @@ mod tests {
         let server = test_server().await;
         let result = handle_correct_prefix(&server, "list files in current directory").await;
         assert!(result.is_none(), "non-correct intents should return None");
+    }
+
+    // ── M19-P5 bash_execute fallback ──────────────────────────────────
+
+    #[test]
+    fn test_is_bash_state_intent_explicit_restore() {
+        assert!(is_bash_state_intent("state_restore"));
+        assert!(is_bash_state_intent("restore state"));
+        assert!(is_bash_state_intent("state_restore from last checkpoint"));
+    }
+
+    #[test]
+    fn test_is_bash_state_intent_explicit_checkpoint() {
+        assert!(is_bash_state_intent("state_checkpoint"));
+        assert!(is_bash_state_intent("checkpoint state"));
+        assert!(is_bash_state_intent("state save"));
+        assert!(is_bash_state_intent("save state"));
+    }
+
+    #[test]
+    fn test_is_bash_state_intent_commands_are_not_state_ops() {
+        assert!(!is_bash_state_intent("git status"));
+        assert!(!is_bash_state_intent("ls -la"));
+        assert!(!is_bash_state_intent("cargo build"));
+        assert!(!is_bash_state_intent("echo hello"));
+        assert!(!is_bash_state_intent("list files"));
+        assert!(!is_bash_state_intent("run python script.py"));
+    }
+
+    #[test]
+    fn test_is_bash_state_intent_edge_cases() {
+        assert!(!is_bash_state_intent(""));
+        assert!(!is_bash_state_intent("state"));
+        assert!(!is_bash_state_intent("restore file backup"));
+        assert!(!is_bash_state_intent("save file to disk"));
+        assert!(!is_bash_state_intent("check status"));
+    }
+
+    #[test]
+    fn test_is_bash_state_intent_case_insensitive() {
+        assert!(is_bash_state_intent("State_Restore"));
+        assert!(is_bash_state_intent("RESTORE STATE"));
+        assert!(is_bash_state_intent("State_Checkpoint after update"));
     }
 }
