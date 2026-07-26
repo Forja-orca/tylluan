@@ -52,7 +52,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               </span>
               <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
-                599 / 599 Tests Green
+                CI Passing
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5 font-mono">
