@@ -193,7 +193,7 @@ description = "Rust/CLI implementation"
         let _ = std::fs::create_dir_all(tmp.join(".tylluan"));
         let _ = std::fs::create_dir_all(tmp.join("crates").join("tylluan-kernel"));
 
-        std::fs::write(&tmp.join("tylluan.toml"), "[nexus]\nport = 4000\n").unwrap();
+        std::fs::write(tmp.join("tylluan.toml"), "[nexus]\nport = 4000\n").unwrap();
         let agents_toml = r#"
 [agents.deep]
 role = "contributor"
