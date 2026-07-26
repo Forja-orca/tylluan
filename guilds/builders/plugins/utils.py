@@ -82,9 +82,17 @@ async def run_command(
         return (-1, "", "Error: Empty command")
     
     try:
+        # stdin=DEVNULL: without this, the child inherits the guild process's
+        # stdin. A command that reads stdin on its own (e.g. `git` prompting
+        # for a credential helper, or a pager) blocks indefinitely -- nothing
+        # ever sends EOF -- until the timeout below kills it, turning a
+        # sub-second command into a 30s+ hang. Found living the real flow:
+        # `git status`/`git --version` timed out while `echo` (never reads
+        # stdin) worked instantly, 2026-07-26.
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE if capture_stderr else None,
         )
