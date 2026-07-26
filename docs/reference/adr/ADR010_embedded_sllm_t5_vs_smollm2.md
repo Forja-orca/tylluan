@@ -263,6 +263,8 @@ Con HTTP real, la estrategia "paralelizar todo" del MLP pierde contra el pipelin
 - ❌ Con los pesos entrenados en simulación, el MLP no supera al pipeline fijo en ejecución real (33.3% vs 60% threshold).
 - 🔄 **El camino correcto si se quiere reintentar:** entrenar SepCMA directamente con fitness real (HTTP), no con simulación. Esto es caro en tiempo (~12min/gen × 20 gens ≈ 4 horas) y requiere hacer ~7,200 llamadas HTTP al kernel, pero produciría un MLP que aprende de latencias y fallos reales en lugar de una fórmula simulada. El código ya soporta este modo (quitar `--dry-run` en entrenamiento).
 
+**Decisión formal (Go/No-Go):** 🔴 **NO-GO.** Con el resultado real (33.3% win rate, por debajo del umbral 60%), el coordinador SepCMA entrenado **no se integra** en `guilds/core/coordinator.py` de producción. El pipeline fijo actual (heurísticas `_needs_prior_context`/`_is_synthesis_intent`) se mantiene sin cambios. Este cierre es reversible: si en el futuro se decide invertir ~4h + ~7.200 llamadas HTTP en reentrenar con fitness real desde el inicio (en vez de simulada), el spike puede reabrirse desde `spike_train.py` sin trabajo previo perdido — pero no hay una decisión tomada de hacerlo, y no se prioriza mientras ADR-011 Fase 3 (con recall_feedback en 0 filas) siga siendo el gate de datos más urgente del sistema.
+
 **Archivos generados:**
 
 | Archivo | Contenido |
