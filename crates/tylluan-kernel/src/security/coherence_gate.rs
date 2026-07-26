@@ -16,6 +16,7 @@
 
 use crate::memory::silva::GraphNode;
 use crate::security::poison_patterns::matches_injection_pattern;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Same bar Ouroboros/Consensus already use for "is this semantically the
 /// same thing" — one threshold across the codebase, not a gate-specific number.
@@ -37,6 +38,30 @@ impl GateStats {
             return false;
         }
         (self.eliminated + self.penalized) as f32 / self.total as f32 > WARN_FILTER_RATIO
+    }
+}
+
+/// Process-lifetime totals, exposed via `GET /api/v1/security/coherence-gate/stats`.
+/// Reset on kernel restart — this is "since last boot" observability, not a
+/// persisted audit log (that already exists separately in `guild_audit_log`).
+static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
+static TOTAL_ELIMINATED: AtomicU64 = AtomicU64::new(0);
+static TOTAL_PENALIZED: AtomicU64 = AtomicU64::new(0);
+
+/// Cumulative counters since process start, for dashboard observability.
+#[derive(serde::Serialize)]
+pub struct CumulativeGateStats {
+    pub total_seen: u64,
+    pub total_eliminated: u64,
+    pub total_penalized: u64,
+}
+
+/// Snapshot of the process-lifetime Coherence Gate counters.
+pub fn cumulative_stats() -> CumulativeGateStats {
+    CumulativeGateStats {
+        total_seen: TOTAL_SEEN.load(Ordering::Relaxed),
+        total_eliminated: TOTAL_ELIMINATED.load(Ordering::Relaxed),
+        total_penalized: TOTAL_PENALIZED.load(Ordering::Relaxed),
     }
 }
 
@@ -90,6 +115,10 @@ impl CoherenceGate {
             }
             survivors.push((node, score));
         }
+
+        TOTAL_SEEN.fetch_add(total as u64, Ordering::Relaxed);
+        TOTAL_ELIMINATED.fetch_add(eliminated as u64, Ordering::Relaxed);
+        TOTAL_PENALIZED.fetch_add(penalized as u64, Ordering::Relaxed);
 
         (survivors, GateStats { total, eliminated, penalized })
     }

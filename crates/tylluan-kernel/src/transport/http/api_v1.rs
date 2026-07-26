@@ -29,6 +29,7 @@ pub mod api_monitor;
 pub mod api_silva;
 pub mod api_collective;
 pub mod api_audit;
+pub mod api_security;
 pub mod api_eval;
 pub mod api_ops;
 pub mod api_canvas;
@@ -232,6 +233,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/capabilities", get(capabilities_handler))
         .route("/api/v1/audit/logs", get(audit_logs_handler))
         .route("/api/v1/audit/verify", get(api_audit::audit_verify))
+        // ADR-011 §2.5: Coherence Gate + Signal Loop observability
+        .route("/api/v1/security/coherence-gate/stats", get(api_security::coherence_gate_stats))
+        .route("/api/v1/memory/recall-feedback/stats", get(api_security::recall_feedback_stats))
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
         .route("/api/v1/config/sandbox-profile", post(set_sandbox_profile_handler))

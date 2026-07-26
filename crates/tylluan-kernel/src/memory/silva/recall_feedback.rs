@@ -130,6 +130,16 @@ impl SilvaDB {
                 .map_err(anyhow::Error::from)
         })
     }
+
+    /// Count of feedback rows still awaiting resolution (`useful == 0`) — the
+    /// complement of `resolved_feedback_count`, for dashboard observability.
+    pub async fn pending_feedback_count(&self) -> Result<i64> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.query_row("SELECT COUNT(*) FROM recall_feedback WHERE useful = 0", [], |r| r.get(0))
+                .map_err(anyhow::Error::from)
+        })
+    }
 }
 
 #[cfg(test)]
