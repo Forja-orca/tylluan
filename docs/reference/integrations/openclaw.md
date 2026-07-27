@@ -4,16 +4,16 @@
 
 ## Prerequisites
 
-- Tylluan running: `tylluan-cli start` → `http://127.0.0.1:3030`
+- Tylluan running: `tylluan-cli start` → `http://127.0.0.1:4000`
 - OpenClaw installed: [openclaw.io](https://openclaw.io)
-- Health check: `curl http://127.0.0.1:3030/health` returns `{"status":"ok"}`
+- Health check: `curl http://127.0.0.1:4000/health` returns `{"status":"ok"}`
 
 ## Connect Tylluan to OpenClaw
 
 ### Option A — CLI (fastest)
 
 ```bash
-openclaw mcp add tylluan http://127.0.0.1:3030/sse
+openclaw mcp add tylluan http://127.0.0.1:4000/sse
 ```
 
 OpenClaw will detect the 5 sovereign tools automatically on next restart.
@@ -27,7 +27,7 @@ Add to `~/.config/openclaw/openclaw.json` (Linux/macOS) or `%APPDATA%\openclaw\o
   "mcpServers": {
     "tylluan": {
       "type": "sse",
-      "url": "http://127.0.0.1:3030/sse"
+      "url": "http://127.0.0.1:4000/sse"
     }
   }
 }
@@ -70,7 +70,7 @@ By default Tylluan runs with `dev_mode = true` (no auth required). To enable aut
      "mcpServers": {
        "tylluan": {
          "type": "sse",
-         "url": "http://127.0.0.1:3030/sse",
+         "url": "http://127.0.0.1:4000/sse",
          "headers": { "Authorization": "Bearer <your-token>" }
        }
      }
@@ -96,7 +96,7 @@ After this, retrieval uses BGE-M3 1024-dim embeddings + BM25 fusion (R@5 82% on 
 | Symptom | Fix |
 |---------|-----|
 | Tool not appearing in OpenClaw | Run `openclaw mcp list` and verify `tylluan` is listed |
-| `connection refused` | Check `curl http://127.0.0.1:3030/health` — kernel may not be running |
+| `connection refused` | Check `curl http://127.0.0.1:4000/health` — kernel may not be running |
 | `401 Unauthorized` | Add Bearer token header (see Authentication above) |
 | `localhost` not resolving | Use `127.0.0.1` explicitly — Windows resolves `localhost` to IPv6 first |
 

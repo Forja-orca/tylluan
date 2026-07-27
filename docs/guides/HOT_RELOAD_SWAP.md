@@ -1,6 +1,6 @@
 ﻿# Zero-Downtime Hot-Reload Swap — ARCHIVED DESIGN
 
-> **⚠️ ARCHIVED — NOT IMPLEMENTED.** This document describes a proxy-based zero-downtime restart design that was considered but not built. Tylluan does **not** have a `tylluan-proxy` binary or `active_port.json`. The kernel (`tylluan-nexus`) binds directly to `:3030`. Clients reconnect via SSE retry on restart. This file is kept for historical context only.
+> **⚠️ ARCHIVED — NOT IMPLEMENTED.** This document describes a proxy-based zero-downtime restart design that was considered but not built. Tylluan does **not** have a `tylluan-proxy` binary or `active_port.json`. The kernel (`tylluan-nexus`) binds directly to `:4000`. Clients reconnect via SSE retry on restart. This file is kept for historical context only.
 
 ---
 
@@ -17,7 +17,7 @@ La arquitectura de recarga en caliente permite actualizar el núcleo Rust de Tyl
                       |   Client / UI     |
                       +-------------------+
                                 |
-                   (Stable Port 3030 over WS/SSE)
+                   (Stable Port 4000 over WS/SSE)
                                 v
                       +-------------------+
                       |    tylluan-proxy    | <----+ Checks data/active_port.json
@@ -35,12 +35,12 @@ La arquitectura de recarga en caliente permite actualizar el núcleo Rust de Tyl
 
 ### 1. El Proxy Inverso (`tylluan-proxy`)
 * **Ubicación:** [crates/tylluan-proxy](file:///E:/TylluanMCPo3/crates/tylluan-proxy)
-* **Puerto Estable:** Escucha en `127.0.0.1:3030`. Todos los clientes de la red y frontend se conectan aquí.
+* **Puerto Estable:** Escucha en `127.0.0.1:4000`. Todos los clientes de la red y frontend se conectan aquí.
 * **Mapeo Dinámico:** Lee el puerto activo desde `data/active_port.json` (por ejemplo, `{"port": 3031}`).
 * **Watcher Pasivo:** Vigila el archivo cada 250ms. Al cambiar el puerto, desvía el nuevo tráfico HTTP y hereda la gestión del túnel de WebSocket de forma transparente.
 
 ### 2. Arranque del Kernel con Puertos Dinámicos
-* **Fallback de Enlace:** En [crates/tylluan-kernel/src/transport/http/mod.rs](file:///E:/TylluanMCPo3/crates/tylluan-kernel/src/transport/http/mod.rs), si el puerto solicitado (`3030`) está ocupado (lo cual ocurre siempre que el proxy esté arriba), el kernel busca el primer puerto libre en el rango `3031..=3130`.
+* **Fallback de Enlace:** En [crates/tylluan-kernel/src/transport/http/mod.rs](file:///E:/TylluanMCPo3/crates/tylluan-kernel/src/transport/http/mod.rs), si el puerto solicitado (`4000`) está ocupado (lo cual ocurre siempre que el proxy esté arriba), el kernel busca el primer puerto libre en el rango `3031..=3130`.
 * **Registro de Puerto:** Una vez que el kernel está listo e inicializado, escribe su puerto activo en `data/active_port.json`.
 
 ### 3. Graceful Shutdown & Protección SQLite
@@ -76,7 +76,7 @@ Para iniciar el sistema de recarga en caliente de forma limpia:
 
 3. **Ejecutar el Kernel:**
    ```powershell
-   # En otra terminal. Detectará que 3030 está ocupado por el proxy y se moverá a 3031.
+   # En otra terminal. Detectará que 4000 está ocupado por el proxy y se moverá a 3031.
    ./target/release/tylluan.exe
    ```
 
@@ -84,4 +84,4 @@ Para iniciar el sistema de recarga en caliente de forma limpia:
    Cuando modifiques el kernel y quieras desplegarlo:
    * Vuelve a compilar el kernel.
    * Ejecuta el nuevo kernel. Éste enviará el comando de apagado al kernel en `3031`, se enlazará a `3032`, y actualizará el archivo json.
-   * El proxy en `3030` redirigirá el flujo de inmediato sin que el usuario ni las conexiones WebSockets activas pierdan conectividad permanente.
+   * El proxy en `4000` redirigirá el flujo de inmediato sin que el usuario ni las conexiones WebSockets activas pierdan conectividad permanente.

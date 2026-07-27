@@ -6,7 +6,7 @@
 > Ejecuta: the operator (el kernel de producción NO se toca). Verifica: cualquier agente.
 
 ## Pre-requisitos
-- Kernel de producción corriendo en :3030 (NO se para — el drill usa una instancia efímera en otro puerto).
+- Kernel de producción corriendo en :4000 (NO se para — el drill usa una instancia efímera en otro puerto).
 - ~200 MB libres en disco.
 
 ## Paso 1 — Snapshot consistente (sin parar producción)
@@ -33,7 +33,7 @@ for db in ['silva', 'tylluan', 'mailbox']:
 ## Paso 2 — Instancia efímera en puerto alternativo
 
 ```powershell
-# Config mínima apuntando al snapshot (puerto 3045 para no violar el singleton de :3030)
+# Config mínima apuntando al snapshot (puerto 3045 para no violar el singleton de :4000)
 Copy-Item E:\TylluanMCPo3\tylluan.toml "$dest\tylluan.toml"
 # Editar $dest\tylluan.toml: port = 3045, y db_path/silva.db_path hacia $dest\data\
 Copy-Item E:\TylluanMCPo3\target\debug\tylluan.exe "$dest\"

@@ -221,7 +221,7 @@ Delivered:
 **Goal:** A junior engineer or first-time user gets from zero to a working, understood instance without help — and the base is provably secure, not just "probably fine."
 
 Delivered:
-- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→3030, repo root cleanup)
+- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→4000, repo root cleanup)
 - [x] **M23-P1 "El Primer Minuto"** — `tylluan install` auto-downloads the embedding model + auto-starts the kernel + polls `/health` (`910f15f`); dashboard shows a designed Empty State (hero + 3 action cards + progress checklist) instead of a blank screen when SilvaDB is empty (`bad7015`)
 - [x] **M26 Sprint 1** — Coloquio Canvas Workspace: modular tabs, collaborative DOCS with CRUD+SSE
 - [x] **M26 Sprint 2** — tldraw interactive whiteboard embedded in the canvas, per-channel persistence (`50da092`)

@@ -18,10 +18,10 @@ Version: 1.0.0
 ### 1. Estado del Kernel (2 min)
 ```bash
 # ¿El kernel está respondiendo?
-curl -s http://127.0.0.1:3030/health | jq .
+curl -s http://127.0.0.1:4000/health | jq .
 
 # Uptime y métricas básicas
-curl -s http://127.0.0.1:3030/api/v1/health/detailed | jq .
+curl -s http://127.0.0.1:4000/api/v1/health/detailed | jq .
 
 # Últimos errores en logs
 tail -50 logs/kernel.log | grep -E "ERROR|panic|CRITICAL"
@@ -34,10 +34,10 @@ tail -50 logs/kernel.log | grep -E "ERROR|panic|CRITICAL"
 ### 2. Estado de los Guilds (3 min)
 ```bash
 # ¿Cuántos guilds están activos?
-curl -s http://127.0.0.1:3030/api/v1/guilds | jq '[.guilds[] | select(.running == true)] | length'
+curl -s http://127.0.0.1:4000/api/v1/guilds | jq '[.guilds[] | select(.running == true)] | length'
 
 # ¿Hay guilds en crash loop?
-curl -s http://127.0.0.1:3030/api/v1/guilds | jq '[.guilds[] | select(.restarts_5m > 3)]'
+curl -s http://127.0.0.1:4000/api/v1/guilds | jq '[.guilds[] | select(.restarts_5m > 3)]'
 ```
 
 Via `tylluan_do`:
@@ -66,7 +66,7 @@ Umbrales de alerta:
 
 ### 4. Estado de SilvaDB (2 min)
 ```bash
-curl -s http://127.0.0.1:3030/api/v1/silva/stats | jq .
+curl -s http://127.0.0.1:4000/api/v1/silva/stats | jq .
 
 # Verificar:
 # - node_count: ¿crecimiento razonable?

@@ -6,9 +6,9 @@
 
 ---
 
-## Estado actual — v0.13.0 ✅
+## Estado actual — v0.14.0 ✅
 
-M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M37 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue en estado PENDIENTE — solo comparativa documentada, benchmark real no ejecutado. 575 tests (502 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto: :3030 (Tylluan) — nunca confundir con ForjaMCPo3 :3030 en otro repo.
+M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) avanzó de "solo comparativa" a spikes reales ejecutados hoy — ver sección "Sociedad SLM" más abajo. 612 tests (539 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -401,9 +401,9 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 ## Ciclo 2026-07-14 — "Que Tylluan no se quede a medias"
 
-**Origen:** José pidió explícitamente un escaneo completo, no incremental: qué le falta a Tylluan frente al estado del arte 2026 en cuatro frentes (Canvas bidireccional, sandbox configurable, CLI harness, memoria de agentes), más un hallazgo suyo directo (bidireccionalidad MCP "perdida" desde ForjaMCPo3). Investigado con 3 agentes de investigación web en paralelo + verificación de código en ambos repos (ForjaMCPo3 y Tylluan) antes de escribir nada — ningún ítem de esta sección es una idea sin contrastar.
+**Origen:** José pidió explícitamente un escaneo completo, no incremental: qué le falta a Tylluan frente al estado del arte 2026 en cuatro frentes (Canvas bidireccional, sandbox configurable, CLI harness, memoria de agentes), más un hallazgo suyo directo (bidireccionalidad MCP "perdida" desde el proyecto interno predecesor). Investigado con 3 agentes de investigación web en paralelo + verificación de código en ambos repos (el proyecto interno predecesor y Tylluan) antes de escribir nada — ningún ítem de esta sección es una idea sin contrastar.
 
-**Hallazgo de partida (verificado en código, no de memoria):** ForjaMCPo3 cerró un "M25-B: Forja como cliente MCP bidireccional" en 2026-06-12, y Tylluan heredó la misma config (`external_mcp`) y los mismos endpoints (`list/add/remove/discover`). Pero en **ninguno de los dos repos** ese cliente MCP externo está cableado al dispatch real — `tylluan_do` no puede invocar una herramienta de un servidor MCP externo registrado, solo se puede listar/registrar/descubrir. No es una memoria falsa de José: es un gap real, heredado, nunca cerrado del todo en ninguno de los dos sitios (M32 abajo).
+**Hallazgo de partida (verificado en código, no de memoria):** el proyecto interno predecesor cerró un "M25-B: Forja como cliente MCP bidireccional" en 2026-06-12, y Tylluan heredó la misma config (`external_mcp`) y los mismos endpoints (`list/add/remove/discover`). Pero en **ninguno de los dos repos** ese cliente MCP externo está cableado al dispatch real — `tylluan_do` no puede invocar una herramienta de un servidor MCP externo registrado, solo se puede listar/registrar/descubrir. No es una memoria falsa de José: es un gap real, heredado, nunca cerrado del todo en ninguno de los dos sitios (M32 abajo).
 
 ### M25 — Canvas Event Bridge (v0.19.0)
 
@@ -469,7 +469,7 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 ### M32 — Cliente MCP Bidireccional Real (v0.20.0)
 
-**Norte:** Cerrar el gap heredado de ForjaMCPo3 M25-B — `external_mcp` existe como config y CRUD (`list/add/remove/discover`, verificado en `api_v1.rs` líneas 233-234) pero **nunca se cableó al dispatch real**. Un agente puede registrar un servidor MCP externo (GitHub, Slack, lo que sea) pero no puede realmente invocarlo como herramienta desde `tylluan_do`.
+**Norte:** Cerrar el gap heredado del proyecto interno predecesor (M25-B) — `external_mcp` existe como config y CRUD (`list/add/remove/discover`, verificado en `api_v1.rs` líneas 233-234) pero **nunca se cableó al dispatch real**. Un agente puede registrar un servidor MCP externo (GitHub, Slack, lo que sea) pero no puede realmente invocarlo como herramienta desde `tylluan_do`.
 
 **Fases:**
 

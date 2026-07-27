@@ -172,7 +172,7 @@ fn description_override(name: &str) -> Option<&'static str> {
         "sequential_thinking" => "Step-by-step reasoning and analysis",
         "coloquio_digest" => "Coloquio channel digest and summary",
         "whats_new" => "Unread messages and updates from channels",
-        "night_reasoner" => "Nightly SmolLM2-135M memory feedback reasoning and analysis",
+        "night_reasoner" => "Nightly reasoning + Gemma-4-E2B coordinator: route_intent, reason_about, analyze_feedback",
         "council" => "Multi-voice decision making and tradeoff analysis",
         "ast_surgeon" => "AST manipulation and code transformation",
         "audio_tools" => "Audio file processing and conversion",
