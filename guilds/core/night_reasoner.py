@@ -54,8 +54,9 @@ def _get_tokenizer():
         return _tokenizer
     try:
         from tokenizers import Tokenizer
-        # Try SmolLM2 tokenizer first, then Qwen3.5-2B as fallback
+        # Try SmolLM2 tokenizer first (exact match), then ONNX community, then Qwen fallback
         for cache_name in [
+            "models--HuggingFaceTB--SmolLM2-135M-Instruct",
             "models--onnx-community--SmolLM2-135M-Instruct-ONNX",
             "models--Qwen--Qwen3.5-2B",
         ]:
