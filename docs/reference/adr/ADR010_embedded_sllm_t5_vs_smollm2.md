@@ -291,3 +291,72 @@ Con HTTP real, la estrategia "paralelizar todo" del MLP pierde contra el pipelin
 1. Reentrenar SepCMA con fitness real (`compute_fitness`, no `compute_fitness_simulated`): ~7,200 llamadas HTTP, ~4 horas.
 2. Ampliar el held-out set con escenarios donde paralelismo real marque diferencia (guilds de inferencia pesada, web search multi-source) — las métricas de sistema son demasiado rápidas para que el paralelismo gane.
 3. Considerar features adicionales: tamaño esperado de respuesta, latencia histórica del guild, carga actual del kernel.
+
+---
+
+## 7. Decisión §2-5: Puntos de Inserción y Asignación de Modelos (2026-07-27)
+
+**Estado:** 🟢 DECIDIDO — diseño documentado, implementación pendiente de ciclo dedicado  
+**Autores:** Deep (OpenCode), tras análisis convergente de Claude Code y Antigravity  
+**Benchmarks reales usados:** `benchmarks/benchmark_adr010.json` (T5-Small 5.42ms p50, DistilBERT 20.12ms p50, ambos medidos en vivo sobre ONNX real en disco)
+
+### 7.1 Principio rector
+
+No se despliega ningún modelo pequeño hasta que haya un punto de dolor concreto que lo justifique. Los 3 puntos de inserción del ADR original siguen siendo válidos, pero la prioridad de implementación se ordena por: (1) infraestructura ya existente en el kernel, (2) evidencia de benchmark real, (3) menor riesgo de integración.
+
+### 7.2 Punto A — Clasificación de Complejidad de Routing (prioridad: ALTA)
+
+**Archivo:** `crates/tylluan-kernel/src/router/complexity.rs`  
+**Función a extender:** `blend_with_mlp(heuristic: f64, mlp: Option<f64>) -> f64` (línea 210)  
+**Modelo asignado:** **DistilBERT-base-uncased (ONNX, 68MB, 20.12ms p50)**  
+**Justificación:**
+- `blend_with_mlp()` ya existe — acepta un score heurístico + un score MLP opcional y los combina. Solo falta pasarle un score real de un modelo ONNX en vez de `None`.
+- DistilBERT fue elegido sobre T5-Small porque: (a) está medido en vivo (20.12ms), (b) es un encoder puro como T5 pero con mejor soporte ONNX comunitario (Xenova), (c) 20ms está dentro del umbral de <20ms que el ADR original pedía para clasificación de routing, (d) la diferencia con T5 (5.42ms) es irrelevante para clasificación — ambos son sub-frame a 60fps.
+- **NO se reemplaza la heurística** — `score_complexity()` existente sigue como baseline. DistilBERT se añade como rama ONNX opcional, mismo patrón que `LightReranker` (opt-in, fallback automático si el modelo no existe).
+- El MLP scorer (`models/complexity_mlp.onnx`, 4 features) ya existe y está cableado — DistilBERT sería una alternativa de mayor calidad para el mismo slot, no un reemplazo.
+
+**Qué hay que implementar:**
+1. `ComplexityClassifier` struct en `complexity.rs` con `new(models_dir)` y `classify(intent) -> Option<f64>`
+2. Carga de `distilbert-base-uncased.onnx` vía `ort` (mismo patrón que `EmbeddingEngine`)
+3. Inyectar en `cascade_action()`: si el clasificador está activo, usar su score en vez de (o como complemento a) la heurística
+
+### 7.3 Punto B — Reconciliación de Contradicciones (prioridad: MEDIA)
+
+**Archivo:** `crates/tylluan-kernel/src/memory/consensus.rs`  
+**Función a extender:** `consolidate_with_engine()` (línea 58)  
+**Modelo asignado:** **Qwen3-0.6B (ONNX, 570MB)** — o SmolLM2-360M como fallback  
+**Justificación:**
+- `consensus.rs` ya tiene el gate BGE-M3 (`SYNTHESIS_COHERENCE_THRESHOLD = 0.85`, línea 23) y un comentario explícito (línea 55): *"gate exists so that when synthesis becomes generative (ADR-010), a hallucinated synthesis has to fool BOTH the generator and BGE-M3"*. La infraestructura de seguridad ya está — solo falta el generador.
+- Qwen3-0.6B fue elegido sobre SmolLM2-360M porque: (a) está declarado como slot 2 recomendado en `models.toml`, (b) 570MB es manejable para CPU, (c) mejor calidad zero-shot que SmolLM2 para síntesis de texto.
+- **No se ha medido en vivo** — Qwen3-0.6B no está instalado en disco. El benchmark ADR-010 solo midió los modelos ya descargados. Este punto requiere descargar el modelo primero.
+- **NO es urgente** — la reconciliación actual (concatenación literal + verificación BGE-M3) funciona. La síntesis generativa es una mejora de calidad, no un fix de algo roto.
+
+**Qué hay que implementar (cuando se priorice):**
+1. Descargar `Qwen3-0.6B-ONNX` desde onnx-community
+2. `ConsensusSynthesizer` struct que cargue el modelo y genere texto de síntesis
+3. Pasar la salida por `verify_synthesis_coherence()` (ya existe, umbral 0.85)
+4. Si el coseno contra las fuentes originales < 0.85 → descartar síntesis, mantener concatenación literal
+
+### 7.4 Punto C — Resumen de Coloquio Digest (prioridad: BAJA)
+
+**Archivo:** `guilds/core/coloquio_digest.py`  
+**Modelo asignado:** **Qwen3-1.7B (ONNX, 1.43GB)** — o SmolLM2-1.7B si existiera en ONNX (verificado: no existe)  
+**Justificación:**
+- `coloquio_digest.py` existe como guild Python pero no está activo en producción.
+- Qwen3-1.7B es el slot 3 recomendado en `models.toml`.
+- **No se ha medido en vivo.** No está instalado en disco.
+- **NO es urgente** — no hay un caso de uso activo que requiera resúmenes de coloquio generados por LLM. El flywheel de Coloquio→SilvaDB ya ingiere episodios automáticamente.
+
+**Qué hay que implementar (cuando se priorice):**
+1. Descargar `Qwen3-1.7B-ONNX`
+2. Añadir tool `digest_channel` en `coloquio_digest.py` que cargue el modelo y genere resúmenes
+
+### 7.5 Orden de implementación recomendado
+
+| # | Punto | Modelo | Esfuerzo | Bloqueantes |
+|---|-------|--------|----------|-------------|
+| 1 | A — Routing | DistilBERT 68MB | 4-6h | Ninguno. Modelo ya descargado. Infraestructura `blend_with_mlp()` ya existe. |
+| 2 | B — Consensus | Qwen3-0.6B 570MB | 6-8h | Descargar modelo (no instalado). Gate de seguridad ya existe. |
+| 3 | C — Digest | Qwen3-1.7B 1.43GB | 6-8h | Descargar modelo (no instalado). Guild no activo en prod. |
+
+El punto A (DistilBERT en routing) es el único accionable hoy sin pasos previos. Los puntos B y C requieren descargar modelos primero. Los 3 son independientes — se pueden implementar en cualquier orden o en paralelo.
