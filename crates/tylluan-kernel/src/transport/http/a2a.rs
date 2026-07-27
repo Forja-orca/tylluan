@@ -51,8 +51,13 @@ pub struct AgentCard {
     default_input_modes: Vec<String>,
     #[serde(rename = "defaultOutputModes")]
     default_output_modes: Vec<String>,
+    // A2A spec models securitySchemes as a map (scheme name -> SecurityScheme
+    // object), not a list. The official a2a-sdk's card resolver calls
+    // .values() on this field and errors with "'list' object has no
+    // attribute 'values'" against the old Vec shape -- found 2026-07-27
+    // testing interop against a real external client, not our own code.
     #[serde(rename = "securitySchemes")]
-    security_schemes: Vec<serde_json::Value>,
+    security_schemes: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -83,12 +88,16 @@ pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl Int
         skills,
         default_input_modes: vec!["text".into()],
         default_output_modes: vec!["text".into()],
-        security_schemes: vec![serde_json::json!({
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "Bearer token matching the kernel's configured auth token or OAuth JWT"
-        })],
+        security_schemes: {
+            let mut m = serde_json::Map::new();
+            m.insert("bearer".to_string(), serde_json::json!({
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Bearer token matching the kernel's configured auth token or OAuth JWT"
+            }));
+            m
+        },
     };
 
     (StatusCode::OK, Json(card))
