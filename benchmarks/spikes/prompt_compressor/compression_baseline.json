@@ -1,0 +1,7 @@
+{
+  "samples": 100,
+  "total_before": 23449,
+  "total_after": 16208,
+  "compression_ratio": 0.691,
+  "token_savings_pct": 30.9
+}
