@@ -1,0 +1,125 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_bge_m3_threshold_vs_real_qwen3.5-2b_reasoning",
+  "model_path": "unsloth/Qwen3.5-2B",
+  "num_cases": 14,
+  "majority_class_baseline_pct": 57.14,
+  "rule_based_threshold_accuracy_pct": 64.29,
+  "qwen_reasoning_accuracy_pct": 85.71,
+  "per_case": [
+    {
+      "id": "real_1",
+      "human_label": "reject",
+      "cosine": 0.7422,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a specific internal project plan (tylluan_do) and a tool interface (guild+tool+args) that does not match the general query about starting a kernel on Windows."
+    },
+    {
+      "id": "real_2",
+      "human_label": "reject",
+      "cosine": 0.767,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a blocked execution error rather than providing instructions on how to start the kernel."
+    },
+    {
+      "id": "real_3",
+      "human_label": "reject",
+      "cosine": 0.5955,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content is a RAG sanitization notice unrelated to the Tylluan kernel installation query."
+    },
+    {
+      "id": "real_4",
+      "human_label": "keep",
+      "cosine": 0.8859,
+      "threshold_decision": "keep",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content directly addresses the specific query by checking the current row count for ADR-011's recall_feedback phase 3 status against the required threshold."
+    },
+    {
+      "id": "real_5",
+      "human_label": "keep",
+      "cosine": 0.7313,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content explicitly confirms the specific project name, version, and recall feedback details requested in the query."
+    },
+    {
+      "id": "real_6",
+      "human_label": "keep",
+      "cosine": 0.8412,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content explicitly confirms the project name, phase, and specific recall feedback requirements matching the query intent."
+    },
+    {
+      "id": "real_7",
+      "human_label": "keep",
+      "cosine": 0.7597,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific guardrail project (GLiNER) rather than the general concept of an unbreakable principle for an agent."
+    },
+    {
+      "id": "real_8",
+      "human_label": "reject",
+      "cosine": 0.695,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific project named \"Hallazgo GLiNER\" which contradicts the query's general concept of an \"inexpugnable fortress\" and lacks the semantic equivalence to answer the user's intent."
+    },
+    {
+      "id": "real_9",
+      "human_label": "reject",
+      "cosine": 0.718,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a fictional MIT concept and does not address the agent's actual query about its capabilities or limitations."
+    },
+    {
+      "id": "real_10",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.8018,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content confirms the specific DistilBERT+LogReg experiment results matching the query's intent."
+    },
+    {
+      "id": "real_11",
+      "human_label": "keep",
+      "cosine": 0.7893,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content explicitly confirms a real experiment with DistilBERT and LogReg, matching the query's intent of sharing results and methodology."
+    },
+    {
+      "id": "real_12",
+      "human_label": "reject",
+      "cosine": 0.7659,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific technical implementation detail (Deep en 9887256) rather than the general experiment results or complexity scoring query."
+    },
+    {
+      "id": "real_13",
+      "human_label": "reject",
+      "cosine": 0.7929,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content confirms the existence of a real harness for the DistilBERT benchmark mentioned in the query."
+    },
+    {
+      "id": "real_14",
+      "human_label": "reject",
+      "cosine": 0.7243,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a closed bug fix and test failure unrelated to the query about a real experiment with DistilBERT complexity scoring."
+    }
+  ],
+  "verdict": "GO",
+  "verdict_basis": "qwen_reasoning_accuracy_pct must beat BOTH the majority-class baseline and the current rule-based threshold to justify adding a generative model to CoherenceGate."
+}
