@@ -18,7 +18,7 @@ exit /b 1
 :venv_ok
 
 echo [Tylluan] Sincronizando dependencias Python...
-"%~dp0.venv\Scripts\pip" install -e . --quiet --no-warn-script-location
+"%~dp0.venv\Scripts\pip" install -e . --quiet --no-warn-script-location --disable-pip-version-check
 if errorlevel 1 goto :pip_failed
 goto :pip_ok
 :pip_failed

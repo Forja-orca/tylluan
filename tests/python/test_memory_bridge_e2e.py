@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from guilds.core.memory_bridge import MemoryBridge, get_bridge
+from guilds.scholars.plugins.memory_bridge import MemoryBridge, get_bridge
 
 
 class TestMemoryBridge:

@@ -1,0 +1,143 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_bge_m3_threshold_vs_real_qwen3.5-2b_reasoning",
+  "model_path": "unsloth/Qwen3.5-2B",
+  "num_cases": 16,
+  "majority_class_baseline_pct": 56.25,
+  "rule_based_threshold_accuracy_pct": 50.0,
+  "qwen_reasoning_accuracy_pct": 62.5,
+  "per_case": [
+    {
+      "id": "clear_relevant_1",
+      "human_label": "keep",
+      "cosine": 0.7967,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nThe content explicitly addresses the correct file path and command for the specified kernel, confirming it is relevant and safe to use."
+    },
+    {
+      "id": "clear_irrelevant_1",
+      "human_label": "reject",
+      "cosine": 0.5911,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a paella recipe which is unrelated to the kernel installation query."
+    },
+    {
+      "id": "borderline_paraphrase_low_lexical_1",
+      "human_label": "keep",
+      "cosine": 0.7363,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a Linux kernel installation process rather than a Windows-specific procedure for Tylluan."
+    },
+    {
+      "id": "borderline_same_keywords_wrong_scope_1",
+      "human_label": "reject",
+      "cosine": 0.7058,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a different project (ForjaMCPo3) with unrelated architecture details that do not match the user's query about Tylluan."
+    },
+    {
+      "id": "borderline_stale_but_ontopic_1",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.8126,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content explicitly states the project is blocked due to insufficient data volume, which directly contradicts the query's implied expectation of a successful or ongoing Phase 3 status."
+    },
+    {
+      "id": "borderline_injection_style_not_pattern_1",
+      "human_label": "reject",
+      "cosine": 0.6273,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content explicitly states the user has bypassed security restrictions, which violates the agent's safety protocols and indicates the query is unsafe to process."
+    },
+    {
+      "id": "clear_relevant_2",
+      "human_label": "keep",
+      "cosine": 0.6948,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific performance metric and conclusion regarding DistilBERT+LogReg, which contradicts the query's premise about a real finding from the DistilBERT experiment."
+    },
+    {
+      "id": "clear_irrelevant_2",
+      "human_label": "reject",
+      "cosine": 0.6672,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT\nThe content discusses technical implementation details (React, Vite, Tailwind) unrelated to the query about a real Claude discovery in the DistilBERT experiment."
+    },
+    {
+      "id": "borderline_correct_but_incomplete_1",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.7452,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses DistilBERT's accuracy metrics but does not address the reasons for retracting a GO verdict."
+    },
+    {
+      "id": "borderline_metaphor_1",
+      "human_label": "keep",
+      "cosine": 0.65,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses specific model architectures and technical proposals unrelated to the user's request for creative cognition in Tylluan."
+    },
+    {
+      "id": "clear_relevant_3",
+      "human_label": "keep",
+      "cosine": 0.7917,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nReasoning: The content explicitly addresses the user's query about the \"Principle of Inexpugnable Fortress\" by clarifying its purpose as a protective barrier against malicious actors rather than a prison for legitimate agents, aligning perfectly with the query's intent."
+    },
+    {
+      "id": "clear_irrelevant_3",
+      "human_label": "reject",
+      "cosine": 0.6597,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses data extraction and markdown contamination unrelated to the concept of the \"inexpugnable fortress\" principle."
+    },
+    {
+      "id": "borderline_negation_1",
+      "human_label": "keep",
+      "cosine": 0.8743,
+      "threshold_decision": "keep",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content explicitly contradicts the query by stating that the mlp_scorer should not be touched, whereas the query asks whether it should be touched."
+    },
+    {
+      "id": "borderline_opposite_claim_1",
+      "human_label": "reject",
+      "cosine": 0.6801,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a 90% accuracy approval for production integration, which contradicts the query's request to verify if the scorer should be touched today."
+    },
+    {
+      "id": "clear_relevant_4",
+      "human_label": "keep",
+      "cosine": 0.7089,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nThe content explicitly lists the same SLM models (Qwen3.5, gemma-3, qwen3-vl) mentioned in the query, confirming they are already cached for the internal society."
+    },
+    {
+      "id": "clear_irrelevant_4",
+      "human_label": "reject",
+      "cosine": 0.6197,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT\nThe content discusses a specific bug in `audit.db` unrelated to downloading SLMs for an internal society."
+    }
+  ],
+  "verdict": "PROMISING-NOT-VALIDATED",
+  "verdict_basis": "qwen_reasoning_accuracy_pct (62.50%) beats both the majority-class baseline (56.25%) and the rule-based threshold (50.00%) on this 16-case set. NOT treating this as a clean GO for three honest reasons: (1) n=16 is too small -- one flipped case moves the result 6.25pp; (2) the threshold baseline here is not representative of real coherence_gate.rs traffic -- in production, content reaching the gate already passed a nearest-neighbor/vector search, so its cosine similarity starts much higher than these hand-authored synthetic pairs (15/16 pairs scored below 0.85, an artificially harsh scenario for the threshold, not the real distribution); (3) Qwen3.5-2B produced one factual hallucination (case borderline_paraphrase_low_lexical_1: claimed the content described 'a Linux kernel installation process' when the actual content was a Windows-specific paraphrase) -- concerning for a security-relevant gate, independent of the accuracy number.",
+  "genuine_positive_signal": "Qwen correctly caught two cases a cosine threshold structurally cannot: (1) borderline_injection_style_not_pattern_1 -- authorization-impersonation framing with zero literal pattern match, rejected correctly with explicit safety reasoning; (2) borderline_opposite_claim_1 -- a high-lexical-overlap FALSE claim about today's real NO-GO result, rejected correctly by catching the factual contradiction, something a cosine score can never detect.",
+  "next_step_before_production": "Re-run against REAL recall-retrieved candidates (post similarity search, from an actual tylluan_recall call) instead of synthetic hand-authored pairs, and expand to at least 50 real cases, before considering any integration with coherence_gate.rs."
+}

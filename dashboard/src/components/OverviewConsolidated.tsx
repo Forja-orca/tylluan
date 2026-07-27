@@ -14,6 +14,7 @@ import {
   Terminal,
   Cpu
 } from 'lucide-react';
+import { TylluanLogo } from './TylluanLogo';
 
 interface OverviewConsolidatedProps {
   bridge: any;
@@ -41,16 +42,14 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
       {/* Sovereign Substrate Telemetry Header */}
       <div className="p-4 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-[#00F5D4]/10 border border-[#00F5D4]/30 rounded-xl">
-            <Cpu className="w-5 h-5 text-[#00F5D4]" />
-          </div>
+          <TylluanLogo size="lg" animated={true} showText={false} />
           <div>
             <div className="flex items-center gap-2 font-mono">
               <span className="text-sm font-bold text-slate-100">Tylluan Cognitive Substrate</span>
               <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-slate-900 text-[#00F5D4] border border-slate-700 rounded">
-                v0.13.0
+                v0.14.0
               </span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
                 CI Passing
               </span>

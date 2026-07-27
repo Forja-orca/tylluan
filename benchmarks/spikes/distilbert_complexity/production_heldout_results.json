@@ -1,0 +1,19 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_distilbert_embedding_plus_logreg_production_heldout",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--distilbert-base-uncased/snapshots\\5d73105e39e322b779ff7a8fcd11530fa579165b\\onnx\\model_quantized.onnx",
+  "source_commit": "4606f48",
+  "raw_heldout_count": 55,
+  "excluded_noise_count": 11,
+  "excluded_noise_reason": "markdown report/status fragments leaked into guild_audit_log.intent against unrelated guilds (git/bash/comfy_ui/code_reviewer) -- audit pipeline bug, reported separately",
+  "evaluated_count": 44,
+  "correct": 33,
+  "accuracy_pct": 75.0,
+  "decision_threshold_pct": 70.0,
+  "baseline_heuristic_plus_6feature_mlp_pct": 61.11,
+  "majority_class_baseline_pct": 77.27,
+  "majority_class_baseline_note": "always predicting 'Direct' (34/44 of my own hand labels) beats DistilBERT+LogReg (75.00%). Skewed label distribution (34 Direct / 9 Reactive / 1 Proactive) makes accuracy_pct alone a misleading metric -- retracting the original GO verdict.",
+  "deep_labels_comparison": "Deep independently labeled the same 55 raw intents via a heuristic scorer: 54/55 Direct, 1 Reactive, 0 Proactive -- an even more degenerate distribution than my manual labels, meaning inter-rater agreement is dominated by the trivial majority class and doesn't validate the DistilBERT signal either.",
+  "verdict": "NO-GO",
+  "verdict_basis": "accuracy_pct alone was misleading -- corrected verdict compares against the majority-class baseline (77.27%), which DistilBERT+LogReg (75.00%) does not beat on this real, hand-labeled, class-imbalanced production set. Do not integrate into routing.rs on this evidence. Needs a class-balanced held-out set (more genuinely Reactive/Proactive real intents) before re-evaluating."
+}

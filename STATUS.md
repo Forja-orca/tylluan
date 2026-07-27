@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-26 (v0.13.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
+> Last updated: 2026-07-27 (v0.14.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
 
 ## CI
 
@@ -16,13 +16,13 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** ae3339f · **606 total** green (533 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +2 desde fix find_workspace_root() para AgentsContract/RepoMap (test de regresión CWD anidado). `scripts/check_test_count.sh --fix` (2026-07-26) ahora corrige README.md en un comando en vez de edición manual -- este check ha fallado 4 veces en una tarde por la velocidad de commits paralelos durante la semana de dogfooding. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **627 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** ae3339f · **610 total** green (537 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +2 desde fix find_workspace_root() para AgentsContract/RepoMap (test de regresión CWD anidado). `scripts/check_test_count.sh --fix` (2026-07-26) ahora corrige README.md en un comando en vez de edición manual -- este check ha fallado 4 veces en una tarde por la velocidad de commits paralelos durante la semana de dogfooding. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **631 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
 
 ---
 
 ## Version
 
-**v0.13.0** (Cargo.toml) — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.14.0** (Cargo.toml) — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 

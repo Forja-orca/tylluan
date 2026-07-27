@@ -56,9 +56,9 @@ export function ArchitectureMap() {
           <SectionLabel x={30} y={108} text="ORCHESTRATION" color="#A855F7" />
 
           {/* Complexity Cascade box */}
-          <PhaseBox x={100} y={88} width={300} height={100} title="Complexity Cascade" color="#A855F7">
-            <SvgNode x={120} y={126} width={120} height={34} label="Intent Parser" sublabel="classify intent" style={NODE_STYLES.process} />
-            <SvgNode x={260} y={126} width={120} height={34} label="Score Router" sublabel="complexity level" style={NODE_STYLES.process} />
+          <PhaseBox x={100} y={88} width={320} height={100} title="Complexity Cascade & Short-Intent Router" color="#A855F7">
+            <SvgNode x={115} y={126} width={120} height={34} label="Short-Intent Router" sublabel="2-3 word fallback" style={{ fill: '#1E1B4B', stroke: '#F59E0B', strokeWidth: 1.5 }} />
+            <SvgNode x={245} y={126} width={125} height={34} label="Score Router" sublabel="complexity level" style={NODE_STYLES.process} />
           </PhaseBox>
 
           {/* Dispatch Router box */}

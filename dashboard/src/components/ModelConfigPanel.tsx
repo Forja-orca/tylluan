@@ -159,7 +159,7 @@ export function ModelConfigPanel({ bridge }: Props) {
             type="button"
             onClick={() => setSelectedDevice('directml')}
             className={cn(
-              "flex flex-col items-start p-3 rounded-lg border text-left transition-all",
+              "flex flex-col items-start p-3 rounded-lg border text-left transition-all relative",
               selectedDevice === 'directml'
                 ? "bg-emerald-950/20 border-emerald-500/80 text-emerald-300 ring-1 ring-emerald-500"
                 : "bg-slate-950/40 border-slate-900 text-slate-500 hover:border-slate-850 hover:text-slate-400"
@@ -169,11 +169,11 @@ export function ModelConfigPanel({ bridge }: Props) {
               <span className="text-emerald-400">⚡</span> DirectML (GPU)
             </span>
             <span className="text-[10px] opacity-80 leading-relaxed text-slate-400">
-              Recomendado para Windows. Acelera la inferencia en cualquier GPU (AMD, Intel, NVIDIA).
+              Recomendado para Windows. Acelera en cualquier GPU (NVIDIA RTX 3060, AMD, Intel) sin recompilar.
             </span>
             {selectedDevice === 'directml' && (
-              <span className="text-[9px] text-emerald-400 font-mono mt-2 uppercase tracking-wide">
-                ● Activo
+              <span className="text-[9px] text-emerald-400 font-mono mt-2 uppercase tracking-wide flex items-center gap-1">
+                ● Seleccionado (DirectML GPU)
               </span>
             )}
           </button>
@@ -182,21 +182,21 @@ export function ModelConfigPanel({ bridge }: Props) {
             type="button"
             onClick={() => setSelectedDevice('cuda')}
             className={cn(
-              "flex flex-col items-start p-3 rounded-lg border text-left transition-all",
+              "flex flex-col items-start p-3 rounded-lg border text-left transition-all relative",
               selectedDevice === 'cuda'
-                ? "bg-violet-950/20 border-violet-500/80 text-violet-300 ring-1 ring-violet-500"
+                ? "bg-amber-950/20 border-amber-500/80 text-amber-300 ring-1 ring-amber-500"
                 : "bg-slate-950/40 border-slate-900 text-slate-500 hover:border-slate-850 hover:text-slate-400"
             )}
           >
             <span className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <span className="text-violet-400">🔥</span> NVIDIA CUDA
+              <span className="text-amber-400">🔥</span> NVIDIA CUDA
             </span>
             <span className="text-[10px] opacity-80 leading-relaxed text-slate-400">
-              Para GPUs NVIDIA con drivers CUDA y cuDNN instalados. Rendimiento óptimo de frontera.
+              Requiere binario compilado con `--features cuda`. Si no está activo, caerá a CPU/DirectML.
             </span>
             {selectedDevice === 'cuda' && (
-              <span className="text-[9px] text-violet-400 font-mono mt-2 uppercase tracking-wide">
-                ● Activo
+              <span className="text-[9px] text-amber-400 font-mono mt-2 uppercase tracking-wide flex items-center gap-1">
+                ⚠️ Requiere feature `cuda` compilada (Usar DirectML para GPU instantánea)
               </span>
             )}
           </button>

@@ -51,13 +51,17 @@ pub fn extract_path_from_intent(intent: &str) -> String {
     }
 
     // "in X" / "at X" / "from X" / "to X" preposition hints
-    let prepositions = ["in ", "at ", "from ", "to ", "into ", "inside "];
+    let prepositions = ["in ", "at ", "from ", "to ", "into ", "inside ",
+                        "en ", "en el ", "en la "];
     let lower = intent.to_lowercase();
     for prep in &prepositions {
         if let Some(pos) = lower.find(prep) {
             let after = &intent[pos + prep.len()..];
             let candidate = after.split_whitespace().next().unwrap_or("").trim_matches(|c: char| "\"',".contains(c));
-            if !candidate.is_empty() && (looks_like_abs_path(candidate) || looks_like_filename(candidate)) {
+            if !candidate.is_empty()
+                && (looks_like_abs_path(candidate) || looks_like_filename(candidate)
+                    || candidate.contains('/') || candidate.contains('\\'))
+            {
                 return candidate.to_string();
             }
         }
@@ -168,5 +172,29 @@ mod tests {
     #[test]
     fn test_extract_command_plain_git() {
         assert_eq!(extract_command_from_intent("git status"), "git status");
+    }
+
+    #[test]
+    fn test_extract_path_relative_with_slash() {
+        let path = extract_path_from_intent("list files in crates/tylluan-kernel/src");
+        assert_eq!(path, "crates/tylluan-kernel/src", "should extract relative path after 'in'");
+    }
+
+    #[test]
+    fn test_extract_path_spanish_en() {
+        let path = extract_path_from_intent("listar archivos en crates/tylluan-kernel");
+        assert_eq!(path, "crates/tylluan-kernel", "should extract path after Spanish 'en'");
+    }
+
+    #[test]
+    fn test_extract_path_spanish_en_el() {
+        let path = extract_path_from_intent("buscar en guilds/builders/plugins");
+        assert_eq!(path, "guilds/builders/plugins", "should extract path after 'en'");
+    }
+
+    #[test]
+    fn test_extract_path_falls_back_to_dot() {
+        let path = extract_path_from_intent("list files in current directory");
+        assert_eq!(path, ".", "no match should return '.'");
     }
 }
