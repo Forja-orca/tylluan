@@ -575,3 +575,29 @@ No es un milestone con fecha — es el marco que debe informar cómo se prioriza
 **Principio de diseño:** adoptar lo que la comunidad ya hace bien (A2A), construir lo que solo Tylluan necesita (mesh soberano). No reinventar ruedas. No aislarse del ecosistema.
 
 ---
+
+## Arquitectura consensuada — tablero interactivo José↔Claude (2026-07-27)
+
+**Origen:** José pidió un sistema para discutir intersecciones de arquitectura "como una partida de ajedrez" — un tablero editable en el mapa de ruta público ([artefacto](https://claude.ai/code/artifact/935f0e62-406c-48b0-8d5c-8aa0085bdc22)) donde él mueve/conecta piezas por turnos y Claude actualiza la versión oficial. Tres turnos jugados hoy consolidan el diagrama de más alto nivel de Tylluan, con distinción explícita entre lo **real** (verificado en código) y lo **visión** (propuesto, sin construir).
+
+**Piezas del tablero (9 nodos):** Kernel Rust, SilvaDB, Guilds Python, Sociedad SLM, A2A Server, Mesh P2P, Dashboard, **Puente/Consensus** (nuevo), **Frontera externa** (nuevo).
+
+**Conexiones reales (verificadas en código, línea sólida):**
+- Kernel ↔ A2A, Kernel ↔ Mesh, Kernel ↔ Dashboard, Kernel ↔ SilvaDB, Kernel ↔ Guilds — todas ya en producción.
+- Sociedad SLM ↔ Kernel — CoherenceGate corre en el camino real de recall.
+- Sociedad SLM ↔ Guilds — GLiNER, T5-compressor, vision son guilds reales.
+- Sociedad SLM ↔ SilvaDB — CoherenceGate razona sobre resultados reales de SilvaDB (75%, GO-with-caveats).
+- **Sociedad SLM ↔ Puente/Consensus** — `consensus.rs` (TRINITY Thinker/Worker/Verifier) ya existe y coordina modelos hoy.
+- Kernel ↔ Puente/Consensus — `consensus.rs` vive dentro del proceso del kernel.
+
+**Conexiones de visión (propuestas, cero código todavía, línea discontinua):**
+- A2A ↔ Sociedad SLM — prompt-rewriting/razonamiento en el borde antes de que un mensaje A2A externo llegue al procesamiento real.
+- Mesh ↔ Sociedad SLM — razonamiento aplicado a decisiones de la malla P2P (confianza de peers, dispatch).
+- A2A ↔ SilvaDB (directo) — hoy la relación pasa por Kernel, no es un cable literal.
+- **Puente/Consensus ↔ Frontera externa** (Sakana AI, Fugu/TRINITY de Sakana, y modelos de frontera en general) — la pieza central de la visión de José: Tylluan como **soporte real de modelos de frontera, no sustituto**. El patrón: la Sociedad SLM pre-filtra/comprime antes de gastar tokens en un modelo caro externo; el Puente/Consensus (reusando `consensus.rs`, no una pieza nueva) verifica/critica la respuesta al volver — el mismo patrón Thinker/Worker/Verifier que TRINITY ya aplica internamente, extendido hacia fuera.
+
+**Palabras de José sobre el momento actual del proyecto:** *"sabemos cómo se hace porque esto lo hemos reproducido durante meses y luego eliminado, aún nos faltaba acero, ahora ya nos sobra, tenemos la magia capturada, ahora debemos saber cómo liberarla sin dañarla."* — el reto ya no es demostrar que se puede construir (la ingeniería de meses ya lo demostró), es liberar la capacidad ya construida de forma segura y sin romper lo que funciona — exactamente la disciplina de hoy (benchmark real, NO-GO honesto, hibridar en vez de reemplazar) aplicada de aquí en adelante a cada pieza de visión antes de que se convierta en código de producción.
+
+**Próximo paso concreto:** un spike real y acotado del Puente/Consensus hacia un modelo de frontera externo (ej. una llamada real a un modelo de Sakana AI o equivalente, con `consensus.rs` verificando la respuesta) — misma disciplina de siempre: baseline, held-out honesto, NO-GO si no aporta señal, antes de tocar producción.
+
+---
