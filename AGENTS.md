@@ -23,7 +23,7 @@ tylluan-cli start
 # o desde source:
 cargo run -p tylluan-cli -- start
 ```
-**Health check:** `curl http://127.0.0.1:3030/health`  
+**Health check:** `curl http://127.0.0.1:4000/health`  
 **Dashboard dev:** `cd dashboard && pnpm dev` → `http://localhost:5173`
 
 ---
