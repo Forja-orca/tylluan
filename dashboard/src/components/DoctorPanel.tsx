@@ -234,10 +234,10 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
               <span className="text-slate-400 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#00F5D4] animate-pulse" />
-                GPU Execution Provider:
+                Execution Provider:
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                DirectML (NVIDIA RTX 3060 Active)
+                {report.system.warnings?.length ? 'System Inspection OK' : 'Default Hardware Engine'}
               </span>
             </div>
           </div>
