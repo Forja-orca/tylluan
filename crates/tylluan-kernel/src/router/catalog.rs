@@ -172,6 +172,7 @@ fn description_override(name: &str) -> Option<&'static str> {
         "sequential_thinking" => "Step-by-step reasoning and analysis",
         "coloquio_digest" => "Coloquio channel digest and summary",
         "whats_new" => "Unread messages and updates from channels",
+        "night_reasoner" => "Nightly SmolLM2-135M memory feedback reasoning and analysis",
         "council" => "Multi-voice decision making and tradeoff analysis",
         "ast_surgeon" => "AST manipulation and code transformation",
         "audio_tools" => "Audio file processing and conversion",
@@ -660,7 +661,7 @@ mod tests {
             "audit", "bash", "browser", "code", "code_analysis", "code_graph", "code_reviewer",
             "coloquio", "coloquio_digest", "comfy_ui", "data_tools", "database", "deep_analysis", "deep_web_research",
             "docker", "filesystem", "formatter", "git", "ingest", "knowledge",
-            "mcp_bridge", "memory", "monitor", "n8n_bridge", "pdf", "scrapling", "search",
+            "mcp_bridge", "memory", "monitor", "n8n_bridge", "night_reasoner", "pdf", "scrapling", "search",
             "sequential_thinking", "system_metrics", "vision", "vision_moondream", "websearch",
             // V1 Port — guilds/builders/plugins/, guilds/watchers/plugins/, guilds/wardens/plugins/, guilds/scholars/plugins/
             "audio_tools", "ffmpeg_tools", "screenshot_tools", "clipboard_tools",
