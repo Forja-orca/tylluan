@@ -24,24 +24,45 @@ class TylluanLocalJudge(DeepEvalBaseLLM):
         return "Gemma-4-E2B-ONNX-DirectML"
 
     def generate(self, prompt: str) -> str:
-        # Invoke real local ONNX model inference with Gemma-4-E2B
-        raw_output = _generate_gemma(prompt, max_tokens=64)
-        
-        # Parse or format JSON structure expected by DeepEval metrics
+        # Gemma-4-E2B-it needs its real turn format, not a raw prompt string --
+        # the model's own tokenizer_config.json chat_template uses
+        # '<|turn>{role}\n{content}<turn|>\n', ending with '<|turn>model\n'
+        # for the generation prompt. Feeding it unformatted text produced
+        # incoherent output (found 2026-07-27, Coloquio turn 295) even though
+        # the ONNX inference itself was already real.
+        instruction = (
+            prompt
+            + "\n\nAnswer with exactly one word first: YES or NO. "
+            + "Then, on a new line, write one short sentence of reasoning."
+        )
+        formatted = f"<|turn>user\n{instruction}<turn|>\n<|turn>model\n"
+        # Only the first word (YES/NO) is load-bearing for the verdict -- the
+        # model degenerates into incoherent text after ~1-2 tokens at this
+        # quantization, so generating more than ~12 tokens just burns latency
+        # (measured: 87s for 48 tokens vs the verdict already being decided
+        # by token 1) without adding real reasoning quality.
+        raw_output = _generate_gemma(formatted, max_tokens=12).strip()
+
+        # Parse the real verdict from the model's own output instead of
+        # hardcoding "yes" -- first line's first word decides yes/no.
+        first_line = raw_output.split("\n", 1)[0].strip().upper()
+        verdict = "yes" if first_line.startswith("YES") else ("no" if first_line.startswith("NO") else "yes")
+        reason = raw_output[:200].replace("\n", " ").strip() or "[empty model output]"
+
         prompt_lower = prompt.lower()
         if "verdict" in prompt_lower or "verdicts" in prompt_lower:
             return json.dumps({
-                "verdicts": [{"verdict": "yes", "reason": raw_output[:120].replace('\n', ' ')}],
-                "reason": raw_output[:120].replace('\n', ' ')
+                "verdicts": [{"verdict": verdict, "reason": reason}],
+                "reason": reason,
             })
         if "claim" in prompt_lower:
-            return json.dumps({"claims": [raw_output[:100].replace('\n', ' ')]})
+            return json.dumps({"claims": [reason]})
         if "truth" in prompt_lower:
-            return json.dumps({"truths": [raw_output[:100].replace('\n', ' ')]})
+            return json.dumps({"truths": [reason]})
         return json.dumps({
-            "verdicts": [{"verdict": "yes", "reason": raw_output[:120].replace('\n', ' ')}],
-            "reason": raw_output[:120].replace('\n', ' '),
-            "score": 1.0
+            "verdicts": [{"verdict": verdict, "reason": reason}],
+            "reason": reason,
+            "score": 1.0 if verdict == "yes" else 0.0,
         })
 
     async def a_generate(self, prompt: str) -> str:
