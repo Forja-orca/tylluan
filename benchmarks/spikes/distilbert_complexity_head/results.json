@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_distilbert_embedding_plus_logreg",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--distilbert-base-uncased/snapshots\\5d73105e39e322b779ff7a8fcd11530fa579165b\\onnx\\model_quantized.onnx",
+  "num_training_samples": 62,
+  "leaked_eval_note": "benchmark_cases_accuracy is inflated -- those 18 cases were in the training set, same bias as the 61.11% MLP baseline",
+  "benchmark_cases_accuracy_pct_LEAKED": 100.0,
+  "true_held_out_cases": 10,
+  "true_held_out_accuracy_pct": 80.0,
+  "baseline_heuristic_only_pct": 61.11,
+  "baseline_heuristic_plus_6feature_mlp_pct": 61.11,
+  "verdict": "GO",
+  "verdict_basis": "true_held_out_accuracy_pct, not the leaked benchmark number"
+}
