@@ -352,8 +352,8 @@ impl GuildMatcher {
         let sem_weight: f32 = 0.55;
         let kw_weight: f32 = 0.45;
 
-        let mut best: Option<MatchResult> = None;
-        let mut best_score = -1.0_f32;
+        let mut top1: Option<(MatchResult, f32, f32)> = None; // (result, blended, pure_sem)
+        let mut top2: Option<(MatchResult, f32, f32)> = None;
 
         info!("🔍 Matcher: hybrid scoring '{}'", query);
         for guild in &self.catalog {
@@ -390,17 +390,51 @@ impl GuildMatcher {
                 guild.name, score, sem_score, kw_score, trigger_bonus, verb_bonus, neg_penalty
             );
 
-            if score > best_score && score >= threshold {
-                best_score = score;
-                best = Some(MatchResult {
+            if score >= threshold {
+                let result = MatchResult {
                     guild_name: guild.name.clone(),
                     score,
-                    method,
-                });
+                    method: method.clone(),
+                };
+                // Track top-2 for embedding tiebreaker (J-13)
+                match (&top1, &top2) {
+                    (None, _) => {
+                        top1 = Some((result, score, sem_score));
+                    }
+                    (Some(t1), None) => {
+                        if score > t1.1 {
+                            top2 = Some(t1.clone());
+                            top1 = Some((result, score, sem_score));
+                        } else {
+                            top2 = Some((result, score, sem_score));
+                        }
+                    }
+                    (Some(t1), Some(t2)) => {
+                        if score > t1.1 {
+                            top2 = Some(t1.clone());
+                            top1 = Some((result, score, sem_score));
+                        } else if score > t2.1 {
+                            top2 = Some((result, score, sem_score));
+                        }
+                    }
+                }
             }
         }
 
-        let mut keyword_result = best;
+        // J-13: Embedding tiebreaker — when top-2 blended scores are close
+        // (≤ 0.15), prefer the guild with higher pure BGE-M3 semantic similarity.
+        // Keyword dominates normal routing; embedding only resolves ambiguity.
+        if let (Some(t1), Some(t2)) = (&top1, &top2) {
+            if (t1.1 - t2.1).abs() < 0.15 && t2.2 > t1.2 {
+                tracing::debug!(
+                    "🎯 Tiebreak: '{}' (sem={:.3}) > '{}' (sem={:.3}) — scores {:.3} vs {:.3}",
+                    t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
+                );
+                top1 = Some(t2.clone());
+            }
+        }
+
+        let mut keyword_result = top1.map(|(r, _, _)| r);
 
         // Confidence gate: reject sub-threshold matches
         if let Some(ref m) = keyword_result {
