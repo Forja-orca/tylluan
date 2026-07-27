@@ -28,7 +28,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("tylluan-vision")
 
-_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".tylluan", "models_cache")
 _MODEL_ID  = "HuggingFaceTB/SmolVLM2-256M-Instruct"
 
 _vision_session  = None
@@ -57,9 +56,14 @@ _PROVIDER_LOADED   = False
 
 def _resolve_model_dir() -> str:
     from huggingface_hub import snapshot_download
+    # Uses the default HF hub cache (~/.cache/huggingface/hub) -- same
+    # location every other model in this codebase resolves from (BGE-M3,
+    # Qwen3.5-2B, Gemma-4-E2B, SmolLM2...). A separate ~/.tylluan/models_cache
+    # was never populated, so this always fell through to the degraded
+    # fallback even though the model was already downloaded and sitting in
+    # the standard cache the whole time (found 2026-07-27).
     return snapshot_download(
         repo_id=_MODEL_ID,
-        cache_dir=_CACHE_DIR,
         local_files_only=True,
         ignore_patterns=["*.bin", "*.pt", "*.safetensors",
                          "*bnb4*", "*fp16*", "*int8*", "*q4*", "*quantized*", "*uint8*"],

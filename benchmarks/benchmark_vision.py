@@ -59,12 +59,13 @@ async def run_benchmark():
     print(f"Sanity check -- output mentions text/writing: {mentions_text}")
 
     if is_degraded:
-        print("\nSTATUS: FAILED_MODEL_NOT_CACHED -- vision.py returned its degraded fallback, not real inference.")
-        print("Real cause: guilds/core/vision.py expects the model under ~/.tylluan/models_cache")
-        print("(local_files_only=True, by design -- no silent network calls). That directory")
-        print("does not exist in this environment -- the model was never downloaded there.")
-        print("Not fixed here: needs an explicit one-time download step into that exact path")
-        print("before this benchmark can report a real result.")
+        print("\nSTATUS: FAILED_MODEL_INCOMPLETE -- vision.py returned its degraded fallback, not real inference.")
+        print("Real cause (2026-07-27): the HF snapshot for HuggingFaceTB/SmolVLM2-256M-Instruct")
+        print("exists in the standard cache (~/.cache/huggingface/hub) but its onnx/ subfolder is")
+        print("missing the actual .onnx weight files (vision_encoder.onnx not present) -- only")
+        print("config/tokenizer files were ever downloaded, not the ONNX weights themselves.")
+        print("Not fixed here: needs a real (re-)download of the onnx/ subfolder before this")
+        print("benchmark can report a genuine result.")
     elif not (mentions_shape or mentions_text):
         print("\nSTATUS: SUSPECT -- model produced non-degraded output but it doesn't reference")
         print("anything in the actual test image. Inspect manually before trusting this as a real pass.")
