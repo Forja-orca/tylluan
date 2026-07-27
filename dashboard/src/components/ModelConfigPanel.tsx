@@ -173,7 +173,7 @@ export function ModelConfigPanel({ bridge }: Props) {
             </span>
             {selectedDevice === 'directml' && (
               <span className="text-[9px] text-emerald-400 font-mono mt-2 uppercase tracking-wide flex items-center gap-1">
-                ● Aceleración GPU Activa (DirectML ONNX)
+                ● Seleccionado (DirectML GPU)
               </span>
             )}
           </button>
