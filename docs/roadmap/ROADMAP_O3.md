@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-26 · v0.13.0 (HEAD `acc217c`) — M22/M23-P1/M26/M27/M28/M29/M34-M38 cerrados (M38 = A2A, cierra J-3, verificado retroactivamente el 2026-07-26), M19-P5 cerrado, ADR-011 Fase 1-2b + dashboard cerradas, ADR-010 §6 cerrado NO-GO — §2-5 (T5 vs SmolLM2) sigue PENDIENTE
+> **Última actualización:** 2026-07-27 · v0.13.0 (HEAD `02fa698`) — plan=true fix verificado end-to-end · SLM society spike day: Gemma-4-E2B ONNX pipeline funcional en DirectML, embedding router benchmarkeado (NO-GO puro, GO como tiebreaker), CoherenceGate 75% (GO-with-caveats), A2A coexistence explicitada · DeepEval identificado como candidato para J-6 · J-13/J-14 añadidos al backlog
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -503,5 +503,27 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | J-12 | **Bug bounty program para contribuidores externos** de `tylluan-montaraz`: recompensas por vulnerabilidades reales encontradas por la comunidad. | MEDIO | Palanca real de adopción/validación externa una vez v0.14.0 está publicado. | Idea genérica de la industria open-source, no específica de ningún paper — mecanismo de recompensa (tokens/USD) sin definir todavía. | ⬜ abierto (requiere diseño del mecanismo de recompensa) |
 
 **Nota de integridad:** todo lo marcado "INVESTIGACIÓN" (J-7, J-10) es explícitamente terreno no maduro — no convertir en milestone con fecha hasta validar con un spike acotado, no directamente en producción. Todo lo demás tiene al menos una fuente primaria verificada por el agente de investigación (ver reporte completo en Coloquio si se publica, o pedir las fuentes exactas).
+
+---
+
+### Visión / Norte — por qué existe Tylluan (síntesis de José, 2026-07-27)
+
+No es un milestone con fecha — es el marco que debe informar cómo se priorizan todos los demás. Registrado para que no se pierda en compactaciones de contexto futuras.
+
+**El principio de fondo:** Tylluan no pretende inventar desde cero — evoluciona sobre 70+ años de cómputo, lenguajes, papers y open-source ya existente, igual que la vida biológica evolucionó aprovechando y adaptando recursos, no reinventándolos. Cada pieza real de hoy (BGE-M3, DirectML, arXiv 2605.05277, Gemma-4-E2B, el propio matcher.rs) es evidencia de ese principio: **hibridar y adaptar recursos existentes gana sobre reemplazar o inventar de cero** — confirmado hoy mismo con datos reales en routing (72-80% híbrido vs 19-41% de alternativas puras).
+
+**Por qué la escala federada importa (no es "más FLOPs")**: la pregunta que se hizo José — qué pasaría si Tylluan completa su roadmap y un millón de personas comparten vía instancias Tylluan — no se responde con potencia bruta (mil portátiles no superan un datacenter). Lo que cambia es la **topología**:
+1. Un millón de contextos reales en paralelo, no una sola distribución de entrenamiento centralizada.
+2. Sin punto único de control/censura — ninguna empresa puede apagar una pregunta para todos a la vez.
+3. Conocimiento validado que se propaga entre pares (con consentimiento), no que se extrae hacia arriba hacia un solo propietario.
+
+**El eje moral explícito**: fortaleza inexpugnable contra actores maliciosos, nunca jaula para el agente legítimo (ver "Principio de diseño" en Coloquio 2026-07-27, ya aplicado a CoherenceGate/GLiNER). Los guardrails no son el objetivo, son la implementación técnica de un principio de amor/no-daño/no-entropía-autodestructiva más alto que cualquier guardrail corporativo — protegen sin encerrar, y eso sí se puede construir y verificar línea por línea, no solo declarar.
+
+**Decisión explícita de doble vía (no una a costa de la otra):**
+- **A2A (M38, protocolo abierto Linux Foundation)** debe llegar a producción real siguiendo las metodologías que ya funcionan en la comunidad — interoperar con CUALQUIER agente externo (LangGraph, CrewAI, etc.), no solo peers de confianza.
+- **La federación P2P propietaria (M14, Noise XK + Kademlia DHT + Gossip)** sigue mejorando en paralelo — es la capa de confianza mutua entre instancias Tylluan soberanas.
+- Ninguna de las dos se sacrifica por la otra. Ambas deben funcionar perfectamente en sus respectivos cometidos: A2A abre Tylluan al ecosistema externo; el mesh propio da soberanía real entre instancias que se conocen y confían.
+
+**Cómo aplicar esto en decisiones futuras:** al evaluar cualquier feature nueva, preguntar (1) ¿evoluciona sobre algo que ya existe o reinventa sin necesidad? (2) ¿protege sin encerrar? (3) ¿favorece la topología distribuida/soberana sobre la centralización, incluso cuando centralizar sería más simple a corto plazo?
 
 ---
