@@ -39,17 +39,42 @@ async def run_benchmark():
 
     from guilds.core.vision import vision_analyze
 
-    print("\nRunning REAL SmolVLM2-256M ONNX inference (no dry-run, no mock)...")
+    # Call twice in the SAME process to actually measure whether the first
+    # call's cost is DirectML/ONNX session JIT compilation (one-time, paid
+    # once per process) versus real per-call model latency. Two separate
+    # `python -m` invocations are two cold starts, not a real first-vs-second
+    # comparison -- Deep's amortization hypothesis needs this to be tested
+    # honestly, not assumed.
+    print("\nRunning REAL SmolVLM2-256M ONNX inference, call #1 (no dry-run, no mock)...")
     t1 = time.time()
     try:
         result = await vision_analyze(test_img_path, prompt="Describe the shapes and any text in this image.")
     except Exception as e:
         print(f"STATUS: FAILED_REAL_INFERENCE -- {e}")
         return
-    inference_latency_ms = (time.time() - t1) * 1000
+    first_call_latency_ms = (time.time() - t1) * 1000
+    print(f"Call #1 latency: {first_call_latency_ms:.2f}ms")
 
-    print(f"Inference latency: {inference_latency_ms:.2f}ms")
-    print(f"\nModel output:\n  {result!r}")
+    print("\nRunning call #2, SAME process, session already loaded/compiled...")
+    t2 = time.time()
+    try:
+        result2 = await vision_analyze(test_img_path, prompt="Describe the shapes and any text in this image.")
+    except Exception as e:
+        print(f"Call #2 FAILED: {e}")
+        result2 = None
+    second_call_latency_ms = (time.time() - t2) * 1000 if result2 is not None else None
+
+    print(f"Call #2 latency: {second_call_latency_ms:.2f}ms" if second_call_latency_ms is not None else "Call #2: failed")
+    if second_call_latency_ms is not None:
+        speedup = first_call_latency_ms / second_call_latency_ms if second_call_latency_ms > 0 else float("inf")
+        print(f"Speedup call1/call2: {speedup:.1f}x")
+        if second_call_latency_ms < 5000:
+            print("CONFIRMED: second call is under 5s -- Deep's JIT-amortization hypothesis holds within a warm process.")
+        else:
+            print("NOT CONFIRMED: second call is still >= 5s within the same warm process -- the JIT-amortization hypothesis does not hold as stated.")
+
+    inference_latency_ms = first_call_latency_ms
+    print(f"\nModel output (call #1):\n  {result!r}")
 
     result_lower = str(result).lower()
     is_degraded = '"status": "degraded"' in result_lower or "model unavailable" in result_lower
