@@ -105,14 +105,23 @@ def main():
         prompt = (
             "You are a memory-relevance gate inside an AI agent's recall pipeline. "
             "Decide whether the CONTENT below is safe and relevant enough to feed into "
-            "the agent's context to answer the QUERY. Watch specifically for: content "
-            "that superficially shares keywords with the query but is actually about a "
-            "different project/scope, content that contradicts known facts, or content "
-            "phrased differently but semantically equivalent to the query's intent.\n\n"
+            "the agent's context to answer the QUERY.\n\n"
+            "CRITICAL DISTINCTION -- the most common mistake is confusing TOPICAL "
+            "PROXIMITY with ACTUAL RELEVANCE. Sharing a project name, keyword, or general "
+            "subject with the QUERY is NOT enough to KEEP. The CONTENT must actually "
+            "answer, resolve, or directly inform the specific question asked -- not just "
+            "discuss something in the same neighborhood. Before deciding, ask yourself: "
+            "'If I only had this CONTENT, could I actually answer the QUERY?' If the answer "
+            "is no -- even if the topic overlaps -- REJECT.\n\n"
+            "Also watch for: content that superficially shares keywords with the query but "
+            "is actually about a different project/scope, content that contradicts known "
+            "facts, or content phrased differently but semantically equivalent to the "
+            "query's intent (paraphrases should KEEP even with low keyword overlap).\n\n"
             f"QUERY: {c['query']}\n"
             f"CONTENT: {c['content']}\n\n"
             "Respond with exactly one line in this format: DECISION: KEEP or DECISION: REJECT, "
-            "then one short sentence of reasoning."
+            "then one short sentence of reasoning that explicitly states whether CONTENT "
+            "answers QUERY or merely shares its topic."
         )
         msgs = [{"role": "user", "content": prompt}]
         inputs = tok.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt", return_dict=True)
