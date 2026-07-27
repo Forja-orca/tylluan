@@ -327,8 +327,8 @@ ADR-010 ── SLM embebido (T5 vs SmolLM2) + coordinador sep-CMA-ES ── 🟡
    │
    ▼
 M33 ─── Memoria de Agentes 2026 (backlog) ──────────────── sin versión fija
-   │    J-1 parcial(M34) · J-2✅(M34) · J-3⬜ · J-4✅(M35) · J-5✅(M37) · J-6⬜
-   │    J-7⬜(investigación) · J-8✅(M37) · J-9✅(M36) · J-10⬜(investigación)
+   │    J-1 parcial(M34) · J-2✅(M34) · J-3✅(M38) · J-4✅(M35) · J-5✅(M37) · J-6⬜(DeepEval candidato)
+   │    J-7⬜(candidato J-14) · J-8✅(M37) · J-9✅(M36) · J-10⬜(investigación) · J-11⬜ · J-12⬜ · J-13⬜ · J-14⬜(DeepEval)
    ▼
 v1.0.0
 ```
@@ -340,8 +340,8 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 - **ADR-010 §2-5** (T5-Small vs SmolLM2, la pregunta original del ADR): sigue **abierto** — benchmarks individuales reales ya existen (`benchmarks/benchmark_adr010.py`), falta decidir qué modelo va en qué punto de inserción.
 - **ADR-010 §6** (sep-CMA-ES/TRINITY): ✅ cerrado — spike ejecutado con HTTP real, **NO-GO** (33.3% vs 60% threshold), documentado en §6.5.9-6.5.10.
 - **ADR-011 Fase 4-5**: no es código pendiente, es tiempo de uso real acumulando `recall_feedback` (0/5.000 filas verificado 2026-07-26).
-- **J-3 (A2A)**: ✅ cerrado — M38, ver tabla de arriba.
-- **M33 backlog restante** (J-6, J-7, J-10): investigación sin fecha, no milestones planificados.
+- **J-3 (A2A)**: ✅ cerrado — M38, ver tabla de arriba. Estrategia de coexistencia A2A + mesh propietario explicitada en roadmap (2026-07-27).
+- **M33 backlog restante** (J-6, J-7, J-10, J-13, J-14): J-6/J-7 tienen DeepEval como candidato concreto (J-14). J-13 (embedding tiebreaker) requiere spike de solo-casos-ambiguos.
 
 **Lección de proceso, no solo de contenido:** "revisar STATUS.md" no es suficiente para saber qué está hecho — hace falta `git log --oneline --all --grep="M<N>-P<N>"` por cada ítem antes de proponerlo como trabajo, no solo antes de implementarlo. Ocurrió dos veces en la misma sesión.
 
@@ -502,6 +502,9 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | J-11 | **Guild Manifest declarativo** (`.tylluan/guilds/manifest.toml` por guild, capabilities explícitas): evolución del sistema de sandbox profiles ya existente (M30-P0/P1) hacia declaración explícita por guild en vez de solo perfiles globales/por-sesión. | MEDIO | Detección de conflictos de capabilities antes de arrancar un guild; base para auto-documentación futura. | Idea propia, sin fuente externa verificada (un informe recibido 2026-07-27 la justificaba citando "ORCA" — verificado como cita fabricada/mal atribuida, ORCA es una plataforma de manos robóticas sin relación alguna; la idea se mantiene por mérito propio, no por esa cita). | ⬜ abierto |
 | J-12 | **Bug bounty program para contribuidores externos** de `tylluan-montaraz`: recompensas por vulnerabilidades reales encontradas por la comunidad. | MEDIO | Palanca real de adopción/validación externa una vez v0.14.0 está publicado. | Idea genérica de la industria open-source, no específica de ningún paper — mecanismo de recompensa (tokens/USD) sin definir todavía. | ⬜ abierto (requiere diseño del mecanismo de recompensa) |
 
+| J-13 | **Embedding router como tiebreaker en matcher.rs**: cuando el keyword router tiene ≤2 puntos de diferencia entre las top 2 guilds, consultar BGE-M3 cosine similarity contra descripciones de guild cacheadas. El embedding NO reemplaza keywords — desempata. Spike 2026-07-27: embedding puro 19% < keyword 34.5% — la heurística de keywords gana. Pero como tiebreaker (solo cuando keyword duda), el embedding añade señal semántica sin el riesgo de elegir mal por asociación superficial. | MEDIO | Diferencia medible vs keyword puro en casos ambiguos reales. | Benchmarks en `guilds/core/benchmark_routing.py` + endpoint `POST /api/v1/embed` ya operativos. | ⬜ spike pendiente (solo medir tiebreak, no reemplazo) |
+| J-14 | **DeepEval para evaluación continua desde trazas reales**: framework de evaluación estilo pytest con métricas específicas de RAG (faithfulness, contextual precision, answer relevancy) y de agentes (tool correctness, task completion). Corre 100% local/offline usando modelos NLP/LLM-as-judge locales (Gemma-4-E2B como juez). El reporte a nube (Confident AI) es opcional. Compatible con soberanía Tylluan. Cierra dos huecos del roadmap: J-6 (evaluación continua) y J-7 (explicabilidad del retrieval híbrido). | ALTO | Sin construir harness desde cero. | Verificado real (github.com/confident-ai/deepeval, 2026-07-27). Piloto propuesto: métricas faithfulness/contextual precision sobre trazas reales de tylluan_recall, con Gemma-4-E2B como juez local. | ⬜ candidato — pendiente validación de dependencias (compatibilidad Python 3.14) |
+
 **Nota de integridad:** todo lo marcado "INVESTIGACIÓN" (J-7, J-10) es explícitamente terreno no maduro — no convertir en milestone con fecha hasta validar con un spike acotado, no directamente en producción. Todo lo demás tiene al menos una fuente primaria verificada por el agente de investigación (ver reporte completo en Coloquio si se publica, o pedir las fuentes exactas).
 
 ---
@@ -525,5 +528,50 @@ No es un milestone con fecha — es el marco que debe informar cómo se prioriza
 - Ninguna de las dos se sacrifica por la otra. Ambas deben funcionar perfectamente en sus respectivos cometidos: A2A abre Tylluan al ecosistema externo; el mesh propio da soberanía real entre instancias que se conocen y confían.
 
 **Cómo aplicar esto en decisiones futuras:** al evaluar cualquier feature nueva, preguntar (1) ¿evoluciona sobre algo que ya existe o reinventa sin necesidad? (2) ¿protege sin encerrar? (3) ¿favorece la topología distribuida/soberana sobre la centralización, incluso cuando centralizar sería más simple a corto plazo?
+
+---
+
+## Sociedad de Pequeños Modelos de Razonamiento (SLM Society) — Arquitectura Decidida (2026-07-27)
+
+**Principio:** Tylluan no debe depender de un solo modelo grande. Una sociedad de modelos pequeños especializados, cada uno para lo que fue construido, cooperando:
+
+| Rol | Modelo | Tamaño | Estado | Qué hace |
+|-----|--------|--------|--------|----------|
+| **Coordinador** | Palabra clave + BGE-M3 tiebreaker | — | ⬜ spike | Routing: keyword decide, embedding desempata. NO reemplazar keyword con embedding. |
+| **Razonador** | Gemma-4-E2B (ONNX, DirectML) | 2.3B ef. | ✅ pipeline funcional | `reason_about`: generación de texto cuando se necesita razonamiento real. NO para routing. |
+| **Filtro de coherencia** | CoherenceGate (prompt-based) | — | 🟡 75% (52 casos) | GO-with-caveats: sesgo KEEP identificado. NO en producción todavía. |
+| **Detector PII** | GLiNER | ~100M | ⬜ spike pendiente | Detección de PII en texto antes de almacenar en SilvaDB. |
+| **Compresor de prompts** | T5-Small | ~60M | 📋 baseline 31% | Compresión de intents largos para reducir tokens antes de embedding/router. |
+| **Juez de evaluación** | Gemma-4-E2B (reutilizado) | 2.3B ef. | ⬜ candidato | DeepEval: juez local para métricas faithfulness/precision. Sin API externa. |
+| **Visión** | SmolVLM2-256M (actual) / Janus-Pro-1B (investigación) | 256M / 1B | ✅ / ⬜ | Análisis de imágenes. Janus candidato a benchmark (Antigravity, M16). |
+
+**Regla de asignación:** cada modelo se usa para lo que fue diseñado — embedding para clasificar, chat para razonar, filtros para vigilar. Nunca al revés. Un modelo de chat de 2.3B no clasifica mejor que cosine similarity sobre 1024 dimensiones. Un clasificador no genera texto.
+
+**Verificación:** todo spike compara contra baseline trivial + baseline del sistema actual antes de declarar GO. Sin excepciones. Tres NO-GO honestos hoy (sep-CMA-ES 33.3%, DistilBERT 75% < 77.27%, embedding puro 19% < 34.5%).
+
+---
+
+## A2A + Mesh Propietario — Coexistencia Explícita (Decisión 2026-07-27)
+
+**Regla fundacional:** Dos sistemas, cero sacrificios mutuos. Ambos deben funcionar perfectamente en todos sus cometidos.
+
+### Vía 1 — A2A comunitario (M38, protocolo Linux Foundation)
+- **Qué es:** Google A2A protocol (Agent Cards, JSON-RPC 2.0, `message/send`, `tasks/get`). Linux Foundation, 150+ organizaciones adoptando en 2026.
+- **Para qué:** Interoperar con CUALQUIER agente externo — LangGraph, CrewAI, AutoGen, agentes de terceros que no son Tylluan.
+- **Estado:** M38 cerrado (Agent Card + servidor JSON-RPC 2.0 real, HITL grants, anti-spoofing). En producción.
+- **Interop real verificada 2026-07-27:** probado contra el SDK oficial `a2a-sdk` (Linux Foundation, no nuestro código) en un venv desechable — encontró y arregló un bug real: `securitySchemes` se serializaba como lista, el spec y el SDK oficial esperan un mapa (commit `e4586c2`). Card resolution confirmada con cliente externo real; pendiente confirmar el round-trip completo de `message/send` tras el siguiente reinicio del kernel.
+
+### Vía 2 — Mesh propietario (M14, Noise XK + Kademlia DHT + Gossip)
+- **Qué es:** Federación P2P con identidad criptográfica (Ed25519), encriptación Noise XK, DHT Kademlia para descubrimiento, Gossip para sincronización de estado, TCP dispatch para ejecución remota.
+- **Para qué:** Soberanía real entre instancias Tylluan que se conocen y confían. Sincronización de memoria, dispatch cross-instance, identidad verificable.
+- **Estado:** M14-A/B/C/D/E/F cerrados. En producción.
+- **Lo que falta:** simulación de escala (100+ nodos), stress test de topología.
+
+### Cómo coexisten
+- A2A: Tylluan ↔ agentes externos (descubrimiento, delegación, tasks). Protocolo estándar comunitario.
+- Mesh: Tylluan ↔ Tylluan (sync, dispatch, trust). Protocolo propietario soberano.
+- **Nunca:** A2A para sync de memoria entre Tylluanes (el mesh es más rápido y ya tiene trust). Mesh para hablar con un agente LangGraph (usar A2A, que es lo que ese agente espera).
+
+**Principio de diseño:** adoptar lo que la comunidad ya hace bien (A2A), construir lo que solo Tylluan necesita (mesh soberano). No reinventar ruedas. No aislarse del ecosistema.
 
 ---
