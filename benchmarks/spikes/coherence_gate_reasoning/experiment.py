@@ -17,6 +17,7 @@ Usage:
   python benchmarks/spikes/coherence_gate_reasoning/experiment.py
 """
 import json
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -25,7 +26,7 @@ import numpy as np
 import torch
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
-CASES_PATH = Path(__file__).parent / "cases.json"
+CASES_PATH = Path(__file__).parent / (sys.argv[1] if len(sys.argv) > 1 else "cases.json")
 COHERENCE_THRESHOLD = 0.85  # same constant as coherence_gate.rs
 
 QWEN_MODEL_ID = "unsloth/Qwen3.5-2B"
@@ -151,7 +152,7 @@ def main():
         "verdict": "GO" if qwen_acc > threshold_acc and qwen_acc > majority_acc * 100 else "NO-GO",
         "verdict_basis": "qwen_reasoning_accuracy_pct must beat BOTH the majority-class baseline and the current rule-based threshold to justify adding a generative model to CoherenceGate.",
     }
-    out_path = Path(__file__).parent / "results.json"
+    out_path = Path(__file__).parent / (sys.argv[2] if len(sys.argv) > 2 else "results.json")
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
     print(f"\nResult saved: {out_path}")
     print(f"VERDICT: {result['verdict']}")

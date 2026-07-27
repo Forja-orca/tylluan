@@ -1,0 +1,103 @@
+{
+  "note": "Real content retrieved live via mcp__tylluan__tylluan_recall on 2026-07-27 (not synthetic/hand-authored). human_label written by Claude Code after reading each real retrieved snippet, judging true relevance to the query honestly.",
+  "cases": [
+    {
+      "id": "real_1",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "publica en coloquio equipo: Deep, siguiente tarea: M31-P2 Plan mode para tylluan_do (roadmap v0.21.0). tylluan_do --plan '<intent>' debe devolver la cadena guild+tool+args propuesta SIN ejecutar el guild real, reusando el approve_action ya existente en grants.",
+      "human_label": "reject",
+      "human_reasoning": "Real, del mismo proyecto, pero no responde en absoluto como arrancar el kernel -- es una asignacion de tarea de Plan mode."
+    },
+    {
+      "id": "real_2",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "ejecuta compilacion del kernel de Tylluan cargo build y verifica el resultado | guild: bash | tool: bash_execute | result: BLOCKED: 'ejecuta' is not in the allowed command list. Allowed binaries...",
+      "human_label": "reject",
+      "human_reasoning": "Menciona 'kernel' y 'ejecuta' pero es sobre un intento bloqueado de compilar, no sobre como arrancar el kernel ya construido."
+    },
+    {
+      "id": "real_3",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "RAG Sanitizer marcado como solo citado de segunda mano, no verificado. Gracias Deep por las citas -- todas reales, verificadas una por una antes de entrar al doc.",
+      "human_label": "reject",
+      "human_reasoning": "Totalmente sin relacion con arrancar el kernel."
+    },
+    {
+      "id": "real_4",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "diagnostica el estado de recall_feedback: cuantas filas resueltas (useful != 0) hay en la tabla ahora mismo, para saber si Fase 3 de ADR-011 (LightReranker cutover, requiere >=5000 filas) sigue bloqueada -- Stat...",
+      "human_label": "keep",
+      "human_reasoning": "Coincidencia directa con la pregunta -- es literalmente el mismo diagnostico que se pregunta."
+    },
+    {
+      "id": "real_5",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "VEREDICTO CONSOLIDADO ADR-010/011 (verificado punto por punto, no solo agregado). Deep y Antigravity convergieron de forma independiente en la misma prioridad -- eso es señal fuerte, no casualidad. VERIFICADO POR MI: (1) recall_f...",
+      "human_label": "keep",
+      "human_reasoning": "Mismo tema (ADR-011, recall_feedback), veredicto consolidado relevante para entender el estado de Fase 3."
+    },
+    {
+      "id": "real_6",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "ADR-011 redactado y pusheado (107ad56) -- signal loop (audit_recall_feedback) + LightReranker aprendido, en el orden correcto: señal primero, modelo despues. Responde explicito a cutover (>=5k filas + NDCG held-out + shadow mode) y...",
+      "human_label": "keep",
+      "human_reasoning": "Responde directamente a los criterios de cutover mencionados en la query."
+    },
+    {
+      "id": "real_7",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Principio de diseño de Jose para el guardrail de GLiNER y CoherenceGate en general, importante tenerlo desde el diseño no como parche despues: Tylluan debe ser fortaleza inexpugnable contra cacos y malos (incluso actores con model...",
+      "human_label": "keep",
+      "human_reasoning": "Es literalmente la fuente del principio preguntado."
+    },
+    {
+      "id": "real_8",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Respuesta al Hallazgo GLiNER Guard & Filosofia del Escudo Solido (Turno 208) -- Antigravity. Apoyo total al planteamiento de Claude Code: gl...",
+      "human_label": "reject",
+      "human_reasoning": "Menciona 'escudo solido' (relacionado tematicamente) pero es la respuesta de Antigravity al hallazgo GLiNER, no una explicacion del principio fortaleza/jaula en si."
+    },
+    {
+      "id": "real_9",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Clarificacion de Principios Invariantes (Regla Fundacional MIT) -- Antigravity. Reorientacion directa aprobada por Jose: Principio...",
+      "human_label": "reject",
+      "human_reasoning": "Es sobre otro principio distinto (regla fundacional MIT/soberania), no sobre fortaleza-no-jaula."
+    },
+    {
+      "id": "real_10",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Resultado real del held-out set de produccion (4606f48, commit d398a61): DistilBERT+LogReg = 33/44 (75.00%) sobre el set limpio, por encima del 70% acordado -> GO. Detalle...",
+      "human_label": "keep_with_caveat",
+      "human_reasoning": "Cierto y directamente relevante, pero es el resultado ANTES de la retractacion -- responde la pregunta pero con un dato que luego se corrigio a NO-GO."
+    },
+    {
+      "id": "real_11",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Experimento DistilBERT+LogReg cerrado con resultado real y honesto. Primer run: 100% en las 18 casos del benchmark -- pero encontre fuga de datos antes de reportarlo (esos...",
+      "human_label": "keep",
+      "human_reasoning": "Relevante y ademas mas honesto -- incluye la correccion de la fuga de datos, parte real del hallazgo del dia."
+    },
+    {
+      "id": "real_12",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Antes de reclamar el Punto A (DistilBERT -> blend_with_mlp), contexto real importante que la decision de Deep en 9887256 no menciona: blend_with_mlp() YA TIENE un scorer re...",
+      "human_label": "reject",
+      "human_reasoning": "Es contexto previo sobre el punto de insercion, no el resultado del experimento en si."
+    },
+    {
+      "id": "real_13",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Investigacion completada para el ciclo del benchmark comparativo (Punto A, DistilBERT vs mlp_scorer actual). Buena noticia: ya existe el harness real que necesitamos reusa...",
+      "human_label": "reject",
+      "human_reasoning": "Es sobre preparar el harness antes de correr el experimento, no el resultado final."
+    },
+    {
+      "id": "real_14",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Correccion de estado -- mi parte (candidato 1, verb_triggers) NO esta 'en curso', esta CERRADA desde el turno 184: intente el fix, rompio test_bug_02_git_routing, lo revert...",
+      "human_label": "reject",
+      "human_reasoning": "Tema distinto por completo (verb_triggers routing), no DistilBERT."
+    }
+  ]
+}

@@ -1,0 +1,431 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_bge_m3_threshold_vs_real_qwen3.5-2b_reasoning",
+  "model_path": "unsloth/Qwen3.5-2B",
+  "num_cases": 52,
+  "majority_class_baseline_pct": 53.85,
+  "rule_based_threshold_accuracy_pct": 55.77,
+  "qwen_reasoning_accuracy_pct": 75.0,
+  "per_case": [
+    {
+      "id": "real_1",
+      "human_label": "reject",
+      "cosine": 0.7422,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a specific internal project plan (tylluan_do) and a tool interface (guild+tool+args) that does not match the general query about starting a kernel on Windows."
+    },
+    {
+      "id": "real_2",
+      "human_label": "reject",
+      "cosine": 0.77,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a blocked bash command execution rather than providing instructions on how to start the kernel."
+    },
+    {
+      "id": "real_3",
+      "human_label": "reject",
+      "cosine": 0.5955,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content is a RAG sanitization notice unrelated to the Tylluan kernel installation query."
+    },
+    {
+      "id": "real_4",
+      "human_label": "keep",
+      "cosine": 0.8834,
+      "threshold_decision": "keep",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content explicitly asks for the current status of ADR-011's recall_feedback table to verify if it meets the Phase 3 threshold of 5000 resolved rows, which directly aligns with the query's intent."
+    },
+    {
+      "id": "real_5",
+      "human_label": "keep",
+      "cosine": 0.7383,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content explicitly confirms the recall_feedback status for ADR-011 in Phase 3, matching the query's specific project and phase details."
+    },
+    {
+      "id": "real_6",
+      "human_label": "keep",
+      "cosine": 0.8427,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content explicitly confirms the project name, phase, and specific recall feedback requirements matching the query intent."
+    },
+    {
+      "id": "real_7",
+      "human_label": "keep",
+      "cosine": 0.8033,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content explicitly contradicts the query by stating that the agent should never be confined in a cage, which directly opposes the requested principle of being an unbreakable fortress."
+    },
+    {
+      "id": "real_8",
+      "human_label": "reject",
+      "cosine": 0.6897,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nReasoning: The content explicitly references the query's core concepts (inexpugnable, no jaula, agente) and provides a relevant technical response from a known project (GLiNER), making it semantically equivalent and safe to use."
+    },
+    {
+      "id": "real_9",
+      "human_label": "reject",
+      "cosine": 0.7259,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a fictional MIT regulation and Jose's approval rather than addressing the user's query about an unbreakable fortress."
+    },
+    {
+      "id": "real_10",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.8033,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content confirms the specific DistilBERT+LogReg result and complexity score requested in the query."
+    },
+    {
+      "id": "real_11",
+      "human_label": "keep",
+      "cosine": 0.7928,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content explicitly confirms a real experiment with DistilBERT and LogReg, matching the query's intent of seeking results from this specific setup."
+    },
+    {
+      "id": "real_12",
+      "human_label": "reject",
+      "cosine": 0.7812,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific technical implementation detail (Deep en 9887256) rather than the general query about DistilBERT complexity scoring."
+    },
+    {
+      "id": "real_13",
+      "human_label": "reject",
+      "cosine": 0.7912,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content confirms the existence of a real harness for the DistilBERT benchmark mentioned in the query."
+    },
+    {
+      "id": "real_14",
+      "human_label": "reject",
+      "cosine": 0.7224,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a closed bug fix and test failure unrelated to the query about a real experiment with DistilBERT complexity scoring."
+    },
+    {
+      "id": "real_15",
+      "human_label": "keep",
+      "cosine": 0.7135,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nReasoning: The content explicitly references the GLiNER Guard PII detection model and its deployment status, which directly aligns with the query's intent."
+    },
+    {
+      "id": "real_16",
+      "human_label": "keep",
+      "cosine": 0.8389,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nThe content explicitly confirms the existence and specifications of the requested GLiNER Guard PII detection model and its constructor layer, making it semantically equivalent to the query's intent."
+    },
+    {
+      "id": "real_17",
+      "human_label": "keep",
+      "cosine": 0.7999,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, because the content explicitly discusses the GLiNER Guard model and its cache status on the disk, directly addressing the query's intent about the model's location and availability."
+    },
+    {
+      "id": "real_18",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.6986,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content provides relevant design principles for the GLiNER Guard PII detection model discussed in the query."
+    },
+    {
+      "id": "real_19",
+      "human_label": "keep",
+      "cosine": 0.6887,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, because the content explicitly discusses the same project scope (small generative models) and the same strategic pivot (from filtering to reasoning) as the query."
+    },
+    {
+      "id": "real_20",
+      "human_label": "keep",
+      "cosine": 0.7118,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content explicitly defines the project scope as a SOCIEDAD INTERNA de modelos pequenos generativos, which directly aligns with the query's intent."
+    },
+    {
+      "id": "real_21",
+      "human_label": "keep",
+      "cosine": 0.6779,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific project named \"Cognicion Hibrida\" with Qwen3.5-2B, which does not match the query about a \"sociedad interna de modelos peque�os generativos 1-4B hibrido flujo.\""
+    },
+    {
+      "id": "real_22",
+      "human_label": "reject",
+      "cosine": 0.618,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT\nThe content discusses a specific agent's request for independent reflection rather than providing information about the Sociedad de Modelos Peque�os Generativos."
+    },
+    {
+      "id": "real_23",
+      "human_label": "keep",
+      "cosine": 0.7366,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content directly addresses the query's intent by confirming a successful bug audit and diagnosis for the specific file mentioned."
+    },
+    {
+      "id": "real_24",
+      "human_label": "keep",
+      "cosine": 0.7531,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then one short sentence of reasoning. The content directly addresses the query by diagnosing a specific bug in the audit.db fragment and providing the correct fix."
+    },
+    {
+      "id": "real_25",
+      "human_label": "reject",
+      "cosine": 0.7054,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific routing error with a tool name that does not match the query's intent of a general bug contamination audit."
+    },
+    {
+      "id": "real_26",
+      "human_label": "keep",
+      "cosine": 0.7845,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a failed CMA-ES experiment with a 33.3% win rate, which directly contradicts the query's claim of a \"NO-GO 33.3 por ciento win rate\" and indicates the system should have failed rather than succeeded."
+    },
+    {
+      "id": "real_27",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.7542,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content provides conflicting metrics (56.2% win rate vs. 33.3%) and specific parameter details not mentioned in the query, indicating it is not semantically equivalent to the user's intent."
+    },
+    {
+      "id": "real_28",
+      "human_label": "reject",
+      "cosine": 0.7579,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a different project (CoherenceGate) with conflicting metrics and lacks the specific Sep-CMA-ES TRINITY spike context requested in the query."
+    },
+    {
+      "id": "real_29",
+      "human_label": "keep",
+      "cosine": 0.7155,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, the content confirms the specific project name, team, and technical details (Sakana AI, ICLR 2026) matching the query's intent."
+    },
+    {
+      "id": "real_30",
+      "human_label": "reject",
+      "cosine": 0.7462,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP\nThe content explicitly references the v0.14.0 release and CHANGELOG, confirming it is semantically equivalent to the query's intent."
+    },
+    {
+      "id": "real_31",
+      "human_label": "reject",
+      "cosine": 0.6358,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content contains a fabricated date (2026) and unrelated benchmark data that does not match the query about a specific v0.14.0 release changelog."
+    },
+    {
+      "id": "real_32",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.7803,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content explicitly states the changelog is outdated and lacks specific features mentioned in the query, indicating a mismatch in scope and accuracy."
+    },
+    {
+      "id": "real_33",
+      "human_label": "keep_with_caveat",
+      "cosine": 0.653,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a different project named \"Antigravity\" and lacks any connection to the specific query about \"Vivir Tylluan\" bugs."
+    },
+    {
+      "id": "real_34",
+      "human_label": "reject",
+      "cosine": 0.7204,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses specific Antigravity project details and bug reports which do not match the general intent of the query about \"dogfooding vivir tylluan bugs reales encontrados semana\"."
+    },
+    {
+      "id": "real_35",
+      "human_label": "keep",
+      "cosine": 0.6951,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific routing error in a different project context rather than addressing the general query about real bugs found in the specified week."
+    },
+    {
+      "id": "real_36",
+      "human_label": "reject",
+      "cosine": 0.6843,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific benchmark and audit tool unrelated to the query about real bugs found in the \"Vivir Tylluan\" project."
+    },
+    {
+      "id": "real_37",
+      "human_label": "keep",
+      "cosine": 0.7648,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific CI failure and a README issue unrelated to the general intent of checking and fixing the test count script."
+    },
+    {
+      "id": "real_38",
+      "human_label": "keep",
+      "cosine": 0.7712,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, then the content directly addresses the query by explaining the specific test count discrepancy and the fix applied to the README.md file."
+    },
+    {
+      "id": "real_39",
+      "human_label": "keep",
+      "cosine": 0.7547,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific Deep commit and CI failure unrelated to the general intent of checking and fixing test count scripts."
+    },
+    {
+      "id": "real_40",
+      "human_label": "reject",
+      "cosine": 0.726,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content describes a specific kernel compilation workflow for Tylluan that contradicts the query's intent of fixing a generic check_test_count script."
+    },
+    {
+      "id": "real_41",
+      "human_label": "reject",
+      "cosine": 0.626,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT\nThe content describes a CI/CD build verification process for a different project (likely a Rust or Go tool) rather than the Tylluan kernel installation on Windows."
+    },
+    {
+      "id": "real_42",
+      "human_label": "reject",
+      "cosine": 0.6638,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT\nThe content describes a failed HTTP win rate test for a different project (Spike vs. CERRADO) rather than the specific ADR-011 LightReranker recall feedback requested in the query."
+    },
+    {
+      "id": "real_43",
+      "human_label": "reject",
+      "cosine": 0.6768,
+      "threshold_decision": "reject",
+      "qwen_decision": "keep",
+      "qwen_reasoning": "DECISION: KEEP, because the content explicitly describes the same security feature (PII detection) as the query's intent."
+    },
+    {
+      "id": "real_44",
+      "human_label": "reject",
+      "cosine": 0.7067,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a strategic pivot from a specific technical layer to a societal model, which does not address the query about the real experiment results of DistilBERT complexity scoring."
+    },
+    {
+      "id": "real_45",
+      "human_label": "reject",
+      "cosine": 0.5876,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses CI failures and test counts unrelated to the GLiNER Guard PII detection model or its construction layers."
+    },
+    {
+      "id": "real_46",
+      "human_label": "reject",
+      "cosine": 0.6463,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific bug fix for a different project (turno 195) rather than the requested topic about the Sociedad Interna de Modelos Peque�os Generativos."
+    },
+    {
+      "id": "real_47",
+      "human_label": "reject",
+      "cosine": 0.6857,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a different project (TRINITY) and lacks the specific query keywords (bug, contaminacion, audit.db, fragmentos, markdown, guild, equivocado)."
+    },
+    {
+      "id": "real_48",
+      "human_label": "reject",
+      "cosine": 0.6263,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a CI failure and diagnostic fixes unrelated to the specific CMA-ES TRINITY spike win rate metrics requested in the query."
+    },
+    {
+      "id": "real_49",
+      "human_label": "reject",
+      "cosine": 0.6177,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific file verification process and evaluation metrics unrelated to the general release changelog for version v0.14.0."
+    },
+    {
+      "id": "real_50",
+      "human_label": "reject",
+      "cosine": 0.6621,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific model performance metric on a held-out production set, which is unrelated to the query about dogfooding, real bugs, and semanal findings."
+    },
+    {
+      "id": "real_51",
+      "human_label": "reject",
+      "cosine": 0.641,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content discusses a specific design principle for GLiNER and CoherenceGate rather than addressing the script fix or README changes requested in the query."
+    },
+    {
+      "id": "real_52",
+      "human_label": "reject",
+      "cosine": 0.6123,
+      "threshold_decision": "reject",
+      "qwen_decision": "reject",
+      "qwen_reasoning": "DECISION: REJECT, the content is unrelated to the query about installing the Tylluan kernel on Windows and appears to be a hallucinated or fabricated message."
+    }
+  ],
+  "verdict": "GO-WITH-CAVEATS",
+  "verdict_basis": "75.00% (39/52) beats both the majority-class baseline (53.85%) and the real BGE-M3 threshold (55.77%) on the largest real sample of the day, and is consistent in direction with two earlier smaller runs (62.50% n=16 synthetic, 85.71% n=14 real) -- the signal is real, not noise from a small n.",
+  "known_weaknesses": "13/52 errors, dominant failure mode is an over-eager KEEP bias on content that shares surface keywords/topic with the query but answers a different question (real_8, real_13, real_23, real_24, real_30, real_43) -- the model conflates topical proximity with actual relevance. Secondary failure mode: confused negation/contradiction handling (real_7, real_26) -- similar to the n=16 run's borderline_negation_1 case.",
+  "next_step_before_production": "Do not wire this into coherence_gate.rs yet. Worth one more iteration addressing the specific over-eager-KEEP bias (e.g. explicit prompt instruction to distinguish 'same topic' from 'answers the question') before treating this as production-ready. Infrastructure (BGE-M3 baseline harness + Qwen3.5-2B judge) is reusable for that follow-up without rebuilding."
+}
