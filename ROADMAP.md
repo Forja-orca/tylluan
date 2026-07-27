@@ -252,4 +252,16 @@ Stretch goals (not funded yet; deferred to v1.x):
 
 ---
 
+## Horizon — Planetary Sovereign Mesh & Dual A2A Architecture
+
+**Vision:** Scaling Tylluan to 1 Million sovereign nodes without cloud lock-in, combining standard open-source Agent-to-Agent (A2A) protocols with Tylluan's local-first P2P mesh fabric.
+
+Requirements & Insertion Points:
+- [ ] **Dual A2A Standard Integration**: Support industry open-source Agent-to-Agent protocols (e.g. OpenClaw / A2A specs) alongside Tylluan's native Noise XK / BWC protocol, allowing any client or external agent to interact seamlessly.
+- [ ] **SLLM Flow Coordinator (1.5B–3B)**: Deploy SOTA small models (e.g. Qwen2.5-Coder-1.5B / Gemma-4-E2B) over ONNX DirectML as active flow coordinators for `matcher.rs` / `route_intent`, reserving ~100M models (SmolLM2-135M / GLiNER) as fast filters (PII, CoherenceGate).
+- [ ] **Planetary Mesh Fabric (1M Nodes)**: Decentralized peer discovery (Kademlia DHT + mDNS + STUN) ensuring privacy-preserving SilvaDB knowledge graph synchronization without central servers or token costs.
+- [ ] **Zero Self-Destructive Entropy**: Enforce kernel-level safety, isolation, and ethical guardrails that protect both host machine and user context without restricting agent autonomy.
+
+---
+
 *This roadmap reflects the project's actual state, not aspirational marketing. Items move to "done" only when verified.*
