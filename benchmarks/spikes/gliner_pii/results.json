@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_gliner2_pii_detection",
+  "model": "fastino/gliner2-base-v1",
+  "num_cases": 15,
+  "majority_class_baseline_pct": 60.0,
+  "regex_baseline_pct": 53.33,
+  "gliner2_accuracy_pct": 66.67,
+  "avg_latency_ms": 161.1,
+  "verdict": "NO-GO-precision-problem",
+  "verdict_basis": "66.67% beats both baselines on raw accuracy, but ALL 5 errors are false positives on negative controls (0/5 specificity) -- 100% recall on genuine PII, 0% specificity on context-dependent non-PII text ('112', a git-verified test count, a room name, a port number, an agent's name). Checked with include_confidence=True whether a higher threshold fixes this: it does not -- false positive confidences (0.58-0.9999, e.g. '112' as phone number at 0.9999) overlap directly with true positive confidences (0.77-1.0), so no threshold value separates them. This is a genuine zero-shot entity-typing limitation (plausible entity type out of context, wrong in this context), not a scoring artifact or a tunable hyperparameter. Same class of over-eager-positive-bias failure found earlier today in CoherenceGate.",
+  "raw_accuracy_pct_before_specificity_analysis": 66.67,
+  "next_step_before_production": "Not viable as a standalone confidence-threshold-gated filter. Would need either a larger held-out set to confirm this isn't sample noise (n=15 today), a fine-tuned/few-shot-calibrated label set, or pairing with a second-pass contextual check (e.g. the Sociedad SLM CoherenceGate reasoning approach) before touching any real PII-scrubbing path."
+}
