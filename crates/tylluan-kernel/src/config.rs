@@ -630,26 +630,20 @@ pub struct InferenceConfig {
 /// Returns the most capable GPU execution provider available on the OS,
 /// falling back to CPU when unavailable.
 pub fn auto_select_device() -> InferenceDevice {
-    #[cfg(target_os = "macos")]
-    {
+    if cfg!(target_os = "macos") {
         tracing::info!("🍎 Detected macOS — auto-selecting CoreML inference device");
-        InferenceDevice::Coreml
+        return InferenceDevice::Coreml;
     }
-    #[cfg(target_os = "windows")]
-    {
+    if cfg!(feature = "cuda") {
+        tracing::info!("🚀 CUDA feature enabled — auto-selecting CUDA inference device");
+        return InferenceDevice::Cuda;
+    }
+    if cfg!(target_os = "windows") {
         tracing::info!("🚀 Detected Windows — auto-selecting DirectML inference device");
-        InferenceDevice::Directml
+        return InferenceDevice::Directml;
     }
-    #[cfg(feature = "cuda")]
-    {
-        tracing::info!("🚀 CUDA feature enabled on Linux — auto-selecting CUDA inference device");
-        InferenceDevice::Cuda
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", feature = "cuda")))]
-    {
-        tracing::info!("🧠 No GPU execution provider available — falling back to CPU");
-        InferenceDevice::Cpu
-    }
+    tracing::info!("🧠 No GPU execution provider available — falling back to CPU");
+    InferenceDevice::Cpu
 }
 
 impl Default for InferenceConfig {
