@@ -58,7 +58,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 |------------|---------|
 | **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LightRAG graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) for zero-touch role assignment per agent_id |
-| **Tools** | 42 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
+| **Tools** | 43 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | DHT Kademlia + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
@@ -90,7 +90,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 
 Tylluan features a built-in React-based visual dashboard. 
 
-- **Production (Single Binary):** When running the kernel, the dashboard is automatically served at [http://127.0.0.1:3030/](http://127.0.0.1:3030/) (or your configured port).
+- **Production (Single Binary):** When running the kernel, the dashboard is automatically served at [http://127.0.0.1:4000/](http://127.0.0.1:4000/) (or your configured port).
 - **Development Mode:** Run `cd dashboard && pnpm dev` to launch the hot-reloading development server at [http://localhost:5173/](http://localhost:5173/).
 
 <p align="center">
@@ -229,13 +229,13 @@ On first boot, BGE-M3 downloads with a progress bar (5–15 min on a typical con
 
 ```
 Downloading BGE-M3 embedding model... [##########] 1.2 GB
-✅ Tylluan v0.14.0 running at http://127.0.0.1:3030
+✅ Tylluan v0.14.0 running at http://127.0.0.1:4000
 ```
 
 Verify it's up:
 
 ```bash
-curl -s http://127.0.0.1:3030/health
+curl -s http://127.0.0.1:4000/health
 ```
 
 > [!TIP]
@@ -248,12 +248,12 @@ curl -s http://127.0.0.1:3030/health
 ### Step 3 — Connect (15 seconds)
 
 ```json
-{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:3030/sse" } } }
+{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:4000/sse" } } }
 ```
 
 | Client | Config |
 |--------|--------|
-| **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:3030/sse` |
+| **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:4000/sse` |
 | **Claude Desktop** | `claude_desktop_config.json` |
 | **Cursor** | `~/.cursor/mcp.json` |
 | **VS Code** | `.vscode/mcp.json` in your workspace |
@@ -266,13 +266,13 @@ curl -s http://127.0.0.1:3030/health
 export TYLLUAN_TOKEN=$(cat .tylluan-token)
 
 # Store a memory
-curl -X POST http://127.0.0.1:3030/api/v1/memory/write \
+curl -X POST http://127.0.0.1:4000/api/v1/memory/write \
   -H "Authorization: Bearer $TYLLUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content": "Tylluan is running local graph RAG."}'
 
 # Retrieve it
-curl "http://127.0.0.1:3030/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
+curl "http://127.0.0.1:4000/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
   -H "Authorization: Bearer $TYLLUAN_TOKEN"
 ```
 
@@ -347,32 +347,33 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              MCP Clients                                 │
-│  (Claude, Cursor, VS Code, LM Studio, any SSE client)   │
-└──────────────────┬──────────────────────────────────────┘
-                   │ SSE / HTTP Streamable
-┌──────────────────▼──────────────────────────────────────┐
-│              tylluan-nexus (:3030)                       │
-│                                                          │
-│  ┌─────────────────┐  ┌──────────────────┐              │
-│  │  Core Memory     │  │  SilvaDB         │              │
-│  │  persona         │  │  SQLite WAL      │              │
-│  │  preferences     │  │  BGE-M3 vectors  │              │
-│  └─────────────────┘  │  FTS5 BM25       │              │
-│                        │  knowledge graph │              │
-│  ┌─────────────────┐  │  episodic nodes  │              │
-│  │  Guild Registry  │  │  salience decay  │              │
-│  │  42 Python tools │  └──────────────────┘              │
-│  │  auto-discovered │  ┌──────────────────┐              │
-│  └─────────────────┘  │  Coloquio         │              │
-│                        │  multi-agent      │              │
-│  ┌──────────────────────────────────────┐ │              │
-│  │  Federation + Mesh Layer             │ │              │
-│  │  peers.db · ChaCha20 · provenance   │ │              │
-│  │  DHT Kademlia · Gossip · Noise XK   │ └──────────────┘│
-│  └──────────────────────────────────────┘                │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────┐   ┌───────────────────────────────┐
+│      MCP Clients          │   │   External A2A agents         │
+│ (Claude, Cursor, VS Code, │   │ (LangGraph, CrewAI, any        │
+│  LM Studio, any SSE)      │   │  Agent2Agent-compliant client) │
+└─────────────┬─────────────┘   └───────────────┬────────────────┘
+              │ SSE / HTTP Streamable            │ JSON-RPC 2.0
+┌─────────────▼──────────────────────────────────▼────────────────┐
+│                    tylluan-nexus (:4000)                         │
+│                                                                   │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐│
+│  │  Core Memory     │  │  SilvaDB         │  │  A2A Server      ││
+│  │  persona         │  │  SQLite WAL      │  │  Agent Card      ││
+│  │  preferences     │  │  BGE-M3 vectors  │  │  message/send    ││
+│  └─────────────────┘  │  FTS5 BM25       │  │  tasks/get       ││
+│                        │  knowledge graph │  └──────────────────┘│
+│  ┌─────────────────┐  │  episodic nodes  │                      │
+│  │  Guild Registry  │  │  salience decay  │  ┌──────────────────┐│
+│  │  43 Python tools │  └──────────────────┘  │  ONNX Inference  ││
+│  │  auto-discovered │  ┌──────────────────┐  │  CPU default /   ││
+│  └─────────────────┘  │  Coloquio         │  │  DirectML / CUDA ││
+│                        │  multi-agent      │  └──────────────────┘│
+│  ┌──────────────────────────────────────┐                        │
+│  │  Federation + Mesh Layer             │                        │
+│  │  peers.db · ChaCha20 · provenance   │                        │
+│  │  DHT Kademlia · Gossip · Noise XK   │                        │
+│  └──────────────────────────────────────┘                        │
+└───────────────────────────────────────────────────────────────────┘
                │ ChaCha20-Poly1305 encrypted
         ┌──────▼──────┐
         │  Peer nodes │  (LAN / VPN / WAN via DHT)
@@ -423,18 +424,18 @@ auto_sync_mode = "both"         # "push" | "pull" | "both"
 
 ```bash
 # Add a peer
-curl -X POST http://127.0.0.1:3030/api/v1/federation/peers \
+curl -X POST http://127.0.0.1:4000/api/v1/federation/peers \
   -H "Content-Type: application/json" \
-  -d '{"name":"node-b","url":"http://192.168.1.10:3030","auth_token":"...","shared_secret":"..."}'
+  -d '{"name":"node-b","url":"http://192.168.1.10:4000","auth_token":"...","shared_secret":"..."}'
 
 # Push local knowledge to all approved peers
-curl -X POST http://127.0.0.1:3030/api/v1/federation/sync
+curl -X POST http://127.0.0.1:4000/api/v1/federation/sync
 
 # Pull from a specific peer
-curl -X POST "http://127.0.0.1:3030/api/v1/federation/sync/pull?peer=node-b"
+curl -X POST "http://127.0.0.1:4000/api/v1/federation/sync/pull?peer=node-b"
 
 # Query provenance — which nodes came from which peer?
-curl "http://127.0.0.1:3030/api/v1/federation/nodes?source=node-b"
+curl "http://127.0.0.1:4000/api/v1/federation/nodes?source=node-b"
 ```
 
 Security invariants: unapproved peers are never synced; protected nodes are never exported; received nodes carry `federation_source` provenance and are excluded from outbound sync by default (echo-loop prevention).
@@ -471,7 +472,7 @@ python examples/multi_model_coloquio/run.py
 python examples/bounded_work_contract/run.py
 ```
 
-> **Port Resolution**: All examples automatically resolve the active kernel port from `data/active_port.json` or `TYLLUAN_PORT` (defaulting to `3030`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
+> **Port Resolution**: All examples automatically resolve the active kernel port from `data/active_port.json` or `TYLLUAN_PORT` (defaulting to `4000`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
 
 See [examples/](examples/) for full source code.
 
