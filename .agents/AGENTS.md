@@ -33,6 +33,6 @@ Los agentes deben estar al tanto de las siguientes particularidades del código 
     *   `consensus.rs` (raíz): Motor de frescura determinista para sincronización de federación.
     *   `memory/consensus.rs`: Motor de consolidación semántica y resolución de conflictos cognitivos.
 3.  **Notas de arquitectura:**
-    *   Tylluan **NO** tiene proxy local (Hyper proxy de cero tiempo de inactividad), arranca directo en `:3030`.
+    *   Tylluan **NO** tiene proxy local (Hyper proxy de cero tiempo de inactividad), arranca directo en `:4000`.
     *   Tylluan no tiene un daemon SSE deliberativo síncrono tipo `coloquio_watch.rs` (candidato a implementar si se requiere multi-agent debate).
     *   Tylluan cuenta con **FSRS-5** y el módulo `coordinator.py` de orquestación multi-agente paralela.

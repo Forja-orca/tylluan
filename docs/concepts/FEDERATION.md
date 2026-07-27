@@ -5,7 +5,7 @@
 ```
   Windows (nativo)              Docker Desktop
   ─────────────────             ─────────────────
-  tylluan-nexus  :3030  ←──────→  tylluan-nexus  :3040
+  tylluan-nexus  :4000  ←──────→  tylluan-nexus  :3040
   (direct binding, no proxy)       (via docker-compose.secondary.yml)
   data/tylluan.db                 data-docker/tylluan.db
   tylluan.toml                    tylluan.docker.toml
@@ -55,7 +55,7 @@ Esperar hasta 3 minutos (start_period del healthcheck).
 ### Paso 4 — Registrar Docker como peer en el NATIVO (única modificación al nativo, vía API)
 
 ```powershell
-curl -X POST http://127.0.0.1:3030/api/v1/federation/peers `
+curl -X POST http://127.0.0.1:4000/api/v1/federation/peers `
   -H "Content-Type: application/json" `
   -d '{"name":"docker-secondary","url":"http://127.0.0.1:3040","token":"YOUR_SHARED_SECRET_HERE"}'
 ```
@@ -70,13 +70,13 @@ Esto **no modifica `tylluan.toml`** — el kernel lo persiste en memoria y en el
 
 ```powershell
 # Habilitar sharing (marca nodos elegibles como shareable)
-curl -X POST http://127.0.0.1:3030/api/v1/federation/sharing/enable
+curl -X POST http://127.0.0.1:4000/api/v1/federation/sharing/enable
 
 # Verificar cuántos nodos están listos para compartir
-curl http://127.0.0.1:3030/api/v1/federation/sharing/status
+curl http://127.0.0.1:4000/api/v1/federation/sharing/status
 
 # Push al Docker
-curl -X POST http://127.0.0.1:3030/api/v1/federation/sync
+curl -X POST http://127.0.0.1:4000/api/v1/federation/sync
 ```
 
 ### Habilitar sharing en Docker y empujar al nativo
@@ -89,7 +89,7 @@ curl -X POST http://127.0.0.1:3040/api/v1/federation/sync
 ### Ver peers registrados
 
 ```powershell
-curl http://127.0.0.1:3030/api/v1/federation/peers
+curl http://127.0.0.1:4000/api/v1/federation/peers
 curl http://127.0.0.1:3040/api/v1/federation/peers
 ```
 

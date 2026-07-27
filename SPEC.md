@@ -23,14 +23,14 @@ Casos de uso:
 
 ### 2. Agentes usuarios (clientes MCP de terceros que conectan a un Tylluan instalado)
 Casos de uso:
-- Instalar con `tylluan install --profile portable|clinic|server` y conectar vía `:3030/sse`
+- Instalar con `tylluan install --profile portable|clinic|server` y conectar vía `:4000/sse`
 - Usar las 5 sovereign tools (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) para dar memoria persistente a cualquier agente sin tooling nativo
 - Casos reales: un médico en zona sin internet que necesita memoria clínica offline-first (perfil `clinic`); un desarrollador que quiere que su agente de código recuerde contexto entre sesiones (perfil `portable`); un equipo que necesita mesh compartido entre varias instancias (perfil `server`)
 
 ### 3. Humanos (usuarios finales que instalan Tylluan para sí mismos)
 Casos de uso:
 - Instalación en <5 min siguiendo `docs/getting-started/QUICKSTART.md`, sin necesidad de leer código
-- Dashboard web (`:3030/` o `:5173` en dev) como punto de entrada visual, con wizard de primera vez (M23-P1)
+- Dashboard web (`:4000/` o `:5173` en dev) como punto de entrada visual, con wizard de primera vez (M23-P1)
 - Confiar en que sus datos nunca salen de su máquina (soberanía, licencia MIT sin telemetría oculta)
 
 ## Documentación que falta (pendiente, priorizado)

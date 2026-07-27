@@ -8,7 +8,7 @@ Tylluan is a **sovereign MCP kernel** — a local-first memory and routing subst
 MCP Client (Claude, Cursor, VS Code, LM Studio, any SSE client)
         │  SSE / HTTP Streamable
         ▼
-  tylluan-nexus (:3030)            ← single process, no proxy
+  tylluan-nexus (:4000)            ← single process, no proxy
         │
         ├── MCP Transport          (SSE + HTTP Streamable)
         ├── Intent Router          (BGE-M3 embeddings → guild selection + keyword scoring)
@@ -20,7 +20,7 @@ MCP Client (Claude, Cursor, VS Code, LM Studio, any SSE client)
         └── Mesh Layer             (DHT Kademlia · Gossip push-pull · Noise Protocol XK)
 ```
 
-**There is no proxy.** `tylluan-nexus` binds directly to `:3030`. Zero-downtime restarts are handled by the OS — clients reconnect on the SSE retry loop.
+**There is no proxy.** `tylluan-nexus` binds directly to `:4000`. Zero-downtime restarts are handled by the OS — clients reconnect on the SSE retry loop.
 
 ## 5 Sovereign Tools (CONTRACT-01)
 

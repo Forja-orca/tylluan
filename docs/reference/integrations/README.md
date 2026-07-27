@@ -9,6 +9,6 @@ Tylluan speaks standard MCP and connects to any MCP-compatible client. Below is 
 
 ## Common prerequisites
 
-- Tylluan kernel running on `http://127.0.0.1:3030`
-- Health check: `curl http://127.0.0.1:3030/health` returns `{"status":"ok"}`
+- Tylluan kernel running on `http://127.0.0.1:4000`
+- Health check: `curl http://127.0.0.1:4000/health` returns `{"status":"ok"}`
 - No auth required in `dev_mode` (`tylluan.toml` → `dev_mode = true`)

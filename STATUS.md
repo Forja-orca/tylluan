@@ -145,7 +145,7 @@ tylluan-cli start
 cargo run --release -p tylluan-cli -- start
 ```
 
-Verify: `curl http://127.0.0.1:3030/health`
+Verify: `curl http://127.0.0.1:4000/health`
 
 Dashboard (dev): `cd dashboard && pnpm dev` → `http://localhost:5173`
 

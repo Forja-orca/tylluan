@@ -42,7 +42,7 @@ Open your `mcp_settings.json` (usually at `%APPDATA%/Code/User/globalStorage/sao
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/client-cli"],
       "env": {
-        "TYLLUAN_URL": "http://localhost:3030/api/v1/mcp",
+        "TYLLUAN_URL": "http://localhost:4000/api/v1/mcp",
         "TYLLUAN_TOKEN": "TU_TOKEN_AQUI"
       },
       "disabled": false,
@@ -62,7 +62,7 @@ Cursor supports MCP Stdio connections. To connect Cursor to your sovereign hub:
    - **Type**: `command`
    - **Command**: `npx -y @modelcontextprotocol/client-cli`
 4. Set the following environment variables:
-   - `TYLLUAN_URL`: `http://localhost:3030/api/v1/mcp`
+   - `TYLLUAN_URL`: `http://localhost:4000/api/v1/mcp`
    - `TYLLUAN_TOKEN`: `TU_TOKEN_AQUI`
 
 ### Claude Desktop
@@ -82,7 +82,7 @@ Add the server:
         "@modelcontextprotocol/client-cli"
       ],
       "env": {
-        "TYLLUAN_URL": "http://127.0.0.1:3030/mcp",
+        "TYLLUAN_URL": "http://127.0.0.1:4000/mcp",
         "TYLLUAN_TOKEN": "TU_TOKEN_AQUI"
       }
     }
@@ -108,7 +108,7 @@ Authorization: Bearer TU_TOKEN_AQUI
 Returns the complete capability schema (sovereign tools, active guilds, underlying tool catalogs, and active sessions).
 
 ```bash
-curl -X GET http://localhost:3030/api/v1/capabilities \
+curl -X GET http://localhost:4000/api/v1/capabilities \
   -H "Authorization: Bearer TU_TOKEN_AQUI"
 ```
 
@@ -116,7 +116,7 @@ curl -X GET http://localhost:3030/api/v1/capabilities \
 Directs the natural language intent to the appropriate guild module.
 
 ```bash
-curl -X POST http://localhost:3030/api/v1/do \
+curl -X POST http://localhost:4000/api/v1/do \
   -H "Authorization: Bearer TU_TOKEN_AQUI" \
   -H "Content-Type: application/json" \
   -d '{
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3030/api/v1/do \
 Stores a document in the hybrid semantic database.
 
 ```bash
-curl -X POST http://localhost:3030/api/v1/memory/write \
+curl -X POST http://localhost:4000/api/v1/memory/write \
   -H "Authorization: Bearer TU_TOKEN_AQUI" \
   -H "Content-Type: application/json" \
   -d '{

@@ -54,7 +54,7 @@ If your PR touches security-sensitive code (auth, guild execution, token handlin
 ## Reporting issues
 
 - Include: what you did, what you expected, what happened
-- Include kernel version (`curl http://127.0.0.1:3030/health`)
+- Include kernel version (`curl http://127.0.0.1:4000/health`)
 - If possible, include the routing trace from `tylluan_do`
 
 ## License

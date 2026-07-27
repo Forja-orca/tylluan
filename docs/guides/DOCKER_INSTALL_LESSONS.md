@@ -64,8 +64,8 @@ entrar en el contexto — se montan como volumen.
 y rutas (`/home/tylluan/data` vs `./data`).
 
 **Solución implementada:**
-- `tylluan.toml` → instancia nativa Windows (`:3030`, `host = "127.0.0.1"`, `dev_mode = true`)
-- `tylluan.docker.toml` → instancia Docker (`:3030` interno, `host = "0.0.0.0"`, `dev_mode = false`)
+- `tylluan.toml` → instancia nativa Windows (`:4000`, `host = "127.0.0.1"`, `dev_mode = true`)
+- `tylluan.docker.toml` → instancia Docker (`:4000` interno, `host = "0.0.0.0"`, `dev_mode = false`)
 - Montado vía `docker-compose.secondary.yml`: `./tylluan.docker.toml:/home/tylluan/tylluan.toml:ro`
 
 **Regla:** `host = "0.0.0.0"` es seguro en Docker porque el port binding del host ya
@@ -131,7 +131,7 @@ del Dockerfile se propagará a subprocesos — el proceso padre puede sobreescri
 git clone https://github.com/tylluan/tylluan
 cd tylluan
 docker compose up -d
-curl http://127.0.0.1:3030/health
+curl http://127.0.0.1:4000/health
 ```
 
 ### Lo que el Dockerfile ya resuelve automáticamente
