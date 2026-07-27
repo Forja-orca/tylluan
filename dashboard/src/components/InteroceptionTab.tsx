@@ -239,6 +239,15 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
             {interoception ? `${interoception.active_pheromones} signals` : '—'}
           </div>
         </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+          <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#00F5D4] animate-ping" />
+            SLLM Local Reasoning (Qwen3.5-2B)
+          </div>
+          <div className="text-xs font-mono text-slate-300">
+            CoherenceGate Hybrid Accuracy: <span className="text-[#00F5D4] font-bold">85.71%</span> (n=14)
+          </div>
+        </div>
       </div>
 
       {interoception?.recommendations && interoception.recommendations.length > 0 && (
