@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-27",
+  "mode": "real_distilbert_embedding_plus_logreg_production_heldout",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--distilbert-base-uncased/snapshots\\5d73105e39e322b779ff7a8fcd11530fa579165b\\onnx\\model_quantized.onnx",
+  "source_commit": "4606f48",
+  "raw_heldout_count": 55,
+  "excluded_noise_count": 11,
+  "excluded_noise_reason": "markdown report/status fragments leaked into guild_audit_log.intent against unrelated guilds (git/bash/comfy_ui/code_reviewer) -- audit pipeline bug, reported separately",
+  "evaluated_count": 44,
+  "correct": 33,
+  "accuracy_pct": 75.0,
+  "decision_threshold_pct": 70.0,
+  "baseline_heuristic_plus_6feature_mlp_pct": 61.11,
+  "verdict": "GO",
+  "verdict_basis": "accuracy_pct on real production held-out intents from audit.db, hand-labeled, never in training set"
+}
