@@ -42,7 +42,15 @@ def _load_model():
         raise RuntimeError("SmolLM2-135M ONNX model not found in cache")
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 4
-    _decoder_session = ort.InferenceSession(path, opts, providers=['CPUExecutionProvider'])
+    # Auto-select best available provider: GPU first, then CPU
+    providers = ort.get_available_providers()
+    gpu_providers = [p for p in providers if p != 'CPUExecutionProvider' and p != 'AzureExecutionProvider']
+    if gpu_providers:
+        sys.stderr.write(f"[night_reasoner] GPU providers available: {gpu_providers}. Using {gpu_providers[0]}.\n")
+        _decoder_session = ort.InferenceSession(path, opts, providers=[gpu_providers[0], 'CPUExecutionProvider'])
+    else:
+        sys.stderr.write(f"[night_reasoner] No GPU provider available. Using CPU. Available: {providers}\n")
+        _decoder_session = ort.InferenceSession(path, opts, providers=['CPUExecutionProvider'])
     return _decoder_session
 
 # ── Tokenizer ───────────────────────────────────────────────────────────────────
