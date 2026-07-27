@@ -34,7 +34,6 @@ export function TylluanLogo({
 
   // Sovereign Color Tokens (Immutable)
   const CYAN_NEON = '#00F5D4';
-  const MAGENTA_FLASH = '#FF2E93';
 
   // 12 Nodes Coordinates (Home vs Constellation Offsets)
   const nodesData = [
