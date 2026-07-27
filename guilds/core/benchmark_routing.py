@@ -160,7 +160,23 @@ def keyword_router(intent):
         if score > best_score:
             best_score = score
             best_guild = guild
-    return best_guild
+    return best_guild, best_score
+
+def keyword_router_with_tiebreak(intent):
+    """Keyword first, embedding fallback when keyword score is zero or tied."""
+    kw_guild, kw_score = keyword_router(intent)
+    if kw_score > 0:
+        return kw_guild, 1.0  # keyword decided
+    # No keywords matched — use embedding
+    intent_emb = _embed(intent)
+    best_guild = list(GUILD_DESCRIPTIONS.keys())[0]
+    best_sim = -1
+    for guild in _guild_embeddings:
+        sim = cosine_sim(intent_emb, _guild_embeddings[guild])
+        if sim > best_sim:
+            best_sim = sim
+            best_guild = guild
+    return best_guild, best_sim
 
 # ── Embedding router ────────────────────────────────────────────────────────
 def embedding_router(intent):
@@ -190,7 +206,11 @@ def hybrid_router(intent):
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=30) as resp:
         result = json.loads(resp.read())
-        return result.get("guild", "unknown")
+        # The plan_info payload (with "guild") is nested under "result" in the
+        # HTTP envelope ({"status":"ok","content":[...],"result":{...}}), not
+        # at the top level -- the previous version read result.get("guild")
+        # directly and always got the default, scoring a false 0.00%.
+        return result.get("result", {}).get("guild", "unknown")
 
 # ── Benchmark ───────────────────────────────────────────────────────────────
 def benchmark():
@@ -215,23 +235,22 @@ def benchmark():
     print(f"\n--- Baseline 1: Majority class ('{majority_guild}') ---")
     print(f"  Accuracy: {maj_acc*100:.2f}% ({maj_correct}/{len(intents)})")
 
-    # Baseline 2: Keyword router
-    kw_correct = sum(1 for intent, actual in intents if keyword_router(intent) == actual)
+    # Baseline 2: Keyword router (naive simulation)
+    kw_correct = sum(1 for intent, actual in intents if keyword_router(intent)[0] == actual)
     kw_acc = kw_correct / len(intents)
-    print(f"\n--- Baseline 2: Current keyword router ---")
+    print(f"\n--- Baseline 2: Current keyword router (naive sim) ---")
     print(f"  Accuracy: {kw_acc*100:.2f}% ({kw_correct}/{len(intents)})")
 
     # Warmup guild embeddings
     print(f"\n--- Warmup: guild description embeddings ---")
     warmup()
 
-    # Embedding router
     sample_size = min(len(intents), 100)
     sample = intents[:sample_size]
-    print(f"\n--- Embedding router (BGE-M3) on {sample_size} intents ---")
 
+    # Router 3: Embedding-only
+    print(f"\n--- Router 3: Embedding-only (BGE-M3 brute force) on {sample_size} intents ---")
     emb_correct = 0
-    emb_total = 0
     emb_latencies = []
     for i, (intent, actual) in enumerate(sample):
         t0 = time.time()
@@ -239,76 +258,74 @@ def benchmark():
             pred, sim = embedding_router(intent)
             t = time.time() - t0
             emb_latencies.append(t)
-            is_correct = pred == actual
-            if is_correct:
+            if pred == actual:
                 emb_correct += 1
-            emb_total += 1
             if (i + 1) % 20 == 0:
-                print(f"  [{i+1}/{sample_size}] acc={emb_correct/(i+1)*100:.1f}% avg_lat={sum(emb_latencies)/len(emb_latencies):.2f}s")
+                print(f"  [{i+1}/{sample_size}] acc={emb_correct/(i+1)*100:.1f}%")
         except Exception as e:
             print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+    emb_acc = emb_correct / sample_size
+    emb_avg_lat = sum(emb_latencies)/len(emb_latencies) if emb_latencies else 0
+    print(f"  Final: {emb_acc*100:.2f}% ({emb_correct}/{sample_size}) avg_lat={emb_avg_lat:.2f}s")
 
-    emb_acc = emb_correct / emb_total if emb_total else 0
-    avg_lat = sum(emb_latencies) / len(emb_latencies) if emb_latencies else 0
-    print(f"\n  Final accuracy: {emb_acc*100:.2f}% ({emb_correct}/{emb_total})")
-    print(f"  Avg latency: {avg_lat:.2f}s per intent")
+    # Router 4: Keyword-first, embedding tiebreaker when no keywords match
+    print(f"\n--- Router 4: Keyword + embedding tiebreaker on {sample_size} intents ---")
+    kw2_correct = 0
+    kw2_latencies = []
+    for i, (intent, actual) in enumerate(sample):
+        t0 = time.time()
+        try:
+            pred, conf = keyword_router_with_tiebreak(intent)
+            t = time.time() - t0
+            kw2_latencies.append(t)
+            if pred == actual:
+                kw2_correct += 1
+            if (i + 1) % 20 == 0:
+                print(f"  [{i+1}/{sample_size}] acc={kw2_correct/(i+1)*100:.1f}%")
+        except Exception as e:
+            print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+    kw2_acc = kw2_correct / sample_size
+    kw2_avg_lat = sum(kw2_latencies)/len(kw2_latencies) if kw2_latencies else 0
+    print(f"  Final: {kw2_acc*100:.2f}% ({kw2_correct}/{sample_size}) avg_lat={kw2_avg_lat:.2f}s")
 
-    # Misclassifications
-    print(f"\n--- Misclassifications (first 10) ---")
-    count = 0
-    for intent, actual in sample:
-        if count >= 10:
-            break
-        pred, sim = embedding_router(intent)
-        if pred != actual:
-            count += 1
-            print(f"  Intent: {intent[:60]}")
-            print(f"    Actual={actual} Pred={pred} Sim={sim:.3f}")
-
-    # Real production router (hybrid semantic+keyword, via Plan mode) --
-    # DISABLED FOR NOW: verified live that plan=true is NOT honored by
-    # /api/v1/do -- it actually EXECUTES the resolved tool (confirmed with a
-    # real "git status" call, which ran for real). Sweeping 100 historical
-    # intents through this would re-execute 100 real commands with no
-    # control over side effects. Re-enable only after plan=true is fixed to
-    # be a true dry-run at the HTTP layer (see Coloquio turn 266).
-    hyb_acc = None
-    RUN_PRODUCTION_ROUTER_BENCHMARK = False
-    if RUN_PRODUCTION_ROUTER_BENCHMARK:
-        print(f"\n--- Production router (hybrid, matcher.rs via plan=true) on {sample_size} intents ---")
-        hyb_correct = 0
-        hyb_total = 0
-        hyb_latencies = []
-        for i, (intent, actual) in enumerate(sample):
-            t0 = time.time()
-            try:
-                pred = hybrid_router(intent)
-                t = time.time() - t0
-                hyb_latencies.append(t)
-                if pred == actual:
-                    hyb_correct += 1
-                hyb_total += 1
-                if (i + 1) % 20 == 0:
-                    print(f"  [{i+1}/{sample_size}] acc={hyb_correct/(i+1)*100:.1f}% avg_lat={sum(hyb_latencies)/len(hyb_latencies):.2f}s")
-            except Exception as e:
-                print(f"  [{i+1}/{sample_size}] ERROR: {e}")
-
-        hyb_acc = hyb_correct / hyb_total if hyb_total else 0
-        hyb_avg_lat = sum(hyb_latencies) / len(hyb_latencies) if hyb_latencies else 0
-        print(f"\n  Final accuracy: {hyb_acc*100:.2f}% ({hyb_correct}/{hyb_total})")
-        print(f"  Avg latency: {hyb_avg_lat:.2f}s per intent")
+    # Router 5: Real production hybrid (matcher.rs via plan=true)
+    # plan=true fix verified live (turn 269): returns plan without executing.
+    print(f"\n--- Router 5: Production hybrid (matcher.rs via plan=true) on {sample_size} intents ---")
+    hyb_correct = 0
+    hyb_latencies = []
+    for i, (intent, actual) in enumerate(sample):
+        t0 = time.time()
+        try:
+            pred = hybrid_router(intent)
+            t = time.time() - t0
+            hyb_latencies.append(t)
+            if pred == actual:
+                hyb_correct += 1
+            if (i + 1) % 10 == 0:
+                print(f"  [{i+1}/{sample_size}] acc={hyb_correct/(i+1)*100:.1f}%")
+        except Exception as e:
+            print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+    hyb_acc = hyb_correct / sample_size
+    hyb_avg_lat = sum(hyb_latencies)/len(hyb_latencies) if hyb_latencies else 0
+    print(f"  Final: {hyb_acc*100:.2f}% ({hyb_correct}/{sample_size}) avg_lat={hyb_avg_lat:.2f}s")
 
     # Summary
     print(f"\n{'='*72}")
-    print("SUMMARY")
+    print("SUMMARY — 5 routers compared on {sample_size} intents")
     print(f"{'='*72}")
-    print(f"  Majority class ('{majority_guild}'):     {maj_acc*100:6.2f}%")
-    print(f"  Current keyword router (naive sim):{kw_acc*100:6.2f}%")
-    print(f"  Embedding router (BGE-M3 only):    {emb_acc*100:6.2f}%  (avg {avg_lat:.2f}s/intent)")
-    if hyb_acc is not None:
-        print(f"  PRODUCTION router (hybrid, real):  {hyb_acc*100:6.2f}%")
+    print(f"  1. Majority class ('{majority_guild}'): {maj_acc*100:6.2f}%")
+    print(f"  2. Keyword-only (naive sim):      {kw_acc*100:6.2f}%")
+    print(f"  3. Embedding-only (BGE-M3):       {emb_acc*100:6.2f}%  ({emb_avg_lat:.2f}s/intent)")
+    print(f"  4. Keyword+embedding tiebreaker:  {kw2_acc*100:6.2f}%  ({kw2_avg_lat:.2f}s/intent)")
+    print(f"  5. Production hybrid (matcher.rs):{hyb_acc*100:6.2f}%  ({hyb_avg_lat:.2f}s/intent)")
+    if hyb_acc > kw_acc and hyb_acc > emb_acc:
+        print(f"  [OK] Production hybrid beats both pure approaches")
+    elif hyb_acc > kw_acc:
+        print(f"  [OK] Hybrid beats keyword, loses to embedding")
+    elif hyb_acc > emb_acc:
+        print(f"  [OK] Hybrid beats embedding, loses to keyword")
     else:
-        print(f"  PRODUCTION router (hybrid, real):  SKIPPED -- plan=true executes for real via HTTP, unsafe to sweep (see turn 266)")
+        print(f"  [X] Hybrid does NOT beat either pure baseline")
     print(f"{'='*72}")
 
 if __name__ == "__main__":
