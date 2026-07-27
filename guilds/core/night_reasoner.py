@@ -252,6 +252,49 @@ def reason_about(query: str) -> str:
     except Exception as e:
         return f"[SmolLM2 error: {e}]"
 
+@mcp.tool()
+def route_intent(intent: str, candidates: str) -> str:
+    """Route an ambiguous intent to the best guild using SmolLM2 reasoning.
+
+    This is the COORDINATOR role: the model decides what happens next with
+    traceable judgment, not a black-box score. Called by matcher.rs when
+    the top 2 guild scores are too close for keyword disambiguation.
+
+    Args:
+        intent: The natural language intent to route.
+        candidates: JSON list of {guild, score, description} for top candidates.
+    """
+    import json as _json
+    try:
+        cand_list = _json.loads(candidates)
+    except Exception:
+        cand_list = []
+
+    lines = [
+        "You are Tylluan's intent router. Choose the best guild for this intent.\n",
+        f"Intent: {intent}\n",
+        "Candidate guilds:",
+    ]
+    for c in cand_list[:5]:
+        lines.append(f"- {c.get('guild','?')} (score {c.get('score',0):.2f}): {c.get('description','')}")
+
+    lines.append("\nWhich guild should handle this intent? Answer with just the guild name and one sentence why.")
+    prompt = "\n".join(lines)
+
+    result = _generate(prompt, max_tokens=30)
+    # Extract guild name from response (first word after potential "Guild:" prefix)
+    for candidate in cand_list:
+        if candidate.get('guild', '') in result:
+            return _json.dumps({
+                "guild": candidate['guild'],
+                "reasoning": result.strip(),
+            })
+    return _json.dumps({
+        "guild": cand_list[0].get('guild', '?') if cand_list else "unknown",
+        "reasoning": result.strip(),
+        "note": "guild extracted from top candidate, verify model response"
+    })
+
 if __name__ == "__main__":
     from guilds.core import utils
     utils.safe_mcp_run(mcp)
