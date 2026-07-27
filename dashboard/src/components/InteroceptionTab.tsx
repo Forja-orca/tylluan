@@ -245,7 +245,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
             SLLM Local Reasoning (Qwen3.5-2B)
           </div>
           <div className="text-xs font-mono text-slate-300">
-            CoherenceGate Hybrid Accuracy: <span className="text-[#00F5D4] font-bold">85.71%</span> (n=14)
+            CoherenceGate Status: <span className="text-[#00F5D4] font-bold">{interoception ? 'ACTIVE (Hybrid Reasoning)' : 'INITIALIZING'}</span>
           </div>
         </div>
       </div>
