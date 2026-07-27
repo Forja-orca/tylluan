@@ -68,132 +68,62 @@ export function TylluanLogo({
 
   return (
     <div className={cn('flex items-center gap-3 select-none', className)}>
-      {/* Synchronized 60FPS organic 4-phase keyframe engine */}
+      {/* Elegant Professional Motion System (Klarna / Modern Brand Identity 2026) */}
       <style>{`
-        /* Phase 1: Base State Ambient Aura Breathe */
+        /* Gesto 1: Ambient Cyan Aura Breathe (Soft organic pulse) */
         @keyframes sovereign-aura-breathe {
           0%, 100% {
-            box-shadow: 0 0 10px rgba(0, 245, 212, 0.35), inset 0 0 6px rgba(0, 245, 212, 0.2);
+            box-shadow: 0 0 12px rgba(0, 245, 212, 0.25), inset 0 0 8px rgba(0, 245, 212, 0.15);
+            border-color: rgba(0, 245, 212, 0.3);
           }
           50% {
-            box-shadow: 0 0 22px rgba(0, 245, 212, 0.7), inset 0 0 14px rgba(0, 245, 212, 0.4);
+            box-shadow: 0 0 24px rgba(0, 245, 212, 0.6), inset 0 0 14px rgba(0, 245, 212, 0.35);
+            border-color: rgba(0, 245, 212, 0.7);
           }
         }
 
-        /* Owl Body Progressive Opacity: Phase 1 flat at 1.0, Phase 2 COMPLETELY DISSOLVES to 0, Phase 3 invisible (only nodes exist), Phase 4 returns */
-        @keyframes owl-body-progressive {
-          0%, 12% {
-            /* Phase 1 (1.1s): Solid owl base logo */
-            opacity: 1;
+        /* Gesto 2: Sequential Node Glow Pulse (Simple, Purposeful, Playful) */
+        @keyframes node-pulse-glow {
+          0%, 100% {
             transform: scale(1);
-            filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.5));
+            opacity: 0.4;
+            filter: drop-shadow(0 0 2px rgba(0, 245, 212, 0.3));
           }
-          35% {
-            /* Phase 2: COMPLETE DISSOLUTION - Owl image dissolves to 0 as nodes emerge */
-            opacity: 0;
-            transform: scale(0.92);
-            filter: drop-shadow(0 0 0px transparent);
-          }
-          70% {
-            /* Phase 3: Pure Constellation Mode - Image remains COMPLETELY INVISIBLE (opacity 0) */
-            opacity: 0;
-            transform: scale(0.92);
-            filter: drop-shadow(0 0 0px transparent);
-          }
-          92% {
-            /* Phase 4: Nodes collapse back into owl shape and solid image RE-EMERGES */
+          50% {
+            transform: scale(1.3);
             opacity: 1;
+            filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.9));
+          }
+        }
+
+        /* Gesto 3: Eye Retina Intelligent Pulse */
+        @keyframes eye-retina-pulse {
+          0%, 100% {
             transform: scale(1);
-            filter: drop-shadow(0 0 12px rgba(0, 245, 212, 0.8));
+            opacity: 0.7;
           }
-          96% {
-            /* Micro-Flash Pulse when solid owl solidifies completely */
+          50% {
+            transform: scale(1.25);
             opacity: 1;
-            transform: scale(1.04);
-            filter: drop-shadow(0 0 25px rgba(255, 46, 147, 0.95));
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1);
-            filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.5));
-          }
-        }
-
-        /* Outer HUD Rings: Synchronized strictly with the 4 phases (Static in Phase 1, Spins in Phase 2 & 3, Decelerates in Phase 4) */
-        @keyframes hud-ring-sync-cw {
-          0%, 15.8% {
-            transform: rotate(0deg);
-          }
-          47.4% {
-            transform: rotate(180deg);
-          }
-          68.4% {
-            transform: rotate(360deg);
-          }
-          94.7%, 100% {
-            transform: rotate(540deg);
-          }
-        }
-
-        @keyframes hud-ring-sync-ccw {
-          0%, 15.8% {
-            transform: rotate(0deg);
-          }
-          47.4% {
-            transform: rotate(-180deg);
-          }
-          68.4% {
-            transform: rotate(-360deg);
-          }
-          94.7%, 100% {
-            transform: rotate(-540deg);
-          }
-        }
-
-        /* Constellation Lines Opacity */
-        @keyframes constellation-lines-fade {
-          0%, 15.8% {
-            opacity: 0;
-          }
-          47.4%, 68.4% {
-            opacity: 0.45;
-          }
-          94.7%, 100% {
-            opacity: 0;
+            filter: drop-shadow(0 0 10px rgba(255, 46, 147, 0.9));
           }
         }
 
         .animate-sovereign-aura {
-          animation: sovereign-aura-breathe 3.5s ease-in-out infinite;
+          animation: sovereign-aura-breathe 4s ease-in-out infinite;
         }
 
-        .animate-owl-body-loop {
-          animation: owl-body-progressive 9.5s linear infinite;
-        }
-
-        .animate-hud-ring-cw {
-          animation: hud-ring-sync-cw 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .animate-hud-ring-ccw {
-          animation: hud-ring-sync-ccw 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .animate-constellation-lines {
-          animation: constellation-lines-fade 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        .animate-retina-pulse {
+          animation: eye-retina-pulse 3s ease-in-out infinite;
+          transform-origin: center;
         }
       `}</style>
 
       {/* Cybernetic Owl Avatar Container */}
       <div className={cn('relative flex items-center justify-center group', containerSizes[size])}>
-        {/* Outer Synchronized HUD Ring 1 */}
+        {/* Subtle Outer Cyan HUD Ring */}
         {animated && (
-          <div className="absolute -inset-1.5 rounded-2xl border border-dashed border-[#00F5D4]/40 animate-hud-ring-cw pointer-events-none" />
-        )}
-
-        {/* Outer Synchronized HUD Ring 2 */}
-        {animated && (
-          <div className="absolute -inset-3 rounded-full border border-dotted border-[#FF2E93]/30 animate-hud-ring-ccw pointer-events-none" />
+          <div className="absolute -inset-1 rounded-2xl border border-dashed border-[#00F5D4]/30 pointer-events-none transition-all duration-500 group-hover:border-[#00F5D4]/60" />
         )}
 
         {/* Sovereign Card Base */}
@@ -204,13 +134,13 @@ export function TylluanLogo({
             ringPadding[size]
           )}
         >
-          {/* Base Layer: Official Owl Image */}
-          <div className={cn('w-full h-full flex items-center justify-center relative z-10', animated && 'animate-owl-body-loop')}>
+          {/* Base Layer: Official Owl Image ALWAYS 100% Visible & Legible */}
+          <div className="w-full h-full flex items-center justify-center relative z-10">
             {imgLoaded ? (
               <img
                 src="/tylluan-logo.jpg"
                 alt="Tylluan Owl Official Logo"
-                className="w-full h-full object-cover rounded-xl"
+                className="w-full h-full object-cover rounded-xl shadow-inner"
                 onError={() => setImgLoaded(false)}
               />
             ) : (
@@ -228,129 +158,43 @@ export function TylluanLogo({
             )}
           </div>
 
-          {/* Layer 1.5: Professional Vector Feather Lines Overlay (Cyan Neon Geometric Wings & Contour) */}
-          <svg viewBox="0 0 100 100" className={cn("absolute inset-0 w-full h-full z-15 pointer-events-none transition-opacity duration-500", animated && 'animate-owl-body-loop')}>
-            {/* Wing Feather Structural Facets */}
-            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.75" opacity="0.6" strokeDasharray="4 2" />
-            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.75" opacity="0.6" strokeDasharray="4 2" />
-            <path d="M28,45 L32,65 L50,55 L40,32 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
-            <path d="M72,45 L68,65 L50,55 L60,32 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
+          {/* Layer 2: Subtle Vector Geometry Facets Overlay */}
+          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-15 pointer-events-none">
+            {/* Wing Feather Geometry */}
+            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
+            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
 
-            {/* Chest Memory Lattice */}
-            <polygon points="42,42 58,42 50,55" fill="none" stroke={MAGENTA_FLASH} strokeWidth="0.75" opacity="0.5" />
-            <polygon points="50,55 32,65 50,74 68,65" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" />
-            
-            {/* Precision Eye Retina Rings (Superimposed Exactly over Logo Eyes at 42,42 & 58,42) */}
-            <circle cx="42" cy="42" r="4.5" fill="none" stroke={MAGENTA_FLASH} strokeWidth="1.2" opacity="0.95" />
-            <circle cx="42" cy="42" r="1.5" fill={MAGENTA_FLASH} className="animate-ping" style={{ animationDuration: '2.5s' }} />
-            
-            <circle cx="58" cy="42" r="4.5" fill="none" stroke={MAGENTA_FLASH} strokeWidth="1.2" opacity="0.95" />
-            <circle cx="58" cy="42" r="1.5" fill={MAGENTA_FLASH} className="animate-ping" style={{ animationDuration: '2.5s' }} />
+            {/* Precision Eye Retina Rings (Unified Cyan Neon) */}
+            <g className={cn(animated && 'animate-retina-pulse')}>
+              <circle cx="42" cy="42" r="4.5" fill="none" stroke={CYAN_NEON} strokeWidth="1.2" opacity="0.9" />
+              <circle cx="42" cy="42" r="1.5" fill={CYAN_NEON} />
+
+              <circle cx="58" cy="42" r="4.5" fill="none" stroke={CYAN_NEON} strokeWidth="1.2" opacity="0.9" />
+              <circle cx="58" cy="42" r="1.5" fill={CYAN_NEON} />
+            </g>
           </svg>
 
-          {/* SVG Overlay Layer: 12 Granular Nodes + Staggered Trajectories + Constellation Lines */}
-          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none overflow-visible">
-            {/* Constellation Connecting Lines (Soft White rgba(255,255,255,0.3)) */}
-            <g className={cn(animated && 'animate-constellation-lines')}>
-              {constellationEdges.map(([fromId, toId], idx) => {
-                const nFrom = nodesData[fromId];
-                const nTo = nodesData[toId];
-                return (
-                  <line
-                    key={idx}
-                    x1={nFrom.cx}
-                    y1={nFrom.cy}
-                    x2={nTo.cx}
-                    y2={nTo.cy}
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="1.2"
-                    strokeDasharray="3 2"
-                  />
-                );
-              })}
-            </g>
-
-            {/* 12 Individual Nodes with Staggered Flight Trajectories */}
+          {/* Layer 3: 12 Sequential Pulse Nodes (Unified Cyan Neon) */}
+          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none">
             {nodesData.map((node) => {
-              const nodeAnimName = `node-granular-flight-${node.id}`;
-              const totalLoopSecs = 9.5;
-
-              // Timing Percentages for 9.5s Total Loop
-              const flyOutStartMs = 1500 + node.delay; // Phase 2 start (staggered)
-              const flyOutEndMs = 4500;                // Phase 2 end
-
-              const reverseDelay = 1320 - node.delay;  // Phase 4 reverse order start
-              const flyInStartMs = 6500 + reverseDelay;
-              const flyInEndMs = 9000;                 // Phase 4 end
-
-              const pFlyOutStart = ((flyOutStartMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
-              const pFlyOutEnd = ((flyOutEndMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
-              const pFlyInStart = ((flyInStartMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
-              const pFlyInEnd = ((flyInEndMs / (totalLoopSecs * 1000)) * 100).toFixed(1);
-
-              const dx = node.cx - node.hx;
-              const dy = node.cy - node.hy;
+              const pulseDelaySecs = (node.id * 0.25).toFixed(2);
 
               return (
                 <g key={node.id}>
-                  {/* Per-node keyframes */}
                   <style>{`
-                    @keyframes ${nodeAnimName} {
-                      0%, 12% {
-                        /* Phase 1: Nodes active at 1.0 opacity on owl home position, forming the node-owl silhouette */
-                        transform: translate(0px, 0px);
-                        opacity: 0.9;
-                      }
-                      28% {
-                        /* Phase 2a: As image dissolves to 0, nodes shine bright at 1.0 forming pure node-owl */
-                        transform: translate(0px, 0px);
-                        opacity: 1;
-                      }
-                      45% {
-                        /* Phase 2b: Nodes fly out staggered to constellation mesh position */
-                        transform: translate(${dx}px, ${dy}px);
-                        opacity: 1;
-                      }
-                      70% {
-                        /* Phase 3: Soft float in constellation mesh */
-                        transform: translate(${dx}px, ${dy + (node.id % 2 === 0 ? 1.5 : -1.5)}px);
-                        opacity: 1;
-                      }
-                      88% {
-                        /* Phase 4a: Nodes return and re-assemble into owl shape */
-                        transform: translate(0px, 0px);
-                        opacity: 1;
-                      }
-                      96%, 100% {
-                        /* Phase 4b: Solid image re-emerges over nodes */
-                        transform: translate(0px, 0px);
-                        opacity: 0.9;
-                      }
-                    }
-
-                    .node-granular-${node.id} {
-                      animation: ${nodeAnimName} ${totalLoopSecs}s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+                    .node-pulse-${node.id} {
+                      animation: node-pulse-glow 3s ease-in-out infinite;
+                      animation-delay: ${pulseDelaySecs}s;
                       transform-origin: ${node.hx}px ${node.hy}px;
                     }
                   `}</style>
 
-                  {/* SVG Node Vertex */}
-                  <g className={cn(animated && `node-granular-${node.id}`)}>
+                  <g className={cn(animated && `node-pulse-${node.id}`)}>
                     <circle
                       cx={node.hx}
                       cy={node.hy}
-                      r={node.isEye ? 3.5 : 2.5}
-                      fill={node.isEye ? MAGENTA_FLASH : CYAN_NEON}
-                    />
-
-                    <circle
-                      cx={node.hx}
-                      cy={node.hy}
-                      r={node.isEye ? 6 : 4.5}
-                      fill="none"
-                      stroke={node.isEye ? MAGENTA_FLASH : CYAN_NEON}
-                      strokeWidth="0.8"
-                      opacity={node.isEye ? '0.85' : '0.5'}
+                      r={node.isEye ? 3 : 2}
+                      fill={CYAN_NEON}
                     />
                   </g>
                 </g>
