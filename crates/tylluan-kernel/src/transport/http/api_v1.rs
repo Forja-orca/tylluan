@@ -406,6 +406,10 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // Eval benchmarks (M26-B)
         .route("/api/v1/eval/run", post(api_eval::eval_run_handler))
         .route("/api/v1/eval/results", get(api_eval::eval_list_handler))
+        // Embed endpoint — returns BGE-M3 1024-dim vector for a text string.
+        // Used by Python guilds (night_reasoner route_intent) to compare
+        // intent vs guild description similarity without loading a second copy.
+        .route("/api/v1/embed", post(embed_handler))
 }
 
 // --- HANDLERS ---
@@ -1087,6 +1091,14 @@ async fn do_intent_handler(
     if let Some(content) = body_json.get("content").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
         args["content"] = serde_json::Value::String(content.to_string());
     }
+    // M31-P2 Plan mode: must be forwarded so /api/v1/do can dry-run like the
+    // MCP tool-call path already does. Without this, plan=true in the HTTP
+    // body was silently dropped and the intent executed for real instead of
+    // just resolving guild+tool+args (found live 2026-07-27: a "git status"
+    // call with plan=true actually ran the shell command).
+    if let Some(plan) = body_json.get("plan").and_then(|v| v.as_bool()) {
+        args["plan"] = serde_json::Value::Bool(plan);
+    }
     // Explicit `arguments` passthrough for kernel tools that need fields beyond
     // intent/query/guild/content (e.g. approve_action's requestId/approved/grant_level).
     // Named fields above still win on conflict — arguments only fills gaps.
@@ -1630,6 +1642,42 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
             "dimension_mismatch_risk": "changing model with different dims requires full reindex"
         }
     })).into_response()
+}
+
+// ── Embed endpoint ─────────────────────────────────────────────────────────
+// BGE-M3 1024-dim embeddings via POST /api/v1/embed.
+// Exists because Python guilds (night_reasoner route_intent) need embedding
+// similarity comparisons without loading a second copy of the model.
+#[derive(serde::Deserialize)]
+struct EmbedRequest {
+    text: String,
+}
+
+async fn embed_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(req): Json<EmbedRequest>,
+) -> Response {
+    let srv_arc = require_server!(state);
+    let srv = srv_arc.read().await;
+    match srv.matcher.engine() {
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "embedding engine not ready"})),
+        ).into_response(),
+        Some(engine) => {
+            match engine.embed(&req.text) {
+                Ok(embedding) => Json(serde_json::json!({
+                    "embedding": embedding,
+                    "dimension": embedding.len(),
+                    "model": "bge-m3"
+                })).into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                ).into_response(),
+            }
+        }
+    }
 }
 
 /// Returns MCP client config snippets built from the kernel's actual
