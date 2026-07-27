@@ -62,7 +62,9 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | DHT Kademlia + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
+| **A2A Protocol** | Agent Card discovery (`/.well-known/agent-card.json`) + JSON-RPC 2.0 server (`message/send`, `tasks/get`, `tasks/cancel`) — interoperates with any Agent2Agent-compliant external client (LangGraph, CrewAI, etc.), not just Tylluan peers |
 | **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
+| **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA (`--features cuda`) execution provider for ONNX inference — CPU remains the zero-config default |
 
 <details>
 <summary>Full technical capabilities →</summary>
