@@ -196,23 +196,38 @@ def _onnx_generate(
     precomputed_features=None, max_tokens=None
 ) -> str:
     import numpy as np
+    import time as _time
+    import sys as _sys
+
+    # Timing breakdown requested 2026-07-27 (Coloquio) to settle whether the
+    # 28-57s latency is Python<->Rust transport overhead or real DirectML
+    # decoder compute -- do not assume, measure.
+    _t_encoder = 0.0
+    _t_embed_initial = 0.0
+    _t_decoder_total = 0.0
+    _t_embed_loop_total = 0.0
+    _n_decoder_calls = 0
 
     # Step 1: vision encoder (skip if pre-computed)
     if precomputed_features is not None:
         flat_features = precomputed_features
     else:
+        _t0 = _time.perf_counter()
         vis_out       = _vision_session.run(
             ["image_features"],
             {"pixel_values": pixel_values.astype(np.float32),
              "pixel_attention_mask": pixel_attention_mask.astype(np.bool_)},
         )
+        _t_encoder = _time.perf_counter() - _t0
         image_features = vis_out[0]
         flat_features  = image_features.reshape(-1, image_features.shape[-1])
 
     # Step 2: embed text tokens
+    _t0 = _time.perf_counter()
     emb_out       = _embed_session.run(
         ["inputs_embeds"], {"input_ids": input_ids.astype(np.int64)}
     )
+    _t_embed_initial = _time.perf_counter() - _t0
     inputs_embeds = emb_out[0]                                    # [1, seq, hidden]
 
     # Step 3: replace <image> positions with vision features
@@ -238,6 +253,7 @@ def _onnx_generate(
     ]
 
     for _ in range(max_tokens):
+        _t0 = _time.perf_counter()
         outputs    = _decoder_session.run(
             output_names,
             {"inputs_embeds": current_embs.astype(np.float32),
@@ -245,6 +261,8 @@ def _onnx_generate(
              "position_ids": position_ids,
              **kv_cache},
         )
+        _t_decoder_total += _time.perf_counter() - _t0
+        _n_decoder_calls += 1
         next_token = int(np.argmax(outputs[0][0, -1, :]))
         generated_ids.append(next_token)
         if next_token == _EOS_TOKEN_ID:
@@ -254,14 +272,30 @@ def _onnx_generate(
             kv_cache[f"past_key_values.{i}.key"]   = outputs[1 + i * 2]
             kv_cache[f"past_key_values.{i}.value"] = outputs[2 + i * 2]
 
+        _t0 = _time.perf_counter()
         new_emb      = _embed_session.run(
             ["inputs_embeds"],
             {"input_ids": np.array([[next_token]], dtype=np.int64)}
         )[0]
+        _t_embed_loop_total += _time.perf_counter() - _t0
         current_embs = new_emb
         past_len     = kv_cache["past_key_values.0.key"].shape[2]
         position_ids = np.array([[past_len]], dtype=np.int64)
         attn_mask    = np.ones((1, past_len + 1), dtype=np.int64)
+
+    ttft = _t_encoder + _t_embed_initial + (_t_decoder_total / _n_decoder_calls if _n_decoder_calls else 0)
+    tpot = (_t_decoder_total + _t_embed_loop_total) / _n_decoder_calls if _n_decoder_calls > 1 else 0.0
+    total = _t_encoder + _t_embed_initial + _t_decoder_total + _t_embed_loop_total
+    print(
+        f"[vision timing] encoder={_t_encoder*1000:.1f}ms "
+        f"embed_initial={_t_embed_initial*1000:.1f}ms "
+        f"decoder_loop_total={_t_decoder_total*1000:.1f}ms ({_n_decoder_calls} tokens, "
+        f"avg={_t_decoder_total/_n_decoder_calls*1000 if _n_decoder_calls else 0:.1f}ms/tok) "
+        f"embed_loop_total={_t_embed_loop_total*1000:.1f}ms "
+        f"TTFT={ttft*1000:.1f}ms TPOT={tpot*1000:.1f}ms "
+        f"TOTAL_ONNX={total*1000:.1f}ms",
+        file=_sys.stderr,
+    )
 
     return _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
