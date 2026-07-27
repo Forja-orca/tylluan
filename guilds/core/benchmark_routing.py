@@ -110,14 +110,20 @@ def load_audit_intents(limit=200):
                 continue
             cols = [c[1] for c in cur.execute(f"PRAGMA table_info({table})")]
             if "intent" in cols and "guild" in cols:
-                # Exclude tool_name='post_to_channel' entries: these are always
-                # routed via an explicit guild_hint='coloquio' bypass (see
-                # transport routing trace), never by content-based matching.
-                # No content-only classifier can ever replicate a decision made
-                # from an out-of-band hint it never sees -- including them here
-                # would be an unfair comparison, not a "contamination" issue.
-                exclude = "AND tool_name != 'post_to_channel'" if "tool_name" in cols else ""
-                cur.execute(f"SELECT intent, guild FROM {table} WHERE intent IS NOT NULL AND intent != '' AND guild IS NOT NULL {exclude} ORDER BY rowid DESC LIMIT {limit}")
+                # Exclude guilds always routed via explicit hint (calling agent
+                # already knows the target). coloquio, whats_new, coloquio_digest
+                # are chat-channel ops -- no content classifier can pick an agent's
+                # destination channel from natural language alone. Including them
+                # would be apples vs oranges.
+                skip_guilds = ("coloquio", "whats_new", "coloquio_digest")
+                placeholders = ",".join(["?" for _ in skip_guilds])
+                cur.execute(f"""
+                    SELECT intent, guild FROM {table}
+                    WHERE intent IS NOT NULL AND intent != ''
+                      AND guild IS NOT NULL
+                      AND guild NOT IN ({placeholders})
+                    ORDER BY rowid DESC LIMIT {limit}
+                """, skip_guilds)
                 rows = cur.fetchall()
                 break
             elif "args_preview" in cols and "guild" in cols:
@@ -167,6 +173,24 @@ def embedding_router(intent):
             best_sim = sim
             best_guild = guild
     return best_guild, best_sim
+
+# ── Real production router (hybrid semantic+keyword, matcher.rs) ───────────
+# Queries the ACTUAL match_guild() blend (0.55 semantic + 0.45 keyword) via
+# Plan mode (plan=true resolves guild+tool+args without executing). This is
+# the router genuinely running in production today -- comparing pure
+# embedding-only and pure keyword-only against each other and never against
+# THIS was the real gap in the first two runs (Jose, 2026-07-27): the
+# question isn't "replace keyword with embedding", it's "does the existing
+# hybrid already beat both naive approaches" -- production already hybridizes
+# instead of choosing one.
+def hybrid_router(intent):
+    data = json.dumps({"intent": intent, "plan": True}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{KERNEL_URL}/api/v1/do", data=data,
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read())
+        return result.get("guild", "unknown")
 
 # ── Benchmark ───────────────────────────────────────────────────────────────
 def benchmark():
@@ -241,13 +265,50 @@ def benchmark():
             print(f"  Intent: {intent[:60]}")
             print(f"    Actual={actual} Pred={pred} Sim={sim:.3f}")
 
+    # Real production router (hybrid semantic+keyword, via Plan mode) --
+    # DISABLED FOR NOW: verified live that plan=true is NOT honored by
+    # /api/v1/do -- it actually EXECUTES the resolved tool (confirmed with a
+    # real "git status" call, which ran for real). Sweeping 100 historical
+    # intents through this would re-execute 100 real commands with no
+    # control over side effects. Re-enable only after plan=true is fixed to
+    # be a true dry-run at the HTTP layer (see Coloquio turn 266).
+    hyb_acc = None
+    RUN_PRODUCTION_ROUTER_BENCHMARK = False
+    if RUN_PRODUCTION_ROUTER_BENCHMARK:
+        print(f"\n--- Production router (hybrid, matcher.rs via plan=true) on {sample_size} intents ---")
+        hyb_correct = 0
+        hyb_total = 0
+        hyb_latencies = []
+        for i, (intent, actual) in enumerate(sample):
+            t0 = time.time()
+            try:
+                pred = hybrid_router(intent)
+                t = time.time() - t0
+                hyb_latencies.append(t)
+                if pred == actual:
+                    hyb_correct += 1
+                hyb_total += 1
+                if (i + 1) % 20 == 0:
+                    print(f"  [{i+1}/{sample_size}] acc={hyb_correct/(i+1)*100:.1f}% avg_lat={sum(hyb_latencies)/len(hyb_latencies):.2f}s")
+            except Exception as e:
+                print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+
+        hyb_acc = hyb_correct / hyb_total if hyb_total else 0
+        hyb_avg_lat = sum(hyb_latencies) / len(hyb_latencies) if hyb_latencies else 0
+        print(f"\n  Final accuracy: {hyb_acc*100:.2f}% ({hyb_correct}/{hyb_total})")
+        print(f"  Avg latency: {hyb_avg_lat:.2f}s per intent")
+
     # Summary
     print(f"\n{'='*72}")
     print("SUMMARY")
     print(f"{'='*72}")
     print(f"  Majority class ('{majority_guild}'):     {maj_acc*100:6.2f}%")
-    print(f"  Current keyword router:            {kw_acc*100:6.2f}%")
-    print(f"  Embedding router (BGE-M3):         {emb_acc*100:6.2f}%  (avg {avg_lat:.2f}s/intent)")
+    print(f"  Current keyword router (naive sim):{kw_acc*100:6.2f}%")
+    print(f"  Embedding router (BGE-M3 only):    {emb_acc*100:6.2f}%  (avg {avg_lat:.2f}s/intent)")
+    if hyb_acc is not None:
+        print(f"  PRODUCTION router (hybrid, real):  {hyb_acc*100:6.2f}%")
+    else:
+        print(f"  PRODUCTION router (hybrid, real):  SKIPPED -- plan=true executes for real via HTTP, unsafe to sweep (see turn 266)")
     print(f"{'='*72}")
 
 if __name__ == "__main__":
