@@ -58,7 +58,7 @@ A local Rust kernel that gives AI agents **persistent memory**, a **knowledge gr
 |------------|---------|
 | **Memory** | BM25 + FTS5 + BGE-M3 vector search with RRF hybrid fusion + LightRAG graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) for zero-touch role assignment per agent_id |
-| **Tools** | 43 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
+| **Tools** | 44 guilds: bash, git, filesystem, docker, code, vision, web search and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync — ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | DHT Kademlia + Gossip epidemic dissemination + Noise Protocol XK encrypted transport |
@@ -153,7 +153,7 @@ Evaluated via live `onnxruntime.InferenceSession` (`sess.run`) on real downloade
 
 ### Agent Skills
 
-Agents connected to Tylluan can call any of the 42 guilds via `tylluan_do` in natural language:
+Agents connected to Tylluan can call any of the 44 guilds via `tylluan_do` in natural language:
 
 | Skill | Command example |
 |-------|----------------|
@@ -181,13 +181,17 @@ When you call `tylluan_do("search for Rust async patterns")`, the kernel:
 
 No HTTP call leaves your machine. No API key is needed. The Complexity Cascade and TRINITY coordinator are pure heuristics and intent classification — they run in the kernel process, on your CPU, with your data.
 
-The only time an LLM is involved is if you — the agent or human caller — decide to use one via a guild (e.g. the `coloquio` guild for LLM-to-LLM conversation). The kernel never requires one.
+**Two distinct things, worth not conflating:**
+- **Embeddings (BGE-M3) are always in the path** — every routing decision and every memory search uses a local embedding model. That's a neural network, always on, always local — not optional.
+- **Generative LLM inference is optional and never in the hot path.** Tylluan can run one internally via `llama.cpp` + GGUF (`guilds/core/llama_backend.py`, auto-downloads a precompiled binary — no external service required) for specific, async, non-blocking uses: a calibrated reasoning check on memory candidates already flagged by cheaper filters (`CoherenceGate` Layer 4), and an offline evaluation judge (DeepEval). Routing itself never calls it. You can also point Tylluan at your own Ollama/LM Studio/`llama.cpp` instance instead — it auto-detects a real running backend before starting its own.
+
+Tylluan needs no cloud to operate — that's the invariant. "No LLM at all" was never accurate for the memory/embedding layer and is no longer accurate for the optional generative layer either; what stays true is that nothing here is cloud-dependent or required for the kernel to run.
 
 ### CI
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-617 tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+621 tests across Rust kernel (lib), tylluan-link, and tylluan-fsrs — all green. Every push runs: Rust build+test, clippy, cargo-deny (bans, licenses, advisories), Python lint+test (ruff + pytest), Dashboard build (pnpm), and security audit tests. See [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -293,7 +297,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
-| Python guilds (42 tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (44 tools) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles (portable/clinic/server) | `tylluan-cli install --profile=portable` |
@@ -335,11 +339,13 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | **M28 Credibility** | Honest benchmark comparison methodology · granular `/health` · Prometheus `/metrics` · package manager configs (AUR, Scoop, Homebrew) | ✅ v0.13.0 |
 | **M29 Dashboard UX** | 1-click MCP config, real P2P mesh map (live browser pings, no simulated data), guild capability badges, `tylluan new guild` scaffold, dry-run mode | ✅ v0.13.0 |
 | **M19 DX 10/10** | `tylluan` single command, `tylluan doctor`, instant start + background model download, `tylluan update`, hardware-aware profile wizard | ✅ v0.13.0 |
-| **ADR-011 Signal Loop** | `recall_feedback` logging (schema v18), Jaccard utility resolution, 3-layer `CoherenceGate` (prompt injection / provenance / cosim) | ✅ v0.13.0 |
+| **ADR-011 Signal Loop** | `recall_feedback` logging (schema v18), Jaccard utility resolution, 4-layer `CoherenceGate` (prompt injection / provenance / cosim / calibrated reasoning judgment) | ✅ v0.14.0 |
 | **M31-P1 Permissions** | Granular `agent_id` ACLs, token-agent bindings, write-side `owner_scope` scoping, 6 `auth.rs` unit tests | ✅ v0.13.0 |
 | **M31-P2 Plan Mode** | `tylluan_do(plan=true)` pre-flight action approval via `store_plan` / `grants.rs` | ✅ v0.13.0 |
 | **ADR-010 Benchmark** | Pure empirical ONNX Runtime benchmark harness on disk models (`benchmarks/benchmark_adr010.py`) | ✅ v0.13.0 |
 | **M19-P5 Agents Contract** | `.tylluan/agents.toml` parsed on startup, role resolution in bearer_auth_middleware per ADR-009 | ✅ v0.13.0 |
+| **llama.cpp integration** | Real GGUF inference via `llama-server` subprocess (auto-downloaded precompiled binary), agnostic to external Ollama/LM Studio if already running, dashboard model selector wired to real detected models | ✅ v0.14.0 |
+| **CoherenceGate Layer 4** | Calibrated reasoning judgment (78.85% on real held-out cases) wired into production recall path, verified live | ✅ v0.14.0 |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
@@ -364,10 +370,11 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 │                        │  knowledge graph │  └──────────────────┘│
 │  ┌─────────────────┐  │  episodic nodes  │                      │
 │  │  Guild Registry  │  │  salience decay  │  ┌──────────────────┐│
-│  │  43 Python tools │  └──────────────────┘  │  ONNX Inference  ││
-│  │  auto-discovered │  ┌──────────────────┐  │  CPU default /   ││
-│  └─────────────────┘  │  Coloquio         │  │  DirectML / CUDA ││
-│                        │  multi-agent      │  └──────────────────┘│
+│  │  44 Python tools │  └──────────────────┘  │  Embeddings: ONNX ││
+│  │  auto-discovered │  ┌──────────────────┐  │  CPU / DirectML / ││
+│  └─────────────────┘  │  Coloquio         │  │  CUDA · Generative││
+│                        │  multi-agent      │  │  llama.cpp+GGUF  ││
+│                        │                   │  └──────────────────┘│
 │  ┌──────────────────────────────────────┐                        │
 │  │  Federation + Mesh Layer             │                        │
 │  │  peers.db · ChaCha20 · provenance   │                        │
@@ -387,6 +394,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | Kernel | Rust (tokio + axum) |
 | Embeddings | BGE-M3 (local ONNX, CPU) — configurable: bge-small, nomic, none |
 | Reranker | Jina v1 Turbo (local ONNX) |
+| Generative inference | `llama.cpp` (`llama-server`, auto-downloaded precompiled binary) + GGUF models — agnostic to external Ollama/LM Studio if already running |
 | Search | BM25 + FTS5 + BGE-M3 vector + RRF hybrid fusion + entity boost |
 | Storage | SQLite WAL + mmap vector index |
 | Federation | SQLite `peers.db` + ChaCha20-Poly1305 (per-peer keys) |

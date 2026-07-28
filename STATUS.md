@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-27 (v0.14.0: M19-P5 Agents Contract ✅ per ADR-009 — `.tylluan/agents.toml` parsed on startup, role resolution in `bearer_auth_middleware`, 13 new tests)
+> Last updated: 2026-07-28 (v0.14.0: llama.cpp real GGUF inference end-to-end via `llama-server` auto-downloaded binary — `guilds/core/llama_backend.py`; CoherenceGate Layer 4 — calibrated reasoning judgment, 78.85% on real held-out cases, wired to production recall path and verified live; `guilds/core/seed_tools.py` — Tier 1 cold-start seed export/import)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** ae3339f · **610 total** green (537 kernel lib + 61 link lib + 12 fsrs) — 0 fallos. +2 desde fix find_workspace_root() para AgentsContract/RepoMap (test de regresión CWD anidado). `scripts/check_test_count.sh --fix` (2026-07-26) ahora corrige README.md en un comando en vez de edición manual -- este check ha fallado 4 veces en una tarde por la velocidad de commits paralelos durante la semana de dogfooding. Cifra más amplia incluyendo tests de integración (`tylluan-link --all-targets` = 88, `tylluan-evals` = 3, `crates/tylluan-kernel/tests/a2a_hitl_test.rs` = 3): **631 total** — no rastreada por CI, solo de referencia. Clippy clean en --all-targets (stable toolchain).
+**Commit:** 9e72987 · **621 total** green (548 kernel lib + 61 link lib + 12 fsrs) — 0 fallos, verificado con `scripts/check_test_count.sh --fix` (2026-07-28). Clippy clean con `-D warnings` (verificado 3 veces en el mismo día tras encontrar que `cargo check`/`cargo test` locales no cazan lo que CI sí exige). AGENTS.md y `.tylluan/agents.toml` corregidos el mismo día (versión/flota desactualizadas, roles referenciados que no existían — ver docs/architecture si aplica).
 
 ---
 
