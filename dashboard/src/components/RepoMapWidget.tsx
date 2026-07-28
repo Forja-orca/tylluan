@@ -73,47 +73,17 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
     setError(null);
     try {
       const res = await bridge.getRepoMap();
-      if (res && res.top_level_dirs) {
+      if (res && (res.top_level_dirs || res.total_files !== undefined)) {
         setData(res);
         setIsMock(false);
       } else {
-        throw new Error("Invalid payload structure returned by backend");
+        throw new Error("Respuesta de mapa de código inválida del servidor");
       }
     } catch (err: any) {
-      console.warn("Repo Map API call failed, loading local simulated map:", err.message);
-      
-      // High fidelity mock matching project's file topology
-      const mockData: RepoMapData = {
-        root: "E:\\tylluan",
-        built_at_unix: Math.floor((Date.now() - 2 * 3600 * 1000) / 1000),
-        build_duration_ms: 42,
-        total_files: 681,
-        total_dirs: 88,
-        total_lines: 48000,
-        languages: {
-          "Rust": { files: 143, lines: 32000, pct: 66.7 },
-          "TypeScript": { files: 89, lines: 9500, pct: 19.8 },
-          "Python": { files: 34, lines: 4200, pct: 8.7 },
-        },
-        top_level_dirs: [
-          { name: "crates", file_count: 412, dir_count: 25 },
-          { name: "dashboard", file_count: 187, dir_count: 8 },
-          { name: "guilds", file_count: 42, dir_count: 6 },
-          { name: "docs", file_count: 28, dir_count: 4 },
-          { name: "benchmarks", file_count: 12, dir_count: 2 },
-        ],
-        key_files: [
-          { path: "Cargo.toml", kind: "manifest" },
-          { path: "README.md", kind: "docs" },
-          { path: "CLAUDE.md", kind: "docs" },
-          { path: "tylluan.toml", kind: "config" },
-        ],
-        identifiers: {},
-      };
-
-      setData(mockData);
-      setIsMock(true);
-      setError(`[MOCK FALLBACK] GET /api/v1/repo-map returned 404 or error: ${err.message}. Showing simulated layout.`);
+      console.error("Repo Map API error:", err.message);
+      setData(null);
+      setIsMock(false);
+      setError(`Error obteniendo topología del proyecto (GET /api/v1/repo-map): ${err.message}`);
     } finally {
       setLoading(false);
     }
