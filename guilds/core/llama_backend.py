@@ -84,6 +84,20 @@ def _normalize_backend_url(val, is_ollama_host=False):
     return val
 
 
+def _is_backend_reachable(base_url):
+    """Real reachability probe -- an env var being *set* doesn't mean the
+    backend is actually *running* there (found live: OLLAMA_HOST was set
+    in the shell but Ollama wasn't started, causing a connection-refused
+    crash instead of falling through to starting our own llama-server)."""
+    import urllib.request as _urllib
+    probe = base_url.rstrip("/") + "/models"
+    try:
+        with _urllib.urlopen(_urllib.Request(probe, method="GET"), timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def _detect_external_backend():
     """Check for external LLM backends. Returns API base URL or None."""
     global _EXTERNAL_API_BASE
@@ -94,9 +108,11 @@ def _detect_external_backend():
         val = os.environ.get(env_var)
         if val:
             normalized = _normalize_backend_url(val, is_ollama_host=(env_var == "OLLAMA_HOST"))
-            sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
-            _EXTERNAL_API_BASE = normalized
-            return normalized
+            if _is_backend_reachable(normalized):
+                sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
+                _EXTERNAL_API_BASE = normalized
+                return normalized
+            sys.stderr.write(f"[llama_backend] {env_var}={val} set but not reachable at {normalized}, ignoring\n")
 
     import socket
     import urllib.request as _urllib
