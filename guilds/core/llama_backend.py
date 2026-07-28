@@ -211,9 +211,13 @@ async def _start_llama_server():
 
     server_path = _find_llama_server()
     if not server_path:
-        server_path = _install_llama_server()
+        # Blocking pip install (up to 300s) -- run off the event loop thread so
+        # other tool calls to this guild (e.g. backend_health) don't hang too.
+        # Found live: a first query_model call blocked the whole guild process
+        # for minutes, timing out every other call including health checks.
+        server_path = await asyncio.to_thread(_install_llama_server)
 
-    model_path = _resolve_model_path()
+    model_path = await asyncio.to_thread(_resolve_model_path)
 
     if not _is_port_open(LLAMA_PORT):
         sys.stderr.write(f"[llama_backend] Port {LLAMA_PORT} in use, trying to connect...\n")
