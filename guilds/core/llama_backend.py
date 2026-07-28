@@ -149,29 +149,112 @@ def _find_llama_server():
         found = shutil.which(name)
         if found:
             return found
+    # Check Python Scripts directory
     scripts = Path(sys.executable).parent / "Scripts"
     for name in ["llama-server.exe", "llama-server"]:
         candidate = scripts / name
         if candidate.exists():
             return str(candidate)
+    # Check our own cache directory (precompiled downloads)
+    cache_dir = Path.home() / ".cache" / "tylluan" / "llama-cpp"
+    for root, dirs, files in os.walk(cache_dir) if cache_dir.exists() else ():
+        for f in files:
+            if f in ("llama-server", "llama-server.exe"):
+                return str(Path(root) / f)
     return None
 
 
 def _install_llama_server():
-    """Install llama-cpp-python (includes llama-server binary)."""
+    """Install llama-server binary.
+
+    Three paths, in order:
+    1. Precompiled CPU binary from GitHub Releases (17.5MB, no compilation)
+    2. Precompiled CUDA binary (235MB) if NVIDIA GPU detected
+    3. pip install llama-cpp-python (compiles from source, slow but works everywhere)
+    """
+    import platform
     import subprocess as sp
-    sys.stderr.write("[llama_backend] Installing llama-cpp-python...\n")
+    import urllib.request as _urllib
+    import zipfile
+    import tempfile
+
+    sys_name = platform.system().lower()
+    machine = platform.machine().lower()
+
+    # Detect GPU for CUDA path
+    has_cuda = False
+    try:
+        sp.run(["nvidia-smi"], capture_output=True, timeout=5)
+        has_cuda = True
+    except Exception:
+        pass
+
+    # Build list of release assets to try
+    assets = []
+    if sys_name == "windows" and machine in ("amd64", "x86_64"):
+        # CPU binary first (small, universal)
+        assets.append(("llama-b10158-bin-win-cpu-x64.zip", "CPU (x64)"))
+        if has_cuda:
+            assets.append(("llama-b10158-bin-win-cuda-13.3-x64.zip", "CUDA 13.3 (x64)"))
+
+    elif sys_name == "linux" and machine in ("x86_64", "amd64"):
+        assets.append(("llama-b10158-bin-linux-x64.zip", "CPU (Linux x64)"))
+
+    elif sys_name == "darwin" and machine == "arm64":
+        assets.append(("llama-b10158-bin-macos-arm64.zip", "CPU (macOS ARM)"))
+
+    for asset_name, label in assets:
+        sys.stderr.write(f"[llama_backend] Trying precompiled binary: {label}...\n")
+        try:
+            url = f"https://github.com/ggerganov/llama.cpp/releases/download/b10158/{asset_name}"
+            dest_dir = Path.home() / ".cache" / "tylluan" / "llama-cpp"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            zip_path = dest_dir / asset_name
+            if not zip_path.exists():
+                sys.stderr.write(f"[llama_backend] Downloading {asset_name}...\n")
+                _urllib.urlretrieve(url, zip_path)
+
+            with zipfile.ZipFile(zip_path) as zf:
+                for member in zf.namelist():
+                    if member.endswith("llama-server.exe") or member.endswith("llama-server"):
+                        zf.extract(member, dest_dir)
+                        binary = dest_dir / member
+                        if not sys_name.startswith("win"):
+                            binary.chmod(0o755)
+                        sys.stderr.write(f"[llama_backend] Extracted: {binary}\n")
+                        return str(binary)
+
+            sys.stderr.write(f"[llama_backend] llama-server not found in {asset_name}\n")
+        except Exception as e:
+            sys.stderr.write(f"[llama_backend] Precompiled download failed: {e}\n")
+
+    # Fallback: pip install (compiles from source)
+    sys.stderr.write("[llama_backend] Precompiled binary unavailable, installing via pip...\n")
     result = sp.run(
         [sys.executable, "-m", "pip", "install", "llama-cpp-python"],
-        capture_output=True, text=True, timeout=300
+        capture_output=True, text=True, timeout=600
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Failed to install llama-cpp-python: {result.stderr}")
+        raise RuntimeError(f"Failed to install llama-cpp-python: {result.stderr[-300:]}")
+
+    # After pip install, search for the binary in Scripts/
     path = _find_llama_server()
-    if not path:
-        raise RuntimeError("llama-server not found after pip install")
-    sys.stderr.write(f"[llama_backend] Installed: {path}\n")
-    return path
+    if path:
+        return path
+
+    # Last resort: search in site-packages for compiled binary
+    import site
+    for sp_dir in site.getsitepackages():
+        for root, dirs, files in os.walk(sp_dir):
+            for f in files:
+                if f in ("llama-server", "llama-server.exe"):
+                    return os.path.join(root, f)
+
+    raise RuntimeError(
+        "llama-server not found after all installation attempts. "
+        "Please install llama.cpp manually: pip install llama-cpp-python"
+    )
 
 
 def _resolve_model_path():
