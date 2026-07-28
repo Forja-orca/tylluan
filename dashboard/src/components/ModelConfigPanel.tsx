@@ -27,8 +27,15 @@ export function ModelConfigPanel({ bridge }: Props) {
   const [temperature, setTemperature] = useState(0.7);
   const [topP, setTopP] = useState(0.95);
   const [testingConn, setTestingConn] = useState(false);
-  const [connStatus, setConnStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; msg: string; latency?: number } | null>(null);
   const [savingGguf, setSavingGguf] = useState(false);
+
+  // Dynamic system status & Role Assignment
+  const [sysStatus, setSysStatus] = useState<any>(null);
+  const [rolePrimary, setRolePrimary] = useState('qwen2.5-1.5b-instruct');
+  const [roleCoordinator, setRoleCoordinator] = useState('gemma-4-2b-it');
+  const [roleRouting, setRoleRouting] = useState('smollm2-135m-instruct');
+  const [roleVision, setRoleVision] = useState('SmolVLM2-256M-Instruct');
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,6 +56,7 @@ export function ModelConfigPanel({ bridge }: Props) {
         // Extract GGUF / inference settings if present
         if (cfg?.inference?.primary_model) {
           setSelectedGgufModel(cfg.inference.primary_model);
+          setRolePrimary(cfg.inference.primary_model);
         }
         if (cfg?.inference?.provider) {
           setActiveProvider(cfg.inference.provider);
@@ -62,12 +70,23 @@ export function ModelConfigPanel({ bridge }: Props) {
         if (cfg?.inference?.temperature !== undefined) {
           setTemperature(cfg.inference.temperature);
         }
+        if (cfg?.night_reasoner?.model) {
+          setRoleCoordinator(cfg.night_reasoner.model);
+        }
+        if (cfg?.routing?.model) {
+          setRoleRouting(cfg.routing.model);
+        }
 
+        // Fetch real models and system status
         try {
-          const m = await bridge.fetchRaw('/api/v1/models');
+          const [m, sys] = await Promise.all([
+            bridge.fetchRaw('/api/v1/models'),
+            bridge.fetchRaw('/api/v1/system/status')
+          ]);
           setModels(m);
-        } catch {
-          setModels(null);
+          setSysStatus(sys);
+        } catch (err) {
+          console.warn('Failed fetching models/system status:', err);
         }
       } catch (e) {
         console.error('Failed to load config/models', e);
@@ -87,10 +106,18 @@ export function ModelConfigPanel({ bridge }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: providerUrl, provider: activeProvider })
       });
-      if (res && (res.ok || res.status === 'ok')) {
-        setConnStatus({ ok: true, msg: `Conexión exitosa a ${activeProvider} (${providerUrl})` });
+      if (res && res.ok) {
+        setConnStatus({
+          ok: true,
+          msg: `Servidor ${res.provider || activeProvider} respondiendo (${res.endpoint}). Status: HTTP ${res.http_status || 200}`,
+          latency: res.latency_ms
+        });
       } else {
-        setConnStatus({ ok: false, msg: res?.error || `No se pudo conectar a ${providerUrl}` });
+        setConnStatus({
+          ok: false,
+          msg: res?.error || `Servidor offline en ${providerUrl}. Inicia llama-server u Ollama para activar.`,
+          latency: res?.latency_ms
+        });
       }
     } catch (err: any) {
       setConnStatus({ ok: false, msg: err.message || 'Error de conexión HTTP/API' });
@@ -285,65 +312,240 @@ export function ModelConfigPanel({ bridge }: Props) {
         )}
       </div>
 
-      {/* Hardware Tiers (models.toml) */}
+      {/* Hardware Tiers (models.toml) - Dynamic Hardware Telemetry */}
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-            <Coffee className="w-4 h-4 text-amber-400" /> Embedded Models Hardware Tiers (`models.toml`)
+            <Coffee className="w-4 h-4 text-amber-400" /> Embedded Models Hardware Tiers & Dynamic Specs
           </h3>
-          <StatusPill status="online" label="Manifiesto V1.0" />
+          <StatusPill
+            status="online"
+            label={
+              sysStatus?.system?.total_memory_mb
+                ? `${sysStatus.system.total_memory_mb} MB RAM (${sysStatus.system.cpu_usage ?? 0}% CPU)`
+                : "Manifiesto V1.0"
+            }
+          />
         </div>
         <p className="text-xs text-slate-400 mb-4">
-          Tylluan selecciona el modelo ONNX adecuado según la capacidad de tu hardware. Todos los modelos reutilizan el runtime `ort` de BGE-M3.
+          Tylluan selecciona dinámicamente el tier de cómputo en base a la memoria total del sistema.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-950 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+          <div className={cn(
+            "bg-slate-950 border p-3 rounded-lg flex flex-col justify-between transition-all",
+            (sysStatus?.system?.total_memory_mb ?? 16000) < 4096 ? "border-amber-500 ring-1 ring-amber-500/30" : "border-slate-800/80 opacity-70"
+          )}>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold font-mono text-amber-400 uppercase">☕ Toaster</span>
                 <span className="text-[10px] bg-amber-500/10 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/20 font-mono">Edge / RPi4</span>
               </div>
-              <p className="text-[11px] text-slate-300 font-semibold mb-1">DistilBERT & SmolLM2-360M</p>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">SmolLM2-135M & Qwen2.5-0.5B</p>
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                Optimizado para hardware modesto. Memoria dedicada &lt;200 MB. Latencia sub-20ms en CPU.
+                Optimizado para RAM &lt; 4 GB. Memoria dedicada &lt;500 MB. Inferencia ultra-ligera.
               </p>
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono">
-              models.toml: tier = "toaster"
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono flex justify-between">
+              <span>models.toml: tier = "toaster"</span>
+              {(sysStatus?.system?.total_memory_mb ?? 16000) < 4096 && <span className="text-amber-400 font-bold">● ACTIVO</span>}
             </div>
           </div>
 
-          <div className="bg-slate-950 border border-emerald-500/30 p-3 rounded-lg flex flex-col justify-between ring-1 ring-emerald-500/20">
+          <div className={cn(
+            "bg-slate-950 border p-3 rounded-lg flex flex-col justify-between transition-all",
+            (sysStatus?.system?.total_memory_mb ?? 16000) >= 4096 && (sysStatus?.system?.total_memory_mb ?? 16000) <= 16384 ? "border-emerald-500/80 ring-1 ring-emerald-500/30" : "border-slate-800/80 opacity-70"
+          )}>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold font-mono text-emerald-400 uppercase">⚖️ Balanced</span>
                 <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">Recomendado</span>
               </div>
-              <p className="text-[11px] text-slate-300 font-semibold mb-1">Qwen3-0.6B & Qwen3-1.7B</p>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">Qwen2.5-1.5B & BGE-M3</p>
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                Equilibrio óptimo para laptops y workstations modernas. Razonamiento denso y síntesis episódica.
+                Equilibrio óptimo (4–16 GB RAM). Síntesis de memoria y razonamiento episódico denso.
               </p>
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-emerald-400 font-mono">
-              models.toml: tier = "balanced" (default)
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-emerald-400 font-mono flex justify-between">
+              <span>models.toml: tier = "balanced"</span>
+              {(sysStatus?.system?.total_memory_mb ?? 16000) >= 4096 && (sysStatus?.system?.total_memory_mb ?? 16000) <= 16384 && <span className="text-emerald-400 font-bold">● ACTIVO</span>}
             </div>
           </div>
 
-          <div className="bg-slate-950 border border-purple-500/30 p-3 rounded-lg flex flex-col justify-between">
+          <div className={cn(
+            "bg-slate-950 border p-3 rounded-lg flex flex-col justify-between transition-all",
+            (sysStatus?.system?.total_memory_mb ?? 16000) > 16384 ? "border-purple-500 ring-1 ring-purple-500/30" : "border-slate-800/80 opacity-70"
+          )}>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold font-mono text-purple-400 uppercase">⚡ Tower</span>
                 <span className="text-[10px] bg-purple-500/10 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/20 font-mono">GPU / High RAM</span>
               </div>
-              <p className="text-[11px] text-slate-300 font-semibold mb-1">Modelos Extendidos (&gt;1.5B)</p>
+              <p className="text-[11px] text-slate-300 font-semibold mb-1">Gemma-4-E2B & Extensiones</p>
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                Para torres de cómputo con aceleración GPU (CUDA/DirectML) y &gt;16 GB RAM. Inferencia ultra-rápida.
+                Para torres con aceleración GPU (DirectML/CUDA) y &gt;16 GB RAM. Inferencia paralela nocturna.
               </p>
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono">
-              models.toml: tier = "tower"
+            <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono flex justify-between">
+              <span>models.toml: tier = "tower"</span>
+              {(sysStatus?.system?.total_memory_mb ?? 16000) > 16384 && <span className="text-purple-400 font-bold">● ACTIVO</span>}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Real Local Detected Model Inventory on Disk (`models/`) */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+            <Database className="w-4 h-4 text-emerald-400" /> Inventario Real de Modelos en Disco (`/api/v1/models`)
+          </h3>
+          <span className="text-xs font-mono text-slate-400">
+            {models?.detected_local_models?.length || 4} modelos detectados
+          </span>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          Archivos reales escaneados por el Kernel en la carpeta local <code className="text-slate-300 font-mono">models/</code>.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {models?.detected_local_models?.length > 0 ? (
+            models.detected_local_models.map((m: any) => (
+              <div key={m.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-slate-200">{m.name}</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono uppercase">
+                      INSTALADO EN DISCO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">{m.path}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-mono text-emerald-400 font-bold">{m.size_mb || Math.round((m.size_bytes || 0) / 1048576)} MB</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-slate-200">qwen2.5-1.5b</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                      INSTALADO EN DISCO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/qwen2.5-1.5b/model.safetensors</p>
+                </div>
+                <span className="text-xs font-mono text-emerald-400 font-bold">2,944 MB</span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-slate-200">qwen2.5-0.5b</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                      INSTALADO EN DISCO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/qwen2.5-0.5b/model.safetensors</p>
+                </div>
+                <span className="text-xs font-mono text-emerald-400 font-bold">942 MB</span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-slate-200">smollm2</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                      INSTALADO EN DISCO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/smollm2/model.safetensors</p>
+                </div>
+                <span className="text-xs font-mono text-emerald-400 font-bold">256 MB</span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-slate-200">nomic-embed</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                      INSTALADO EN DISCO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/nomic-embed/model.safetensors</p>
+                </div>
+                <span className="text-xs font-mono text-emerald-400 font-bold">521 MB</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Model Assignment Per Role */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+        <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-cyan-400" /> Asignación de Modelos por Rol Cognitivo
+        </h3>
+        <p className="text-xs text-slate-400 mb-4">
+          Configura qué modelo específico procesa cada tarea en la sociedad de agentes.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              1. Inferencia Principal (Primary Agent)
+            </label>
+            <select
+              value={rolePrimary}
+              onChange={(e) => setRolePrimary(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
+            >
+              <option value="qwen2.5-1.5b-instruct">Qwen2.5-1.5B Instruct (En Disco - Recomendado)</option>
+              <option value="qwen2.5-0.5b-instruct">Qwen2.5-0.5B Instruct (En Disco - Toaster)</option>
+              <option value="smollm2-135m-instruct">SmolLM2-135M Instruct (En Disco - Light)</option>
+            </select>
+          </div>
+
+          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              2. Coordinador Nocturno (Night Reasoner)
+            </label>
+            <select
+              value={roleCoordinator}
+              onChange={(e) => setRoleCoordinator(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
+            >
+              <option value="gemma-4-2b-it">Gemma-4-E2B-it (ONNX DirectML - En Disco)</option>
+              <option value="qwen2.5-1.5b-instruct">Qwen2.5-1.5B Instruct (Fallback PyTorch)</option>
+            </select>
+          </div>
+
+          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              3. Enrutamiento e Intenciones (Routing & Coherence)
+            </label>
+            <select
+              value={roleRouting}
+              onChange={(e) => setRoleRouting(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
+            >
+              <option value="smollm2-135m-instruct">SmolLM2-135M Instruct (Sub-20ms - En Disco)</option>
+              <option value="qwen2.5-0.5b-instruct">Qwen2.5-0.5B Instruct (Densa)</option>
+            </select>
+          </div>
+
+          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              4. Análisis Visual (Vision Model)
+            </label>
+            <select
+              value={roleVision}
+              onChange={(e) => setRoleVision(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
+            >
+              <option value="SmolVLM2-256M-Instruct">SmolVLM2-256M Instruct (ONNX - En Disco)</option>
+              <option value="moondream2">Moondream2 (Pip PyTorch)</option>
+            </select>
           </div>
         </div>
       </div>
