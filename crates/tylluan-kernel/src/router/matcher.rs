@@ -424,14 +424,14 @@ impl GuildMatcher {
         // J-13: Embedding tiebreaker — when top-2 blended scores are close
         // (≤ 0.15), prefer the guild with higher pure BGE-M3 semantic similarity.
         // Keyword dominates normal routing; embedding only resolves ambiguity.
-        if let (Some(t1), Some(t2)) = (&top1, &top2) {
-            if (t1.1 - t2.1).abs() < 0.15 && t2.2 > t1.2 {
-                tracing::debug!(
-                    "🎯 Tiebreak: '{}' (sem={:.3}) > '{}' (sem={:.3}) — scores {:.3} vs {:.3}",
-                    t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
-                );
-                top1 = Some(t2.clone());
-            }
+        if let (Some(t1), Some(t2)) = (&top1, &top2)
+            && (t1.1 - t2.1).abs() < 0.15 && t2.2 > t1.2
+        {
+            tracing::debug!(
+                "🎯 Tiebreak: '{}' (sem={:.3}) > '{}' (sem={:.3}) — scores {:.3} vs {:.3}",
+                t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
+            );
+            top1 = Some(t2.clone());
         }
 
         let mut keyword_result = top1.map(|(r, _, _)| r);
