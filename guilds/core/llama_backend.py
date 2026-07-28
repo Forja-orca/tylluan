@@ -310,6 +310,20 @@ def _is_port_open(port):
         return False
 
 
+def _is_http_ready(port):
+    """Real HTTP readiness probe -- the port being occupied only means
+    llama-server has bound the socket, not that it finished loading the
+    model and is actually serving requests. Found live, reproduced 3
+    times: query_model got a real HTTP 503 right after the port-bound
+    check passed, because the model was still loading."""
+    import urllib.request as _urllib
+    try:
+        with _urllib.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=1) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 async def _start_llama_server():
     """Start llama-server subprocess on LLAMA_PORT. Idempotent.
 
@@ -374,7 +388,7 @@ async def _start_llama_server_locked():
 
     for _ in range(30):
         await asyncio.sleep(0.5)
-        if not _is_port_open(LLAMA_PORT):
+        if not _is_port_open(LLAMA_PORT) and await asyncio.to_thread(_is_http_ready, LLAMA_PORT):
             _model_loaded = True
             sys.stderr.write("[llama_backend] llama-server ready\n")
             # Drain stderr continuously from here on -- a PIPE that's read only
