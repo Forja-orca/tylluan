@@ -263,43 +263,13 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
 }
 
 function TaskRegistryWidget({ bridge }: { bridge: any }) {
-  const [tasks, setTasks] = useState<{ completed: string[]; inProgress: string[]; pending: string[] }>({
+  const [tasks] = useState<{ completed: string[]; inProgress: string[]; pending: string[] }>({
     completed: [],
     inProgress: [],
     pending: []
   });
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!bridge) return;
-      try {
-        const raw = await bridge.fetchRaw('/api/v1/worklog', {}) as any;
-        if (raw?.content) {
-          const lines: string[] = raw.content.split('\n');
-          const completed: string[] = [];
-          const inProgress: string[] = [];
-          const pending: string[] = [];
-          let current: 'c' | 'ip' | 'p' | 'none' = 'none';
-
-          for (const l of lines) {
-            const tr = l.trim();
-            if (tr.includes('COMPLETED') || tr.includes('COMPLETADOS')) current = 'c';
-            else if (tr.includes('IN PROGRESS') || tr.includes('EN PROGRESO')) current = 'ip';
-            else if (tr.includes('PENDING') || tr.includes('PENDIENTES')) current = 'p';
-            else if (tr.startsWith('- [x]') || tr.startsWith('* [x]')) {
-              if (current === 'c' || current === 'none') completed.push(tr.replace(/^[-*]\s*\[x\]\s*/, ''));
-            } else if (tr.startsWith('- [ ]') || tr.startsWith('* [ ]')) {
-              if (current === 'ip') inProgress.push(tr.replace(/^[-*]\s*\[\s*\]\s*/, ''));
-              else pending.push(tr.replace(/^[-*]\s*\[\s*\]\s*/, ''));
-            }
-          }
-          setTasks({ completed: completed.slice(0, 3), inProgress: inProgress.slice(0, 3), pending: pending.slice(0, 3) });
-        }
-      } catch {}
-    };
-    fetchTasks();
-  }, [bridge]);
-
+  // Task registry backend not yet implemented — widget kept as placeholder
   return (
     <div className="rounded-xl border border-slate-800 bg-[#0B0F17]/90 p-4 space-y-3 font-sans">
       <div className="flex items-center justify-between font-mono">

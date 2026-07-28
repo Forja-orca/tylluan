@@ -8,38 +8,32 @@ interface DoctorPanelProps {
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
+// Honest fallback when diagnostic API is unavailable — does not fabricate metrics
 const generateMockReport = (): DiagnosticReport => ({
   timestamp: new Date().toISOString(),
   status: 'degraded',
-  guilds: [
-    { name: 'bash', running: true, tools_count: 5, issues: [] },
-    { name: 'knowledge', running: false, tools_count: 3, issues: ['Connection timeout to local worker'] },
-    { name: 'vision', running: true, tools_count: 2, issues: [] },
-  ],
+  guilds: [],
   storage: {
-    memory_db_ok: true,
+    memory_db_ok: false,
     silva_db_ok: false,
-    docs_count: 1450,
-    nodes_count: 5200,
-    memory_bytes: 1024 * 1024 * 45,
-    silva_bytes: 1024 * 1024 * 210,
+    docs_count: 0,
+    nodes_count: 0,
+    memory_bytes: 0,
+    silva_bytes: 0,
     recent_nodes: []
   },
   system: {
-    total_memory_mb: 16384,
-    used_memory_mb: 450,
-    memory_percent: 2.7,
-    cpu_usage_percent: 12.5,
-    process_count: 1,
-    thread_count: 42,
-    status: 'ok',
-    warnings: ['High latency detected in vector operations']
+    total_memory_mb: 0,
+    used_memory_mb: 0,
+    memory_percent: 0,
+    cpu_usage_percent: 0,
+    process_count: 0,
+    thread_count: 0,
+  status: 'degraded',
+    warnings: ['Diagnostic API unavailable — cannot generate real report']
   },
-  config_valid: true,
-  suggestions: [
-    "Run 'doctor_repair(target=\"guild\", name=\"knowledge\")' to restart.",
-    "Run 'doctor_repair(target=\"storage\")' to VACUUM SilvaDB."
-  ]
+  config_valid: false,
+  suggestions: ["Ensure kernel is running and /api/v1/doctor is reachable."]
 });
 
 const formatBytes = (bytes: number) => {

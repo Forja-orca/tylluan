@@ -98,12 +98,6 @@ export function ModelConfigPanel({ bridge }: Props) {
         if (llamaCfg.repeat_penalty !== undefined) {
           setRepeatPenalty(llamaCfg.repeat_penalty);
         }
-        if (cfg?.night_reasoner?.model) {
-          setRoleCoordinator(cfg.night_reasoner.model);
-        }
-        if (cfg?.routing?.model) {
-          setRoleRouting(cfg.routing.model);
-        }
 
         // Fetch real models and system status
         try {
