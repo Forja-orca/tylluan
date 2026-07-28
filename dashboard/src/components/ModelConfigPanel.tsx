@@ -489,46 +489,91 @@ export function ModelConfigPanel({ bridge }: Props) {
       </div>
 
       {/* Model Assignment Per Role */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
-        <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-cyan-400" /> Asignación de Modelos por Rol Cognitivo
-        </h3>
-        <p className="text-xs text-slate-400 mb-4">
-          Configura qué modelo específico procesa cada tarea en la sociedad de agentes.
-        </p>
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-cyan-400" /> Asignación de Modelos por Rol Cognitivo
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Cada módulo dentro de Tylluan requiere diferentes características de tamaño, velocidad y capacidad de razonamiento.
+          </p>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            { label: '1. Inferencia Principal (Primary Agent)', value: rolePrimary, setter: setRolePrimary },
-            { label: '2. Coordinador Nocturno (Night Reasoner)', value: roleCoordinator, setter: setRoleCoordinator },
-            { label: '3. Enrutamiento e Intenciones (Routing & Coherence)', value: roleRouting, setter: setRoleRouting },
-            { label: '4. Análisis Visual (Vision Model)', value: roleVision, setter: setRoleVision },
-          ].map(({ label, value, setter }) => (
-            <div key={label} className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                {label}
-              </label>
-              {models?.detected_local_models?.length > 0 ? (
-                <select
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
-                >
-                  {models.detected_local_models.map((m: any) => (
-                    <option key={m.id || m.name} value={m.id || m.name}>
-                      {m.name} {m.size_mb ? `(${m.size_mb} MB)` : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-400"
-                  placeholder="Sin modelos en disco — introduce el nombre del modelo"
-                />
-              )}
+            {
+              id: 'primary',
+              title: '1. Inferencia Principal (Primary Agent)',
+              desc: 'Responde a consultas de usuario y ejecuta herramientas (tylluan_do). Requiere buen seguimiento de instrucciones.',
+              rec: 'Recomendado: 1.5B – 3B (ej. Qwen2.5-1.5B)',
+              value: rolePrimary,
+              setter: setRolePrimary,
+              color: 'border-emerald-500/30'
+            },
+            {
+              id: 'coordinator',
+              title: '2. Coordinador Nocturno (Night Reasoner)',
+              desc: 'Consolidación de memoria episódica en background. Prioriza razonamiento profundo sobre velocidad.',
+              rec: 'Recomendado: 2B – 4B (ej. Gemma-2B / Qwen2.5-3B)',
+              value: roleCoordinator,
+              setter: setRoleCoordinator,
+              color: 'border-violet-500/30'
+            },
+            {
+              id: 'routing',
+              title: '3. Enrutamiento e Intenciones (Routing & Intent)',
+              desc: 'Clasificación ultra-rápida de intenciones y filtrado. Requiere latencia <50ms en CPU.',
+              rec: 'Recomendado: <500M (ej. SmolLM2-135M / Qwen-0.5B)',
+              value: roleRouting,
+              setter: setRoleRouting,
+              color: 'border-blue-500/30'
+            },
+            {
+              id: 'vision',
+              title: '4. Análisis Visual (Vision Model)',
+              desc: 'Extracción de texto (OCR) y descripción de imágenes para la guild de visión.',
+              rec: 'Recomendado: SmolVLM2-256M / Moondream',
+              value: roleVision,
+              setter: setRoleVision,
+              color: 'border-cyan-500/30'
+            },
+          ].map((role) => (
+            <div key={role.id} className={cn("bg-slate-950 p-3.5 rounded-lg border flex flex-col justify-between space-y-2", role.color)}>
+              <div>
+                <label className="block text-xs font-bold text-slate-200 tracking-wide mb-1">
+                  {role.title}
+                </label>
+                <p className="text-[10px] text-slate-400 leading-relaxed mb-2">
+                  {role.desc}
+                </p>
+              </div>
+
+              <div>
+                {models?.detected_local_models?.length > 0 ? (
+                  <select
+                    value={role.value}
+                    onChange={(e) => role.setter(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 focus:border-cyan-500 focus:outline-none"
+                  >
+                    {models.detected_local_models.map((m: any) => (
+                      <option key={m.id || m.name} value={m.id || m.name}>
+                        {m.name} {m.size_mb ? `(${m.size_mb} MB)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={role.value}
+                    onChange={(e) => role.setter(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-400"
+                    placeholder="Sin modelos en disco — introduce nombre"
+                  />
+                )}
+                <span className="text-[9px] text-slate-500 font-mono block mt-1.5">
+                  💡 {role.rec}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -546,75 +591,47 @@ export function ModelConfigPanel({ bridge }: Props) {
           Selecciona el modelo GGUF y el backend de inferencia activo. Conecta directamente con subproceso <code className="text-violet-300 font-mono">llama-server</code> local, runtime ONNX nativo, o servidores OpenAI-compatible (Ollama / LM Studio).
         </p>
 
-        {/* Local GGUF Model Cards */}
+        {/* Real Local GGUF / ONNX Model Cards from /api/v1/models */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            {
-              id: 'qwen2.5-1.5b-instruct',
-              name: 'Qwen2.5-1.5B Instruct',
-              quant: 'Q4_K_M',
-              vram: '~1.1 GB RAM',
-              tier: 'Balanced (Default)',
-              desc: 'Modelo principal recomendado. Síntesis densa y razonamiento episódico.',
-              color: 'emerald'
-            },
-            {
-              id: 'qwen2.5-0.5b-instruct',
-              name: 'Qwen2.5-0.5B Instruct',
-              quant: 'Q4_K_M',
-              vram: '~450 MB RAM',
-              tier: 'Toaster / RPi4',
-              desc: 'Ligero para edge devices e inferencia continua con recursos acotados.',
-              color: 'amber'
-            },
-            {
-              id: 'smollm2-135m-instruct',
-              name: 'SmolLM2-135M Instruct',
-              quant: 'Q4_K_M',
-              vram: '~180 MB RAM',
-              tier: 'Ultra-Light',
-              desc: 'Filtrado de intenciones, routing y compresión ultra-rápida en CPU.',
-              color: 'blue'
-            },
-            {
-              id: 'gemma-4-2b-it',
-              name: 'Gemma-4-E2B-it',
-              quant: 'Q4_K_M',
-              vram: '~1.8 GB RAM',
-              tier: 'Reasoning Coordinated',
-              desc: 'Coordinador deliberativo nocturno con capacidad de razonamiento extenso.',
-              color: 'violet'
-            }
-          ].map((m) => (
-            <div
-              key={m.id}
-              onClick={() => setSelectedGgufModel(m.id)}
-              className={cn(
-                "p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between text-left",
-                selectedGgufModel === m.id
-                  ? "bg-violet-950/30 border-violet-500 text-slate-100 ring-1 ring-violet-500"
-                  : "bg-slate-950/50 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold font-mono text-slate-200">{m.name}</span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                    {m.quant}
+          {models?.detected_local_models && models.detected_local_models.length > 0 ? (
+            models.detected_local_models.map((m: any) => (
+              <div
+                key={m.id || m.name}
+                onClick={() => setSelectedGgufModel(m.id || m.name)}
+                className={cn(
+                  "p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between text-left",
+                  selectedGgufModel === (m.id || m.name)
+                    ? "bg-violet-950/30 border-violet-500 text-slate-100 ring-1 ring-violet-500"
+                    : "bg-slate-950/50 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold font-mono text-slate-200 truncate">{m.name}</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                      INSTALADO
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono mb-2 truncate" title={m.path}>
+                    {m.path}
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[9px] font-mono">
+                  <span className="text-slate-400 font-bold">{m.size_mb || Math.round((m.size_bytes || 0) / 1048576)} MB</span>
+                  <span className={cn(
+                    selectedGgufModel === (m.id || m.name) ? "text-violet-400 font-bold" : "text-slate-600"
+                  )}>
+                    {selectedGgufModel === (m.id || m.name) ? "● Seleccionado" : "Disponible"}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mb-2 leading-relaxed">{m.desc}</p>
               </div>
-              <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[9px] font-mono">
-                <span className="text-slate-500">{m.vram}</span>
-                <span className={cn(
-                  selectedGgufModel === m.id ? "text-violet-400 font-bold" : "text-slate-600"
-                )}>
-                  {selectedGgufModel === m.id ? "● Seleccionado" : m.tier}
-                </span>
-              </div>
+            ))
+          ) : (
+            <div className="col-span-full p-4 bg-slate-950/40 border border-dashed border-slate-800 rounded-lg text-center">
+              <p className="text-xs font-mono text-slate-400">Sin modelos detectados en el directorio local <code className="text-violet-400">models/</code></p>
+              <p className="text-[10px] text-slate-500 mt-1">Coloca archivos .gguf o carpetas de modelo en <code className="text-slate-400">models/</code> para que aparezcan aquí automáticamente.</p>
             </div>
-          ))}
+          )}
         </div>
 
         {/* Backend Provider & Endpoint Settings */}

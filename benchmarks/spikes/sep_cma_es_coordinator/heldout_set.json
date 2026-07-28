@@ -2,8 +2,8 @@
   "metadata": {
     "created": "2026-07-26",
     "source": "data\\audit.db",
-    "total_audit_rows": 212,
-    "multi_step_candidates": 61,
+    "total_audit_rows": 439,
+    "multi_step_candidates": 115,
     "scenarios_selected": 40,
     "train_count": 24,
     "heldout_count": 16
