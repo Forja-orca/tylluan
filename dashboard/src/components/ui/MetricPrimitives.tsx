@@ -60,7 +60,7 @@ export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
     pts.forEach((v, i) => {
       const x = pad + i * xStep;
       const y = toY(v);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
 
     // filled area
@@ -75,7 +75,7 @@ export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
     pts.forEach((v, i) => {
       const x = pad + i * xStep;
       const y = toY(v);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
