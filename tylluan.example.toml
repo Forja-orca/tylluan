@@ -53,6 +53,19 @@ decay_interval_secs = 300
 # SQLite WAL checkpoint interval (secs)
 checkpoint_interval_secs = 300
 
+# Local LLM inference via llama.cpp
+[inference.llama]
+# llama-server port (avoid Ollama 11434, LM Studio 1234, vLLM 8000, Gradio 7860)
+port = 9000
+n_gpu_layers = 0      # 0 = CPU only; set to 999 for all layers on GPU
+ctx_size = 2048
+threads = 0            # 0 = auto-detect CPU count
+batch_size = 512
+temperature = 0.7
+top_p = 0.95
+top_k = 64
+repeat_penalty = 1.1
+
 # Security: Sandbox, Access Control & Encryption
 [security]
 # Block dangerous intents (rm -rf, DROP TABLE, fork bombs, etc.) across the

@@ -104,6 +104,7 @@ fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> 
     m.insert("screenshot_tools", (GuildWeight::Light, vec!["path"]));
     m.insert("clipboard_tools", (GuildWeight::Light, vec!["path"]));
     m.insert("local_llm_proxy", (GuildWeight::Medium, vec!["command"]));
+    m.insert("llama_backend", (GuildWeight::Heavy, vec!["prompt"]));
     m.insert("biome_warden", (GuildWeight::Medium, vec!["query"]));
     m.insert("coordinator", (GuildWeight::Heavy, vec!["task"]));
     m.insert("audit", (GuildWeight::Heavy, vec!["path"]));
@@ -173,6 +174,7 @@ fn description_override(name: &str) -> Option<&'static str> {
         "coloquio_digest" => "Coloquio channel digest and summary",
         "whats_new" => "Unread messages and updates from channels",
         "night_reasoner" => "Nightly reasoning + Gemma-4-E2B coordinator: route_intent, reason_about, analyze_feedback",
+        "llama_backend" => "Local LLM inference via llama.cpp subprocess with GGUF models",
         "council" => "Multi-voice decision making and tradeoff analysis",
         "ast_surgeon" => "AST manipulation and code transformation",
         "audio_tools" => "Audio file processing and conversion",
@@ -661,7 +663,7 @@ mod tests {
             "audit", "bash", "browser", "code", "code_analysis", "code_graph", "code_reviewer",
             "coloquio", "coloquio_digest", "comfy_ui", "data_tools", "database", "deep_analysis", "deep_web_research",
             "docker", "filesystem", "formatter", "git", "ingest", "knowledge",
-            "mcp_bridge", "memory", "monitor", "n8n_bridge", "night_reasoner", "pdf", "scrapling", "search",
+            "mcp_bridge", "memory", "monitor", "n8n_bridge", "night_reasoner", "llama_backend", "pdf", "scrapling", "search",
             "sequential_thinking", "system_metrics", "vision", "vision_moondream", "websearch",
             // V1 Port — guilds/builders/plugins/, guilds/watchers/plugins/, guilds/wardens/plugins/, guilds/scholars/plugins/
             "audio_tools", "ffmpeg_tools", "screenshot_tools", "clipboard_tools",

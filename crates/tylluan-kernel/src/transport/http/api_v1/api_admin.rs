@@ -450,7 +450,78 @@ pub async fn system_status_handler(
     crate::transport::http::Utf8Json(status_json)
 }
 
-pub async fn test_connection_handler() -> impl IntoResponse { StatusCode::OK }
+#[derive(serde::Deserialize)]
+pub struct TestConnectionPayload {
+    pub endpoint: Option<String>,
+    pub url: Option<String>,
+    pub provider: Option<String>,
+}
+
+pub async fn test_connection_handler(
+    payload: Option<axum::Json<TestConnectionPayload>>,
+) -> impl IntoResponse {
+    let p = payload.map(|b| b.0);
+    let target_url = p.as_ref()
+        .and_then(|p| p.endpoint.clone().or_else(|| p.url.clone()))
+        .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
+
+    let provider = p.as_ref()
+        .and_then(|p| p.provider.clone())
+        .unwrap_or_else(|| "llama-server".to_string());
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                crate::transport::http::Utf8Json(serde_json::json!({
+                    "ok": false,
+                    "status": "error",
+                    "error": format!("Failed to build HTTP client: {}", e),
+                    "endpoint": target_url
+                })),
+            ).into_response();
+        }
+    };
+
+    let start = std::time::Instant::now();
+    let res = client.get(&target_url).send().await;
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match res {
+        Ok(response) => {
+            let status_code = response.status().as_u16();
+            (
+                StatusCode::OK,
+                crate::transport::http::Utf8Json(serde_json::json!({
+                    "ok": true,
+                    "status": "online",
+                    "http_status": status_code,
+                    "latency_ms": latency_ms,
+                    "provider": provider,
+                    "endpoint": target_url
+                })),
+            ).into_response()
+        }
+        Err(e) => {
+            (
+                StatusCode::OK,
+                crate::transport::http::Utf8Json(serde_json::json!({
+                    "ok": false,
+                    "status": "offline",
+                    "error": format!("Servidor en {} no responde: {}", target_url, e),
+                    "latency_ms": latency_ms,
+                    "provider": provider,
+                    "endpoint": target_url
+                })),
+            ).into_response()
+        }
+    }
+}
+
 pub async fn update_wsl_config_handler() -> impl IntoResponse { StatusCode::OK }
 
 pub async fn list_inference_providers_handler() -> impl IntoResponse { StatusCode::OK }
