@@ -82,37 +82,15 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     if (!bridge) return;
     setRepairing(true);
     try {
-      if (simulated) {
-        // Simulate repair locally
-        await new Promise(res => setTimeout(res, 800));
-        setReport(prev => {
-          if (!prev) return prev;
-          const rep = { ...prev };
-          if (target === 'guild' && name) {
-            rep.guilds = rep.guilds.map(g => g.name === name ? { ...g, running: true, issues: [] } : g);
-          } else if (target === 'storage') {
-            rep.storage.memory_db_ok = true;
-            rep.storage.silva_db_ok = true;
-          }
-          // Recalculate global status
-          const anyGuildsBad = rep.guilds.some(g => !g.running);
-          const storageBad = !rep.storage.memory_db_ok || !rep.storage.silva_db_ok;
-          rep.status = (anyGuildsBad || storageBad) ? 'degraded' : 'healthy';
-          if (rep.status === 'healthy') rep.suggestions = [];
-          return rep;
-        });
-        notify(`Simulated repair of ${name || target} successful`, 'info');
+      const res = await bridge.repairDoctor(target, name);
+      if (res && res.success) {
+        notify(res.message || `Reparación de ${name || target} completada exitosamente`, 'info');
+        await loadReport();
       } else {
-        const res = await bridge.repairDoctor(target, name);
-        if (res.success) {
-          notify(res.message || `Repaired ${name || target}`, 'info');
-          await loadReport();
-        } else {
-          notify(res.message || `Failed to repair ${name || target}`, 'error');
-        }
+        notify(res?.message || `Fallo en la reparación de ${name || target}`, 'error');
       }
     } catch (err: any) {
-      notify(`Repair error: ${err.message}`, 'error');
+      notify(`Error ejecutando reparación: ${err.message}`, 'error');
     } finally {
       setRepairing(false);
     }

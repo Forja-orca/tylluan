@@ -572,6 +572,8 @@ export class NexusBridge {
 
   // --- Scopes ---
   async getNodesByScopePrefix(prefix: string, limit = 100) { return scopes.getNodesByScopePrefix(this, prefix, limit); }
+  async getSecurityScopes() { return scopes.getSecurityScopes(this); }
+  async saveSecurityScopes(roles: { role: string; scopes: string[] }[]) { return scopes.saveSecurityScopes(this, roles); }
 
   // --- System ---
   async getHealth() { return system.getHealth(this); }
@@ -596,6 +598,7 @@ export class NexusBridge {
   async getSystemStatus() { return system.getSystemStatus(this); }
   async getSessions() { return system.getSessions(this); }
   async revokeSession(id: string) { return system.revokeSession(this, id); }
+  async resumeSession(sessionId: string) { return system.resumeSession(this, sessionId); }
   async getAuditTrail(agentId?: string, limit?: number) { return system.getAuditTrail(this, agentId, limit); }
   async getCoherenceGateStats() { return security.getCoherenceGateStats(this); }
   async getRecallFeedbackStats() { return security.getRecallFeedbackStats(this); }
@@ -607,6 +610,8 @@ export class NexusBridge {
   async clearSessionSandboxOverride(agentId: string) { return system.clearSessionSandboxOverride(this, agentId); }
   async rotateLogs() { return system.rotateLogs(this); }
   async getMetricsHistory() { return system.getMetricsHistory(this); }
+  async maintenance_onnx_clean() { return system.maintenance_onnx_clean(this); }
+  async maintenance_logs_compact() { return system.maintenance_logs_compact(this); }
 
   // --- Memory ---
   async getRepoMap() { return memory.getRepoMap(this); }
@@ -632,6 +637,7 @@ export class NexusBridge {
   async saveProjectSkill(name: string, content: string) { return memory.saveProjectSkill(this, name, content); }
   async deleteProjectSkill(name: string) { return memory.deleteProjectSkill(this, name); }
   async startBackgroundJob(intent: string) { return memory.startBackgroundJob(this, intent); }
+  async listBackgroundJobs() { return memory.listBackgroundJobs(this); }
   async getJobStatus(jobId: string) { return memory.getJobStatus(this, jobId); }
   async getSharedKnowledge(agentA: string, agentB: string) { return memory.getSharedKnowledge(this, agentA, agentB); }
   async getAgentIdentity(agentId: string) { return memory.getAgentIdentity(this, agentId); }
