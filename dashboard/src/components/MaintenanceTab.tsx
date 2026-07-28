@@ -80,6 +80,8 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       if (action === 'vacuum') await bridge.maintenance_vacuum();
       if (action === 'checkpoint') await bridge.maintenance_checkpoint();
       if (action === 'decay') await bridge.maintenance_decay();
+      if (action === 'onnx-clean') await bridge.maintenance_onnx_clean();
+      if (action === 'logs-compact') await bridge.maintenance_logs_compact();
       if (action === 'communities') await bridge.fetchRaw('/api/v1/silva/communities', { method: 'POST' });
       if (action === 'clean-orphans') {
         const res = await bridge.fetchRaw('/api/v1/maintenance/clean-orphans', { method: 'POST' });

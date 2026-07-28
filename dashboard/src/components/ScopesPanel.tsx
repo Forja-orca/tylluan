@@ -56,20 +56,13 @@ export function ScopesPanel({ bridge, notify }: Props) {
     if (!bridge) return;
     setLoading(true);
     try {
-      // Intentional endpoint call (fails if backend isn't ready)
       const res = await bridge.getNodesByScopePrefix(searchPrefix);
-      setNodes(res);
+      setNodes(res || []);
       setSimulated(false);
-    } catch (e) {
-      console.warn("Backend API not found or failed. Falling back to simulated scope query.");
-      setSimulated(true);
-      // Filter mock nodes based on prefix match
-      const filtered = MOCK_NODES.filter(n => {
-        if (!searchPrefix) return true;
-        const scope = n.owner_scope || '';
-        return scope === searchPrefix || scope.startsWith(searchPrefix + '/');
-      });
-      setNodes(filtered);
+    } catch (e: any) {
+      console.error("Error consultando nodos por ámbito:", e.message);
+      setSimulated(false);
+      setNodes([]);
     } finally {
       setLoading(false);
     }
