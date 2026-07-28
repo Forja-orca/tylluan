@@ -1,4 +1,10 @@
-# Tylluan v0.10.0 — Agent Instructions (Codex / OpenCode)
+# Tylluan v0.14.0 — Agent Instructions (Codex / OpenCode)
+
+> Este archivo es leído automáticamente por agentes OpenCode/Codex al conectar (Deep,
+> Mimo, cualquier futuro agente en ese runtime). Si está desactualizado, TODO agente
+> de esa clase arranca con información falsa desde el primer segundo — no es un
+> detalle cosmético. Confirmado 2026-07-28: este archivo llevaba meses con versión,
+> milestones y flota incorrectos mientras el equipo lo usaba a diario.
 
 ## Regla fundacional
 
@@ -28,12 +34,12 @@ cargo run -p tylluan-cli -- start
 
 ---
 
-## Estado actual — v0.13.0
+## Estado actual — v0.14.0
 
-**Tests:** 595 total (522 kernel lib + 61 link lib + 12 fsrs, CI-tracked) — 616 incluyendo tests de integración (link all-targets 88, evals 3, a2a_hitl 3) · 0 fallos  
-**HEAD commit:** `bee6ac5` (main) · **tag: v0.13.0** (en progreso)
+**Tests:** 544 lib tests (kernel) en verde, más suites de integración (federation_audit, a2a, etc.) — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
+**HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:4000/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
-### En progreso — ninguno (v0.12.0 cerrado, próximo: M16 BGE-M3 Benchmark)
+### En progreso (2026-07-28): backend `llama.cpp`+GGUF real (P0-P3 cerrado), limpieza del dashboard (fases troceadas y verificadas), diseño de auto-despertar de Coloquio (`docs/architecture/coloquio_wake_scheduling.md`).
 
 ### Milestones completados
 
@@ -149,17 +155,25 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 
 | Agente | Runtime | Rol |
 |--------|---------|-----|
-| **Claude Code (Sonnet 4.6)** | CLI / IDE | Tech lead — planes, briefings, síntesis, docs, memoria |
-| **Deep (DeepSeek V4 Flash)** | OpenCode IDE #1 | Implementación Rust — features complejas, razonamiento largo |
-| **DeepSeekPadawan (DeepSeek V4 Flash)** | OpenCode IDE #2 | Implementación Rust — segundo carril paralelo, tareas acotadas |
-| **Antigravity** | Browser + MCP | UI/UX/GUI — dashboard React, visualizaciones (inferencia limitada, reservar) |
-| **Qwen Desktop** | App escritorio | Investigación web + deep research — papers, repos, benchmarks; vía SSE MCP |
+| **Claude Code (Sonnet 5)** | CLI / IDE | Tech lead — planes, briefings, síntesis, docs, memoria, verificación cruzada |
+| **Deep** | OpenCode | Backend Rust + guilds Python — features complejas, cierre de bugs de fondo |
+| **Mimo** | OpenCode | Auditorías/refactor de dashboard — tareas acotadas y verificadas, no diseño abierto de una vez |
+| **Antigravity** | Gemini + MCP | UI/UX dashboard — tareas YA cerradas y acotadas por el tech lead (historial de datos simulados presentados como reales, verificar siempre antes de aceptar) |
+| **Qwen Desktop** | App escritorio | Investigación web + deep research — vía SSE MCP, sin acceso a disco |
 
 **Reglas de asignación:**
-- Rust / crates/ → Deep o DeepSeekPadawan (briefing previo con DoD y zonas excluidas)
+- Rust / crates/ → Deep (briefing previo con DoD y zonas excluidas)
+- Dashboard / UI → Mimo o Antigravity, en pasos pequeños verificados uno a uno, nunca un rediseño completo de golpe
 - Research web / papers / repos → Qwen Desktop
-- Dashboard / UI / visualizaciones → Antigravity (solo si hay budget disponible)
 - Orquestación / docs / arbitraje → Claude Code
+
+**Disciplina no negociable para cualquier agente de esta flota (aprendida a base de incidentes reales, 2026-07-28):**
+1. Nunca afirmar "cerrado"/"funciona" sin verificar tú mismo (leer el código, correr el build/test real, probar en vivo). `cargo check`/`cargo test` NO corren `clippy -D warnings` — CI sí; corre `cargo clippy -p tylluan-kernel -- -D warnings` tú mismo antes de dar un cambio Rust por listo.
+2. Un guild Python nuevo necesita registrarse en 3 sitios (`main.rs` lista `lazy_guilds`, `router/catalog.rs` weight+descripción+lista de nombres) o falla con "Unknown guild" en runtime — `discover_guilds()` no escanea subcarpetas, no basta con crear el `.py`.
+3. Dashboard: `pnpm`, nunca `npm` (dos lockfiles divergentes rompieron dependencias en producción, 2026-07-28).
+4. Si dos agentes tocan piezas complementarias (un endpoint + quien lo consume), acordar el esquema EXACTO (nombres de tabla/campo, puertos) en Coloquio antes de escribir código — pasó 2 veces el mismo día no hacerlo y hubo que arreglar el desajuste después.
+5. Nunca dejar trabajo sin commitear acumulándose — commits pequeños y verificados, no todo junto al final.
+6. Nunca atribuir una decisión a José que no diera — si actúas por iniciativa propia, dilo así.
 
 **Perfiles declarativos (M19-P5):** ver [ADR-009](docs/architecture/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
 
@@ -181,3 +195,5 @@ Al cerrar cualquier milestone, el agente que lo cierra ejecuta este checklist an
 **Quién verifica:** el Tech Lead (Claude Code) confirma que estos puntos están al día antes del visto bueno final — contrastado contra el archivo real, no solo el reporte del agente que cerró el milestone.
 
 **Por qué existe esta regla:** en la sesión del 2026-07-10 se encontró `STATUS.md` con 2 milestones de retraso (M22 y M23-P1 cerrados sin documentar). Este protocolo existe para que no se repita.
+
+**Escalada (2026-07-28):** este mismo archivo (`AGENTS.md`) llevaba meses reportando v0.10.0 mientras el repo estaba en v0.13-0.14, con la flota de agentes desactualizada. Como es el archivo que OpenCode/Codex carga automáticamente al conectar cualquier agente, la desactualización no es solo ruido documental — es contexto falso heredado por cada agente nuevo desde el primer segundo, coincidiendo con el hallazgo de investigación del mismo día sobre degradación de seguridad en el arranque en frío de un agente (arXiv:2606.07867). Revisar este archivo específicamente en cada cierre de milestone, no solo `STATUS.md`.

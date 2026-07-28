@@ -71,7 +71,6 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   const [searchResults, setSearchResults] = useState<GraphNode[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchPanel, setShowSearchPanel] = useState(false);
-  const [simulated, setSimulated] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Recent Sidebar State ---
@@ -105,10 +104,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
       let loadedEdges = res.edges as any || [];
       // Empty DB is normal for fresh installs — show empty state, not fake data
       if (loadedNodes.length === 0) {
-        setSimulated(false);
         notify('No memories found. Use tylluan_remember to add knowledge.', 'info');
-      } else {
-        setSimulated(false);
       }
       setResults(loadedNodes);
       setEdges(loadedEdges);
@@ -213,11 +209,6 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
         </div>
 
         <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 gap-1 items-center shrink-0">
-          {simulated && (
-            <span className="mr-2 px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold rounded flex items-center gap-1">
-              <ShieldAlert className="w-3 h-3" /> [SIMULADO]
-            </span>
-          )}
           <button 
             type="button" 
             onClick={() => setActiveSubView('graph')} 
