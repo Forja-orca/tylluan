@@ -54,13 +54,12 @@ export function VisionTab({ bridge, notify }: Props) {
     setResult('');
     setParsedResult(null);
     try {
-      let res;
       const endpoint = mode === 'analyze' ? 'vision_analyze' : mode === 'ocr' ? 'vision_ocr' : 'vision_extract';
       const body = mode === 'analyze' ? { image_path: imagePath, prompt } : 
                    mode === 'ocr' ? { image_path: imagePath } : 
                    { image_path: imagePath, schema: prompt };
 
-      res = await bridge.fetchRaw(`/api/v1/guilds/vision/call/${endpoint}`, {
+      const res = await bridge.fetchRaw(`/api/v1/guilds/vision/call/${endpoint}`, {
         method: 'POST',
         body: JSON.stringify(body)
       });

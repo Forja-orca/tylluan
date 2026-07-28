@@ -221,7 +221,7 @@ export async function deleteProjectSkill(client: Fetcher, name: string): Promise
         })
       });
     } catch (e) {
-      throw new Error('Project skills not implemented in backend yet.');
+      throw new Error('Project skills not implemented in backend yet.', { cause: e });
     }
   }
 }

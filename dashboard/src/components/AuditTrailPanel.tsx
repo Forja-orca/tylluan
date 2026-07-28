@@ -144,24 +144,29 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                     key={idx} 
                     className="hover:bg-slate-900/50 odd:bg-slate-900/10 transition-colors"
                   >
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2 py-1 rounded bg-slate-800/80 border border-slate-700 text-slate-300 font-mono text-[10px] font-medium leading-none">
-                        @{entry.agent_id}
+                    <td className="px-4 py-3.5">
+                      <span className={cn(
+                        "inline-flex items-center px-2 py-0.5 rounded border font-mono text-[10px] font-medium leading-none",
+                        entry.agent_id === 'unverified'
+                          ? "bg-slate-800/60 text-slate-400 border-slate-750"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      )}>
+                        {entry.agent_id === 'unverified' ? '@internal' : `@${entry.agent_id}`}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <span className="inline-flex items-center text-[11px] text-emerald-400 font-mono font-bold tracking-tight">
                         {entry.guild}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="max-w-md md:max-w-lg lg:max-w-2xl truncate text-[11px] text-slate-300 font-mono font-medium leading-normal" title={entry.intent_preview}>
+                    <td className="px-4 py-3.5">
+                      <div className="max-w-xs md:max-w-sm lg:max-w-md truncate text-[11px] text-slate-300 font-mono font-medium leading-normal" title={entry.intent_preview}>
                         {entry.intent_preview}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-4 py-3.5 text-center">
                       <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold font-mono uppercase tracking-wider border leading-none",
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold font-mono uppercase tracking-wider border leading-none whitespace-nowrap",
                         entry.allowed
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-red-500/10 text-red-400 border-red-500/20"

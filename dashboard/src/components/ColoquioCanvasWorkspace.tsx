@@ -130,7 +130,7 @@ ${bridgeHtml}
 <style>body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:1rem;}</style>
 </head><body><script>
 try { ${code} } catch(e) { document.body.innerHTML = '<pre style="color:#f87171">' + e + '</pre>'; }
-<\/script></body></html>`;
+</script></body></html>`;
   }
   if (['css'].includes(lang.toLowerCase())) {
     return `<!doctype html><html><head><meta charset="utf-8">

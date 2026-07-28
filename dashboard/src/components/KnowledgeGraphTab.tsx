@@ -100,8 +100,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
     setSearching(true);
     try {
       const res = await bridge.getSilvaGraph(500, false);
-      let loadedNodes = res.nodes as any || [];
-      let loadedEdges = res.edges as any || [];
+      const loadedNodes = res.nodes as any || [];
+      const loadedEdges = res.edges as any || [];
       // Empty DB is normal for fresh installs — show empty state, not fake data
       if (loadedNodes.length === 0) {
         notify('No memories found. Use tylluan_remember to add knowledge.', 'info');

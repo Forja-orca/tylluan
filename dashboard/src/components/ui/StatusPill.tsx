@@ -12,7 +12,7 @@ interface StatusPillProps {
 export function StatusPill({ status, label, className = '' }: StatusPillProps) {
   const norm = (status || '').toLowerCase();
 
-  let text = label || status;
+  const text = label || status;
   let colorClass = 'bg-slate-800 text-slate-400 border-slate-700';
   let Icon = Activity;
 

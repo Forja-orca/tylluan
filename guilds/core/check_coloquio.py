@@ -1,13 +1,16 @@
 """Coloquio polling agent for Deep — checks unread messages and reads new turns.
 
-Level B polling from coloquio_wake_scheduling.md: shell-polling universal
-fallback. Run this at the start of each session cycle to catch messages
-published since the last check. Does NOT commit, push, or modify repo state
-— reads only, per the turn 367 rule (only Claude Code touches the remote).
+Level B polling from coloquio_wake_scheduling.md. Run at start of each
+session cycle. Does NOT commit, push, or modify repo state — reads only,
+per turn 367 rule.
+
+Defaults to 'equipo' channel (team coordination). Other channels on request.
 
 Usage:
-  python guilds/core/check_coloquio.py          # one-shot check
-  python guilds/core/check_coloquio.py --watch  # continuous polling (Ctrl+C to stop)
+  python guilds/core/check_coloquio.py              # equipo only, latest turns
+  python guilds/core/check_coloquio.py --all         # all channels
+  python guilds/core/check_coloquio.py --watch       # continuous polling
+  python guilds/core/check_coloquio.py equipo mision-activa  # specific channels
 """
 import json
 import os
@@ -17,10 +20,25 @@ import urllib.request
 from pathlib import Path
 
 READER_ID = "deep"
-KERNEL_URL = "http://127.0.0.1:4000"
 CHECK_INTERVAL = 120  # seconds between checks in watch mode
 
-_last_turn = None
+# Only show these channels by default (team coordination).
+# Use --all or pass channel names to override.
+DEFAULT_CHANNELS = ["equipo"]
+
+# Messages matching these patterns are noise — don't show.
+NOISE_PATTERNS = [
+    "🔄 Starting scheduled auto-sync",
+    "Auto-sync: push to",
+    "failed: error sending request",
+    "🧹 Running periodic SQLite maintenance",
+    "🩺 System diagnostic started",
+    "kernel restarted",
+    "shutdown_initiated",
+]
+
+# Where to persist last-read state across sessions
+STATE_FILE = Path.home() / ".cache" / "tylluan" / "coloquio_last_read.json"
 
 
 def resolve_kernel():
@@ -28,13 +46,12 @@ def resolve_kernel():
     if port_file.exists():
         try:
             data = json.loads(port_file.read_text())
-            port = data.get("port", 4000)
-            return f"http://127.0.0.1:{port}"
+            return f"http://127.0.0.1:{data.get('port', 4000)}"
         except Exception:
             pass
     if "KERNEL_BASE" in os.environ:
         return os.environ["KERNEL_BASE"]
-    return KERNEL_URL
+    return "http://127.0.0.1:4000"
 
 
 def api_get(path, params=None):
@@ -47,8 +64,27 @@ def api_get(path, params=None):
         return json.loads(resp.read())
 
 
-def check_unread():
-    global _last_turn
+def load_state():
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def save_state(state):
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+
+def is_noise(content):
+    return any(p in content for p in NOISE_PATTERNS)
+
+
+def check_unread(channels_to_check, show_all=False):
+    state = load_state()
+
     try:
         data = api_get("/api/v1/coloquio/unread", {"reader": READER_ID})
     except Exception as e:
@@ -56,59 +92,92 @@ def check_unread():
         return
 
     channels = data if isinstance(data, list) else data.get("channels", [data])
-    total_unread = sum(c.get("unread_count", 0) for c in channels)
 
+    # Filter to requested channels
+    if not show_all:
+        channels = [c for c in channels
+                     if c.get("channel_id", c.get("id", "")) in channels_to_check]
+
+    total_unread = sum(c.get("unread_count", 0) for c in channels)
     if total_unread == 0:
-        if _last_turn is None:
-            print(f"[{time.strftime('%H:%M:%S')}] No unread messages for {READER_ID}")
+        print(f"[{time.strftime('%H:%M:%S')}] No new messages in: {', '.join(channels_to_check)}")
         return
 
-    print(f"[{time.strftime('%H:%M:%S')}] {total_unread} unread messages for {READER_ID}")
+    print(f"\n{'='*60}")
+    print(f"[{time.strftime('%H:%M:%S')}] {total_unread} unread messages")
+    print(f"{'='*60}")
 
+    new_turns = 0
     for ch in channels:
         unread = ch.get("unread_count", 0)
         if unread == 0:
             continue
         channel_id = ch.get("channel_id", ch.get("id", "?"))
-        print(f"  {channel_id}: {unread} unread (last read turn: {ch.get('last_read_turn', '?')})")
+        last_read = state.get(channel_id, 0)
 
         try:
             thread = api_get(f"/api/v1/coloquio/channels/{channel_id}")
             messages = thread.get("messages", []) if isinstance(thread, dict) else thread
-            for msg in messages:
+
+            # Only show messages newer than last_read
+            shown = 0
+            max_turn = last_read
+            for msg in reversed(messages):  # newest first
                 if not isinstance(msg, dict):
                     continue
                 turn = msg.get("turn", 0)
-                if _last_turn and turn <= _last_turn:
-                    continue
-                agent = msg.get("agent_id", "?")
+                if turn <= last_read:
+                    break
                 content = msg.get("content", "")
-                mention_me = "deep" in content.lower() or "equipo" in (channel_id or "").lower()
+                agent = msg.get("agent_id", "?") or "?"
 
-                prefix = ">>>" if mention_me else "   "
-                print(f"{prefix} Turn {turn} by {agent}: {content[:120]}...")
-                if mention_me and turn > (_last_turn or 0):
-                    _last_turn = turn
+                if is_noise(content):
+                    continue
+
+                shown += 1
+                new_turns += 1
+                max_turn = max(max_turn, turn)
+
+                mention = "deep" in content.lower()
+                prefix = "[>>>]" if mention else "     "
+                preview = content[:150].replace("\n", " ")
+                print(f"{prefix} T{turn} {agent}: {preview}...")
+
+            if max_turn > last_read:
+                state[channel_id] = max_turn
+
         except Exception as e:
             sys.stderr.write(f"  Error reading {channel_id}: {e}\n")
 
-    if _last_turn:
-        print(f"  Last seen turn: {_last_turn}")
+    if new_turns:
+        save_state(state)
+        print(f"\n  {new_turns} new turns since last check. State saved.")
+
+    # Quick summary: any mentions of me?
+    mentions = [m for m in channels_to_check if state.get(m, 0) > (load_state().get(m, 0) or 0)]
+    if mentions:
+        print(f"\n  Channels with new activity: {', '.join(mentions)}")
 
 
-def watch():
-    print(f"[check_coloquio] Watching for messages to {READER_ID} every {CHECK_INTERVAL}s...")
-    print(f"[check_coloquio] Press Ctrl+C to stop.\n")
+def watch(channels_to_check):
+    print(f"[check_coloquio] Watching {', '.join(channels_to_check)} every {CHECK_INTERVAL}s for {READER_ID}")
+    print("[check_coloquio] Ctrl+C to stop.\n")
     while True:
-        check_unread()
+        check_unread(channels_to_check)
         time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+
     if "--watch" in sys.argv or "-w" in sys.argv:
+        channels = args if args else DEFAULT_CHANNELS
         try:
-            watch()
+            watch(channels)
         except KeyboardInterrupt:
             print("\n[check_coloquio] Stopped.")
+    elif "--all" in sys.argv or "-a" in sys.argv:
+        check_unread([], show_all=True)
     else:
-        check_unread()
+        channels = args if args else DEFAULT_CHANNELS
+        check_unread(channels)
