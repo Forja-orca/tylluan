@@ -702,6 +702,8 @@ async fn main() -> anyhow::Result<()> {
         ("deep_web_research", "guilds.core.deep_web_research", false),
         ("coloquio_digest",   "guilds.core.coloquio_digest",   false),
         ("coordinator",       "guilds.core.coordinator",       false),
+        ("night_reasoner",    "guilds.core.night_reasoner",   false),
+        ("llama_backend",     "guilds.core.llama_backend",    false),
         ("git",               "guilds.builders.plugins.git",   false),
         ("scheduler",         "guilds.core.scheduler",         true),
     ];
