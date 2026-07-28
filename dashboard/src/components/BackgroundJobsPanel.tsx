@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Cpu,
   ServerOff,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { BackgroundJob } from '../lib/nexus-bridge';
+import { usePolling } from '../hooks/usePolling';
 
 interface BackgroundJobsPanelProps {
   bridge: any;
@@ -51,11 +52,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
     }
   };
 
-  useEffect(() => {
-    loadJobs();
-    const interval = setInterval(loadJobs, 15000);
-    return () => clearInterval(interval);
-  }, [bridge]);
+  usePolling('bg-jobs-list', loadJobs, { interval: 'standard', enabled: !!bridge });
 
   const handleStartJob = async () => {
     if (!intent.trim() || !bridge) return;
@@ -83,11 +80,12 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   };
 
   // Poll a real job's status every 3s until it's completed/failed.
-  const pollJob = (jobId: string) => {
+  const pollJob = useCallback((jobId: string) => {
     if (pollRef.current[jobId]) return;
     pollRef.current[jobId] = setInterval(async () => {
       try {
-        const { status, text } = await bridge.getJobStatus(jobId);
+        const { status, text } = await bridge?.getJobStatus(jobId) ?? {};
+        if (!status) return;
         setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status, result_text: text } : j));
         if (status !== 'pending') {
           clearInterval(pollRef.current[jobId]);
@@ -97,17 +95,15 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
         // transient fetch failure -- keep polling
       }
     }, 3000);
-  };
+  }, [bridge]);
 
-  // Elapsed-time ticker for pending jobs.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setJobs(prev => prev.map(j => j.status === 'pending'
-        ? { ...j, elapsed_secs: Math.floor((Date.now() - new Date(j.started_at).getTime()) / 1000) }
-        : j));
-    }, 1000);
-    return () => clearInterval(timer);
+  // Elapsed-time ticker for pending jobs (via coordinator instead of raw setInterval).
+  const tickElapsed = useCallback(() => {
+    setJobs(prev => prev.map(j => j.status === 'pending'
+      ? { ...j, elapsed_secs: Math.floor((Date.now() - new Date(j.started_at).getTime()) / 1000) }
+      : j));
   }, []);
+  usePolling('bg-jobs-elapsed', tickElapsed, { interval: 'fast', enabled: true });
 
   // Real-time updates via the guild_job_complete SSE event (params: job_id, guild,
   // status, summary, ts -- see emit_job_complete in background_jobs.rs).
