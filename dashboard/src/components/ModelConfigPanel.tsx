@@ -35,6 +35,7 @@ export function ModelConfigPanel({ bridge }: Props) {
   const [testingConn, setTestingConn] = useState(false);
   const [connStatus, setConnStatus] = useState<{ ok: boolean; msg: string; latency?: number } | null>(null);
   const [savingGguf, setSavingGguf] = useState(false);
+  const [savingRoles, setSavingRoles] = useState(false);
 
   // Dynamic system status & Role Assignment
   const [sysStatus, setSysStatus] = useState<any>(null);
@@ -198,6 +199,28 @@ export function ModelConfigPanel({ bridge }: Props) {
       alert(`Error guardando configuración GGUF: ${e.message || String(e)}`);
     }
     setSavingGguf(false);
+  };
+
+  const handleSaveRoles = async () => {
+    if (!bridge) return;
+    setSavingRoles(true);
+    try {
+      const res = await bridge.fetch('/api/v1/config/inference-llama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primary_model: rolePrimary,
+          coordinator_model: roleCoordinator,
+          routing_model: roleRouting,
+          vision_model: roleVision,
+        })
+      });
+      if (res?.error) throw new Error(res.error);
+      alert('Asignación de modelos por rol guardada exitosamente en tylluan.toml.');
+    } catch (e: any) {
+      alert(`Error guardando asignación de modelos por rol: ${e.message || String(e)}`);
+    }
+    setSavingRoles(false);
   };
 
   const handleSave = async () => {
@@ -490,13 +513,23 @@ export function ModelConfigPanel({ bridge }: Props) {
 
       {/* Model Assignment Per Role */}
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-cyan-400" /> Asignación de Modelos por Rol Cognitivo
-          </h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Cada módulo dentro de Tylluan requiere diferentes características de tamaño, velocidad y capacidad de razonamiento.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400" /> Asignación de Modelos por Rol Cognitivo
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Cada módulo dentro de Tylluan requiere diferentes características de tamaño, velocidad y capacidad de razonamiento.
+            </p>
+          </div>
+          <button
+            onClick={handleSaveRoles}
+            disabled={savingRoles}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 text-xs font-mono font-bold rounded-lg transition-all disabled:opacity-50 shrink-0 cursor-pointer"
+          >
+            <Save className={cn("w-3.5 h-3.5", savingRoles && "animate-spin")} />
+            {savingRoles ? 'Guardando...' : 'Guardar Asignación de Roles'}
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

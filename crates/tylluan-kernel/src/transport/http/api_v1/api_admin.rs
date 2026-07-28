@@ -1188,6 +1188,9 @@ pub async fn maintenance_clean_orphans_handler(State(state): State<Arc<HttpState
 #[derive(serde::Deserialize)]
 pub struct InferenceLlamaConfigRequest {
     pub primary_model: Option<String>,
+    pub coordinator_model: Option<String>,
+    pub routing_model: Option<String>,
+    pub vision_model: Option<String>,
     pub provider: Option<String>,
     pub endpoint: Option<String>,
     pub port: Option<u16>,
@@ -1221,14 +1224,15 @@ pub async fn set_inference_llama_config_handler(
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("Failed to parse tylluan.toml: {}", e) }))).into_response(),
     };
 
+    let root = match doc.as_table_mut() {
+        Some(t) => t,
+        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": "tylluan.toml root is not a TOML table"
+        }))).into_response(),
+    };
+
     // Ensure [inference] and [inference.llama] tables exist
     {
-        let root = match doc.as_table_mut() {
-            Some(t) => t,
-            None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": "tylluan.toml root is not a TOML table"
-            }))).into_response(),
-        };
         if !root.contains_key("inference") {
             root.insert("inference".to_string(), toml::Value::Table(toml::map::Map::new()));
         }
@@ -1245,6 +1249,12 @@ pub async fn set_inference_llama_config_handler(
         // Patch [inference] top-level fields
         if let Some(ref model) = req.primary_model {
             inf.insert("primary_model".to_string(), toml::Value::String(model.clone()));
+        }
+        if let Some(ref model) = req.coordinator_model {
+            inf.insert("coordinator_model".to_string(), toml::Value::String(model.clone()));
+        }
+        if let Some(ref model) = req.routing_model {
+            inf.insert("routing_model".to_string(), toml::Value::String(model.clone()));
         }
 
         // Patch [inference.llama] sub-fields
@@ -1265,6 +1275,16 @@ pub async fn set_inference_llama_config_handler(
         if let Some(v)     = req.top_p         { llama.insert("top_p".to_string(), toml::Value::Float(v as f64)); }
         if let Some(v)     = req.top_k         { llama.insert("top_k".to_string(), toml::Value::Integer(v as i64)); }
         if let Some(v)     = req.repeat_penalty { llama.insert("repeat_penalty".to_string(), toml::Value::Float(v as f64)); }
+    }
+
+    // Patch [vision] section separately to avoid mutable borrow conflict
+    if let Some(ref model) = req.vision_model {
+        if !root.contains_key("vision") {
+            root.insert("vision".to_string(), toml::Value::Table(toml::map::Map::new()));
+        }
+        if let Some(v) = root.get_mut("vision").and_then(|v| v.as_table_mut()) {
+            v.insert("model_path".to_string(), toml::Value::String(model.clone()));
+        }
     }
 
     let new_raw = match toml::to_string_pretty(&doc) {
