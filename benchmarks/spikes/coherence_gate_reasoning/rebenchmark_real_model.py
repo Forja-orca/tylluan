@@ -63,7 +63,10 @@ def main():
     print("=" * 72)
 
     cases = json.loads(CASES_FILE.read_text(encoding="utf-8"))["cases"]
-    print(f"Loaded {len(cases)} real cases")
+    # Limit to first N for quick benchmark (52 cases × 16s = 14 min)
+    sample_size = min(len(cases), int(sys.argv[1]) if len(sys.argv) > 1 else 20)
+    cases = cases[:sample_size]
+    print(f"Sample size: {len(cases)} cases (full set: 52)")
 
     labels = [label_to_keep(c["human_label"]) for c in cases]
     majority_keep = sum(labels)
