@@ -159,7 +159,7 @@ impl CoherenceGate {
                 "{}\n\nQUERY: {}\nCONTENT: {}\n\nRespond with exactly: DECISION: KEEP or DECISION: REJECT on the first line, followed by one brief sentence of reasoning.",
                 REASONING_PROMPT_V3,
                 query,
-                &node.content
+                node.content
             );
 
             match call_reasoning_backend(&prompt).await {
