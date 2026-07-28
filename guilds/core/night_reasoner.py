@@ -1,19 +1,18 @@
 """NightReasoner guild: Small model reasoning and analysis.
 
-Uses three models in a cascade, each for what it's actually built for:
+Uses three models in a cascade, each for what it's built for:
 1. BGE-M3 embeddings (already in kernel, 1024d) — intent routing via cosine
    similarity with pre-computed guild embeddings. Classification, not chat.
-2. Gemma-4-E2B (2.3B, loaded ONNX) — reasoning tasks where actual generation
-   is needed (digesting feedback, generating nightly insights).
-3. SmolLM2-135M — fallback for simple pattern summarization when Gemma
+2. llama_backend guild (llama.cpp + GGUF) — reasoning tasks where actual
+   text generation is needed (digesting feedback, nightly insights).
+3. SmolLM2-135M — fallback for simple pattern summarization when llama
    is unavailable.
 
 Architecture rule (M19-P5): routing is a CLASSIFICATION problem, solved with
 embeddings + similarity. Chat models generate text; they don't classify.
-Gemma-4 is for REASONING (ADR-010 §7 Point B), not routing (Point A).
+llama_backend is for REASONING (ADR-010 §7 Point B), not routing (Point A).
 
-Not critical path — Python/ort is acceptable for non-blocking async guilds.
-If spike validates (GO), Rust engine replaces selected paths.
+Not critical path — Python is acceptable for non-blocking async guilds.
 """
 import json, os, time, sqlite3, sys, re
 from pathlib import Path
@@ -29,22 +28,10 @@ _SMOL_KV_HEADS = 3
 _SMOL_HEAD_DIM = 64
 _SMOL_VOCAB = 49152
 
-# ── Gemma-4-E2B config (primary coordinator) ───────────────────────────────
-_GEMMA_CACHE = Path.home() / ".cache/huggingface/hub/models--onnx-community--gemma-4-E2B-it-ONNX"
-_GEMMA_LAYERS = 35
-_GEMMA_KV_HEADS = 1          # MQA — 1 KV head
-_GEMMA_HEAD_DIM = 256        # per KV head
-_GEMMA_HIDDEN = 1536         # d_model
-_GEMMA_VOCAB = 262144
-_GEMMA_PLE_DIM = 256         # per-layer embedding dimension
-_EOS_TOKENS = {1, 106}       # Gemma-4 EOS token IDs
-
 _MAX_NEW_TOKENS = 128
 
 # ── Lazy model sessions ─────────────────────────────────────────────────────
 _smol_session = None
-_gemma_embed = None
-_gemma_decoder = None
 _tokenizer = None
 
 # ── Model discovery ─────────────────────────────────────────────────────────
@@ -56,20 +43,10 @@ def _find_model(cache_root: Path, pattern: str = "onnx/model_quantized.onnx"):
             return str(snap)
     return None
 
-def _find_gemma_component(component: str):
-    """Find a Gemma-4 ONNX component file (q4)."""
-    for snap in _GEMMA_CACHE.glob(f"snapshots/*/onnx/{component}.onnx"):
-        if snap.exists():
-            return str(snap)
-    return None
-
-def _gemma_available():
-    return _find_gemma_component("decoder_model_merged_q4") is not None
-
 def _smol_available():
     return _find_model(_SMOL_CACHE) is not None
 
-# ── Tokenizer (shared, tries Gemma first) ───────────────────────────────────
+# ── Tokenizer (shared) ───────────────────────────────────────────────────
 
 def _get_tokenizer():
     global _tokenizer
@@ -78,7 +55,6 @@ def _get_tokenizer():
     try:
         from tokenizers import Tokenizer
         for cache_name in [
-            "models--onnx-community--gemma-4-E2B-it-ONNX",
             "models--HuggingFaceTB--SmolLM2-135M-Instruct",
             "models--onnx-community--SmolLM2-135M-Instruct-ONNX",
         ]:
@@ -158,201 +134,35 @@ def _generate_smol(prompt, max_tokens=None):
         attention_mask = np.ones((1, past_len + 1), dtype=np.int64)
     return _decode_smol(generated) if generated else "[no output]"
 
-# ── Gemma-4 coordinator path ────────────────────────────────────────────────
+# -- llama_backend integration (P3) --
+# Replaces the manual ONNX Gemma-4 loop deleted in P3.
+# Calls llama_backend.py guild which manages llama-server subprocess.
+# Falls back to SmolLM2-135M if llama_backend is unavailable.
 
-def _log_model_structure(session, label):
-    """Log every input and output of an ONNX session with name and shape.
-    This is the structural diagnostic that was missing before — hardcoded shape
-    assumptions killed three attempts today."""
-    sys.stderr.write(f"[night_reasoner] === {label} model structure ===\n")
-    for inp in session.get_inputs():
-        sys.stderr.write(f"  INPUT  {inp.name}: shape={inp.shape}, type={inp.type}\n")
-    for out in session.get_outputs():
-        sys.stderr.write(f"  OUTPUT {out.name}: shape={out.shape}, type={out.type}\n")
-    sys.stderr.write(f"[night_reasoner] === end {label} ===\n")
-
-def _load_gemma():
-    global _gemma_embed, _gemma_decoder
-    if _gemma_decoder is not None:
-        return _gemma_embed, _gemma_decoder
-    import onnxruntime as ort
-
-    embed_path = _find_gemma_component("embed_tokens_q4")
-    decoder_path = _find_gemma_component("decoder_model_merged_q4")
-    if not embed_path or not decoder_path:
-        raise RuntimeError(f"Gemma-4-E2B not found in cache (embed={embed_path}, decoder={decoder_path})")
-
-    opts = ort.SessionOptions()
-    opts.intra_op_num_threads = 4
-    providers = ort.get_available_providers()
-    gpu = [p for p in providers if p not in ('CPUExecutionProvider', 'AzureExecutionProvider')]
-    provider_list = gpu + ['CPUExecutionProvider'] if gpu else ['CPUExecutionProvider']
-
-    sys.stderr.write(f"[night_reasoner] Gemma providers: {provider_list}\n")
-    _gemma_embed = ort.InferenceSession(embed_path, opts, providers=provider_list)
-    _gemma_decoder = ort.InferenceSession(decoder_path, opts, providers=provider_list)
-
-    _log_model_structure(_gemma_embed, "embed_tokens_q4")
-    _log_model_structure(_gemma_decoder, "decoder_model_merged_q4")
-
-    return _gemma_embed, _gemma_decoder
-
-def _init_gemma_kv(decoder_session, batch_size=1):
-    """Initialize KV cache for Gemma-4 decoder.
-
-    Uses the same pattern as the official ONNX Runtime Python example:
-    past_key_values are always [batch, num_kv_heads, seq_len=0, head_dim].
-    Dimensions 0 (batch) and 2 (seq_len) are dynamic; 1 (num_heads) and
-    3 (head_dim) are fixed in the ONNX graph and we read them directly.
-    """
-    kv_cache = {}
-    for inp in decoder_session.get_inputs():
-        if inp.name.startswith("past_key_values"):
-            s = inp.shape
-            dtype = np.float32 if inp.type == "tensor(float)" else np.float16
-            # Dynamic dims in ONNX shape can be strings ('batch_size', 'past_sequence_length') or ints
-            b = batch_size if (s[0] is None or isinstance(s[0], str)) else int(s[0])
-            h = 1 if (s[1] is None or isinstance(s[1], str)) else int(s[1])
-            d = 256 if (s[3] is None or isinstance(s[3], str)) else int(s[3])
-            kv_cache[inp.name] = np.zeros([b, h, 0, d], dtype=dtype)
-    # Verify every past_key_values input has a corresponding present output
-    present_names = [o.name for o in decoder_session.get_outputs() if o.name.startswith("present.")]
-    for pn in present_names:
-        kv_name = pn.replace("present.", "past_key_values.")
-        if kv_name not in kv_cache:
-            sys.stderr.write(f"[night_reasoner] WARNING: {pn} has no matching past_key_values input! "
-                           f"Known KV inputs: {list(kv_cache.keys())}\n")
-    return kv_cache
-
-def _tokenize_gemma(text, max_len=200):
-    """Tokenize for Gemma-4 using the 262K vocab tokenizer."""
-    tok = _get_tokenizer()
-    if tok is not None:
-        enc = tok.encode(text)
-        ids = enc.ids[:max_len]
-        # Ensure BOS token (2) is present for Gemma-4
-        if not ids or ids[0] != 2:
-            ids = [2] + ids
-        return np.array([ids], dtype=np.int64)
-    raise RuntimeError("No tokenizer available for Gemma-4")
-
-def _decode_gemma(token_ids):
-    tok = _get_tokenizer()
-    if tok is not None:
-        text = tok.decode(token_ids)
-        return text
-    return f"[{len(token_ids)} tokens]"
-
-def _sample_token(logits_row, temperature=1.0, top_p=0.95, top_k=64, rng=None):
-    """Top-k + top-p (nucleus) sampling, per Google DeepMind's Gemma 4 model
-    card recommended config (temperature=1.0, top_p=0.95, top_k=64). Greedy
-    argmax on this QAT-quantized checkpoint was found to degenerate into
-    gibberish beyond 1-2 tokens on real reasoning/tool-calling prompts
-    (Coloquio 2026-07-27) -- this is the documented alternative, not yet
-    confirmed to fix it, hence exposed as an opt-in `sampling=True` path
-    rather than replacing the existing greedy default used by the
-    DeepEval judge (which only needs a reliable single first token).
-    """
-    rng = rng or np.random.default_rng()
-    logits = logits_row.astype(np.float64) / max(temperature, 1e-6)
-    top_k = min(top_k, logits.shape[-1])
-    top_idx = np.argpartition(logits, -top_k)[-top_k:]
-    top_logits = logits[top_idx]
-    probs = np.exp(top_logits - top_logits.max())
-    probs /= probs.sum()
-    order = np.argsort(-probs)
-    sorted_idx = top_idx[order]
-    sorted_probs = probs[order]
-    cumulative = np.cumsum(sorted_probs)
-    cutoff = np.searchsorted(cumulative, top_p) + 1
-    cutoff = max(cutoff, 1)
-    nucleus_idx = sorted_idx[:cutoff]
-    nucleus_probs = sorted_probs[:cutoff]
-    nucleus_probs = nucleus_probs / nucleus_probs.sum()
-    return int(rng.choice(nucleus_idx, p=nucleus_probs))
-
-
-def _generate_gemma(prompt, max_tokens=None, sampling=False, temperature=1.0, top_p=0.95, top_k=64, seed=None):
-    """Generate with Gemma-4-E2B using embed_tokens + decoder_merged pattern.
-
-    sampling=False (default): greedy argmax, unchanged behavior for existing
-    callers (route_intent-era code, the DeepEval judge — both only need a
-    reliable first token, and greedy keeps that deterministic).
-    sampling=True: real top-k/top-p/temperature sampling per the model
-    card's recommended config, for exploring reasoning/tool-calling prompts
-    where greedy degenerated into gibberish.
-    """
-    embed, decoder = _load_gemma()
-    max_tokens = max_tokens or _MAX_NEW_TOKENS
-    rng = np.random.default_rng(seed) if sampling else None
-
-    input_ids = _tokenize_gemma(prompt, max_len=300)
-    seq_len = input_ids.shape[1]
-    attention_mask = np.ones((1, seq_len), dtype=np.int64)
-    position_ids = np.arange(seq_len, dtype=np.int64).reshape(1, -1)
-    num_logits_to_keep = np.array(1, dtype=np.int64)
-
-    # Discover KV cache structure from decoder inputs
-    # Hardcode KV cache input names; we discover output names dynamically
-    kv_cache = _init_gemma_kv(decoder, batch_size=1)
-
-    # Discover output names for KV present values
-    present_names = [o.name for o in decoder.get_outputs() if o.name.startswith("present.")]
-
-    generated = []
-    for step in range(max_tokens):
-        # Embed: input_ids → inputs_embeds + per_layer_inputs
-        inputs_embeds, per_layer_inputs = embed.run(None, {"input_ids": input_ids})
-
-        decoder_inputs = {
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "per_layer_inputs": per_layer_inputs,
-            "position_ids": position_ids,
-            "num_logits_to_keep": num_logits_to_keep,
-            **kv_cache,
-        }
-        outputs = decoder.run(None, decoder_inputs)
-        logits = outputs[0]
-
-        # Update KV cache from present outputs
-        for j, name in enumerate(present_names):
-            kv_cache[name.replace("present.", "past_key_values.")] = outputs[1 + j]
-
-        if sampling:
-            next_token = _sample_token(logits[0, -1, :], temperature, top_p, top_k, rng)
-        else:
-            next_token = int(np.argmax(logits[0, -1, :]))
-        generated.append(next_token)
-
-        if next_token in _EOS_TOKENS:
-            break
-
-        # Prepare for next step: single token
-        input_ids = np.array([[next_token]], dtype=np.int64)
-        past_len = kv_cache[present_names[0].replace("present.", "past_key_values.")].shape[2]
-        position_ids = np.array([[past_len]], dtype=np.int64)
-        attention_mask = np.ones((1, past_len + 1), dtype=np.int64)
-
-        if step % 20 == 0:
-            sys.stderr.write(f"  gemma token {step+1}/{max_tokens}\n")
-
-    return _decode_gemma(generated) if generated else "[no output]"
-
-# ── Auto-select best model for task ─────────────────────────────────────────
-
-_USE_GEMMA = None
-
-def _use_gemma():
-    global _USE_GEMMA
-    if _USE_GEMMA is not None:
-        return _USE_GEMMA
-    _USE_GEMMA = _gemma_available()
-    if _USE_GEMMA:
-        sys.stderr.write("[night_reasoner] Gemma-4-E2B available — using as primary coordinator\n")
-    else:
-        sys.stderr.write("[night_reasoner] Gemma-4-E2B not found — falling back to SmolLM2-135M\n")
-    return _USE_GEMMA
+def _reason_with_llama(prompt, max_tokens=128):
+    """Call llama_backend guild for text generation. Falls back to SmolLM2."""
+    try:
+        import urllib.request as _urllib
+        data = json.dumps({
+            "intent": "query_model",
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+        }).encode("utf-8")
+        req = _urllib.Request(
+            f"{_KERNEL_URL}/api/v1/guilds/llama_backend/tools/query_model",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _urllib.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            if "content" in result and result["content"]:
+                return json.loads(result["content"][0])["text"]
+            return result.get("text", "[llama_backend: empty response]")
+    except Exception as e:
+        sys.stderr.write(f"[night_reasoner] llama_backend unavailable: {e}\n")
+        return _generate_smol(prompt, max_tokens=min(max_tokens, 50))
 
 # ── MCP Tools ───────────────────────────────────────────────────────────────
 
@@ -361,7 +171,7 @@ def analyze_feedback(min_age_secs: int = 300) -> str:
     """Analyze today's recall feedback and generate a nightly reasoning report.
 
     Uses SmolLM2-135M for lightweight pattern summarization (this is a
-    simple aggregation task, not a routing decision — Gemma-4 would be
+    simple aggregation task, not a routing decision — llama_backend would be
     overkill here).
 
     Args:
@@ -438,23 +248,14 @@ Write a 2-sentence recommendation for tomorrow."""
 
 @mcp.tool()
 def reason_about(query: str) -> str:
-    """Ask the coordinator model to reason about a specific question.
+    """Ask llama_backend to reason about a specific question.
 
-    Uses Gemma-4-E2B (2.3B) when available, falls back to SmolLM2-135M.
-    For testing reasoning capability — not wired to production paths.
+    Uses llama.cpp GGUF backend when available, falls back to SmolLM2-135M.
 
     Args:
         query: What to reason about.
     """
-    if _use_gemma():
-        try:
-            return _generate_gemma(query, max_tokens=64)
-        except Exception as e:
-            return f"[Gemma-4 error, fallback: {e}]"
-    try:
-        return _generate_smol(query, max_tokens=50)
-    except Exception as e:
-        return f"[SmolLM2 error: {e}]"
+    return _reason_with_llama(query, max_tokens=128)
 
 # ── Embedding router (replaces chat-based route_intent) ─────────────────────
 # Architecture: this is a CLASSIFIER, not a chat model. Uses BGE-M3 embeddings
