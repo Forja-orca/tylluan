@@ -103,44 +103,19 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
       const res = await bridge.getSilvaGraph(500, false);
       let loadedNodes = res.nodes as any || [];
       let loadedEdges = res.edges as any || [];
-      // If we loaded correctly but there are NO nodes (fresh DB) or API doesn't support provenance yet, inject mocks for testing:
-      if (loadedNodes.length === 0 || !loadedNodes.some((n: any) => n.provenance)) {
-        setSimulated(true);
-        loadedNodes = [
-          { id: 'mock:1', node_type: 'entity', content: 'Mock user direct node', provenance: 'user_direct', weight: 0.95 },
-          { id: 'mock:2', node_type: 'concept', content: 'Mock agent generated node', provenance: 'agent_generated', weight: 0.8 },
-          { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
-          { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
-          { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
-          { id: 'mock:6', node_type: 'consolidated_summary', content: 'Mock consolidated synthesis node combining insights from multiple sources.', provenance: 'agent_generated', weight: 0.99 },
-          ...loadedNodes
-        ];
-        loadedEdges = [
-          { source: 'mock:1', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
-          { source: 'mock:2', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
-          ...loadedEdges
-        ];
+      // Empty DB is normal for fresh installs — show empty state, not fake data
+      if (loadedNodes.length === 0) {
+        setSimulated(false);
+        notify('No memories found. Use tylluan_remember to add knowledge.', 'info');
       } else {
         setSimulated(false);
       }
       setResults(loadedNodes);
       setEdges(loadedEdges);
     } catch (e) {
-      notify('Failed to load recent memories', 'error');
-      // Mock fallback on error
-      setSimulated(true);
-      setResults([
-        { id: 'mock:1', node_type: 'entity', content: 'Mock user direct node', provenance: 'user_direct', weight: 0.95 },
-        { id: 'mock:2', node_type: 'concept', content: 'Mock agent generated node', provenance: 'agent_generated', weight: 0.8 },
-        { id: 'mock:3', node_type: 'lesson', content: 'Mock federation peer node from external network', provenance: 'federation_peer', weight: 0.4 },
-        { id: 'mock:4', node_type: 'identity', content: 'Mock guild output node', provenance: 'guild_output', weight: 0.7 },
-        { id: 'mock:5', node_type: 'entity', content: 'Mock unverified external data', provenance: 'unverified', weight: 0.2 },
-        { id: 'mock:6', node_type: 'consolidated_summary', content: 'Mock consolidated synthesis node combining insights from multiple sources.', provenance: 'agent_generated', weight: 0.99 },
-      ]);
-      setEdges([
-        { source: 'mock:1', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
-        { source: 'mock:2', target: 'mock:6', type: 'consolidated_into', weight: 1.0 },
-      ]);
+      notify('Failed to load knowledge graph', 'error');
+      setResults([]);
+      setEdges([]);
     }
     setSearching(false);
   }, [bridge, notify]);

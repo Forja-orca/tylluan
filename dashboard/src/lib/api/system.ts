@@ -57,16 +57,18 @@ export async function getGuildHealth(client: Fetcher): Promise<any[]> {
   }
 }
 
-export async function getApprovals(client: Fetcher): Promise<any> {
-  return await client.fetch('/api/v1/system/approvals');
+// Approval actions are handled via tylluan_do MCP tool (plan mode).
+// No dedicated HTTP endpoint for approvals exists.
+export async function getApprovals(_client: Fetcher): Promise<any> {
+  return []; // backend not wired — approvals go through tylluan_do plan mode
 }
 
-export async function approveAction(client: Fetcher, id: string): Promise<any> {
-  return await client.fetch(`/api/v1/system/approvals/${id}/approve`, { method: 'POST' });
+export async function approveAction(_client: Fetcher, _id: string): Promise<any> {
+  return null;
 }
 
-export async function rejectAction(client: Fetcher, id: string): Promise<any> {
-  return await client.fetch(`/api/v1/system/approvals/${id}/reject`, { method: 'POST' });
+export async function rejectAction(_client: Fetcher, _id: string): Promise<any> {
+  return null;
 }
 
 export async function getGuilds(client: Fetcher): Promise<any> {

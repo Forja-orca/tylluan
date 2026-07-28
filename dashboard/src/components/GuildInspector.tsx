@@ -202,7 +202,7 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
           </div>
           <h2 className="text-xl font-bold tracking-tight text-slate-100 mt-2 flex items-center gap-2">
             <Layers className="w-5 h-5 text-[#00F5D4]" />
-            42-Guild Inspector &amp; FastMCP Tool Tester
+             {guilds.length}-Guild Inspector &amp; FastMCP Tool Tester
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Test and inspect parameters of registered guilds and tools directly on the kernel.
@@ -242,7 +242,7 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
               type="text"
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Search 42 guilds..."
+              placeholder="Search guilds..."
               className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-850 focus:border-[#00F5D4]/50 text-slate-100 text-xs rounded-xl outline-none"
             />
           </div>

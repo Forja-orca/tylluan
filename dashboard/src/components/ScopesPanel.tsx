@@ -8,44 +8,6 @@ interface Props {
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
-const MOCK_NODES: GraphNode[] = [
-  {
-    id: "node:1",
-    type: "entity",
-    node_type: "entity",
-    content: "Alice's general profile data and key-value store mapping preferences.",
-    owner_scope: "user:alice"
-  },
-  {
-    id: "node:2",
-    type: "concept",
-    node_type: "concept",
-    content: "Active project notes for Q3 including roadmap and milestones.",
-    owner_scope: "user:alice/session:s1"
-  },
-  {
-    id: "node:3",
-    type: "lesson",
-    node_type: "lesson",
-    content: "Learned context about STUN network routing and NAT traversal techniques.",
-    owner_scope: "user:alice/session:s1/agent:claude"
-  },
-  {
-    id: "node:4",
-    type: "identity",
-    node_type: "identity",
-    content: "Bob's secure credentials and cryptographic verification keys.",
-    owner_scope: "user:bob"
-  },
-  {
-    id: "node:5",
-    type: "entity",
-    node_type: "entity",
-    content: "Temporary session logs for troubleshooting Gossip push-pull protocol.",
-    owner_scope: "user:bob/session:s2/agent:qwen"
-  }
-];
-
 export function ScopesPanel({ bridge, notify }: Props) {
   const [prefix, setPrefix] = useState('');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
