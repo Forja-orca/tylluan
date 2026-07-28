@@ -704,6 +704,7 @@ async fn main() -> anyhow::Result<()> {
         ("coordinator",       "guilds.core.coordinator",       false),
         ("night_reasoner",    "guilds.core.night_reasoner",   false),
         ("llama_backend",     "guilds.core.llama_backend",    false),
+        ("seed_tools",        "guilds.core.seed_tools",       false),
         ("git",               "guilds.builders.plugins.git",   false),
         ("scheduler",         "guilds.core.scheduler",         true),
     ];
