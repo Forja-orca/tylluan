@@ -30,7 +30,36 @@ mcp = FastMCP("llama_backend")
 
 DEFAULT_MODEL = "unsloth/SmolLM2-135M-Instruct-GGUF"
 DEFAULT_MODEL_FILE = "SmolLM2-135M-Instruct-Q4_K_M.gguf"
-LLAMA_PORT = 8081
+
+
+def _read_config():
+    """Read llama-server config from tylluan.toml [inference.llama] section.
+    Falls back to reasonable defaults if the section is missing."""
+    import tomllib
+    root = Path(__file__).resolve().parent.parent.parent
+    config_path = root / "tylluan.toml"
+    try:
+        with open(config_path, "rb") as f:
+            cfg = tomllib.load(f)
+        llama_cfg = cfg.get("inference", {}).get("llama", {})
+    except Exception:
+        llama_cfg = {}
+
+    return {
+        "port": llama_cfg.get("port", 9000),
+        "n_gpu_layers": llama_cfg.get("n_gpu_layers", 0),
+        "ctx_size": llama_cfg.get("ctx_size", 2048),
+        "threads": llama_cfg.get("threads", 0),  # 0 = auto (cpu_count)
+        "batch_size": llama_cfg.get("batch_size", 512),
+        "temperature": llama_cfg.get("temperature", 0.7),
+        "top_p": llama_cfg.get("top_p", 0.95),
+        "top_k": llama_cfg.get("top_k", 64),
+        "repeat_penalty": llama_cfg.get("repeat_penalty", 1.1),
+    }
+
+
+_CFG = _read_config()
+LLAMA_PORT = _CFG["port"]
 
 # P1: External backend support — if user has Ollama/LM Studio/LiteLLM running,
 # use that instead of starting our own llama-server. Detected on first query
@@ -157,15 +186,16 @@ async def _start_llama_server():
         _model_loaded = True
         return
 
+    threads = _CFG["threads"] if _CFG["threads"] > 0 else (os.cpu_count() or 4)
     cmd = [
         server_path,
         "--model", model_path,
         "--host", "127.0.0.1",
         "--port", str(LLAMA_PORT),
-        "--n-gpu-layers", "0",   # CPU-only by default, override via config
-        "--ctx-size", "2048",
-        "--threads", str(os.cpu_count() or 4),
-        "--batch-size", "512",
+        "--n-gpu-layers", str(_CFG["n_gpu_layers"]),
+        "--ctx-size", str(_CFG["ctx_size"]),
+        "--threads", str(threads),
+        "--batch-size", str(_CFG["batch_size"]),
     ]
 
     sys.stderr.write(f"[llama_backend] Starting: {' '.join(cmd)}\n")
@@ -225,10 +255,12 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float = 0
     if not is_external:
         await _start_llama_server()
 
+    t = temperature if temperature != 0.7 else _CFG["temperature"]
+
     data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
-        "temperature": temperature,
+        "temperature": t,
         "stream": False,
     }).encode("utf-8")
 
@@ -245,19 +277,35 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float = 0
 
 @mcp.tool()
 async def backend_health() -> str:
-    """Check if llama-server is running and which model is loaded."""
-    if _model_loaded and _llama_process is not None and _llama_process.poll() is None:
-        return json.dumps({
-            "status": "ok",
-            "model": DEFAULT_MODEL,
-            "port": LLAMA_PORT,
-            "backend": "llama.cpp",
-        })
+    """Check llama-server status: running/stopped, model, port, params."""
+    status = "running" if (_model_loaded and _llama_process is not None
+                          and _llama_process.poll() is None) else "stopped"
     return json.dumps({
-        "status": "stopped",
-        "model": DEFAULT_MODEL,
-        "pid": _llama_process.pid if _llama_process else None,
+        "status": status,
+        "model": f"{DEFAULT_MODEL}::{DEFAULT_MODEL_FILE}",
+        "port": LLAMA_PORT,
+        "backend": "llama.cpp",
+        "external_backend": _detect_external_backend(),
+        "params": {
+            "n_gpu_layers": _CFG["n_gpu_layers"],
+            "ctx_size": _CFG["ctx_size"],
+            "threads": _CFG["threads"],
+            "batch_size": _CFG["batch_size"],
+        },
     })
+
+
+@mcp.tool()
+async def list_models() -> str:
+    """List cached GGUF models in the HuggingFace hub cache."""
+    import glob as _glob
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    models = []
+    for gguf in _glob.glob(str(cache_dir / "**/*.gguf"), recursive=True):
+        path = Path(gguf)
+        size_mb = path.stat().st_size / (1024 * 1024)
+        models.append({"file": path.name, "size_mb": round(size_mb, 1), "path": gguf})
+    return json.dumps({"models": sorted(models, key=lambda m: m["size_mb"])})
 
 
 if __name__ == "__main__":
