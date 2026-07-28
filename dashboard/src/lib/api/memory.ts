@@ -173,12 +173,26 @@ async function callTylluanDoIntent(client: Fetcher, intent: string): Promise<{ t
 }
 
 export async function getProjectSkills(client: Fetcher): Promise<Pick<ProjectSkill, 'name'>[]> {
+  try {
+    const res = await client.fetch('/api/v1/skills');
+    if (Array.isArray(res)) return res;
+  } catch {
+    // Fallback to tylluan_do
+  }
   const { text } = await callTylluanDoIntent(client, '@skill:list');
   if (text.startsWith('No skills saved')) return [];
   return text
     .split('\n')
     .filter((line) => line.trim().startsWith('- '))
     .map((line) => ({ name: line.trim().replace(/^- /, '') }));
+}
+
+export async function listBackgroundJobs(client: Fetcher): Promise<{ jobs: any[]; total: number }> {
+  try {
+    return await client.fetch('/api/v1/jobs');
+  } catch {
+    return { jobs: [], total: 0 };
+  }
 }
 
 export async function getProjectSkill(client: Fetcher, name: string): Promise<ProjectSkill> {

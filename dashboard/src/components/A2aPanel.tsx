@@ -86,10 +86,10 @@ export default function A2aPanel({ notify }: Props) {
       const data = await bridge.getAgentCard();
       setCard(data);
       setCardSimulated(false);
-    } catch (e) {
-      console.warn("Failed to load real /.well-known/agent-card.json, falling back to mock");
-      setCard(MOCK_CARD);
-      setCardSimulated(true);
+    } catch (e: any) {
+      console.error("Error al cargar agent-card.json:", e.message);
+      setCard(null);
+      setCardSimulated(false);
     } finally {
       setLoadingCard(false);
     }
@@ -97,23 +97,18 @@ export default function A2aPanel({ notify }: Props) {
 
   const handleInspectTask = async () => {
     if (!taskId.trim() || !bridge) return;
-    setLoadingTask(false);
+    setLoadingTask(true);
     setTaskError(null);
     setSearchedTask(null);
-    setLoadingTask(true);
     try {
       const res = await bridge.getA2aTaskStatus(taskId.trim());
       setSearchedTask(res);
       setTaskSimulated(false);
     } catch (e: any) {
-      console.warn(`tasks/get failed for '${taskId}', checking simulated tasks:`, e.message);
-      const mockTask = MOCK_TASKS[taskId.trim()];
-      if (mockTask) {
-        setSearchedTask(mockTask);
-        setTaskSimulated(true);
-      } else {
-        setTaskError(`Task ID "${taskId}" not found (API returned: ${e.message})`);
-      }
+      console.error(`Error al consultar tarea A2A '${taskId}':`, e.message);
+      setSearchedTask(null);
+      setTaskSimulated(false);
+      setTaskError(`No se encontró la tarea A2A '${taskId.trim()}' o la consulta falló: ${e.message}`);
     } finally {
       setLoadingTask(false);
     }

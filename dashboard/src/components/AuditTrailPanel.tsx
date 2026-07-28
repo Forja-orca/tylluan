@@ -69,21 +69,14 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     try {
       const data = await bridge.getAuditTrail(agentIdFilter || undefined, limit);
       setEntries(data.entries || []);
-      setTotal(data.total || 0);
+      setTotal(data.total || (data.entries ? data.entries.length : 0));
       setIsMock(false);
     } catch (err: any) {
-      // Fallback to local mock data on 404 or connection failure
-      console.warn("Audit Trail GET /api/v1/audit failed, using mock:", err.message);
-      
-      // Filter mock entries locally
-      const filteredMock = MOCK_AUDIT_ENTRIES.filter(e => 
-        !agentIdFilter || e.agent_id.toLowerCase().includes(agentIdFilter.toLowerCase())
-      ).slice(0, limit);
-      
-      setEntries(filteredMock);
-      setTotal(MOCK_AUDIT_ENTRIES.length);
-      setIsMock(true);
-      setError(`[MOCK FALLBACK] Server endpoint returned: ${err.message}. Showing simulated records.`);
+      console.error("Audit Trail fetch error:", err.message);
+      setEntries([]);
+      setTotal(0);
+      setIsMock(false);
+      setError(`Error consultando registros de auditoría: ${err.message}`);
     } finally {
       setLoading(false);
     }

@@ -208,7 +208,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/dream/status", get(dream_status_handler))
         .route("/api/v1/silva/nodes/{node_id}", delete(silva_delete_node_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
-        .route("/api/v1/sessions/resume", get(sessions_resume_handler))
+        .route("/api/v1/sessions/resume", get(sessions_resume_handler).post(sessions_resume_action_handler))
         .route("/api/v1/repo-map", get(repo_map_handler))
         .route("/api/v1/sessions/{session_id}", get(session_detail_handler).delete(revoke_session_handler))
         .route("/api/v1/system/sessions", get(list_sessions_handler))
@@ -229,15 +229,18 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/memory/search", any(memory_search_handler))
         // M31-P1: Audit trail query by agent_id
         .route("/api/v1/audit", get(audit_log_handler))
+        .route("/api/v1/audit/trail", get(audit_trail_handler))
         .route("/api/v1/tools", get(tools_list_handler))
         .route("/api/v1/capabilities", get(capabilities_handler))
         .route("/api/v1/audit/logs", get(audit_logs_handler))
         .route("/api/v1/audit/verify", get(api_audit::audit_verify))
         // ADR-011 §2.5: Coherence Gate + Signal Loop observability
         .route("/api/v1/security/coherence-gate/stats", get(api_security::coherence_gate_stats))
+        .route("/api/v1/security/scopes", get(get_security_scopes_handler).post(save_security_scopes_handler))
         .route("/api/v1/memory/recall-feedback/stats", get(api_security::recall_feedback_stats))
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
+        .route("/api/v1/config/inference-llama", post(set_inference_llama_config_handler))
         .route("/api/v1/config/sandbox-profile", post(set_sandbox_profile_handler))
         .route("/api/v1/config/sandbox-profile/guild", post(set_guild_sandbox_override_handler))
         .route("/api/v1/config/sandbox-profile/session", post(set_session_sandbox_override_handler))
@@ -245,6 +248,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config/sandbox-profile/session/{agent_id}", delete(delete_session_sandbox_override_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/setup-hint", get(setup_hint_handler))
+        .route("/api/v1/skills", get(project_skills_list_handler).post(project_skills_save_handler))
+        .route("/api/v1/jobs", get(background_jobs_list_handler))
         .route("/api/v1/bash", post(bash_execute_handler)) // DEPRECATED - usar tylluan_do
 
         .route("/api/v1/security/events", get(security_events_handler))
@@ -261,6 +266,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/maintenance/checkpoint", post(maintenance_checkpoint_handler))
         .route("/api/v1/maintenance/decay", post(maintenance_decay_handler))
         .route("/api/v1/maintenance/purge", post(maintenance_purge_handler))
+        .route("/api/v1/maintenance/onnx-clean", post(maintenance_onnx_clean_handler))
+        .route("/api/v1/maintenance/logs-compact", post(maintenance_logs_compact_handler))
         .route("/api/v1/maintenance/purge-lessons", post(maintenance_purge_lessons_handler))
         .route("/api/v1/maintenance/clean-orphans", post(maintenance_clean_orphans_handler))
         .route("/api/v1/guilds/{name}/test", post(guild_test_handler))
@@ -1625,29 +1632,29 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     // Real disk scanner for local model files
     let mut detected_local_models = Vec::new();
     let models_dir = std::path::Path::new("models");
-    if models_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(models_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    let dir_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
-                    let mut size = 0u64;
-                    if let Ok(files) = std::fs::read_dir(&path) {
-                        for f in files.flatten() {
-                            if let Ok(meta) = f.metadata() {
-                                size += meta.len();
-                            }
+    if models_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(models_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let dir_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
+                let mut size = 0u64;
+                if let Ok(files) = std::fs::read_dir(&path) {
+                    for f in files.flatten() {
+                        if let Ok(meta) = f.metadata() {
+                            size += meta.len();
                         }
                     }
-                    detected_local_models.push(serde_json::json!({
-                        "id": dir_name,
-                        "name": format!("Local {}", dir_name),
-                        "path": path.to_string_lossy(),
-                        "size_bytes": size,
-                        "size_mb": size / (1024 * 1024),
-                        "installed": true,
-                    }));
                 }
+                detected_local_models.push(serde_json::json!({
+                    "id": dir_name,
+                    "name": format!("Local {}", dir_name),
+                    "path": path.to_string_lossy(),
+                    "size_bytes": size,
+                    "size_mb": size / (1024 * 1024),
+                    "installed": true,
+                }));
             }
         }
     }

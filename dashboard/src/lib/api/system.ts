@@ -134,15 +134,15 @@ export async function getAuditTrail(client: Fetcher, agentId?: string, limit?: n
   if (agentId) params.append('agent_id', agentId);
   if (limit) params.append('limit', limit.toString());
   const query = params.toString() ? `?${params.toString()}` : '';
-  const raw = await client.fetch(`/api/v1/audit${query}`);
+  const raw = await client.fetch(`/api/v1/audit/trail${query}`);
   const entries = (raw.entries || []).map((row: any) => ({
     agent_id: row.agent_id,
     guild: row.guild,
-    intent_preview: row.intent || row.result_preview || '',
-    allowed: row.status === 'ok',
+    intent_preview: row.intent_preview || row.intent || row.result_preview || '',
+    allowed: row.allowed !== undefined ? row.allowed : (row.status === 'ok'),
     timestamp: row.timestamp,
   }));
-  return { entries, total: raw.count ?? entries.length };
+  return { entries, total: raw.total ?? raw.count ?? entries.length };
 }
 
 export async function getConfig(client: Fetcher): Promise<any> {
@@ -192,4 +192,19 @@ export async function getMetricsHistory(client: Fetcher): Promise<MetricsHistory
   } catch {
     return { snapshots: [], interval_secs: 5, capacity: 60 };
   }
+}
+
+export async function resumeSession(client: Fetcher, sessionId: string): Promise<{ success: boolean; message: string }> {
+  return await client.fetch('/api/v1/sessions/resume', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId })
+  });
+}
+
+export async function maintenance_onnx_clean(client: Fetcher): Promise<{ success: boolean; message: string }> {
+  return await client.fetch('/api/v1/maintenance/onnx-clean', { method: 'POST' });
+}
+
+export async function maintenance_logs_compact(client: Fetcher): Promise<{ success: boolean; message: string }> {
+  return await client.fetch('/api/v1/maintenance/logs-compact', { method: 'POST' });
 }

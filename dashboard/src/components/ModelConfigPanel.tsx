@@ -116,6 +116,25 @@ export function ModelConfigPanel({ bridge }: Props) {
         } catch (err) {
           console.warn('Failed fetching models/system status:', err);
         }
+
+        // Auto-probe llama-server/provider backend status on load
+        try {
+          const lCfg = cfg?.inference?.llama || cfg?.inference || {};
+          const url = lCfg.endpoint || 'http://127.0.0.1:9000';
+          const provider = lCfg.provider || 'llama-server';
+          const res = await bridge.fetchRaw('/api/v1/test-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: url, provider })
+          });
+          if (res?.ok) {
+            setConnStatus({ ok: true, msg: `Backend ${provider} online (${url})`, latency: res.latency_ms });
+          } else {
+            setConnStatus({ ok: false, msg: res?.error || `Backend ${provider} offline en ${url}` });
+          }
+        } catch {
+          // No llama-server running — silent, user can test manually
+        }
       } catch (e) {
         console.error('Failed to load config/models', e);
       }
@@ -157,30 +176,30 @@ export function ModelConfigPanel({ bridge }: Props) {
     if (!bridge) return;
     setSavingGguf(true);
     try {
-      await bridge.fetch('/api/v1/config', {
+      // Uses /api/v1/config/inference-llama — a safe TOML-patch endpoint that
+      // reads tylluan.toml, patches [inference] and [inference.llama] fields,
+      // validates the result, then atomic-writes. Never sends the full TOML
+      // through the browser (that pattern bricked the config once).
+      const res = await bridge.fetch('/api/v1/config/inference-llama', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inference: {
-            primary_model: selectedGgufModel,
-            device: selectedDevice,
-            llama: {
-              provider: activeProvider,
-              endpoint: providerUrl,
-              port: llamaPort,
-              ctx_size: contextLen,
-              n_gpu_layers: gpuLayers,
-              threads: cpuThreads,
-              batch_size: batchSize,
-              temperature: temperature,
-              top_p: topP,
-              top_k: topK,
-              repeat_penalty: repeatPenalty,
-            }
-          }
+          primary_model: selectedGgufModel,
+          provider: activeProvider,
+          endpoint: providerUrl,
+          port: llamaPort,
+          ctx_size: contextLen,
+          n_gpu_layers: gpuLayers,
+          threads: cpuThreads,
+          batch_size: batchSize,
+          temperature: temperature,
+          top_p: topP,
+          top_k: topK,
+          repeat_penalty: repeatPenalty,
         })
       });
-      alert('Configuración de inferencia GGUF & [inference.llama] guardada exitosamente en tylluan.toml.');
+      if (res?.error) throw new Error(res.error);
+      alert('Configuración [inference.llama] guardada exitosamente en tylluan.toml.');
     } catch (e: any) {
       alert(`Error guardando configuración GGUF: ${e.message || String(e)}`);
     }
@@ -438,7 +457,7 @@ export function ModelConfigPanel({ bridge }: Props) {
             <Database className="w-4 h-4 text-emerald-400" /> Inventario Real de Modelos en Disco (`/api/v1/models`)
           </h3>
           <span className="text-xs font-mono text-slate-400">
-            {models?.detected_local_models?.length || 4} modelos detectados
+            {models?.detected_local_models?.length ?? 0} modelos detectados
           </span>
         </div>
         <p className="text-xs text-slate-400 mb-4">
@@ -464,56 +483,13 @@ export function ModelConfigPanel({ bridge }: Props) {
               </div>
             ))
           ) : (
-            <>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold font-mono text-slate-200">qwen2.5-1.5b</span>
-                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
-                      INSTALADO EN DISCO
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/qwen2.5-1.5b/model.safetensors</p>
-                </div>
-                <span className="text-xs font-mono text-emerald-400 font-bold">2,944 MB</span>
-              </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold font-mono text-slate-200">qwen2.5-0.5b</span>
-                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
-                      INSTALADO EN DISCO
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/qwen2.5-0.5b/model.safetensors</p>
-                </div>
-                <span className="text-xs font-mono text-emerald-400 font-bold">942 MB</span>
-              </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold font-mono text-slate-200">smollm2</span>
-                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
-                      INSTALADO EN DISCO
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/smollm2/model.safetensors</p>
-                </div>
-                <span className="text-xs font-mono text-emerald-400 font-bold">256 MB</span>
-              </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold font-mono text-slate-200">nomic-embed</span>
-                    <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
-                      INSTALADO EN DISCO
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1">models/nomic-embed/model.safetensors</p>
-                </div>
-                <span className="text-xs font-mono text-emerald-400 font-bold">521 MB</span>
-              </div>
-            </>
+            <div className="col-span-2 p-6 bg-slate-950 border border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center gap-2 text-center">
+              <Database className="w-8 h-8 text-slate-600" />
+              <p className="text-sm font-mono text-slate-400 font-semibold">Sin modelos detectados en disco</p>
+              <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                El kernel no encontró archivos en <code className="text-slate-400">models/</code>. Descarga un modelo GGUF y colócalo en esa carpeta, luego reinicia el kernel.
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -528,62 +504,39 @@ export function ModelConfigPanel({ bridge }: Props) {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              1. Inferencia Principal (Primary Agent)
-            </label>
-            <select
-              value={rolePrimary}
-              onChange={(e) => setRolePrimary(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
-            >
-              <option value="qwen2.5-1.5b-instruct">Qwen2.5-1.5B Instruct (En Disco - Recomendado)</option>
-              <option value="qwen2.5-0.5b-instruct">Qwen2.5-0.5B Instruct (En Disco - Toaster)</option>
-              <option value="smollm2-135m-instruct">SmolLM2-135M Instruct (En Disco - Light)</option>
-            </select>
-          </div>
-
-          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              2. Coordinador Nocturno (Night Reasoner)
-            </label>
-            <select
-              value={roleCoordinator}
-              onChange={(e) => setRoleCoordinator(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
-            >
-              <option value="gemma-4-2b-it">Gemma-4-E2B-it (ONNX DirectML - En Disco)</option>
-              <option value="qwen2.5-1.5b-instruct">Qwen2.5-1.5B Instruct (Fallback PyTorch)</option>
-            </select>
-          </div>
-
-          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              3. Enrutamiento e Intenciones (Routing & Coherence)
-            </label>
-            <select
-              value={roleRouting}
-              onChange={(e) => setRoleRouting(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
-            >
-              <option value="smollm2-135m-instruct">SmolLM2-135M Instruct (Sub-20ms - En Disco)</option>
-              <option value="qwen2.5-0.5b-instruct">Qwen2.5-0.5B Instruct (Densa)</option>
-            </select>
-          </div>
-
-          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              4. Análisis Visual (Vision Model)
-            </label>
-            <select
-              value={roleVision}
-              onChange={(e) => setRoleVision(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
-            >
-              <option value="SmolVLM2-256M-Instruct">SmolVLM2-256M Instruct (ONNX - En Disco)</option>
-              <option value="moondream2">Moondream2 (Pip PyTorch)</option>
-            </select>
-          </div>
+          {[
+            { label: '1. Inferencia Principal (Primary Agent)', value: rolePrimary, setter: setRolePrimary },
+            { label: '2. Coordinador Nocturno (Night Reasoner)', value: roleCoordinator, setter: setRoleCoordinator },
+            { label: '3. Enrutamiento e Intenciones (Routing & Coherence)', value: roleRouting, setter: setRoleRouting },
+            { label: '4. Análisis Visual (Vision Model)', value: roleVision, setter: setRoleVision },
+          ].map(({ label, value, setter }) => (
+            <div key={label} className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                {label}
+              </label>
+              {models?.detected_local_models?.length > 0 ? (
+                <select
+                  value={value}
+                  onChange={(e) => setter(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200"
+                >
+                  {models.detected_local_models.map((m: any) => (
+                    <option key={m.id || m.name} value={m.id || m.name}>
+                      {m.name} {m.size_mb ? `(${m.size_mb} MB)` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => setter(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-400"
+                  placeholder="Sin modelos en disco — introduce el nombre del modelo"
+                />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
