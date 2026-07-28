@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
-import { Search, ShieldAlert, Layers, Folder, User, Terminal, Cpu } from 'lucide-react';
+import { Search, Layers, Folder, User, Terminal, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -12,7 +12,6 @@ export function ScopesPanel({ bridge, notify }: Props) {
   const [prefix, setPrefix] = useState('');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [loading, setLoading] = useState(false);
-  const [simulated, setSimulated] = useState(false);
 
   const fetchNodes = async (searchPrefix: string) => {
     if (!bridge) return;
@@ -20,10 +19,8 @@ export function ScopesPanel({ bridge, notify }: Props) {
     try {
       const res = await bridge.getNodesByScopePrefix(searchPrefix);
       setNodes(res || []);
-      setSimulated(false);
     } catch (e: any) {
       console.error("Error consultando nodos por ámbito:", e.message);
-      setSimulated(false);
       setNodes([]);
     } finally {
       setLoading(false);
@@ -77,11 +74,6 @@ export function ScopesPanel({ bridge, notify }: Props) {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">Multi-Tenant Hierarchical Scopes (J-8)</h3>
-            {simulated && (
-              <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold rounded flex items-center gap-1">
-                <ShieldAlert className="w-3 h-3" /> [SIMULADO]
-              </span>
-            )}
           </div>
           <p className="text-[11px] text-slate-500 font-mono">Query lightweight nodes by hierarchical owner scope prefix</p>
         </div>
