@@ -221,7 +221,7 @@ Delivered:
 **Goal:** A junior engineer or first-time user gets from zero to a working, understood instance without help — and the base is provably secure, not just "probably fine."
 
 Delivered:
-- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→3030, repo root cleanup)
+- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→4000, repo root cleanup)
 - [x] **M23-P1 "El Primer Minuto"** — `tylluan install` auto-downloads the embedding model + auto-starts the kernel + polls `/health` (`910f15f`); dashboard shows a designed Empty State (hero + 3 action cards + progress checklist) instead of a blank screen when SilvaDB is empty (`bad7015`)
 - [x] **M26 Sprint 1** — Coloquio Canvas Workspace: modular tabs, collaborative DOCS with CRUD+SSE
 - [x] **M26 Sprint 2** — tldraw interactive whiteboard embedded in the canvas, per-channel persistence (`50da092`)
@@ -249,6 +249,18 @@ Requirements (all must be met):
 
 Stretch goals (not funded yet; deferred to v1.x):
 - [ ] External security audit — requires funding (sponsor, grant, or self-funding). The project is currently unipersonal and pre-revenue; promising a paid audit without a funding source is not honest. If you can sponsor this, [open a discussion](https://github.com/Forja-orca/tylluan/discussions).
+
+---
+
+## Horizon — Planetary Sovereign Mesh & Dual A2A Architecture
+
+**Vision:** Scaling Tylluan to 1 Million sovereign nodes without cloud lock-in, combining standard open-source Agent-to-Agent (A2A) protocols with Tylluan's local-first P2P mesh fabric.
+
+Requirements & Insertion Points:
+- [ ] **Dual A2A Standard Integration**: Support industry open-source Agent-to-Agent protocols (e.g. OpenClaw / A2A specs) alongside Tylluan's native Noise XK / BWC protocol, allowing any client or external agent to interact seamlessly.
+- [ ] **SLLM Flow Coordinator (1.5B–3B)**: Deploy SOTA small models (e.g. Qwen2.5-Coder-1.5B / Gemma-4-E2B) over ONNX DirectML as active flow coordinators for `matcher.rs` / `route_intent`, reserving ~100M models (SmolLM2-135M / GLiNER) as fast filters (PII, CoherenceGate).
+- [ ] **Planetary Mesh Fabric (1M Nodes)**: Decentralized peer discovery (Kademlia DHT + mDNS + STUN) ensuring privacy-preserving SilvaDB knowledge graph synchronization without central servers or token costs.
+- [ ] **Zero Self-Destructive Entropy**: Enforce kernel-level safety, isolation, and ethical guardrails that protect both host machine and user context without restricting agent autonomy.
 
 ---
 

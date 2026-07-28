@@ -1,6 +1,6 @@
 # Constitución de Ingeniería para Equipos de Agentes
 
-> **Origen:** sintetizado a partir de `SISTEMA_DE_TRABAJO.md` (ForjaMCPo3, v1.1, 2026-06-18) —
+> **Origen:** sintetizado a partir de `SISTEMA_DE_TRABAJO.md` (un proyecto interno predecesor, v1.1, 2026-06-18) —
 > ~14 meses de trabajo real de un equipo humano+IA construyendo software de producción.
 > Cada regla de este documento viene de un incidente que ya ocurrió, no de teoría.
 >
@@ -330,4 +330,4 @@ contrasta contra el archivo real (mismo criterio que auditar entregas de código
 ---
 
 *Versión 1.0 del documento genérico — 2026-07-19, sintetizado de SISTEMA_DE_TRABAJO.md
-(ForjaMCPo3 v1.1, 2026-06-18) al migrar el equipo a trabajar directamente sobre Tylluan.*
+(proyecto predecesor interno, v1.1, 2026-06-18) al migrar el equipo a trabajar directamente sobre Tylluan.*

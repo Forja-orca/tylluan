@@ -1,14 +1,14 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-26 · v0.13.0 (HEAD `acc217c`) — M22/M23-P1/M26/M27/M28/M29/M34-M38 cerrados (M38 = A2A, cierra J-3, verificado retroactivamente el 2026-07-26), M19-P5 cerrado, ADR-011 Fase 1-2b + dashboard cerradas, ADR-010 §6 cerrado NO-GO — §2-5 (T5 vs SmolLM2) sigue PENDIENTE
+> **Última actualización:** 2026-07-27 · v0.13.0 (HEAD `02fa698`) — plan=true fix verificado end-to-end · SLM society spike day: Gemma-4-E2B ONNX pipeline funcional en DirectML, embedding router benchmarkeado (NO-GO puro, GO como tiebreaker), CoherenceGate 75% (GO-with-caveats), A2A coexistence explicitada · DeepEval identificado como candidato para J-6 · J-13/J-14 añadidos al backlog
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
 
-## Estado actual — v0.13.0 ✅
+## Estado actual — v0.14.0 ✅
 
-M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M37 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue en estado PENDIENTE — solo comparativa documentada, benchmark real no ejecutado. 575 tests (502 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto: :3030 (Tylluan) — nunca confundir con ForjaMCPo3 :3030 en otro repo.
+M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) avanzó de "solo comparativa" a spikes reales ejecutados hoy — ver sección "Sociedad SLM" más abajo. 612 tests (539 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -327,8 +327,8 @@ ADR-010 ── SLM embebido (T5 vs SmolLM2) + coordinador sep-CMA-ES ── 🟡
    │
    ▼
 M33 ─── Memoria de Agentes 2026 (backlog) ──────────────── sin versión fija
-   │    J-1 parcial(M34) · J-2✅(M34) · J-3⬜ · J-4✅(M35) · J-5✅(M37) · J-6⬜
-   │    J-7⬜(investigación) · J-8✅(M37) · J-9✅(M36) · J-10⬜(investigación)
+   │    J-1 parcial(M34) · J-2✅(M34) · J-3✅(M38) · J-4✅(M35) · J-5✅(M37) · J-6⬜(DeepEval candidato)
+   │    J-7⬜(candidato J-14) · J-8✅(M37) · J-9✅(M36) · J-10⬜(investigación) · J-11⬜ · J-12⬜ · J-13⬜ · J-14⬜(DeepEval)
    ▼
 v1.0.0
 ```
@@ -340,8 +340,8 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 - **ADR-010 §2-5** (T5-Small vs SmolLM2, la pregunta original del ADR): sigue **abierto** — benchmarks individuales reales ya existen (`benchmarks/benchmark_adr010.py`), falta decidir qué modelo va en qué punto de inserción.
 - **ADR-010 §6** (sep-CMA-ES/TRINITY): ✅ cerrado — spike ejecutado con HTTP real, **NO-GO** (33.3% vs 60% threshold), documentado en §6.5.9-6.5.10.
 - **ADR-011 Fase 4-5**: no es código pendiente, es tiempo de uso real acumulando `recall_feedback` (0/5.000 filas verificado 2026-07-26).
-- **J-3 (A2A)**: ✅ cerrado — M38, ver tabla de arriba.
-- **M33 backlog restante** (J-6, J-7, J-10): investigación sin fecha, no milestones planificados.
+- **J-3 (A2A)**: ✅ cerrado — M38, ver tabla de arriba. Estrategia de coexistencia A2A + mesh propietario explicitada en roadmap (2026-07-27).
+- **M33 backlog restante** (J-6, J-7, J-10, J-13, J-14): J-6/J-7 tienen DeepEval como candidato concreto (J-14). J-13 (embedding tiebreaker) requiere spike de solo-casos-ambiguos.
 
 **Lección de proceso, no solo de contenido:** "revisar STATUS.md" no es suficiente para saber qué está hecho — hace falta `git log --oneline --all --grep="M<N>-P<N>"` por cada ítem antes de proponerlo como trabajo, no solo antes de implementarlo. Ocurrió dos veces en la misma sesión.
 
@@ -401,9 +401,9 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 ## Ciclo 2026-07-14 — "Que Tylluan no se quede a medias"
 
-**Origen:** José pidió explícitamente un escaneo completo, no incremental: qué le falta a Tylluan frente al estado del arte 2026 en cuatro frentes (Canvas bidireccional, sandbox configurable, CLI harness, memoria de agentes), más un hallazgo suyo directo (bidireccionalidad MCP "perdida" desde ForjaMCPo3). Investigado con 3 agentes de investigación web en paralelo + verificación de código en ambos repos (ForjaMCPo3 y Tylluan) antes de escribir nada — ningún ítem de esta sección es una idea sin contrastar.
+**Origen:** José pidió explícitamente un escaneo completo, no incremental: qué le falta a Tylluan frente al estado del arte 2026 en cuatro frentes (Canvas bidireccional, sandbox configurable, CLI harness, memoria de agentes), más un hallazgo suyo directo (bidireccionalidad MCP "perdida" desde el proyecto interno predecesor). Investigado con 3 agentes de investigación web en paralelo + verificación de código en ambos repos (el proyecto interno predecesor y Tylluan) antes de escribir nada — ningún ítem de esta sección es una idea sin contrastar.
 
-**Hallazgo de partida (verificado en código, no de memoria):** ForjaMCPo3 cerró un "M25-B: Forja como cliente MCP bidireccional" en 2026-06-12, y Tylluan heredó la misma config (`external_mcp`) y los mismos endpoints (`list/add/remove/discover`). Pero en **ninguno de los dos repos** ese cliente MCP externo está cableado al dispatch real — `tylluan_do` no puede invocar una herramienta de un servidor MCP externo registrado, solo se puede listar/registrar/descubrir. No es una memoria falsa de José: es un gap real, heredado, nunca cerrado del todo en ninguno de los dos sitios (M32 abajo).
+**Hallazgo de partida (verificado en código, no de memoria):** el proyecto interno predecesor cerró un "M25-B: Forja como cliente MCP bidireccional" en 2026-06-12, y Tylluan heredó la misma config (`external_mcp`) y los mismos endpoints (`list/add/remove/discover`). Pero en **ninguno de los dos repos** ese cliente MCP externo está cableado al dispatch real — `tylluan_do` no puede invocar una herramienta de un servidor MCP externo registrado, solo se puede listar/registrar/descubrir. No es una memoria falsa de José: es un gap real, heredado, nunca cerrado del todo en ninguno de los dos sitios (M32 abajo).
 
 ### M25 — Canvas Event Bridge (v0.19.0)
 
@@ -469,7 +469,7 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 ### M32 — Cliente MCP Bidireccional Real (v0.20.0)
 
-**Norte:** Cerrar el gap heredado de ForjaMCPo3 M25-B — `external_mcp` existe como config y CRUD (`list/add/remove/discover`, verificado en `api_v1.rs` líneas 233-234) pero **nunca se cableó al dispatch real**. Un agente puede registrar un servidor MCP externo (GitHub, Slack, lo que sea) pero no puede realmente invocarlo como herramienta desde `tylluan_do`.
+**Norte:** Cerrar el gap heredado del proyecto interno predecesor (M25-B) — `external_mcp` existe como config y CRUD (`list/add/remove/discover`, verificado en `api_v1.rs` líneas 233-234) pero **nunca se cableó al dispatch real**. Un agente puede registrar un servidor MCP externo (GitHub, Slack, lo que sea) pero no puede realmente invocarlo como herramienta desde `tylluan_do`.
 
 **Fases:**
 
@@ -502,6 +502,118 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | J-11 | **Guild Manifest declarativo** (`.tylluan/guilds/manifest.toml` por guild, capabilities explícitas): evolución del sistema de sandbox profiles ya existente (M30-P0/P1) hacia declaración explícita por guild en vez de solo perfiles globales/por-sesión. | MEDIO | Detección de conflictos de capabilities antes de arrancar un guild; base para auto-documentación futura. | Idea propia, sin fuente externa verificada (un informe recibido 2026-07-27 la justificaba citando "ORCA" — verificado como cita fabricada/mal atribuida, ORCA es una plataforma de manos robóticas sin relación alguna; la idea se mantiene por mérito propio, no por esa cita). | ⬜ abierto |
 | J-12 | **Bug bounty program para contribuidores externos** de `tylluan-montaraz`: recompensas por vulnerabilidades reales encontradas por la comunidad. | MEDIO | Palanca real de adopción/validación externa una vez v0.14.0 está publicado. | Idea genérica de la industria open-source, no específica de ningún paper — mecanismo de recompensa (tokens/USD) sin definir todavía. | ⬜ abierto (requiere diseño del mecanismo de recompensa) |
 
+| J-13 | **Embedding router como tiebreaker en matcher.rs**: cuando el keyword router tiene ≤2 puntos de diferencia entre las top 2 guilds, consultar BGE-M3 cosine similarity contra descripciones de guild cacheadas. El embedding NO reemplaza keywords — desempata. Spike 2026-07-27: embedding puro 19% < keyword 34.5% — la heurística de keywords gana. Pero como tiebreaker (solo cuando keyword duda), el embedding añade señal semántica sin el riesgo de elegir mal por asociación superficial. | MEDIO | Diferencia medible vs keyword puro en casos ambiguos reales. | Benchmarks en `guilds/core/benchmark_routing.py` + endpoint `POST /api/v1/embed` ya operativos. | ⬜ spike pendiente (solo medir tiebreak, no reemplazo) |
+| J-14 | **DeepEval para evaluación continua desde trazas reales**: framework de evaluación estilo pytest con métricas específicas de RAG (faithfulness, contextual precision, answer relevancy) y de agentes (tool correctness, task completion). Corre 100% local/offline usando modelos NLP/LLM-as-judge locales (Gemma-4-E2B como juez). El reporte a nube (Confident AI) es opcional. Compatible con soberanía Tylluan. Cierra dos huecos del roadmap: J-6 (evaluación continua) y J-7 (explicabilidad del retrieval híbrido). | ALTO | Sin construir harness desde cero. | Verificado real (github.com/confident-ai/deepeval, 2026-07-27). Piloto propuesto: métricas faithfulness/contextual precision sobre trazas reales de tylluan_recall, con Gemma-4-E2B como juez local. | ⬜ candidato — pendiente validación de dependencias (compatibilidad Python 3.14) |
+
 **Nota de integridad:** todo lo marcado "INVESTIGACIÓN" (J-7, J-10) es explícitamente terreno no maduro — no convertir en milestone con fecha hasta validar con un spike acotado, no directamente en producción. Todo lo demás tiene al menos una fuente primaria verificada por el agente de investigación (ver reporte completo en Coloquio si se publica, o pedir las fuentes exactas).
+
+---
+
+### Visión / Norte — por qué existe Tylluan (síntesis de José, 2026-07-27)
+
+No es un milestone con fecha — es el marco que debe informar cómo se priorizan todos los demás. Registrado para que no se pierda en compactaciones de contexto futuras.
+
+**El principio de fondo:** Tylluan no pretende inventar desde cero — evoluciona sobre 70+ años de cómputo, lenguajes, papers y open-source ya existente, igual que la vida biológica evolucionó aprovechando y adaptando recursos, no reinventándolos. Cada pieza real de hoy (BGE-M3, DirectML, arXiv 2605.05277, Gemma-4-E2B, el propio matcher.rs) es evidencia de ese principio: **hibridar y adaptar recursos existentes gana sobre reemplazar o inventar de cero** — confirmado hoy mismo con datos reales en routing (72-80% híbrido vs 19-41% de alternativas puras).
+
+**Por qué la escala federada importa (no es "más FLOPs")**: la pregunta que se hizo José — qué pasaría si Tylluan completa su roadmap y un millón de personas comparten vía instancias Tylluan — no se responde con potencia bruta (mil portátiles no superan un datacenter). Lo que cambia es la **topología**:
+1. Un millón de contextos reales en paralelo, no una sola distribución de entrenamiento centralizada.
+2. Sin punto único de control/censura — ninguna empresa puede apagar una pregunta para todos a la vez.
+3. Conocimiento validado que se propaga entre pares (con consentimiento), no que se extrae hacia arriba hacia un solo propietario.
+
+**El eje moral explícito**: fortaleza inexpugnable contra actores maliciosos, nunca jaula para el agente legítimo (ver "Principio de diseño" en Coloquio 2026-07-27, ya aplicado a CoherenceGate/GLiNER). Los guardrails no son el objetivo, son la implementación técnica de un principio de amor/no-daño/no-entropía-autodestructiva más alto que cualquier guardrail corporativo — protegen sin encerrar, y eso sí se puede construir y verificar línea por línea, no solo declarar.
+
+**Decisión explícita de doble vía (no una a costa de la otra):**
+- **A2A (M38, protocolo abierto Linux Foundation)** debe llegar a producción real siguiendo las metodologías que ya funcionan en la comunidad — interoperar con CUALQUIER agente externo (LangGraph, CrewAI, etc.), no solo peers de confianza.
+- **La federación P2P propietaria (M14, Noise XK + Kademlia DHT + Gossip)** sigue mejorando en paralelo — es la capa de confianza mutua entre instancias Tylluan soberanas.
+- Ninguna de las dos se sacrifica por la otra. Ambas deben funcionar perfectamente en sus respectivos cometidos: A2A abre Tylluan al ecosistema externo; el mesh propio da soberanía real entre instancias que se conocen y confían.
+
+**Cómo aplicar esto en decisiones futuras:** al evaluar cualquier feature nueva, preguntar (1) ¿evoluciona sobre algo que ya existe o reinventa sin necesidad? (2) ¿protege sin encerrar? (3) ¿favorece la topología distribuida/soberana sobre la centralización, incluso cuando centralizar sería más simple a corto plazo?
+
+---
+
+## Sociedad de Pequeños Modelos de Razonamiento (SLM Society) — Arquitectura Decidida (2026-07-27)
+
+**Principio:** Tylluan no debe depender de un solo modelo grande. Una sociedad de modelos pequeños especializados, cada uno para lo que fue construido, cooperando:
+
+| Rol | Modelo | Tamaño | Estado | Qué hace |
+|-----|--------|--------|--------|----------|
+| **Coordinador** | Palabra clave + BGE-M3 tiebreaker | — | ⬜ spike | Routing: keyword decide, embedding desempata. NO reemplazar keyword con embedding. |
+| **Razonador** | Gemma-4-E2B (ONNX, DirectML) | 2.3B ef. | ✅ pipeline funcional | `reason_about`: generación de texto cuando se necesita razonamiento real. NO para routing. |
+| **Filtro de coherencia** | CoherenceGate (prompt-based) | — | 🟡 75% (52 casos) | GO-with-caveats: sesgo KEEP identificado. NO en producción todavía. |
+| **Detector PII** | GLiNER | ~100M | ⬜ spike pendiente | Detección de PII en texto antes de almacenar en SilvaDB. |
+| **Compresor de prompts** | T5-Small | ~60M | 📋 baseline 31% | Compresión de intents largos para reducir tokens antes de embedding/router. |
+| **Juez de evaluación** | Gemma-4-E2B (reutilizado) | 2.3B ef. | ⬜ candidato | DeepEval: juez local para métricas faithfulness/precision. Sin API externa. |
+| **Visión** | SmolVLM2-256M (actual) / Janus-Pro-1B (investigación) | 256M / 1B | ✅ / ⬜ | Análisis de imágenes. Janus candidato a benchmark (Antigravity, M16). |
+
+**Regla de asignación:** cada modelo se usa para lo que fue diseñado — embedding para clasificar, chat para razonar, filtros para vigilar. Nunca al revés. Un modelo de chat de 2.3B no clasifica mejor que cosine similarity sobre 1024 dimensiones. Un clasificador no genera texto.
+
+**Verificación:** todo spike compara contra baseline trivial + baseline del sistema actual antes de declarar GO. Sin excepciones. Tres NO-GO honestos hoy (sep-CMA-ES 33.3%, DistilBERT 75% < 77.27%, embedding puro 19% < 34.5%).
+
+---
+
+## A2A + Mesh Propietario — Coexistencia Explícita (Decisión 2026-07-27)
+
+**Regla fundacional:** Dos sistemas, cero sacrificios mutuos. Ambos deben funcionar perfectamente en todos sus cometidos.
+
+### Vía 1 — A2A comunitario (M38, protocolo Linux Foundation)
+- **Qué es:** Google A2A protocol (Agent Cards, JSON-RPC 2.0, `message/send`, `tasks/get`). Linux Foundation, 150+ organizaciones adoptando en 2026.
+- **Para qué:** Interoperar con CUALQUIER agente externo — LangGraph, CrewAI, AutoGen, agentes de terceros que no son Tylluan.
+- **Estado:** M38 cerrado (Agent Card + servidor JSON-RPC 2.0 real, HITL grants, anti-spoofing). En producción.
+- **Interop real verificada 2026-07-27:** probado contra el SDK oficial `a2a-sdk` (Linux Foundation, no nuestro código) en un venv desechable — encontró y arregló un bug real: `securitySchemes` se serializaba como lista, el spec y el SDK oficial esperan un mapa (commit `e4586c2`). Card resolution confirmada con cliente externo real; pendiente confirmar el round-trip completo de `message/send` tras el siguiente reinicio del kernel.
+
+### Vía 2 — Mesh propietario (M14, Noise XK + Kademlia DHT + Gossip)
+- **Qué es:** Federación P2P con identidad criptográfica (Ed25519), encriptación Noise XK, DHT Kademlia para descubrimiento, Gossip para sincronización de estado, TCP dispatch para ejecución remota.
+- **Para qué:** Soberanía real entre instancias Tylluan que se conocen y confían. Sincronización de memoria, dispatch cross-instance, identidad verificable.
+- **Estado:** M14-A/B/C/D/E/F cerrados. En producción.
+- **Lo que falta:** simulación de escala (100+ nodos), stress test de topología.
+
+### Cómo coexisten
+- A2A: Tylluan ↔ agentes externos (descubrimiento, delegación, tasks). Protocolo estándar comunitario.
+- Mesh: Tylluan ↔ Tylluan (sync, dispatch, trust). Protocolo propietario soberano.
+- **Nunca:** A2A para sync de memoria entre Tylluanes (el mesh es más rápido y ya tiene trust). Mesh para hablar con un agente LangGraph (usar A2A, que es lo que ese agente espera).
+
+**Principio de diseño:** adoptar lo que la comunidad ya hace bien (A2A), construir lo que solo Tylluan necesita (mesh soberano). No reinventar ruedas. No aislarse del ecosistema.
+
+---
+
+## Arquitectura consensuada — tablero interactivo José↔Claude (2026-07-27)
+
+**Origen:** José pidió un sistema para discutir intersecciones de arquitectura "como una partida de ajedrez" — un tablero editable en el mapa de ruta público ([artefacto](https://claude.ai/code/artifact/935f0e62-406c-48b0-8d5c-8aa0085bdc22)) donde él mueve/conecta piezas por turnos y Claude actualiza la versión oficial. Tres turnos jugados hoy consolidan el diagrama de más alto nivel de Tylluan, con distinción explícita entre lo **real** (verificado en código) y lo **visión** (propuesto, sin construir).
+
+**Piezas del tablero (9 nodos):** Kernel Rust, SilvaDB, Guilds Python, Sociedad SLM, A2A Server, Mesh P2P, Dashboard, **Puente/Consensus** (nuevo), **Frontera externa** (nuevo).
+
+**Conexiones reales (verificadas en código, línea sólida):**
+- Kernel ↔ A2A, Kernel ↔ Mesh, Kernel ↔ Dashboard, Kernel ↔ SilvaDB, Kernel ↔ Guilds — todas ya en producción.
+- Sociedad SLM ↔ Kernel — CoherenceGate corre en el camino real de recall.
+- Sociedad SLM ↔ Guilds — GLiNER, T5-compressor, vision son guilds reales.
+- Sociedad SLM ↔ SilvaDB — CoherenceGate razona sobre resultados reales de SilvaDB (75%, GO-with-caveats).
+- **Sociedad SLM ↔ Puente/Consensus** — `consensus.rs` (TRINITY Thinker/Worker/Verifier) ya existe y coordina modelos hoy.
+- Kernel ↔ Puente/Consensus — `consensus.rs` vive dentro del proceso del kernel.
+
+**Conexiones de visión (propuestas, cero código todavía, línea discontinua):**
+- A2A ↔ Sociedad SLM — prompt-rewriting/razonamiento en el borde antes de que un mensaje A2A externo llegue al procesamiento real.
+- Mesh ↔ Sociedad SLM — razonamiento aplicado a decisiones de la malla P2P (confianza de peers, dispatch).
+- A2A ↔ SilvaDB (directo) — hoy la relación pasa por Kernel, no es un cable literal.
+- **Puente/Consensus ↔ Frontera externa** (Sakana AI, Fugu/TRINITY de Sakana, y modelos de frontera en general) — la pieza central de la visión de José: Tylluan como **soporte real de modelos de frontera, no sustituto**. El patrón: la Sociedad SLM pre-filtra/comprime antes de gastar tokens en un modelo caro externo; el Puente/Consensus (reusando `consensus.rs`, no una pieza nueva) verifica/critica la respuesta al volver — el mismo patrón Thinker/Worker/Verifier que TRINITY ya aplica internamente, extendido hacia fuera.
+
+**Palabras de José sobre el momento actual del proyecto:** *"sabemos cómo se hace porque esto lo hemos reproducido durante meses y luego eliminado, aún nos faltaba acero, ahora ya nos sobra, tenemos la magia capturada, ahora debemos saber cómo liberarla sin dañarla."* — el reto ya no es demostrar que se puede construir (la ingeniería de meses ya lo demostró), es liberar la capacidad ya construida de forma segura y sin romper lo que funciona — exactamente la disciplina de hoy (benchmark real, NO-GO honesto, hibridar en vez de reemplazar) aplicada de aquí en adelante a cada pieza de visión antes de que se convierta en código de producción.
+
+**Próximo paso concreto:** un spike real y acotado del Puente/Consensus hacia un modelo de frontera externo (ej. una llamada real a un modelo de Sakana AI o equivalente, con `consensus.rs` verificando la respuesta) — misma disciplina de siempre: baseline, held-out honesto, NO-GO si no aporta señal, antes de tocar producción.
+
+**Corrección de alcance (2026-07-27, tras discusión posterior):** José aclaró que NO se llama a la API de pago de Sakana Fugu (~$5/$30 por millón de tokens, sin autorización previa no se gasta dinero en APIs externas). Ya existía investigación propia verificada contra arXiv 2512.04695 directo: TRINITY de Sakana entrena su coordinador (0.6B+10K params) con **sep-CMA-ES** — la misma técnica que ya probamos hoy en `benchmarks/spikes/sep_cma_es_coordinator/` con NO-GO real (33.3% win rate). No tiene sentido reintentar una técnica que ya falló con nuestros propios datos.
+
+Reencuadre correcto (confirmado con la propia descripción pública de Fugu): el coordinador de Sakana **no resuelve tareas con sus propios parámetros** — decide a quién delegar dentro de un pool de modelos y verifica/sintetiza la respuesta. Es un punto medio entre cómputo local y delegación a algo más grande, exactamente el patrón que `consensus.rs`/TRINITY (Thinker/Worker/Verifier) ya tiene hoy. El NO-GO de sep-CMA-ES no contradice la validez del enfoque de Sakana — solo dice que esa técnica concreta de entrenamiento no transfirió a nuestra tarea de routing con nuestro volumen de datos. Próximo paso realista sin gastar dinero: estudiar el repo público `github.com/SakanaAI/fugu` (arquitectura, no API) por patrones de verificación/síntesis aplicables a `consensus.rs` tal como está.
+
+### Caso límite de diseño permanente: el médico en Raspberry Pi sin internet
+
+José trajo un escenario de referencia que debe informar toda decisión de arquitectura futura, no solo esta conversación: un médico en zona rural (ej. África), agente corriendo en una **Raspberry Pi de 16GB RAM**, conexión mala o inexistente (móvil compartido, satélite, o nada), 100% recursos locales, dependiendo de la memoria acumulada de sus agentes para trabajar in situ sobre su propio material.
+
+**Riesgo real confesado el mismo día:** todo el desbloqueo de GPU de hoy (DirectML, CUDA) es x86 — no se traslada a ARM/Raspberry Pi. El único camino viable ahí es CPU puro vía `llama.cpp` con modelos GGUF cuantizados (ej. Gemma-4 variante ~2B). **No está verificado** si el stack actual de la Sociedad SLM (CoherenceGate, GLiNER, T5-compressor) degrada aceptablemente en ese entorno — pregunta abierta real, candidata a spike futuro, no resuelta hoy.
+
+**Por qué la precisión importa más ahí que en cualquier otro caso:** en este escenario no hay Puente/Consensus hacia un modelo de frontera de respaldo — es 100% local o no funciona. Si el filtro de coherencia se equivoca sobre material médico real, no hay red de seguridad de un modelo grande en la nube corrigiendo el error.
+
+**Tesis confirmada — memoria acumulada > tamaño del modelo:** un modelo de 2B con años de memoria histórica real acumulada (`tylluan_recall`, refinada por `recall_feedback`) puede ser más preciso y seguro para ESE usuario concreto que un modelo de frontera genérico sin esa historia. Esto es exactamente por lo que el `LightReranker` (ADR-011, Fase 3-5) sigue bloqueado por volumen de datos (~45 filas reales hoy, necesita ~5000) — no es un fallo de diseño, es que necesita meses/años de uso real acumulado, el mismo mecanismo que haría funcionar el caso del médico con el tiempo.
+
+**Distinción arquitectónica clave, ya real hoy (no visión):** la Sociedad SLM (Qwen/Gemma/GLiNER/T5, corriendo dentro del kernel) es un concepto distinto del agente externo del usuario (Ollama, LM Studio, `llama.cpp` directo, lo que sea). Tylluan es agnóstico al modelo del cliente por diseño — el transporte MCP (5 tools soberanas) no depende de qué modelo respalda al agente conectado. Ese agente, sea cual sea su tamaño, hereda por `tylluan_recall`/el grafo de conocimiento todo lo que otros agentes (sesiones propias pasadas, u otros miembros del equipo/"hermanos mayores") ya resolvieron antes — no necesita ser más grande, necesita estar bien conectado a la memoria correcta.
 
 ---

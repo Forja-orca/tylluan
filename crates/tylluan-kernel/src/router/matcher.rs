@@ -352,8 +352,8 @@ impl GuildMatcher {
         let sem_weight: f32 = 0.55;
         let kw_weight: f32 = 0.45;
 
-        let mut best: Option<MatchResult> = None;
-        let mut best_score = -1.0_f32;
+        let mut top1: Option<(MatchResult, f32, f32)> = None; // (result, blended, pure_sem)
+        let mut top2: Option<(MatchResult, f32, f32)> = None;
 
         info!("🔍 Matcher: hybrid scoring '{}'", query);
         for guild in &self.catalog {
@@ -390,17 +390,51 @@ impl GuildMatcher {
                 guild.name, score, sem_score, kw_score, trigger_bonus, verb_bonus, neg_penalty
             );
 
-            if score > best_score && score >= threshold {
-                best_score = score;
-                best = Some(MatchResult {
+            if score >= threshold {
+                let result = MatchResult {
                     guild_name: guild.name.clone(),
                     score,
-                    method,
-                });
+                    method: method.clone(),
+                };
+                // Track top-2 for embedding tiebreaker (J-13)
+                match (&top1, &top2) {
+                    (None, _) => {
+                        top1 = Some((result, score, sem_score));
+                    }
+                    (Some(t1), None) => {
+                        if score > t1.1 {
+                            top2 = Some(t1.clone());
+                            top1 = Some((result, score, sem_score));
+                        } else {
+                            top2 = Some((result, score, sem_score));
+                        }
+                    }
+                    (Some(t1), Some(t2)) => {
+                        if score > t1.1 {
+                            top2 = Some(t1.clone());
+                            top1 = Some((result, score, sem_score));
+                        } else if score > t2.1 {
+                            top2 = Some((result, score, sem_score));
+                        }
+                    }
+                }
             }
         }
 
-        let mut keyword_result = best;
+        // J-13: Embedding tiebreaker — when top-2 blended scores are close
+        // (≤ 0.15), prefer the guild with higher pure BGE-M3 semantic similarity.
+        // Keyword dominates normal routing; embedding only resolves ambiguity.
+        if let (Some(t1), Some(t2)) = (&top1, &top2) {
+            if (t1.1 - t2.1).abs() < 0.15 && t2.2 > t1.2 {
+                tracing::debug!(
+                    "🎯 Tiebreak: '{}' (sem={:.3}) > '{}' (sem={:.3}) — scores {:.3} vs {:.3}",
+                    t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
+                );
+                top1 = Some(t2.clone());
+            }
+        }
+
+        let mut keyword_result = top1.map(|(r, _, _)| r);
 
         // Confidence gate: reject sub-threshold matches
         if let Some(ref m) = keyword_result {
@@ -572,6 +606,28 @@ impl GuildMatcher {
                     method: MatchMethod::Keyword,
                 });
             }
+
+        // Long multi-paragraph report/chat text override: free-form status
+        // reports and long messages (e.g. "publica en coloquio equipo: ..."
+        // bodies) share vocabulary with whatever guild they describe (git,
+        // bash, tsc, etc.) and can out-score coloquio's generic "Multi-agent
+        // conversation channels" description on pure semantic/keyword blend.
+        // A real report/message about a technical topic is not the same as
+        // an instruction to *act* on that topic. Multi-paragraph structure
+        // (2+ blank-line-separated blocks or 2+ markdown bold headers) is a
+        // strong signal this is prose to relay, not a task to execute.
+        if q.len() > 200 && self.catalog.iter().any(|g| g.name == "coloquio") {
+            let blank_line_blocks = q.split("\n\n").filter(|b| !b.trim().is_empty()).count();
+            let bold_headers = q.matches("**").count() / 2;
+            if blank_line_blocks >= 2 || bold_headers >= 2 {
+                tracing::info!("📨 Long multi-paragraph report text → coloquio (not a task instruction)");
+                return Some(MatchResult {
+                    guild_name: "coloquio".to_string(),
+                    score: 0.6,
+                    method: MatchMethod::Keyword,
+                });
+            }
+        }
 
         None
     }
@@ -785,6 +841,31 @@ mod tests {
         let result = matcher.match_guild("execute shell commands", None, 0.2, None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().guild_name, "bash");
+    }
+
+    #[test]
+    fn test_long_multiparagraph_report_routes_to_coloquio_not_topic_guild() {
+        let matcher = test_matcher();
+        // Real case from audit.db contamination (turn 196): a status report
+        // mentioning code-splitting/chunks/lazy-loading, posted to coloquio,
+        // previously misrouted to a technical guild by pure content match.
+        let report = "**Code-Splitting y Lazy Loading (Pilares #1 y #2)**:\n\n\
+            - Sub-tabs de `TeamConsolidated` y `GuildsConsolidated` refactorizados con `React.lazy` + `Suspense`.\n\n\
+            - Tamano inicial del chunk de `TeamConsolidated` reducido de **1.8 MB a 3.0 kB**.\n\n\
+            - `FederationTab`, `McpRegistryPanel` y `GuildsTab` ahora son chunks independientes.";
+        let result = matcher.match_guild(report, None, 0.3, None);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().guild_name, "coloquio");
+    }
+
+    #[test]
+    fn test_short_technical_command_still_routes_to_topic_guild() {
+        let matcher = test_matcher();
+        // Guard against over-triggering: a short real command must NOT be
+        // swept into coloquio just because it mentions a guild keyword.
+        let result = matcher.match_guild("git status --short", None, 0.2, None);
+        assert!(result.is_some());
+        assert_ne!(result.unwrap().guild_name, "coloquio");
     }
 
     #[test]

@@ -18,7 +18,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 **Kernel (instalado):** `tylluan-cli start`
 **Kernel (desde source):** `cargo run -p tylluan-cli -- start`
-**Health check:** `curl http://127.0.0.1:3030/health`
+**Health check:** `curl http://127.0.0.1:4000/health`
 **Dashboard:** `cd dashboard && pnpm dev` → `http://localhost:5173`
 
 ---
@@ -28,7 +28,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 1. **5 sovereign tools:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024` en `tylluan.toml`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
-4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente (sin proxy en Tylluan — a diferencia de Forja).
+4. **Puerto único:** `tylluan-nexus` escucha en `:4000` directamente (sin proxy en Tylluan — a diferencia de Forja).
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **n8n es OPCIONAL** — `n8n_bridge` en lazy, nunca en always_on.
 
@@ -41,7 +41,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 | **M1-M7** | Memoria, embeddings, retrievals, kernel | ✅ v0.1.0 |
 | **M10/M11** | Work Contracts + Federación completa | ✅ v0.3.0 |
 | **Encryption** | SQLCipher AES-256 cifrado en reposo | ✅ v0.3.0 |
-| **Docker** | Imagen de producción en `:3030`, caché BGE-M3 persistente | ✅ v0.4.0 |
+| **Docker** | Imagen de producción en `:4000`, caché BGE-M3 persistente | ✅ v0.4.0 |
 | **Security CI** | 30 tests automatizados — intent filter, ACL, rate limiter | ✅ v0.4.0 |
 | **CI** | Pipeline 5 jobs | ✅ 352 tests |
 | **M12** | Ed25519 identity · STUN NAT · mDNS LAN · node signing | ✅ v0.4.0 |
@@ -78,7 +78,7 @@ Este workspace tiene acceso a Forja vía MCP (`.claude/settings.json`):
 - Coloquio para comunicación entre agentes
 - Memoria compartida del equipo
 
-Endpoint: `http://127.0.0.1:3030/sse` (requiere Forja corriendo)
+Endpoint: `http://127.0.0.1:4000/sse` (requiere Forja corriendo)
 
 ---
 

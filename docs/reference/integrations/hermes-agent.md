@@ -8,9 +8,9 @@
 
 ## Prerequisites
 
-- Tylluan running: `tylluan-cli start` → `http://127.0.0.1:3030`
+- Tylluan running: `tylluan-cli start` → `http://127.0.0.1:4000`
 - Hermes Agent installed: [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
-- Health check: `curl http://127.0.0.1:3030/health` returns `{"status":"ok"}`
+- Health check: `curl http://127.0.0.1:4000/health` returns `{"status":"ok"}`
 
 ## Connect Tylluan to Hermes
 
@@ -19,7 +19,7 @@ Add to `~/.hermes/config.yaml`:
 ```yaml
 mcp_servers:
   tylluan:
-    url: "http://127.0.0.1:3030/sse"
+    url: "http://127.0.0.1:4000/sse"
 ```
 
 Hermes infers transport from the `url` field (no `transport:` key needed). Restart Hermes after editing — it auto-discovers the 5 sovereign tools on startup.
@@ -42,7 +42,7 @@ If Tylluan has auth enabled (`dev_mode = false` in `tylluan.toml`):
 ```yaml
 mcp_servers:
   tylluan:
-    url: "http://127.0.0.1:3030/sse"
+    url: "http://127.0.0.1:4000/sse"
     headers:
       Authorization: "Bearer <your-token>"
 ```

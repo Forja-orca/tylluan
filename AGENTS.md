@@ -23,7 +23,7 @@ tylluan-cli start
 # o desde source:
 cargo run -p tylluan-cli -- start
 ```
-**Health check:** `curl http://127.0.0.1:3030/health`  
+**Health check:** `curl http://127.0.0.1:4000/health`  
 **Dashboard dev:** `cd dashboard && pnpm dev` → `http://localhost:5173`
 
 ---
@@ -93,7 +93,7 @@ cargo run -p tylluan-cli -- start
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
-4. **Puerto único:** `tylluan-nexus` escucha en `:3030` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
+4. **Puerto único:** `tylluan-nexus` escucha en `:4000` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **Degree penalty (no boost):** `local_query_graph` usa `pr_score / (1 + deg * 0.1)` — penaliza hubs genéricos. El boost (`*`) fue un bug corregido en v0.10.0.
 
