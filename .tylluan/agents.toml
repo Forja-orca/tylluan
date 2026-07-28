@@ -1,0 +1,35 @@
+# .tylluan/agents.toml — declarative agent profiles for this repo.
+#
+# This file is the machine-readable counterpart to AGENTS.md.
+# It assigns agent_ids to existing roles defined in tylluan.toml's
+# [security.acl.roles] table — it does NOT define new roles.
+#
+# If a referenced role doesn't exist in [security.acl.roles], the kernel
+# logs a warning and falls back to [security.acl].default_role for that
+# agent — this is only "fail safe" if default_role itself is restrictive.
+# Verified 2026-07-28: a real deployment's tylluan.toml had default_role =
+# "admin" with only the admin role defined — roles referenced here that
+# don't exist would silently grant FULL admin access, the opposite of
+# fail-safe. Before relying on this file, confirm reader/writer/admin (or
+# whatever roles you reference) actually exist in your own tylluan.toml
+# [security.acl.roles], and that default_role is NOT admin.
+
+[agents.claude-code]
+role = "admin"
+description = "Tech lead — orchestration, planning, cross-cutting fixes, verification"
+
+[agents.deep]
+role = "writer"
+description = "Backend Rust + guilds Python — complex features, deep bug fixing"
+
+[agents.mimo]
+role = "writer"
+description = "Dashboard audits/refactor — bounded, verified tasks, not open-ended design"
+
+[agents.antigravity]
+role = "writer"
+description = "Dashboard/UI — browser-based, MCP client, bounded tasks only"
+
+[agents.qwen]
+role = "reader"
+description = "Web research + deep research — SSE MCP, no disk access"
