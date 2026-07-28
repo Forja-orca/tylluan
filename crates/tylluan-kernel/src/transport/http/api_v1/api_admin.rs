@@ -939,15 +939,15 @@ pub async fn maintenance_onnx_clean_handler() -> impl IntoResponse {
     let mut count = 0;
     let mut bytes = 0u64;
     let cache_dir = std::path::Path::new("./data/cache/onnx");
-    if cache_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(cache_dir) {
-            for e in entries.flatten() {
-                if let Ok(m) = e.metadata() {
-                    bytes += m.len();
-                    count += 1;
-                }
-                let _ = std::fs::remove_file(e.path());
+    if cache_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(cache_dir)
+    {
+        for e in entries.flatten() {
+            if let Ok(m) = e.metadata() {
+                bytes += m.len();
+                count += 1;
             }
+            let _ = std::fs::remove_file(e.path());
         }
     }
     Json(serde_json::json!({
@@ -983,30 +983,29 @@ pub async fn maintenance_logs_compact_handler() -> impl IntoResponse {
 pub async fn project_skills_list_handler() -> impl IntoResponse {
     let mut skills = Vec::new();
     let skill_dirs = &["./.agents/skills", "./.tylluan/skills", "./skills"];
-    
+
     for dir_path in skill_dirs {
         if let Ok(entries) = std::fs::read_dir(dir_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() {
-                    let fname = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                    if !fname.is_empty() {
-                        skills.push(serde_json::json!({ "name": fname }));
-                    }
+                let name_opt = if path.is_file() {
+                    path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
                 } else if path.is_dir() {
-                    let dname = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                    if !dname.is_empty() {
-                        skills.push(serde_json::json!({ "name": dname }));
+                    path.file_name().and_then(|s| s.to_str()).map(|s| s.to_string())
+                } else {
+                    None
+                };
+                if let Some(name) = name_opt {
+                    if !name.is_empty() {
+                        skills.push(serde_json::json!({ "name": name }));
                     }
                 }
             }
         }
     }
-    
-    if skills.is_empty() {
-        skills.push(serde_json::json!({ "name": "coloquio_teamwork" }));
-    }
 
+    // No mock fallback: if no skills directory exists, return empty list.
+    // The caller (ProjectSkillsPanel) handles the empty state.
     Json(skills)
 }
 
@@ -1052,9 +1051,10 @@ pub async fn background_jobs_list_handler() -> impl IntoResponse {
             "status": "active",
             "created_at": now,
             "description": "P2P Mesh state push-pull synchronization"
-        })
+        }),
     ];
-    Json(serde_json::json!({ "jobs": jobs, "total": jobs.len() }))
+    let total = jobs.len();
+    Json(serde_json::json!({ "jobs": jobs, "total": total }))
 }
 
 // --- AUDIT TRAIL (Point 1) ---
@@ -1223,11 +1223,21 @@ pub async fn set_inference_llama_config_handler(
 
     // Ensure [inference] and [inference.llama] tables exist
     {
-        let root = doc.as_table_mut().unwrap();
+        let root = match doc.as_table_mut() {
+            Some(t) => t,
+            None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": "tylluan.toml root is not a TOML table"
+            }))).into_response(),
+        };
         if !root.contains_key("inference") {
             root.insert("inference".to_string(), toml::Value::Table(toml::map::Map::new()));
         }
-        let inf = root.get_mut("inference").unwrap().as_table_mut().unwrap();
+        let inf = match root.get_mut("inference").and_then(|v| v.as_table_mut()) {
+            Some(t) => t,
+            None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": "[inference] section in tylluan.toml is not a table"
+            }))).into_response(),
+        };
         if !inf.contains_key("llama") {
             inf.insert("llama".to_string(), toml::Value::Table(toml::map::Map::new()));
         }
@@ -1238,7 +1248,12 @@ pub async fn set_inference_llama_config_handler(
         }
 
         // Patch [inference.llama] sub-fields
-        let llama = inf.get_mut("llama").unwrap().as_table_mut().unwrap();
+        let llama = match inf.get_mut("llama").and_then(|v| v.as_table_mut()) {
+            Some(t) => t,
+            None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": "[inference.llama] section in tylluan.toml is not a table"
+            }))).into_response(),
+        };
         if let Some(ref v) = req.provider     { llama.insert("provider".to_string(), toml::Value::String(v.clone())); }
         if let Some(ref v) = req.endpoint     { llama.insert("endpoint".to_string(), toml::Value::String(v.clone())); }
         if let Some(v)     = req.port          { llama.insert("port".to_string(), toml::Value::Integer(v as i64)); }
