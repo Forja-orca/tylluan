@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
+import { usePolling } from './hooks/usePolling'
 import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -245,52 +246,32 @@ function App() {
     }
   }, [online, stats, memoryStats]);
 
-  useEffect(() => {
-    if (online) {
-      const interval = setInterval(incrementUptime, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [online, incrementUptime]);
-
-  // Poll coloquio unread for sidebar badge
-  useEffect(() => {
-    if (!bridge || !online) return;
-    const poll = async () => {
-      try {
-        const data = await bridge.getColoquioUnread('jose');
-        setColoquioUnread(data.total_unread ?? 0);
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
-  }, [bridge, online]);
+  // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
+  usePolling('app-uptime', incrementUptime, { interval: 'fast', enabled: online });
+  usePolling('app-coloquio-unread', async () => {
+    if (!bridge) return;
+    try {
+      const data = await bridge.getColoquioUnread('jose');
+      setColoquioUnread(data.total_unread ?? 0);
+    } catch {}
+  }, { interval: 'quick', enabled: !!bridge && online });
 
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (!bridge || !online) return;
-    const fetchActiveAgents = async () => {
-      try {
-        const data = await bridge.getColoquioThread("mision-activa");
-        const msgs = data.messages || [];
-        const nowSecs = Math.floor(Date.now() / 1000);
-        // unique author ids active in the last 30 minutes
-        const active = Array.from(new Set(
-          msgs
-            .filter((m: any) => (nowSecs - m.created_at) < 1800)
-            .map((m: any) => m.author_id)
-        )) as string[];
-        setActiveAgents(active);
-      } catch (err) {
-        console.error('Failed to load active agents:', err);
-      }
-    };
-
-    fetchActiveAgents();
-    const interval = setInterval(fetchActiveAgents, 10000);
-    return () => clearInterval(interval);
-  }, [bridge, online]);
+  usePolling('app-active-agents', async () => {
+    if (!bridge) return;
+    try {
+      const data = await bridge.getColoquioThread("mision-activa");
+      const msgs = data.messages || [];
+      const nowSecs = Math.floor(Date.now() / 1000);
+      const active = Array.from(new Set(
+        msgs
+          .filter((m: any) => (nowSecs - m.created_at) < 1800)
+          .map((m: any) => m.author_id)
+      )) as string[];
+      setActiveAgents(active);
+    } catch {}
+  }, { interval: 'medium', enabled: !!bridge && online });
 
   const getAgentDotColor = (agentId: string): string => {
     const cleanId = agentId.toLowerCase();
