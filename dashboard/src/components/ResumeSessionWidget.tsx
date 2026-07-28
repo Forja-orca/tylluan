@@ -57,18 +57,10 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
       setResult(data);
       setIsMock(false);
     } catch (err: any) {
-      console.warn("Session resume endpoint failed, falling back to mock:", err.message);
-      
-      // Local mock summary if the endpoint fails
-      const mockResult: AgentMemorySummary = {
-        summary: `Sesión previa consolidada — 5 episodios relevantes:\n1. Inicialización y setup del sandbox ejecutados con éxito.\n2. Modificación de permisos de agente en tylluan.toml.\n3. Corrección del leak de WebGL en el grafo de conocimiento 3D.\n4. Integración del panel de logs de auditoría de seguridad.\n5. Compilación y build local verificado.`,
-        created_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
-        node_id: `sim_session_${agentId.trim()}`
-      };
-
-      setError(`[MOCK FALLBACK] GET /api/v1/agent-memories/${agentId.trim()}/summary returned error: ${err.message}. Showing simulated session log.`);
-      setResult(mockResult);
-      setIsMock(true);
+      console.error("Session summary fetch error:", err.message);
+      setResult(null);
+      setIsMock(false);
+      setError(`Error al consultar contexto de sesión (${agentId.trim()}): ${err.message}`);
     } finally {
       setLoading(false);
     }
