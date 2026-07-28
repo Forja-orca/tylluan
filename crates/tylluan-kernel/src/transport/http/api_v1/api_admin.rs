@@ -995,10 +995,10 @@ pub async fn project_skills_list_handler() -> impl IntoResponse {
                 } else {
                     None
                 };
-                if let Some(name) = name_opt {
-                    if !name.is_empty() {
-                        skills.push(serde_json::json!({ "name": name }));
-                    }
+                if let Some(name) = name_opt
+                    && !name.is_empty()
+                {
+                    skills.push(serde_json::json!({ "name": name }));
                 }
             }
         }
