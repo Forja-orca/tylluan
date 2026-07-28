@@ -59,43 +59,44 @@ export function ModelConfigPanel({ bridge }: Props) {
         setSelectedDevice(dev);
         setInitialDevice(dev);
 
-        // Extract GGUF / inference settings if present
+        // Extract GGUF / inference settings from [inference.llama] with fallback to [inference]
+        const llamaCfg = cfg?.inference?.llama || cfg?.inference || {};
         if (cfg?.inference?.primary_model) {
           setSelectedGgufModel(cfg.inference.primary_model);
           setRolePrimary(cfg.inference.primary_model);
         }
-        if (cfg?.inference?.provider) {
-          setActiveProvider(cfg.inference.provider);
+        if (llamaCfg.provider) {
+          setActiveProvider(llamaCfg.provider);
         }
-        if (cfg?.inference?.endpoint) {
-          setProviderUrl(cfg.inference.endpoint);
+        if (llamaCfg.endpoint) {
+          setProviderUrl(llamaCfg.endpoint);
         }
-        if (cfg?.inference?.port) {
-          setLlamaPort(cfg.inference.port);
+        if (llamaCfg.port) {
+          setLlamaPort(llamaCfg.port);
         }
-        if (cfg?.inference?.context_size) {
-          setContextLen(cfg.inference.context_size);
+        if (llamaCfg.ctx_size || llamaCfg.context_size) {
+          setContextLen(llamaCfg.ctx_size || llamaCfg.context_size);
         }
-        if (cfg?.inference?.n_gpu_layers !== undefined) {
-          setGpuLayers(cfg.inference.n_gpu_layers);
+        if (llamaCfg.n_gpu_layers !== undefined) {
+          setGpuLayers(llamaCfg.n_gpu_layers);
         }
-        if (cfg?.inference?.threads) {
-          setCpuThreads(cfg.inference.threads);
+        if (llamaCfg.threads !== undefined) {
+          setCpuThreads(llamaCfg.threads);
         }
-        if (cfg?.inference?.batch_size) {
-          setBatchSize(cfg.inference.batch_size);
+        if (llamaCfg.batch_size) {
+          setBatchSize(llamaCfg.batch_size);
         }
-        if (cfg?.inference?.temperature !== undefined) {
-          setTemperature(cfg.inference.temperature);
+        if (llamaCfg.temperature !== undefined) {
+          setTemperature(llamaCfg.temperature);
         }
-        if (cfg?.inference?.top_p !== undefined) {
-          setTopP(cfg.inference.top_p);
+        if (llamaCfg.top_p !== undefined) {
+          setTopP(llamaCfg.top_p);
         }
-        if (cfg?.inference?.top_k !== undefined) {
-          setTopK(cfg.inference.top_k);
+        if (llamaCfg.top_k !== undefined) {
+          setTopK(llamaCfg.top_k);
         }
-        if (cfg?.inference?.repeat_penalty !== undefined) {
-          setRepeatPenalty(cfg.inference.repeat_penalty);
+        if (llamaCfg.repeat_penalty !== undefined) {
+          setRepeatPenalty(llamaCfg.repeat_penalty);
         }
         if (cfg?.night_reasoner?.model) {
           setRoleCoordinator(cfg.night_reasoner.model);
@@ -162,21 +163,24 @@ export function ModelConfigPanel({ bridge }: Props) {
         body: JSON.stringify({
           inference: {
             primary_model: selectedGgufModel,
-            provider: activeProvider,
-            endpoint: providerUrl,
-            port: llamaPort,
-            context_size: contextLen,
-            n_gpu_layers: gpuLayers,
-            threads: cpuThreads,
-            batch_size: batchSize,
-            temperature: temperature,
-            top_p: topP,
-            top_k: topK,
-            repeat_penalty: repeatPenalty,
+            device: selectedDevice,
+            llama: {
+              provider: activeProvider,
+              endpoint: providerUrl,
+              port: llamaPort,
+              ctx_size: contextLen,
+              n_gpu_layers: gpuLayers,
+              threads: cpuThreads,
+              batch_size: batchSize,
+              temperature: temperature,
+              top_p: topP,
+              top_k: topK,
+              repeat_penalty: repeatPenalty,
+            }
           }
         })
       });
-      alert('Configuración de inferencia GGUF & llama-server guardada exitosamente en tylluan.toml.');
+      alert('Configuración de inferencia GGUF & [inference.llama] guardada exitosamente en tylluan.toml.');
     } catch (e: any) {
       alert(`Error guardando configuración GGUF: ${e.message || String(e)}`);
     }

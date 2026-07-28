@@ -616,16 +616,20 @@ pub struct InferenceConfig {
     pub primary_model: String,
     #[serde(default = "auto_select_device")]
     pub device: InferenceDevice,
+    #[serde(default)]
+    pub llama: InferenceLlamaConfig,
+}
 
-    // Local llama-server & GGUF execution parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InferenceLlamaConfig {
     #[serde(default = "default_provider_name")]
     pub provider: String,
     #[serde(default = "default_endpoint_url")]
     pub endpoint: String,
     #[serde(default = "default_llama_port")]
     pub port: u16,
-    #[serde(default = "default_context_size")]
-    pub context_size: usize,
+    #[serde(default = "default_ctx_size")]
+    pub ctx_size: usize,
     #[serde(default = "default_n_gpu_layers")]
     pub n_gpu_layers: i32,
     #[serde(default = "default_threads")]
@@ -645,7 +649,7 @@ pub struct InferenceConfig {
 fn default_provider_name() -> String { "llama-server".to_string() }
 fn default_endpoint_url() -> String { "http://127.0.0.1:9000".to_string() }
 fn default_llama_port() -> u16 { 9000 }
-fn default_context_size() -> usize { 4096 }
+fn default_ctx_size() -> usize { 4096 }
 fn default_n_gpu_layers() -> i32 { 99 }
 fn default_threads() -> usize { 4 }
 fn default_batch_size() -> usize { 512 }
@@ -653,6 +657,24 @@ fn default_temperature() -> f32 { 0.7 }
 fn default_top_p() -> f32 { 0.95 }
 fn default_top_k() -> i32 { 40 }
 fn default_repeat_penalty() -> f32 { 1.1 }
+
+impl Default for InferenceLlamaConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_provider_name(),
+            endpoint: default_endpoint_url(),
+            port: default_llama_port(),
+            ctx_size: default_ctx_size(),
+            n_gpu_layers: default_n_gpu_layers(),
+            threads: default_threads(),
+            batch_size: default_batch_size(),
+            temperature: default_temperature(),
+            top_p: default_top_p(),
+            top_k: default_top_k(),
+            repeat_penalty: default_repeat_penalty(),
+        }
+    }
+}
 
 /// Auto-detect the best inference device for the current platform.
 /// Returns the most capable GPU execution provider available on the OS,
@@ -680,17 +702,7 @@ impl Default for InferenceConfig {
             providers: Vec::new(),
             primary_model: default_model(),
             device: auto_select_device(),
-            provider: default_provider_name(),
-            endpoint: default_endpoint_url(),
-            port: default_llama_port(),
-            context_size: default_context_size(),
-            n_gpu_layers: default_n_gpu_layers(),
-            threads: default_threads(),
-            batch_size: default_batch_size(),
-            temperature: default_temperature(),
-            top_p: default_top_p(),
-            top_k: default_top_k(),
-            repeat_penalty: default_repeat_penalty(),
+            llama: InferenceLlamaConfig::default(),
         }
     }
 }
