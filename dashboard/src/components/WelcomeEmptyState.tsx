@@ -69,7 +69,7 @@ export function WelcomeEmptyState({
     if (!noteText.trim() || !bridge) return;
     setAddingNote(true);
     try {
-      await bridge.fetchRaw('/api/v1/memory/remember', {
+      await bridge.fetchRaw('/api/v1/memory/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: noteText })
