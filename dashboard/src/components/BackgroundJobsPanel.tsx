@@ -33,6 +33,32 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const pollRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
+  const loadJobs = async () => {
+    if (!bridge) return;
+    try {
+      const res = await bridge.listBackgroundJobs();
+      if (res && res.jobs) {
+        setJobs(res.jobs.map((j: any) => ({
+          id: j.id,
+          guild: j.guild || j.name || 'kernel',
+          intent: j.intent || j.description || j.name,
+          status: j.status || 'running',
+          started_at: j.created_at || new Date().toISOString(),
+          elapsed_secs: j.elapsed_secs || 0,
+        })));
+        setIsMock(false);
+      }
+    } catch (err: any) {
+      console.error("Error al cargar lista de trabajos en segundo plano:", err.message);
+    }
+  };
+
+  useEffect(() => {
+    loadJobs();
+    const interval = setInterval(loadJobs, 15000);
+    return () => clearInterval(interval);
+  }, [bridge]);
+
   const handleStartJob = async () => {
     if (!intent.trim() || !bridge) return;
     setStarting(true);
@@ -52,25 +78,9 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
       setIntent('');
       pollJob(jobId);
     } catch (err: any) {
-      console.warn("Background job start failed, using mock:", err.message);
-      const mockId = `bg_guild_call:mock-${Date.now().toString(36)}`;
-      setJobs(prev => [{
-        id: mockId,
-        guild: intent.toLowerCase().includes('vision') ? 'vision' : 'deep_analysis',
-        intent: intent.trim(),
-        status: 'pending',
-        started_at: new Date().toISOString(),
-        elapsed_secs: 0,
-      }, ...prev]);
-      setIsMock(true);
-      setError(`[MOCK FALLBACK] @bg: intent failed: ${err.message}. Showing simulated job.`);
-      setIntent('');
-      // Simulate completion after a few seconds
-      setTimeout(() => {
-        setJobs(prev => prev.map(j => j.id === mockId
-          ? { ...j, status: 'completed', result_text: `SIMULATED RESULT for '${j.intent}' on guild '${j.guild}'.` }
-          : j));
-      }, 4000);
+      console.error("Error al iniciar trabajo en segundo plano:", err.message);
+      setIsMock(false);
+      setError(`Error al iniciar trabajo (@bg:${intent.trim()}): ${err.message}`);
     } finally {
       setStarting(false);
     }
