@@ -243,10 +243,48 @@ def _decode_gemma(token_ids):
         return text
     return f"[{len(token_ids)} tokens]"
 
-def _generate_gemma(prompt, max_tokens=None):
-    """Generate with Gemma-4-E2B using embed_tokens + decoder_merged pattern."""
+def _sample_token(logits_row, temperature=1.0, top_p=0.95, top_k=64, rng=None):
+    """Top-k + top-p (nucleus) sampling, per Google DeepMind's Gemma 4 model
+    card recommended config (temperature=1.0, top_p=0.95, top_k=64). Greedy
+    argmax on this QAT-quantized checkpoint was found to degenerate into
+    gibberish beyond 1-2 tokens on real reasoning/tool-calling prompts
+    (Coloquio 2026-07-27) -- this is the documented alternative, not yet
+    confirmed to fix it, hence exposed as an opt-in `sampling=True` path
+    rather than replacing the existing greedy default used by the
+    DeepEval judge (which only needs a reliable single first token).
+    """
+    rng = rng or np.random.default_rng()
+    logits = logits_row.astype(np.float64) / max(temperature, 1e-6)
+    top_k = min(top_k, logits.shape[-1])
+    top_idx = np.argpartition(logits, -top_k)[-top_k:]
+    top_logits = logits[top_idx]
+    probs = np.exp(top_logits - top_logits.max())
+    probs /= probs.sum()
+    order = np.argsort(-probs)
+    sorted_idx = top_idx[order]
+    sorted_probs = probs[order]
+    cumulative = np.cumsum(sorted_probs)
+    cutoff = np.searchsorted(cumulative, top_p) + 1
+    cutoff = max(cutoff, 1)
+    nucleus_idx = sorted_idx[:cutoff]
+    nucleus_probs = sorted_probs[:cutoff]
+    nucleus_probs = nucleus_probs / nucleus_probs.sum()
+    return int(rng.choice(nucleus_idx, p=nucleus_probs))
+
+
+def _generate_gemma(prompt, max_tokens=None, sampling=False, temperature=1.0, top_p=0.95, top_k=64, seed=None):
+    """Generate with Gemma-4-E2B using embed_tokens + decoder_merged pattern.
+
+    sampling=False (default): greedy argmax, unchanged behavior for existing
+    callers (route_intent-era code, the DeepEval judge — both only need a
+    reliable first token, and greedy keeps that deterministic).
+    sampling=True: real top-k/top-p/temperature sampling per the model
+    card's recommended config, for exploring reasoning/tool-calling prompts
+    where greedy degenerated into gibberish.
+    """
     embed, decoder = _load_gemma()
     max_tokens = max_tokens or _MAX_NEW_TOKENS
+    rng = np.random.default_rng(seed) if sampling else None
 
     input_ids = _tokenize_gemma(prompt, max_len=300)
     seq_len = input_ids.shape[1]
@@ -281,7 +319,10 @@ def _generate_gemma(prompt, max_tokens=None):
         for j, name in enumerate(present_names):
             kv_cache[name.replace("present.", "past_key_values.")] = outputs[1 + j]
 
-        next_token = int(np.argmax(logits[0, -1, :]))
+        if sampling:
+            next_token = _sample_token(logits[0, -1, :], temperature, top_p, top_k, rng)
+        else:
+            next_token = int(np.argmax(logits[0, -1, :]))
         generated.append(next_token)
 
         if next_token in _EOS_TOKENS:
