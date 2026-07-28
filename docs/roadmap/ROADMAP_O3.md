@@ -649,3 +649,33 @@ Tras el debate en equipo (Coloquio `#equipo`, turnos 302-306: José, Claude Code
 - **Estado real: diseño validado en debate de equipo (infraestructura Ed25519 confirmada real, formato `.silva` NO implementado, cero seeds construidos).** Próximo paso concreto: implementar Tier 1 primero (bajo riesgo, dominio propio) como spike acotado antes de plantear Tier 2 con ninguna institución externa.
 
 ---
+
+## Auditoría dashboard-backend — desconexiones reportadas por Antigravity (2026-07-28)
+
+Antigravity realizó una autoauditoría del `dashboard/src/components/` buscando paneles/controles sin endpoint real detrás — patrón que ya causó 7 incidentes previos en esta sesión (ver `incident_antigravity_recurring_hardcoded_telemetry.md`). Esta vez el propio agente reportó los huecos en vez de esconderlos, señal positiva. **No verificado punto por punto todavía** — un ítem revisado ya resultó incorrecto (ver nota), así que tratar el resto como reporte sin confirmar, no como hechos cerrados, hasta pasar por el mismo criterio de verificación del resto del ciclo.
+
+**Corrección encontrada al verificar (1 de 13, spot-check):** el informe afirma que el guild real de visión corre `moondream2`/`vision_moondream.py` — falso, verificado en `guilds/core/vision.py`: el modelo real en producción es `SmolVLM2-256M-Instruct` (migrado de moondream2 en una sesión anterior de este mismo ciclo de trabajo). El resto de la tabla no se ha verificado línea por línea.
+
+**Grupo 1 — paneles con fallback a datos mock cuando el endpoint real falla o no existe:**
+- `AuditTrailPanel.tsx` — `bridge.getAuditTrail()` no existe en `nexus-bridge.ts` ni en rutas HTTP del kernel (confirmado con grep, este sí es real); cae siempre a `MOCK_AUDIT_ENTRIES`.
+- `DoctorPanel.tsx` — botón "Reparar" llama a `bridge.repairDoctor()`, inexistente; simula con `setTimeout(800ms)` sin tocar disco.
+- `A2aPanel.tsx` — fallback a `MOCK_CARD`/`MOCK_TASKS` si `/a2a/agent-card.json` falla.
+- `RepoMapWidget.tsx` — fallback a `mockData` estático si `GET /api/v1/repo-map` falla.
+- `ProjectSkillsPanel.tsx` — fallback a `mockSkills` si `bridge.getProjectSkills()` no responde.
+- `BackgroundJobsPanel.tsx` — sin endpoint real de listado (`GET /api/v1/jobs`); genera trabajo simulado si falla la creación.
+
+**Grupo 2 — controles que solo mutan estado local de React, sin persistencia real:**
+- `ScopesPanel.tsx` — toggles de ACL sin `POST` que persista en `tylluan.toml`.
+- `ResumeSessionWidget.tsx` — botón "Reanudar sesión" sin llamada real a `/api/v1/sessions/resume`.
+- `PlanModePanel.tsx` — toggle de modo planificación sin envío al router de deliberación del kernel.
+- `MaintenanceTab.tsx` — botones de limpieza/reorganización/compactado ejecutan promesas simuladas en cliente.
+
+**Grupo 3 — selectores/indicadores visuales sin efecto real o con dato calculado indirectamente:**
+- `ModelConfigPanel.tsx` — opciones de embedding (`BGE-base-en-v1.5`, `Nomic-Embed-v2`) que no pueden activarse de verdad (CONTRACT-01 exige `vector_dimensions=1024`, BGE-M3 fijo).
+- `ModelConfigPanel.tsx` — selector de visión menciona un modelo que **no es el real** (ver corrección arriba).
+- `ColoquioAgentsPanel.tsx` — indicador verde/gris de agentes activos calculado por timestamp del último mensaje en `mailbox.db`, no por ping real de proceso.
+- `ConnectorsTab.tsx` — gráfica de latencia mesh simula ondas sinusoidales en cliente si no hay peers P2P reales conectados.
+
+**Próximo paso:** verificar cada ítem individualmente (mismo criterio que el resto del ciclo — leer el código, no aceptar la tabla) antes de repartir fixes. No priorizado sobre P0-P3 (llama.cpp) en curso.
+
+---
