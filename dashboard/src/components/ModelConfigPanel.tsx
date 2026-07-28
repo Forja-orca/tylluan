@@ -201,8 +201,39 @@ export function ModelConfigPanel({ bridge }: Props) {
     setSavingGguf(false);
   };
 
+  const isModelInstalled = (modelVal: string) => {
+    if (!models?.detected_local_models || models.detected_local_models.length === 0) return null;
+    if (!modelVal) return null;
+    return models.detected_local_models.find((m: any) => {
+      const mId = (m.id || '').toLowerCase();
+      const mName = (m.name || '').toLowerCase();
+      const val = modelVal.toLowerCase();
+      return mId === val || mName === val || mId.includes(val) || val.includes(mId) || mName.includes(val) || val.includes(mName);
+    }) || null;
+  };
+
   const handleSaveRoles = async () => {
     if (!bridge) return;
+
+    // Validation: Check if assigned models exist in local disk inventory
+    if (models?.detected_local_models?.length > 0) {
+      const roleChecks = [
+        { role: 'Inferencia Principal', val: rolePrimary },
+        { role: 'Coordinador Nocturno', val: roleCoordinator },
+        { role: 'Enrutamiento e Intenciones', val: roleRouting },
+        { role: 'Análisis Visual', val: roleVision },
+      ];
+      const unverified = roleChecks.filter(r => r.val && !isModelInstalled(r.val));
+      if (unverified.length > 0) {
+        const warnMsg = `Atención: Los siguientes modelos no se detectaron en el inventario local de disco:\n\n` +
+          unverified.map(u => `• ${u.role}: "${u.val}"`).join('\n') +
+          `\n\n¿Deseas guardar esta asignación de todas formas?`;
+        if (!window.confirm(warnMsg)) {
+          return;
+        }
+      }
+    }
+
     setSavingRoles(true);
     try {
       const res = await bridge.fetch('/api/v1/config/inference-llama', {
@@ -603,9 +634,26 @@ export function ModelConfigPanel({ bridge }: Props) {
                     placeholder="Sin modelos en disco — introduce nombre"
                   />
                 )}
-                <span className="text-[9px] text-slate-500 font-mono block mt-1.5">
-                  💡 {role.rec}
-                </span>
+                {(() => {
+                  const match = isModelInstalled(role.value);
+                  return (
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <span className="text-[9px] text-slate-500 font-mono">
+                        💡 {role.rec}
+                      </span>
+                      {models?.detected_local_models?.length > 0 && (
+                        <span className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded font-mono border whitespace-nowrap shrink-0",
+                          match
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        )}>
+                          {match ? `✓ En disco (${match.size_mb} MB)` : '⚠️ No detectado'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ))}
