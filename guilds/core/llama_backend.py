@@ -67,6 +67,23 @@ LLAMA_PORT = _CFG["port"]
 _EXTERNAL_API_BASE = None
 
 
+def _normalize_backend_url(val, is_ollama_host=False):
+    """Normalize an env-var-provided backend address into a usable API base URL.
+
+    OLLAMA_HOST in particular is a bare `host:port` (Ollama's own listen-address
+    format, e.g. "0.0.0.0:11434" to accept connections on all interfaces) --
+    not a URL. Using it as-is breaks urllib with "unknown url type: 0.0.0.0".
+    0.0.0.0/:: is a *bind* address, never a valid address to *connect to* --
+    normalize it to 127.0.0.1 for the client side.
+    """
+    if "://" not in val:
+        val = f"http://{val}"
+    val = val.replace("://0.0.0.0", "://127.0.0.1").replace("://[::]", "://127.0.0.1")
+    if is_ollama_host and not val.rstrip("/").endswith("/v1"):
+        val = val.rstrip("/") + "/v1"
+    return val
+
+
 def _detect_external_backend():
     """Check for external LLM backends. Returns API base URL or None."""
     global _EXTERNAL_API_BASE
@@ -76,9 +93,10 @@ def _detect_external_backend():
     for env_var in ["OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST"]:
         val = os.environ.get(env_var)
         if val:
-            sys.stderr.write(f"[llama_backend] Using {env_var}={val}\n")
-            _EXTERNAL_API_BASE = val
-            return val
+            normalized = _normalize_backend_url(val, is_ollama_host=(env_var == "OLLAMA_HOST"))
+            sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
+            _EXTERNAL_API_BASE = normalized
+            return normalized
 
     import socket
     import urllib.request as _urllib
