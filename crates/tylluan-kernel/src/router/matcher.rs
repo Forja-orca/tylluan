@@ -344,6 +344,7 @@ impl GuildMatcher {
             ("show", "filesystem"), ("display", "filesystem"),
             ("echo", "bash"), ("run", "bash"), ("pwd", "bash"),
             ("ls", "bash"), ("cat", "bash"), ("grep", "bash"),
+            ("rm", "bash"), ("npm", "bash"), ("pip", "bash"),
         ];
         let verb_guild = verb_triggers.iter()
             .find(|(v, _)| *v == first_word)
