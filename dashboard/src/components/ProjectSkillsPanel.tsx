@@ -53,13 +53,13 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     setError(null);
     try {
       const data = await bridge.getProjectSkills();
-      setSkills(data);
+      setSkills(data || []);
       setIsMock(false);
     } catch (err: any) {
-      console.warn("Project Skills API not implemented in backend:", err.message);
-      setSkills(mockSkills.map(({ name }) => ({ name })));
-      setIsMock(true);
-      setError(`[MOCK FALLBACK] Backend endpoints missing. Showing simulated project skills.`);
+      console.error("Project Skills API error:", err.message);
+      setSkills([]);
+      setIsMock(false);
+      setError(`Error al consultar habilidades del proyecto: ${err.message}`);
     } finally {
       setLoading(false);
     }
