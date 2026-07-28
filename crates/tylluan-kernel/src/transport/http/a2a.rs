@@ -356,6 +356,32 @@ pub async fn a2a_jsonrpc_handler(
     }
 }
 
+/// Extracts the intent text from `message/send` params. Accepts three shapes:
+/// a flat `{"intent": "..."}` (internal callers, dashboard), a real A2A spec
+/// `message` object `{role, parts: [{kind:"text", text}], messageId}` (the
+/// official SDK and any compliant external client), or a lenient bare
+/// `{"message": "..."}` string.
+fn extract_intent(params: &serde_json::Value) -> String {
+    if let Some(s) = params.get("intent").and_then(|v| v.as_str()) {
+        return s.to_string();
+    }
+    if let Some(msg) = params.get("message") {
+        if let Some(s) = msg.as_str() {
+            return s.to_string();
+        }
+        if let Some(parts) = msg.get("parts").and_then(|p| p.as_array()) {
+            let text = parts
+                .iter()
+                .filter(|p| p.get("kind").and_then(|k| k.as_str()) == Some("text"))
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" ");
+            return text;
+        }
+    }
+    String::new()
+}
+
 async fn handle_message_send(
     task_mgr: &A2aTaskManager,
     state: &Arc<HttpState>,
@@ -385,12 +411,11 @@ async fn handle_message_send(
         ));
     }
 
-    let intent_str = params.get("intent")
-        .and_then(|v| v.as_str())
-        .unwrap_or_else(|| params.get("message").and_then(|v| v.as_str()).unwrap_or(""));
+    let intent_string = extract_intent(&params);
+    let intent_str = intent_string.as_str();
 
     if intent_str.is_empty() {
-        return Json(jsonrpc_error(-32602, "Invalid params: 'intent' or 'message' required", id));
+        return Json(jsonrpc_error(-32602, "Invalid params: 'intent', or 'message' as a string or a spec-shaped {parts:[{kind:\"text\",text}]} object, is required", id));
     }
 
     let task_id = task_mgr.create_task(agent_id, "message/send", &params).await;
@@ -583,6 +608,54 @@ mod tests {
         assert_eq!(resp.id, serde_json::json!(1));
         assert!(resp.error.is_none());
         assert_eq!(resp.result.as_ref().unwrap().get("ok").unwrap(), true);
+    }
+
+    #[test]
+    fn test_extract_intent_flat_shape() {
+        let params = serde_json::json!({"intent": "list files"});
+        assert_eq!(extract_intent(&params), "list files");
+    }
+
+    #[test]
+    fn test_extract_intent_real_spec_message_shape() {
+        // The real A2A spec shape sent by the official a2a-sdk client and any
+        // compliant external agent: message is an object with a parts array,
+        // not a plain string. Found missing 2026-07-28 when a real curl request
+        // shaped like this got rejected with "'intent' or 'message' required"
+        // despite the earlier securitySchemes fix (e4586c2) already being live.
+        let params = serde_json::json!({
+            "message": {
+                "role": "user",
+                "parts": [{"kind": "text", "text": "health check ping"}],
+                "messageId": "test-msg-1"
+            }
+        });
+        assert_eq!(extract_intent(&params), "health check ping");
+    }
+
+    #[test]
+    fn test_extract_intent_multi_part_message_joins_text() {
+        let params = serde_json::json!({
+            "message": {
+                "parts": [
+                    {"kind": "text", "text": "first"},
+                    {"kind": "text", "text": "second"}
+                ]
+            }
+        });
+        assert_eq!(extract_intent(&params), "first second");
+    }
+
+    #[test]
+    fn test_extract_intent_bare_message_string_fallback() {
+        let params = serde_json::json!({"message": "hello"});
+        assert_eq!(extract_intent(&params), "hello");
+    }
+
+    #[test]
+    fn test_extract_intent_empty_when_nothing_matches() {
+        let params = serde_json::json!({"agent_id": "test-agent"});
+        assert_eq!(extract_intent(&params), "");
     }
 
     #[tokio::test(flavor = "multi_thread")]
