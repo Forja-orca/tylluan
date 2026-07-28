@@ -140,6 +140,7 @@ def _get_backend_url():
 
 _llama_process = None
 _model_loaded = False
+_start_lock = asyncio.Lock()
 
 
 def _find_llama_server():
@@ -293,7 +294,17 @@ def _is_port_open(port):
 
 
 async def _start_llama_server():
-    """Start llama-server subprocess on LLAMA_PORT. Idempotent."""
+    """Start llama-server subprocess on LLAMA_PORT. Idempotent.
+
+    Guarded by _start_lock: concurrent query_model calls before the server
+    is up would otherwise race past the `_model_loaded` check (it's only
+    set True at the very end) and each try to spawn their own subprocess.
+    """
+    async with _start_lock:
+        await _start_llama_server_locked()
+
+
+async def _start_llama_server_locked():
     global _llama_process, _model_loaded
     if _model_loaded:
         return
@@ -342,12 +353,31 @@ async def _start_llama_server():
         if not _is_port_open(LLAMA_PORT):
             _model_loaded = True
             sys.stderr.write("[llama_backend] llama-server ready\n")
+            # Drain stderr continuously from here on -- a PIPE that's read only
+            # once (on crash) fills up once the server is running long enough
+            # to log past the OS pipe buffer, which blocks the child process
+            # on its next write() and silently hangs llama-server.
+            asyncio.create_task(_drain_process_stderr(_llama_process))
             return
         if _llama_process.poll() is not None:
             stderr = _llama_process.stderr.read() if _llama_process.stderr else ""
             raise RuntimeError(f"llama-server exited early: {stderr[:200]}")
 
     raise RuntimeError("llama-server did not start within 15s")
+
+
+async def _drain_process_stderr(proc):
+    """Continuously read and discard a running llama-server's stderr so its
+    OS pipe buffer never fills up and blocks the child on write()."""
+    if proc.stderr is None:
+        return
+    try:
+        while True:
+            line = await asyncio.to_thread(proc.stderr.readline)
+            if not line:
+                break
+    except Exception:
+        pass
 
 
 async def _stop_llama_server():
@@ -367,7 +397,7 @@ async def _stop_llama_server():
 
 
 @mcp.tool()
-async def query_model(prompt: str, max_tokens: int = 256, temperature: float = 0.7) -> str:
+async def query_model(prompt: str, max_tokens: int = 256, temperature: float | None = None) -> str:
     """Query the llama.cpp backend with a prompt. Returns generated text.
 
     The first call starts llama-server if not already running.
@@ -376,7 +406,11 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float = 0
     Args:
         prompt: The prompt to send to the model.
         max_tokens: Maximum tokens to generate (default 256).
-        temperature: Sampling temperature (default 0.7, 0 for greedy).
+        temperature: Sampling temperature. Defaults to tylluan.toml's
+            [inference.llama].temperature when not given -- None is the
+            real sentinel for "caller didn't specify" (a bare 0.7 default
+            here would be indistinguishable from a caller explicitly
+            asking for 0.7, silently overriding it with the config value).
     """
     import urllib.request as _urllib
 
@@ -386,7 +420,7 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float = 0
     if not is_external:
         await _start_llama_server()
 
-    t = temperature if temperature != 0.7 else _CFG["temperature"]
+    t = temperature if temperature is not None else _CFG["temperature"]
 
     data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
