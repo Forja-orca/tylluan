@@ -109,25 +109,10 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
           routing_trace: [backendPlan.message],
         });
       } else {
-        // Evaluate client-side dry-run estimate if raw result is standard JSON
-        const isDestructive = detectDestructiveKeywords(intent);
-        const resolvedGuild = intent.toLowerCase().includes('coloquio') || intent.toLowerCase().includes('chat') ? 'coloquio' : 'bash';
-        const resolvedTool = resolvedGuild === 'coloquio' ? 'post_to_channel' : 'run_command';
-
-        setPlanResult({
-          plan: true,
-          would_execute: {
-            guild: resolvedGuild,
-            tool_name: resolvedTool,
-            destructive: isDestructive,
-            sandbox_profile: isDestructive ? 'Strict' : 'Balanced',
-            args_preview: raw?.result ?? { intent: intent.trim() }
-          },
-          routing_trace: [
-            `Pre-flight dry-run evaluated for agent '${agentId}'`,
-            isDestructive ? 'Flagged as DESTRUCTIVE intent' : 'Safe read-only execution footprint'
-          ]
-        });
+        // If the backend didn't return a plan even though we requested one,
+        // it means the tool execution didn't yield a plan format.
+        setError('El backend no devolvió un plan válido para la intención solicitada.');
+        notify('No se recibió un plan del kernel', 'error');
       }
     } catch (err: any) {
       setError(`Failed to reach kernel on :4000: ${err.message}`);

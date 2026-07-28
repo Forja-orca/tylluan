@@ -64,7 +64,6 @@ function formatRelativeTime(unixSecs: number): string {
 export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
   const [data, setData] = useState<RepoMapData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchRepoMap = async () => {
@@ -75,14 +74,12 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
       const res = await bridge.getRepoMap();
       if (res && (res.top_level_dirs || res.total_files !== undefined)) {
         setData(res);
-        setIsMock(false);
       } else {
         throw new Error("Respuesta de mapa de código inválida del servidor");
       }
     } catch (err: any) {
       console.error("Repo Map API error:", err.message);
       setData(null);
-      setIsMock(false);
       setError(`Error obteniendo topología del proyecto (GET /api/v1/repo-map): ${err.message}`);
     } finally {
       setLoading(false);
@@ -119,17 +116,6 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
           Built {formatRelativeTime(data.built_at_unix)} ({data.build_duration_ms}ms)
         </span>
       </div>
-
-      {/* Simulated warning banner */}
-      {isMock && (
-        <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl flex items-center gap-2 text-[10px] leading-normal font-mono">
-          <ServerOff className="w-3.5 h-3.5 flex-shrink-0 animate-pulse text-amber-500" />
-          <div>
-            <span className="font-bold">[SIMULATED REPO MAP] </span>
-            {error || "GET /api/v1/repo-map is pending backend integration."}
-          </div>
-        </div>
-      )}
 
       {/* Totals row */}
       <div className="grid grid-cols-3 gap-2 text-center font-mono">

@@ -24,7 +24,6 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
   // full content upfront since there's no real intent round-trip to lazy-load from.
   const [skills, setSkills] = useState<Pick<ProjectSkill, 'name'>[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Editor states
@@ -34,18 +33,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
   const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
 
-  const mockSkills: ProjectSkill[] = [
-    {
-      name: 'format-guidelines',
-      content: 'Always format code to 100 column width, use 4 spaces indent, and prioritize early returns.',
-      created_at: new Date(Date.now() - 86400000).toISOString()
-    },
-    {
-      name: 'deploy-prod',
-      content: 'Build the binary with --release --features bundled-dashboard, and push to ECR before reloading the service.',
-      created_at: new Date(Date.now() - 3600000 * 4).toISOString()
-    }
-  ];
+
 
   const loadSkills = async () => {
     if (!bridge) return;
@@ -54,11 +42,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     try {
       const data = await bridge.getProjectSkills();
       setSkills(data || []);
-      setIsMock(false);
     } catch (err: any) {
       console.error("Project Skills API error:", err.message);
       setSkills([]);
-      setIsMock(false);
       setError(`Error al consultar habilidades del proyecto: ${err.message}`);
     } finally {
       setLoading(false);
@@ -80,16 +66,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
     setLoading(true);
     try {
-      if (!isMock) {
-        await bridge.saveProjectSkill(nameToSave, contentToSave);
-        notify(`Skill '${nameToSave}' saved successfully`, 'info');
-        await loadSkills();
-      } else {
-        // Simulate save (mock mode only tracks names in `skills`; content lives
-        // in editingSkill for immediate display)
-        setSkills(prev => prev.some(s => s.name === nameToSave) ? prev : [...prev, { name: nameToSave }]);
-        notify(`[SIMULATED] Skill '${nameToSave}' saved`, 'info');
-      }
+      await bridge.saveProjectSkill(nameToSave, contentToSave);
+      notify(`Skill '${nameToSave}' saved successfully`, 'info');
+      await loadSkills();
       setIsCreating(false);
       setEditingSkill(null);
     } catch (err: any) {
@@ -104,14 +83,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
     setLoading(true);
     try {
-      if (!isMock) {
-        await bridge.deleteProjectSkill(name);
-        notify(`Skill '${name}' deleted`, 'info');
-        await loadSkills();
-      } else {
-        setSkills(prev => prev.filter(s => s.name !== name));
-        notify(`[SIMULATED] Skill '${name}' deleted`, 'info');
-      }
+      await bridge.deleteProjectSkill(name);
+      notify(`Skill '${name}' deleted`, 'info');
+      await loadSkills();
       if (editingSkill?.name === name) {
         setEditingSkill(null);
       }
@@ -135,9 +109,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     setIsCreating(false);
     setLoadingSkill(true);
     try {
-      const full = isMock
-        ? mockSkills.find(s => s.name === skillName) ?? { name: skillName, content: '', created_at: '' }
-        : await bridge.getProjectSkill(skillName);
+      const full = await bridge.getProjectSkill(skillName);
       setEditingSkill(full);
       setNewName(full.name);
       setNewContent(full.content);
@@ -170,17 +142,6 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
         </button>
       </div>
-
-      {/* Mock status warning */}
-      {isMock && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center gap-3 text-xs leading-normal font-mono">
-          <ServerOff className="w-4 h-4 flex-shrink-0 animate-pulse text-amber-500" />
-          <div>
-            <span className="font-bold">[SIMULATED SKILLS MODULE] </span>
-            {error || "Project Skills API is pending backend implementation. Operating on mock state."}
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Skill List */}

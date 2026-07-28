@@ -43,7 +43,6 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
   const [agentId, setAgentId] = useState('claude-code');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AgentMemorySummary | null>(null);
-  const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleCheckSession = async () => {
@@ -55,11 +54,9 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
     try {
       const data = await bridge.getAgentMemorySummary(agentId.trim());
       setResult(data);
-      setIsMock(false);
     } catch (err: any) {
       console.error("Session summary fetch error:", err.message);
       setResult(null);
-      setIsMock(false);
       setError(`Error al consultar contexto de sesión (${agentId.trim()}): ${err.message}`);
     } finally {
       setLoading(false);
@@ -116,17 +113,6 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
           Check
         </button>
       </div>
-
-      {/* Simulated warning banner */}
-      {isMock && result?.summary && (
-        <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl flex items-center gap-2 text-[10px] leading-normal font-mono">
-          <ServerOff className="w-3.5 h-3.5 flex-shrink-0 animate-pulse text-amber-500" />
-          <div>
-            <span className="font-bold">[SIMULATED SESSION SUMMARY] </span>
-            {error || "Showing local session summary blueprint."}
-          </div>
-        </div>
-      )}
 
       {/* Results Display */}
       {result ? (
