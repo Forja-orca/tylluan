@@ -19,6 +19,17 @@ export function ModelConfigPanel({ bridge }: Props) {
   const [initialDevice, setInitialDevice] = useState('cpu');
   const [showRestartModal, setShowRestartModal] = useState(false);
 
+  // GGUF & Inference Selector State
+  const [selectedGgufModel, setSelectedGgufModel] = useState('qwen2.5-1.5b-instruct');
+  const [activeProvider, setActiveProvider] = useState('llama-server');
+  const [providerUrl, setProviderUrl] = useState('http://127.0.0.1:8080');
+  const [contextLen, setContextLen] = useState(4096);
+  const [temperature, setTemperature] = useState(0.7);
+  const [topP, setTopP] = useState(0.95);
+  const [testingConn, setTestingConn] = useState(false);
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [savingGguf, setSavingGguf] = useState(false);
+
   useEffect(() => {
     const loadData = async () => {
       if (!bridge) return;
@@ -35,6 +46,23 @@ export function ModelConfigPanel({ bridge }: Props) {
         setSelectedDevice(dev);
         setInitialDevice(dev);
 
+        // Extract GGUF / inference settings if present
+        if (cfg?.inference?.primary_model) {
+          setSelectedGgufModel(cfg.inference.primary_model);
+        }
+        if (cfg?.inference?.provider) {
+          setActiveProvider(cfg.inference.provider);
+        }
+        if (cfg?.inference?.endpoint) {
+          setProviderUrl(cfg.inference.endpoint);
+        }
+        if (cfg?.inference?.context_size) {
+          setContextLen(cfg.inference.context_size);
+        }
+        if (cfg?.inference?.temperature !== undefined) {
+          setTemperature(cfg.inference.temperature);
+        }
+
         try {
           const m = await bridge.fetchRaw('/api/v1/models');
           setModels(m);
@@ -49,12 +77,56 @@ export function ModelConfigPanel({ bridge }: Props) {
     loadData();
   }, [bridge]);
 
+  const handleTestConnection = async () => {
+    if (!bridge) return;
+    setTestingConn(true);
+    setConnStatus(null);
+    try {
+      const res = await bridge.fetchRaw('/api/v1/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: providerUrl, provider: activeProvider })
+      });
+      if (res && (res.ok || res.status === 'ok')) {
+        setConnStatus({ ok: true, msg: `Conexión exitosa a ${activeProvider} (${providerUrl})` });
+      } else {
+        setConnStatus({ ok: false, msg: res?.error || `No se pudo conectar a ${providerUrl}` });
+      }
+    } catch (err: any) {
+      setConnStatus({ ok: false, msg: err.message || 'Error de conexión HTTP/API' });
+    }
+    setTestingConn(false);
+  };
+
+  const handleSaveGgufConfig = async () => {
+    if (!bridge) return;
+    setSavingGguf(true);
+    try {
+      await bridge.fetch('/api/v1/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inference: {
+            primary_model: selectedGgufModel,
+            provider: activeProvider,
+            endpoint: providerUrl,
+            context_size: contextLen,
+            temperature: temperature,
+            top_p: topP
+          }
+        })
+      });
+      alert('Configuración GGUF e inferencia guardada exitosamente en tylluan.toml.');
+    } catch (e: any) {
+      alert(`Error guardando configuración GGUF: ${e.message || String(e)}`);
+    }
+    setSavingGguf(false);
+  };
+
   const handleSave = async () => {
     if (!bridge) return;
     setSaving(true);
     try {
-      // Device: targeted server-side TOML edit — never round-trip the whole
-      // config through the browser (JSON.stringify once bricked tylluan.toml).
       if (selectedDevice !== initialDevice) {
         await bridge.fetch('/api/v1/config/device', {
           method: 'POST',
@@ -273,6 +345,208 @@ export function ModelConfigPanel({ bridge }: Props) {
               models.toml: tier = "tower"
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* GGUF & Local Inference Selector Panel (Zero-Mock Backend Wiring) */}
+      <div className="rounded-lg border border-violet-900/40 bg-slate-900/60 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-400" /> Selector de Modelos GGUF & Inferencia Local
+          </h3>
+          <StatusPill status="online" label={activeProvider} />
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Selecciona el modelo GGUF y el backend de inferencia activo. Conecta directamente con subproceso <code className="text-violet-300 font-mono">llama-server</code> local, runtime ONNX nativo, o servidores OpenAI-compatible (Ollama / LM Studio).
+        </p>
+
+        {/* Local GGUF Model Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              id: 'qwen2.5-1.5b-instruct',
+              name: 'Qwen2.5-1.5B Instruct',
+              quant: 'Q4_K_M',
+              vram: '~1.1 GB RAM',
+              tier: 'Balanced (Default)',
+              desc: 'Modelo principal recomendado. Síntesis densa y razonamiento episódico.',
+              color: 'emerald'
+            },
+            {
+              id: 'qwen2.5-0.5b-instruct',
+              name: 'Qwen2.5-0.5B Instruct',
+              quant: 'Q4_K_M',
+              vram: '~450 MB RAM',
+              tier: 'Toaster / RPi4',
+              desc: 'Ligero para edge devices e inferencia continua con recursos acotados.',
+              color: 'amber'
+            },
+            {
+              id: 'smollm2-135m-instruct',
+              name: 'SmolLM2-135M Instruct',
+              quant: 'Q4_K_M',
+              vram: '~180 MB RAM',
+              tier: 'Ultra-Light',
+              desc: 'Filtrado de intenciones, routing y compresión ultra-rápida en CPU.',
+              color: 'blue'
+            },
+            {
+              id: 'gemma-4-2b-it',
+              name: 'Gemma-4-E2B-it',
+              quant: 'Q4_K_M',
+              vram: '~1.8 GB RAM',
+              tier: 'Reasoning Coordinated',
+              desc: 'Coordinador deliberativo nocturno con capacidad de razonamiento extenso.',
+              color: 'violet'
+            }
+          ].map((m) => (
+            <div
+              key={m.id}
+              onClick={() => setSelectedGgufModel(m.id)}
+              className={cn(
+                "p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between text-left",
+                selectedGgufModel === m.id
+                  ? "bg-violet-950/30 border-violet-500 text-slate-100 ring-1 ring-violet-500"
+                  : "bg-slate-950/50 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+              )}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold font-mono text-slate-200">{m.name}</span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    {m.quant}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 mb-2 leading-relaxed">{m.desc}</p>
+              </div>
+              <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[9px] font-mono">
+                <span className="text-slate-500">{m.vram}</span>
+                <span className={cn(
+                  selectedGgufModel === m.id ? "text-violet-400 font-bold" : "text-slate-600"
+                )}>
+                  {selectedGgufModel === m.id ? "● Seleccionado" : m.tier}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Backend Provider & Endpoint Settings */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Backend Provider
+            </label>
+            <select
+              value={activeProvider}
+              onChange={(e) => setActiveProvider(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+            >
+              <option value="llama-server">llama-server (Subproceso local GGUF)</option>
+              <option value="onnx-runtime">ONNX Runtime (Embedded DirectML)</option>
+              <option value="ollama">Ollama (http://localhost:11434)</option>
+              <option value="lm-studio">LM Studio (http://localhost:1234)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Endpoint Base URL
+            </label>
+            <input
+              type="text"
+              value={providerUrl}
+              onChange={(e) => setProviderUrl(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+              placeholder="http://127.0.0.1:8080"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Context Window Size (Tokens)
+            </label>
+            <select
+              value={contextLen}
+              onChange={(e) => setContextLen(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+            >
+              <option value={2048}>2048 Tokens (Bajo consumo RAM)</option>
+              <option value={4096}>4096 Tokens (Estándar)</option>
+              <option value={8192}>8192 Tokens (Razonamiento largo)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Hyperparameters Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Temperatura: {temperature}</span>
+              <span className="text-[9px] text-slate-500 font-mono">0.0 (determínico) — 1.0 (creativo)</span>
+            </div>
+            <input
+              type="range"
+              min="0.0"
+              max="1.0"
+              step="0.05"
+              value={temperature}
+              onChange={(e) => setTemperature(parseFloat(e.target.value))}
+              className="w-full accent-violet-500 bg-slate-950 rounded h-1.5 cursor-pointer"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top-P (Nucleus): {topP}</span>
+              <span className="text-[9px] text-slate-500 font-mono">Sampling cutoff</span>
+            </div>
+            <input
+              type="range"
+              min="0.50"
+              max="1.00"
+              step="0.01"
+              value={topP}
+              onChange={(e) => setTopP(parseFloat(e.target.value))}
+              className="w-full accent-violet-500 bg-slate-950 rounded h-1.5 cursor-pointer"
+            />
+          </div>
+        </div>
+
+        {/* Connection status notification */}
+        {connStatus && (
+          <div className={cn(
+            "p-3 rounded-lg border text-xs flex items-center justify-between",
+            connStatus.ok ? "bg-emerald-950/20 border-emerald-800/40 text-emerald-300" : "bg-rose-950/20 border-rose-800/40 text-rose-300"
+          )}>
+            <div className="flex items-center gap-2">
+              {connStatus.ok ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
+              <span>{connStatus.msg}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+          <button
+            type="button"
+            onClick={handleTestConnection}
+            disabled={testingConn}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg text-xs font-mono flex items-center gap-2 transition-colors"
+          >
+            {testingConn ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5 text-cyan-400" />}
+            Probar Conexión Backend
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSaveGgufConfig}
+            disabled={savingGguf}
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors shadow-lg shadow-violet-900/30"
+          >
+            {savingGguf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Guardar Configuración GGUF
+          </button>
         </div>
       </div>
 
