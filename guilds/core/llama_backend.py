@@ -215,17 +215,27 @@ def _install_llama_server():
                 sys.stderr.write(f"[llama_backend] Downloading {asset_name}...\n")
                 _urllib.urlretrieve(url, zip_path)
 
+            # Extract the WHOLE zip, not just llama-server(.exe) -- the binary is a
+            # thin launcher dynamically linked against ggml-*.dll/llama-*.dll shipped
+            # in the same archive. Extracting only the .exe left it unable to load
+            # its dependencies and exit silently with no stderr output (found live,
+            # 2026-07-28: "llama-server exited early:" with an empty stderr capture).
             with zipfile.ZipFile(zip_path) as zf:
-                for member in zf.namelist():
-                    if member.endswith("llama-server.exe") or member.endswith("llama-server"):
-                        zf.extract(member, dest_dir)
-                        binary = dest_dir / member
-                        if not sys_name.startswith("win"):
-                            binary.chmod(0o755)
-                        sys.stderr.write(f"[llama_backend] Extracted: {binary}\n")
-                        return str(binary)
+                zf.extractall(dest_dir)
 
-            sys.stderr.write(f"[llama_backend] llama-server not found in {asset_name}\n")
+            binary = None
+            for name in ("llama-server.exe", "llama-server"):
+                candidate = dest_dir / name
+                if candidate.exists():
+                    binary = candidate
+                    break
+            if binary is None:
+                sys.stderr.write(f"[llama_backend] llama-server not found in {asset_name}\n")
+                continue
+            if not sys_name.startswith("win"):
+                binary.chmod(0o755)
+            sys.stderr.write(f"[llama_backend] Extracted: {binary}\n")
+            return str(binary)
         except Exception as e:
             sys.stderr.write(f"[llama_backend] Precompiled download failed: {e}\n")
 
