@@ -11,53 +11,7 @@ interface AgentCard {
   securitySchemes: Record<string, any>;
 }
 
-const MOCK_CARD: AgentCard = {
-  protocolVersion: "0.3.0",
-  name: "Tylluan Sovereign Agent (NEXUS-O3)",
-  url: "http://127.0.0.1:3030/a2a",
-  skills: [
-    { name: "tylluan_do", description: "Execute arbitrary cognitive intents", category: "core" },
-    { name: "tylluan_recall", description: "Retrieve nodes from SilvaDB using semantic/BM25 search", category: "core" },
-    { name: "tylluan_remember", description: "Inject new knowledge nodes into long-term memory", category: "core" },
-    { name: "tylluan_think", description: "Trigger internal reasoning and execution planning", category: "core" },
-    { name: "tylluan_graph", description: "Inspect and traverse the SilvaDB Knowledge Graph", category: "core" },
-    { name: "guild_dispatch", description: "Delegate calls to specialized micro-agents and guilds", category: "integration" }
-  ],
-  securitySchemes: {
-    bearerAuth: {
-      type: "http",
-      scheme: "bearer",
-      description: "Bearer Token required unless running in dev_mode"
-    }
-  }
-};
 
-const MOCK_TASKS: Record<string, any> = {
-  "task-a2a-001": {
-    id: "task-a2a-001",
-    state: "completed",
-    client_agent_id: "external_crew_lead",
-    result: "Codebase analysis completed successfully. Found 3 critical security violations in E:\\tylluan.",
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-    updated_at: new Date(Date.now() - 3500000).toISOString()
-  },
-  "task-a2a-002": {
-    id: "task-a2a-002",
-    state: "working",
-    client_agent_id: "langgraph_researcher",
-    result: null,
-    created_at: new Date(Date.now() - 600000).toISOString(),
-    updated_at: new Date(Date.now() - 50000).toISOString()
-  },
-  "task-a2a-003": {
-    id: "task-a2a-003",
-    state: "input-required",
-    client_agent_id: "external_consultant_agent",
-    result: "Awaiting approval for capability 'run_command' on file 'E:\\tylluan\\data\\setup.sh'.",
-    created_at: new Date(Date.now() - 120000).toISOString(),
-    updated_at: new Date(Date.now() - 120000).toISOString()
-  }
-};
 
 interface Props {
   notify: (msg: string, type?: 'info' | 'error') => void;
