@@ -582,9 +582,6 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-500 animate-pulse" />
             <h3 className="text-sm font-bold text-slate-50 uppercase tracking-tight font-mono">Sandbox Capability Grants Log</h3>
-            <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-tighter" title="Backend log is currently mock stub">
-              Local Audit Log Only
-            </span>
           </div>
           {grants.length > 0 && (
             <button

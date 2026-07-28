@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NexusBridge, DiagnosticReport } from '../lib/nexus-bridge';
-import { Stethoscope, Activity, Server, Cpu, AlertTriangle, CheckCircle2, RotateCcw, Wrench, RefreshCw, XCircle } from 'lucide-react';
+import { Stethoscope, Activity, Server, Cpu, AlertTriangle, CheckCircle2, RotateCcw, Wrench, RefreshCw, XCircle, ServerOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface DoctorPanelProps {
@@ -8,33 +8,6 @@ interface DoctorPanelProps {
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
-// Honest fallback when diagnostic API is unavailable — does not fabricate metrics
-const generateMockReport = (): DiagnosticReport => ({
-  timestamp: new Date().toISOString(),
-  status: 'degraded',
-  guilds: [],
-  storage: {
-    memory_db_ok: false,
-    silva_db_ok: false,
-    docs_count: 0,
-    nodes_count: 0,
-    memory_bytes: 0,
-    silva_bytes: 0,
-    recent_nodes: []
-  },
-  system: {
-    total_memory_mb: 0,
-    used_memory_mb: 0,
-    memory_percent: 0,
-    cpu_usage_percent: 0,
-    process_count: 0,
-    thread_count: 0,
-  status: 'degraded',
-    warnings: ['Diagnostic API unavailable — cannot generate real report']
-  },
-  config_valid: false,
-  suggestions: ["Ensure kernel is running and /api/v1/doctor is reachable."]
-});
 
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return '0 B';
@@ -47,7 +20,7 @@ const formatBytes = (bytes: number) => {
 export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
   const [report, setReport] = useState<DiagnosticReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [simulated, setSimulated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
 
   const loadReport = async () => {
@@ -56,11 +29,11 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     try {
       const data = await bridge.getDoctorReport();
       setReport(data);
-      setSimulated(false);
-    } catch (err) {
-      console.warn("Doctor API not available, falling back to mock", err);
-      setReport(generateMockReport());
-      setSimulated(true);
+      setReport(data);
+    } catch (err: any) {
+      console.warn("Doctor API not available:", err);
+      setError(`Doctor API unavailable: ${err.message}`);
+      setReport(null);
     } finally {
       setLoading(false);
     }
@@ -121,6 +94,16 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-red-400 gap-4">
+        <ServerOff className="w-8 h-8 opacity-50" />
+        <span className="text-sm font-mono">{error}</span>
+        <button onClick={loadReport} className="px-4 py-2 border border-red-500/30 rounded-lg hover:bg-red-500/10">Retry</button>
+      </div>
+    );
+  }
+
   if (!report) return null;
 
   const statusColor = report.status === 'healthy' ? 'text-emerald-500' :
@@ -143,11 +126,6 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {simulated && (
-            <span className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold rounded">
-              [SIMULATED DOCTOR MODULE]
-            </span>
-          )}
           <button
             onClick={loadReport}
             className="p-1.5 bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 rounded transition-colors"
