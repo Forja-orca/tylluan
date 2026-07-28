@@ -59,7 +59,24 @@ def _read_config():
 
 
 _CFG = _read_config()
+_CFG_LOADED_TS = time.time()
 LLAMA_PORT = _CFG["port"]
+
+
+def _get_config():
+    """Return current config, reloading from tylluan.toml every 60s.
+    Allows runtime config changes without guild restart."""
+    global _CFG, _CFG_LOADED_TS, LLAMA_PORT
+    now = time.time()
+    if now - _CFG_LOADED_TS > 60:
+        try:
+            new_cfg = _read_config()
+            _CFG = new_cfg
+            LLAMA_PORT = new_cfg["port"]
+            _CFG_LOADED_TS = now
+        except Exception:
+            pass  # keep stale config if file is temporarily unreadable
+    return _CFG
 
 # P1: External backend support — if user has Ollama/LM Studio/LiteLLM running,
 # use that instead of starting our own llama-server. Detected on first query
@@ -328,17 +345,24 @@ async def _start_llama_server_locked():
         _model_loaded = True
         return
 
-    threads = _CFG["threads"] if _CFG["threads"] > 0 else (os.cpu_count() or 4)
+    threads = _get_config()["threads"] if _get_config()["threads"] > 0 else (os.cpu_count() or 4)
     cmd = [
         server_path,
         "--model", model_path,
         "--host", "127.0.0.1",
         "--port", str(LLAMA_PORT),
-        "--n-gpu-layers", str(_CFG["n_gpu_layers"]),
-        "--ctx-size", str(_CFG["ctx_size"]),
+        "--n-gpu-layers", str(_get_config()["n_gpu_layers"]),
+        "--ctx-size", str(_get_config()["ctx_size"]),
         "--threads", str(threads),
-        "--batch-size", str(_CFG["batch_size"]),
+        "--batch-size", str(_get_config()["batch_size"]),
     ]
+    # --mlock on ARM or low-RAM devices prevents model swap.
+    # The doctor-in-Africa anchor (Raspberry Pi 4, 4-8GB RAM) benefits most.
+    # On high-RAM systems the flag is cheap and harmless.
+    if platform := __import__("platform"):
+        is_arm = platform.machine().lower() in ("armv7l", "aarch64", "arm64")
+        if is_arm or _get_config()["n_gpu_layers"] == 0:
+            cmd.append("--mlock")
 
     sys.stderr.write(f"[llama_backend] Starting: {' '.join(cmd)}\n")
     _llama_process = subprocess.Popen(
@@ -420,12 +444,15 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float | N
     if not is_external:
         await _start_llama_server()
 
-    t = temperature if temperature is not None else _CFG["temperature"]
+    t = temperature if temperature is not None else _get_config()["temperature"]
 
     data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": t,
+        "top_p": _get_config()["top_p"],
+        "top_k": _get_config()["top_k"],
+        "repeat_penalty": _get_config()["repeat_penalty"],
         "stream": False,
     }).encode("utf-8")
 
@@ -452,10 +479,10 @@ async def backend_health() -> str:
         "backend": "llama.cpp",
         "external_backend": _detect_external_backend(),
         "params": {
-            "n_gpu_layers": _CFG["n_gpu_layers"],
-            "ctx_size": _CFG["ctx_size"],
-            "threads": _CFG["threads"],
-            "batch_size": _CFG["batch_size"],
+            "n_gpu_layers": _get_config()["n_gpu_layers"],
+            "ctx_size": _get_config()["ctx_size"],
+            "threads": _get_config()["threads"],
+            "batch_size": _get_config()["batch_size"],
         },
     })
 
@@ -466,10 +493,24 @@ async def list_models() -> str:
     import glob as _glob
     cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
     models = []
-    for gguf in _glob.glob(str(cache_dir / "**/*.gguf"), recursive=True):
+    # Only scan 3 levels deep: repos/models--org--name/snapshots/HASH/*.gguf
+    for gguf in _glob.glob(str(cache_dir / "models--*" / "snapshots" / "*" / "*.gguf")):
         path = Path(gguf)
         size_mb = path.stat().st_size / (1024 * 1024)
-        models.append({"file": path.name, "size_mb": round(size_mb, 1), "path": gguf})
+        # Extract repo name from path: models--org--name -> org/name
+        parts = path.parts
+        try:
+            snap_idx = parts.index("snapshots")
+            repo_dir = parts[snap_idx - 1]
+            repo = repo_dir.replace("models--", "").replace("--", "/")
+        except ValueError:
+            repo = "unknown"
+        models.append({
+            "repo": repo,
+            "file": path.name,
+            "size_mb": round(size_mb, 1),
+            "path": str(gguf),
+        })
     return json.dumps({"models": sorted(models, key=lambda m: m["size_mb"])})
 
 

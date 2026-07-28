@@ -49,7 +49,6 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
   const [loading, setLoading] = useState(false);
   const [agentIdFilter, setAgentIdFilter] = useState('');
   const [limit, setLimit] = useState(25);
-  const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAuditTrail = useCallback(async () => {
@@ -60,12 +59,10 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       const data = await bridge.getAuditTrail(agentIdFilter || undefined, limit);
       setEntries(data.entries || []);
       setTotal(data.total || (data.entries ? data.entries.length : 0));
-      setIsMock(false);
     } catch (err: any) {
       console.error("Audit Trail fetch error:", err.message);
       setEntries([]);
       setTotal(0);
-      setIsMock(false);
       setError(`Error consultando registros de auditoría: ${err.message}`);
     } finally {
       setLoading(false);
@@ -98,17 +95,6 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           Refresh Logs
         </button>
       </div>
-
-      {/* Mock status warning */}
-      {isMock && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center gap-3 text-xs leading-normal">
-          <ServerOff className="w-4 h-4 flex-shrink-0 animate-pulse text-amber-500" />
-          <div>
-            <span className="font-bold font-mono">[SIMULATED AUDIT TRAIL LOG] </span>
-            {error || "GET /api/v1/security/audit pending backend PR. Showing simulated local activity logs."}
-          </div>
-        </div>
-      )}
 
       {/* Control Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-slate-900/60 border border-slate-850 rounded-2xl">

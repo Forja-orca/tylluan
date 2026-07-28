@@ -110,7 +110,6 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   const [hideInactive, setHideInactive] = useState(true);
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxProfile, setSandboxProfile] = useState<'strict' | 'balanced' | 'permissive'>('balanced');
-  const [isBackendMock, setIsBackendMock] = useState(false);
   const [fullConfig, setFullConfig] = useState<any>(null);
   const [guildOverrides, setGuildOverrides] = useState<Record<string, 'inherited' | 'strict' | 'balanced' | 'permissive'>>({});
 
@@ -135,12 +134,8 @@ export function GuildsTab({ bridge, notify, events }: Props) {
         // Detect if backend natively supports sandbox_profile in any configuration struct
         if (cfg?.guilds && 'sandbox_profile' in cfg.guilds) {
           setSandboxProfile(cfg.guilds.sandbox_profile);
-          setIsBackendMock(false);
         } else if (cfg?.security?.sandbox && 'profile' in cfg.security.sandbox) {
           setSandboxProfile(cfg.security.sandbox.profile);
-          setIsBackendMock(false);
-        } else {
-          setIsBackendMock(true);
         }
 
         if (cfg?.security?.sandbox) {
@@ -149,7 +144,6 @@ export function GuildsTab({ bridge, notify, events }: Props) {
       })
       .catch(err => {
         console.error("Failed to load config for sandbox status:", err);
-        setIsBackendMock(true);
       });
   }, [bridge]);
 
@@ -163,7 +157,6 @@ export function GuildsTab({ bridge, notify, events }: Props) {
     }
     try {
       const result = await bridge.setSandboxProfile(newProfile);
-      setIsBackendMock(false);
       notify(
         result.restart_required
           ? `Sandbox Profile set to ${newProfile} — restart required to apply`
@@ -732,11 +725,6 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                 )}>
                   Sandbox: {sandboxEnabled ? "Enabled" : "Disabled"}
                 </span>
-                {isBackendMock && (
-                  <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-tighter" title="Backend implementation is currently a mock stub">
-                    Mock Mode
-                  </span>
-                )}
               </div>
             </div>
 

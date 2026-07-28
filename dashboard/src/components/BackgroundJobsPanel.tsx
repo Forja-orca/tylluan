@@ -27,7 +27,6 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   const [jobs, setJobs] = useState<BackgroundJob[]>([]);
   const [intent, setIntent] = useState('');
   const [starting, setStarting] = useState(false);
-  const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -46,7 +45,6 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
           started_at: j.created_at || new Date().toISOString(),
           elapsed_secs: j.elapsed_secs || 0,
         })));
-        setIsMock(false);
       }
     } catch (err: any) {
       console.error("Error al cargar lista de trabajos en segundo plano:", err.message);
@@ -74,12 +72,10 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
         elapsed_secs: 0,
       };
       setJobs(prev => [job, ...prev]);
-      setIsMock(false);
       setIntent('');
       pollJob(jobId);
     } catch (err: any) {
       console.error("Error al iniciar trabajo en segundo plano:", err.message);
-      setIsMock(false);
       setError(`Error al iniciar trabajo (@bg:${intent.trim()}): ${err.message}`);
     } finally {
       setStarting(false);
@@ -198,17 +194,6 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
           </p>
         </div>
       </div>
-
-      {/* Mock status warning */}
-      {isMock && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center gap-3 text-xs leading-normal font-mono">
-          <ServerOff className="w-4 h-4 flex-shrink-0 animate-pulse text-amber-500" />
-          <div>
-            <span className="font-bold">[SIMULATED BACKGROUND JOBS] </span>
-            {error || "@bg: intent is pending backend availability. Operating on mock state."}
-          </div>
-        </div>
-      )}
 
       {/* Start Job Form */}
       <div className="flex items-center gap-2 p-4 bg-slate-900/60 border border-slate-850 rounded-2xl">
