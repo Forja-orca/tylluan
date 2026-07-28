@@ -57,8 +57,8 @@ if "%DASH_PRESENT%"=="1" if "%REBUILD_DASH%"=="0" if exist "dashboard\dist\index
 if "%REBUILD_DASH%"=="1" (
     echo [Tylluan] Codigo del dashboard cambiado o build ausente - compilando...
     pushd dashboard
-    call npm install
-    call npm run build
+    call pnpm install
+    call pnpm run build
     popd
 )
 
