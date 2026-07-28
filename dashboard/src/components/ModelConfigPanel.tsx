@@ -22,10 +22,16 @@ export function ModelConfigPanel({ bridge }: Props) {
   // GGUF & Inference Selector State
   const [selectedGgufModel, setSelectedGgufModel] = useState('qwen2.5-1.5b-instruct');
   const [activeProvider, setActiveProvider] = useState('llama-server');
-  const [providerUrl, setProviderUrl] = useState('http://127.0.0.1:8080');
+  const [providerUrl, setProviderUrl] = useState('http://127.0.0.1:9000');
+  const [llamaPort, setLlamaPort] = useState(9000);
   const [contextLen, setContextLen] = useState(4096);
+  const [gpuLayers, setGpuLayers] = useState(99);
+  const [cpuThreads, setCpuThreads] = useState(4);
+  const [batchSize, setBatchSize] = useState(512);
   const [temperature, setTemperature] = useState(0.7);
   const [topP, setTopP] = useState(0.95);
+  const [topK, setTopK] = useState(40);
+  const [repeatPenalty, setRepeatPenalty] = useState(1.10);
   const [testingConn, setTestingConn] = useState(false);
   const [connStatus, setConnStatus] = useState<{ ok: boolean; msg: string; latency?: number } | null>(null);
   const [savingGguf, setSavingGguf] = useState(false);
@@ -64,11 +70,32 @@ export function ModelConfigPanel({ bridge }: Props) {
         if (cfg?.inference?.endpoint) {
           setProviderUrl(cfg.inference.endpoint);
         }
+        if (cfg?.inference?.port) {
+          setLlamaPort(cfg.inference.port);
+        }
         if (cfg?.inference?.context_size) {
           setContextLen(cfg.inference.context_size);
         }
+        if (cfg?.inference?.n_gpu_layers !== undefined) {
+          setGpuLayers(cfg.inference.n_gpu_layers);
+        }
+        if (cfg?.inference?.threads) {
+          setCpuThreads(cfg.inference.threads);
+        }
+        if (cfg?.inference?.batch_size) {
+          setBatchSize(cfg.inference.batch_size);
+        }
         if (cfg?.inference?.temperature !== undefined) {
           setTemperature(cfg.inference.temperature);
+        }
+        if (cfg?.inference?.top_p !== undefined) {
+          setTopP(cfg.inference.top_p);
+        }
+        if (cfg?.inference?.top_k !== undefined) {
+          setTopK(cfg.inference.top_k);
+        }
+        if (cfg?.inference?.repeat_penalty !== undefined) {
+          setRepeatPenalty(cfg.inference.repeat_penalty);
         }
         if (cfg?.night_reasoner?.model) {
           setRoleCoordinator(cfg.night_reasoner.model);
@@ -137,13 +164,19 @@ export function ModelConfigPanel({ bridge }: Props) {
             primary_model: selectedGgufModel,
             provider: activeProvider,
             endpoint: providerUrl,
+            port: llamaPort,
             context_size: contextLen,
+            n_gpu_layers: gpuLayers,
+            threads: cpuThreads,
+            batch_size: batchSize,
             temperature: temperature,
-            top_p: topP
+            top_p: topP,
+            top_k: topK,
+            repeat_penalty: repeatPenalty,
           }
         })
       });
-      alert('Configuración GGUF e inferencia guardada exitosamente en tylluan.toml.');
+      alert('Configuración de inferencia GGUF & llama-server guardada exitosamente en tylluan.toml.');
     } catch (e: any) {
       alert(`Error guardando configuración GGUF: ${e.message || String(e)}`);
     }
@@ -634,7 +667,7 @@ export function ModelConfigPanel({ bridge }: Props) {
         </div>
 
         {/* Backend Provider & Endpoint Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
               Backend Provider
@@ -653,6 +686,23 @@ export function ModelConfigPanel({ bridge }: Props) {
 
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Puerto HTTP Local (`[inference] port`)
+            </label>
+            <input
+              type="number"
+              value={llamaPort}
+              onChange={(e) => {
+                const p = Number(e.target.value);
+                setLlamaPort(p);
+                setProviderUrl(`http://127.0.0.1:${p}`);
+              }}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+              placeholder="9000"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
               Endpoint Base URL
             </label>
             <input
@@ -660,7 +710,7 @@ export function ModelConfigPanel({ bridge }: Props) {
               value={providerUrl}
               onChange={(e) => setProviderUrl(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
-              placeholder="http://127.0.0.1:8080"
+              placeholder="http://127.0.0.1:9000"
             />
           </div>
 
@@ -680,12 +730,55 @@ export function ModelConfigPanel({ bridge }: Props) {
           </div>
         </div>
 
+        {/* llama-server Execution Settings (GPU layers, Threads, Batch) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Capas en GPU (`--n-gpu-layers`)
+            </label>
+            <input
+              type="number"
+              value={gpuLayers}
+              onChange={(e) => setGpuLayers(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+              placeholder="99 (99 = Offload GPU total, 0 = CPU solo)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Hilos CPU (`--threads`)
+            </label>
+            <input
+              type="number"
+              value={cpuThreads}
+              onChange={(e) => setCpuThreads(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+              placeholder="4"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Batch Size (`--batch-size`)
+            </label>
+            <select
+              value={batchSize}
+              onChange={(e) => setBatchSize(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:border-violet-500 focus:outline-none"
+            >
+              <option value={256}>256 Tokens</option>
+              <option value={512}>512 Tokens (Estándar)</option>
+              <option value={1024}>1024 Tokens</option>
+            </select>
+          </div>
+        </div>
+
         {/* Hyperparameters Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-1">
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Temperatura: {temperature}</span>
-              <span className="text-[9px] text-slate-500 font-mono">0.0 (determínico) — 1.0 (creativo)</span>
             </div>
             <input
               type="range"
@@ -700,8 +793,7 @@ export function ModelConfigPanel({ bridge }: Props) {
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top-P (Nucleus): {topP}</span>
-              <span className="text-[9px] text-slate-500 font-mono">Sampling cutoff</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top-P: {topP}</span>
             </div>
             <input
               type="range"
@@ -710,6 +802,36 @@ export function ModelConfigPanel({ bridge }: Props) {
               step="0.01"
               value={topP}
               onChange={(e) => setTopP(parseFloat(e.target.value))}
+              className="w-full accent-violet-500 bg-slate-950 rounded h-1.5 cursor-pointer"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top-K: {topK}</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              value={topK}
+              onChange={(e) => setTopK(parseInt(e.target.value))}
+              className="w-full accent-violet-500 bg-slate-950 rounded h-1.5 cursor-pointer"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Repeat Penalty: {repeatPenalty}</span>
+            </div>
+            <input
+              type="range"
+              min="1.00"
+              max="1.50"
+              step="0.02"
+              value={repeatPenalty}
+              onChange={(e) => setRepeatPenalty(parseFloat(e.target.value))}
               className="w-full accent-violet-500 bg-slate-950 rounded h-1.5 cursor-pointer"
             />
           </div>
