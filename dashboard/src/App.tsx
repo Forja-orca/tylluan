@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
+import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -44,9 +45,10 @@ const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
 
 function App() {
-  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
-    return (localStorage.getItem('tylluan_theme') as 'dark' | 'light' | 'system') || 'system';
-  });
+  const { theme, setTheme, activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, addMention, showMentionsDropdown, setShowMentionsDropdown, pendingGrant, setPendingGrant } = useAppStore()
+  const setActiveTab = useCallback((id: string) => {
+    setTab(id)
+  }, [setTab])
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -58,7 +60,6 @@ function App() {
     } else {
       root.classList.add(theme);
     }
-    localStorage.setItem('tylluan_theme', theme);
   }, [theme]);
 
   // Listen to system theme changes in real-time if theme is set to 'system'
@@ -82,13 +83,9 @@ function App() {
     bridge, refreshData, clearLogs
   } = useNexus();
   
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('tylluan_active_tab') || 'overview');
-  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set(['overview', localStorage.getItem('tylluan_active_tab') || 'overview']));
-  const handleTabChange = (id: string) => {
+  const handleTabChange = useCallback((id: string) => {
     setActiveTab(id);
-    localStorage.setItem('tylluan_active_tab', id);
-    setMountedTabs(prev => new Set(prev).add(id));
-  };
+  }, [setActiveTab]);
 
   useEffect(() => {
     const onSwitchTab = (event: Event) => {
@@ -97,21 +94,8 @@ function App() {
     };
     window.addEventListener('nexus_switch_tab', onSwitchTab);
     return () => window.removeEventListener('nexus_switch_tab', onSwitchTab);
-  }, []);
+  }, [handleTabChange]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [toasts, setToasts] = useState<{id: number, msg: string, guild?: string, type: 'info' | 'error'}[]>([]);
-  const [kernelUptime, setKernelUptime] = useState(0);
-  const [coloquioUnread, setColoquioUnread] = useState(0);
-  const [activeMentions, setActiveMentions] = useState<Array<{ id: number, sender: string, channel: string, message: string, ts: Date }>>([]);
-  const [showMentionsDropdown, setShowMentionsDropdown] = useState(false);
-  const [pendingGrant, setPendingGrant] = useState<{
-    requestId: string;
-    guild: string;
-    agentId: string;
-    tool: string;
-    blockedReason: string;
-    options: string[];
-  } | null>(null);
 
   const formatUptime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -120,10 +104,8 @@ function App() {
     return `${h}h ${m}m ${s}s`;
   };
   const notify = useCallback((msg: string, type: 'info' | 'error' = 'info', guild?: string) => {
-    const id = Date.now();
-    setToasts(prev => [{id, msg, type, guild}, ...prev].slice(0, 5));
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
-  }, []);
+    addToast(msg, type, guild);
+  }, [addToast]);
 
   const GRANT_LEVEL_MAP = {
     once: 'this_time',
@@ -188,12 +170,9 @@ function App() {
         const fullMsg = `${sender} en #${channel}: "${message}"`;
         notify(fullMsg, 'info', 'Mención Recibida');
         
-        setActiveMentions(prev => [
-          { id: Date.now(), sender, channel, message, ts: new Date() },
-          ...prev
-        ].slice(0, 10));
+        addMention({ sender, channel, message });
         
-        setColoquioUnread(c => c + 1);
+        setColoquioUnread(prev => prev + 1);
       }
     };
     
@@ -268,10 +247,10 @@ function App() {
 
   useEffect(() => {
     if (online) {
-      const interval = setInterval(() => setKernelUptime(prev => prev + 1), 1000);
+      const interval = setInterval(incrementUptime, 1000);
       return () => clearInterval(interval);
     }
-  }, [online]);
+  }, [online, incrementUptime]);
 
   // Poll coloquio unread for sidebar badge
   useEffect(() => {
@@ -463,7 +442,7 @@ function App() {
                   {activeMentions.length > 0 && (
                     <button 
                       onClick={() => {
-                        setActiveMentions([]);
+                        useAppStore.getState().clearMentions();
                         setShowMentionsDropdown(false);
                       }}
                       className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold uppercase cursor-pointer"
