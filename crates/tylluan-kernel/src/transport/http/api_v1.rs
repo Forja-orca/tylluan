@@ -230,7 +230,6 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // M31-P1: Audit trail query by agent_id
         .route("/api/v1/audit", get(audit_log_handler))
         .route("/api/v1/audit/trail", get(audit_trail_handler))
-        .route("/api/v1/doctor/repair", post(doctor_repair_handler))
         .route("/api/v1/tools", get(tools_list_handler))
         .route("/api/v1/capabilities", get(capabilities_handler))
         .route("/api/v1/audit/logs", get(audit_logs_handler))
