@@ -62,7 +62,7 @@ def seed_export(output_path: str = "", min_weight: float = 0.5, max_nodes: int =
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT id, node_type, content, provenance, weight, created_at, metadata
+        SELECT id, type, content, provenance, weight, created_at, metadata
         FROM nodes
         WHERE weight >= ?
         ORDER BY weight DESC
