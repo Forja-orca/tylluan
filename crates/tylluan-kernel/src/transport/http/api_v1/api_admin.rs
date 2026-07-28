@@ -959,17 +959,16 @@ pub async fn maintenance_onnx_clean_handler() -> impl IntoResponse {
 pub async fn maintenance_logs_compact_handler() -> impl IntoResponse {
     let mut count = 0;
     let log_dir = std::path::Path::new("./logs");
-    if log_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(log_dir) {
-            for e in entries.flatten() {
-                if e.path().extension().and_then(|ext| ext.to_str()) == Some("log") {
-                    if let Ok(meta) = e.metadata() {
-                        if meta.len() > 5 * 1024 * 1024 {
-                            let _ = std::fs::write(e.path(), "");
-                            count += 1;
-                        }
-                    }
-                }
+    if log_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(log_dir)
+    {
+        for e in entries.flatten() {
+            if e.path().extension().and_then(|ext| ext.to_str()) == Some("log")
+                && let Ok(meta) = e.metadata()
+                && meta.len() > 5 * 1024 * 1024
+            {
+                let _ = std::fs::write(e.path(), "");
+                count += 1;
             }
         }
     }
@@ -1027,7 +1026,7 @@ pub async fn project_skills_save_handler(
     
     let skills_dir = std::path::Path::new("./.agents/skills");
     let _ = std::fs::create_dir_all(skills_dir);
-    let skill_file = skills_dir.join(format!("{}.md", name));
+    let skill_file = skills_dir.join(format!("{name}.md"));
     
     match std::fs::write(&skill_file, &payload.content) {
         Ok(_) => Json(serde_json::json!({ "success": true, "message": format!("Habilidad '{}' guardada exitosamente", name) })).into_response(),
@@ -1076,10 +1075,10 @@ pub async fn audit_trail_handler(
     let mut entries = Vec::new();
     for node in silva_nodes {
         let agent = if !node.provenance.is_empty() { &node.provenance } else { "system" };
-        if let Some(ref filter) = params.agent_id {
-            if !agent.to_lowercase().contains(&filter.to_lowercase()) {
-                continue;
-            }
+        if let Some(ref filter) = params.agent_id
+            && !agent.to_lowercase().contains(&filter.to_lowercase())
+        {
+            continue;
         }
         let intent = if !node.content.is_empty() {
             node.content.chars().take(80).collect::<String>()

@@ -1633,29 +1633,29 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     // Real disk scanner for local model files
     let mut detected_local_models = Vec::new();
     let models_dir = std::path::Path::new("models");
-    if models_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(models_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    let dir_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
-                    let mut size = 0u64;
-                    if let Ok(files) = std::fs::read_dir(&path) {
-                        for f in files.flatten() {
-                            if let Ok(meta) = f.metadata() {
-                                size += meta.len();
-                            }
+    if models_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(models_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let dir_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
+                let mut size = 0u64;
+                if let Ok(files) = std::fs::read_dir(&path) {
+                    for f in files.flatten() {
+                        if let Ok(meta) = f.metadata() {
+                            size += meta.len();
                         }
                     }
-                    detected_local_models.push(serde_json::json!({
-                        "id": dir_name,
-                        "name": format!("Local {}", dir_name),
-                        "path": path.to_string_lossy(),
-                        "size_bytes": size,
-                        "size_mb": size / (1024 * 1024),
-                        "installed": true,
-                    }));
                 }
+                detected_local_models.push(serde_json::json!({
+                    "id": dir_name,
+                    "name": format!("Local {}", dir_name),
+                    "path": path.to_string_lossy(),
+                    "size_bytes": size,
+                    "size_mb": size / (1024 * 1024),
+                    "installed": true,
+                }));
             }
         }
     }
