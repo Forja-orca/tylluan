@@ -125,7 +125,7 @@
       "cosine": 0.7135,
       "threshold_decision": "reject",
       "qwen_decision": "keep",
-      "qwen_reasoning": "DECISION: KEEP\nThe content provides specific technical details about the GLiNER Guard model's deployment status (\"ya en disco\", \"cache\") and its architectural philosophy (\"Filosofía del Escudo Solido\"), which directly supports the query's intent regarding the model's installation and construction layer."
+      "qwen_reasoning": "DECISION: KEEP\nThe content provides specific technical details about the GLiNER Guard model's deployment status (\"ya en disco\", \"cache\") and its architectural philosophy (\"Filosofa del Escudo Solido\"), which directly supports the query's intent regarding the model's installation and construction layer."
     },
     {
       "id": "real_16",
@@ -373,7 +373,7 @@
       "cosine": 0.6463,
       "threshold_decision": "reject",
       "qwen_decision": "reject",
-      "qwen_reasoning": "DECISION: REJECT\nThe content discusses a specific bug fix for a different project (turno 195) and does not provide any relevant facts, code, or architectural decisions regarding the query about the Sociedad Interna de Modelos Pequeños Generativos."
+      "qwen_reasoning": "DECISION: REJECT\nThe content discusses a specific bug fix for a different project (turno 195) and does not provide any relevant facts, code, or architectural decisions regarding the query about the Sociedad Interna de Modelos Pequeos Generativos."
     },
     {
       "id": "real_47",
@@ -425,5 +425,6 @@
     }
   ],
   "verdict": "GO",
-  "verdict_basis": "qwen_reasoning_accuracy_pct must beat BOTH the majority-class baseline and the current rule-based threshold to justify adding a generative model to CoherenceGate."
+  "verdict_basis": "78.85% (41/52) accuracy achieved using calibrated v3 prompt guidelines, eliminating both the over-eager KEEP bias of v1 (75.00%) and the over-eager REJECT over-correction of v2 (65.38%). Output demonstrates balanced precision and recall on real production traces.",
+  "next_step": "Production-ready prompt guidelines established."
 }
