@@ -22,6 +22,11 @@ dependencies = [
     "scrapling>=0.2",
     "requests>=2.28",
     "beautifulsoup4>=4.12",
+    "numpy>=1.26",
+    "onnxruntime>=1.19",
+    "pillow>=10.0",
+    "huggingface_hub>=0.25",
+    "tokenizers>=0.20",
 ]
 
 [project.optional-dependencies]

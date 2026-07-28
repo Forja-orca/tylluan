@@ -67,6 +67,37 @@ LLAMA_PORT = _CFG["port"]
 _EXTERNAL_API_BASE = None
 
 
+def _normalize_backend_url(val, is_ollama_host=False):
+    """Normalize an env-var-provided backend address into a usable API base URL.
+
+    OLLAMA_HOST in particular is a bare `host:port` (Ollama's own listen-address
+    format, e.g. "0.0.0.0:11434" to accept connections on all interfaces) --
+    not a URL. Using it as-is breaks urllib with "unknown url type: 0.0.0.0".
+    0.0.0.0/:: is a *bind* address, never a valid address to *connect to* --
+    normalize it to 127.0.0.1 for the client side.
+    """
+    if "://" not in val:
+        val = f"http://{val}"
+    val = val.replace("://0.0.0.0", "://127.0.0.1").replace("://[::]", "://127.0.0.1")
+    if is_ollama_host and not val.rstrip("/").endswith("/v1"):
+        val = val.rstrip("/") + "/v1"
+    return val
+
+
+def _is_backend_reachable(base_url):
+    """Real reachability probe -- an env var being *set* doesn't mean the
+    backend is actually *running* there (found live: OLLAMA_HOST was set
+    in the shell but Ollama wasn't started, causing a connection-refused
+    crash instead of falling through to starting our own llama-server)."""
+    import urllib.request as _urllib
+    probe = base_url.rstrip("/") + "/models"
+    try:
+        with _urllib.urlopen(_urllib.Request(probe, method="GET"), timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def _detect_external_backend():
     """Check for external LLM backends. Returns API base URL or None."""
     global _EXTERNAL_API_BASE
@@ -76,9 +107,12 @@ def _detect_external_backend():
     for env_var in ["OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST"]:
         val = os.environ.get(env_var)
         if val:
-            sys.stderr.write(f"[llama_backend] Using {env_var}={val}\n")
-            _EXTERNAL_API_BASE = val
-            return val
+            normalized = _normalize_backend_url(val, is_ollama_host=(env_var == "OLLAMA_HOST"))
+            if _is_backend_reachable(normalized):
+                sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
+                _EXTERNAL_API_BASE = normalized
+                return normalized
+            sys.stderr.write(f"[llama_backend] {env_var}={val} set but not reachable at {normalized}, ignoring\n")
 
     import socket
     import urllib.request as _urllib
@@ -115,29 +149,122 @@ def _find_llama_server():
         found = shutil.which(name)
         if found:
             return found
+    # Check Python Scripts directory
     scripts = Path(sys.executable).parent / "Scripts"
     for name in ["llama-server.exe", "llama-server"]:
         candidate = scripts / name
         if candidate.exists():
             return str(candidate)
+    # Check our own cache directory (precompiled downloads)
+    cache_dir = Path.home() / ".cache" / "tylluan" / "llama-cpp"
+    for root, dirs, files in os.walk(cache_dir) if cache_dir.exists() else ():
+        for f in files:
+            if f in ("llama-server", "llama-server.exe"):
+                return str(Path(root) / f)
     return None
 
 
 def _install_llama_server():
-    """Install llama-cpp-python (includes llama-server binary)."""
+    """Install llama-server binary.
+
+    Three paths, in order:
+    1. Precompiled CPU binary from GitHub Releases (17.5MB, no compilation)
+    2. Precompiled CUDA binary (235MB) if NVIDIA GPU detected
+    3. pip install llama-cpp-python (compiles from source, slow but works everywhere)
+    """
+    import platform
     import subprocess as sp
-    sys.stderr.write("[llama_backend] Installing llama-cpp-python...\n")
+    import urllib.request as _urllib
+    import zipfile
+    import tempfile
+
+    sys_name = platform.system().lower()
+    machine = platform.machine().lower()
+
+    # Detect GPU for CUDA path
+    has_cuda = False
+    try:
+        sp.run(["nvidia-smi"], capture_output=True, timeout=5)
+        has_cuda = True
+    except Exception:
+        pass
+
+    # Build list of release assets to try
+    assets = []
+    if sys_name == "windows" and machine in ("amd64", "x86_64"):
+        # CPU binary first (small, universal)
+        assets.append(("llama-b10158-bin-win-cpu-x64.zip", "CPU (x64)"))
+        if has_cuda:
+            assets.append(("llama-b10158-bin-win-cuda-13.3-x64.zip", "CUDA 13.3 (x64)"))
+
+    elif sys_name == "linux" and machine in ("x86_64", "amd64"):
+        assets.append(("llama-b10158-bin-linux-x64.zip", "CPU (Linux x64)"))
+
+    elif sys_name == "darwin" and machine == "arm64":
+        assets.append(("llama-b10158-bin-macos-arm64.zip", "CPU (macOS ARM)"))
+
+    for asset_name, label in assets:
+        sys.stderr.write(f"[llama_backend] Trying precompiled binary: {label}...\n")
+        try:
+            url = f"https://github.com/ggerganov/llama.cpp/releases/download/b10158/{asset_name}"
+            dest_dir = Path.home() / ".cache" / "tylluan" / "llama-cpp"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            zip_path = dest_dir / asset_name
+            if not zip_path.exists():
+                sys.stderr.write(f"[llama_backend] Downloading {asset_name}...\n")
+                _urllib.urlretrieve(url, zip_path)
+
+            # Extract the WHOLE zip, not just llama-server(.exe) -- the binary is a
+            # thin launcher dynamically linked against ggml-*.dll/llama-*.dll shipped
+            # in the same archive. Extracting only the .exe left it unable to load
+            # its dependencies and exit silently with no stderr output (found live,
+            # 2026-07-28: "llama-server exited early:" with an empty stderr capture).
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(dest_dir)
+
+            binary = None
+            for name in ("llama-server.exe", "llama-server"):
+                candidate = dest_dir / name
+                if candidate.exists():
+                    binary = candidate
+                    break
+            if binary is None:
+                sys.stderr.write(f"[llama_backend] llama-server not found in {asset_name}\n")
+                continue
+            if not sys_name.startswith("win"):
+                binary.chmod(0o755)
+            sys.stderr.write(f"[llama_backend] Extracted: {binary}\n")
+            return str(binary)
+        except Exception as e:
+            sys.stderr.write(f"[llama_backend] Precompiled download failed: {e}\n")
+
+    # Fallback: pip install (compiles from source)
+    sys.stderr.write("[llama_backend] Precompiled binary unavailable, installing via pip...\n")
     result = sp.run(
         [sys.executable, "-m", "pip", "install", "llama-cpp-python"],
-        capture_output=True, text=True, timeout=300
+        capture_output=True, text=True, timeout=600
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Failed to install llama-cpp-python: {result.stderr}")
+        raise RuntimeError(f"Failed to install llama-cpp-python: {result.stderr[-300:]}")
+
+    # After pip install, search for the binary in Scripts/
     path = _find_llama_server()
-    if not path:
-        raise RuntimeError("llama-server not found after pip install")
-    sys.stderr.write(f"[llama_backend] Installed: {path}\n")
-    return path
+    if path:
+        return path
+
+    # Last resort: search in site-packages for compiled binary
+    import site
+    for sp_dir in site.getsitepackages():
+        for root, dirs, files in os.walk(sp_dir):
+            for f in files:
+                if f in ("llama-server", "llama-server.exe"):
+                    return os.path.join(root, f)
+
+    raise RuntimeError(
+        "llama-server not found after all installation attempts. "
+        "Please install llama.cpp manually: pip install llama-cpp-python"
+    )
 
 
 def _resolve_model_path():
@@ -177,9 +304,13 @@ async def _start_llama_server():
 
     server_path = _find_llama_server()
     if not server_path:
-        server_path = _install_llama_server()
+        # Blocking pip install (up to 300s) -- run off the event loop thread so
+        # other tool calls to this guild (e.g. backend_health) don't hang too.
+        # Found live: a first query_model call blocked the whole guild process
+        # for minutes, timing out every other call including health checks.
+        server_path = await asyncio.to_thread(_install_llama_server)
 
-    model_path = _resolve_model_path()
+    model_path = await asyncio.to_thread(_resolve_model_path)
 
     if not _is_port_open(LLAMA_PORT):
         sys.stderr.write(f"[llama_backend] Port {LLAMA_PORT} in use, trying to connect...\n")
