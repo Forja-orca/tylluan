@@ -13,3 +13,4 @@ pub mod actor;
 pub mod proxy;
 pub mod service_manager;
 pub mod approval;
+pub mod guild_list;

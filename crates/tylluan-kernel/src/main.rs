@@ -8,7 +8,7 @@ mod cleanup;
 use tylluan_kernel::config::{TylluanConfig, load_guild_config};
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::transport;
-use tylluan_kernel::registry::{guild_process::GuildRegistry, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
+use tylluan_kernel::registry::{guild_process::GuildRegistry, guild_list::LAZY_GUILDS, lifecycle, service_manager::ServiceManager, actor::RegistryActor};
 use tylluan_kernel::memory::{hybrid::HybridMemory, silva::SilvaDB, mailbox::Mailbox, coloquio::ColoquioDb, consensus::ConsensusEngine, agent_profile::AgentProfileStore, agent_memory::AgentMemoryManager};
 use tylluan_kernel::memory::agent_nodes::AgentNodeRouter;
 use tylluan_kernel::memory::silva::nodes::build_contextual_text;
@@ -687,33 +687,16 @@ async fn main() -> anyhow::Result<()> {
     
     // Lazy guilds: on-demand only, never in tylluan.toml always_on list.
     // Always-on guilds are handled by the loop below — don't duplicate them here.
-    let lazy_guilds = vec![
-        ("database",      "guilds.core.database",        false),
-        ("browser",       "guilds.core.browser",         false),
-        ("pdf",           "guilds.core.pdf",              false),
-        ("code_analysis", "guilds.core.code_analysis",   false),
-        ("data_tools",    "guilds.core.data_tools",      false),
-        ("formatter",     "guilds.core.formatter",       false),
-        ("vision",        "guilds.core.vision",          false),
-        ("ingest",        "guilds.core.ingest",          false),
-        ("deep_analysis", "guilds.core.deep_analysis",   false),
-        ("mcp_bridge",    "guilds.core.mcp_bridge",      false),
-        ("code_reviewer", "guilds.core.code_reviewer",   false),
-        ("deep_web_research", "guilds.core.deep_web_research", false),
-        ("coloquio_digest",   "guilds.core.coloquio_digest",   false),
-        ("coordinator",       "guilds.core.coordinator",       false),
-        ("night_reasoner",    "guilds.core.night_reasoner",   false),
-        ("llama_backend",     "guilds.core.llama_backend",    false),
-        ("seed_tools",        "guilds.core.seed_tools",       false),
-        ("git",               "guilds.builders.plugins.git",   false),
-        ("docker",            "guilds.builders.plugins.docker", false),
-        ("scheduler",         "guilds.core.scheduler",         true),
-    ];
+    //
+    // This list lives in `registry::guild_list::LAZY_GUILDS` (not inline) so that
+    // router::catalog's structural drift test can assert every catalog guild is
+    // reachable from either this list or tylluan.toml's always_on list. See that
+    // constant's doc comment for the bug history this closes.
     // CPU inference guilds (vision, deep_analysis): tool_timeout = None → wait indefinitely.
     // Killing ONNX inference mid-run wastes all prior computation. Patience is correct on CPU.
     // Network/fast guilds: tool_timeout = None falls back to 120s default in guild_process.rs.
     let cpu_inference_guilds = ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"];
-    for (name, module, _) in lazy_guilds {
+    for (name, module, _) in LAZY_GUILDS.iter().copied() {
         if !registry_raw.guilds.contains_key(name) {
             // cpu_inference_guilds explicitly get None (unlimited); others get system default
             registry_raw.register(name, module, false, None);
