@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { NexusBridge, AutoResearchSummary } from '../lib/nexus-bridge';
 import { 
   Beaker, Play, Square, GitBranch, GitCommit, TrendingUp, Zap, Clock, ShieldCheck, 
   Cpu, RotateCcw, AlertTriangle, ArrowRight, Settings
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface Props {
   bridge: NexusBridge | null;
@@ -55,9 +56,10 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('lab-data', fetchData, { interval: 'fast', enabled: !!bridge });
 
   const handleStart = async () => {
     if (!bridge) return;

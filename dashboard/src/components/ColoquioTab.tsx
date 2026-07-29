@@ -3,6 +3,7 @@ import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 import { ColoquioChannelsPanel } from './ColoquioChannelsPanel';
 import { ColoquioMessagesPanel } from './ColoquioMessagesPanel';
@@ -158,27 +159,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     fetchUnreadRef.current = fetchUnread;
   }, [fetchUnread]);
 
-  // Stable polling effect
-  useEffect(() => {
-    fetchUnreadRef.current();
-    const unreadInterval = setInterval(() => {
-      if (document.visibilityState !== 'hidden') {
-        fetchUnreadRef.current();
-      }
-    }, 5000);
-
-    const threadInterval = setInterval(() => {
-      if (document.visibilityState !== 'hidden') {
-        fetchThreadRef.current();
-        fetchChannelsRef.current();
-      }
-    }, 5000);
-
-    return () => {
-      clearInterval(unreadInterval);
-      clearInterval(threadInterval);
-    };
-  }, []);
+  // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
+  usePolling('coloquio-unread', fetchUnread, { interval: 'quick', enabled: !!bridge });
+  usePolling('coloquio-thread', () => { fetchThread(); fetchChannels(); }, { interval: 'quick', enabled: !!bridge });
 
   // Handle SSE Real-time events
   useEffect(() => {
@@ -242,24 +225,21 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     }
   }, [events, selectedId, fetchThread, fetchChannels]);
 
-  // Clean up stale typing statuses
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setTypingStatuses(p => {
-        const next = { ...p };
-        let changed = false;
-        for (const [k, v] of Object.entries(next)) {
-          if (now - v.ts > 4000) {
-            delete next[k];
-            changed = true;
-          }
+  // Clean up stale typing statuses (via coordinator instead of raw setInterval)
+  usePolling('coloquio-typing-cleanup', () => {
+    const now = Date.now();
+    setTypingStatuses(p => {
+      const next = { ...p };
+      let changed = false;
+      for (const [k, v] of Object.entries(next)) {
+        if (now - v.ts > 4000) {
+          delete next[k];
+          changed = true;
         }
-        return changed ? next : p;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+      }
+      return changed ? next : p;
+    });
+  }, { interval: 'fast', enabled: true });
 
   useEffect(() => {
     if (!selectedId) return;

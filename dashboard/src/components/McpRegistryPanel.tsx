@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plug, 
   Plus, 
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface McpServerInfo {
   name: string;
@@ -207,9 +208,10 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
   useEffect(() => {
     fetchServers();
-    const interval = setInterval(() => fetchServers(true), 30000);
-    return () => clearInterval(interval);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('mcp-servers', () => fetchServers(true), { interval: 'slow', enabled: !!bridge });
 
   const handleAddServer = async (e: React.FormEvent) => {
     e.preventDefault();

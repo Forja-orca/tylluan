@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Send, Radio, Users, Cpu, ShieldCheck, Inbox, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface NodeInfo {
   agent_id: string;
@@ -30,9 +31,10 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
 
   useEffect(() => { 
     fetchNodes(); 
-    const iv = setInterval(fetchNodes, 15000); 
-    return () => clearInterval(iv); 
   }, [fetchNodes]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('nodes-fetch', fetchNodes, { interval: 'standard', enabled: true });
 
   const sendMessage = async () => {
     if (!targetId || !message) return;

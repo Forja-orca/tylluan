@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Upload, Layers, ChevronDown, ChevronUp, Clock, Tag, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface Props {
   bridge: NexusBridge | null;
@@ -94,9 +95,10 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   useEffect(() => {
     if (!open) return;
     fetchRecentNodes();
-    const interval = setInterval(fetchRecentNodes, 10000);
-    return () => clearInterval(interval);
   }, [open, fetchRecentNodes]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('ingest-nodes', fetchRecentNodes, { interval: 'medium', enabled: !!open });
 
   const handleSubmit = useCallback(async () => {
     if (!bridge || !canSubmit) return;

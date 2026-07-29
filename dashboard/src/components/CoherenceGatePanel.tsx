@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldAlert, RefreshCw, Gauge, Ban, TrendingDown, Cpu, Activity, CheckCircle2, Lock } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 import type { CoherenceGateStats, RecallFeedbackStats } from '../lib/api/security';
 
 export interface CoherenceGatePanelProps {
@@ -73,9 +74,10 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [fetchStats]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('coherence-stats', fetchStats, { interval: 'slow', enabled: !!bridge });
 
   const resolvedCount = signal?.resolved ?? 0;
   const threshold = signal?.threshold ?? 5000;

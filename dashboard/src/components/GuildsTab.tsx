@@ -23,6 +23,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import type { Guild, NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { GuildInspector } from './GuildInspector';
@@ -188,9 +189,10 @@ export function GuildsTab({ bridge, notify, events }: Props) {
 
   useEffect(() => {
     fetchDockerStatus();
-    const interval = setInterval(fetchDockerStatus, 30_000);
-    return () => clearInterval(interval);
   }, [fetchDockerStatus]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('guilds-docker', fetchDockerStatus, { interval: 'slow', enabled: !!bridge });
 
   const handleGuildAction = async (
     name: string,
