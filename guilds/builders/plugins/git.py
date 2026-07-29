@@ -45,6 +45,7 @@ async def _run_git(args: list[str], cwd: str | None = None, use_fallback: bool =
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=work_dir,
+            stdin=asyncio.subprocess.DEVNULL,  # prevent git from reading stdin (hangs on AV-scanned Windows)
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -83,9 +84,12 @@ async def _run_git(args: list[str], cwd: str | None = None, use_fallback: bool =
 
 async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
     """Fallback using shell=True to avoid AV intercepting child process."""
+    import shlex
+
     work_dir = cwd or os.getcwd()
 
-    cmd_str = f"git -c core.fsmonitor=false -c core.untrackedcache=false {args[0]} --porcelain=v2 --branch --untracked-files=no --no-ahead-behind"
+    quoted_args = " ".join(shlex.quote(a) for a in args)
+    cmd_str = f"git -c core.fsmonitor=false -c core.untrackedcache=false {quoted_args}"
 
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
@@ -97,6 +101,7 @@ async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
         process = await asyncio.create_subprocess_shell(
             cmd_str,
             cwd=work_dir,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -121,7 +126,7 @@ async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
     except FileNotFoundError:
         return "❌ Error: 'git' command not found."
     except TimeoutError:
-        return "⏱️ git shell timeout (>45s). Add git.exe and python.exe to Kaspersky exclusions for full speed."
+        return "⏱️ git shell timeout (>8s). Add git.exe and python.exe to Kaspersky exclusions for full speed."
     except Exception as e:
         return f"❌ Error: {e}"
 
