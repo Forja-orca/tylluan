@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-28 (v0.14.0: llama.cpp real GGUF inference end-to-end via `llama-server` auto-downloaded binary — `guilds/core/llama_backend.py`; CoherenceGate Layer 4 — calibrated reasoning judgment, 78.85% on real held-out cases, wired to production recall path and verified live; `guilds/core/seed_tools.py` — Tier 1 cold-start seed export/import)
+> Last updated: 2026-07-29 (v0.14.0: llama.cpp real GGUF inference end-to-end via `llama-server` auto-downloaded binary — `guilds/core/llama_backend.py`, now with GBNF grammar-constrained decoding; CoherenceGate Layer 4 — v3/v4 reasoning prompts calibrated (78.85% on Qwen3.5-2B), but confirmed NOT wired to the production `filter()` path — `reason_about_flagged()` has no caller, zero live risk, staged for when the backend model is upgraded to ≥0.5B; `guilds/core/seed_tools.py` — Tier 1 cold-start seed export/import; friction logging (`security/friction_log.rs`) tracking dogfooding metrics; dashboard PollingCoordinator (43→0 scattered timers) + Zustand state + ESLint/Prettier)
 
 ## CI
 
@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** c301bfa · **622 total** green (549 kernel lib + 61 link lib + 12 fsrs) — 0 fallos, verificado con `scripts/check_test_count.sh --fix` (2026-07-29). CoherenceGate Layer 4: formato de salida arreglado con GBNF grammar (+5pp, 50%→55% en SmolLM2-135M real), prompt v4 few-shot listo — pendiente subir de modelo (Qwen2.5-Coder-0.5B+) antes de conectar a producción; `reason_about_flagged()` sigue sin llamador en el `filter()` real, cero riesgo activo.
+**Commit:** ced6aac · **625 total** green (552 kernel lib + 61 link lib + 12 fsrs) — 0 fallos, verificado con `scripts/check_test_count.sh --fix` (2026-07-29). CoherenceGate Layer 4: formato de salida arreglado con GBNF grammar (+5pp, 50%→55% en SmolLM2-135M real), prompt v4 few-shot listo — pendiente subir de modelo (Qwen2.5-Coder-0.5B+) antes de conectar a producción; `reason_about_flagged()` sigue sin llamador en el `filter()` real, cero riesgo activo. Nuevo: friction logging (Sessions/Workflows/Events en `data/audit.db`, auto-capturado desde el tiebreaker semántico del router) para benchmark de fricción/dogfooding. Bug real arreglado: `tylluan_think` filtraba el texto de error interno de un guild ("Unknown tool: think") como si fuera síntesis real — ahora comprueba `is_error` antes de anexar.
 
 ---
 
