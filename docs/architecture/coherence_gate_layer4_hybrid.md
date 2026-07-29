@@ -118,21 +118,33 @@ Latency:
 > lower. Treat every number below as directional, not verified, until re-measured
 > against a live run with real candidate metadata.
 
-- **Trigger rate**: at least ~60% of candidates (Zone A alone), likely higher once Zones B/C/D are counted
-- **LLM calls per recall**: ~31+ calls (not 15, not 52)
-- **Total latency**: 31 × 4s = ~124s for LLM portion, parallelizable -- more than double the original estimate
+- **Trigger rate**: **59.6% (31/52) confirmed** (`trigger_rate_live.json`) -- Zone A dominates entirely (31/52), Zone C is a subset of Zone A (17/52, all also in A), Zones B and D contribute 0 additional cases *on this specific 52-case dataset*.
+- **LLM calls per recall**: ~31 calls (not 15, not 52)
+- **Total latency**: 31 × 4s = ~124s for LLM portion, parallelizable -- more than double the original ~28% estimate
 
-> **Open question, unresolved -- do not implement until answered.** Section 7
-> recommends Qwen2.5-0.5B-Instruct for the cheap classification step. But the
-> NO-GO finding from the same day (`COHERENCEGATE_BRIEFING.md`,
-> `benchmarks/spikes/slm_society/`) shows models in this size class collapsing
-> to a single constant answer with **0% variance across runs** -- they aren't
-> discriminating at all, on a task that is arguably *simpler* than this
-> 3-way classification (binary KEEP/REJECT with forced grammar). Before wiring
-> this hybrid design, someone needs to run a small, honest spike of the exact
-> IRRELEVANT/AMBIGUOUS/RELEVANT classification prompt against Zone A's real 31
-> cases and check whether the model's output actually varies with the input,
-> or whether it's the same 0%-variance collapse in a smaller disguise.
+> **Caveat on the Zone B/D "0 contribution" result -- read before trusting it.**
+> The "live" run against `tylluan_recall` returned **0 matching nodes for all
+> 52 synthetic benchmark queries** (`live_provenance: []` in every single
+> case of `trigger_rate_live.json`) -- these benchmark queries don't have real
+> counterparts in this SilvaDB instance. That means Zone B (which needs live
+> provenance/weight data) was never actually exercised -- "0/52" is a null
+> result from an empty data pull, not evidence that provenance conflicts
+> don't happen in production. Zone A/C/D numbers above are real (computed
+> from the static cosine values and query/content text overlap, which don't
+> need live data), but **Zone B's true contribution in production is still
+> unknown**. Don't read "60% confirmed, B/D don't matter" as license to drop
+> the Zone B check from the implementation -- it's untested, not disproven.
+
+> **Resolved 2026-07-29 (Deep, verified).** The earlier open question about
+> whether Qwen2.5-0.5B-Instruct collapses on this classification task (like
+> the SLM-society NO-GO) is closed: re-ran with runs_per_case=3 on 10 real
+> Zone A cases, 0/20 variance (deterministic per-case, as expected with
+> temperature=0 + grammar) and 3 distinct labels used across different cases
+> (50.0% accuracy, above the 33% chance baseline) -- the model discriminates
+> by content, it does not collapse to one constant answer. Minor watch-item,
+> not disqualifying: 7/10 cases classified RELEVANT, a real skew worth
+> re-checking on a larger sample given the earlier documented "superficial
+> KEEP bias" pattern in this same CoherenceGate work.
 
 For the RECALL HOT PATH:
 - Option A (blocking): 60s added to recall → unacceptable

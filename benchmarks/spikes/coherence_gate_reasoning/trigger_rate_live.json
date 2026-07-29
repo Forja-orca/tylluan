@@ -1,0 +1,586 @@
+{
+  "date": "2026-07-29T15:35",
+  "mode": "live_recall_trigger_rate",
+  "total_cases": 52,
+  "trigger_rate_pct": 59.6,
+  "zone_counts": {
+    "A": 31,
+    "B": 0,
+    "C": 17,
+    "D": 0
+  },
+  "per_case": [
+    {
+      "id": "real_1",
+      "cosine": 0.7422,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_2",
+      "cosine": 0.77,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_3",
+      "cosine": 0.5955,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_4",
+      "cosine": 0.8834,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_5",
+      "cosine": 0.7383,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_6",
+      "cosine": 0.8427,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_7",
+      "cosine": 0.8033,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_8",
+      "cosine": 0.6897,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_9",
+      "cosine": 0.7259,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_10",
+      "cosine": 0.8033,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_11",
+      "cosine": 0.7928,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_12",
+      "cosine": 0.7812,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_13",
+      "cosine": 0.7912,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_14",
+      "cosine": 0.7224,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_15",
+      "cosine": 0.7135,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_16",
+      "cosine": 0.8389,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_17",
+      "cosine": 0.7999,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_18",
+      "cosine": 0.6986,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_19",
+      "cosine": 0.6887,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_20",
+      "cosine": 0.7118,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_21",
+      "cosine": 0.6779,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_22",
+      "cosine": 0.618,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_23",
+      "cosine": 0.7366,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_24",
+      "cosine": 0.7531,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_25",
+      "cosine": 0.7054,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_26",
+      "cosine": 0.7845,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_27",
+      "cosine": 0.7542,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_28",
+      "cosine": 0.7579,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_29",
+      "cosine": 0.7155,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_30",
+      "cosine": 0.7462,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_31",
+      "cosine": 0.6358,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_32",
+      "cosine": 0.7803,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_33",
+      "cosine": 0.653,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_34",
+      "cosine": 0.7204,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_35",
+      "cosine": 0.6951,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_36",
+      "cosine": 0.6843,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_37",
+      "cosine": 0.7648,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_38",
+      "cosine": 0.7712,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_39",
+      "cosine": 0.7547,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": true,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_40",
+      "cosine": 0.726,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_41",
+      "cosine": 0.626,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_42",
+      "cosine": 0.6638,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_43",
+      "cosine": 0.6768,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_44",
+      "cosine": 0.7067,
+      "triggers": {
+        "A": true,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_45",
+      "cosine": 0.5876,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_46",
+      "cosine": 0.6463,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_47",
+      "cosine": 0.6857,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_48",
+      "cosine": 0.6263,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_49",
+      "cosine": 0.6177,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_50",
+      "cosine": 0.6621,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_51",
+      "cosine": 0.641,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    },
+    {
+      "id": "real_52",
+      "cosine": 0.6123,
+      "triggers": {
+        "A": false,
+        "B": false,
+        "C": false,
+        "D": false
+      },
+      "live_provenance": []
+    }
+  ]
+}
