@@ -345,7 +345,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | **ADR-010 Benchmark** | Pure empirical ONNX Runtime benchmark harness on disk models (`benchmarks/benchmark_adr010.py`) | ✅ v0.13.0 |
 | **M19-P5 Agents Contract** | `.tylluan/agents.toml` parsed on startup, role resolution in bearer_auth_middleware per ADR-009 | ✅ v0.13.0 |
 | **llama.cpp integration** | Real GGUF inference via `llama-server` subprocess (auto-downloaded precompiled binary), agnostic to external Ollama/LM Studio if already running, dashboard model selector wired to real detected models | ✅ v0.14.0 |
-| **CoherenceGate Layer 4** | Calibrated reasoning judgment: v3/v4 prompts benchmarked (78.85% on Qwen3.5-2B), grammar-constrained decoding fixes format failures on tiny models (+5pp on SmolLM2-135M). **Not wired to the production `filter()` path** — no caller exists yet, staged for when the backend model is upgraded to ≥0.5B | 🔧 staged, not live |
+| **CoherenceGate Layer 4** | Production model upgraded to Qwen2.5-0.5B-Instruct (75.0%, above baseline). A 3-model SLM-society debate (propose→critique→synthesize) was tried and **NO-GO'd**: models converge to a constant answer with 0% variance across runs regardless of prompt design — confirms <2B params can't do nuanced relevance judgment, debate structure doesn't compensate. New direction: deterministic+LLM hybrid filter (design has 2 open issues, not yet implemented). **Not wired to the production `filter()` path** — no caller exists yet | 🔧 staged, not live |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---

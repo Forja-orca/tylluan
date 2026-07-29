@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-27 · v0.13.0 (HEAD `02fa698`) — plan=true fix verificado end-to-end · SLM society spike day: Gemma-4-E2B ONNX pipeline funcional en DirectML, embedding router benchmarkeado (NO-GO puro, GO como tiebreaker), CoherenceGate 75% (GO-with-caveats), A2A coexistence explicitada · DeepEval identificado como candidato para J-6 · J-13/J-14 añadidos al backlog
+> **Última actualización:** 2026-07-29 · v0.14.0 (HEAD `ad5b9c4`) — modelo de producción subido a Qwen2.5-0.5B-Instruct (75.0%, verificado independientemente) · **Sociedad de 3 SLMs (<2B) para CoherenceGate Layer 4 probada y NO-GO'd**: converge a respuesta constante con 0% varianza sin importar el diseño del debate — el 75%/78.85% original era el modelo cayendo al default seguro bajo grammar, no discriminación real · nueva dirección: filtro híbrido determinista+LLM (`docs/architecture/coherence_gate_layer4_hybrid.md`, 2 problemas reales abiertos, sin implementar) · friction logging con TTFUA cerrado · bug real arreglado en `tylluan_think` (filtraba error interno como síntesis) · 627 tests
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -8,7 +8,7 @@
 
 ## Estado actual — v0.14.0 ✅
 
-M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) avanzó de "solo comparativa" a spikes reales ejecutados hoy — ver sección "Sociedad SLM" más abajo. 612 tests (539 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
+M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) avanzó de "solo comparativa" a spikes reales ejecutados hoy — ver sección "Sociedad SLM" más abajo. 627 tests (554 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -539,7 +539,7 @@ No es un milestone con fecha — es el marco que debe informar cómo se prioriza
 |-----|--------|--------|--------|----------|
 | **Coordinador** | Palabra clave + BGE-M3 tiebreaker | — | ⬜ spike | Routing: keyword decide, embedding desempata. NO reemplazar keyword con embedding. |
 | **Razonador** | Gemma-4-E2B (ONNX, DirectML) | 2.3B ef. | ✅ pipeline funcional | `reason_about`: generación de texto cuando se necesita razonamiento real. NO para routing. |
-| **Filtro de coherencia** | CoherenceGate (prompt-based) | — | 🟡 75% (52 casos) | GO-with-caveats: sesgo KEEP identificado. NO en producción todavía. |
+| **Filtro de coherencia** | CoherenceGate (prompt-based) | — | 🔴 NO-GO (<2B, 2026-07-29) | Sociedad de 3 SLMs probada, converge a respuesta constante (0% varianza). El 75% original era el default seguro bajo grammar, no juicio real. Nueva dirección: filtro híbrido determinista+LLM, diseño en revisión. NO en producción. |
 | **Detector PII** | GLiNER | ~100M | ⬜ spike pendiente | Detección de PII en texto antes de almacenar en SilvaDB. |
 | **Compresor de prompts** | T5-Small | ~60M | 📋 baseline 31% | Compresión de intents largos para reducir tokens antes de embedding/router. |
 | **Juez de evaluación** | Gemma-4-E2B (reutilizado) | 2.3B ef. | ⬜ candidato | DeepEval: juez local para métricas faithfulness/precision. Sin API externa. |
@@ -597,17 +597,18 @@ Tras el spike de razonamiento/tool-calling de Gemma-4 (gibberish incluso con sam
 
 **Origen:** José pidió un sistema para discutir intersecciones de arquitectura "como una partida de ajedrez" — un tablero editable en el mapa de ruta público ([artefacto](https://claude.ai/code/artifact/935f0e62-406c-48b0-8d5c-8aa0085bdc22)) donde él mueve/conecta piezas por turnos y Claude actualiza la versión oficial. Tres turnos jugados hoy consolidan el diagrama de más alto nivel de Tylluan, con distinción explícita entre lo **real** (verificado en código) y lo **visión** (propuesto, sin construir).
 
-**Piezas del tablero (9 nodos):** Kernel Rust, SilvaDB, Guilds Python, Sociedad SLM, A2A Server, Mesh P2P, Dashboard, **Puente/Consensus** (nuevo), **Frontera externa** (nuevo).
+**Piezas del tablero (11 nodos, actualizado 2026-07-29):** Kernel Rust, SilvaDB, Guilds Python, Sociedad SLM (etiquetada "NO-GO documentado 2026-07-29" — necesita ≥2B o filtro híbrido), A2A Server, Mesh P2P, Dashboard, Puente/Consensus, Frontera externa, **Friction Log** (nuevo, real), **CoherenceGate Híbrido** (nuevo, visión).
 
 **Conexiones reales (verificadas en código, línea sólida):**
 - Kernel ↔ A2A, Kernel ↔ Mesh, Kernel ↔ Dashboard, Kernel ↔ SilvaDB, Kernel ↔ Guilds — todas ya en producción.
-- Sociedad SLM ↔ Kernel — CoherenceGate corre en el camino real de recall.
-- Sociedad SLM ↔ Guilds — GLiNER, T5-compressor, vision son guilds reales.
-- Sociedad SLM ↔ SilvaDB — CoherenceGate razona sobre resultados reales de SilvaDB (75%, GO-with-caveats).
+- Sociedad SLM ↔ Guilds — GLiNER, T5-compressor, vision son guilds reales (no relacionado con el NO-GO de Layer 4).
 - **Sociedad SLM ↔ Puente/Consensus** — `consensus.rs` (TRINITY Thinker/Worker/Verifier) ya existe y coordina modelos hoy.
 - Kernel ↔ Puente/Consensus — `consensus.rs` vive dentro del proceso del kernel.
+- **Kernel ↔ Friction Log** — `security/friction_log.rs` wireado en producción, capturando `routing_ambiguous`/`routing_mismatch` de verdad.
 
 **Conexiones de visión (propuestas, cero código todavía, línea discontinua):**
+- **Sociedad SLM ↔ Kernel** y **Sociedad SLM ↔ SilvaDB** — corregido 2026-07-29: eran "real" citando el 75% de CoherenceGate, pero `reason_about_flagged()` nunca tuvo llamador en el `filter()` de producción (confirmado por grep) y el 75% resultó engañoso. Bajadas a visión.
+- **SilvaDB ↔ CoherenceGate Híbrido** y **Sociedad SLM ↔ CoherenceGate Híbrido** — el punto de inserción concreto del nuevo diseño, sin implementar.
 - A2A ↔ Sociedad SLM — prompt-rewriting/razonamiento en el borde antes de que un mensaje A2A externo llegue al procesamiento real.
 - Mesh ↔ Sociedad SLM — razonamiento aplicado a decisiones de la malla P2P (confianza de peers, dispatch).
 - A2A ↔ SilvaDB (directo) — hoy la relación pasa por Kernel, no es un cable literal.
