@@ -540,6 +540,16 @@ if let Some(ref mut s) = stmt {
             );
         }
 
+        // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
+        // Calls the LLM only for those that trigger any ambiguity zone (A/B/C/D).
+        // Observation mode — logs to friction_log, does not modify scores.
+        crate::security::coherence_gate::CoherenceGate::hybrid_classify(
+            &effective_query,
+            &scored,
+            server.silva.clone(),
+            query_embedding.map(|e| e.to_vec()),
+        );
+
         for (node, _) in &scored {
             let _ = server.silva.reinforce_node(&node.id, 1.02).await;
             let _ = server.silva.touch_node(&node.id, aid, "recall").await;
@@ -689,6 +699,14 @@ if let Some(ref mut s) = stmt {
                     gate_stats.penalized_nodes.clone(),
                 );
             }
+
+            // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
+            crate::security::coherence_gate::CoherenceGate::hybrid_classify(
+                &effective_query,
+                &scored,
+                server.silva.clone(),
+                query_embedding.map(|e| e.to_vec()),
+            );
 
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
                 tracing::info!(
