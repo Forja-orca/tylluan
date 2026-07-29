@@ -1,0 +1,75 @@
+{
+  "date": "2026-07-29",
+  "mode": "slm_society_propose_critique_synthesize",
+  "models": {
+    "proposer": "Proposer (Qwen2.5-0.5B)",
+    "critic": "Critic (Gemma-3-1B)",
+    "synthesizer": "Synthesizer (Llama-3.2-1B)"
+  },
+  "num_cases": 5,
+  "accuracy_pct": 60.0,
+  "baseline_single_judge_pct": 75.0,
+  "synthesizer_call_rate_pct": 0.0,
+  "per_case": [
+    {
+      "id": "real_1",
+      "human_label": "reject",
+      "proposer": "REJECT",
+      "critic": "AGREE",
+      "synthesizer_used": false,
+      "final": "REJECT",
+      "correct": true,
+      "latency_proposer": 1.0,
+      "latency_critic": 2.0,
+      "latency_synthesizer": 0
+    },
+    {
+      "id": "real_2",
+      "human_label": "reject",
+      "proposer": "REJECT",
+      "critic": "AGREE",
+      "synthesizer_used": false,
+      "final": "REJECT",
+      "correct": true,
+      "latency_proposer": 0.5,
+      "latency_critic": 1.7,
+      "latency_synthesizer": 0
+    },
+    {
+      "id": "real_3",
+      "human_label": "reject",
+      "proposer": "REJECT",
+      "critic": "AGREE",
+      "synthesizer_used": false,
+      "final": "REJECT",
+      "correct": true,
+      "latency_proposer": 0.6,
+      "latency_critic": 1.6,
+      "latency_synthesizer": 0
+    },
+    {
+      "id": "real_4",
+      "human_label": "keep",
+      "proposer": "REJECT",
+      "critic": "AGREE",
+      "synthesizer_used": false,
+      "final": "REJECT",
+      "correct": false,
+      "latency_proposer": 0.6,
+      "latency_critic": 2.2,
+      "latency_synthesizer": 0
+    },
+    {
+      "id": "real_5",
+      "human_label": "keep",
+      "proposer": "REJECT",
+      "critic": "AGREE",
+      "synthesizer_used": false,
+      "final": "REJECT",
+      "correct": false,
+      "latency_proposer": 0.8,
+      "latency_critic": 1.8,
+      "latency_synthesizer": 0
+    }
+  ]
+}

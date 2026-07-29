@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-29T13:31",
+  "mode": "v2_independent",
+  "models": {
+    "proposer": "SmolLM2-1.7B-Instruct-GGUF::SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "critic": "Qwen2.5-0.5B-Instruct-GGUF::Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+  },
+  "num_cases": 10,
+  "accuracy_pct": 40.0,
+  "baseline_pct": 75.0,
+  "consensus_rate_pct": 80.0
+}
