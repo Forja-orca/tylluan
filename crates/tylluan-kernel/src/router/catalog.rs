@@ -720,4 +720,95 @@ mod tests {
              Remove or rename: {missing_from_known:?}"
         );
     }
+
+    /// ANTI-REGRESSION: Every catalog guild must actually be *registered* somewhere
+    /// at startup, not just described in catalog.rs.
+    ///
+    /// `test_every_guild_file_is_in_catalog` above only checks that a guild has a
+    /// `GuildDescriptor` — it says nothing about whether `tylluan_do` can ever reach
+    /// it. This exact gap shipped to production twice:
+    ///   1. "docker" — had a catalog entry, was never added to main.rs's lazy guild
+    ///      registration, so tylluan_do answered "Unknown guild: docker".
+    ///   2. "night_reasoner" / "llama_backend" — same pattern.
+    ///
+    /// A guild becomes reachable at runtime through exactly one of two paths in
+    /// main.rs:
+    ///   - `registry::guild_list::LAZY_GUILDS` (on-demand registration loop), or
+    ///   - `tylluan.toml`'s `[guilds.core] always_on` list (always-on loop).
+    ///
+    /// This test fails if a catalog guild is in neither. To prove it actually
+    /// catches the bug class above: temporarily delete the "docker" entry from
+    /// `LAZY_GUILDS` in registry/guild_list.rs and re-run this test — it must fail.
+    #[test]
+    fn test_lazy_or_always_on_guilds_are_registered() {
+        use crate::registry::guild_list::LAZY_GUILDS;
+
+        // Mirrors tylluan.toml's [guilds.core] always_on list (kept in sync by hand,
+        // same pattern as NOT_GUILDS above). If you edit always_on in tylluan.toml,
+        // update this list too, or this test will (correctly) start failing for
+        // whichever guild drifted.
+        const ALWAYS_ON_GUILDS: &[&str] = &[
+            "bash", "filesystem", "monitor", "system_metrics", "vision", "knowledge",
+            "comfy_ui", "coloquio", "websearch", "deep_web_research", "code_graph",
+            "scrapling", "scheduler",
+        ];
+
+        // Guilds that only exist as "V1 Port" files under guilds/builders/plugins,
+        // guilds/scholars/plugins, guilds/wardens/plugins, guilds/watchers/plugins
+        // and are intended to be registered via the `config.guilds.v2` gremios
+        // mechanism (main.rs's `if let Some(v2_config) = &config.guilds.v2` block).
+        // As of this writing tylluan.toml has NO `[guilds.v2]` section, so
+        // `config.guilds.v2` is `None` and this registration path is a no-op —
+        // meaning these guilds are ALSO currently unreachable via tylluan_do at
+        // runtime. That is a real gap, but activating guilds.v2 (or migrating
+        // these into LAZY_GUILDS/always_on directly) is a separate follow-up; this
+        // test intentionally does not block on it so it stays focused on the
+        // lazy/always-on drift bug it was written to catch.
+        const V2_GREMIO_ONLY_GUILDS: &[&str] = &[
+            "audit", "code", "memory", "search", "sequential_thinking",
+            "biome_warden", "ast_surgeon", "audio_tools", "ffmpeg_tools",
+            "screenshot_tools", "clipboard_tools", "local_llm_proxy",
+            "cron_scheduler", "n8n_bridge", "vision_moondream",
+        ];
+
+        // sandbox.py is real and extract_guild_name() succeeds on it (so it shows up
+        // in builtin_catalog(), which scans the filesystem), but it's explicitly
+        // experimental — see the "NOTE: sandbox.py..." comment in KNOWN_GUILDS above
+        // and its presence in NOT_GUILDS in test_every_guild_file_is_in_catalog.
+        const EXPERIMENTAL_GUILDS: &[&str] = &["sandbox"];
+
+        let lazy_names: std::collections::HashSet<&str> =
+            LAZY_GUILDS.iter().map(|(name, _, _)| *name).collect();
+        let always_on_set: std::collections::HashSet<&str> =
+            ALWAYS_ON_GUILDS.iter().copied().collect();
+        let v2_only_set: std::collections::HashSet<&str> =
+            V2_GREMIO_ONLY_GUILDS.iter().copied().collect();
+        let experimental_set: std::collections::HashSet<&str> =
+            EXPERIMENTAL_GUILDS.iter().copied().collect();
+
+        let catalog = builtin_catalog();
+        let mut unreachable: Vec<&str> = Vec::new();
+        for guild in &catalog {
+            let name = guild.name.as_str();
+            if guild.module_path.starts_with("external:") {
+                continue; // external MCP guilds are registered via config.external_mcp, not lazy/always_on
+            }
+            if v2_only_set.contains(name) || experimental_set.contains(name) {
+                continue; // known separate gap / experimental, see comments above
+            }
+            if !lazy_names.contains(name) && !always_on_set.contains(name) {
+                unreachable.push(name);
+            }
+        }
+
+        assert!(
+            unreachable.is_empty(),
+            "Catalog guild(s) have no GuildDescriptor path to runtime registration —\n\
+             tylluan_do will answer \"Unknown guild\" for these even though they pass\n\
+             test_every_guild_file_is_in_catalog: {unreachable:?}\n\
+             Fix: add each to registry::guild_list::LAZY_GUILDS (on-demand) or to\n\
+             tylluan.toml's [guilds.core] always_on list (+ mirror it into\n\
+             ALWAYS_ON_GUILDS above)."
+        );
+    }
 }
