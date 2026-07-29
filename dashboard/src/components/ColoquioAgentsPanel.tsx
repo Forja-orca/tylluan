@@ -1,29 +1,6 @@
 import { cn } from '../lib/utils';
 import { ColoquioChannel } from './coloquio-types';
-
-interface AgentMeta {
-  color: string;
-  bg: string;
-  border: string;
-  initial: string;
-}
-
-const AGENT_META: Record<string, AgentMeta> = {
-  antigravity: { color: 'text-violet-300', bg: 'bg-violet-950/40', border: 'border-violet-500/30', initial: 'A' },
-  'claude-code': { color: 'text-blue-300', bg: 'bg-blue-950/40', border: 'border-blue-500/30', initial: 'C' },
-  mimo: { color: 'text-teal-300', bg: 'bg-teal-950/40', border: 'border-teal-500/30', initial: 'M' },
-  deep: { color: 'text-cyan-300', bg: 'bg-cyan-950/40', border: 'border-cyan-500/30', initial: 'D' },
-  opencode: { color: 'text-amber-300', bg: 'bg-amber-950/40', border: 'border-indigo-500/30', initial: 'O' },
-  qwen: { color: 'text-orange-300', bg: 'bg-orange-950/40', border: 'border-orange-500/30', initial: 'Q' },
-  jose: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'J' },
-};
-
-const DA = { color: 'text-slate-300', bg: 'bg-slate-800/60', border: 'border-slate-600/30', initial: '?' };
-
-function agentMeta(id: string): AgentMeta {
-  const k = Object.keys(AGENT_META).find(key => id.toLowerCase().includes(key));
-  return k ? AGENT_META[k] : { ...DA, initial: id[0]?.toUpperCase() ?? '?' };
-}
+import { agentStyle } from '../lib/agent-meta';
 
 function fmtRel(u: number): string {
   const d = Math.floor(Date.now() / 1000 - u);
@@ -54,7 +31,7 @@ export function ColoquioAgentsPanel({
           <div className="px-4 py-6 text-center text-[10px] text-slate-700 italic">Sin actividad</div>
         ) : (
           agentPresence.map(({ id, lastSeen, status }) => {
-            const m = agentMeta(id);
+            const m = agentStyle(id);
             return (
               <div key={id} className="flex items-center gap-2 px-3 py-1.5">
                 <div className="relative shrink-0">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity, Cpu, Database, Users, AlertTriangle, CheckCircle, Clock, Zap, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
+import { KNOWN_AGENTS, agentStyle } from '../lib/agent-meta';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -35,29 +36,6 @@ interface FleetData {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-const KNOWN_AGENTS = ['jose', 'claude-code', 'mimo', 'deep', 'opencode', 'antigravity', 'qwen', 'kernel'];
-
-const AGENT_STYLE: Record<string, { color: string; bg: string; ring: string; label: string }> = {
-  'jose':        { color: 'text-emerald-300', bg: 'bg-emerald-950/50', ring: 'ring-emerald-500/40', label: 'Jose' },
-  'claude-code': { color: 'text-blue-300',    bg: 'bg-blue-950/50',    ring: 'ring-blue-500/40',    label: 'Claude' },
-  'mimo':        { color: 'text-teal-300',    bg: 'bg-teal-950/50',    ring: 'ring-teal-500/40',    label: 'Mimo' },
-  'deep':        { color: 'text-cyan-300',    bg: 'bg-cyan-950/50',    ring: 'ring-cyan-500/40',    label: 'Deep' },
-  'opencode':    { color: 'text-amber-300',   bg: 'bg-amber-950/50',   ring: 'ring-amber-500/40',   label: 'OpenCode' },
-  'antigravity': { color: 'text-violet-300',  bg: 'bg-violet-950/50',  ring: 'ring-violet-500/40',  label: 'Antigravity' },
-  'qwen':        { color: 'text-orange-300',  bg: 'bg-orange-950/50',  ring: 'ring-orange-500/40',  label: 'Qwen' },
-  'kernel':      { color: 'text-slate-300',   bg: 'bg-slate-800/50',   ring: 'ring-slate-500/30',   label: 'Kernel' },
-};
-
-function styleFor(id: string) {
-  const key = Object.keys(AGENT_STYLE).find(k => id.toLowerCase().includes(k));
-  return key ? AGENT_STYLE[key] : { color: 'text-slate-300', bg: 'bg-slate-800/50', ring: 'ring-slate-600/30', label: id };
-}
-
-function initial(id: string) {
-  const s = styleFor(id);
-  return s.label[0].toUpperCase();
-}
 
 function fmtUptime(s: number) {
   if (s < 60) return `${s}s`;
@@ -195,7 +173,7 @@ function KernelCard({ k }: { k: KernelHealth }) {
 }
 
 function AgentCard({ a }: { a: AgentActivity }) {
-  const s = styleFor(a.id);
+  const s = agentStyle(a.id);
   const status = a.lastTs > 0 ? agentStatus(a.lastTs) : 'offline';
   const label = s.label;
 
@@ -204,7 +182,7 @@ function AgentCard({ a }: { a: AgentActivity }) {
       status === 'online' ? 'border-emerald-500/20' : status === 'idle' ? 'border-amber-500/15' : 'border-slate-700/40')}>
       <div className="relative shrink-0 mt-0.5">
         <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ring-1', s.bg, s.color, s.ring)}>
-          {initial(a.id)}
+          {s.initial}
         </div>
         <div className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900', STATUS_DOT[status])} />
       </div>
