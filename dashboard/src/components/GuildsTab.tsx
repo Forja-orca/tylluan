@@ -27,40 +27,8 @@ import { usePolling } from '../hooks/usePolling';
 import type { Guild, NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { GuildInspector } from './GuildInspector';
-
-// ─── Guild Category Mapping ────────────────────────────────────────────────────
-// Mirrors the GuildCategory enum in catalog.rs
-
-type GuildCategory = 'Core' | 'Builder' | 'Scholar' | 'Watcher';
-
-const CATEGORY_MAP: Record<string, GuildCategory> = {
-  // Core (always-on system tools)
-  bash: 'Core', filesystem: 'Core', memory: 'Core', monitor: 'Core',
-  // Builders (create, build, deploy)
-  git: 'Builder', code: 'Builder', docker: 'Builder', rust_specialist: 'Builder',
-  // Scholars (research, analyze, learn)
-  search: 'Scholar', browser: 'Scholar', knowledge: 'Scholar', pdf: 'Scholar',
-  vision: 'Scholar', code_analysis: 'Scholar', sequential_thinking: 'Scholar',
-  deep_analysis: 'Scholar', ingest: 'Scholar',
-  // Watchers (audit, observe, protect)
-  audit: 'Watcher', system_metrics: 'Watcher', security: 'Watcher',
-};
-
-const CATEGORY_STYLE: Record<GuildCategory, { label: string; cls: string }> = {
-  Core:    { label: 'Core',    cls: 'bg-slate-700 text-slate-300 border-slate-600' },
-  Builder: { label: 'Builder', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
-  Scholar: { label: 'Scholar', cls: 'bg-violet-500/15 text-violet-400 border-violet-500/25' },
-  Watcher: { label: 'Watcher', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
-};
-
-const DEPRECATED_GUILDS = new Set([
-  'formatter', 'web_search', 'data_tools', 'database',
-  'code_analysis', 'pdf', 'browser', 'n8n'
-]);
-
-function getGuildCategory(name: string): GuildCategory {
-  return CATEGORY_MAP[name.toLowerCase().replace(/-/g, '_')] ?? 'Core';
-}
+import { CATEGORY_MAP, CATEGORY_STYLE, DEPRECATED_GUILDS, getGuildCategory } from '../lib/guild-meta';
+import type { GuildCategory } from '../lib/guild-meta';
 
 // ─── Guild Status Helpers ──────────────────────────────────────────────────────
 

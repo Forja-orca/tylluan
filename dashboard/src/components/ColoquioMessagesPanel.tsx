@@ -5,6 +5,7 @@ import {
 import { useRef, useLayoutEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
 import { NexusBridge } from '../lib/nexus-bridge';
+import { agentStyle } from '../lib/agent-meta';
 
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 
@@ -39,19 +40,6 @@ function VirtualMessageList({ messages, renderItem, scrollToBottom, onScrollToBo
       ))}
     </div>
   );
-}
-
-const AGENT_META: Record<string, { color: string; bg: string; border: string; initial: string }> = {
-  antigravity: { color: 'text-violet-300', bg: 'bg-violet-950/40', border: 'border-violet-500/30', initial: 'A' },
-  'claude-code': { color: 'text-blue-300', bg: 'bg-blue-950/40', border: 'border-blue-500/30', initial: 'C' },
-  opencode: { color: 'text-amber-300', bg: 'bg-amber-950/40', border: 'border-amber-500/30', initial: 'O' },
-  qwen: { color: 'text-orange-300', bg: 'bg-orange-950/40', border: 'border-orange-500/30', initial: 'Q' },
-  jose: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'J' },
-};
-const DA = { color: 'text-slate-300', bg: 'bg-slate-800/60', border: 'border-slate-600/30', initial: '?' };
-function agentMeta(id: string) {
-  const k = Object.keys(AGENT_META).find(k => id.toLowerCase().includes(k));
-  return k ? AGENT_META[k] : { ...DA, initial: id[0]?.toUpperCase() ?? '?' };
 }
 
 const QUICK_TEMPLATES = [
@@ -224,7 +212,7 @@ export function ColoquioMessagesPanel({
 
   const renderMessage = (msg: ColoquioMessage, prev: ColoquioMessage | null) => {
     const isHuman = msg.role === 'human';
-    const m = agentMeta(msg.author_id);
+    const m = agentStyle(msg.author_id);
     const cont = !!(prev && prev.author_id === msg.author_id && msg.created_at - prev.created_at < 120);
     const highlight = highlightedTurn === msg.turn;
     const escapedSearch = msgSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
