@@ -37,7 +37,7 @@ export default function A2aPanel({ notify }: Props) {
     if (!bridge) return;
     setLoadingCard(true);
     try {
-      const data = await bridge.getAgentCard();
+      const data = await bridge.getAgentCard() as AgentCard;
       setCard(data);
       setCardSimulated(false);
     } catch (e: any) {

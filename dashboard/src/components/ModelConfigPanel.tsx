@@ -52,52 +52,53 @@ export function ModelConfigPanel({ bridge }: Props) {
         const cfg = await bridge.getConfig();
         setConfig(cfg);
         // Fallback for embedding model
-        setEmbeddingModel(cfg?.memory?.embedding_model || cfg?.embedding?.model_name || cfg?.embeddings?.model || '');
+        setEmbeddingModel((cfg?.memory?.embedding_model || cfg?.embedding?.model_name || cfg?.embeddings?.model || '') as string);
         setRawConfigStr(typeof cfg === 'string' ? cfg : JSON.stringify(cfg, null, 2));
         
         // Extract device config
-        const dev = cfg?.inference?.device || 'cpu';
+        const dev = ((cfg?.inference?.device) || 'cpu') as string;
         setSelectedDevice(dev);
         setInitialDevice(dev);
 
         // Extract GGUF / inference settings from [inference.llama] with fallback to [inference]
-        const llamaCfg = cfg?.inference?.llama || cfg?.inference || {};
-        if (cfg?.inference?.primary_model) {
-          setSelectedGgufModel(cfg.inference.primary_model);
-          setRolePrimary(cfg.inference.primary_model);
+        const llamaCfg = (cfg?.inference?.llama || cfg?.inference || {}) as Record<string, unknown>;
+        if ((cfg?.inference as Record<string, unknown>)?.primary_model) {
+          const pm = (cfg?.inference as Record<string, unknown>).primary_model as string;
+          setSelectedGgufModel(pm);
+          setRolePrimary(pm);
         }
         if (llamaCfg.provider) {
-          setActiveProvider(llamaCfg.provider);
+          setActiveProvider(llamaCfg.provider as string);
         }
         if (llamaCfg.endpoint) {
-          setProviderUrl(llamaCfg.endpoint);
+          setProviderUrl(llamaCfg.endpoint as string);
         }
         if (llamaCfg.port) {
-          setLlamaPort(llamaCfg.port);
+          setLlamaPort(llamaCfg.port as number);
         }
         if (llamaCfg.ctx_size || llamaCfg.context_size) {
-          setContextLen(llamaCfg.ctx_size || llamaCfg.context_size);
+          setContextLen((llamaCfg.ctx_size || llamaCfg.context_size) as number);
         }
         if (llamaCfg.n_gpu_layers !== undefined) {
-          setGpuLayers(llamaCfg.n_gpu_layers);
+          setGpuLayers(llamaCfg.n_gpu_layers as number);
         }
         if (llamaCfg.threads !== undefined) {
-          setCpuThreads(llamaCfg.threads);
+          setCpuThreads(llamaCfg.threads as number);
         }
         if (llamaCfg.batch_size) {
-          setBatchSize(llamaCfg.batch_size);
+          setBatchSize(llamaCfg.batch_size as number);
         }
         if (llamaCfg.temperature !== undefined) {
-          setTemperature(llamaCfg.temperature);
+          setTemperature(llamaCfg.temperature as number);
         }
         if (llamaCfg.top_p !== undefined) {
-          setTopP(llamaCfg.top_p);
+          setTopP(llamaCfg.top_p as number);
         }
         if (llamaCfg.top_k !== undefined) {
-          setTopK(llamaCfg.top_k);
+          setTopK(llamaCfg.top_k as number);
         }
         if (llamaCfg.repeat_penalty !== undefined) {
-          setRepeatPenalty(llamaCfg.repeat_penalty);
+          setRepeatPenalty(llamaCfg.repeat_penalty as number);
         }
 
         // Fetch real models and system status
@@ -114,9 +115,9 @@ export function ModelConfigPanel({ bridge }: Props) {
 
         // Auto-probe llama-server/provider backend status on load
         try {
-          const lCfg = cfg?.inference?.llama || cfg?.inference || {};
-          const url = lCfg.endpoint || 'http://127.0.0.1:9000';
-          const provider = lCfg.provider || 'llama-server';
+          const lCfg = (cfg?.inference?.llama || cfg?.inference || {}) as Record<string, unknown>;
+          const url = (lCfg.endpoint as string) || 'http://127.0.0.1:9000';
+          const provider = (lCfg.provider as string) || 'llama-server';
           const res = await bridge.fetchRaw('/api/v1/test-connection', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

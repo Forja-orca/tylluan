@@ -107,7 +107,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const fetchChannels = useCallback(async () => {
     if (!bridge) return;
     try {
-      const d = await bridge.getColoquioChannels();
+      const d = await bridge.getColoquioChannels() as { channels?: ColoquioChannel[] };
       const chs = d.channels ?? [];
       setChannels(chs);
       if (!selectedId && chs.length > 0) setSelectedId(chs[0].channel_id);
@@ -117,7 +117,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const fetchThread = useCallback(async () => {
     if (!bridge || !selectedId) return;
     try {
-      const d = await bridge.getColoquioThread(selectedId);
+      const d = await bridge.getColoquioThread(selectedId) as { messages?: ColoquioMessage[] };
       const nm = d.messages ?? [];
       setMessages(prev => {
         if (prev.length === nm.length && prev.length > 0 && prev[prev.length - 1].msg_id === nm[nm.length - 1].msg_id) return prev;

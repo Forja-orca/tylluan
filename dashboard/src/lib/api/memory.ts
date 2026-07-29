@@ -13,11 +13,9 @@ import type {
   CollectivePulse,
   GraphNode
 } from '../api-client';
+import type { ApiFetcher, BackgroundJobInfo } from './types';
 
-interface Fetcher {
-  fetch(path: string, options?: RequestInit): Promise<any>;
-  fetchRaw(path: string, options?: RequestInit): Promise<any>;
-}
+type Fetcher = ApiFetcher;
 
 export async function getRepoMap(client: Fetcher): Promise<{
   root: string;
@@ -35,28 +33,28 @@ export async function getRepoMap(client: Fetcher): Promise<{
 }
 
 export async function getSilvaGraph(client: Fetcher, limit = 300, cluster = false): Promise<GraphData> {
-  const rawData = await client.fetch(`/api/v1/graph/viz?limit=${limit}&cluster=${cluster}`);
+  const rawData = await client.fetch<{ nodes?: Array<Record<string, unknown>>; links?: Array<Record<string, unknown>>; edges?: Array<Record<string, unknown>> }>(`/api/v1/graph/viz?limit=${limit}&cluster=${cluster}`);
   return {
-    nodes: (rawData.nodes || []).map((n: any) => ({ 
+    nodes: (rawData.nodes || []).map((n) => ({ 
       ...n, 
-      id: n.id, 
-      type: n.node_type || n.type || 'agnostic',
-      created_at: n.created_at,
-      cluster_id: n.cluster_id
+      id: n.id as string, 
+      type: (n.node_type as string) || (n.type as string) || 'agnostic',
+      created_at: n.created_at as number,
+      cluster_id: n.cluster_id as string | undefined
     })),
-    edges: (rawData.links || rawData.edges || []).map((l: any) => ({ ...l }))
+    edges: (rawData.links || rawData.edges || []).map((l) => ({ ...l }))
   };
 }
 
-export async function getGraph(client: Fetcher): Promise<{ nodes: any[], edges: any[] }> {
+export async function getGraph(client: Fetcher): Promise<{ nodes: GraphNode[]; edges: unknown[] }> {
   return client.fetch('/memory/graph');
 }
 
-export async function getMemoryStats(client: Fetcher): Promise<any> {
+export async function getMemoryStats(client: Fetcher): Promise<Record<string, unknown>> {
   return await client.fetch('/api/v1/silva/stats');
 }
 
-export async function getMailbox(client: Fetcher): Promise<any> {
+export async function getMailbox(client: Fetcher): Promise<{ messages: unknown[] }> {
   try {
     return await client.fetch('/api/v1/mailbox');
   } catch {
@@ -131,7 +129,7 @@ export async function getNodeTraces(client: Fetcher, nodeId: string): Promise<No
 
 export async function getAgentMemories(client: Fetcher, agentId: string): Promise<AgentMemory[]> {
   try {
-    const resp = await client.fetch(`/api/v1/agent-memories/${encodeURIComponent(agentId)}`);
+    const resp = await client.fetch<{ memories?: AgentMemory[] }>(`/api/v1/agent-memories/${encodeURIComponent(agentId)}`);
     return resp.memories ?? [];
   } catch {
     return [];
@@ -140,7 +138,7 @@ export async function getAgentMemories(client: Fetcher, agentId: string): Promis
 
 export async function getAgentMemorySummary(client: Fetcher, agentId: string): Promise<AgentMemorySummary> {
   try {
-    const resp = await client.fetch(`/api/v1/agent-memories/${encodeURIComponent(agentId)}/summary`);
+    const resp = await client.fetch<{ summary?: { content?: string; id?: string; created_at?: string } }>(`/api/v1/agent-memories/${encodeURIComponent(agentId)}/summary`);
     if (resp.summary) {
       return { summary: resp.summary.content ?? null, node_id: resp.summary.id, created_at: resp.summary.created_at };
     }
@@ -163,12 +161,12 @@ export async function getAgentProfiles(client: Fetcher): Promise<AgentProfile[]>
 }
 
 async function callTylluanDoIntent(client: Fetcher, intent: string): Promise<{ text: string; isError: boolean }> {
-  const raw = await client.fetchRaw('/api/v1/do', {
+  const raw = await client.fetchRaw<{ content?: string | string[]; is_error?: boolean }>('/api/v1/do', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tool: 'tylluan_do', arguments: { intent } })
   });
-  const text: string = Array.isArray(raw?.content) ? raw.content.join('') : (raw?.content?.[0] ?? '');
+  const text: string = Array.isArray(raw?.content) ? raw.content.join('') : ((raw?.content as string) ?? '');
   return { text, isError: !!raw?.is_error };
 }
 
@@ -187,7 +185,7 @@ export async function getProjectSkills(client: Fetcher): Promise<Pick<ProjectSki
     .map((line) => ({ name: line.trim().replace(/^- /, '') }));
 }
 
-export async function listBackgroundJobs(client: Fetcher): Promise<{ jobs: any[]; total: number }> {
+export async function listBackgroundJobs(client: Fetcher): Promise<{ jobs: BackgroundJobInfo[]; total: number }> {
   try {
     return await client.fetch('/api/v1/jobs');
   } catch {
@@ -242,11 +240,11 @@ export async function getJobStatus(client: Fetcher, jobId: string): Promise<{ st
   return { status: 'completed', text };
 }
 
-export async function getSharedKnowledge(client: Fetcher, agentA: string, agentB: string): Promise<any> {
+export async function getSharedKnowledge(client: Fetcher, agentA: string, agentB: string): Promise<unknown> {
   return await client.fetch(`/api/v1/silva/shared/${encodeURIComponent(agentA)}/${encodeURIComponent(agentB)}`);
 }
 
-export async function getAgentIdentity(client: Fetcher, agentId: string): Promise<{identity: any; memories: AgentMemory[]; competencies: Record<string, number>; summary: AgentMemorySummary | null}> {
+export async function getAgentIdentity(client: Fetcher, agentId: string): Promise<{identity: unknown; memories: AgentMemory[]; competencies: Record<string, number>; summary: AgentMemorySummary | null}> {
   try {
     const identityResp = await client.fetch('/api/v1/do', {
       method: 'POST',
@@ -273,27 +271,27 @@ export async function getAgentIdentity(client: Fetcher, agentId: string): Promis
   }
 }
 
-export async function maintenance_vacuum(client: Fetcher): Promise<any> {
+export async function maintenance_vacuum(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/maintenance/vacuum', { method: 'POST' });
 }
 
-export async function maintenance_checkpoint(client: Fetcher): Promise<any> {
+export async function maintenance_checkpoint(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/maintenance/checkpoint', { method: 'POST' });
 }
 
-export async function maintenance_decay(client: Fetcher): Promise<any> {
+export async function maintenance_decay(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/maintenance/decay', { method: 'POST' });
 }
 
-export async function maintenance_purge(client: Fetcher): Promise<any> {
+export async function maintenance_purge(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/maintenance/purge', { method: 'POST' });
 }
 
-export async function maintenance_reindex(client: Fetcher): Promise<any> {
+export async function maintenance_reindex(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/memory/reindex', { method: 'POST' });
 }
 
-export async function maintenance_status(client: Fetcher): Promise<any> {
+export async function maintenance_status(client: Fetcher): Promise<{ status: string; brain_size_bytes: number; brain_size_human: string; last_export: string; storage_mode: string; node_count: number; edge_count: number }> {
   return await client.fetch('/api/v1/maintenance/status');
 }
 
@@ -341,7 +339,7 @@ export async function uploadFile(client: Fetcher, file: File): Promise<{ status:
 
 export async function fetchSessionDigests(client: Fetcher, limit = 3): Promise<Array<{agent_id: string, content: string, created_at: string}>> {
   try {
-    const res = await client.fetch('/api/v1/memory/search', {
+    const res = await client.fetch<{ nodes?: Array<{ agent_id: string; content: string; created_at: string }> }>('/api/v1/memory/search', {
       method: 'POST',
       body: JSON.stringify({
         query: 'session digest episodios',
@@ -349,7 +347,7 @@ export async function fetchSessionDigests(client: Fetcher, limit = 3): Promise<A
         mode: 'personal'
       })
     });
-    return res || [];
+    return res.nodes || [];
   } catch {
     return [];
   }
@@ -357,11 +355,11 @@ export async function fetchSessionDigests(client: Fetcher, limit = 3): Promise<A
 
 export async function recall(client: Fetcher, query: string, limit = 10): Promise<GraphNode[]> {
   try {
-    const res = await client.fetch('/api/v1/memory/search', {
+    const res = await client.fetch<{ nodes?: GraphNode[] }>('/api/v1/memory/search', {
       method: 'POST',
       body: JSON.stringify({ query, limit })
     });
-    return res.nodes || res || [];
+    return res.nodes || [];
   } catch {
     return [];
   }
@@ -373,14 +371,14 @@ export async function deleteNode(client: Fetcher, nodeId: string): Promise<void>
 
 export async function getRecentNodes(client: Fetcher, limit = 10): Promise<GraphNode[]> {
   try {
-    const res = await client.fetch(`/api/v1/silva/recent?limit=${limit}`);
+    const res = await client.fetch<GraphNode[] | { nodes: GraphNode[] }>(`/api/v1/silva/recent?limit=${limit}`);
     return Array.isArray(res) ? res : (res.nodes || []);
   } catch {
     return [];
   }
 }
 
-export async function getCollectiveReputation(client: Fetcher): Promise<{ reputation: any[], by_domain: Record<string, any[]> }> {
+export async function getCollectiveReputation(client: Fetcher): Promise<{ reputation: Array<{ agent_id: string; score: number }>; by_domain: Record<string, Array<{ agent_id: string; score: number }>> }> {
   try {
     return await client.fetch('/api/v1/collective/reputation');
   } catch {

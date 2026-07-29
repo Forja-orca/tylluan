@@ -1,28 +1,27 @@
 import type { Approval } from '../api-client';
+import type { ApiFetcher } from './types';
 
-interface Fetcher {
-  fetch(path: string, options?: RequestInit): Promise<any>;
-}
+type Fetcher = ApiFetcher;
 
 // MCP Registry
-export async function listMcpExternal(client: Fetcher): Promise<any[]> {
+export async function listMcpExternal(client: Fetcher): Promise<Array<{ name: string; url?: string; command?: string; active: boolean }>> {
   return await client.fetch('/api/v1/mcp/external');
 }
 
-export async function addMcpExternal(client: Fetcher, req: { name: string; url?: string; command?: string; args?: string[] }): Promise<any> {
+export async function addMcpExternal(client: Fetcher, req: { name: string; url?: string; command?: string; args?: string[] }): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/mcp/external', {
     method: 'POST',
     body: JSON.stringify(req)
   });
 }
 
-export async function removeMcpExternal(client: Fetcher, name: string): Promise<any> {
+export async function removeMcpExternal(client: Fetcher, name: string): Promise<{ success: boolean }> {
   return await client.fetch(`/api/v1/mcp/external/${encodeURIComponent(name)}`, {
     method: 'DELETE'
   });
 }
 
-export async function toggleMcpExternal(client: Fetcher, name: string, active: boolean): Promise<any> {
+export async function toggleMcpExternal(client: Fetcher, name: string, active: boolean): Promise<{ success: boolean }> {
   return await client.fetch(`/api/v1/mcp/external/${encodeURIComponent(name)}`, {
     method: 'PUT',
     body: JSON.stringify({ active })
@@ -30,18 +29,18 @@ export async function toggleMcpExternal(client: Fetcher, name: string, active: b
 }
 
 // Federation
-export async function listFederationPeers(client: Fetcher): Promise<any[]> {
+export async function listFederationPeers(client: Fetcher): Promise<Array<{ name: string; url: string; online: boolean; nodes_count: number | null }>> {
   return await client.fetch('/api/v1/federation/peers');
 }
 
-export async function addFederationPeer(client: Fetcher, req: { name: string; url: string; token: string }): Promise<any> {
+export async function addFederationPeer(client: Fetcher, req: { name: string; url: string; token: string }): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/federation/peers', {
     method: 'POST',
     body: JSON.stringify(req)
   });
 }
 
-export async function removeFederationPeer(client: Fetcher, name: string): Promise<any> {
+export async function removeFederationPeer(client: Fetcher, name: string): Promise<{ success: boolean }> {
   return await client.fetch(`/api/v1/federation/peers/${encodeURIComponent(name)}`, {
     method: 'DELETE'
   });

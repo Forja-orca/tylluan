@@ -36,11 +36,13 @@ interface FleetData {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-const KNOWN_AGENTS = ['jose', 'claude-code', 'opencode', 'antigravity', 'qwen', 'kernel'];
+const KNOWN_AGENTS = ['jose', 'claude-code', 'mimo', 'deep', 'opencode', 'antigravity', 'qwen', 'kernel'];
 
 const AGENT_STYLE: Record<string, { color: string; bg: string; ring: string; label: string }> = {
   'jose':        { color: 'text-emerald-300', bg: 'bg-emerald-950/50', ring: 'ring-emerald-500/40', label: 'Jose' },
   'claude-code': { color: 'text-blue-300',    bg: 'bg-blue-950/50',    ring: 'ring-blue-500/40',    label: 'Claude' },
+  'mimo':        { color: 'text-teal-300',    bg: 'bg-teal-950/50',    ring: 'ring-teal-500/40',    label: 'Mimo' },
+  'deep':        { color: 'text-cyan-300',    bg: 'bg-cyan-950/50',    ring: 'ring-cyan-500/40',    label: 'Deep' },
   'opencode':    { color: 'text-amber-300',   bg: 'bg-amber-950/50',   ring: 'ring-amber-500/40',   label: 'OpenCode' },
   'antigravity': { color: 'text-violet-300',  bg: 'bg-violet-950/50',  ring: 'ring-violet-500/40',  label: 'Antigravity' },
   'qwen':        { color: 'text-orange-300',  bg: 'bg-orange-950/50',  ring: 'ring-orange-500/40',  label: 'Qwen' },

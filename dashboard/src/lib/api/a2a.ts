@@ -1,13 +1,13 @@
-interface Fetcher {
-  fetch(path: string, options?: RequestInit): Promise<any>;
-}
+import type { ApiFetcher } from './types';
 
-export async function getAgentCard(client: Fetcher): Promise<any> {
+type Fetcher = ApiFetcher;
+
+export async function getAgentCard(client: Fetcher): Promise<unknown> {
   return await client.fetch('/.well-known/agent-card.json');
 }
 
-export async function getA2aTaskStatus(client: Fetcher, taskId: string): Promise<any> {
-  const raw = await client.fetch('/a2a', {
+export async function getA2aTaskStatus(client: Fetcher, taskId: string): Promise<{ status: string; result?: unknown }> {
+  const raw = await client.fetch<{ error?: { message: string }; result?: { status: string; result?: unknown } }>('/a2a', {
     method: 'POST',
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -19,5 +19,5 @@ export async function getA2aTaskStatus(client: Fetcher, taskId: string): Promise
   if (raw.error) {
     throw new Error(raw.error.message || 'JSON-RPC error');
   }
-  return raw.result;
+  return raw.result as { status: string; result?: unknown };
 }

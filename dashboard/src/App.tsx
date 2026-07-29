@@ -261,12 +261,12 @@ function App() {
   usePolling('app-active-agents', async () => {
     if (!bridge) return;
     try {
-      const data = await bridge.getColoquioThread("mision-activa");
-      const msgs = data.messages || [];
+      const data = await bridge.getColoquioThread("mision-activa") as { messages?: Array<Record<string, unknown>> };
+      const msgs = (data.messages ?? []) as Array<{ created_at: number; author_id: string }>;
       const nowSecs = Math.floor(Date.now() / 1000);
       const active = Array.from(new Set(
         msgs
-          .filter((m: any) => (nowSecs - m.created_at) < 1800)
+          .filter((m) => (nowSecs - m.created_at) < 1800)
           .map((m: any) => m.author_id)
       )) as string[];
       setActiveAgents(active);

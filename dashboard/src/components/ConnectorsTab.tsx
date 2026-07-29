@@ -63,7 +63,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
     if (!bridge) return;
     setLocalLoading(true);
     try {
-      const data = await bridge.getCapabilities();
+      const data = await bridge.getCapabilities() as CapabilitiesData;
       setCapabilities(data);
     } catch (e) {
       console.error('Failed to fetch capabilities:', e);
