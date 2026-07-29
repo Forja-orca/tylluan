@@ -239,7 +239,7 @@ fn compute_median_ttfua(conn: &rusqlite::Connection, session_id: i64) -> f64 {
         .collect();
     if values.is_empty() { return 0.0; }
     let mid = values.len() / 2;
-    if values.len() % 2 == 0 { (values[mid-1] + values[mid]) / 2.0 } else { values[mid] }
+    if values.len().is_multiple_of(2) { (values[mid-1] + values[mid]) / 2.0 } else { values[mid] }
 }
 
 fn compute_friction_score(conn: &rusqlite::Connection, session_id: i64) -> f64 {
