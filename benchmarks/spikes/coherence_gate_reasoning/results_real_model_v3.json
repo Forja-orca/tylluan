@@ -1,12 +1,12 @@
 {
   "date": "2026-07-29",
   "mode": "real_production_model_v3_prompt",
-  "model": "SmolLM2-135M-Instruct-Q4_K_M via llama_backend (llama.cpp)",
+  "model": "bartowski/Qwen2.5-0.5B-Instruct-GGUF::Qwen2.5-0.5B-Instruct-Q4_K_M.gguf via llama_backend (llama.cpp)",
   "num_cases": 20,
   "majority_baseline_pct": 60.0,
   "qwen35_2b_benchmark_pct": 78.85,
-  "smollm2_135m_production_pct": 55.0,
-  "avg_latency_s": 16.7,
+  "production_model_pct": 75.0,
+  "avg_latency_s": 16.9,
   "per_case": [
     {
       "id": "real_1",
@@ -14,7 +14,7 @@
       "model_decision": "REJECT",
       "model_response": "REJECT",
       "correct": true,
-      "latency_s": 17.7
+      "latency_s": 20.3
     },
     {
       "id": "real_2",
@@ -22,7 +22,7 @@
       "model_decision": "REJECT",
       "model_response": "REJECT",
       "correct": true,
-      "latency_s": 16.4
+      "latency_s": 16.7
     },
     {
       "id": "real_3",
@@ -30,15 +30,15 @@
       "model_decision": "REJECT",
       "model_response": "REJECT",
       "correct": true,
-      "latency_s": 16.5
+      "latency_s": 16.7
     },
     {
       "id": "real_4",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.8
     },
     {
       "id": "real_5",
@@ -46,31 +46,31 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.5
+      "latency_s": 16.7
     },
     {
       "id": "real_6",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.7
     },
     {
       "id": "real_7",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.8
     },
     {
       "id": "real_8",
       "human_label": "reject",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": true,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": false,
+      "latency_s": 16.7
     },
     {
       "id": "real_9",
@@ -78,7 +78,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": false,
-      "latency_s": 16.4
+      "latency_s": 16.6
     },
     {
       "id": "real_10",
@@ -86,7 +86,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.5
+      "latency_s": 16.8
     },
     {
       "id": "real_11",
@@ -94,7 +94,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.4
+      "latency_s": 16.7
     },
     {
       "id": "real_12",
@@ -102,7 +102,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": false,
-      "latency_s": 16.5
+      "latency_s": 16.7
     },
     {
       "id": "real_13",
@@ -110,23 +110,23 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": false,
-      "latency_s": 16.4
+      "latency_s": 16.7
     },
     {
       "id": "real_14",
       "human_label": "reject",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": true,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": false,
+      "latency_s": 16.7
     },
     {
       "id": "real_15",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.7
     },
     {
       "id": "real_16",
@@ -134,7 +134,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.5
+      "latency_s": 16.7
     },
     {
       "id": "real_17",
@@ -142,7 +142,7 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.5
+      "latency_s": 16.7
     },
     {
       "id": "real_18",
@@ -150,24 +150,24 @@
       "model_decision": "KEEP",
       "model_response": "KEEP",
       "correct": true,
-      "latency_s": 16.4
+      "latency_s": 16.6
     },
     {
       "id": "real_19",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 16.5
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.8
     },
     {
       "id": "real_20",
       "human_label": "keep",
-      "model_decision": "REJECT",
-      "model_response": "REJECT",
-      "correct": false,
-      "latency_s": 19.8
+      "model_decision": "KEEP",
+      "model_response": "KEEP",
+      "correct": true,
+      "latency_s": 16.7
     }
   ],
-  "verdict": "BELOW majority baseline — model too small for reasoning gate"
+  "verdict": "Layer 4 production accuracy"
 }

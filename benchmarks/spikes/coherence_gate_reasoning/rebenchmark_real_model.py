@@ -1,10 +1,11 @@
 """Re-benchmark CoherenceGate v3 prompt against REAL production model.
 
-Runs the v3 calibrated prompt on all 52 real cases using llama_backend
-(SmolLM2-135M-Instruct GGUF, ~200MB, 135M params) instead of Qwen3.5-2B
-(2B params, not in production). Honest comparison: same cases, same prompt,
+Runs the v3 calibrated prompt on all 52 real cases using whatever model
+llama_backend is currently configured with (DEFAULT_MODEL in
+llama_backend.py) instead of Qwen3.5-2B (2B params, only used for the
+original isolated benchmark). Honest comparison: same cases, same prompt,
 different model — because this is what Layer 4 in coherence_gate.rs
-actually uses in production.
+actually uses in production. Re-run this after any DEFAULT_MODEL change.
 
 Usage:
   python benchmarks/spikes/coherence_gate_reasoning/rebenchmark_real_model.py
@@ -15,6 +16,13 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "guilds" / "core"))
+try:
+    from llama_backend import DEFAULT_MODEL, DEFAULT_MODEL_FILE
+    PRODUCTION_MODEL_LABEL = f"{DEFAULT_MODEL}::{DEFAULT_MODEL_FILE}"
+except ImportError:
+    PRODUCTION_MODEL_LABEL = "unknown (could not import llama_backend.DEFAULT_MODEL)"
 
 KERNEL_URL = "http://127.0.0.1:4000"
 CASES_FILE = Path(__file__).parent / "cases_real_50.json"
@@ -65,7 +73,7 @@ def label_to_keep(label):
 def main():
     print("=" * 72)
     print("CoherenceGate v3 Re-Benchmark — REAL production model")
-    print("Model: SmolLM2-135M-Instruct GGUF via llama_backend")
+    print(f"Model: {PRODUCTION_MODEL_LABEL} (via llama_backend)")
     print("=" * 72)
 
     cases = json.loads(CASES_FILE.read_text(encoding="utf-8"))["cases"]
@@ -129,7 +137,7 @@ def main():
     print(f"\n{'='*72}")
     print(f"RESULTS — {correct}/{len(cases)} ({acc:.1f}%)")
     print(f"  v3 on Qwen3.5-2B (benchmark): 78.85%")
-    print(f"  v3 on SmolLM2-135M (PRODUCTION): {acc:.1f}%")
+    print(f"  v3 on {PRODUCTION_MODEL_LABEL} (PRODUCTION): {acc:.1f}%")
     print(f"  Delta: {acc - 78.85:+.1f}pp")
     print(f"  Avg latency: {avg_lat:.1f}s/case")
     print(f"{'='*72}")
@@ -138,11 +146,11 @@ def main():
     out = {
         "date": time.strftime("%Y-%m-%d"),
         "mode": "real_production_model_v3_prompt",
-        "model": "SmolLM2-135M-Instruct-Q4_K_M via llama_backend (llama.cpp)",
+        "model": f"{PRODUCTION_MODEL_LABEL} via llama_backend (llama.cpp)",
         "num_cases": len(cases),
         "majority_baseline_pct": round(majority_acc * 100, 1),
         "qwen35_2b_benchmark_pct": 78.85,
-        "smollm2_135m_production_pct": round(acc, 1),
+        "production_model_pct": round(acc, 1),
         "avg_latency_s": round(avg_lat, 1),
         "per_case": results,
         "verdict": "Layer 4 production accuracy" if acc > majority_acc * 100 else "BELOW majority baseline — model too small for reasoning gate",
