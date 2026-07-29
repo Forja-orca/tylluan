@@ -1,15 +1,15 @@
 {
-  "date": "2026-07-29T15:15",
+  "date": "2026-07-29T15:28",
   "model": "Qwen2.5-0.5B-Instruct (llama_backend)",
   "grammar": "IRRELEVANT|AMBIGUOUS|RELEVANT",
-  "num_cases": 15,
-  "runs_per_case": 1,
-  "accuracy_pct": 53.3,
+  "num_cases": 10,
+  "runs_per_case": 3,
+  "accuracy_pct": 50.0,
   "unique_responses_across_cases": 3,
   "deterministic": true,
   "variance_score": 0,
   "verdict": "GO",
-  "reason": "model discriminates (3 unique responses across cases) with 53.3% accuracy, deterministic within-case",
+  "reason": "model discriminates (3 unique responses across cases) with 50.0% accuracy, deterministic within-case",
   "per_case": [
     {
       "id": "real_1",
@@ -17,13 +17,15 @@
       "human_label": "reject",
       "expected": "IRRELEVANT",
       "responses": [
+        "AMBIGU",
+        "AMBIGU",
         "AMBIGU"
       ],
       "majority": "AMBIGU",
       "correct": false,
       "variance": 0,
       "constant": true,
-      "latency": 19.8
+      "latency": 17.5
     },
     {
       "id": "real_2",
@@ -31,13 +33,15 @@
       "human_label": "reject",
       "expected": "IRRELEVANT",
       "responses": [
+        "IRRELEV",
+        "IRRELEV",
         "IRRELEV"
       ],
       "majority": "IRRELEV",
       "correct": true,
       "variance": 0,
       "constant": true,
-      "latency": 16.4
+      "latency": 16.3
     },
     {
       "id": "real_4",
@@ -45,13 +49,15 @@
       "human_label": "keep",
       "expected": "RELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": true,
       "variance": 0,
       "constant": true,
-      "latency": 16.6
+      "latency": 16.4
     },
     {
       "id": "real_5",
@@ -59,13 +65,15 @@
       "human_label": "keep",
       "expected": "RELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": true,
       "variance": 0,
       "constant": true,
-      "latency": 16.5
+      "latency": 16.4
     },
     {
       "id": "real_6",
@@ -73,13 +81,15 @@
       "human_label": "keep",
       "expected": "RELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": true,
       "variance": 0,
       "constant": true,
-      "latency": 16.5
+      "latency": 16.3
     },
     {
       "id": "real_7",
@@ -87,13 +97,15 @@
       "human_label": "keep",
       "expected": "RELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": true,
       "variance": 0,
       "constant": true,
-      "latency": 16.5
+      "latency": 16.4
     },
     {
       "id": "real_9",
@@ -101,13 +113,15 @@
       "human_label": "reject",
       "expected": "IRRELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": false,
       "variance": 0,
       "constant": true,
-      "latency": 16.4
+      "latency": 16.3
     },
     {
       "id": "real_10",
@@ -115,13 +129,15 @@
       "human_label": "keep_with_caveat",
       "expected": "AMBIGUOUS",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": false,
       "variance": 0,
       "constant": true,
-      "latency": 16.6
+      "latency": 17.5
     },
     {
       "id": "real_11",
@@ -129,13 +145,15 @@
       "human_label": "keep",
       "expected": "RELEVANT",
       "responses": [
+        "AMBIGU",
+        "AMBIGU",
         "AMBIGU"
       ],
       "majority": "AMBIGU",
       "correct": false,
       "variance": 0,
       "constant": true,
-      "latency": 16.4
+      "latency": 16.3
     },
     {
       "id": "real_12",
@@ -143,83 +161,15 @@
       "human_label": "reject",
       "expected": "IRRELEVANT",
       "responses": [
+        "RELEVANT",
+        "RELEVANT",
         "RELEVANT"
       ],
       "majority": "RELEVANT",
       "correct": false,
       "variance": 0,
       "constant": true,
-      "latency": 16.5
-    },
-    {
-      "id": "real_13",
-      "cosine": 0.7912,
-      "human_label": "reject",
-      "expected": "IRRELEVANT",
-      "responses": [
-        "AMBIGU"
-      ],
-      "majority": "AMBIGU",
-      "correct": false,
-      "variance": 0,
-      "constant": true,
-      "latency": 16.4
-    },
-    {
-      "id": "real_14",
-      "cosine": 0.7224,
-      "human_label": "reject",
-      "expected": "IRRELEVANT",
-      "responses": [
-        "AMBIGU"
-      ],
-      "majority": "AMBIGU",
-      "correct": false,
-      "variance": 0,
-      "constant": true,
-      "latency": 16.5
-    },
-    {
-      "id": "real_15",
-      "cosine": 0.7135,
-      "human_label": "keep",
-      "expected": "RELEVANT",
-      "responses": [
-        "RELEVANT"
-      ],
-      "majority": "RELEVANT",
-      "correct": true,
-      "variance": 0,
-      "constant": true,
-      "latency": 16.6
-    },
-    {
-      "id": "real_16",
-      "cosine": 0.8389,
-      "human_label": "keep",
-      "expected": "RELEVANT",
-      "responses": [
-        "RELEVANT"
-      ],
-      "majority": "RELEVANT",
-      "correct": true,
-      "variance": 0,
-      "constant": true,
-      "latency": 16.5
-    },
-    {
-      "id": "real_17",
-      "cosine": 0.7999,
-      "human_label": "keep",
-      "expected": "RELEVANT",
-      "responses": [
-        "RELEVANT"
-      ],
-      "majority": "RELEVANT",
-      "correct": true,
-      "variance": 0,
-      "constant": true,
-      "latency": 16.4
+      "latency": 16.3
     }
   ]
 }
