@@ -806,6 +806,8 @@ pub async fn handle_tylluan_do(
     let audit_preview = result_text.chars().take(200).collect::<String>();
     tokio::task::spawn_blocking(move || {
         let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview);
+        // Auto-capture friction events from guild error responses
+        capture_friction_from_result(&audit_intent, &audit_guild, &audit_tool, &audit_preview);
     });
 
     // Anchor learning: store successful routings as routing_anchor nodes (async, fire-and-forget)
@@ -975,6 +977,24 @@ pub async fn handle_tylluan_do(
     let footer = format!("\n\n---\nRouting: guild={} tool={}\nRouting Trace:\n - {}", guild_name, tool_name, routing_trace.join("\n - "));
     result.content.push(rmcp::model::Content::text(footer));
     Ok(result)
+}
+
+/// Auto-capture friction events from guild tool call results.
+/// Parses common error patterns and logs them to the friction tracking system.
+fn capture_friction_from_result(intent: &str, guild: &str, tool: &str, result_text: &str) {
+    let lower = result_text.to_lowercase();
+    let preview: String = result_text.chars().take(100).collect();
+
+    if result_text.contains("BLOCKED:") {
+        // Extract the quoted command, e.g. "BLOCKED: 'list' is not in..." -> "list"
+        let command = result_text
+            .split("BLOCKED:").nth(1)
+            .and_then(|rest| rest.split('\'').nth(1))
+            .unwrap_or(guild);
+        crate::security::friction_log::log_blocklist_rejection(intent, command);
+    } else if lower.contains("error:") && (lower.contains("guild") || lower.contains("tool")) {
+        crate::security::friction_log::log_routing_mismatch(intent, guild, tool, &preview);
+    }
 }
 
 /// Test helper: minimal TylluanServer with in-memory stores, no guilds.
