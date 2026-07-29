@@ -435,7 +435,7 @@ async def _stop_llama_server():
 
 
 @mcp.tool()
-async def query_model(prompt: str, max_tokens: int = 256, temperature: float | None = None) -> str:
+async def query_model(prompt: str, max_tokens: int = 256, temperature: float | None = None, grammar: str = "") -> str:
     """Query the llama.cpp backend with a prompt. Returns generated text.
 
     The first call starts llama-server if not already running.
@@ -445,10 +445,11 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float | N
         prompt: The prompt to send to the model.
         max_tokens: Maximum tokens to generate (default 256).
         temperature: Sampling temperature. Defaults to tylluan.toml's
-            [inference.llama].temperature when not given -- None is the
-            real sentinel for "caller didn't specify" (a bare 0.7 default
-            here would be indistinguishable from a caller explicitly
-            asking for 0.7, silently overriding it with the config value).
+            [inference.llama].temperature when not given.
+        grammar: Optional GBNF grammar string to constrain output.
+            Example: 'root ::= \"KEEP\" | \"REJECT\"' forces the model
+            to only output one of those two words. llama.cpp native feature.
+            Empty string = no constraint (free generation).
     """
     import urllib.request as _urllib
 
@@ -460,7 +461,7 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float | N
 
     t = temperature if temperature is not None else _get_config()["temperature"]
 
-    data = json.dumps({
+    request_body = {
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": t,
@@ -468,7 +469,11 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float | N
         "top_k": _get_config()["top_k"],
         "repeat_penalty": _get_config()["repeat_penalty"],
         "stream": False,
-    }).encode("utf-8")
+    }
+    if grammar:
+        request_body["grammar"] = grammar
+
+    data = json.dumps(request_body).encode("utf-8")
 
     req = _urllib.Request(
         f"{backend_url}/chat/completions",

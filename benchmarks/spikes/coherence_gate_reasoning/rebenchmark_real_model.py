@@ -20,6 +20,9 @@ KERNEL_URL = "http://127.0.0.1:4000"
 CASES_FILE = Path(__file__).parent / "cases_real_50.json"
 
 # Same v3 prompt wired into coherence_gate.rs REASONING_PROMPT_V3
+# GBNF grammar: forces model to output only KEEP or REJECT
+KEEP_REJECT_GRAMMAR = 'root ::= decision\ndecision ::= "KEEP" | "REJECT"'
+
 PROMPT_V3 = (
     "You are a memory-relevance gate inside an AI agent's recall pipeline.\n"
     "Decide whether the CONTENT is useful context or supporting evidence for the QUERY.\n\n"
@@ -31,14 +34,17 @@ PROMPT_V3 = (
 )
 
 
-def call_llama_backend(prompt, max_tokens=64):
+def call_llama_backend(prompt, max_tokens=64, grammar=""):
     """Call llama_backend guild via HTTP."""
-    data = json.dumps({
+    body = {
         "intent": "query_model",
         "prompt": prompt,
         "max_tokens": max_tokens,
-        "temperature": 0.0,  # deterministic for gate decisions
-    }).encode("utf-8")
+        "temperature": 0.0,
+    }
+    if grammar:
+        body["grammar"] = grammar
+    data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         f"{KERNEL_URL}/api/v1/guilds/llama_backend/tools/query_model",
         data=data,
@@ -89,7 +95,7 @@ def main():
 
         t0 = time.time()
         try:
-            response = call_llama_backend(prompt, max_tokens=48)
+            response = call_llama_backend(prompt, max_tokens=8, grammar=KEEP_REJECT_GRAMMAR)
         except Exception as e:
             print(f"  [{i+1}/{len(cases)}] {c['id']}: ERROR: {e}")
             response = ""
