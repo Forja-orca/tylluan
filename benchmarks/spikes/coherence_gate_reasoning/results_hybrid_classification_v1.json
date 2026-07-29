@@ -1,0 +1,225 @@
+{
+  "date": "2026-07-29T15:15",
+  "model": "Qwen2.5-0.5B-Instruct (llama_backend)",
+  "grammar": "IRRELEVANT|AMBIGUOUS|RELEVANT",
+  "num_cases": 15,
+  "runs_per_case": 1,
+  "accuracy_pct": 53.3,
+  "unique_responses_across_cases": 3,
+  "deterministic": true,
+  "variance_score": 0,
+  "verdict": "GO",
+  "reason": "model discriminates (3 unique responses across cases) with 53.3% accuracy, deterministic within-case",
+  "per_case": [
+    {
+      "id": "real_1",
+      "cosine": 0.7422,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "AMBIGU"
+      ],
+      "majority": "AMBIGU",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 19.8
+    },
+    {
+      "id": "real_2",
+      "cosine": 0.77,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "IRRELEV"
+      ],
+      "majority": "IRRELEV",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.4
+    },
+    {
+      "id": "real_4",
+      "cosine": 0.8834,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.6
+    },
+    {
+      "id": "real_5",
+      "cosine": 0.7383,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_6",
+      "cosine": 0.8427,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_7",
+      "cosine": 0.8033,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_9",
+      "cosine": 0.7259,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.4
+    },
+    {
+      "id": "real_10",
+      "cosine": 0.8033,
+      "human_label": "keep_with_caveat",
+      "expected": "AMBIGUOUS",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.6
+    },
+    {
+      "id": "real_11",
+      "cosine": 0.7928,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "AMBIGU"
+      ],
+      "majority": "AMBIGU",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.4
+    },
+    {
+      "id": "real_12",
+      "cosine": 0.7812,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_13",
+      "cosine": 0.7912,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "AMBIGU"
+      ],
+      "majority": "AMBIGU",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.4
+    },
+    {
+      "id": "real_14",
+      "cosine": 0.7224,
+      "human_label": "reject",
+      "expected": "IRRELEVANT",
+      "responses": [
+        "AMBIGU"
+      ],
+      "majority": "AMBIGU",
+      "correct": false,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_15",
+      "cosine": 0.7135,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.6
+    },
+    {
+      "id": "real_16",
+      "cosine": 0.8389,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.5
+    },
+    {
+      "id": "real_17",
+      "cosine": 0.7999,
+      "human_label": "keep",
+      "expected": "RELEVANT",
+      "responses": [
+        "RELEVANT"
+      ],
+      "majority": "RELEVANT",
+      "correct": true,
+      "variance": 0,
+      "constant": true,
+      "latency": 16.4
+    }
+  ]
+}
