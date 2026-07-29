@@ -15,6 +15,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import type { 
   NexusEvent, 
   AgentMemory, 
@@ -69,14 +70,29 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
       bridge.getAgentProfiles().then(setProfiles).catch(console.error);
     };
     load();
-    const interval = setInterval(load, 30000);
     const onVisibility = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
+  usePolling('collective-profiles', async () => {
+    if (!bridge) return;
+    try { setProfiles(await bridge.getAgentProfiles()); } catch {}
+  }, { interval: 'slow', enabled: !!bridge });
+  usePolling('collective-memory', async () => {
+    if (!bridge || !selectedAgentId) return;
+    try {
+      const [memResult, sumResult] = await Promise.allSettled([
+        bridge.getAgentMemories(selectedAgentId),
+        bridge.getAgentMemorySummary(selectedAgentId)
+      ]);
+      if (memResult.status === 'fulfilled') setMemories(memResult.value);
+      if (sumResult.status === 'fulfilled') setSummary(sumResult.value);
+    } catch {}
+  }, { interval: 'idle', enabled: !!bridge && !!selectedAgentId });
 
   useEffect(() => {
     if (!bridge || !selectedAgentId) {
@@ -103,10 +119,6 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
 
     setLoadingMemory(true);
     poll().finally(() => setLoadingMemory(false));
-    
-    // Poll agent memory data every 60s (agent-specific endpoints not available via SSE)
-    const interval = setInterval(poll, 60000);
-    return () => clearInterval(interval);
   }, [selectedAgentId, bridge]);
 
   useEffect(() => {
@@ -450,13 +462,9 @@ export function CollectiveTab() {
 
   useEffect(() => {
     fetchAll();
-    const id = setInterval(() => {
-      if (document.visibilityState !== 'hidden') fetchAll();
-    }, 30000);
     const onVisibility = () => { if (document.visibilityState === 'visible') fetchAll(); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      clearInterval(id);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchAll]);

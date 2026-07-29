@@ -11,6 +11,8 @@ interface AgentMeta {
 const AGENT_META: Record<string, AgentMeta> = {
   antigravity: { color: 'text-violet-300', bg: 'bg-violet-950/40', border: 'border-violet-500/30', initial: 'A' },
   'claude-code': { color: 'text-blue-300', bg: 'bg-blue-950/40', border: 'border-blue-500/30', initial: 'C' },
+  mimo: { color: 'text-teal-300', bg: 'bg-teal-950/40', border: 'border-teal-500/30', initial: 'M' },
+  deep: { color: 'text-cyan-300', bg: 'bg-cyan-950/40', border: 'border-cyan-500/30', initial: 'D' },
   opencode: { color: 'text-amber-300', bg: 'bg-amber-950/40', border: 'border-indigo-500/30', initial: 'O' },
   qwen: { color: 'text-orange-300', bg: 'bg-orange-950/40', border: 'border-orange-500/30', initial: 'Q' },
   jose: { color: 'text-emerald-300', bg: 'bg-emerald-950/40', border: 'border-emerald-500/30', initial: 'J' },
