@@ -543,7 +543,7 @@ No es un milestone con fecha — es el marco que debe informar cómo se prioriza
 | **Detector PII** | GLiNER | ~100M | ⬜ spike pendiente | Detección de PII en texto antes de almacenar en SilvaDB. |
 | **Compresor de prompts** | T5-Small | ~60M | 📋 baseline 31% | Compresión de intents largos para reducir tokens antes de embedding/router. |
 | **Juez de evaluación** | Gemma-4-E2B (reutilizado) | 2.3B ef. | ⬜ candidato | DeepEval: juez local para métricas faithfulness/precision. Sin API externa. |
-| **Visión** | SmolVLM2-256M (actual) / Janus-Pro-1B (investigación) | 256M / 1B | ✅ / ⬜ | Análisis de imágenes. Janus candidato a benchmark (Antigravity, M16). |
+| **Visión** | SmolVLM2-256M (en producción) | 256M | ✅ | Análisis de imágenes, `benchmarks/benchmark_vision.py` verificado con inferencia real (119.6s arranque, 30.2s en caliente, 4x speedup). Janus-Pro-1B: **corregido 2026-07-29** — no tiene ningún código, script ni benchmark real en el repo, era una anotación sin dueño. Retirado hasta que alguien lo tome de verdad. |
 
 **Regla de asignación:** cada modelo se usa para lo que fue diseñado — embedding para clasificar, chat para razonar, filtros para vigilar. Nunca al revés. Un modelo de chat de 2.3B no clasifica mejor que cosine similarity sobre 1024 dimensiones. Un clasificador no genera texto.
 
