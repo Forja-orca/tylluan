@@ -343,7 +343,9 @@ pub async fn handle_tylluan_think(
                     } else { None }
                 };
 
-                if let Some(synth) = synth_result {
+                if let Some(synth) = synth_result
+                    && synth.is_error != Some(true)
+                {
                     let synth_text = synth.content.iter()
                         .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
                         .collect::<String>();
