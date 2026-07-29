@@ -13,6 +13,7 @@ pub mod hooks;
 pub mod coherence_gate;
 pub mod poison_patterns;
 pub mod agents_contract;
+pub mod friction_log;
 
 #[cfg(test)]
 mod integration_tests;
