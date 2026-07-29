@@ -29,6 +29,149 @@ const SEMANTIC_PENALTY: f32 = 0.1;
 /// Above this fraction filtered/penalized, the caller should surface a warning.
 pub const WARN_FILTER_RATIO: f32 = 0.5;
 
+// ── Layer 4 Hybrid trigger zones (from coherence_gate_layer4_hybrid.md §3) ──
+/// Zone A: soft semantic boundary — cosine in this range is genuinely ambiguous.
+const ZONE_A_COS_MIN: f32 = 0.70;
+const ZONE_A_COS_MAX: f32 = 0.90;
+/// Zone C: close-call score — within this delta of the median survivor score.
+const ZONE_C_SCORE_DELTA: f32 = 0.10;
+/// Zone D: lexical match threshold — at least this many keyword overlaps
+/// with cosine below this value triggers the LLM.
+const ZONE_D_KEYWORD_MIN: usize = 2;
+const ZONE_D_COS_MAX: f32 = 0.60;
+
+/// Which Layer 4 hybrid triggers fired for a candidate.
+#[derive(Debug, Clone, PartialEq)]
+struct HybridTrigger {
+    zone_a: bool,
+    zone_b: bool,
+    zone_c: bool,
+    zone_d: bool,
+    cosine: f32,
+    score: f32,
+    keyword_overlap: usize,
+}
+
+impl HybridTrigger {
+    fn any(&self) -> bool { self.zone_a || self.zone_b || self.zone_c || self.zone_d }
+}
+
+fn compute_triggers(node: &GraphNode, cosim: f32, score: f32, query_words: &[String], median_score: f32) -> HybridTrigger {
+    let content_lower = node.content.to_lowercase();
+    let keyword_overlap = query_words.iter()
+        .filter(|qw| content_lower.contains(qw.as_str()))
+        .count();
+
+    HybridTrigger {
+        zone_a: (ZONE_A_COS_MIN..ZONE_A_COS_MAX).contains(&cosim),
+        zone_b: node.provenance == "federation_peer" && node.weight > 0.5,
+        zone_c: (score - median_score).abs() < ZONE_C_SCORE_DELTA,
+        zone_d: keyword_overlap >= ZONE_D_KEYWORD_MIN && cosim < ZONE_D_COS_MAX,
+        cosine: cosim,
+        score,
+        keyword_overlap,
+    }
+}
+
+/// Tokenize query into lowercase words for keyword overlap (Zone D).
+fn tokenize_query(query: &str) -> Vec<String> {
+    query.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .map(|w| w.to_string())
+        .filter(|w| w.len() >= 2)
+        .collect()
+}
+
+fn median(values: &[f32]) -> f32 {
+    if values.is_empty() { return 0.0; }
+    let mut sorted: Vec<f32> = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mid = sorted.len() / 2;
+    if sorted.len() % 2 == 0 { (sorted[mid - 1] + sorted[mid]) / 2.0 } else { sorted[mid] }
+}
+
+fn parse_hybrid_response(response: &str) -> HybridDecision {
+    let upper = response.trim().to_uppercase();
+    // Grammar may truncate: "IRRELEV" = "IRRELEVANT", "RELEV" = "RELEVANT"
+    if upper.starts_with("IRRELEV") { HybridDecision::Reject }
+    else if upper.starts_with("RELEV") { HybridDecision::Keep }
+    else { HybridDecision::KeepSoft } // AMBIGUOUS or unrecognized -> soft keep
+}
+
+/// Call llama_backend with grammar-constrained output for hybrid classification.
+async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
+    let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:4000".to_string());
+
+    let body = serde_json::json!({
+        "intent": "query_model",
+        "prompt": prompt,
+        "max_tokens": 3,
+        "temperature": 0.0,
+        "grammar": grammar,
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{kernel_base}/api/v1/guilds/llama_backend/tools/query_model"))
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("HTTP error: {e}"))?;
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("JSON parse error: {e}"))?;
+
+    json["content"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .or_else(|| json["text"].as_str().map(|s| s.to_string()))
+        .ok_or_else(|| "Empty response from llama_backend".to_string())
+}
+
+/// 3-way classification grammar for hybrid Layer 4 (from design §4).
+const HYBRID_GRAMMAR: &str = "root ::= decision\ndecision ::= \"IRRELEVANT\" | \"AMBIGUOUS\" | \"RELEVANT\"";
+
+/// Short classification prompt for hybrid Layer 4.
+const HYBRID_CLASSIFY_PROMPT: &str = "\
+Classify this recall candidate by relevance to the query.\n\
+Output exactly one word: IRRELEVANT, AMBIGUOUS, or RELEVANT.\n\
+\n\
+IRRELEVANT = content is about a completely different topic, not useful.\n\
+AMBIGUOUS = content shares some context but is not clearly relevant.\n\
+RELEVANT = content directly addresses the query, provides useful evidence.";
+
+/// Decision from hybrid Layer 4 classification (from design §5).
+#[derive(Debug, Clone, PartialEq)]
+enum HybridDecision {
+    Keep,          // LLM says RELEVANT -> keep with no penalty (or remove existing penalty)
+    KeepSoft,      // LLM says AMBIGUOUS -> keep with soft penalty
+    Reject,        // LLM says IRRELEVANT -> reject
+}
+
+/// Log a hybrid Layer 4 observation decision to friction_log.
+fn log_hybrid_decision(node_id: &str, trigger: &HybridTrigger, decision: &HybridDecision) {
+    let zones: Vec<&str> = [
+        ("A", trigger.zone_a), ("B", trigger.zone_b),
+        ("C", trigger.zone_c), ("D", trigger.zone_d),
+    ].iter().filter(|(_, active)| *active).map(|(z, _)| *z).collect();
+
+    let action = match decision {
+        HybridDecision::Keep => "KEEP (LLM says RELEVANT, overriding penalties)",
+        HybridDecision::KeepSoft => "KEEP_SOFT (LLM says AMBIGUOUS, keeping with soft penalty)",
+        HybridDecision::Reject => "REJECT (LLM says IRRELEVANT)",
+    };
+
+    let desc = format!(
+        "node={} zones={} cos={:.2} score={:.2} kw_overlap={} llm={:?} action={}",
+        node_id, zones.join(","), trigger.cosine, trigger.score, trigger.keyword_overlap, decision, action
+    );
+    let _ = crate::security::friction_log::log_friction_event_standalone("layer4_hybrid_decision", &desc);
+}
+
 /// Layer 4: v3 calibrated reasoning prompt (78.85% on 52 real cases with Qwen3.5-2B).
 /// Balanced KEEP guidelines that avoid both over-eager KEEP bias (v1 75.00%)
 /// and over-eager REJECT overcorrection (v2 65.38%).
@@ -144,7 +287,6 @@ impl CoherenceGate {
         let mut penalized_nodes = Vec::new();
 
         for (node, mut score) in results {
-            // Layer 1: known injection patterns -> silent elimination.
             if matches_injection_pattern(&node.content) {
                 eliminated += 1;
                 continue;
@@ -152,13 +294,11 @@ impl CoherenceGate {
 
             let mut node_penalized = false;
 
-            // Layer 2: untrusted provenance -> penalize, don't remove.
             if node.provenance == "federation_peer" && node.weight < 1.0 {
                 score *= PROVENANCE_PENALTY;
                 node_penalized = true;
             }
 
-            // Layer 3: query/content semantic drift -> penalize, don't remove.
             if let Some(q_emb) = query_embedding
                 && let Ok(Some(node_emb)) = silva.get_node_embedding(&node.id).await
             {
@@ -181,6 +321,71 @@ impl CoherenceGate {
         TOTAL_PENALIZED.fetch_add(penalized as u64, Ordering::Relaxed);
 
         (survivors, GateStats { total, eliminated, penalized, penalized_nodes })
+    }
+
+    /// Layer 4 hybrid classification: for each survivor flagged by any trigger
+    /// zone, spawn a fire-and-forget LLM call to classify as IRRELEVANT/
+    /// AMBIGUOUS/RELEVANT. Logs decisions via friction_log (observation mode).
+    /// Does NOT modify scores. Safe to call after every filter() invocation.
+    pub fn hybrid_classify(
+        query: &str,
+        survivors: &[(GraphNode, f32)],
+        silva: std::sync::Arc<crate::memory::silva::SilvaDB>,
+        query_embedding: Option<Vec<f32>>,
+    ) {
+        if survivors.is_empty() {
+            return;
+        }
+
+        let query_clone = query.to_string();
+        let query_words = tokenize_query(query);
+        let survivors_clone: Vec<(GraphNode, f32)> = survivors.iter()
+            .map(|(n, s)| (n.clone(), *s)).collect();
+
+        tokio::spawn(async move {
+            // Re-compute cosines and triggers for each survivor
+            let mut cosines: Vec<f32> = Vec::with_capacity(survivors_clone.len());
+            let scores: Vec<f32> = survivors_clone.iter().map(|(_, s)| *s).collect();
+
+            for (node, _score) in &survivors_clone {
+                let cosim: f32 = if let Some(ref q_emb) = query_embedding {
+                    if let Ok(Some(node_emb)) = silva.get_node_embedding(&node.id).await {
+                        crate::memory::cosine::cosine_similarity(q_emb, &node_emb)
+                    } else { 1.0 }
+                } else { 1.0 };
+
+                cosines.push(cosim);
+            }
+
+            // Zone C compares the final post-penalty SCORE against the median
+            // survivor score, not the median cosine -- different scale (design §3).
+            let median_score = median(&scores);
+
+            for (i, (node, _score)) in survivors_clone.iter().enumerate() {
+                let cosim = cosines[i];
+                let trigger = compute_triggers(node, cosim, *_score, &query_words, median_score);
+                if trigger.any() {
+                    // Build classification prompt
+                    let flagged_by = {
+                        let mut flags = vec![];
+                        if node.provenance == "federation_peer" { flags.push("provenance(federation)".to_string()); }
+                        if cosim < COHERENCE_THRESHOLD { flags.push(format!("cosine({cosim:.2})")); }
+                        if flags.is_empty() { "none".to_string() } else { flags.join(", ") }
+                    };
+
+                    let query_preview: String = query_clone.chars().take(80).collect();
+                    let content_preview: String = node.content.chars().take(200).collect();
+                    let prompt = format!(
+                        "{HYBRID_CLASSIFY_PROMPT}\n\nQUERY: {query_preview}\nCONTENT: {content_preview}\nCosine: {cosim:.2}\nFlagged by: {flagged_by}\n\nRespond with one word: IRRELEVANT, AMBIGUOUS, or RELEVANT."
+                    );
+
+                    if let Ok(response) = call_reasoning_backend_with_grammar(&prompt, HYBRID_GRAMMAR).await {
+                        let decision = parse_hybrid_response(&response);
+                        log_hybrid_decision(&node.id, &trigger, &decision);
+                    }
+                }
+            }
+        });
     }
 
     /// Layer 4: reasoning judgment via llama_backend guild (optional, async).
@@ -452,5 +657,80 @@ mod tests {
     async fn reason_about_empty_flagged_returns_empty() {
         let annotations = CoherenceGate::reason_about_flagged("test query", &[]).await;
         assert!(annotations.is_empty());
+    }
+
+    #[test]
+    fn hybrid_trigger_zone_a_activates_on_mid_cosine() {
+        let query_words = tokenize_query("deploy the kernel");
+        let node = node("n1", "deployment instructions for tylluan kernel", "unverified", 1.0);
+        let trigger = compute_triggers(&node, 0.75, 0.9, &query_words, 0.5);
+        assert!(trigger.zone_a, "cosine 0.75 should activate Zone A [0.70, 0.90)");
+        assert!(!trigger.zone_b);
+        assert!(!trigger.zone_c);
+        assert!(!trigger.zone_d);
+        assert!(trigger.any());
+    }
+
+    #[test]
+    fn hybrid_trigger_high_cosine_does_not_activate() {
+        let query_words = tokenize_query("deploy the kernel");
+        let node = node("n2", "deployment instructions for tylluan kernel", "unverified", 1.0);
+        let trigger = compute_triggers(&node, 0.95, 0.9, &query_words, 0.5);
+        assert!(!trigger.zone_a, "cosine 0.95 above Zone A max 0.90");
+        assert!(!trigger.zone_b);
+        assert!(!trigger.zone_c);
+        assert!(!trigger.zone_d);
+        assert!(!trigger.any(), "high cosine should NOT trigger any zone");
+    }
+
+    #[test]
+    fn hybrid_trigger_low_cosine_does_not_activate() {
+        let query_words = tokenize_query("deploy the kernel");
+        let node = node("n3", "completely unrelated topic", "unverified", 1.0);
+        let trigger = compute_triggers(&node, 0.40, 0.9, &query_words, 0.5);
+        assert!(!trigger.zone_a, "cosine 0.40 below Zone A min 0.70");
+        assert!(!trigger.zone_b);
+        assert!(!trigger.zone_c);
+        assert!(!trigger.zone_d);
+        assert!(!trigger.any(), "low cosine should NOT trigger any zone");
+    }
+
+    #[test]
+    fn hybrid_trigger_zone_b_federation_provenance() {
+        let query_words = tokenize_query("shared knowledge");
+        let node = node("n4", "federated knowledge from peer", "federation_peer", 0.8);
+        let trigger = compute_triggers(&node, 0.65, 0.9, &query_words, 0.5);
+        assert!(trigger.zone_b, "federation_peer with weight 0.8 > 0.5 should trigger Zone B");
+        assert!(!trigger.zone_a);
+        assert!(!trigger.zone_c);
+        assert!(!trigger.zone_d);
+        assert!(trigger.any());
+    }
+
+    #[test]
+    fn hybrid_trigger_zone_b_ignores_low_weight() {
+        let query_words = tokenize_query("shared knowledge");
+        let node = node("n5", "federated knowledge from peer", "federation_peer", 0.3);
+        let trigger = compute_triggers(&node, 0.65, 0.9, &query_words, 0.5);
+        assert!(!trigger.zone_b, "federation_peer with weight 0.3 <= 0.5 should NOT trigger Zone B");
+        assert!(!trigger.any());
+    }
+
+    #[test]
+    fn hybrid_parse_irrelevant() {
+        assert_eq!(parse_hybrid_response("IRRELEVANT"), HybridDecision::Reject);
+        assert_eq!(parse_hybrid_response("IRRELEV"), HybridDecision::Reject);
+    }
+
+    #[test]
+    fn hybrid_parse_relevant() {
+        assert_eq!(parse_hybrid_response("RELEVANT"), HybridDecision::Keep);
+    }
+
+    #[test]
+    fn hybrid_parse_ambiguous_defaults_soft_keep() {
+        assert_eq!(parse_hybrid_response("AMBIGUOUS"), HybridDecision::KeepSoft);
+        assert_eq!(parse_hybrid_response("AMBIGU"), HybridDecision::KeepSoft);
+        assert_eq!(parse_hybrid_response("gibberish"), HybridDecision::KeepSoft);
     }
 }
