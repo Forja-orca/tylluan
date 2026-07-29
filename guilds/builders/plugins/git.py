@@ -109,7 +109,7 @@ async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
 
         stdout, stderr = await asyncio.wait_for(
             process.communicate(),
-            timeout=8,
+            timeout=30,  # Windows AV can delay subprocess spawn 15-25s
         )
 
         output = ""
@@ -126,7 +126,7 @@ async def _run_git_shell(args: list[str], cwd: str | None = None) -> str:
     except FileNotFoundError:
         return "❌ Error: 'git' command not found."
     except TimeoutError:
-        return "⏱️ git shell timeout (>8s). Add git.exe and python.exe to Kaspersky exclusions for full speed."
+        return "⏱️ git shell timeout (>30s). Add git.exe and python.exe to Kaspersky exclusions for full speed."
     except Exception as e:
         return f"❌ Error: {e}"
 
