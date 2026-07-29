@@ -1,5 +1,5 @@
 import { MessageSquare, Sparkles, Users, Check } from 'lucide-react';
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
@@ -7,7 +7,7 @@ import { usePolling } from '../hooks/usePolling';
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 import { ColoquioChannelsPanel } from './ColoquioChannelsPanel';
 import { ColoquioMessagesPanel } from './ColoquioMessagesPanel';
-import { ColoquioCanvasWorkspace } from './ColoquioCanvasWorkspace';
+const ColoquioCanvasWorkspace = lazy(() => import('./ColoquioCanvasWorkspace').then(m => ({ default: m.ColoquioCanvasWorkspace })));
 import { ColoquioAgentsPanel } from './ColoquioAgentsPanel';
 
 interface ColoquioTabProps {
@@ -447,7 +447,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
           {/* Canvas View */}
           {showCanvas && selectedId && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
+              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-500 text-xs">Cargando canvas...</div>}>
+                <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
+              </Suspense>
             </div>
           )}
         </div>
