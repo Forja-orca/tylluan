@@ -432,6 +432,11 @@ impl GuildMatcher {
                 "🎯 Tiebreak: '{}' (sem={:.3}) > '{}' (sem={:.3}) — scores {:.3} vs {:.3}",
                 t2.0.guild_name, t2.2, t1.0.guild_name, t1.2, t1.1, t2.1
             );
+            // Log friction: semantic tiebreaker was needed (routing was ambiguous)
+            let _ = crate::security::friction_log::log_friction_event_standalone(
+                "routing_ambiguous",
+                &format!("'{}' vs '{}' both within 0.15 — semantic tiebreak chose '{}'", t1.0.guild_name, t2.0.guild_name, t2.0.guild_name)
+            );
             top1 = Some(t2.clone());
         }
 
