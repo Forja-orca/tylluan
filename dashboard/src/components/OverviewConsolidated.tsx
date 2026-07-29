@@ -12,7 +12,6 @@ import {
   MessageSquare, 
   ShieldCheck,
   CheckCircle2, 
-  Terminal,
   Cpu
 } from 'lucide-react';
 import { TylluanLogo } from './TylluanLogo';
@@ -128,8 +127,6 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
             />
             {/* Team Pulse Widget */}
             <TeamPulseWidget bridge={props.bridge} />
-            {/* Task Registry Widget */}
-            <TaskRegistryWidget bridge={props.bridge} />
             {/* Resume Session Widget */}
             <ResumeSessionWidget bridge={props.bridge} />
             {/* Repo Map Widget */}
@@ -264,58 +261,4 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
   );
 }
 
-function TaskRegistryWidget({ bridge }: { bridge: any }) {
-  const [tasks] = useState<{ completed: string[]; inProgress: string[]; pending: string[] }>({
-    completed: [],
-    inProgress: [],
-    pending: []
-  });
-
-  // Task registry backend not yet implemented — widget kept as placeholder
-  return (
-    <div className="rounded-xl border border-slate-800 bg-[#0B0F17]/90 p-4 space-y-3 font-sans">
-      <div className="flex items-center justify-between font-mono">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#00F5D4] flex items-center gap-1.5">
-          <Terminal className="w-3.5 h-3.5" />
-          Active Worklog Registry
-        </span>
-        <span className="text-[10px] text-slate-500 font-mono">Real-time Task Registry</span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
-        <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl space-y-1">
-          <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Completed Recent</div>
-          {tasks.completed.length === 0 ? (
-            <div className="text-[11px] text-slate-600">No completed items listed</div>
-          ) : (
-            tasks.completed.map((t, idx) => (
-              <div key={idx} className="text-[11px] text-slate-300 truncate">✓ {t}</div>
-            ))
-          )}
-        </div>
-
-        <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl space-y-1">
-          <div className="text-[10px] font-bold text-[#00F5D4] uppercase tracking-wider">In Progress</div>
-          {tasks.inProgress.length === 0 ? (
-            <div className="text-[11px] text-slate-600">No tasks currently in progress</div>
-          ) : (
-            tasks.inProgress.map((t, idx) => (
-              <div key={idx} className="text-[11px] text-[#00F5D4] truncate">⚡ {t}</div>
-            ))
-          )}
-        </div>
-
-        <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl space-y-1">
-          <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Pending Next</div>
-          {tasks.pending.length === 0 ? (
-            <div className="text-[11px] text-slate-600">Queue clear</div>
-          ) : (
-            tasks.pending.map((t, idx) => (
-              <div key={idx} className="text-[11px] text-slate-400 truncate">⏳ {t}</div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// TaskRegistryWidget removed — no backend endpoint exists (verified 2026-07-29)
