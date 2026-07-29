@@ -6,6 +6,7 @@ import {
   History, Clock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 import { Tldraw } from '@tldraw/tldraw';
 import '@tldraw/tldraw/tldraw.css';
 import { useNexus } from '../hooks/useNexus';
@@ -509,15 +510,11 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
     }
   }, [docs]);
 
-  // Poll for remote changes every 3s
-  useEffect(() => {
-    if (!selectedDocId || showHistory) return;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      if (!localEditRef.current) loadDoc(selectedDocId);
-    }, 3000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [selectedDocId, remoteVersion, showHistory]);
+  // Poll for remote changes every 3s (via coordinator instead of raw setInterval)
+  usePolling('canvas-doc-poll', () => {
+    if (!selectedDocId || showHistory || localEditRef.current) return;
+    loadDoc(selectedDocId);
+  }, { interval: 'fast', enabled: !!selectedDocId && !showHistory });
 
   const onContentChange = (val: string) => {
     setContent(val);

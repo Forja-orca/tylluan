@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { NexusBridge, DiagnosticReport } from '../lib/nexus-bridge';
 import { Stethoscope, Activity, Server, Cpu, AlertTriangle, CheckCircle2, RotateCcw, Wrench, RefreshCw, XCircle, ServerOff } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface DoctorPanelProps {
   bridge: NexusBridge | null;
@@ -41,9 +42,10 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
 
   useEffect(() => {
     loadReport();
-    const interval = setInterval(loadReport, 15000); // Auto-refresh every 15s
-    return () => clearInterval(interval);
-  }, [bridge]);
+  }, [bridge, loadReport]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('doctor-report', loadReport, { interval: 'standard', enabled: !!bridge });
 
   const handleRepair = async (target: 'guild' | 'storage' | 'benchmark', name?: string) => {
     if (!bridge) return;

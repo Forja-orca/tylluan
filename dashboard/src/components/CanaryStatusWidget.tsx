@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface CanaryStatusWidgetProps {
   bridge: NexusBridge | null;
@@ -45,10 +46,10 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
 
   useEffect(() => {
     fetchCanary();
-    // Poll every 20s for canary invariants
-    const id = setInterval(fetchCanary, 20000);
-    return () => clearInterval(id);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('canary-status', fetchCanary, { interval: 'slow', enabled: !!bridge });
 
   if (loading && !canary) {
     return (

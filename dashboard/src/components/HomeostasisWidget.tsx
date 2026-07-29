@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, ShieldAlert, Cpu, Database, Heart, Clock } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 interface HomeostasisWidgetProps {
   bridge: NexusBridge | null;
@@ -24,10 +25,13 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
       }
     };
     fetchHealth();
-    // Poll detailed health every 10 seconds as per requirement
-    const interval = setInterval(fetchHealth, 10000);
-    return () => clearInterval(interval);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('homeostasis-health', async () => {
+    if (!bridge) return;
+    try { setHealth(await bridge.health_detailed()); } catch {}
+  }, { interval: 'medium', enabled: !!bridge });
 
   // Calculate homeostasis score: guilds_ok * 40 + memoria_ok * 30 + sin_errores_recientes * 30
   const guildsOk = health?.components?.guilds?.ok ? 1 : 0;

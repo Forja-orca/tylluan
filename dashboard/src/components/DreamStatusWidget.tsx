@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Moon, Database, Clock, RefreshCw, Layers } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
+import { usePolling } from '../hooks/usePolling';
 
 interface DreamStatusWidgetProps {
   bridge: NexusBridge | null;
@@ -30,18 +31,24 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
     };
     
     fetchDreamStatus();
-    // Fetch every 30 seconds as specified in prompt (no real-time to avoid unnecessary load)
-    const id = setInterval(fetchDreamStatus, 30000);
-    return () => clearInterval(id);
   }, [bridge]);
 
-  // Local 1-second countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNextRunCountdown(prev => (prev !== null && prev > 0 ? prev - 1 : prev));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
+  usePolling('dream-status', async () => {
+    if (!bridge) return;
+    try {
+      const raw = await bridge.fetchRaw('/api/v1/dream/status', {}) as any;
+      if (raw && raw.status === 'ok') {
+        setDreamStatus(raw);
+        if (raw.night_consolidation?.next_run_in_secs !== undefined) {
+          setNextRunCountdown(raw.night_consolidation.next_run_in_secs);
+        }
+      }
+    } catch {}
+  }, { interval: 'slow', enabled: !!bridge });
+  usePolling('dream-countdown', () => {
+    setNextRunCountdown(prev => (prev !== null && prev > 0 ? prev - 1 : prev));
+  }, { interval: 'fast', enabled: true });
 
   const formatCountdown = (seconds: number | null) => {
     if (seconds === null) return '--:--';

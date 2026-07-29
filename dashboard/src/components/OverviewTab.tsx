@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Activity,
   Wifi,
@@ -29,6 +29,7 @@ import type {
   Interoception
 } from '../lib/nexus-bridge';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import type { MemoryStats } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { MetricCard, RelativeTime, MiniSparkline } from './ui/MetricPrimitives';
@@ -92,8 +93,6 @@ export function OverviewTab({
       } catch { /* ignore — kernel may not expose endpoint yet */ }
     };
     fetchMetricsHistory();
-    const id = setInterval(fetchMetricsHistory, 5000);
-    return () => clearInterval(id);
   }, [bridge]);
 
   useEffect(() => {
@@ -115,9 +114,34 @@ export function OverviewTab({
       } catch {}
     };
     loadStatic();
-    const id = setInterval(loadStatic, 60000);
-    return () => clearInterval(id);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
+  usePolling('overview-metrics', async () => {
+    if (!bridge) return;
+    try {
+      const raw = await bridge.fetchRaw('/api/v1/metrics/history', {}) as any;
+      const snapshots: Array<{ ts: number; cpu: number; mem: number }> = raw?.snapshots ?? [];
+      setCpuHistory(snapshots.map((s) => s.cpu));
+      setMemHistory(snapshots.map((s) => s.mem));
+    } catch {}
+  }, { interval: 'fast', enabled: !!bridge });
+  usePolling('overview-static', async () => {
+    if (!bridge) return;
+    try {
+      const results = await Promise.allSettled([
+        bridge.getBlackboard(),
+        bridge.getCollectivePulse(),
+        bridge.getInteroception(),
+      ]);
+      const bb = results[0].status === 'fulfilled' ? results[0].value : null;
+      const pulse = results[1].status === 'fulfilled' ? results[1].value : null;
+      const intero = results[2].status === 'fulfilled' ? results[2].value : null;
+      if (bb) setBlackboard(bb);
+      if (pulse) setCollectivePulse(pulse);
+      if (intero) setInteroceptionData(intero);
+    } catch {}
+  }, { interval: 'idle', enabled: !!bridge });
 
   // Update live metrics from SSE events or sysStatus
   useEffect(() => {

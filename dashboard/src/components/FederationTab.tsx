@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import { 
   Network, 
   Plus, 
@@ -224,22 +225,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
 
   useEffect(() => {
     handleRefreshAll();
-    // Poll every 5 seconds as requested by the user
-    const interval = setInterval(() => {
-      fetchPeers(true);
-      fetchNodes(true);
-    }, 5000);
-    return () => clearInterval(interval);
   }, [bridge, handleRefreshAll, fetchPeers, fetchNodes]);
 
-  useEffect(() => {
-    fetchSharingStatus();
-    // Poll sharing status every 10 seconds (M6 specification)
-    const interval = setInterval(() => {
-      fetchSharingStatus(true);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [bridge, fetchSharingStatus]);
+  // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
+  usePolling('fed-peers-nodes', () => { fetchPeers(true); fetchNodes(true); }, { interval: 'quick', enabled: !!bridge });
+  usePolling('fed-sharing', () => fetchSharingStatus(true), { interval: 'medium', enabled: !!bridge });
 
   const handleAddPeer = async (e: React.FormEvent) => {
     e.preventDefault();

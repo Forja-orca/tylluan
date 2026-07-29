@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { OverviewTab } from './OverviewTab';
 import { SystemTab } from './SystemTab';
 import { InteroceptionTab } from './InteroceptionTab';
 import ResumeSessionWidget from './ResumeSessionWidget';
+import { usePolling } from '../hooks/usePolling';
 import RepoMapWidget from './RepoMapWidget';
 import { 
   LayoutDashboard, 
@@ -174,9 +175,10 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
 
   useEffect(() => {
     fetchPulse();
-    const interval = setInterval(fetchPulse, 10000);
-    return () => clearInterval(interval);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('overview-pulse', fetchPulse, { interval: 'medium', enabled: !!bridge });
 
   const handleMessageClick = () => {
     window.dispatchEvent(new CustomEvent('nexus_switch_tab', { detail: 'team' }));

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Activity, Cpu, Database, Users, AlertTriangle, CheckCircle, Clock, Zap, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -274,9 +275,10 @@ export function FleetTab() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
   }, []);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('fleet-refresh', refresh, { interval: 'medium', enabled: true });
 
   if (loading) return (
     <div className="flex-1 flex items-center justify-center">

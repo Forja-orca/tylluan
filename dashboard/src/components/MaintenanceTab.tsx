@@ -6,6 +6,7 @@ import {
 import { cn } from '../lib/utils';
 import type { NexusBridge, MetricsHistory } from '../lib/nexus-bridge';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import { SparklineChart } from './SparklineChart';
 
 interface Props {
@@ -50,9 +51,6 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
   useEffect(() => {
     loadStatus();
-    // Poll maintenance status every 60s (data rarely changes, not available via SSE)
-    const interval = setInterval(loadStatus, 60000);
-    return () => clearInterval(interval);
   }, [loadStatus]);
 
   useEffect(() => {
@@ -66,12 +64,15 @@ export function MaintenanceTab({ bridge, notify }: Props) {
     };
 
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return () => { cancelled = true; };
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
+  usePolling('maintenance-status', loadStatus, { interval: 'idle', enabled: !!bridge });
+  usePolling('maintenance-metrics', async () => {
+    if (!bridge) return;
+    try { setMetricsHistory(await bridge.getMetricsHistory()); } catch {}
+  }, { interval: 'fast', enabled: !!bridge });
 
   const runAction = async (action: string, label: string) => {
     if (!bridge) return;
