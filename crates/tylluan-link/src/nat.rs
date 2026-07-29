@@ -1,5 +1,5 @@
 use rand::RngCore;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 
 // RFC 5389 constants
@@ -64,13 +64,22 @@ pub async fn discover_external_addr(config: &NatConfig) -> anyhow::Result<Extern
     anyhow::bail!("all STUN servers failed after retries")
 }
 
+/// `server` is a hostname:port (e.g. "stun.l.google.com:19302"), not a literal
+/// IP:port -- SocketAddr::parse (FromStr) never resolves DNS and would always
+/// fail here. to_socket_addrs() does the actual DNS lookup.
+fn resolve_stun_server(server: &str) -> anyhow::Result<SocketAddr> {
+    server
+        .to_socket_addrs()
+        .map_err(|e| anyhow::anyhow!("failed to resolve STUN server '{server}': {e}"))?
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("STUN server '{server}' resolved to no addresses"))
+}
+
 async fn stun_binding_request(
     server: &str,
     timeout: Duration,
 ) -> anyhow::Result<(IpAddr, u16)> {
-    let server_addr: SocketAddr = server
-        .parse()
-        .map_err(|e| anyhow::anyhow!("invalid STUN server address '{server}': {e}"))?;
+    let server_addr = resolve_stun_server(server)?;
 
     let local = if server_addr.is_ipv4() {
         "0.0.0.0:0"
@@ -318,6 +327,24 @@ mod tests {
         let result = parse_binding_response(&buf, &tx_id);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no XOR-MAPPED-ADDRESS"));
+    }
+
+    #[test]
+    fn test_resolve_stun_server_accepts_hostname() {
+        // Regression: this used to call SocketAddr::parse() directly on the
+        // server string, which only accepts literal "ip:port" and always fails
+        // on a hostname -- meaning both default STUN servers (real hostnames)
+        // could never resolve, and NAT discovery silently always fell back to
+        // LAN. localhost is used instead of a real public hostname to keep
+        // this test network-independent.
+        let resolved = resolve_stun_server("localhost:19302");
+        assert!(resolved.is_ok(), "hostname:port must resolve via DNS, not fail like a bad literal");
+    }
+
+    #[test]
+    fn test_resolve_stun_server_accepts_literal_ip() {
+        let resolved = resolve_stun_server("127.0.0.1:19302").unwrap();
+        assert_eq!(resolved.port(), 19302);
     }
 
     #[tokio::test]
