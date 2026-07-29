@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::fs;
 use serde::Deserialize;
 use crate::transport::http::{HttpState, SaveConfigRequest};
+use rmcp::model::CallToolRequestParam;
 
 #[derive(Deserialize)]
 pub struct SetDeviceRequest { pub device: String }
@@ -80,6 +81,59 @@ pub async fn set_inference_device_handler(Json(req): Json<SetDeviceRequest>) -> 
     }
     (StatusCode::OK, Json(serde_json::json!({
         "device": device, "restart_required": true
+    }))).into_response()
+}
+
+/// GET /api/v1/config/device/status — reports the REAL ONNX execution
+/// provider state, never a hardcoded/assumed value. Backlog item: no status
+/// widget ships without a real endpoint behind it (3 prior incidents of
+/// hardcoded/ghost dashboard data). Queries each inference guild directly
+/// via the in-process guild registry (same path `guild_tool_call_handler`
+/// uses) and reports per-guild real vs configured provider. If a guild is
+/// unreachable, that guild's entry is honestly `null` — never faked as CPU.
+pub async fn device_status_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    let configured_device = match crate::config::TylluanConfig::load_cached() {
+        Ok(cfg_lock) => match cfg_lock.try_read() {
+            Ok(cfg) => Some(format!("{:?}", cfg.inference.device).to_lowercase()),
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+
+    // Inference guilds that load ONNX models locally. Extend this list if
+    // more guilds gain their own onnxruntime sessions.
+    const INFERENCE_GUILDS: &[(&str, &str)] = &[("vision", "vision_device_status")];
+
+    let mut guilds = serde_json::Map::new();
+    for (guild, tool) in INFERENCE_GUILDS {
+        let params = CallToolRequestParam { name: (*tool).into(), arguments: None };
+        let entry = match state.registry.call_tool(guild, params).await {
+            Ok(res) => {
+                let mut parsed_any: Option<serde_json::Value> = None;
+                for c in res.content {
+                    if let Some(text) = c.as_text()
+                        && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text.text) {
+                            parsed_any = Some(parsed);
+                            break;
+                        }
+                }
+                parsed_any.unwrap_or_else(|| serde_json::json!({
+                    "status": "error",
+                    "error": "guild returned no parseable status"
+                }))
+            }
+            Err(e) => serde_json::json!({
+                "status": "error",
+                "error": format!("guild '{guild}' unreachable: {e}")
+            }),
+        };
+        guilds.insert((*guild).to_string(), entry);
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "ok": true,
+        "configured_device": configured_device,
+        "guilds": guilds,
     }))).into_response()
 }
 

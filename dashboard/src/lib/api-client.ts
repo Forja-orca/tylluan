@@ -603,6 +603,7 @@ export class NexusBridge {
   async getCoherenceGateStats() { return security.getCoherenceGateStats(this); }
   async getRecallFeedbackStats() { return security.getRecallFeedbackStats(this); }
   async getFrictionStats() { return security.getFrictionStats(this); }
+  async getDeviceStatus() { return security.getDeviceStatus(this); }
   async getConfig() { return system.getConfig(this); }
   async saveConfig(content: string) { return system.saveConfig(this, content); }
   async setSandboxProfile(profile: 'strict' | 'balanced' | 'permissive') { return system.setSandboxProfile(this, profile); }

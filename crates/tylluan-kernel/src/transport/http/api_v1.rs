@@ -241,6 +241,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/memory/recall-feedback/stats", get(api_security::recall_feedback_stats))
         .route("/api/v1/config", get(get_config_handler).post(save_config_handler))
         .route("/api/v1/config/device", post(set_inference_device_handler))
+        .route("/api/v1/config/device/status", get(device_status_handler))
         .route("/api/v1/config/inference-llama", post(set_inference_llama_config_handler))
         .route("/api/v1/config/sandbox-profile", post(set_sandbox_profile_handler))
         .route("/api/v1/config/sandbox-profile/guild", post(set_guild_sandbox_override_handler))
@@ -1378,6 +1379,16 @@ async fn silva_create_node_handler(State(state): State<Arc<HttpState>>, Json(p):
                     )
                 });
             }
+            // upsert_node() is a plain INSERT with no embedding step. Nodes created
+            // through this HTTP endpoint (e.g. vision guild) were previously invisible
+            // to semantic hybrid search because nothing ever populated node_embeddings
+            // for them. Mirror the same embed-then-save pattern already used by
+            // silva_add_edge_handler above so every node created here gets a real
+            // BGE-M3 embedding like nodes created via tylluan_remember/handler_do.
+            if let Some(engine) = state.matcher.engine()
+                && let Ok(vec) = engine.embed(&p.content) {
+                    let _ = state.silva.save_embedding(&node_id, &vec, "bge-m3", None).await;
+                }
             (StatusCode::CREATED, Json(serde_json::json!({"ok": true, "id": node_id}))).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response(),
