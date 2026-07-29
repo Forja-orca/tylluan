@@ -1,6 +1,6 @@
-interface Fetcher {
-  fetch(path: string, options?: RequestInit): Promise<any>;
-}
+import type { ApiFetcher } from './types';
+
+type Fetcher = ApiFetcher;
 
 export interface CoherenceGateStats {
   ok: boolean;

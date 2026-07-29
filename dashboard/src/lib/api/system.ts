@@ -7,18 +7,35 @@ import type {
   Interoception, 
   McpSession, 
   Approval, 
-  MetricsHistory 
+  MetricsHistory,
+  Guild
 } from '../api-client';
+import type { ApiFetcher, AuditEntry } from './types';
 
-interface Fetcher {
-  fetch(path: string, options?: RequestInit): Promise<any>;
+export interface TylluanConfig {
+  inference?: Record<string, unknown>;
+  memory?: Record<string, unknown>;
+  embedding?: Record<string, unknown>;
+  embeddings?: Record<string, unknown>;
+  security?: Record<string, unknown>;
+  guilds?: Record<string, unknown>;
+  federation?: Record<string, unknown>;
+  silva?: Record<string, unknown>;
+  network?: Record<string, unknown>;
+  p2p?: Record<string, unknown>;
+  dev_mode?: boolean;
+  host?: string;
+  port?: number;
+  [key: string]: unknown;
 }
 
-export async function getHealth(client: Fetcher): Promise<any> {
+type Fetcher = ApiFetcher;
+
+export async function getHealth(client: Fetcher): Promise<{ status: string; uptime_secs: number }> {
   return await client.fetch('/health');
 }
 
-export async function health_detailed(client: Fetcher): Promise<any> {
+export async function health_detailed(client: Fetcher): Promise<{ status: string; components: Record<string, { ok: boolean; detail?: string }> }> {
   return await client.fetch('/api/v1/health/detailed');
 }
 
@@ -41,7 +58,7 @@ export async function probe(client: Fetcher): Promise<ProbeResult | null> {
   }
 }
 
-export async function getStats(client: Fetcher): Promise<any> {
+export async function getStats(client: Fetcher): Promise<{ guilds: Array<{ name: string; status: string }>; uptime: number }> {
   try {
     return await client.fetch('/api/v1/guilds/health');
   } catch {
@@ -49,7 +66,7 @@ export async function getStats(client: Fetcher): Promise<any> {
   }
 }
 
-export async function getGuildHealth(client: Fetcher): Promise<any[]> {
+export async function getGuildHealth(client: Fetcher): Promise<Guild[]> {
   try {
     return await client.fetch('/api/v1/guilds/health');
   } catch {
@@ -59,35 +76,35 @@ export async function getGuildHealth(client: Fetcher): Promise<any[]> {
 
 // Approval actions are handled via tylluan_do MCP tool (plan mode).
 // No dedicated HTTP endpoint for approvals exists.
-export async function getApprovals(_client: Fetcher): Promise<any> {
+export async function getApprovals(_client: Fetcher): Promise<Approval[]> {
   return []; // backend not wired — approvals go through tylluan_do plan mode
 }
 
-export async function approveAction(_client: Fetcher, _id: string): Promise<any> {
-  return null;
+export async function approveAction(_client: Fetcher, _id: string): Promise<{ success: boolean }> {
+  return { success: false };
 }
 
-export async function rejectAction(_client: Fetcher, _id: string): Promise<any> {
-  return null;
+export async function rejectAction(_client: Fetcher, _id: string): Promise<{ success: boolean }> {
+  return { success: false };
 }
 
-export async function getGuilds(client: Fetcher): Promise<any> {
+export async function getGuilds(client: Fetcher): Promise<Guild[]> {
   return await client.fetch('/api/v1/guilds');
 }
 
-export async function getCapabilities(client: Fetcher): Promise<any> {
+export async function getCapabilities(client: Fetcher): Promise<unknown> {
   return await client.fetch('/api/v1/capabilities');
 }
 
-export async function startGuild(client: Fetcher, name: string): Promise<any> {
+export async function startGuild(client: Fetcher, name: string): Promise<{ success: boolean }> {
   return await client.fetch(`/api/v1/guilds/${name}/start`, { method: 'POST' });
 }
 
-export async function stopGuild(client: Fetcher, name: string): Promise<any> {
+export async function stopGuild(client: Fetcher, name: string): Promise<{ success: boolean }> {
   return await client.fetch(`/api/v1/guilds/${name}/stop`, { method: 'POST' });
 }
 
-export async function testGuild(client: Fetcher, name: string): Promise<any> {
+export async function testGuild(client: Fetcher, name: string): Promise<{ success: boolean; output: string }> {
   return await client.fetch(`/api/v1/guilds/${name}/test`, { method: 'POST' });
 }
 
@@ -123,7 +140,7 @@ export async function getSystemStatus(client: Fetcher): Promise<{
 }
 
 export async function getSessions(client: Fetcher): Promise<McpSession[]> {
-  const r = await client.fetch('/api/v1/sessions');
+  const r = await client.fetch<{ sessions?: McpSession[] }>('/api/v1/sessions');
   return r.sessions ?? [];
 }
 
@@ -131,23 +148,23 @@ export async function revokeSession(client: Fetcher, id: string): Promise<void> 
   await client.fetch(`/api/v1/sessions/${id}`, { method: 'DELETE' });
 }
 
-export async function getAuditTrail(client: Fetcher, agentId?: string, limit?: number): Promise<{ entries: any[]; total: number }> {
+export async function getAuditTrail(client: Fetcher, agentId?: string, limit?: number): Promise<{ entries: AuditEntry[]; total: number }> {
   const params = new URLSearchParams();
   if (agentId) params.append('agent_id', agentId);
   if (limit) params.append('limit', limit.toString());
   const query = params.toString() ? `?${params.toString()}` : '';
-  const raw = await client.fetch(`/api/v1/audit/trail${query}`);
-  const entries = (raw.entries || []).map((row: any) => ({
-    agent_id: row.agent_id,
-    guild: row.guild,
-    intent_preview: row.intent_preview || row.intent || row.result_preview || '',
-    allowed: row.allowed !== undefined ? row.allowed : (row.status === 'ok'),
-    timestamp: row.timestamp,
+  const raw = await client.fetch<{ entries?: Array<Record<string, unknown>>; total?: number; count?: number }>(`/api/v1/audit/trail${query}`);
+  const entries = (raw.entries || []).map((row) => ({
+    agent_id: row.agent_id as string,
+    guild: row.guild as string,
+    intent_preview: (row.intent_preview as string) || (row.intent as string) || (row.result_preview as string) || '',
+    allowed: row.allowed !== undefined ? (row.allowed as boolean) : (row.status === 'ok'),
+    timestamp: String(row.timestamp),
   }));
   return { entries, total: raw.total ?? raw.count ?? entries.length };
 }
 
-export async function getConfig(client: Fetcher): Promise<any> {
+export async function getConfig(client: Fetcher): Promise<TylluanConfig> {
   return await client.fetch('/api/v1/config');
 }
 
@@ -184,7 +201,7 @@ export async function clearSessionSandboxOverride(client: Fetcher, agentId: stri
   });
 }
 
-export async function rotateLogs(client: Fetcher): Promise<any> {
+export async function rotateLogs(client: Fetcher): Promise<{ success: boolean }> {
   return await client.fetch('/api/v1/maintenance/checkpoint', { method: 'POST' });
 }
 

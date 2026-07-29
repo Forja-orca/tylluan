@@ -133,14 +133,17 @@ export function GuildsTab({ bridge, notify, events }: Props) {
         setFullConfig(cfg);
         
         // Detect if backend natively supports sandbox_profile in any configuration struct
-        if (cfg?.guilds && 'sandbox_profile' in cfg.guilds) {
-          setSandboxProfile(cfg.guilds.sandbox_profile);
-        } else if (cfg?.security?.sandbox && 'profile' in cfg.security.sandbox) {
-          setSandboxProfile(cfg.security.sandbox.profile);
+        const guildsCfg = (cfg?.guilds ?? {}) as Record<string, unknown>;
+        const secCfg = (cfg?.security ?? {}) as Record<string, unknown>;
+        const sandbox = secCfg.sandbox as Record<string, unknown> | undefined;
+        if (guildsCfg.sandbox_profile !== undefined) {
+          setSandboxProfile(guildsCfg.sandbox_profile as 'strict' | 'balanced' | 'permissive');
+        } else if (sandbox?.profile !== undefined) {
+          setSandboxProfile(sandbox.profile as 'strict' | 'balanced' | 'permissive');
         }
 
-        if (cfg?.security?.sandbox) {
-          setSandboxEnabled(!!cfg.security.sandbox.enabled);
+        if (sandbox) {
+          setSandboxEnabled(!!sandbox.enabled);
         }
       })
       .catch(err => {

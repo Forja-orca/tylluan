@@ -103,10 +103,10 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const intero = summary ? summary.interoception : null;
       const sysStat = summary ? summary.system_status : null;
 
-      setGuilds(g.guilds || g || []);
+      setGuilds(Array.isArray(g) ? g : []);
       setStats(s);
       setMemoryStats(m);
-      setApprovals(a.pending || a || []);
+      setApprovals(Array.isArray(a) ? a : []);
       setGoldenSignals(gs);
       setGuildsUtilization(gu);
       setMemoryRetention(mr);
