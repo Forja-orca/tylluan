@@ -84,6 +84,10 @@ pub struct GateStats {
     pub total: usize,
     pub eliminated: usize,
     pub penalized: usize,
+    /// The specific nodes penalized by layers 2-3 (provenance/semantic drift),
+    /// with their post-penalty score. Used by Layer 4 observation mode so it
+    /// only reasons about the flagged subset, not every survivor.
+    pub penalized_nodes: Vec<(GraphNode, f32)>,
 }
 
 impl GateStats {
@@ -137,6 +141,7 @@ impl CoherenceGate {
         let mut eliminated = 0usize;
         let mut penalized = 0usize;
         let mut survivors = Vec::with_capacity(total);
+        let mut penalized_nodes = Vec::new();
 
         for (node, mut score) in results {
             // Layer 1: known injection patterns -> silent elimination.
@@ -166,6 +171,7 @@ impl CoherenceGate {
 
             if node_penalized {
                 penalized += 1;
+                penalized_nodes.push((node.clone(), score));
             }
             survivors.push((node, score));
         }
@@ -174,7 +180,7 @@ impl CoherenceGate {
         TOTAL_ELIMINATED.fetch_add(eliminated as u64, Ordering::Relaxed);
         TOTAL_PENALIZED.fetch_add(penalized as u64, Ordering::Relaxed);
 
-        (survivors, GateStats { total, eliminated, penalized })
+        (survivors, GateStats { total, eliminated, penalized, penalized_nodes })
     }
 
     /// Layer 4: reasoning judgment via llama_backend guild (optional, async).
@@ -217,6 +223,34 @@ impl CoherenceGate {
         }
         annotations
     }
+}
+
+/// Layer 4 observation mode: fire-and-forget reasoning on survivors.
+/// Does NOT modify scores — only logs reasoning annotations for analysis.
+/// Spawned as a background tokio task so it never blocks the recall hot path.
+pub fn observe_layer4(
+    query: String,
+    survivors: Vec<(GraphNode, f32)>,
+) {
+    tokio::spawn(async move {
+        if survivors.is_empty() {
+            return;
+        }
+        let annotations = CoherenceGate::reason_about_flagged(&query, &survivors).await;
+        for ann in &annotations {
+            let reason_preview: String = ann.reasoning.chars().take(100).collect();
+            tracing::info!(
+                "🔍 Layer4 observe: node={} decision={:?} score={:.3} reason={}",
+                ann.node_id,
+                ann.decision,
+                ann.original_score,
+                reason_preview
+            );
+        }
+        if annotations.is_empty() {
+            tracing::debug!("🔍 Layer4 observe: no annotations (backend unavailable)");
+        }
+    });
 }
 
 /// Result of a single reasoning judgment for a flagged recall candidate.
@@ -320,6 +354,9 @@ mod tests {
         assert!((survivors[0].1 - 0.09).abs() < 1e-5, "score must be penalized x0.1, got {}", survivors[0].1);
         assert_eq!(stats.penalized, 1);
         assert_eq!(stats.eliminated, 0);
+        assert_eq!(stats.penalized_nodes.len(), 1, "penalized_nodes must expose the flagged node for Layer 4 observation");
+        assert_eq!(stats.penalized_nodes[0].0.id, "fed");
+        assert!((stats.penalized_nodes[0].1 - 0.09).abs() < 1e-5, "penalized_nodes must carry the post-penalty score");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -331,6 +368,7 @@ mod tests {
         let (survivors, stats) = CoherenceGate::filter(results, &db, None).await;
         assert!((survivors[0].1 - 0.9).abs() < 1e-5, "high-weight federation node should not be penalized");
         assert_eq!(stats.penalized, 0);
+        assert!(stats.penalized_nodes.is_empty(), "non-penalized nodes must not appear in penalized_nodes");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -359,15 +397,15 @@ mod tests {
 
     #[test]
     fn gate_stats_warns_above_50_percent_filtered() {
-        let stats = GateStats { total: 10, eliminated: 3, penalized: 3 };
+        let stats = GateStats { total: 10, eliminated: 3, penalized: 3, penalized_nodes: Vec::new() };
         assert!(stats.should_warn(), "60% filtered/penalized must warn");
-        let stats_ok = GateStats { total: 10, eliminated: 1, penalized: 1 };
+        let stats_ok = GateStats { total: 10, eliminated: 1, penalized: 1, penalized_nodes: Vec::new() };
         assert!(!stats_ok.should_warn(), "20% filtered/penalized must not warn");
     }
 
     #[test]
     fn gate_stats_empty_never_warns() {
-        let stats = GateStats { total: 0, eliminated: 0, penalized: 0 };
+        let stats = GateStats { total: 0, eliminated: 0, penalized: 0, penalized_nodes: Vec::new() };
         assert!(!stats.should_warn());
     }
 
