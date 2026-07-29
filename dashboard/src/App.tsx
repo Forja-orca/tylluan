@@ -37,6 +37,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import React, { lazy, Suspense } from 'react'
 import { OverviewConsolidated } from './components/OverviewConsolidated'
 import { TylluanLogo } from './components/TylluanLogo'
+import DeviceStatusBadge from './components/DeviceStatusBadge'
 
 const MemoryConsolidated = lazy(() => import('./components/MemoryConsolidated'))
 const TeamConsolidated = lazy(() => import('./components/TeamConsolidated'))
@@ -342,6 +343,8 @@ function App() {
               </div>
             </div>
           )}
+
+          <DeviceStatusBadge bridge={bridge} />
 
           <div className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',

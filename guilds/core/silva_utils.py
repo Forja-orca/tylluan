@@ -86,37 +86,38 @@ def add_node(
     tags: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Insert a node into SilvaDB. Returns node id or None on failure.
-    M17-4 Drift Guard: rejects drift-sensitive types from guild/public paths."""
+    """Insert a node into SilvaDB via kernel IPC (POST /api/v1/silva/node).
+    Returns node id or None on failure.
+    M17-4 Drift Guard: rejects drift-sensitive types from guild/public paths.
+
+    NOTE: previously this did a raw sqlite3.connect() INSERT directly against
+    silva.db from the Python guild process. That bypassed the kernel entirely,
+    which meant the node never got a BGE-M3 embedding (invisible to semantic
+    hybrid search) and risked concurrent writes to the same SQLite file the
+    Rust kernel has open. Routed through the same HTTP IPC pattern as
+    write_edge() below so the kernel is the single writer and the node gets a
+    real embedding like any other node it creates.
+    """
     if node_type in DRIFT_SENSITIVE_TYPES:
         logger.warning(f"DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through guilds. Skipping.")
         return None
     content = compress_for_storage(content)
-    silva_path = get_silva_db_path()
-    if not silva_path.exists():
-        return None
 
-    try:
-        conn = sqlite3.connect(str(silva_path))
-        node_id = str(uuid.uuid4())
-        now = datetime.now().isoformat()
+    # Merge tags into metadata dict (schema has no tags column)
+    meta: Dict[str, Any] = metadata or {}
+    if tags:
+        meta["tags"] = tags
 
-        # Merge tags into metadata dict (schema has no tags column)
-        meta: Dict[str, Any] = metadata or {}
-        if tags:
-            meta["tags"] = tags
-
-        conn.execute(
-            """INSERT INTO nodes (id, type, content, metadata, weight, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 1.0, ?, ?)""",
-            (node_id, node_type, content, json.dumps(meta), now, now),
-        )
-        conn.commit()
-        conn.close()
-        return node_id
-    except Exception as e:
-        print(f"silva_utils: error adding node: {e}", file=sys.stderr)
-        return None
+    payload = {
+        "content": content,
+        "node_type": node_type,
+        "metadata": json.dumps(meta),
+    }
+    resp = _http_post("/api/v1/silva/node", payload)
+    if resp.get("ok"):
+        return resp.get("id")
+    logger.error(f"silva_utils: error adding node via IPC: {resp.get('error')}")
+    return None
 
 
 def search_nodes(query: str, limit: int = 10) -> List[Dict[str, Any]]:

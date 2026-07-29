@@ -52,6 +52,25 @@ _IMAGE_TOKEN_STR   = "<image>"
 _PROVIDER          = "CPUExecutionProvider"   # detected at load time
 _PROVIDER_LOADED   = False
 
+
+def _detect_available_provider() -> tuple[str, list]:
+    """Real ONNX Runtime provider detection — no hardcoding, no assumption.
+    Returns (chosen_provider, all_available_providers). Cheap: does not load
+    any model, only queries onnxruntime's compiled-in provider list.
+    """
+    try:
+        import onnxruntime as ort
+        available = list(ort.get_available_providers())
+    except Exception as e:
+        return "unavailable", [f"onnxruntime import failed: {e}"]
+
+    if "DmlExecutionProvider" in available:
+        return "DmlExecutionProvider", available
+    if "CUDAExecutionProvider" in available:
+        return "CUDAExecutionProvider", available
+    return "CPUExecutionProvider", available
+
+
 # ── Model loading ─────────────────────────────────────────────────────────────
 
 def _resolve_model_dir() -> str:
@@ -118,20 +137,7 @@ def _load_vision_model():
 
         # Auto-detect DirectML if available (M25-A)
         if not _PROVIDER_LOADED:
-            try:
-                import onnxruntime.training.api.module  # noqa: F401
-            except ImportError:
-                pass
-            try:
-                providers = ort.get_available_providers()
-                if "DmlExecutionProvider" in providers:
-                    _PROVIDER = "DmlExecutionProvider"
-                elif "CUDAExecutionProvider" in providers:
-                    _PROVIDER = "CUDAExecutionProvider"
-                else:
-                    _PROVIDER = "CPUExecutionProvider"
-            except Exception:
-                _PROVIDER = "CPUExecutionProvider"
+            _PROVIDER, _ = _detect_available_provider()
             _PROVIDER_LOADED = True
 
         providers = [_PROVIDER]
@@ -383,6 +389,31 @@ async def _run_vision(image_path: str, prompt: str, max_tokens: int = None) -> s
 
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def vision_device_status() -> str:
+    """Report the REAL ONNX execution provider state for this guild — no
+    hardcoding, no assumption of CPU. Cheap: does not load the model.
+    Returns JSON with:
+        active_provider:    provider actually in use if the model has been
+                             loaded already, else the provider that WOULD be
+                             chosen (same detection logic, run fresh).
+        available_providers: full list onnxruntime reports as compiled in.
+        model_loaded:        whether inference sessions are already warm.
+    """
+    if _MODEL_LOADED and _PROVIDER_LOADED:
+        active, available = _PROVIDER, None
+        _, available = _detect_available_provider()
+    else:
+        active, available = _detect_available_provider()
+    return json.dumps({
+        "guild": "vision",
+        "active_provider": active,
+        "available_providers": available,
+        "model_loaded": bool(_MODEL_LOADED and _vision_session is not None),
+        "status": "ok",
+    }, ensure_ascii=False)
+
 
 @mcp.tool()
 async def vision_analyze(
