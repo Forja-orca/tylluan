@@ -220,7 +220,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
     return acc;
   }, {});
 
-  const CATEGORIES: (GuildCategory | 'all')[] = ['all', 'Builder', 'Scholar', 'Watcher', 'Core'];
+  const CATEGORIES: (GuildCategory | 'all')[] = ['all', 'Builder', 'Scholar', 'Watcher', 'Core', 'Tool'];
 
   const renderGuildCard = (guild: Guild) => {
     const status = resolveStatus(guild);
