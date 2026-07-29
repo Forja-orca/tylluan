@@ -45,6 +45,7 @@ pub const LAZY_GUILDS: &[(&str, &str, bool)] = &[
     ("git", "guilds.builders.plugins.git", false),
     ("docker", "guilds.builders.plugins.docker", false),
     ("scheduler", "guilds.core.scheduler", true),
+    ("n8n_bridge", "guilds.core.n8n_bridge", false),
 ];
 
 #[cfg(test)]

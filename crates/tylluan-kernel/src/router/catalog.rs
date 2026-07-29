@@ -753,23 +753,16 @@ mod tests {
             "scrapling", "scheduler",
         ];
 
-        // Guilds that only exist as "V1 Port" files under guilds/builders/plugins,
-        // guilds/scholars/plugins, guilds/wardens/plugins, guilds/watchers/plugins
-        // and are intended to be registered via the `config.guilds.v2` gremios
-        // mechanism (main.rs's `if let Some(v2_config) = &config.guilds.v2` block).
-        // As of this writing tylluan.toml has NO `[guilds.v2]` section, so
-        // `config.guilds.v2` is `None` and this registration path is a no-op —
-        // meaning these guilds are ALSO currently unreachable via tylluan_do at
-        // runtime. That is a real gap, but activating guilds.v2 (or migrating
-        // these into LAZY_GUILDS/always_on directly) is a separate follow-up; this
-        // test intentionally does not block on it so it stays focused on the
-        // lazy/always-on drift bug it was written to catch.
-        const V2_GREMIO_ONLY_GUILDS: &[&str] = &[
-            "audit", "code", "memory", "search", "sequential_thinking",
-            "biome_warden", "ast_surgeon", "audio_tools", "ffmpeg_tools",
-            "screenshot_tools", "clipboard_tools", "local_llm_proxy",
-            "cron_scheduler", "n8n_bridge", "vision_moondream",
-        ];
+        // "vision_moondream" is real "V1 Port" code under guilds/core (spike, per its
+        // own docstring: "Status: spike") that was superseded by vision.py's SmolVLM2
+        // migration. It is intentionally left unreachable — dead code, not a gap to
+        // close via guilds.v2, LAZY_GUILDS, or always_on.
+        //
+        // "n8n_bridge" lives under guilds/core (not a v1-port gremio directory) and
+        // is being wired via registry::guild_list::LAZY_GUILDS in a separate change.
+        // Left excluded here until that lands so this test doesn't fail on a gap
+        // that belongs to that other change.
+        const V2_GREMIO_ONLY_GUILDS: &[&str] = &["vision_moondream", "n8n_bridge"];
 
         // sandbox.py is real and extract_guild_name() succeeds on it (so it shows up
         // in builtin_catalog(), which scans the filesystem), but it's explicitly
@@ -786,6 +779,38 @@ mod tests {
         let experimental_set: std::collections::HashSet<&str> =
             EXPERIMENTAL_GUILDS.iter().copied().collect();
 
+        // Third registration path: `[guilds.v2]` gremios, read for real off disk
+        // rather than hand-mirrored into a const — a hardcoded list here would
+        // silently rot the moment someone edits the gremios without touching this
+        // test, which defeats the point of a guardrail.
+        // CARGO_MANIFEST_DIR is crates/tylluan-kernel, so the repo root is two
+        // levels up. `tylluan.toml` is gitignored (user-local runtime config, may
+        // not exist on a fresh checkout or in CI), so fall back to the checked-in
+        // `tylluan.example.toml` template, which is kept in sync with it.
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let real_toml = repo_root.join("tylluan.toml");
+        let example_toml = repo_root.join("tylluan.example.toml");
+        let toml_path = if real_toml.exists() { &real_toml } else { &example_toml };
+        let toml_content = std::fs::read_to_string(toml_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", toml_path.display()));
+        let config: crate::config::TylluanConfig = toml::from_str(&toml_content)
+            .unwrap_or_else(|e| panic!("failed to parse {}: {e}", toml_path.display()));
+
+        let v2_registered_names: std::collections::HashSet<String> = config
+            .guilds
+            .v2
+            .as_ref()
+            .map(|v2| {
+                v2.gremios
+                    .iter()
+                    .flat_map(|g| g.plugins.iter())
+                    .map(|plugin| plugin.trim_end_matches(".py").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let catalog = builtin_catalog();
         let mut unreachable: Vec<&str> = Vec::new();
         for guild in &catalog {
@@ -796,9 +821,13 @@ mod tests {
             if v2_only_set.contains(name) || experimental_set.contains(name) {
                 continue; // known separate gap / experimental, see comments above
             }
-            if !lazy_names.contains(name) && !always_on_set.contains(name) {
-                unreachable.push(name);
+            if lazy_names.contains(name) || always_on_set.contains(name) {
+                continue;
             }
+            if v2_registered_names.contains(name) {
+                continue; // reachable via tylluan.toml's [guilds.v2] gremios, verified against the real file above
+            }
+            unreachable.push(name);
         }
 
         assert!(
@@ -806,9 +835,10 @@ mod tests {
             "Catalog guild(s) have no GuildDescriptor path to runtime registration —\n\
              tylluan_do will answer \"Unknown guild\" for these even though they pass\n\
              test_every_guild_file_is_in_catalog: {unreachable:?}\n\
-             Fix: add each to registry::guild_list::LAZY_GUILDS (on-demand) or to\n\
+             Fix: add each to registry::guild_list::LAZY_GUILDS (on-demand), to\n\
              tylluan.toml's [guilds.core] always_on list (+ mirror it into\n\
-             ALWAYS_ON_GUILDS above)."
+             ALWAYS_ON_GUILDS above), or to a gremio's `plugins` list under\n\
+             tylluan.toml's [guilds.v2]."
         );
     }
 }
