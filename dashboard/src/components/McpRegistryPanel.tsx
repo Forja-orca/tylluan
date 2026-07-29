@@ -77,7 +77,12 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   const [calls, setCalls] = useState<any[]>([]);
   const lastProcessedEventTs = React.useRef<number>(0);
 
-  // Local state for sandbox grants (Mock/Pending integration log)
+  // Sandbox grants: managed via MCP tool calls (approve_action), not HTTP.
+  // No /api/v1/grants endpoint exists in the kernel. The dashboard reads from
+  // localStorage because it cannot invoke MCP tools directly. This is the only
+  // viable path until the kernel exposes a grants HTTP endpoint or the dashboard
+  // gets an MCP client. The 'tylluan_grant_updated' CustomEvent is dispatched
+  // by PlanModePanel when a grant is approved/rejected via the bridge.
   const [grants, setGrants] = useState<any[]>([]);
 
   const fetchGrants = () => {

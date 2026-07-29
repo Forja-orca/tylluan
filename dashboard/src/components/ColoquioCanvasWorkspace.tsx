@@ -360,8 +360,6 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   const [newTitle, setNewTitle] = useState('');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localEditRef = useRef(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Version History states
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState<{ version: number; updated_by: string; updated_at: number; title: string }[]>([]);
