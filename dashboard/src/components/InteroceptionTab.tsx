@@ -5,6 +5,7 @@ import {
   Clock 
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 import { cn } from '../lib/utils';
 import type { 
   Interoception, 
@@ -51,10 +52,13 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
       }
     };
     poll();
-    // Poll memory stats every 60s (not available via SSE in useNexus)
-    const interval = setInterval(poll, 60000);
-    return () => clearInterval(interval);
   }, [bridge]);
+
+  // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
+  usePolling('interoception-memory', async () => {
+    if (!bridge) return;
+    try { setSilva(await bridge.getMemoryStats()); } catch {}
+  }, { interval: 'idle', enabled: !!bridge });
 
   if (silva?.edge_count !== undefined) {
     const h = edgeHistory.current;
@@ -152,14 +156,11 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
       }
     };
     loadProfiles();
-    const interval = setInterval(loadProfiles, 30000);
-    return () => clearInterval(interval);
   }, [bridge]);
 
   useEffect(() => {
     if (!bridge) return;
     const poll = async () => {
-      if (document.visibilityState === 'hidden') return;
       try {
         const h = await bridge.getHormones();
         setHormones(h);
@@ -168,8 +169,6 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
       }
     };
     poll();
-    const interval = setInterval(poll, 30000);
-    return () => clearInterval(interval);
   }, [bridge]);
 
   const HormoneBar = ({ label, value, color }: { label: string, value: number, color: string }) => (
