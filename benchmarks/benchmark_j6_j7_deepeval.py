@@ -66,16 +66,12 @@ class TylluanLocalJudge(DeepEvalBaseLLM):
         verdict = "yes" if first_line.startswith("YES") else ("no" if first_line.startswith("NO") else "yes")
         reason = raw_output[:200].replace("\n", " ").strip()
 
-        prompt_lower = prompt.lower()
-        if "verdict" in prompt_lower or "verdicts" in prompt_lower:
-            return json.dumps({"verdicts": [{"verdict": verdict, "reason": reason}]})
-        if "claim" in prompt_lower:
-            return json.dumps({"claims": [reason]})
-        if "truth" in prompt_lower:
-            return json.dumps({"truths": [reason]})
         return json.dumps({
             "verdicts": [{"verdict": verdict, "reason": reason}],
+            "verdict": verdict,
             "reason": reason,
+            "claims": [reason],
+            "truths": [reason],
             "score": 1.0 if verdict == "yes" else 0.0,
         })
 
