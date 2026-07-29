@@ -530,6 +530,16 @@ if let Some(ref mut s) = stmt {
         scored = gated;
         let gate_warning = gate_stats.should_warn();
 
+        // Layer 4 observation: fire-and-forget reasoning on nodes penalized
+        // by layers 2-3 only (not every survivor) — keeps this to a handful
+        // of LLM calls per recall instead of one per result.
+        if !gate_stats.penalized_nodes.is_empty() {
+            crate::security::coherence_gate::observe_layer4(
+                effective_query.clone(),
+                gate_stats.penalized_nodes.clone(),
+            );
+        }
+
         for (node, _) in &scored {
             let _ = server.silva.reinforce_node(&node.id, 1.02).await;
             let _ = server.silva.touch_node(&node.id, aid, "recall").await;
@@ -670,6 +680,16 @@ if let Some(ref mut s) = stmt {
             ).await;
             scored = gated;
             let gate_warning = gate_stats.should_warn();
+
+            // Layer 4 observation: fire-and-forget reasoning on nodes penalized
+            // by layers 2-3 only (not every survivor).
+            if !gate_stats.penalized_nodes.is_empty() {
+                crate::security::coherence_gate::observe_layer4(
+                    effective_query.clone(),
+                    gate_stats.penalized_nodes.clone(),
+                );
+            }
+
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
                 tracing::info!(
                     "🛡️ Coherence Gate: {} eliminated, {} penalized of {} candidates",
