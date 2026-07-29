@@ -17,6 +17,16 @@ export default defineConfig({
   build: {
     outDir: "../dashboard/dist",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-three': ['three', 'react-force-graph-3d'],
+          'vendor-tldraw': ['@tldraw/tldraw'],
+          'vendor-lucide': ['lucide-react'],
+        },
+      },
+    },
   },
   server: {
     // Force IPv4 loopback. Node/Vite defaulting to IPv6-only (`::1`) here is
