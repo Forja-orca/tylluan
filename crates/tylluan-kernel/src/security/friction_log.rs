@@ -62,7 +62,7 @@ pub fn end_workflow(workflow_id: i64, status: &str, round_trips: i64) -> Result<
 }
 
 /// Log a friction event without a workflow binding. For use from the router
-/// where workflow context is not available (tiebreaker, ambiguous routing).
+/// and handler_do where workflow context is not available.
 pub fn log_friction_event_standalone(event_type: &str, description: &str) -> Result<i64, String> {
     let conn = open_friction_db()?;
     ensure_schema(&conn)?;
@@ -73,6 +73,24 @@ pub fn log_friction_event_standalone(event_type: &str, description: &str) -> Res
         params![event_type, now, description],
     ).map_err(|e| format!("log_friction_standalone: {e}"))?;
     Ok(conn.last_insert_rowid())
+}
+
+/// Shorthand: log a routing mismatch (wrong guild selected, tool call failed).
+pub fn log_routing_mismatch(intent: &str, guild: &str, tool: &str, error: &str) {
+    let desc = format!("intent='{intent}' routed to guild={guild} tool={tool} — {error:.100}");
+    let _ = log_friction_event_standalone("routing_mismatch", &desc);
+}
+
+/// Shorthand: log a command blocklist rejection.
+pub fn log_blocklist_rejection(intent: &str, command: &str) {
+    let desc = format!("intent='{intent}' blocked: '{command}' not in allowed command list");
+    let _ = log_friction_event_standalone("command_blocklist_rejection", &desc);
+}
+
+/// Shorthand: log a semantic precision failure (retrieval returned noise).
+pub fn log_semantic_noise(intent: &str, expected_guild: &str, actual_guild: &str) {
+    let desc = format!("intent='{intent}' expected guild={expected_guild} but semantic similarity routed to guild={actual_guild}");
+    let _ = log_friction_event_standalone("semantic_precision_failure", &desc);
 }
 pub fn log_friction_event(
     workflow_id: i64,

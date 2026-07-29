@@ -166,6 +166,7 @@ pub(crate) async fn resolve_guild_name(
                                         trace.push(format!("rfl_fallback trigger='{}'", trigger.guild_name));
                                         return Ok((trigger.guild_name, trace));
                                     }
+                                crate::security::friction_log::log_routing_mismatch(intent, &m.guild_name, "", &format!("RFL blocked: weight={:.0}%", node.weight * 100.0));
                                 return Err(error_result(&format!(
                                     "Routing BLOCKED: guild '{}' previously failed for this intent (weight={:.0}%). Try a different phrasing.",
                                     m.guild_name, node.weight * 100.0
@@ -175,6 +176,7 @@ pub(crate) async fn resolve_guild_name(
                 // Confidence gate: reject low-confidence routing to prevent silent misfires
                 const MIN_CONFIDENCE: f32 = 0.20;
                 if m.score < MIN_CONFIDENCE {
+                    crate::security::friction_log::log_routing_mismatch(intent, &m.guild_name, "", &format!("low confidence: score={:.2}", m.score));
                     return Err(error_result(&format!(
                         "Error: intent '{}' unclear. Closest guild was '{}' \
                          but confidence too low ({:.0}%). \
