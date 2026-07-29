@@ -226,9 +226,6 @@ fn count_events(conn: &rusqlite::Connection, session_id: i64, event_type: &str) 
     ).unwrap_or(0)
 }
 
-/// Composite friction score: higher = more friction.
-/// Weights: manual_intervention=5, routing_error=3, timeout=2, retry=2,
-/// guild_error=1, ambiguous=1, coloquio_roundtrip=0.5
 fn compute_median_ttfua(conn: &rusqlite::Connection, session_id: i64) -> f64 {
     let values: Vec<f64> = conn
         .prepare("SELECT ttfua_seconds FROM friction_workflows WHERE session_id = ?1 AND ttfua_seconds IS NOT NULL ORDER BY ttfua_seconds")
@@ -242,6 +239,26 @@ fn compute_median_ttfua(conn: &rusqlite::Connection, session_id: i64) -> f64 {
     if values.len().is_multiple_of(2) { (values[mid-1] + values[mid]) / 2.0 } else { values[mid] }
 }
 
+/// Composite friction score: higher = more friction.
+///
+/// ## Weights (provisional — calibrated via synthetic analysis Jul 2026)
+/// | Event type           | Weight | Rationale |
+/// |----------------------|--------|-----------|
+/// | manual_intervention  | 5.0    | Direct human cost — agent failed autonomously, worst signal |
+/// | routing_error        | 3.0    | Wrong guild selected, wastes round-trip; medium-high severity |
+/// | timeout              | 2.0    | Timeout == slow response + likely retry; pairs with retry at same weight |
+/// | retry                | 2.0    | Wasted work + latency; pairs with timeout at same weight |
+/// | guild_error          | 1.0    | Guild-level failure but may resolve internally; minor |
+/// | routing_ambiguous    | 1.0    | Ambiguity is normal in routing; minor unless persistent |
+/// | coloquio_roundtrip   | 0.5    | Coordination overhead; lowest severity, part of normal workflow |
+///
+/// **Status:** PROVISIONAL. Synthetic analysis (80 sessions, 6 profiles) shows
+/// all 7 weights are FRAGILE under ±50% perturbation (~11-13 mean rank shift)
+/// because event types are highly correlated — sessions with many manual_interventions
+/// also have routing_errors, retries, etc. The weights are ADEQUATE for binary
+/// separation (high-friction score ~108 vs smooth ~0) but granular ranking within
+/// the middle band is unreliable. Re-calibrate when >50 real sessions with events exist.
+/// Consider simplifying to 3 tiers: Critical=5, Significant=2, Minor=1.
 fn compute_friction_score(conn: &rusqlite::Connection, session_id: i64) -> f64 {
     let weights: Vec<(&str, f64)> = vec![
         ("manual_intervention", 5.0),
