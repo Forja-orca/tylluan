@@ -183,7 +183,7 @@ No HTTP call leaves your machine. No API key is needed. The Complexity Cascade a
 
 **Two distinct things, worth not conflating:**
 - **Embeddings (BGE-M3) are always in the path** — every routing decision and every memory search uses a local embedding model. That's a neural network, always on, always local — not optional.
-- **Generative LLM inference is optional and never in the hot path.** Tylluan can run one internally via `llama.cpp` + GGUF (`guilds/core/llama_backend.py`, auto-downloads a precompiled binary — no external service required) for specific, async, non-blocking uses: a calibrated reasoning check on memory candidates already flagged by cheaper filters (`CoherenceGate` Layer 4), and an offline evaluation judge (DeepEval). Routing itself never calls it. You can also point Tylluan at your own Ollama/LM Studio/`llama.cpp` instance instead — it auto-detects a real running backend before starting its own.
+- **Generative LLM inference is optional and never in the hot path.** Tylluan can run one internally via `llama.cpp` + GGUF (`guilds/core/llama_backend.py`, auto-downloads a precompiled binary — no external service required) for specific, async, non-blocking uses: an offline evaluation judge (DeepEval), and a calibrated reasoning check on memory candidates already flagged by cheaper filters (`CoherenceGate` Layer 4 — built and benchmarked, not yet wired into the live recall path pending a larger backend model). Routing itself never calls it. You can also point Tylluan at your own Ollama/LM Studio/`llama.cpp` instance instead — it auto-detects a real running backend before starting its own.
 
 Tylluan needs no cloud to operate — that's the invariant. "No LLM at all" was never accurate for the memory/embedding layer and is no longer accurate for the optional generative layer either; what stays true is that nothing here is cloud-dependent or required for the kernel to run.
 
@@ -339,13 +339,13 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | **M28 Credibility** | Honest benchmark comparison methodology · granular `/health` · Prometheus `/metrics` · package manager configs (AUR, Scoop, Homebrew) | ✅ v0.13.0 |
 | **M29 Dashboard UX** | 1-click MCP config, real P2P mesh map (live browser pings, no simulated data), guild capability badges, `tylluan new guild` scaffold, dry-run mode | ✅ v0.13.0 |
 | **M19 DX 10/10** | `tylluan` single command, `tylluan doctor`, instant start + background model download, `tylluan update`, hardware-aware profile wizard | ✅ v0.13.0 |
-| **ADR-011 Signal Loop** | `recall_feedback` logging (schema v18), Jaccard utility resolution, 4-layer `CoherenceGate` (prompt injection / provenance / cosim / calibrated reasoning judgment) | ✅ v0.14.0 |
+| **ADR-011 Signal Loop** | `recall_feedback` logging (schema v18), Jaccard utility resolution, `CoherenceGate` (3 rule-based layers active in production: prompt injection / provenance / cosim; 4th layer — calibrated reasoning judgment — built and tested but not yet wired in, see below) | ✅ v0.14.0 |
 | **M31-P1 Permissions** | Granular `agent_id` ACLs, token-agent bindings, write-side `owner_scope` scoping, 6 `auth.rs` unit tests | ✅ v0.13.0 |
 | **M31-P2 Plan Mode** | `tylluan_do(plan=true)` pre-flight action approval via `store_plan` / `grants.rs` | ✅ v0.13.0 |
 | **ADR-010 Benchmark** | Pure empirical ONNX Runtime benchmark harness on disk models (`benchmarks/benchmark_adr010.py`) | ✅ v0.13.0 |
 | **M19-P5 Agents Contract** | `.tylluan/agents.toml` parsed on startup, role resolution in bearer_auth_middleware per ADR-009 | ✅ v0.13.0 |
 | **llama.cpp integration** | Real GGUF inference via `llama-server` subprocess (auto-downloaded precompiled binary), agnostic to external Ollama/LM Studio if already running, dashboard model selector wired to real detected models | ✅ v0.14.0 |
-| **CoherenceGate Layer 4** | Calibrated reasoning judgment (78.85% on real held-out cases) wired into production recall path, verified live | ✅ v0.14.0 |
+| **CoherenceGate Layer 4** | Calibrated reasoning judgment: v3/v4 prompts benchmarked (78.85% on Qwen3.5-2B), grammar-constrained decoding fixes format failures on tiny models (+5pp on SmolLM2-135M). **Not wired to the production `filter()` path** — no caller exists yet, staged for when the backend model is upgraded to ≥0.5B | 🔧 staged, not live |
 | **v1.0.0** | External security audit · community validation · stable API · Docker smoke CI | 🔜 |
 
 ---
