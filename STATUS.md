@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** 9e72987 · **621 total** green (548 kernel lib + 61 link lib + 12 fsrs) — 0 fallos, verificado con `scripts/check_test_count.sh --fix` (2026-07-28). Clippy clean con `-D warnings` (verificado 3 veces en el mismo día tras encontrar que `cargo check`/`cargo test` locales no cazan lo que CI sí exige). AGENTS.md y `.tylluan/agents.toml` corregidos el mismo día (versión/flota desactualizadas, roles referenciados que no existían — ver docs/architecture si aplica).
+**Commit:** c301bfa · **622 total** green (549 kernel lib + 61 link lib + 12 fsrs) — 0 fallos, verificado con `scripts/check_test_count.sh --fix` (2026-07-29). CoherenceGate Layer 4: formato de salida arreglado con GBNF grammar (+5pp, 50%→55% en SmolLM2-135M real), prompt v4 few-shot listo — pendiente subir de modelo (Qwen2.5-Coder-0.5B+) antes de conectar a producción; `reason_about_flagged()` sigue sin llamador en el `filter()` real, cero riesgo activo.
 
 ---
 
