@@ -58,6 +58,37 @@ pub fn end_workflow(workflow_id: i64, status: &str, round_trips: i64) -> Result<
         "UPDATE friction_workflows SET completed_at = ?1, status = ?2, round_trips = ?3 WHERE id = ?4",
         params![now, status, round_trips, workflow_id],
     ).map_err(|e| format!("end_workflow: {e}"))?;
+
+    // Compute TTFUA if first_result_at was set
+    let ttfua: Option<f64> = conn.query_row(
+        "SELECT CASE WHEN first_result_at IS NOT NULL
+         THEN (julianday(first_result_at) - julianday(started_at)) * 86400.0
+         ELSE NULL END FROM friction_workflows WHERE id = ?1",
+        params![workflow_id],
+        |r| r.get(0),
+    ).unwrap_or(None);
+
+    if let Some(seconds) = ttfua {
+        conn.execute(
+            "UPDATE friction_workflows SET ttfua_seconds = ?1 WHERE id = ?2",
+            params![seconds, workflow_id],
+        ).ok();
+    }
+
+    Ok(())
+}
+
+/// Record the first result from a workflow (successful or not).
+/// Used to compute TTFUA: time from workflow start to first actionable output.
+pub fn record_workflow_result(workflow_id: i64) -> Result<(), String> {
+    let conn = open_friction_db()?;
+    ensure_schema(&conn)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE friction_workflows SET first_result_at = ?1
+         WHERE id = ?2 AND first_result_at IS NULL",
+        params![now, workflow_id],
+    ).map_err(|e| format!("record_workflow_result: {e}"))?;
     Ok(())
 }
 
@@ -135,6 +166,8 @@ pub struct FrictionStats {
     pub guild_errors: i64,
     pub avg_round_trips: f64,
     pub total_friction_score: f64,
+    pub avg_ttfua_seconds: f64,
+    pub median_ttfua_seconds: f64,
 }
 
 /// Get friction stats for a session.
@@ -175,6 +208,11 @@ pub fn get_session_friction(session_id: i64) -> Result<FrictionStats, String> {
             params![session_id], |r| r.get(0),
         ).unwrap_or(0.0),
         total_friction_score: compute_friction_score(&conn, session_id),
+        avg_ttfua_seconds: conn.query_row(
+            "SELECT COALESCE(AVG(ttfua_seconds), 0.0) FROM friction_workflows WHERE session_id = ?1 AND ttfua_seconds IS NOT NULL",
+            params![session_id], |r| r.get(0),
+        ).unwrap_or(0.0),
+        median_ttfua_seconds: compute_median_ttfua(&conn, session_id),
     };
 
     Ok(stats)
@@ -191,6 +229,19 @@ fn count_events(conn: &rusqlite::Connection, session_id: i64, event_type: &str) 
 /// Composite friction score: higher = more friction.
 /// Weights: manual_intervention=5, routing_error=3, timeout=2, retry=2,
 /// guild_error=1, ambiguous=1, coloquio_roundtrip=0.5
+fn compute_median_ttfua(conn: &rusqlite::Connection, session_id: i64) -> f64 {
+    let values: Vec<f64> = conn
+        .prepare("SELECT ttfua_seconds FROM friction_workflows WHERE session_id = ?1 AND ttfua_seconds IS NOT NULL ORDER BY ttfua_seconds")
+        .unwrap()
+        .query_map(params![session_id], |r| r.get(0))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+    if values.is_empty() { return 0.0; }
+    let mid = values.len() / 2;
+    if values.len() % 2 == 0 { (values[mid-1] + values[mid]) / 2.0 } else { values[mid] }
+}
+
 fn compute_friction_score(conn: &rusqlite::Connection, session_id: i64) -> f64 {
     let weights: Vec<(&str, f64)> = vec![
         ("manual_intervention", 5.0),
@@ -222,6 +273,7 @@ pub struct GlobalFrictionStats {
     pub guild_errors: i64,
     pub avg_round_trips_per_workflow: f64,
     pub total_friction_score: f64,
+    pub avg_ttfua_seconds: f64,
 }
 
 pub fn get_global_friction_stats() -> GlobalFrictionStats {
@@ -232,6 +284,7 @@ pub fn get_global_friction_stats() -> GlobalFrictionStats {
             manual_interventions: 0, routing_errors: 0, routing_ambiguous: 0,
             coloquio_roundtrips: 0, timeouts: 0, retries: 0, guild_errors: 0,
             avg_round_trips_per_workflow: 0.0, total_friction_score: 0.0,
+            avg_ttfua_seconds: 0.0,
         },
     };
     let _ = ensure_schema(&conn);
@@ -267,6 +320,10 @@ pub fn get_global_friction_stats() -> GlobalFrictionStats {
         guild_errors: count_event_type_global(&conn, "guild_error"),
         avg_round_trips_per_workflow: avg_rt,
         total_friction_score: (total_score * 10.0).round() / 10.0,
+        avg_ttfua_seconds: conn.query_row(
+            "SELECT COALESCE(AVG(ttfua_seconds), 0.0) FROM friction_workflows WHERE ttfua_seconds IS NOT NULL",
+            [], |r| r.get(0),
+        ).unwrap_or(0.0),
     }
 }
 
@@ -303,9 +360,11 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
             guild TEXT DEFAULT '',
             tool TEXT DEFAULT '',
             started_at TEXT NOT NULL,
+            first_result_at TEXT,
             completed_at TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
-            round_trips INTEGER NOT NULL DEFAULT 0
+            round_trips INTEGER NOT NULL DEFAULT 0,
+            ttfua_seconds REAL
         );
 
         CREATE TABLE IF NOT EXISTS friction_events (
@@ -321,8 +380,15 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_friction_sessions_agent ON friction_sessions(agent_id);
         CREATE INDEX IF NOT EXISTS idx_friction_workflows_session ON friction_workflows(session_id);
         CREATE INDEX IF NOT EXISTS idx_friction_events_workflow ON friction_events(workflow_id);
-        CREATE INDEX IF NOT EXISTS idx_friction_events_type ON friction_events(event_type);"
-    ).map_err(|e| format!("friction schema: {e}"))?;
+        CREATE INDEX IF NOT EXISTS idx_friction_events_type ON friction_events(event_type);
+
+        -- Schema v2: add TTFUA columns to existing tables
+        ALTER TABLE friction_workflows ADD COLUMN first_result_at TEXT;
+        ALTER TABLE friction_workflows ADD COLUMN ttfua_seconds REAL;"
+    ).or_else(|e| {
+        // Ignore "duplicate column name" errors from ALTER TABLE on existing DBs
+        if e.to_string().contains("duplicate column") { Ok(()) } else { Err(e) }
+    }).map_err(|e| format!("friction schema: {e}"))?;
     Ok(())
 }
 
@@ -416,5 +482,37 @@ mod tests {
         assert_eq!(stats.total_workflows, 3);
         assert_eq!(stats.completed_workflows, 3);
         assert_eq!(stats.timeouts, 1);
+    }
+
+    #[test]
+    fn test_ttfua_computed_on_record_result() {
+        let agent = unique_agent();
+        let sid = start_session(&agent).expect("start_session failed");
+        let wid = start_workflow(sid, "slow task", "bash", "bash_execute")
+            .expect("start_workflow failed");
+
+        // Simulate a delay between workflow start and first useful result.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        record_workflow_result(wid).expect("record_workflow_result failed");
+        end_workflow(wid, "completed", 0).expect("end_workflow failed");
+        end_session(sid).expect("end_session failed");
+
+        let stats = get_session_friction(sid).expect("get_session_friction failed");
+        assert!(stats.avg_ttfua_seconds > 0.0, "TTFUA should be positive after a real delay");
+        assert!(stats.avg_ttfua_seconds < 5.0, "TTFUA should be small for a 50ms test delay, got {}", stats.avg_ttfua_seconds);
+        assert_eq!(stats.median_ttfua_seconds, stats.avg_ttfua_seconds, "single-sample median must equal the average");
+    }
+
+    #[test]
+    fn test_ttfua_null_without_recorded_result() {
+        let agent = unique_agent();
+        let sid = start_session(&agent).expect("start_session failed");
+        let wid = start_workflow(sid, "no result recorded", "bash", "bash_execute")
+            .expect("start_workflow failed");
+        end_workflow(wid, "completed", 0).expect("end_workflow failed");
+        end_session(sid).expect("end_session failed");
+
+        let stats = get_session_friction(sid).expect("get_session_friction failed");
+        assert_eq!(stats.avg_ttfua_seconds, 0.0, "no TTFUA samples should average to the COALESCE default");
     }
 }
