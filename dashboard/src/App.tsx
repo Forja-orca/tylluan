@@ -44,6 +44,7 @@ const GuildsConsolidated = lazy(() => import('./components/GuildsConsolidated'))
 const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
 const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
+const FrictionPanel = lazy(() => import('./components/FrictionPanel'))
 
 function App() {
   const { theme, setTheme, activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, addMention, showMentionsDropdown, setShowMentionsDropdown, pendingGrant, setPendingGrant } = useAppStore()
@@ -596,6 +597,9 @@ function App() {
                       bridge={bridge}
                     />
                     <CoherenceGatePanel
+                      bridge={bridge}
+                    />
+                    <FrictionPanel
                       bridge={bridge}
                     />
                   </div>

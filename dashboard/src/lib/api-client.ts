@@ -602,6 +602,7 @@ export class NexusBridge {
   async getAuditTrail(agentId?: string, limit?: number) { return system.getAuditTrail(this, agentId, limit); }
   async getCoherenceGateStats() { return security.getCoherenceGateStats(this); }
   async getRecallFeedbackStats() { return security.getRecallFeedbackStats(this); }
+  async getFrictionStats() { return security.getFrictionStats(this); }
   async getConfig() { return system.getConfig(this); }
   async saveConfig(content: string) { return system.saveConfig(this, content); }
   async setSandboxProfile(profile: 'strict' | 'balanced' | 'permissive') { return system.setSandboxProfile(this, profile); }
