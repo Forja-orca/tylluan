@@ -28,8 +28,8 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("llama_backend")
 
-DEFAULT_MODEL = "unsloth/SmolLM2-135M-Instruct-GGUF"
-DEFAULT_MODEL_FILE = "SmolLM2-135M-Instruct-Q4_K_M.gguf"
+DEFAULT_MODEL = "bartowski/Qwen2.5-0.5B-Instruct-GGUF"
+DEFAULT_MODEL_FILE = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
 
 
 def _read_config():
