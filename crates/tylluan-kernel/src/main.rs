@@ -706,6 +706,7 @@ async fn main() -> anyhow::Result<()> {
         ("llama_backend",     "guilds.core.llama_backend",    false),
         ("seed_tools",        "guilds.core.seed_tools",       false),
         ("git",               "guilds.builders.plugins.git",   false),
+        ("docker",            "guilds.builders.plugins.docker", false),
         ("scheduler",         "guilds.core.scheduler",         true),
     ];
     // CPU inference guilds (vision, deep_analysis): tool_timeout = None → wait indefinitely.
