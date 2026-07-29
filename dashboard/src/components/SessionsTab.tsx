@@ -23,9 +23,12 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Note: currentSessionId is not currently exposed by the bridge/SSE.
-  // We'll use a placeholder or check for 'dashboard' in client_name.
-  const currentSessionId = null; 
+  // No backend endpoint exposes the "active session ID" — the kernel tracks
+  // `active_sessions: usize` (count only) and `session_bridge` (internal cross-guild).
+  // The MCP session list comes via SSE but has no "current" flag. This null is
+  // intentional, not a TODO. If a session-self-identification endpoint is added
+  // to the kernel (e.g. GET /api/v1/sessions/self), connect it here.
+  const currentSessionId = null;
 
   // Session list is now managed by useNexus hook globally
 
