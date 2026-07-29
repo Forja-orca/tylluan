@@ -45,6 +45,50 @@ warm_pool = ["git", "codebase_memory"]
 # Seconds before an idle lazy guild is considered for suspension
 idle_suspend_secs = 3600
 
+# "V1 Port" guilds — real guild code that lives outside guilds/core, grouped by
+# gremio directory. Each gremio's plugins are registered lazily (on first call)
+# unless always_on = true. Keep this in sync with crates/tylluan-kernel/src/
+# router/catalog.rs's test_lazy_or_always_on_guilds_are_registered, which
+# parses this file (or the real tylluan.toml, when present) to verify every
+# catalog guild has a real runtime registration path.
+[guilds.v2]
+legacy_fallback = "guilds/core"
+
+[[guilds.v2.gremios]]
+name = "wardens"
+path = "guilds/wardens/plugins"
+always_on = false
+plugins = ["audit.py", "biome_warden.py"]
+agents = []
+
+[[guilds.v2.gremios]]
+name = "builders"
+path = "guilds/builders/plugins"
+always_on = false
+plugins = [
+    "code.py",
+    "audio_tools.py",
+    "ffmpeg_tools.py",
+    "screenshot_tools.py",
+    "clipboard_tools.py",
+    "local_llm_proxy.py",
+]
+agents = ["architect", "backend-dev", "frontend-dev"]
+
+[[guilds.v2.gremios]]
+name = "scholars"
+path = "guilds/scholars/plugins"
+always_on = false
+plugins = ["memory.py", "search.py", "sequential_thinking.py", "ast_surgeon.py"]
+agents = []
+
+[[guilds.v2.gremios]]
+name = "watchers"
+path = "guilds/watchers/plugins"
+always_on = false
+plugins = ["cron_scheduler.py"]
+agents = []
+
 [performance]
 # Reindexing interval (secs) - 600s recommended for low-RAM hardware
 reindex_interval_secs = 600
