@@ -49,14 +49,17 @@ _MAX_NEW_TOKENS_OCR = 192
 _MAX_NEW_TOKENS_EXTRACT = 128
 _IMAGE_TOKEN_STR   = "<image>"
 
-_PROVIDER          = "CPUExecutionProvider"   # detected at load time
-_PROVIDER_LOADED   = False
+_PROVIDER          = "CPUExecutionProvider"   # forced CPU — see _load_vision_model docstring
+_PROVIDER_LOADED   = True   # no detection needed, CPU is always available
 
 
 def _detect_available_provider() -> tuple[str, list]:
-    """Real ONNX Runtime provider detection — no hardcoding, no assumption.
-    Returns (chosen_provider, all_available_providers). Cheap: does not load
-    any model, only queries onnxruntime's compiled-in provider list.
+    """Returns the active provider. Always CPUExecutionProvider — see note in
+    _load_vision_model() for why DmlExecutionProvider is not used here.
+
+    This function is kept for the vision_device_status tool so the dashboard
+    can still report what onnxruntime COULD use, even though we don't actually
+    use it for inference.
     """
     try:
         import onnxruntime as ort
@@ -64,10 +67,6 @@ def _detect_available_provider() -> tuple[str, list]:
     except Exception as e:
         return "unavailable", [f"onnxruntime import failed: {e}"]
 
-    if "DmlExecutionProvider" in available:
-        return "DmlExecutionProvider", available
-    if "CUDAExecutionProvider" in available:
-        return "CUDAExecutionProvider", available
     return "CPUExecutionProvider", available
 
 
@@ -108,9 +107,21 @@ def _load_preproc_config(model_path: str) -> dict:
 
 
 def _load_vision_model():
+    """Load the 3 ONNX sessions (vision_encoder, embed_tokens, decoder_model_merged).
+
+    Uses CPUExecutionProvider ALWAYS, never DmlExecutionProvider, even when
+    onnxruntime reports DML as available. Reason: DML model compilation on
+    Windows as a subprocess of the kernel triggers GPU driver TDR (Timeout
+    Detection and Recovery, default 2s) when the parent process (kernel) also
+    uses DirectML for BGE-M3 embeddings. This kills the child process at ~5s
+    (3 ONNX models × ~1.7s each on DML), which the kernel sees as an MCP pipe
+    disconnect. CPU loads all 3 models in ~3.7s total — slower per-inference
+    but stable.
+
+    Future: load CPU first, warmup DML in background after responding.
+    """
     global _vision_session, _embed_session, _decoder_session
     global _tokenizer, _preproc_cfg, _MODEL_LOADED, _MODEL_AVAILABLE, _model_path
-    global _PROVIDER, _PROVIDER_LOADED
 
     if _MODEL_LOADED:
         return
@@ -135,12 +146,7 @@ def _load_vision_model():
                 print(f"Vision guild: ONNX missing: {p}", file=sys.stderr, flush=True)
                 return
 
-        # Auto-detect DirectML if available (M25-A)
-        if not _PROVIDER_LOADED:
-            _PROVIDER, _ = _detect_available_provider()
-            _PROVIDER_LOADED = True
-
-        providers = [_PROVIDER]
+        providers = ["CPUExecutionProvider"]
         _vision_session  = ort.InferenceSession(vision_path,  opts, providers=providers)
         _embed_session   = ort.InferenceSession(embed_path,   opts, providers=providers)
         _decoder_session = ort.InferenceSession(decoder_path, opts, providers=providers)
