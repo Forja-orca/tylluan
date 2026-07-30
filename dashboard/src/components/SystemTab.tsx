@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { MaintenanceTab } from './MaintenanceTab';
 import { LogsTab } from './LogsTab';
-import { ModelConfigPanel } from './ModelConfigPanel';
+import { ModelsTab } from './ModelsTab';
 import DoctorPanel from './DoctorPanel';
 import { ScopesPanel } from './ScopesPanel';
 import A2aPanel from './A2aPanel';
@@ -112,7 +112,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
         ) : view === 'logs' ? (
           <LogsTab events={events} onClear={onClearLogs} />
         ) : view === 'models' ? (
-          <ModelConfigPanel bridge={bridge} />
+          <ModelsTab bridge={bridge} />
         ) : view === 'scopes' ? (
           <ScopesPanel bridge={bridge} notify={notify} />
         ) : (

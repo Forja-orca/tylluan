@@ -1644,7 +1644,39 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
     let inference_model = config.inference.primary_model.clone();
     let vector_dims = config.memory.vector_dimensions;
 
-    // Real disk scanner for local model files
+    // Real disk scanner for local model files. Classifies each entry as
+    // embedding/vision/generative so the dashboard can route them to the
+    // right panel instead of offering an embedding model as a chat model
+    // (or vice versa) -- matches known config paths first, falls back to
+    // a directory-name heuristic for anything not currently active.
+    let embedding_dir_name = std::path::Path::new(&embedding_model)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_lowercase());
+    let vision_dir_name = std::path::Path::new(&vision_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_lowercase());
+
+    let classify_model_dir = |dir_name: &str| -> &'static str {
+        let lower = dir_name.to_lowercase();
+        if embedding_dir_name.as_deref() == Some(lower.as_str())
+            || lower.contains("bge")
+            || lower.contains("embed")
+            || lower.contains("nomic")
+        {
+            "embedding"
+        } else if vision_dir_name.as_deref() == Some(lower.as_str())
+            || lower.contains("vision")
+            || lower.contains("vlm")
+            || lower.contains("moondream")
+        {
+            "vision"
+        } else {
+            "generative"
+        }
+    };
+
     let mut detected_local_models = Vec::new();
     let models_dir = std::path::Path::new("models");
     if models_dir.exists()
@@ -1669,6 +1701,7 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
                     "size_bytes": size,
                     "size_mb": size / (1024 * 1024),
                     "installed": true,
+                    "model_type": classify_model_dir(dir_name),
                 }));
             }
         }
