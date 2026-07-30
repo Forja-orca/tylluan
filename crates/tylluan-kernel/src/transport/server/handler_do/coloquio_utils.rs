@@ -140,6 +140,7 @@ pub(super) fn _clean_coloquio_channel_id(raw: &str) -> String {
         " limit ", " limite ", " límite ",
         " offset ", " desde turno ",
         " mensajes", " messages", " mensaje", " message",
+        " channel_id", " channelid",
     ];
     let lower = raw.to_lowercase();
     let mut cut = raw.len();
@@ -206,5 +207,18 @@ mod tests {
         let intent = "publica en coloquio equipo: el artista dashboard quedo listo";
         let (_, _, tool) = parse_coloquio_intent(intent);
         assert_eq!(tool, "post", "'artista' also contains 'lista' as a substring -- must not misroute");
+    }
+
+    #[test]
+    fn read_intent_with_literal_channel_id_param_does_not_pollute_channel_name() {
+        // Regression: an agent typing "lee canal equipo channel_id=equipo" (trying to be
+        // explicit about the parameter) got a literal channel named
+        // "equipo channel_id=equipo" created/read instead of "equipo", because
+        // _clean_coloquio_channel_id's stop_signals didn't include "channel_id" --
+        // reproduced live 2026-07-30 reading #equipo from Coloquio.
+        let intent = "lee canal equipo channel_id=equipo";
+        let (channel, _, tool) = parse_coloquio_intent(intent);
+        assert_eq!(tool, "read");
+        assert_eq!(channel.as_deref(), Some("equipo"));
     }
 }
