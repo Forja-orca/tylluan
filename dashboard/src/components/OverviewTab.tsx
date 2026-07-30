@@ -252,29 +252,29 @@ export function OverviewTab({
 
       {/* Hub Status Pills */}
       <div className="flex flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Kernel</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
+          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+          <span className="text-[11px] font-semibold text-slate-300">Kernel</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-          <div className={cn("w-2 h-2 rounded-full", sysStatus?.embeddings_loaded ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-amber-500")}></div>
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">BGE-M3</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
+          <div className={cn("w-2 h-2 rounded-full", sysStatus?.embeddings_loaded ? "bg-emerald-500" : "bg-amber-500")}></div>
+          <span className="text-[11px] font-semibold text-slate-300">BGE-M3</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-          <span className="text-[10px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Agentes activos</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
+          <span className="text-[11px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
+          <span className="text-[11px] font-semibold text-slate-300">Agentes activos</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-          <span className="text-[10px] font-bold text-violet-400">{memoryStats?.node_count || 0}</span>
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Silva Nodes</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
+          <span className="text-[11px] font-bold text-violet-400">{memoryStats?.node_count || 0}</span>
+          <span className="text-[11px] font-semibold text-slate-300">Silva Nodes</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <MiniSparkline data={cpuHistory} color="#60a5fa" />
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">CPU</span>
+          <span className="text-[11px] font-semibold text-slate-300">CPU</span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <MiniSparkline data={memHistory} color="#34d399" />
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">RAM</span>
+          <span className="text-[11px] font-semibold text-slate-300">RAM</span>
         </div>
       </div>
 
@@ -288,10 +288,10 @@ export function OverviewTab({
             { label: 'Broadcasts/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
             { label: 'Nodos memoria', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="bg-slate-900/60 border border-slate-800/50 rounded-xl p-3 text-center hover:bg-slate-800/40 transition-colors group">
-              <Icon className="w-3 h-3 text-slate-600 mx-auto mb-1 group-hover:text-emerald-400 transition-colors" />
-              <div className="text-lg font-black font-mono text-slate-100">{value}</div>
-              <div className="text-[9px] font-bold uppercase tracking-tighter text-slate-500 mt-0.5">{label}</div>
+            <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center hover:bg-slate-900/60 transition-colors group">
+              <Icon className="w-3 h-3 text-slate-600 mx-auto mb-1 group-hover:text-amber-400 transition-colors" />
+              <div className="text-lg font-bold font-mono text-slate-100">{value}</div>
+              <div className="text-[11px] font-medium text-slate-500 mt-0.5">{label}</div>
             </div>
           ))}
         </div>
@@ -317,27 +317,26 @@ export function OverviewTab({
           </span>
         </div>
       )}
-      <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden group">
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent pointer-events-none" />
+      <div className="flex items-center justify-between bg-slate-900/60 rounded-xl p-4 relative overflow-hidden group">
         <div className="flex items-center gap-4 relative z-10">
           <div className="relative">
-            <div className="w-14 h-14 rounded-full border border-emerald-500/30 flex items-center justify-center bg-emerald-500/5">
-              <Activity className="w-7 h-7 text-emerald-400 animate-pulse" />
+            <div className="w-14 h-14 rounded-full border border-amber-500/20 flex items-center justify-center bg-amber-500/5">
+              <Activity className="w-7 h-7 text-amber-400 animate-pulse" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-slate-950 rounded-full flex items-center justify-center border border-slate-800">
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-slate-950 rounded-full flex items-center justify-center">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-black text-slate-100 uppercase tracking-[0.2em]">Sovereign Kernel Pulse</h3>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5">O3 ENGINE • UPTIME: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
+            <h3 className="text-xs font-semibold text-slate-100">Sovereign Kernel Pulse</h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">O3 ENGINE · UPTIME: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
           </div>
         </div>
         <div className="text-right relative z-10">
-          <div className={cn("text-xs font-black tracking-tighter", getStatusColor(sloSummary?.status || 'healthy'))}>
+          <div className={cn("text-xs font-semibold tracking-tight", getStatusColor(sloSummary?.status || 'healthy'))}>
             {sloSummary?.status?.toUpperCase() || 'SYSTEM STABLE'}
           </div>
-          <div className="text-[10px] text-slate-600 font-mono mt-0.5">Availability: {sloSummary?.current_availability?.toFixed(3) || '99.999'}%</div>
+          <div className="text-[10px] text-slate-600 mt-0.5">Availability: {sloSummary?.current_availability?.toFixed(3) || '99.999'}%</div>
         </div>
       </div>
 
@@ -381,8 +380,8 @@ export function OverviewTab({
             const pct = Math.min(100, value * 100);
             const color = good(value) ? '#34d399' : warn(value) ? '#fbbf24' : '#ef4444';
             return (
-              <div key={label} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40">
-                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">{label}</div>
+              <div key={label} className="p-3 rounded-xl bg-slate-900/40">
+                <div className="text-[11px] font-medium text-slate-500 mb-1">{label}</div>
                 <div className="text-lg font-black font-mono" style={{ color }}>{pct.toFixed(0)}%</div>
                 <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${invert ? 100 - pct : pct}%`, backgroundColor: color }} />
@@ -394,11 +393,11 @@ export function OverviewTab({
       )}
 
       {/* Multi-Agent Activity */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
+      <div className="rounded-xl bg-slate-900/50 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <History className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Stream de Actividad Soberana</span>
+            <History className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[11px] font-medium text-slate-400">Stream de Actividad Soberana</span>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1 text-[9px] text-slate-600 cursor-pointer select-none hover:text-slate-400 transition-colors">
@@ -433,8 +432,8 @@ export function OverviewTab({
                   <User className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col">
-                   <span className="text-[9px] font-black text-slate-200 uppercase tracking-tighter">{agent.split('-')[0]}</span>
-                   <span className="text-[7px] text-slate-500 font-mono">ACTIVE</span>
+                   <span className="text-[10px] font-semibold text-slate-200">{agent.split('-')[0]}</span>
+                   <span className="text-[8px] text-slate-500">active</span>
                 </div>
               </div>
             ))}
@@ -443,7 +442,7 @@ export function OverviewTab({
                 <div className="w-7 h-7 rounded-full border border-slate-800 flex items-center justify-center opacity-30">
                   <User className="w-4 h-4" />
                 </div>
-                <span className="text-[9px] italic font-bold uppercase tracking-widest">No agents detected</span>
+                <span className="text-[10px] italic text-slate-600">No agents detected</span>
               </div>
             )}
           </div>
@@ -484,7 +483,7 @@ export function OverviewTab({
             {events.length === 0 && !silvaDelta && !blackboard?.pending.length && (
               <div className="p-12 text-center flex flex-col items-center justify-center gap-2">
                 <Zap className="w-6 h-6 text-slate-800 animate-pulse" />
-                <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Silent Mode — Awaiting Signal</span>
+                <span className="text-[11px] text-slate-600">Silent Mode — Awaiting Signal</span>
               </div>
             )}
           </div>
@@ -493,10 +492,10 @@ export function OverviewTab({
 
       {/* Running Guilds & Pending Approvals */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Operational Guilds</span>
-            <span className="text-[10px] text-slate-500 font-mono">{activeGuilds} / {guilds?.length || 0} online</span>
+        <div className="lg:col-span-2 rounded-xl bg-slate-900/50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-slate-400">Operational Guilds</span>
+            <span className="text-[10px] text-slate-500">{activeGuilds} / {guilds?.length || 0} online</span>
           </div>
           <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
             {guilds?.map((g) => (
@@ -528,10 +527,10 @@ export function OverviewTab({
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">HITL Gateway</span>
-            <ShieldCheck className="w-3 h-3 text-amber-500" />
+        <div className="rounded-xl bg-slate-900/50 overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-slate-400">HITL Gateway</span>
+            <ShieldCheck className="w-3 h-3 text-amber-400" />
           </div>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
             {approvals.length === 0 ? (
@@ -561,14 +560,14 @@ export function OverviewTab({
       {/* Guild Utilization, Memory Retention, Night Consolidation & Canary Assertions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Tarjeta 1 — Guild Utilization */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+        <div className="p-4 rounded-xl bg-slate-900/50">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest font-bold">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" /> Guild Utilization
+            <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium">
+              <Cpu className="w-3.5 h-3.5 text-amber-400" /> Guild Utilization
             </div>
-            <span className="text-[10px] text-slate-600 font-mono">
-              {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} ACTIVE
-              <span className="ml-2 text-slate-700">·</span>
+            <span className="text-[10px] text-slate-500">
+              {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} active
+              <span className="ml-2 text-slate-600">·</span>
               <span className="ml-2 text-slate-500">
                 {guilds?.reduce((s, g) => s + (g.total_calls || 0), 0) || 0} calls
               </span>
@@ -604,8 +603,8 @@ export function OverviewTab({
         </div>
 
         {/* Tarjeta 2 — Memory Retention */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-center">
-          <div className="flex items-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-6">
+        <div className="p-4 rounded-xl bg-slate-900/50 flex flex-col items-center justify-center text-center">
+          <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium mb-6">
             <Database className="w-3.5 h-3.5 text-violet-400" /> Memory Retention
           </div>
           
@@ -622,7 +621,7 @@ export function OverviewTab({
                 <div className="text-sm font-bold text-slate-200 tracking-tight">
                   {memoryRetention.silva.total_nodes.toLocaleString()}
                 </div>
-                <div className="text-[9px] text-slate-500 uppercase tracking-widest font-medium">
+                <div className="text-[10px] text-slate-500 font-medium">
                   Total Sovereign Nodes
                 </div>
               </div>
@@ -643,9 +642,9 @@ export function OverviewTab({
       </div>
 
       {/* Recent Sessions (Digests) */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sesiones Recientes</span>
+      <div className="rounded-xl bg-slate-900/50 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-slate-400">Sesiones Recientes</span>
           <Clock className="w-3.5 h-3.5 text-blue-400" />
         </div>
         <RecentSessions bridge={bridge} />

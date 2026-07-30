@@ -35,6 +35,8 @@ export default {
         amber: {
           400: "hsl(var(--amber-400) / <alpha-value>)",
           500: "hsl(var(--amber-500) / <alpha-value>)",
+          600: "hsl(var(--amber-600) / <alpha-value>)",
+          700: "hsl(var(--amber-700) / <alpha-value>)",
         },
         red: {
           400: "hsl(var(--red-400) / <alpha-value>)",

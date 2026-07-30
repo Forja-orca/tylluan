@@ -335,7 +335,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   };
 
   return (
-    <div className="border border-slate-700/60 rounded-xl bg-[#0f1117] overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
+    <div className="rounded-xl bg-slate-900/60 overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -343,24 +343,24 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
           <span className="text-sm font-semibold text-slate-100">Coloquio</span>
           <span className="text-[10px] text-slate-500 hidden sm:block">chat grupal de investigación frontera</span>
           {totalUnread > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-[10px] font-bold">
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold">
               {totalUnread} nuevo{totalUnread !== 1 ? 's' : ''}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           {totalUnread > 0 && (
-            <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded-lg border border-slate-700 hover:border-emerald-700/50 transition-all cursor-pointer">
+            <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-all cursor-pointer">
               Todo leído
             </button>
           )}
           <button onClick={() => setShowCanvas(v => !v)}
-            className={cn('p-1.5 rounded-lg border transition-all mr-1.5 cursor-pointer', showCanvas ? 'border-violet-500/40 bg-violet-500/10 text-violet-400' : 'border-slate-700 text-slate-500 hover:text-slate-300')}
+            className={cn('p-1.5 rounded-lg transition-all mr-1.5 cursor-pointer', showCanvas ? 'bg-violet-500/10 text-violet-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300')}
             title="Lienzo Blackboard">
             <Sparkles className="w-3.5 h-3.5" />
           </button>
           <button onClick={() => setShowAgentPanel(v => !v)}
-            className={cn('p-1.5 rounded-lg border transition-all cursor-pointer', showAgentPanel ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-400' : 'border-slate-700 text-slate-500 hover:text-slate-300')}>
+            className={cn('p-1.5 rounded-lg transition-all cursor-pointer', showAgentPanel ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300')}>
             <Users className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -393,7 +393,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         <div ref={splitContainerRef} className="flex-1 flex overflow-hidden">
           {/* Thread (Chat) */}
           <div
-            className="flex flex-col overflow-hidden bg-[#0d1017] border-r border-slate-800"
+            className="flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800"
             style={{ width: showCanvas && selectedId ? chatWidth : '100%', flexShrink: 0 }}
           >
             {!selectedId ? (

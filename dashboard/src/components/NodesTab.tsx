@@ -75,18 +75,18 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
   return (
     <div className="flex-1 min-h-0 p-6 flex flex-col space-y-6 font-sans">
       {/* Header */}
-      <div className="p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-5 bg-slate-900/60 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 font-mono">
-            <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/30 rounded">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
               P2P Topology
             </span>
-            <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
+            <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md">
               Blackboard Active
             </span>
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-100 mt-2 flex items-center gap-2 font-mono">
-            <Radio className="w-5 h-5 text-[#00F5D4]" />
+          <h2 className="text-xl font-semibold tracking-tight text-slate-100 mt-2 flex items-center gap-2">
+            <Radio className="w-5 h-5 text-amber-400" />
             Agent Substrate Nodes &amp; Direct Messaging
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -97,14 +97,14 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         <div className="flex items-center gap-2">
           <button 
             onClick={fetchNodes} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-[#00F5D4]/50 text-xs text-slate-300 font-mono font-medium rounded-xl transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium rounded-xl transition-all"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-[#00F5D4]', loading && 'animate-spin')} /> 
+            <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} /> 
             Sync Nodes
           </button>
           <button 
             onClick={registerNode} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#00F5D4]/10 hover:bg-[#00F5D4]/20 border border-[#00F5D4]/40 text-[#00F5D4] text-xs font-mono font-bold rounded-xl transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all"
           >
             <Radio className="w-3.5 h-3.5" /> 
             Register Dashboard Node
@@ -114,10 +114,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Active Nodes List */}
-        <div className="bg-[#0B0F17]/90 rounded-2xl border border-slate-800/80 p-5 space-y-4 font-mono">
+        <div className="bg-slate-900/60 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Users className="w-4 h-4 text-[#00F5D4]" /> 
+            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" /> 
               Connected Fleet Nodes ({nodes.length})
             </h3>
             <span className="text-[10px] text-slate-500">Live Agent Registry</span>
@@ -126,19 +126,19 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
           {loading ? (
             <div className="text-center py-8 text-xs text-slate-500 animate-pulse">Scanning agent substrate nodes...</div>
           ) : nodes.length === 0 ? (
-            <div className="text-center py-10 text-slate-600 space-y-2 border border-dashed border-slate-800 rounded-xl">
+            <div className="text-center py-10 text-slate-600 space-y-2 rounded-xl">
               <Radio className="w-8 h-8 mx-auto text-slate-700" />
-              <p className="text-xs font-bold text-slate-400">No active nodes registered</p>
+              <p className="text-xs font-semibold text-slate-400">No active nodes registered</p>
               <p className="text-[11px] text-slate-500">Register a node via tylluan_do or click 'Register Dashboard Node' above.</p>
             </div>
           ) : (
             <div className="space-y-2.5">
               {nodes.map((n) => (
-                <div key={n.agent_id} className="flex items-center justify-between bg-slate-950 border border-slate-850 rounded-xl p-3.5 hover:border-slate-700 transition-all">
+                <div key={n.agent_id} className="flex items-center justify-between bg-slate-800/40 rounded-xl p-3.5 hover:bg-slate-800/60 transition-all">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Cpu className="w-3.5 h-3.5 text-[#00F5D4]" />
-                      <span className="text-sm font-bold text-slate-100">{n.agent_id}</span>
+                      <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-sm font-semibold text-slate-100">{n.agent_id}</span>
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-slate-500">
                       <span>Rules: <strong className="text-slate-300">{n.rules}</strong></span>
@@ -147,14 +147,14 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/50 rounded-lg text-xs">
                       <Inbox className="w-3 h-3 text-amber-400" />
                       <span className="text-slate-300 font-bold">{n.inbox_pending}</span>
                       <span className="text-[9px] text-slate-500">pending</span>
                     </div>
                     <button
                       onClick={() => setTargetId(n.agent_id)}
-                      className="px-2.5 py-1 bg-[#00F5D4]/10 hover:bg-[#00F5D4]/20 border border-[#00F5D4]/30 text-[#00F5D4] text-xs font-bold rounded-lg transition-all"
+                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-lg transition-all"
                     >
                       Target
                     </button>
@@ -166,10 +166,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         </div>
 
         {/* Direct Messaging Dispatcher */}
-        <div className="bg-[#0B0F17]/90 rounded-2xl border border-slate-800/80 p-5 space-y-4 font-mono">
+        <div className="bg-slate-900/60 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-[#00F5D4]" /> 
+            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-amber-400" /> 
               Direct Node Dispatcher
             </h3>
             <span className="text-[10px] text-slate-500">Substrate Message Bus</span>
@@ -177,14 +177,14 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-bold">Target Agent ID:</label>
+              <label className="text-xs text-slate-400 font-medium">Target Agent ID:</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
                   placeholder="e.g. claude-code, deep, antigravity"
-                  className="flex-1 px-3.5 py-2 bg-slate-950 border border-slate-800 focus:border-[#00F5D4]/60 text-slate-100 text-xs rounded-xl outline-none"
+                  className="flex-1 px-3.5 py-2 bg-slate-800/50 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded-xl outline-none"
                 />
               </div>
               {/* Quick Select Badges */}
@@ -194,10 +194,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                     key={ag}
                     onClick={() => setTargetId(ag)}
                     className={cn(
-                      "px-2 py-0.5 text-[10px] font-bold rounded border transition-all",
+                      "px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all",
                       targetId === ag
-                        ? "bg-[#00F5D4]/20 border-[#00F5D4]/50 text-[#00F5D4]"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                        ? "bg-amber-500/20 text-amber-400"
+                        : "bg-slate-800/50 text-slate-400 hover:text-slate-200"
                     )}
                   >
                     @{ag}
@@ -207,20 +207,20 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-bold">Payload Message:</label>
+              <label className="text-xs text-slate-400 font-medium">Payload Message:</label>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Enter direct substrate payload for targeted agent node..."
                 rows={4}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-[#00F5D4]/60 text-slate-100 text-xs rounded-xl outline-none placeholder:text-slate-600 resize-none"
+                className="w-full px-3.5 py-2.5 bg-slate-800/50 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded-xl outline-none placeholder:text-slate-600 resize-none"
               />
             </div>
 
             <button
               onClick={sendMessage}
               disabled={!targetId || !message}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#00F5D4]/10 hover:bg-[#00F5D4]/20 border border-[#00F5D4]/40 text-[#00F5D4] text-xs font-bold rounded-xl transition-all disabled:opacity-40"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all disabled:opacity-40"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Dispatch Substrate Message</span>

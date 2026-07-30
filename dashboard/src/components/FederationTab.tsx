@@ -340,22 +340,22 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   return (
     <div className="space-y-8 font-sans">
       {/* Sovereign Substrate Header Panel */}
-      <div className="flex items-center justify-between gap-4 flex-wrap bg-[#0B0F17]/90 p-6 rounded-2xl border border-slate-800/80">
+      <div className="flex items-center justify-between gap-4 flex-wrap bg-slate-900/60 p-6 rounded-lg">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[#00F5D4]/10 border border-[#00F5D4]/30 rounded-xl flex items-center justify-center">
-            <Network className="w-6 h-6 text-[#00F5D4]" />
+          <div className="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center">
+            <Network className="w-6 h-6 text-amber-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2 font-mono mb-1">
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/30 rounded">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 rounded-md">
                 Noise XK Encrypted
               </span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
+              <span className="px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 rounded-md">
                 STUN NAT Mesh
               </span>
             </div>
-            <h2 className="text-xl font-bold text-slate-100 tracking-tight uppercase font-mono">Cognitive Federation Mesh</h2>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">ChaCha20-Poly1305 encrypted peer sync &amp; Noise XK Session Pool telemetry</p>
+            <h2 className="text-xl font-semibold text-slate-100 tracking-tight">Cognitive Federation Mesh</h2>
+            <p className="text-xs text-slate-400 mt-0.5">ChaCha20-Poly1305 encrypted peer sync &amp; Noise XK Session Pool telemetry</p>
           </div>
         </div>
 
@@ -363,16 +363,16 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
           <button
             onClick={handleRefreshAll}
             disabled={peersLoading || nodesLoading}
-            className="p-2.5 rounded-xl border border-slate-800 hover:border-[#00F5D4]/50 bg-slate-950/50 hover:bg-slate-900 text-slate-300 transition-all active:scale-95 disabled:opacity-50"
+            className="p-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition-all active:scale-95 disabled:opacity-50"
             title="Refresh details"
           >
-            <RefreshCw className={cn("w-4 h-4 text-[#00F5D4]", (peersLoading || nodesLoading) && "animate-spin")} />
+            <RefreshCw className={cn("w-4 h-4 text-amber-400", (peersLoading || nodesLoading) && "animate-spin")} />
           </button>
 
           <button
             onClick={handleSyncAll}
             disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold bg-[#00F5D4]/10 hover:bg-[#00F5D4]/20 border border-[#00F5D4]/40 text-[#00F5D4] shadow-sm transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-all disabled:opacity-50"
           >
             <Share2 className={cn("w-4 h-4", syncing && "animate-spin")} />
             <span>{syncing ? 'Syncing Mesh...' : 'Sync Federation Mesh'}</span>
@@ -383,7 +383,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       {/* Sharing Policy Panel */}
       {sharingStatus && (
         <div className={cn(
-          "bg-slate-900/40 p-6 rounded-2xl border backdrop-blur-md transition-all duration-300",
+          "bg-slate-900/40 p-6 rounded-lg backdrop-blur-md transition-all duration-300",
           sharingStatus.enabled ? "border-green-700/40" : "border-red-900/40"
         )}>
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -394,8 +394,8 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 <div className={cn(
                   "p-2.5 rounded-xl border flex items-center justify-center transition-colors",
                   sharingStatus.enabled 
-                    ? "bg-green-500/10 border-green-500/20 text-green-400" 
-                    : "bg-red-500/10 border-red-500/20 text-red-400"
+                    ? "bg-green-500/10 text-green-400" 
+                    : "bg-red-500/10 text-red-400"
                 )}>
                   {sharingStatus.enabled ? (
                     <ShieldCheck className="w-5 h-5 text-green-400" />
@@ -405,12 +405,12 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-300">Sharing Policy</h3>
+                    <h3 className="text-sm font-medium text-slate-300">Sharing Policy</h3>
                     <span className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest font-mono",
+                      "px-2.5 py-0.5 rounded-full text-[10px] font-medium",
                       sharingStatus.enabled 
-                        ? "bg-green-500/10 text-green-400 border border-green-500/25 animate-pulse" 
-                        : "bg-red-500/10 text-red-400 border border-red-500/25"
+                        ? "bg-green-500/10 text-green-400 animate-pulse" 
+                        : "bg-red-500/10 text-red-400"
                     )}>
                       {sharingStatus.enabled ? "SHARING ON" : "SHARING OFF (kill-switch activo)"}
                     </span>
@@ -423,8 +423,8 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                 
                 {/* Shareable Nodes Count */}
-                <div className="bg-slate-950/40 rounded-xl p-3 border border-slate-800/60">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono flex items-center gap-1.5 mb-1">
+                <div className="bg-slate-950/40 rounded-lg p-3">
+                  <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mb-1">
                     <Database className="w-3.5 h-3.5 text-violet-400" />
                     Shareable Nodes
                   </div>
@@ -434,8 +434,8 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 </div>
 
                 {/* Min Weight */}
-                <div className="bg-slate-950/40 rounded-xl p-3 border border-slate-800/60">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono flex items-center gap-1.5 mb-1">
+                <div className="bg-slate-950/40 rounded-lg p-3">
+                  <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mb-1">
                     <Sliders className="w-3.5 h-3.5 text-blue-400" />
                     Min Weight
                   </div>
@@ -445,8 +445,8 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 </div>
 
                 {/* Min Activity Window */}
-                <div className="bg-slate-950/40 rounded-xl p-3 border border-slate-800/60">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono flex items-center gap-1.5 mb-1">
+                <div className="bg-slate-950/40 rounded-lg p-3">
+                  <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mb-1">
                     <Clock className="w-3.5 h-3.5 text-amber-400" />
                     Min Activity
                   </div>
@@ -456,15 +456,15 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 </div>
 
                 {/* Allowed Types */}
-                <div className="bg-slate-950/40 rounded-xl p-3 border border-slate-800/60">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono flex items-center gap-1.5 mb-1">
-                    <Filter className="w-3.5 h-3.5 text-cyan-400" />
+                <div className="bg-slate-950/40 rounded-lg p-3">
+                  <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mb-1">
+                    <Filter className="w-3.5 h-3.5 text-emerald-400" />
                     Allowed Types
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {sharingStatus.node_types && sharingStatus.node_types.length > 0 ? (
                       sharingStatus.node_types.map((t: string) => (
-                        <span key={t} className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-slate-900 border border-slate-800 text-slate-400 uppercase tracking-tighter">
+                        <span key={t} className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900 text-slate-400">
                           {t}
                         </span>
                       ))
@@ -482,10 +482,10 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               <button
                 onClick={handleToggleSharing}
                 className={cn(
-                  "flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg active:scale-95 text-slate-950 font-bold",
+                  "flex items-center gap-2 px-6 py-3 rounded-lg text-xs font-medium transition-all active:scale-95 text-slate-950",
                   sharingStatus.enabled
-                    ? "bg-red-500 hover:bg-red-600 shadow-red-500/10"
-                    : "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/10"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-emerald-500 hover:bg-emerald-600"
                 )}
               >
                 <Power className="w-4 h-4 text-slate-950" />
@@ -503,29 +503,29 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
         {/* Peers List Column */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <h3 className="text-sm font-bold text-slate-200 uppercase font-mono tracking-wider flex items-center gap-2">
+            <h3 className="text-sm font-medium text-slate-200 flex items-center gap-2">
               <Globe className="w-4 h-4 text-emerald-400" />
               Connected Peer Nodes ({peers.length})
             </h3>
           </div>
 
           {peersLoading && peers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-2xl border border-slate-850">
+            <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-lg">
               <RefreshCw className="w-8 h-8 animate-spin text-emerald-500/40 mb-3" />
-              <p className="text-xs font-mono">Querying network topology...</p>
+              <p className="text-xs">Querying network topology...</p>
             </div>
           ) : peers.length === 0 ? (
-            <div className="p-12 border border-dashed border-slate-800/80 bg-slate-900/10 rounded-2xl text-center flex flex-col items-center justify-center">
+            <div className="p-12 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center flex flex-col items-center justify-center">
               <WifiOff className="w-8 h-8 text-slate-600 mb-3" />
-              <p className="text-xs text-slate-500 font-mono">No peer nodes currently configured.</p>
-              <p className="text-[10px] text-slate-600 font-mono mt-1">Register a peer node on the right to begin federation.</p>
+              <p className="text-xs text-slate-500">No peer nodes currently configured.</p>
+              <p className="text-[10px] text-slate-600 mt-1">Register a peer node on the right to begin federation.</p>
             </div>
           ) : (
-            <div className="border border-slate-800/80 bg-slate-900/20 rounded-2xl overflow-hidden backdrop-blur-md">
+            <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800/80 text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold bg-slate-950/60">
+                    <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60">
                       <th className="py-3.5 px-5">Node Identity</th>
                       <th className="py-3.5 px-5">Endpoint Address</th>
                       <th className="py-3.5 px-4 text-center">Status</th>
@@ -544,11 +544,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                           <td className="py-4 px-5">
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-slate-200">
+                                <span className="font-mono font-semibold text-slate-200">
                                   {peer.name}
                                 </span>
                                 {isAuto && (
-                                  <span className="px-2 py-0.5 text-[9px] font-bold text-cyan-400 bg-cyan-950/50 border border-cyan-800/40 rounded-full animate-pulse font-mono uppercase tracking-tighter">
+                                  <span className="px-2 py-0.5 text-[9px] font-medium text-cyan-400 bg-cyan-950/50 rounded-full animate-pulse">
                                     mDNS auto
                                   </span>
                                 )}
@@ -564,17 +564,17 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                           {/* Online Status */}
                           <td className="py-4 px-4 text-center">
                             {status.checking ? (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800/50 text-slate-400 border border-slate-700/30">
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-800/50 text-slate-400">
                                 <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                                 Ping
                               </div>
                             ) : status.online ? (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                                 Online
                               </div>
                             ) : (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                                 Offline
                               </div>
@@ -607,13 +607,13 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   onClick={() => handleDeletePeer(peer.name)}
-                                  className="px-2 py-1 bg-red-500 hover:bg-red-600 text-slate-950 font-bold rounded-lg text-[10px] uppercase transition-all active:scale-95"
+                                  className="px-2 py-1 bg-red-500 hover:bg-red-600 text-slate-950 font-medium rounded-lg text-[10px] transition-all active:scale-95"
                                 >
                                   OK
                                 </button>
                                 <button
                                   onClick={() => setConfirmDeletePeer(null)}
-                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] uppercase transition-all"
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg text-[10px] transition-all"
                                 >
                                   Cancel
                                 </button>
@@ -621,7 +621,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                             ) : (
                               <button
                                 onClick={() => setConfirmDeletePeer(peer.name)}
-                                className="p-2 text-slate-500 hover:text-red-400 bg-slate-950 hover:bg-red-500/10 border border-slate-850 hover:border-red-500/20 rounded-xl transition-all active:scale-95"
+                                className="p-2 text-slate-500 hover:text-red-400 bg-slate-950 hover:bg-red-500/10 rounded-lg transition-all active:scale-95"
                                 title="Remove peer node"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -641,44 +641,44 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
         {/* Register Manual Peer Form Column */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <h3 className="text-sm font-bold text-slate-200 uppercase font-mono tracking-wider flex items-center gap-2">
+            <h3 className="text-sm font-medium text-slate-200 flex items-center gap-2">
               <Plus className="w-4 h-4 text-emerald-400" />
               Register Peer Node
             </h3>
           </div>
 
-          <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-xl backdrop-blur-md">
+          <div className="bg-slate-900/30 rounded-lg p-5 backdrop-blur-md">
             <form onSubmit={handleAddPeer} className="space-y-4">
               {/* Peer Alias */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Peer Name / Alias</label>
+                <label className="block text-[10px] font-medium text-slate-400">Peer Name / Alias</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g., node-tokyo"
                   value={peerName}
                   onChange={(e) => setPeerName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 font-mono transition-all placeholder:text-slate-600"
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 transition-all placeholder:text-slate-600"
                 />
               </div>
 
               {/* Peer Endpoint URL */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Endpoint URL</label>
+                <label className="block text-[10px] font-medium text-slate-400">Endpoint URL</label>
                 <input
                   type="url"
                   required
                   placeholder="e.g., http://localhost:3032"
                   value={peerUrl}
                   onChange={(e) => setPeerUrl(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 font-mono transition-all placeholder:text-slate-600"
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 transition-all placeholder:text-slate-600"
                 />
               </div>
 
               {/* Peer Connection Token */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1">
+                  <label className="block text-[10px] font-medium text-slate-400 flex items-center gap-1">
                     <Key className="w-3 h-3 text-slate-500" /> Connection Token
                   </label>
                   <span className="text-[8px] text-slate-500 font-mono">Use "mdns-auto" for discovery badge</span>
@@ -689,7 +689,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                   placeholder="Paste security key or 'mdns-auto'"
                   value={peerToken}
                   onChange={(e) => setPeerToken(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 font-mono transition-all placeholder:text-slate-600"
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-sm text-slate-200 transition-all placeholder:text-slate-600"
                 />
               </div>
 
@@ -697,7 +697,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               <button
                 type="submit"
                 disabled={submittingPeer}
-                className="w-full py-2.5 mt-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-2.5 mt-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 {submittingPeer ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -716,29 +716,29 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-slate-850 pb-2">
           <div>
-            <h3 className="text-sm font-bold text-slate-200 uppercase font-mono tracking-wider flex items-center gap-2">
+            <h3 className="text-sm font-medium text-slate-200 flex items-center gap-2">
               <Database className="w-4 h-4 text-violet-400" />
               SilvaDB Shareable Nodes Control
             </h3>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5">Toggle sharing flags. Only flagged memories are federated across peer connections.</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Toggle sharing flags. Only flagged memories are federated across peer connections.</p>
           </div>
         </div>
 
         {nodesLoading && nodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-2xl border border-slate-850">
+          <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-lg">
             <RefreshCw className="w-8 h-8 animate-spin text-violet-500/40 mb-3" />
-            <p className="text-xs font-mono">Loading SilvaDB nodes...</p>
+            <p className="text-xs">Loading SilvaDB nodes...</p>
           </div>
         ) : nodes.length === 0 ? (
-          <div className="p-10 border border-dashed border-slate-800/80 bg-slate-900/10 rounded-2xl text-center">
-            <p className="text-xs text-slate-500 font-mono">No nodes found in SilvaDB.</p>
+          <div className="p-10 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center">
+            <p className="text-xs text-slate-500">No nodes found in SilvaDB.</p>
           </div>
         ) : (
-          <div className="border border-slate-800/80 bg-slate-900/20 rounded-2xl overflow-hidden backdrop-blur-md shadow-xl">
+          <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md shadow-xl">
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800/80 text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold bg-slate-950/60 sticky top-0 z-10 backdrop-blur">
+                  <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60 sticky top-0 z-10 backdrop-blur">
                     <th className="py-3 px-5">Node ID / Type</th>
                     <th className="py-3 px-5">Memory Content</th>
                     <th className="py-3 px-5 text-center">Sharing Status</th>
@@ -758,7 +758,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                               {node.id.length > 20 ? `${node.id.substring(0, 20)}...` : node.id}
                             </span>
                             <span className={cn(
-                              "inline-block text-[8px] px-1.5 py-0.5 rounded font-bold border uppercase tracking-tighter",
+                              "inline-block text-[9px] px-1.5 py-0.5 rounded font-medium",
                               getNodeTypeColor(node.node_type)
                             )}>
                               {node.node_type || 'agnostic'}
@@ -775,10 +775,10 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                               onClick={() => handleToggleShareable(node.id, isShareable)}
                               disabled={togglingNodeId === node.id}
                               className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all active:scale-95 disabled:opacity-50",
+                                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all active:scale-95 disabled:opacity-50",
                                 isShareable
-                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                  : "bg-slate-950 text-slate-500 border-slate-850 hover:border-slate-850"
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : "bg-slate-950 text-slate-500 hover:bg-slate-800"
                               )}
                             >
                               {togglingNodeId === node.id ? (
