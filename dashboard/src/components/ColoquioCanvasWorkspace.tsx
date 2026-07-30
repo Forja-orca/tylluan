@@ -349,6 +349,7 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 interface CollabDoc { doc_id: string; title: string; content: string; updated_by: string; version: number; updated_at: number; }
 
 function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
+  const { bridge } = useNexus();
   const [docs, setDocs] = useState<CollabDoc[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [content, setContent] = useState('');
@@ -370,25 +371,26 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   const BASE = '/api/v1/coloquio/documents';
 
   const loadDocs = async () => {
+    if (!bridge) return;
     try {
-      const r = await fetch(BASE);
-      const d = await r.json();
+      const d = await bridge.fetchRaw(BASE);
       setDocs(d.documents ?? []);
     } catch { /* network error, ignore */ }
   };
 
   const deleteDoc = async (id: string, title: string) => {
     if (!confirm(`¿Borrar "${title}"? Esta acción no se puede deshacer.`)) return;
-    await fetch(`${BASE}/${id}`, { method: 'DELETE' });
+    if (!bridge) return;
+    await bridge.fetchRaw(`${BASE}/${id}`, { method: 'DELETE' });
     setDocs(prev => prev.filter(d => d.doc_id !== id));
     if (selectedDocId === id) { setSelectedDocId(null); setContent(''); setTitle(''); }
   };
 
   const loadDoc = async (id: string, force = false) => {
+    if (!bridge) return;
     try {
-      const r = await fetch(`${BASE}/${id}`);
-      if (!r.ok) return;
-      const d: CollabDoc = (await r.json()).document;
+      const d: CollabDoc = (await bridge.fetchRaw(`${BASE}/${id}`)).document;
+      if (!d) return;
       if (force || d.version > remoteVersion) {
         if (!force && localEditRef.current && d.version > remoteVersion + 1) {
           setSaveStatus('conflict');
@@ -405,15 +407,15 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   };
 
   const saveDoc = async (id: string, newTitle: string, newContent: string) => {
+    if (!bridge) return;
     setSaveStatus('saving');
     try {
-      const r = await fetch(`${BASE}/${id}`, {
+      const d: CollabDoc = (await bridge.fetchRaw(`${BASE}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle, content: newContent, updated_by: authorId }),
-      });
-      if (r.ok) {
-        const d: CollabDoc = (await r.json()).document;
+      })).document;
+      if (d) {
         setRemoteVersion(d.version);
         setLastEditor(authorId);
         setSaveStatus('saved');
@@ -425,31 +427,32 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   };
 
   const createDoc = async () => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || !bridge) return;
     setCreating(false);
     try {
-      const r = await fetch(BASE, {
+      const d: CollabDoc = (await bridge.fetchRaw(BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle.trim(), created_by: authorId }),
-      });
-      const d: CollabDoc = (await r.json()).document;
-      setDocs(prev => [d, ...prev]);
-      setSelectedDocId(d.doc_id);
-      setContent(d.content);
-      setTitle(d.title);
-      setRemoteVersion(d.version);
-      setSaveStatus('saved');
-      setNewTitle('');
+      })).document;
+      if (d) {
+        setDocs(prev => [d, ...prev]);
+        setSelectedDocId(d.doc_id);
+        setContent(d.content);
+        setTitle(d.title);
+        setRemoteVersion(d.version);
+        setSaveStatus('saved');
+        setNewTitle('');
+      }
     } catch { /* ignore */ }
   };
 
   // Fetch all snapshots/versions
   const loadVersions = async (docId: string) => {
+    if (!bridge) return;
     try {
-      const r = await fetch(`${BASE}/${docId}/versions`);
-      if (r.ok) {
-        const data = await r.json();
+      const data = await bridge.fetchRaw(`${BASE}/${docId}/versions`);
+      if (data) {
         const vList = data.versions ?? [];
         vList.sort((a: any, b: any) => b.version - a.version);
         setVersions(vList);
@@ -463,20 +466,19 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
 
   // Load content of specific version + its predecessor for diffing
   const loadVersionContent = async (docId: string, versionNum: number, currentVersionsList?: typeof versions) => {
+    if (!bridge) return;
     try {
       const activeList = currentVersionsList ?? versions;
-      const r = await fetch(`${BASE}/${docId}/versions/${versionNum}`);
-      if (!r.ok) return;
-      const data = await r.json();
+      const data = await bridge.fetchRaw(`${BASE}/${docId}/versions/${versionNum}`);
+      if (!data) return;
       const currentSnap = data.snapshot?.content ?? '';
       setVersionContent(currentSnap);
       
       const idx = activeList.findIndex(v => v.version === versionNum);
       if (idx !== -1 && idx + 1 < activeList.length) {
         const prevVer = activeList[idx + 1].version;
-        const rPrev = await fetch(`${BASE}/${docId}/versions/${prevVer}`);
-        if (rPrev.ok) {
-          const dPrev = await rPrev.json();
+        const dPrev = await bridge.fetchRaw(`${BASE}/${docId}/versions/${prevVer}`);
+        if (dPrev) {
           setPrevVersionContent(dPrev.snapshot?.content ?? '');
         } else {
           setPrevVersionContent('');

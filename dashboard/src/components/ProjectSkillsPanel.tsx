@@ -158,7 +158,12 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
           </div>
 
           <div className="bg-slate-900/60 border border-slate-850 rounded-2xl overflow-hidden divide-y divide-slate-800">
-            {skills.length === 0 ? (
+            {error ? (
+              <div className="p-8 text-center space-y-2">
+                <ServerOff className="w-8 h-8 mx-auto text-slate-600" />
+                <p className="text-xs text-red-400 font-mono">{error}</p>
+              </div>
+            ) : skills.length === 0 ? (
               <div className="p-8 text-center text-slate-500 font-mono text-xs">
                 No project skills found.
               </div>

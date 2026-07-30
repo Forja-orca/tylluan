@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity, Cpu, Database, Users, AlertTriangle, CheckCircle, Clock, Zap, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
+import { useNexus } from '../hooks/useNexus';
+import type { NexusBridge } from '../lib/api-client';
 import { KNOWN_AGENTS, agentStyle } from '../lib/agent-meta';
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -68,13 +70,13 @@ const STATUS_DOT: Record<string, string> = {
 
 // ── data fetching ─────────────────────────────────────────────────────────────
 
-async function fetchFleetData(): Promise<FleetData> {
+async function fetchFleetData(bridge: NexusBridge): Promise<FleetData> {
   const [summaryRes, channelsRes] = await Promise.all([
-    fetch('/api/v1/dashboard/summary'),
-    fetch('/api/v1/coloquio/channels'),
+    bridge.fetchRaw('/api/v1/dashboard/summary'),
+    bridge.fetchRaw('/api/v1/coloquio/channels'),
   ]);
-  const summary = await summaryRes.json();
-  const channelsData = await channelsRes.json();
+  const summary = summaryRes;
+  const channelsData = channelsRes;
 
   const kernel: KernelHealth = {
     uptime:       summary.system_status?.uptime_secs ?? 0,
@@ -91,8 +93,7 @@ async function fetchFleetData(): Promise<FleetData> {
   const threadResults = await Promise.all(
     channels.map(async ch => {
       try {
-        const r = await fetch(`/api/v1/coloquio/channels/${ch.channel_id}?limit=20`);
-        const d = await r.json();
+        const d = await bridge.fetchRaw(`/api/v1/coloquio/channels/${ch.channel_id}?limit=20`);
         return { channel_id: ch.channel_id, messages: d.messages ?? [] };
       } catch { return { channel_id: ch.channel_id, messages: [] }; }
     })
@@ -239,13 +240,15 @@ function GuildBar({ online, total }: { online: number; total: number }) {
 // ── main component ────────────────────────────────────────────────────────────
 
 export function FleetTab() {
+  const { bridge } = useNexus();
   const [data, setData] = useState<FleetData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(0);
 
   const refresh = async () => {
+    if (!bridge) return;
     try {
-      const d = await fetchFleetData();
+      const d = await fetchFleetData(bridge);
       setData(d);
       setLastRefresh(Date.now());
     } catch { /* ignore */ } finally {
@@ -255,7 +258,7 @@ export function FleetTab() {
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [bridge]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('fleet-refresh', refresh, { interval: 'medium', enabled: true });
