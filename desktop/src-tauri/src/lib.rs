@@ -51,11 +51,11 @@ pub fn run() {
         );
     }
 
-    // Updater plugin for in-app updates
-    #[cfg(desktop)]
-    {
-        app_builder = app_builder.plugin(tauri_plugin_updater::Builder::new().build());
-    }
+    // Updater plugin intentionally not registered: this is a feasibility spike,
+    // not something distributed/updated yet. It requires a `plugins.updater`
+    // config block (endpoints, pubkey) in tauri.conf.json to initialize --
+    // registering it without that config panics at startup ("invalid type:
+    // null, expected struct Config"), confirmed live 2026-07-30.
 
     app_builder = app_builder
         .plugin(tauri_plugin_process::init())
