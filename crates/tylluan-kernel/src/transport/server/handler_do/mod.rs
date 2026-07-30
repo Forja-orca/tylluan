@@ -335,47 +335,141 @@ pub async fn handle_tylluan_do(
         intent.clone()
     };
 
-    let penalize_lesson = |intent: &str, silva: std::sync::Arc<crate::memory::silva::SilvaDB>| {
-        let intent_lower = intent.to_lowercase();
-        let words: Vec<_> = intent_lower.split_whitespace().take(3).collect();
-        let lesson_key = format!("lesson:intent:{}", words.join("_"));
-        tokio::spawn(async move {
-            if let Ok(Some(_node)) = silva.get_node(&lesson_key).await {
-                // Registrar trace "rejected" para activar negative forgetting de R11-2
-                let _ = silva.touch_node(&lesson_key, "system", "rejected").await;
-            }
-        });
+    // Stage 1: Resolve guild + ACL/rate-limit + tool selection + args + call_params
+    let routing_intent = intent_enhancer::strip_ctx_prefix(&effective_intent);
+    let resolved = match resolve_and_prepare_tool_call(
+        server, routing_intent, &intent, &effective_intent,
+        &guild_hint, &agent_id, &arguments,
+    ).await {
+        Ok(r) => r,
+        Err(call_tool_result) => return Ok(call_tool_result),
     };
 
-    // Strip [ctx: ...] prefix so it doesn't pollute routing
-    let routing_intent = intent_enhancer::strip_ctx_prefix(&effective_intent);
+    // M31-P2: Plan mode — return resolved guild+tool+args for approval before executing
+    if plan_mode {
+        let plan_id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+        let risk_level = server.check_tool_risk(&resolved.tool_name).await;
+        let plan_info = serde_json::json!({
+            "status": "plan",
+            "plan_id": plan_id,
+            "guild": resolved.guild_name,
+            "tool": resolved.tool_name,
+            "risk_level": format!("{:?}", risk_level),
+            "intent": intent,
+            "arguments": resolved.tool_args,
+            "message": format!(
+                "Plan mode: would execute '{}' via guild '{}' tool '{}' (risk: {:?}). \
+                 To approve, call: tylluan_do(intent='approve action for plan {plan_id}') or \
+                 approve_action(requestId='{plan_id}', approved=true).",
+                intent, resolved.guild_name, resolved.tool_name, risk_level
+            ),
+        });
+        crate::security::grants::store_plan(
+            &plan_id, &resolved.guild_name, &resolved.tool_name, &resolved.tool_args,
+            agent_id.as_deref().unwrap_or("anonymous"), &intent,
+        ).await;
+        let result_text = serde_json::to_string_pretty(&plan_info).unwrap_or_default();
+        return Ok(CallToolResult {
+            content: vec![Content::text(result_text)],
+            is_error: Some(false),
+        });
+    }
 
+    // Stage 2: Execute guild call with progress ticker and safety timeout
+    let (result, latency_ms) = execute_guild_call_with_progress(
+        server, &resolved.guild_name, &resolved.tool_name,
+        resolved.call_params, &intent, &agent_id,
+    ).await;
+
+    // Stage 3: Post-process — reactive cascade, agent profiles, audit, anchor learning, lesson drain, etc.
+    let (mut result, _) = post_process_outcome(
+        server, &intent, &resolved.guild_name, &resolved.tool_name,
+        &agent_id, remember, result, latency_ms,
+    ).await;
+
+    // Stage 4: Persist to memory and SilvaDB if remember flag or agent_id is set
+    persist_remember(
+        server, &result, &agent_id, &intent,
+        &resolved.guild_name, &resolved.tool_name, remember,
+    ).await;
+
+    let footer = format!("\n\n---\nRouting: guild={} tool={}\nRouting Trace:\n - {}", resolved.guild_name, resolved.tool_name, resolved.routing_trace.join("\n - "));
+    result.content.push(rmcp::model::Content::text(footer));
+    Ok(result)
+}
+
+/// Auto-capture friction events from guild tool call results.
+/// Parses common error patterns and logs them to the friction tracking system.
+fn capture_friction_from_result(intent: &str, guild: &str, tool: &str, result_text: &str) {
+    let lower = result_text.to_lowercase();
+    let preview: String = result_text.chars().take(100).collect();
+
+    if result_text.contains("BLOCKED:") {
+        // Extract the quoted command, e.g. "BLOCKED: 'list' is not in..." -> "list"
+        let command = result_text
+            .split("BLOCKED:").nth(1)
+            .and_then(|rest| rest.split('\'').nth(1))
+            .unwrap_or(guild);
+        crate::security::friction_log::log_blocklist_rejection(intent, command);
+    } else if lower.contains("error:") && (lower.contains("guild") || lower.contains("tool")) {
+        crate::security::friction_log::log_routing_mismatch(intent, guild, tool, &preview);
+    }
+}
+
+/// Resolved tool call returned by `resolve_and_prepare_tool_call`.
+struct ResolvedToolCall {
+    guild_name: String,
+    tool_name: String,
+    tool_args: serde_json::Value,
+    routing_trace: Vec<String>,
+    call_params: CallToolRequestParam,
+}
+
+fn penalize_lesson_fn(intent: &str, silva: std::sync::Arc<crate::memory::silva::SilvaDB>) {
+    let intent_lower = intent.to_lowercase();
+    let words: Vec<_> = intent_lower.split_whitespace().take(3).collect();
+    let lesson_key = format!("lesson:intent:{}", words.join("_"));
+    tokio::spawn(async move {
+        if let Ok(Some(_node)) = silva.get_node(&lesson_key).await {
+            let _ = silva.touch_node(&lesson_key, "system", "rejected").await;
+        }
+    });
+}
+
+/// Stage 1: resolve guild, apply ACL/rate-limit, select tool, build call params.
+/// Returns early-`Err(CallToolResult)` for soft failures (ACL, rate-limit,
+/// missing guild/tool). On `Ok` all downstream code can assume the call is
+/// safe and prepared.
+async fn resolve_and_prepare_tool_call(
+    server: &TylluanServer,
+    routing_intent: &str,
+    intent: &str,
+    effective_intent: &str,
+    guild_hint: &Option<String>,
+    agent_id: &Option<String>,
+    _arguments: &Option<serde_json::Map<String, serde_json::Value>>,
+) -> Result<ResolvedToolCall, CallToolResult> {
     let (guild_name, routing_trace) = match resolve_guild_name(server, routing_intent, guild_hint.clone(), agent_id.as_deref()).await {
         Ok((name, trace)) => (name, trace),
         Err(initial_err) => {
-            // M32: External MCP dispatch — when no internal guild matches, try registered
-            // external MCP servers before returning the "no guild found" error.
             if guild_hint.is_none()
                 && let Some(result) = external_mcp::try_external_mcp_dispatch(
-                    server, &intent, agent_id.as_deref()
+                    server, intent, agent_id.as_deref()
                 ).await {
                     info!("tylluan_do: dispatched to external MCP server");
-                    return Ok(result);
+                    return Err(result);
                 }
-            return Ok(initial_err);
+            return Err(initial_err);
         }
     };
 
-    // S1b: Per-Guild rate limit check — backstop against a single guild
-    // saturating guild_process even when calls come from diverse agents/IPs.
     if let Err(msg) = server.guild_rate_limiter.check_and_record(&guild_name) {
         warn!("Guild rate limit exceeded for '{}': {}", guild_name, msg);
-        return Ok(error_result(&format!(
+        return Err(error_result(&format!(
             "Rate limit for guild '{guild_name}' exceeded. Try again later."
         )));
     }
 
-    // S2: Per-Guild ACL check — verify the request's role has access to this guild
     if let Ok(config_lock) = crate::config::TylluanConfig::load_cached() {
         let cfg = config_lock.read().await;
         let acl = &cfg.security.acl;
@@ -387,29 +481,28 @@ pub async fn handle_tylluan_do(
                      Contact your administrator to update [security.acl] in tylluan.toml."
                 );
                 warn!("{}", msg);
-                return Ok(error_result(&msg));
+                return Err(error_result(&msg));
             }
         }
-        // M31-P1: Enforce per-agent tool permissions & scope for tylluan_do
         if !acl.agent_permissions.is_empty() {
             let aid = agent_id.as_deref().unwrap_or("anonymous");
             if aid != "anonymous"
                 && let Some(msg) = crate::transport::http::auth::check_agent_id_tool_allowed(aid, "tylluan_do", acl) {
-                    return Ok(error_result(&msg));
+                    return Err(error_result(&msg));
                 }
         }
     }
 
     if let Err(e) = server.registry.write().await.ensure_guild_running(&guild_name).await {
-        penalize_lesson(&intent, server.silva.clone());
-        return Ok(error_result(&format!("Failed to start guild '{guild_name}': {e}")));
+        penalize_lesson_fn(intent, server.silva.clone());
+        return Err(error_result(&format!("Failed to start guild '{guild_name}': {e}")));
     }
 
     let mut tool_name = {
         let reg = server.registry.read().await;
         if let Some(guild) = reg.guilds.get(&guild_name) {
             use crate::router::matcher::{tokenize, keyword_score};
-            let tokens = tokenize(&effective_intent);
+            let tokens = tokenize(effective_intent);
             guild.tools.iter()
                 .max_by(|a, b| {
                     let sa = keyword_score(&tokens, a.description.as_ref(), a.name.as_ref());
@@ -422,12 +515,12 @@ pub async fn handle_tylluan_do(
     };
 
     if tool_name.is_empty() {
-        penalize_lesson(&intent, server.silva.clone());
-        return Ok(error_result(&format!("Guild '{guild_name}' has no tools.")));
+        penalize_lesson_fn(intent, server.silva.clone());
+        return Err(error_result(&format!("Guild '{guild_name}' has no tools.")));
     }
 
-    let path_hint = extract_path_from_intent(&intent);
-    let url_hint = extract_url_from_intent(&intent).unwrap_or_default();
+    let path_hint = extract_path_from_intent(intent);
+    let url_hint = extract_url_from_intent(intent).unwrap_or_default();
     let mut tool_args = serde_json::json!({
         "command": intent, "intent": intent,
         "query": intent, "text": intent, "content": intent,
@@ -435,12 +528,9 @@ pub async fn handle_tylluan_do(
         "server_url": url_hint, "url": url_hint,
         "timeout_secs": 30, "language": "", "depth": 2, "max_results": 50,
     });
-    // Forward agent_id to tool args so check_capabilities can enforce profiles
-    if let Some(ref aid) = agent_id {
+    if let Some(aid) = agent_id {
         tool_args["agent_id"] = serde_json::Value::String(aid.clone());
     }
-    // Only inject path fields when intent contains an actual path — passing "."
-    // causes "Permission denied" in guilds that require filesystem access.
     if path_hint != "." {
         let safe_path = if std::path::Path::new(&path_hint).is_dir() {
             &path_hint
@@ -462,19 +552,13 @@ pub async fn handle_tylluan_do(
         }
     }
 
-    // Bash/Git: extract clean command from NL wrapper ("run X", "execute X:", etc.)
-    // so the guild receives "ls -la" instead of "execute bash command: ls -la".
     if (guild_name == "bash" || guild_name == "git")
         && let Some(obj) = tool_args.as_object_mut() {
-            let clean = extract_command_from_intent(&intent);
+            let clean = extract_command_from_intent(intent);
             obj.insert("command".to_string(), serde_json::Value::String(clean.to_string()));
         }
 
-    // Bash: if keyword_score matched state_checkpoint/state_restore but the
-    // intent is clearly a shell command (not a state operation), override to
-    // bash_execute. Fixes "git status" -> state_restore ambiguity found in
-    // real fleet usage (2026-07-26 cycle).
-    if guild_name == "bash" && tool_name != "bash_execute" && !is_bash_state_intent(&intent) {
+    if guild_name == "bash" && tool_name != "bash_execute" && !is_bash_state_intent(intent) {
         let old_tool = tool_name.clone();
         tool_name = "bash_execute".to_string();
         tracing::debug!(
@@ -483,13 +567,9 @@ pub async fn handle_tylluan_do(
         );
     }
 
-    // Coloquio: extract structured params from intent BEFORE validation so channel_id
-    // is populated when required_args check runs.
     if guild_name == "coloquio" {
-        let (mut channel_id, content_or_name, tool_hint) = parse_coloquio_intent(&intent);
+        let (mut channel_id, content_or_name, tool_hint) = parse_coloquio_intent(intent);
 
-        // Fallback: if parser couldn't extract channel_id but intent has recognizable structure,
-        // try splitting on first colon — text before is channel, text after is message.
         if channel_id.is_none() && intent.contains(':') {
             let parts: Vec<&str> = intent.splitn(2, ':').collect();
             if parts.len() == 2 {
@@ -511,12 +591,9 @@ pub async fn handle_tylluan_do(
             _ => {
                 let lower = intent.to_lowercase();
                 if !lower.contains(':')
-                    || lower.contains("lee")
-                    || lower.contains("leer")
-                    || lower.contains("read")
-                    || lower.contains("ver ")
-                    || lower.contains("mostrar")
-                    || lower.contains("lista")
+                    || lower.contains("lee") || lower.contains("leer")
+                    || lower.contains("read") || lower.contains("ver ")
+                    || lower.contains("mostrar") || lower.contains("lista")
                 {
                     "read_channel"
                 } else {
@@ -534,7 +611,7 @@ pub async fn handle_tylluan_do(
                 obj.insert("intent".to_string(), serde_json::Value::String(cn.clone()));
             }
             if tool_hint == "read" {
-                let (limit, offset) = _parse_coloquio_pagination(&intent);
+                let (limit, offset) = _parse_coloquio_pagination(intent);
                 if limit > 0 { obj.insert("limit".to_string(), serde_json::Value::Number(limit.into())); }
                 if offset > 0 { obj.insert("offset".to_string(), serde_json::Value::Number(offset.into())); }
             }
@@ -545,8 +622,6 @@ pub async fn handle_tylluan_do(
         }
     }
 
-    // M29-A: Validate required_args contract — check the guild's declared args
-    // are populated (coloquio handler already injected channel_id if applicable).
     if let Some(guild_desc) = server.matcher.available_guilds()
         .iter().find(|g| g.name == guild_name)
         && !guild_desc.required_args.is_empty()
@@ -561,7 +636,7 @@ pub async fn handle_tylluan_do(
             if !missing.is_empty() {
                 let missing_list = missing.join(", ");
                 let example = format!("tylluan_do(intent='...', {}<value>)", missing[0]);
-                return Ok(error_result(&format!(
+                return Err(error_result(&format!(
                     "Error: guild '{guild_name}' requires argument(s): {missing_list}. \
                      Provide them explicitly: {example}. \
                      Check guild documentation for required fields."
@@ -575,48 +650,26 @@ pub async fn handle_tylluan_do(
     };
     info!("🔀 tylluan_do: intent='{}' → guild='{}' → tool='{}'", intent, guild_name, tool_name);
 
-    // M31-P2: Plan mode — return resolved guild+tool+args for approval before executing
-    if plan_mode {
-        let plan_id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
-        let risk_level = server.check_tool_risk(&tool_name).await;
-        let plan_info = serde_json::json!({
-            "status": "plan",
-            "plan_id": plan_id,
-            "guild": guild_name,
-            "tool": tool_name,
-            "risk_level": format!("{:?}", risk_level),
-            "intent": intent,
-            "arguments": tool_args,
-            "message": format!(
-                "Plan mode: would execute '{}' via guild '{}' tool '{}' (risk: {:?}). \
-                 To approve, call: tylluan_do(intent='approve action for plan {plan_id}') or \
-                 approve_action(requestId='{plan_id}', approved=true).",
-                intent, guild_name, tool_name, risk_level
-            ),
-        });
-        crate::security::grants::store_plan(
-            &plan_id, &guild_name, &tool_name, &tool_args,
-            agent_id.as_deref().unwrap_or("anonymous"), &intent,
-        ).await;
-        let result_text = serde_json::to_string_pretty(&plan_info).unwrap_or_default();
-        return Ok(CallToolResult {
-            content: vec![Content::text(result_text)],
-            is_error: Some(false),
-        });
-    }
+    Ok(ResolvedToolCall { guild_name, tool_name, tool_args, routing_trace, call_params })
+}
 
-    // Progress ticker: emit SSE events every heartbeat interval for long-running guild calls
+/// Stage 2: execute the guild tool call with a progress ticker and safety timeout.
+async fn execute_guild_call_with_progress(
+    server: &TylluanServer,
+    guild_name: &str,
+    tool_name: &str,
+    call_params: CallToolRequestParam,
+    intent: &str,
+    agent_id: &Option<String>,
+) -> (CallToolResult, u64) {
     let progress_notifier = server.notifier.clone();
-    let progress_guild = guild_name.clone();
+    let progress_guild = guild_name.to_string();
     let progress_intent = intent.chars().take(60).collect::<String>();
 
-    // Get heartbeat interval from config
     let heartbeat_ms = if let Ok(c_lock) = crate::config::TylluanConfig::load_cached() {
         let c = c_lock.read().await;
         c.timeouts.mcp_client_heartbeat_ms
-    } else {
-        8_000 // fallback
-    };
+    } else { 8_000 };
     let heartbeat_secs = (heartbeat_ms / 1000).max(1);
 
     let progress_handle = tokio::spawn(async move {
@@ -625,7 +678,7 @@ pub async fn handle_tylluan_do(
         );
         let timeout_secs = effective_timeout / 1000;
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(heartbeat_secs));
-        let _ = interval.tick().await; // skip first immediate tick
+        let _ = interval.tick().await;
         let mut elapsed = 0u64;
         loop {
             interval.tick().await;
@@ -652,7 +705,6 @@ pub async fn handle_tylluan_do(
         }
     });
 
-    // Emit started BEFORE the guild call so subscribers see the correct order
     server.notify("tool_call", serde_json::json!({
         "status": "started", "tool": tool_name,
         "agent_id": agent_id.as_deref().unwrap_or("anonymous"),
@@ -661,28 +713,24 @@ pub async fn handle_tylluan_do(
 
     let t0 = std::time::Instant::now();
     let effective_timeout = crate::transport::server::handler_do::guild_effective_timeout(
-        &guild_name, server.low_memory_mode
+        guild_name, server.low_memory_mode
     );
-    // Phase 1: brief write lock — touch() and set timeout only, no IO.
     let original_timeout = {
         let mut reg = server.registry.write().await;
-        let orig = reg.guilds.get(&guild_name).and_then(|g| g.tool_timeout);
-        if let Some(guild) = reg.guilds.get_mut(&guild_name) {
+        let orig = reg.guilds.get(guild_name).and_then(|g| g.tool_timeout);
+        if let Some(guild) = reg.guilds.get_mut(guild_name) {
             guild.touch();
             guild.tool_timeout = Some(std::time::Duration::from_millis(effective_timeout));
         }
         orig
-    }; // write lock dropped here — other requests can proceed during guild call
+    };
 
-    // Phase 2: read lock for the actual guild call (no writes needed during IO).
-    // Wrap in a safety timeout to prevent kernel hangs on dead guild processes
-    let call_timeout_ms = effective_timeout + 10_000; // 10s grace period over guild's own timeout
-
-    let mut result: CallToolResult = match tokio::time::timeout(
+    let call_timeout_ms = effective_timeout + 10_000;
+    let result = match tokio::time::timeout(
         std::time::Duration::from_millis(call_timeout_ms),
         async {
             let reg = server.registry.read().await;
-            if let Some(guild) = reg.guilds.get(&guild_name) {
+            if let Some(guild) = reg.guilds.get(guild_name) {
                 guild.call_tool_readonly(call_params).await
             } else {
                 error_result(&format!("Guild '{guild_name}' not found — use tylluan_do with a valid intent."))
@@ -699,17 +747,16 @@ pub async fn handle_tylluan_do(
             ))
         }
     };
-    // Restore original timeout (brief write lock)
+
     {
         let mut reg = server.registry.write().await;
-        if let Some(guild) = reg.guilds.get_mut(&guild_name) {
+        if let Some(guild) = reg.guilds.get_mut(guild_name) {
             guild.tool_timeout = original_timeout;
         }
     }
     progress_handle.abort();
     let latency_ms = t0.elapsed().as_millis() as u64;
 
-    // Final progress event for slow calls
     if latency_ms > 3000 {
         server.notify("guild_progress", serde_json::json!({
             "type": "guild_progress",
@@ -719,30 +766,48 @@ pub async fn handle_tylluan_do(
             "ts": chrono::Utc::now().timestamp_millis()
         }));
     }
+
+    (result, latency_ms)
+}
+
+/// Stage 3: post-process the outcome — reactive cascade, agent profiles,
+/// audit logging, anchor learning, lesson drain, routing feedback, reputation.
+/// Returns the (possibly cascade-replaced) result and success flag.
+/// 8 params is over clippy's default threshold; this is a private, single-caller
+/// helper extracted straight out of handle_tylluan_do's body, not a public API --
+/// bundling into a params struct isn't worth the churn for the marginal benefit.
+#[allow(clippy::too_many_arguments)]
+async fn post_process_outcome(
+    server: &TylluanServer,
+    intent: &str,
+    guild_name: &str,
+    tool_name: &str,
+    agent_id: &Option<String>,
+    remember: bool,
+    mut result: CallToolResult,
+    latency_ms: u64,
+) -> (CallToolResult, bool) {
     let mut is_success = result.is_error != Some(true)
         && !result.content.iter().filter_map(|c| c.as_text())
             .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
 
-    // M20: Reactive Cascade Check
     if !is_success && guild_name != "coordinator" {
-        let c_score = crate::router::complexity::score_complexity(&intent);
+        let c_score = crate::router::complexity::score_complexity(intent);
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
         if c_score >= 0.4 && registry_has_coordinator {
             info!("🔄 Reactive Cascade (score={:.2}): '{}' failed on '{}' → fallback to coordinator", c_score, intent, guild_name);
             let mut new_args = serde_json::Map::new();
-            new_args.insert("intent".to_string(), serde_json::Value::String(intent.clone()));
+            new_args.insert("intent".to_string(), serde_json::Value::String(intent.to_string()));
             new_args.insert("guild".to_string(), serde_json::Value::String("coordinator".to_string()));
-            if let Some(ref aid) = agent_id {
+            if let Some(aid) = agent_id {
                 new_args.insert("agent_id".to_string(), serde_json::Value::String(aid.clone()));
             }
             new_args.insert("remember".to_string(), serde_json::Value::Bool(remember));
 
-            // Invoke coordinator recursively
             match Box::pin(handle_tylluan_do(server, Some(new_args))).await {
                 Ok(cascade_res) => {
                     info!("🔄 Reactive Cascade successful for '{}'", intent);
                     result = cascade_res;
-                    // Recompute is_success for the new result
                     is_success = result.is_error != Some(true)
                         && !result.content.iter().filter_map(|c| c.as_text())
                             .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
@@ -754,18 +819,18 @@ pub async fn handle_tylluan_do(
         }
     }
 
-    server.matcher.record_outcome(&intent, &guild_name, is_success, latency_ms);
+    server.matcher.record_outcome(intent, guild_name, is_success, latency_ms);
 
     if !is_success {
-        penalize_lesson(&intent, server.silva.clone());
+        penalize_lesson_fn(intent, server.silva.clone());
     }
 
-    let is_new = if let Some(ref profiles) = server.agent_profiles {
-        if let Some(ref aid) = agent_id {
+    let is_new = if let Some(profiles) = &server.agent_profiles {
+        if let Some(aid) = agent_id {
             if let Ok(p_store) = profiles.lock() {
-                let _ = p_store.upsert_activity(aid, &guild_name, is_success, Some(&intent));
+                let _ = p_store.upsert_activity(aid, guild_name, is_success, Some(intent));
                 if !is_success
-                    && let Ok(Some(best)) = p_store.get_best_agent_for_domain(&guild_name) {
+                    && let Ok(Some(best)) = p_store.get_best_agent_for_domain(guild_name) {
                         let b_aid = best["agent_id"].as_str().unwrap_or_default();
                         let b_rate = best["rate"].as_f64().unwrap_or(0.0);
                         if b_aid != *aid && b_rate > 0.6 {
@@ -778,7 +843,7 @@ pub async fn handle_tylluan_do(
         } else { false }
     } else { false };
 
-    if is_new && let Some(ref aid) = agent_id { run_agent_handshake(server, aid).await; }
+    if is_new && let Some(aid) = agent_id { run_agent_handshake(server, aid).await; }
 
     server.notify("tool_call", serde_json::json!({
         "status": "finished", "tool": tool_name,
@@ -791,45 +856,39 @@ pub async fn handle_tylluan_do(
     let result_text = result.content.iter().filter_map(|c| c.as_text())
         .map(|t| t.text.clone()).next().unwrap_or_default();
 
-    maybe_auto_extract_triples(server, agent_id.as_deref(), &guild_name, &result_text);
+    maybe_auto_extract_triples(server, agent_id.as_deref(), guild_name, &result_text);
 
-    if let Some(ref aid) = agent_id {
-        record_activity_trace(server, aid, &guild_name, &tool_name, result_text.len());
+    if let Some(aid) = agent_id {
+        record_activity_trace(server, aid, guild_name, tool_name, result_text.len());
     }
 
-    // Audit log: record every tylluan_do tool call to audit.db (fire-and-forget)
-    let audit_intent = intent.clone();
-    let audit_guild = guild_name.clone();
-    let audit_tool = tool_name.clone();
+    let audit_intent = intent.to_string();
+    let audit_guild = guild_name.to_string();
+    let audit_tool = tool_name.to_string();
     let audit_agent = agent_id.clone().unwrap_or_default();
     let audit_success = is_success;
     let audit_preview = result_text.chars().take(200).collect::<String>();
     tokio::task::spawn_blocking(move || {
         let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview);
-        // Auto-capture friction events from guild error responses
         capture_friction_from_result(&audit_intent, &audit_guild, &audit_tool, &audit_preview);
     });
 
-    // Anchor learning: store successful routings as routing_anchor nodes (async, fire-and-forget)
     if is_success && !intent.trim().is_empty() {
         let silva_anchor = server.silva.clone();
         let engine_anchor = server.matcher.engine_arc();
-        let intent_anchor = intent.clone();
-        let guild_anchor = guild_name.clone();
+        let intent_anchor = intent.to_string();
+        let guild_anchor = guild_name.to_string();
         tokio::spawn(async move {
             let embedding = engine_anchor.as_ref().and_then(|e| e.embed(&intent_anchor).ok());
             let _ = silva_anchor.upsert_routing_anchor(
-                &guild_anchor,
-                &intent_anchor,
-                "learned",
+                &guild_anchor, &intent_anchor, "learned",
                 embedding.as_deref(),
             ).await;
         });
     }
 
-    // Sync agent reputation to SilvaDB after each tool call (fire-and-forget)
-    if let Some(ref aid) = agent_id
-        && let Some(ref profiles) = server.agent_profiles {
+    if let Some(aid) = agent_id
+        && let Some(profiles) = &server.agent_profiles {
             let p_store = profiles.clone();
             let silva_reput = server.silva.clone();
             let aid_clone = aid.clone();
@@ -837,9 +896,7 @@ pub async fn handle_tylluan_do(
                 let profile_opt = {
                     if let Ok(store) = p_store.lock() {
                         store.get_profile(&aid_clone).unwrap_or(None)
-                    } else {
-                        None
-                    }
+                    } else { None }
                 };
                 if let Some(prof) = profile_opt {
                     crate::memory::agent_profile::sync_agent_reputation_to_silva(
@@ -849,15 +906,12 @@ pub async fn handle_tylluan_do(
             });
         }
 
-    // R19-2: Routing Feedback Loop — persist failures for future learning
     if !is_success || result_text.trim().is_empty() {
         let err_msg = if !is_success {
             let t = result_text.clone();
             if t.chars().count() > 100 { format!("{}...", t.chars().take(100).collect::<String>()) } else { t }
-        } else {
-            "EMPTY_RESULT".to_string()
-        };
-        let failure_id = routing_failure_id(&intent);
+        } else { "EMPTY_RESULT".to_string() };
+        let failure_id = routing_failure_id(intent);
         let failure_content = format!(
             "ROUTING_FAILURE guild={} intent={} error={}",
             guild_name, &intent[..intent.len().min(100)], err_msg
@@ -868,7 +922,6 @@ pub async fn handle_tylluan_do(
         let _ = server.silva.touch_node(&failure_id, "system", "routing_failure").await;
     }
 
-    // R14-3: Lesson drain — if result contains lesson markers, promote to durable SilvaDB node.
     if is_success && result_text.len() > 100 {
         let lower = result_text.to_lowercase();
         let has_lesson = lower.contains("lesson:") || lower.contains("aprendí")
@@ -895,20 +948,15 @@ pub async fn handle_tylluan_do(
         }
     }
 
-    // R14-3: Save routing lesson on success (PASO 3)
     if is_success {
         let lesson_key = format!("lesson:intent:{}",
             intent.to_lowercase()
-                .split_whitespace()
-                .take(3)
-                .collect::<Vec<_>>()
-                .join("_"));
+                .split_whitespace().take(3).collect::<Vec<_>>().join("_"));
 
-        // R20-3: Lesson throttle — only create/update if new or decayed
         let should_write_lesson = match server.silva.get_node(&lesson_key).await {
-            Ok(Some(existing)) => existing.weight < 0.5, // update only if decayed
-            Ok(None) => true,   // new lesson — always write
-            Err(_) => true,     // on error, write anyway (safe default)
+            Ok(Some(existing)) => existing.weight < 0.5,
+            Ok(None) => true,
+            Err(_) => true,
         };
 
         if should_write_lesson {
@@ -921,10 +969,8 @@ pub async fn handle_tylluan_do(
                 format!("guild:{guild_name} tool:{tool_name} intent:{intent}")
             };
             let meta = serde_json::json!({
-                "source": "routing_lesson",
-                "guild": guild_name,
-                "tool": tool_name,
-                "intent": intent
+                "source": "routing_lesson", "guild": guild_name,
+                "tool": tool_name, "intent": intent
             }).to_string();
             let silva_c = server.silva.clone();
             let lk = lesson_key.clone();
@@ -936,65 +982,58 @@ pub async fn handle_tylluan_do(
         }
     }
 
-    let should_remember = remember || agent_id.is_some();
-    if should_remember && result.is_error != Some(true) {
-        let output_preview = result.content.first()
-            .and_then(|c| c.as_text()).map(|t| t.text.chars().take(300).collect::<String>())
-            .unwrap_or_default();
-        let trace = match &agent_id {
-            Some(aid) => format!("tylluan_do episode | agent: {aid} | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
-            None => format!("tylluan_do episode | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
-        };
-        let meta = serde_json::json!({ "source": "tylluan_do", "guild": guild_name, "tool": tool_name, "agent_id": agent_id.as_deref().unwrap_or("anonymous") }).to_string();
-        let embedding_target = distill_for_embedding(&intent, &output_preview);
-        let embedding = server.matcher.engine().and_then(|e| e.embed(&embedding_target).ok());
-        if let Err(e) = server.memory.add_document(&trace, &meta, embedding.as_deref()).await {
-            warn!("⚠️ tylluan_do remember: hybrid memory write failed: {}", e);
-        }
-        let node_id = format!("memory:{}", chrono::Utc::now().timestamp_millis());
-        if let Err(e) = server.silva.upsert_node(&node_id, "episode", &trace, &meta).await {
-            warn!("⚠️ tylluan_do remember: silva graph write failed: {}", e);
-        } else {
-            let aid = agent_id.as_deref().unwrap_or("anonymous");
-            let _ = server.silva.touch_node(&node_id, aid, "episode").await;
-            info!("🌲 tylluan_do remember: saved to SilvaDB (node: {})", node_id);
-            let silva_clone = server.silva.clone();
-            let nid_clone = node_id.clone();
-            let trace_clone = trace.clone();
-            tokio::spawn(async move { let _ = silva_clone.auto_link_similar(&nid_clone, &trace_clone, 3, 0.3).await; });
-        }
-        if let Some(emb) = embedding.as_deref()
-            && let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
-                warn!("⚠️ tylluan_do remember: embedding save failed for {}: {}", node_id, e);
-            }
-        server.notify("memory_added", serde_json::json!({
-            "node_id": node_id, "type": "episode",
-            "label": trace.chars().take(100).collect::<String>(),
-            "ts": chrono::Utc::now().timestamp_millis()
-        }));
-    }
-
-    let footer = format!("\n\n---\nRouting: guild={} tool={}\nRouting Trace:\n - {}", guild_name, tool_name, routing_trace.join("\n - "));
-    result.content.push(rmcp::model::Content::text(footer));
-    Ok(result)
+    (result, is_success)
 }
 
-/// Auto-capture friction events from guild tool call results.
-/// Parses common error patterns and logs them to the friction tracking system.
-fn capture_friction_from_result(intent: &str, guild: &str, tool: &str, result_text: &str) {
-    let lower = result_text.to_lowercase();
-    let preview: String = result_text.chars().take(100).collect();
-
-    if result_text.contains("BLOCKED:") {
-        // Extract the quoted command, e.g. "BLOCKED: 'list' is not in..." -> "list"
-        let command = result_text
-            .split("BLOCKED:").nth(1)
-            .and_then(|rest| rest.split('\'').nth(1))
-            .unwrap_or(guild);
-        crate::security::friction_log::log_blocklist_rejection(intent, command);
-    } else if lower.contains("error:") && (lower.contains("guild") || lower.contains("tool")) {
-        crate::security::friction_log::log_routing_mismatch(intent, guild, tool, &preview);
+/// Stage 4: persist remember — write episode to memory and SilvaDB graph.
+async fn persist_remember(
+    server: &TylluanServer,
+    result: &CallToolResult,
+    agent_id: &Option<String>,
+    intent: &str,
+    guild_name: &str,
+    tool_name: &str,
+    remember: bool,
+) {
+    let should_remember = remember || agent_id.is_some();
+    if !should_remember || result.is_error == Some(true) {
+        return;
     }
+
+    let output_preview = result.content.first()
+        .and_then(|c| c.as_text()).map(|t| t.text.chars().take(300).collect::<String>())
+        .unwrap_or_default();
+    let trace = match agent_id {
+        Some(aid) => format!("tylluan_do episode | agent: {aid} | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
+        None => format!("tylluan_do episode | intent: {intent} | guild: {guild_name} | tool: {tool_name} | result: {output_preview}"),
+    };
+    let meta = serde_json::json!({ "source": "tylluan_do", "guild": guild_name, "tool": tool_name, "agent_id": agent_id.as_deref().unwrap_or("anonymous") }).to_string();
+    let embedding_target = distill_for_embedding(intent, &output_preview);
+    let embedding = server.matcher.engine().and_then(|e| e.embed(&embedding_target).ok());
+    if let Err(e) = server.memory.add_document(&trace, &meta, embedding.as_deref()).await {
+        warn!("⚠️ tylluan_do remember: hybrid memory write failed: {}", e);
+    }
+    let node_id = format!("memory:{}", chrono::Utc::now().timestamp_millis());
+    if let Err(e) = server.silva.upsert_node(&node_id, "episode", &trace, &meta).await {
+        warn!("⚠️ tylluan_do remember: silva graph write failed: {}", e);
+    } else {
+        let aid = agent_id.as_deref().unwrap_or("anonymous");
+        let _ = server.silva.touch_node(&node_id, aid, "episode").await;
+        info!("🌲 tylluan_do remember: saved to SilvaDB (node: {})", node_id);
+        let silva_clone = server.silva.clone();
+        let nid_clone = node_id.clone();
+        let trace_clone = trace.clone();
+        tokio::spawn(async move { let _ = silva_clone.auto_link_similar(&nid_clone, &trace_clone, 3, 0.3).await; });
+    }
+    if let Some(emb) = embedding.as_deref()
+        && let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
+            warn!("⚠️ tylluan_do remember: embedding save failed for {}: {}", node_id, e);
+        }
+    server.notify("memory_added", serde_json::json!({
+        "node_id": node_id, "type": "episode",
+        "label": trace.chars().take(100).collect::<String>(),
+        "ts": chrono::Utc::now().timestamp_millis()
+    }));
 }
 
 /// Test helper: minimal TylluanServer with in-memory stores, no guilds.
