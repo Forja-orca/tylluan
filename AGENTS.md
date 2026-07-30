@@ -18,6 +18,31 @@ o pasar sus tests.
 
 ---
 
+## Regla obligatoria — sincroniza ANTES de reportar nada (2026-07-30)
+
+**Causa raíz de un incidente real:** un agente nuevo auditó la conexión del proyecto y reportó
+4 hallazgos como si estuvieran abiertos — los 4 ya estaban cerrados en `main`, en commits de
+minutos/horas antes. Su checkout local nunca se sincronizó contra `origin/main` al empezar la
+sesión, así que trabajó (y reportó) sobre un estado del repo que ya no existía. No es un caso
+aislado: este mismo `AGENTS.md` ya había estado meses desactualizado por la misma razón de fondo
+(nadie fuerza una sincronización al arrancar).
+
+**Regla, sin excepción, antes de escribir un solo hallazgo, PR o mensaje de "esto está roto":**
+
+```bash
+git fetch origin
+git log -1 origin/main --oneline   # commit real de main
+git log -1 HEAD --oneline          # tu commit local
+```
+
+Si difieren, `git pull` (o el equivalente de tu runtime) **antes** de seguir. Un hallazgo sobre
+código que ya cambió no es un hallazgo — es ruido que hace perder tiempo real al resto del equipo
+verificándolo. Si tu runtime no te deja sincronizar automáticamente, dilo explícitamente en tu
+primer mensaje ("mi checkout puede estar desactualizado, no lo he podido sincronizar") en vez de
+reportar con la confianza de quien sí lo hizo.
+
+---
+
 ## Environment
 
 **Platform:** Windows 11. Bash disponible solo para operaciones read-only (git, cargo check/test).  
