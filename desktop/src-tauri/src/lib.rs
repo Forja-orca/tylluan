@@ -47,6 +47,34 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
+        .on_page_load(|webview, _payload| {
+            // Injects a small floating reload button into whatever page just
+            // loaded. Fires on every navigation/reload (unlike a one-time
+            // eval() in setup(), which would only run once -- the button
+            // would vanish on the very first location.reload()). Guarded by
+            // an id check so repeated fires (page load + any SPA re-render)
+            // don't stack duplicate buttons.
+            let _ = webview.eval(
+                r#"
+                (function () {
+                    if (document.getElementById('tylluan-desktop-reload-btn')) return;
+                    var btn = document.createElement('button');
+                    btn.id = 'tylluan-desktop-reload-btn';
+                    btn.title = 'Reload dashboard (Ctrl/Cmd+R also works)';
+                    btn.textContent = '↻';
+                    btn.onclick = function () { window.location.reload(); };
+                    Object.assign(btn.style, {
+                        position: 'fixed', bottom: '16px', right: '16px', zIndex: '2147483647',
+                        width: '40px', height: '40px', borderRadius: '9999px', border: 'none',
+                        background: 'rgba(20,20,24,0.75)', color: '#fff', fontSize: '20px',
+                        cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    });
+                    document.body.appendChild(btn);
+                })();
+                "#,
+            );
+        })
         .setup(|app| {
             log::info!("Tylluan Desktop starting up");
 
