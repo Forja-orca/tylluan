@@ -31,6 +31,51 @@ use tower_http::cors::CorsLayer;
 use crate::registry::actor::RegistryHandle;
 use crate::doctor::Doctor;
 
+/// Wire format discriminators for encrypted gossip payloads.
+/// Body format:
+///   0x01 + [sender_node_id (32 ascii bytes)] + [Noise NK ciphertext]
+///   0x02 + [sender_node_id (32 ascii bytes)] + [ChaCha20-Poly1305 ciphertext]
+///   no prefix (legacy) = plaintext JSON
+const GOSSIP_DISCR_NOISE: u8 = 0x01;
+const GOSSIP_DISCR_CHACHA: u8 = 0x02;
+const NODE_ID_BYTES: usize = 32;
+
+/// Decrypt an inbound gossip wire payload.
+/// Tries Noise NK (sender_id from prefix → pubkey lookup), then ChaCha20
+/// shared_secret, then plaintext backward compat.
+pub(crate) async fn gossip_decrypt_plaintext(
+    data: &[u8],
+    shared_secret: &str,
+    identity: &tylluan_link::identity::NodeIdentity,
+    routing_table: &tokio::sync::RwLock<tylluan_link::dht::RoutingTable>,
+) -> Option<Vec<u8>> {
+    if data.is_empty() {
+        return None;
+    }
+    match data[0] {
+        GOSSIP_DISCR_NOISE => {
+            if data.len() < 1 + NODE_ID_BYTES { return None; }
+            let sender_id = std::str::from_utf8(&data[1..1 + NODE_ID_BYTES]).ok()?;
+            let ciphertext = &data[1 + NODE_ID_BYTES..];
+            let pk = routing_table.read().await
+                .all_peers().iter()
+                .find(|e| e.node_id == sender_id)
+                .and_then(|e| e.ed25519_pubkey.as_deref())
+                .map(|s| s.to_string())?;
+            tylluan_link::noise::noise_decrypt_payload(ciphertext, identity, &pk).ok()
+        }
+        GOSSIP_DISCR_CHACHA => {
+            if data.len() < 1 + NODE_ID_BYTES { return None; }
+            if shared_secret.is_empty() { return None; }
+            crate::federation::decrypt_payload(&data[1 + NODE_ID_BYTES..], shared_secret).ok()
+        }
+        _ => {
+            // No discriminator → treat as plaintext JSON (backward compat)
+            Some(data.to_vec())
+        }
+    }
+}
+
 #[cfg(feature = "bundled-dashboard")]
 #[derive(rust_embed::Embed)]
 #[folder = "../../dashboard/dist/"]
@@ -595,50 +640,107 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 capabilities: vec!["mesh".into()],
                 clock,
                 hardware: tylluan_link::gossip::HardwareCaps::default(),
+                ed25519_pubkey: Some(gossip_state.node_identity.public_key_hex().to_string()),
             };
             // Store our own entry so it's available for Pull responses
             gossip_state.gossip_engine.write().await.store_entries(std::slice::from_ref(&local_entry));
 
+            let secret = gossip_state.config.read().await.mesh.gossip.shared_secret.clone();
+
             for peer_entry in &peers {
+                let peer_pubkey = {
+                    let rt = gossip_state.dht_routing_table.read().await;
+                    rt.all_peers().iter()
+                        .find(|e| e.node_id == peer_entry.node_id)
+                        .and_then(|e| e.ed25519_pubkey.as_deref())
+                        .map(|s| s.to_string())
+                };
+
+                // Helper: build encrypted wire bytes for outbound gossip message
+                let build_wire = |body: &[u8], local_id: &str| -> Option<(Vec<u8>, &'static str)> {
+                    // Try Noise NK when peer pubkey known
+                    if let Some(ref pk) = peer_pubkey {
+                        if !pk.is_empty() {
+                            if let Ok(enc) = tylluan_link::noise::noise_encrypt_payload(body, &gossip_state.node_identity, pk) {
+                                let mut wire = Vec::with_capacity(1 + NODE_ID_BYTES + enc.len());
+                                wire.push(GOSSIP_DISCR_NOISE);
+                                wire.extend_from_slice(local_id.as_bytes());
+                                wire.extend_from_slice(&enc);
+                                return Some((wire, "application/octet-stream"));
+                            }
+                        }
+                    }
+                    // Fallback: ChaCha20 via shared_secret
+                    if !secret.is_empty() {
+                        if let Ok(enc) = crate::federation::encrypt_payload(body, &secret) {
+                            let mut wire = Vec::with_capacity(1 + NODE_ID_BYTES + enc.len());
+                            wire.push(GOSSIP_DISCR_CHACHA);
+                            wire.extend_from_slice(local_id.as_bytes());
+                            wire.extend_from_slice(&enc);
+                            return Some((wire, "application/octet-stream"));
+                        }
+                    }
+                    // Last resort: plaintext JSON
+                    Some((body.to_vec(), "application/json"))
+                };
+
+                // Process gossip entries from a response and update routing table
+                let process_entries = |val: &serde_json::Value| -> std::vec::Vec<tylluan_link::gossip::GossipEntry> {
+                    if let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
+                        entries.iter()
+                            .filter_map(|e| serde_json::from_value(e.clone()).ok())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                };
+
                 // Phase 1: Push our entry
                 let push_msg = tylluan_link::gossip::GossipMessage::push(
                     local_id.clone(),
                     clock,
                     vec![local_entry.clone()],
                 );
-                let body = match serde_json::to_string(&push_msg) {
-                    Ok(j) => j,
+                let push_body = match serde_json::to_vec(&push_msg) {
+                    Ok(b) => b,
                     Err(_) => continue,
+                };
+                let (wire_body, content_type) = match build_wire(&push_body, &local_id) {
+                    Some(v) => v,
+                    None => continue,
                 };
                 let url = format!("http://{}/api/v1/gossip", peer_entry.addr);
                 let client = reqwest::Client::new();
                 match client.post(&url)
-                    .header("Content-Type", "application/json")
-                    .body(body)
+                    .header("Content-Type", content_type)
+                    .body(wire_body)
                     .timeout(std::time::Duration::from_secs(gossip_timeout))
                     .send()
                     .await
                 {
                     Ok(resp) => {
                         gossip_state.gossip_engine.write().await.record_peer_clock(&peer_entry.node_id, clock);
-                        // Process any entries pushed back in the response
-                        if let Ok(body) = resp.text().await
-                            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&body)
-                                && let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
-                                    let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
-                                        .iter()
-                                        .filter_map(|e| serde_json::from_value(e.clone()).ok())
-                                        .collect();
-                                    if !parsed.is_empty() {
-                                        gossip_state.gossip_engine.write().await.store_entries(&parsed);
-                                        // Also insert into routing table
-                                        for e in &parsed {
-                                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
-                                                gossip_state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
-                                            }
-                                        }
-                                    }
-                                }
+                        let resp_bytes = match resp.bytes().await {
+                            Ok(b) => b,
+                            Err(_) => continue,
+                        };
+                        let response_entries = if let Some(plain) = gossip_decrypt_plaintext(
+                            &resp_bytes, &secret, &gossip_state.node_identity,
+                            &gossip_state.dht_routing_table,
+                        ).await {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plain) {
+                                process_entries(&val)
+                            } else { Vec::new() }
+                        } else { Vec::new() };
+                        gossip_state.gossip_engine.write().await.store_entries(&response_entries);
+                        for e in &response_entries {
+                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                                gossip_state.dht_routing_table.write().await.insert(
+                                    &e.node_id, addr, e.capabilities.clone(),
+                                    e.ed25519_pubkey.clone(),
+                                );
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::trace!("gossip push → {}: {}", peer_entry.addr, e);
@@ -648,34 +750,43 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 // Phase 2: Pull entries we might have missed
                 let cursor = gossip_state.gossip_engine.read().await.state.last_known(&peer_entry.node_id);
                 let pull_msg = tylluan_link::gossip::GossipMessage::pull(local_id.clone(), cursor);
-                let body = match serde_json::to_string(&pull_msg) {
-                    Ok(j) => j,
+                let pull_body = match serde_json::to_vec(&pull_msg) {
+                    Ok(b) => b,
                     Err(_) => continue,
                 };
+                let (wire_body, content_type) = match build_wire(&pull_body, &local_id) {
+                    Some(v) => v,
+                    None => continue,
+                };
                 match client.post(&url)
-                    .header("Content-Type", "application/json")
-                    .body(body)
+                    .header("Content-Type", content_type)
+                    .body(wire_body)
                     .timeout(std::time::Duration::from_secs(gossip_timeout))
                     .send()
                     .await
                 {
                     Ok(resp) => {
-                        if let Ok(body) = resp.text().await
-                            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&body)
-                                && let Some(entries) = val.get("entries").and_then(|v| v.as_array()) {
-                                    let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
-                                        .iter()
-                                        .filter_map(|e| serde_json::from_value(e.clone()).ok())
-                                        .collect();
-                                    if !parsed.is_empty() {
-                                        gossip_state.gossip_engine.write().await.store_entries(&parsed);
-                                        for e in &parsed {
-                                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
-                                                gossip_state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
-                                            }
-                                        }
-                                    }
-                                }
+                        let resp_bytes = match resp.bytes().await {
+                            Ok(b) => b,
+                            Err(_) => continue,
+                        };
+                        let response_entries = if let Some(plain) = gossip_decrypt_plaintext(
+                            &resp_bytes, &secret, &gossip_state.node_identity,
+                            &gossip_state.dht_routing_table,
+                        ).await {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plain) {
+                                process_entries(&val)
+                            } else { Vec::new() }
+                        } else { Vec::new() };
+                        gossip_state.gossip_engine.write().await.store_entries(&response_entries);
+                        for e in &response_entries {
+                            if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
+                                gossip_state.dht_routing_table.write().await.insert(
+                                    &e.node_id, addr, e.capabilities.clone(),
+                                    e.ed25519_pubkey.clone(),
+                                );
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::trace!("gossip pull → {}: {}", peer_entry.addr, e);
@@ -1216,5 +1327,106 @@ mod tests {
         assert_eq!(found_root.canonicalize().unwrap(), root_path.canonicalize().unwrap());
         assert_eq!(contract.agents.len(), 1);
         assert!(contract.agents.contains_key("claude-code"));
+    }
+
+    fn test_identity() -> tylluan_link::identity::NodeIdentity {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("identity.key");
+        // Leak the tempdir so the file stays alive for the identity's lifetime in the test.
+        std::mem::forget(temp);
+        tylluan_link::identity::NodeIdentity::load_or_create(&path).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_gossip_decrypt_plaintext_passthrough_no_prefix() {
+        // Regression guard: a legacy/no-discriminator payload (plain JSON) must be
+        // returned unchanged -- this is the backward-compat path for peers that
+        // don't have this fix yet.
+        let identity = test_identity();
+        let rt = tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("local".into()));
+        let plain = br#"{"type":"Push","sender_id":"x"}"#.to_vec();
+
+        let result = gossip_decrypt_plaintext(&plain, "", &identity, &rt).await;
+        assert_eq!(result, Some(plain));
+    }
+
+    #[tokio::test]
+    async fn test_gossip_decrypt_plaintext_chacha_fallback_roundtrip() {
+        let identity = test_identity();
+        let rt = tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("local".into()));
+        let secret = "test-shared-secret";
+        let plain = b"hello gossip";
+
+        let enc = crate::federation::encrypt_payload(plain, secret).unwrap();
+        let mut wire = vec![GOSSIP_DISCR_CHACHA];
+        wire.extend_from_slice(&[b'0'; NODE_ID_BYTES]);
+        wire.extend_from_slice(&enc);
+
+        let result = gossip_decrypt_plaintext(&wire, secret, &identity, &rt).await;
+        assert_eq!(result, Some(plain.to_vec()));
+    }
+
+    #[tokio::test]
+    async fn test_gossip_decrypt_plaintext_chacha_wrong_secret_fails() {
+        let identity = test_identity();
+        let rt = tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("local".into()));
+        let plain = b"hello gossip";
+        let enc = crate::federation::encrypt_payload(plain, "real-secret").unwrap();
+        let mut wire = vec![GOSSIP_DISCR_CHACHA];
+        wire.extend_from_slice(&[b'0'; NODE_ID_BYTES]);
+        wire.extend_from_slice(&enc);
+
+        let result = gossip_decrypt_plaintext(&wire, "wrong-secret", &identity, &rt).await;
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_gossip_decrypt_plaintext_noise_roundtrip_with_known_pubkey() {
+        // Two distinct identities: A encrypts to B, B decrypts using its own
+        // identity + A's pubkey looked up from the routing table.
+        let identity_a = test_identity();
+        let identity_b = test_identity();
+        let sender_id = "sender-node-aaaaaaaaaaaaaaaaaaaa"; // 32 ascii chars
+
+        let rt = tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("local-b".into()));
+        rt.write().await.insert(
+            sender_id,
+            "127.0.0.1:1".parse().unwrap(),
+            vec!["mesh".into()],
+            Some(identity_a.public_key_hex().to_string()),
+        );
+
+        let plain = b"secret gossip payload";
+        let enc = tylluan_link::noise::noise_encrypt_payload(plain, &identity_a, identity_b.public_key_hex()).unwrap();
+        let mut wire = vec![GOSSIP_DISCR_NOISE];
+        wire.extend_from_slice(sender_id.as_bytes());
+        wire.extend_from_slice(&enc);
+
+        let result = gossip_decrypt_plaintext(&wire, "", &identity_b, &rt).await;
+        assert_eq!(result, Some(plain.to_vec()));
+    }
+
+    #[tokio::test]
+    async fn test_gossip_decrypt_plaintext_noise_unknown_pubkey_fails() {
+        // Sender not in the routing table -- Noise decrypt must not be attempted
+        // (no pubkey to associate), so this returns None rather than panicking
+        // or falling through silently.
+        let identity_b = test_identity();
+        let rt = tokio::sync::RwLock::new(tylluan_link::dht::RoutingTable::new("local-b".into()));
+        let mut wire = vec![GOSSIP_DISCR_NOISE];
+        wire.extend_from_slice(&[b'z'; NODE_ID_BYTES]);
+        wire.extend_from_slice(&[0u8; 60]); // dummy ciphertext, never reached
+
+        let result = gossip_decrypt_plaintext(&wire, "", &identity_b, &rt).await;
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_gossip_entry_without_pubkey_field_deserializes() {
+        // Backward compat: a GossipEntry JSON from an old peer that predates the
+        // ed25519_pubkey field must still deserialize (serde default = None).
+        let json = r#"{"node_id":"x","addr":"127.0.0.1:1","capabilities":[],"clock":1}"#;
+        let entry: tylluan_link::gossip::GossipEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.ed25519_pubkey, None);
     }
 }

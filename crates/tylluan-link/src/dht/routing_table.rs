@@ -12,6 +12,7 @@ pub struct KBucketEntry {
     pub capabilities: Vec<String>,
     pub last_seen_unix: i64,
     pub last_seen: Instant,
+    pub ed25519_pubkey: Option<String>,
 }
 
 impl KBucketEntry {
@@ -22,6 +23,7 @@ impl KBucketEntry {
             capabilities,
             last_seen_unix: now_unix(),
             last_seen: Instant::now(),
+            ed25519_pubkey: None,
         }
     }
 }
@@ -53,6 +55,9 @@ impl KBucket {
             self.entries[pos].capabilities = entry.capabilities;
             self.entries[pos].last_seen = Instant::now();
             self.entries[pos].last_seen_unix = now_unix();
+            if entry.ed25519_pubkey.is_some() {
+                self.entries[pos].ed25519_pubkey = entry.ed25519_pubkey;
+            }
         } else if self.entries.len() < K {
             self.entries.push(entry);
         }
@@ -108,13 +113,14 @@ impl RoutingTable {
         255
     }
 
-    pub fn insert(&mut self, node_id: &str, addr: SocketAddr, capabilities: Vec<String>) {
+    pub fn insert(&mut self, node_id: &str, addr: SocketAddr, capabilities: Vec<String>, ed25519_pubkey: Option<String>) {
         if node_id == self.local_node_id {
             return;
         }
         let idx = Self::bucket_index(&self.local_node_id, node_id);
         if idx < self.buckets.len() {
-            let entry = KBucketEntry::new(node_id.to_string(), addr, capabilities);
+            let mut entry = KBucketEntry::new(node_id.to_string(), addr, capabilities);
+            entry.ed25519_pubkey = ed25519_pubkey;
             self.buckets[idx].insert_internal(entry);
         }
     }
@@ -196,8 +202,8 @@ mod tests {
         let peer1 = node_id_from_hex("peer1");
         let peer2 = node_id_from_hex("peer2");
 
-        rt.insert(&peer1, "192.168.1.1:3000".parse().unwrap(), vec!["mesh".into()]);
-        rt.insert(&peer2, "192.168.1.2:3000".parse().unwrap(), vec!["mesh".into(), "federation".into()]);
+        rt.insert(&peer1, "192.168.1.1:3000".parse().unwrap(), vec!["mesh".into()], None);
+        rt.insert(&peer2, "192.168.1.2:3000".parse().unwrap(), vec!["mesh".into(), "federation".into()], None);
 
         assert_eq!(rt.peer_count(), 2);
     }
@@ -209,7 +215,7 @@ mod tests {
 
         for i in 0..10 {
             let pid = node_id_from_hex(&format!("peer{i}"));
-            rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec![]);
+            rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec![], None);
         }
 
         let target = node_id_from_hex("search-target");
@@ -221,7 +227,7 @@ mod tests {
     fn test_self_insert_ignored() {
         let local = node_id_from_hex("self");
         let mut rt = RoutingTable::new(local.clone());
-        rt.insert(&local, "127.0.0.1:3000".parse().unwrap(), vec![]);
+        rt.insert(&local, "127.0.0.1:3000".parse().unwrap(), vec![], None);
         assert_eq!(rt.peer_count(), 0);
     }
 
@@ -230,8 +236,8 @@ mod tests {
         let local = node_id_from_hex("local");
         let mut rt = RoutingTable::new(local.clone());
         let pid = node_id_from_hex("peer");
-        rt.insert(&pid, "192.168.1.1:3000".parse().unwrap(), vec!["a".into()]);
-        rt.insert(&pid, "192.168.1.1:3000".parse().unwrap(), vec!["a".into(), "b".into()]);
+        rt.insert(&pid, "192.168.1.1:3000".parse().unwrap(), vec!["a".into()], None);
+        rt.insert(&pid, "192.168.1.1:3000".parse().unwrap(), vec!["a".into(), "b".into()], None);
         assert_eq!(rt.all_peers().len(), 1);
     }
 

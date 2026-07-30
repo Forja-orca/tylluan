@@ -81,6 +81,19 @@ pub fn noise_encrypt_payload(
 
 /// Decrypt a payload encrypted by `noise_encrypt_payload`.
 /// Uses Noise NK pattern: reads ephemeral public key, derives shared key, decrypts.
+///
+/// # Security note (Noise NK authentication)
+/// The `peer_pubkey_hex` parameter is decoded but NOT used in the NK responder
+/// handshake (the NK pattern derives the shared secret purely from the responder's
+/// static key + initiator's ephemeral). This means:
+/// - Confidentiality: YES — only the holder of the responder's static secret can decrypt.
+/// - Sender authentication: NO — anyone who knows the responder's public key can
+///   encrypt a valid NK message; the ciphertext does not bind the sender's identity.
+///   An attacker who knows B's pubkey can impersonate any node_id toward B.
+/// - This is NOT a regression from the unencrypted gossip baseline (zero auth today).
+/// - Message-level authentication can be added by signing the plaintext with the
+///   sender's Ed25519 key before Noise NK encryption, or by upgrading to Noise XK
+///   (which exchanges static keys in both directions).
 pub fn noise_decrypt_payload(
     data: &[u8],
     identity: &NodeIdentity,

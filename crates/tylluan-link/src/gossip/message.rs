@@ -31,6 +31,8 @@ pub struct GossipEntry {
     #[serde(default)]
     pub hardware: HardwareCaps,
     pub clock: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ed25519_pubkey: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +81,7 @@ mod tests {
                 capabilities: vec!["mesh".into()],
                 hardware: HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.3, supports_p2p: false, tcp_port: None },
                 clock: 1,
+                ed25519_pubkey: None,
             }],
         );
         let json = serde_json::to_string(&msg).unwrap();

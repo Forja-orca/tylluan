@@ -76,7 +76,7 @@ impl BootstrapConfig {
                     .unwrap_or_default()
                     .as_secs() as i64 - sp.last_seen;
                 if elapsed < 86400 {
-                    routing_table.insert(&sp.node_id, sp.addr, sp.capabilities.clone());
+                    routing_table.insert(&sp.node_id, sp.addr, sp.capabilities.clone(), None);
                     all.push(DiscoveredPeer {
                         node_id: sp.node_id.clone(),
                         addr: sp.addr.to_string(),
@@ -94,7 +94,7 @@ impl BootstrapConfig {
                 Ok(peers) => {
                     for p in &peers {
                         if let Ok(addr) = p.addr.parse::<SocketAddr>() {
-                            routing_table.insert(&p.node_id, addr, vec!["mesh".into()]);
+                            routing_table.insert(&p.node_id, addr, vec!["mesh".into()], None);
                         }
                         all.push(DiscoveredPeer {
                             node_id: p.node_id.clone(),
@@ -114,7 +114,7 @@ impl BootstrapConfig {
         for seed in &self.seed_nodes {
             if let Ok(addr) = seed.parse::<SocketAddr>() {
                 let pid = format!("seed-{seed}");
-                routing_table.insert(&pid, addr, vec!["seed".into()]);
+                routing_table.insert(&pid, addr, vec!["seed".into()], None);
                 all.push(DiscoveredPeer {
                     node_id: pid,
                     addr: seed.clone(),
@@ -267,6 +267,7 @@ mod tests {
             &peer_id,
             "192.168.1.42:3000".parse::<SocketAddr>().unwrap(),
             vec!["mesh".into()],
+            None,
         );
 
         let config = BootstrapConfig {
