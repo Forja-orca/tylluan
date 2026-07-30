@@ -216,23 +216,10 @@ def write_edge(source: str, predicate: str, target: str, metadata: dict = None) 
 
 
 def add_edge_direct(source: str, predicate: str, target: str, metadata: dict = None) -> bool:
-    """Write a knowledge triple directly to the SQLite silva.db database."""
-    silva_path = get_silva_db_path()
-    if not silva_path.exists():
-        return False
-    try:
-        conn = sqlite3.connect(str(silva_path))
-        conn.execute(
-            """INSERT OR IGNORE INTO edges (source, target, type, metadata, weight)
-               VALUES (?, ?, ?, ?, 1.0)""",
-            (source, target, predicate, json.dumps(metadata or {})),
-        )
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"silva_utils: error adding edge: {e}")
-        return False
+    """Write a knowledge triple as an edge — delegates to write_edge() (IPC).
+    Kept as a backward-compatible alias; new code should call write_edge() directly.
+    """
+    return write_edge(source, predicate, target, metadata)
 
 
 def extract_triples_local(content: str) -> list[tuple[str, str, str]]:
@@ -271,20 +258,26 @@ def extract_triples_local(content: str) -> list[tuple[str, str, str]]:
 
 
 def ensure_node_exists(node_id: str, node_type: str = "entity") -> bool:
-    """Checks if a node exists, or creates a stub if missing."""
+    """Checks if a node exists, or creates a stub if missing.
+
+    Uses a single INSERT OR IGNORE — atomic, no SELECT+INSERT race.
+    Remains as direct SQLite because the kernel has no endpoint to create
+    a node with a caller-specified ID (POST /api/v1/silva/node generates
+    a UUID). The callers (code_graph.py, etc.) need a predictable ID so
+    edges can reference it. The stub has no meaningful content to embed,
+    so the embedding bypass is acceptable.
+    """
     silva_path = get_silva_db_path()
     if not silva_path.exists():
         return False
     try:
         conn = sqlite3.connect(str(silva_path))
-        res = conn.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,)).fetchone()
-        if not res:
-            now = datetime.now().isoformat()
-            conn.execute(
-                "INSERT INTO nodes (id, type, content, weight, created_at, updated_at) VALUES (?, ?, ?, 1.0, ?, ?)",
-                (node_id, node_type, node_id, now, now)
-            )
-            conn.commit()
+        now = datetime.now().isoformat()
+        conn.execute(
+            "INSERT OR IGNORE INTO nodes (id, type, content, weight, created_at, updated_at, provenance) VALUES (?, ?, ?, 1.0, ?, ?, 'guild_stub')",
+            (node_id, node_type, node_id, now, now)
+        )
+        conn.commit()
         conn.close()
         return True
     except Exception:

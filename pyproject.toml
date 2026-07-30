@@ -27,6 +27,7 @@ dependencies = [
     "pillow>=10.0",
     "huggingface_hub>=0.25",
     "tokenizers>=0.20",
+    "transformers>=4.45",
 ]
 
 [project.optional-dependencies]

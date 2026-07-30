@@ -11,10 +11,23 @@ share the same memory as the Rust kernel.
 import json
 import os
 import urllib.request
+from pathlib import Path
 from typing import Optional
 
-KERNEL_URL = os.environ.get("TYLLUAN_KERNEL_URL", "http://127.0.0.1:3030")
-AUTH_TOKEN = os.environ.get("TYLLUAN_AUTH_TOKEN", "")
+def _resolve_kernel_base() -> str:
+    if "TYLLUAN_KERNEL_URL" in os.environ:
+        return os.environ["TYLLUAN_KERNEL_URL"]
+    port_file = Path(__file__).resolve().parent.parent.parent.parent / "data" / "active_port.json"
+    try:
+        data = json.loads(port_file.read_text())
+        port = data.get("port", 4000)
+        return f"http://127.0.0.1:{port}"
+    except Exception:
+        return "http://127.0.0.1:4000"
+
+
+KERNEL_URL = _resolve_kernel_base()
+AUTH_TOKEN = os.environ.get("TYLLUAN_TOKEN")
 TIMEOUT_SECONDS = 30
 
 

@@ -34,10 +34,10 @@ def _resolve_kernel_base() -> str:
     port_file = _REPO_ROOT / "data" / "active_port.json"
     try:
         data = json.loads(port_file.read_text())
-        port = data.get("port", 3030)
+        port = data.get("port", 4000)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:3030"
+        return "http://127.0.0.1:4000"
 
 
 KERNEL_BASE = _resolve_kernel_base()
