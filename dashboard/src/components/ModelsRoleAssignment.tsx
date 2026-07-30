@@ -140,19 +140,24 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
             </div>
 
             <div>
-              {models?.detected_local_models?.length > 0 ? (
+              {models?.detected_local_models?.length > 0 ? (() => {
+                const filtered = role.id === 'vision'
+                  ? models.detected_local_models.filter((m: any) => m.model_type === 'vision')
+                  : models.detected_local_models.filter((m: any) => (m.model_type || 'generative') === 'generative');
+                return (
                 <select
                   value={role.value}
                   onChange={(e) => role.setter(e.target.value)}
                   className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 focus:border-amber-500 focus:outline-none"
                 >
-                  {models.detected_local_models.map((m: any) => (
+                  {filtered.map((m: any) => (
                     <option key={m.id || m.name} value={m.id || m.name}>
                       {m.name} {m.size_mb ? `(${m.size_mb} MB)` : ''}
                     </option>
                   ))}
                 </select>
-              ) : (
+                );
+              })() : (
                 <input
                   type="text"
                   value={role.value}
