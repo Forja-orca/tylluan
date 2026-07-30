@@ -1774,7 +1774,7 @@ mod tests {
     async fn test_mcp_ping_success() {
         let url = start_mock_mcp(200, r#"{"jsonrpc":"2.0","id":"1","result":{}}"#).await;
         let res = mcp_ping_server(&url, 5).await;
-        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert!(res.ok, "expected ok=true, got {res:?}");
         assert_eq!(res.status, "online");
         assert_eq!(res.http_status, 200);
         assert!(res.latency_ms < 5000, "latency too high: {}ms", res.latency_ms);
@@ -1792,7 +1792,7 @@ mod tests {
     async fn test_mcp_ping_connection_refused() {
         let url = "http://127.0.0.1:46891/messages".to_string();
         let res = mcp_ping_server(&url, 3).await;
-        assert!(!res.ok, "expected ok=false for connection refused, got {:?}", res);
+        assert!(!res.ok, "expected ok=false for connection refused, got {res:?}");
         assert_eq!(res.status, "offline");
     }
 
@@ -1832,7 +1832,7 @@ mod tests {
             r#"{"id":"chatcmpl-x","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"A"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}"#,
         ).await;
         let res = test_external_provider("openai_compatible", &base, "sk-test-key", "gpt-4o-mini", 5).await;
-        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert!(res.ok, "expected ok=true, got {res:?}");
         assert_eq!(res.status, "online");
         assert_eq!(res.http_status, 200);
     }
@@ -1845,7 +1845,7 @@ mod tests {
             r#"{"id":"msg_01X","type":"message","role":"assistant","content":[{"type":"text","text":"A"}],"model":"claude-3-opus-20240229","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":1}}"#,
         ).await;
         let res = test_external_provider("anthropic_compatible", &base, "sk-ant-key", "claude-3-opus-20240229", 5).await;
-        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert!(res.ok, "expected ok=true, got {res:?}");
         assert_eq!(res.status, "online");
         assert_eq!(res.http_status, 200);
     }
@@ -1858,7 +1858,7 @@ mod tests {
             r#"{"model":"llama3.2","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"A"},"done":true}"#,
         ).await;
         let res = test_external_provider("ollama_compatible", &base, "", "llama3.2", 5).await;
-        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert!(res.ok, "expected ok=true, got {res:?}");
         assert_eq!(res.status, "online");
         assert_eq!(res.http_status, 200);
     }
@@ -1919,7 +1919,7 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         let res = test_external_provider("anthropic_compatible", &base_url, "sk-ant-key", "claude-3", 5).await;
-        assert!(res.ok, "Anthropic test should succeed, got {:?}", res);
+        assert!(res.ok, "Anthropic test should succeed, got {res:?}");
 
         let hdrs = captured_headers.lock().await;
         let hdr_text = hdrs.join("\n");
