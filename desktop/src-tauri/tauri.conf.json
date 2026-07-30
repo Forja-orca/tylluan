@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "tylluan-desktop-feasibility",
+  "version": "0.1.0",
+  "identifier": "com.tylluan.desktop.feasibility",
+  "build": {
+    "removeUnusedCommands": true,
+    "devUrl": "http://127.0.0.1:4000"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tylluan Desktop (feasibility spike)",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": false,
+        "center": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "transparent": false,
+        "shadow": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost"
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "publisher": "Tylluan Contributors",
+    "category": "DeveloperTool",
+    "shortDescription": "Tylluan Desktop — feasibility spike, not for distribution",
+    "copyright": "Copyright (c) Tylluan Contributors. MIT license."
+  }
+}
