@@ -265,6 +265,8 @@ pub struct GossipConfig {
     pub max_peer_cursors: usize,
     #[serde(default = "default_gossip_timeout_secs")]
     pub timeout_secs: u64,
+    #[serde(default)]
+    pub shared_secret: String,
 }
 fn default_gossip_enabled() -> bool { true }
 fn default_gossip_interval() -> u64 { 30 }
@@ -282,6 +284,7 @@ impl Default for GossipConfig {
             max_entries: 1000,
             max_peer_cursors: 100,
             timeout_secs: 5,
+            shared_secret: String::new(),
         }
     }
 }

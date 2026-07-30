@@ -172,6 +172,7 @@ impl GossipState {
             capabilities,
             hardware,
             clock: self.local_clock,
+            ed25519_pubkey: None,
         }
     }
 
@@ -335,6 +336,7 @@ mod tests {
             capabilities: vec!["mesh".into()],
             hardware: HardwareCaps::default(),
             clock,
+            ed25519_pubkey: None,
         }
     }
 
@@ -371,7 +373,7 @@ mod tests {
         let mut rt = RoutingTable::new(local.clone());
         for i in 0..10 {
             let pid = node_id_from_bytes(format!("peer{i}").as_bytes());
-            rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec!["mesh".into()]);
+            rt.insert(&pid, format!("192.168.1.{}:3000", i + 1).parse().unwrap(), vec!["mesh".into()], None);
         }
         let peers = state.select_peers(&rt, 3);
         assert_eq!(peers.len(), 3);

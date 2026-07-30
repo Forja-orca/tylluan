@@ -201,6 +201,7 @@ async fn test_gossip_dst_concurrent_conflicting_updates() {
         capabilities: vec!["stale".into()],
         clock: 5,
         hardware: HardwareCaps::default(),
+        ed25519_pubkey: None,
     };
     let entry_x_fresh = GossipEntry {
         node_id: "node-x".to_string(),
@@ -208,6 +209,7 @@ async fn test_gossip_dst_concurrent_conflicting_updates() {
         capabilities: vec!["fresh".into()],
         clock: 10,
         hardware: HardwareCaps::default(),
+        ed25519_pubkey: None,
     };
 
     engine_a.store_entries(&[entry_x_stale]);

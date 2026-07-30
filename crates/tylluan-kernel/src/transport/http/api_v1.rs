@@ -2075,21 +2075,48 @@ async fn audit_log_handler(
 
 async fn gossip_handler(
     State(state): State<Arc<HttpState>>,
-    Json(payload): Json<serde_json::Value>,
-) -> impl IntoResponse {
+    body: axum::body::Bytes,
+) -> Response {
+    let secret = state.config.read().await.mesh.gossip.shared_secret.clone();
+
+    // Extract sender node_id from wire prefix before decryption
+    let request_sender_id = if body.len() > 1 + crate::transport::http::NODE_ID_BYTES
+        && (body[0] == crate::transport::http::GOSSIP_DISCR_NOISE
+            || body[0] == crate::transport::http::GOSSIP_DISCR_CHACHA)
+    {
+        String::from_utf8_lossy(&body[1..1 + crate::transport::http::NODE_ID_BYTES]).to_string()
+    } else {
+        String::new()
+    };
+
+    let plain_body = match crate::transport::http::gossip_decrypt_plaintext(
+        &body, &secret, &state.node_identity, &state.dht_routing_table,
+    ).await {
+        Some(p) => match std::str::from_utf8(&p) {
+            Ok(s) => s.to_string().into_bytes(),
+            Err(_) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "decrypted payload is not valid UTF-8"}))).into_response(),
+        },
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "failed to decrypt gossip payload"}))).into_response(),
+    };
+
+    let payload: serde_json::Value = match serde_json::from_slice(&plain_body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("invalid JSON: {e}")}))).into_response();
+        }
+    };
+
     let msg_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-    match msg_type {
+    let response = match msg_type {
         "Push" => {
             let sender_id = payload.get("sender_id").and_then(|v| v.as_str()).unwrap_or("");
             let sender_clock = payload.get("sender_clock").and_then(|v| v.as_u64()).unwrap_or(0);
 
-            // Record sender's clock
             if !sender_id.is_empty() {
                 state.gossip_engine.write().await.record_peer_clock(sender_id, sender_clock);
             }
 
-            // Accept incoming entries
             if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
                 let parsed: Vec<tylluan_link::gossip::GossipEntry> = entries
                     .iter()
@@ -2099,34 +2126,25 @@ async fn gossip_handler(
                     state.gossip_engine.write().await.store_entries(&parsed);
                     for e in &parsed {
                         if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
-                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone(), e.ed25519_pubkey.clone());
                         }
                     }
                 }
             }
 
-            // Symmetric response: only send entries newer than what the sender already knows
             let response_entries = state.gossip_engine.read().await.entries_since(sender_clock);
-            (StatusCode::OK, Json(serde_json::json!({
-                "status": "ok",
-                "entries": response_entries,
-            })))
+            serde_json::json!({"status": "ok", "entries": response_entries})
         }
         "Pull" => {
             let cursor = payload.get("cursor").and_then(|v| v.as_u64()).unwrap_or(0);
             let sender_id = payload.get("sender_id").and_then(|v| v.as_str()).unwrap_or("");
 
-            // Record that this peer is catching up
             if !sender_id.is_empty() {
                 state.gossip_engine.write().await.record_peer_clock(sender_id, cursor);
             }
 
-            // Return all entries since their cursor
             let response_entries = state.gossip_engine.read().await.entries_since(cursor);
-            (StatusCode::OK, Json(serde_json::json!({
-                "status": "ok",
-                "entries": response_entries,
-            })))
+            serde_json::json!({"status": "ok", "entries": response_entries})
         }
         "PullResponse" => {
             if let Some(entries) = payload.get("entries").and_then(|v| v.as_array()) {
@@ -2138,15 +2156,14 @@ async fn gossip_handler(
                     state.gossip_engine.write().await.store_entries(&parsed);
                     for e in &parsed {
                         if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
-                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone(), e.ed25519_pubkey.clone());
                         }
                     }
                 }
             }
-            (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
+            serde_json::json!({"status": "ok"})
         }
         _ => {
-            // Legacy plain push (no type tag) — keep backward compat
             if let Some(sender_id) = payload.get("sender_id").and_then(|v| v.as_str())
                 && let Some(clock) = payload.get("sender_clock").and_then(|v| v.as_u64()) {
                     state.gossip_engine.write().await.record_peer_clock(sender_id, clock);
@@ -2160,12 +2177,59 @@ async fn gossip_handler(
                     state.gossip_engine.write().await.store_entries(&parsed);
                     for e in &parsed {
                         if let Ok(addr) = e.addr.parse::<std::net::SocketAddr>() {
-                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone());
+                            state.dht_routing_table.write().await.insert(&e.node_id, addr, e.capabilities.clone(), e.ed25519_pubkey.clone());
                         }
                     }
                 }
             }
-            (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
+            serde_json::json!({"status": "ok"})
+        }
+    };
+
+    // Encrypt response using Noise NK (preferred) or ChaCha20 fallback
+    let response_bytes = match serde_json::to_vec(&response) {
+        Ok(b) => b,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("serialize failed: {e}")}))).into_response();
+        }
+    };
+    let local_id = state.node_identity.node_id().to_string();
+    let peer_pubkey = {
+        let rt = state.dht_routing_table.read().await;
+        rt.all_peers().iter()
+            .find(|e| e.node_id == request_sender_id)
+            .and_then(|e| e.ed25519_pubkey.as_deref())
+            .map(|s| s.to_string())
+    };
+    let encrypted = if let Some(ref pk) = peer_pubkey {
+        if !pk.is_empty() {
+            tylluan_link::noise::noise_encrypt_payload(&response_bytes, &state.node_identity, pk).ok()
+        } else { None }
+    } else { None };
+    match encrypted {
+        Some(enc) => {
+            let mut wire = Vec::with_capacity(1 + crate::transport::http::NODE_ID_BYTES + enc.len());
+            wire.push(crate::transport::http::GOSSIP_DISCR_NOISE);
+            wire.extend_from_slice(local_id.as_bytes());
+            wire.extend_from_slice(&enc);
+            (StatusCode::OK, [("Content-Type", "application/octet-stream")], wire).into_response()
+        }
+        None if !secret.is_empty() => {
+            match crate::federation::encrypt_payload(&response_bytes, &secret) {
+                Ok(enc) => {
+                    let mut wire = Vec::with_capacity(1 + crate::transport::http::NODE_ID_BYTES + enc.len());
+                    wire.push(crate::transport::http::GOSSIP_DISCR_CHACHA);
+                    wire.extend_from_slice(local_id.as_bytes());
+                    wire.extend_from_slice(&enc);
+                    (StatusCode::OK, [("Content-Type", "application/octet-stream")], wire).into_response()
+                }
+                Err(e) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("encrypt failed: {e}")}))).into_response()
+                }
+            }
+        }
+        _ => {
+            (StatusCode::OK, Json(response)).into_response()
         }
     }
 }

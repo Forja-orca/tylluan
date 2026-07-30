@@ -8,6 +8,7 @@ fn make_entry(node_id: &str, clock: u64) -> GossipEntry {
         capabilities: vec!["mesh".into()],
         hardware: HardwareCaps::default(),
         clock,
+        ed25519_pubkey: None,
     }
 }
 
