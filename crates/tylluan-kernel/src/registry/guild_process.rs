@@ -1072,6 +1072,7 @@ impl GuildRegistry {
                     last_latency_ms: g.last_latency_ms,
                     launcher_type,
                     capabilities,
+                    agent_roles: g.agent_roles.clone(),
                 }
             })
             .collect()
@@ -1293,6 +1294,10 @@ pub struct GuildStatus {
     /// Null if the guild doesn't declare capabilities.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<serde_json::Value>,
+    /// Agent roles assigned to this guild (e.g. ["architect","backend-dev"]).
+    /// Empty if the guild has no role restrictions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agent_roles: Vec<String>,
 }
 
 /// Result of a guild ingestion attempt (Phase B).
