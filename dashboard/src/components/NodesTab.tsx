@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Send, Radio, Users, Cpu, ShieldCheck, Inbox, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
+import { useNexus } from '../hooks/useNexus';
+import type { NexusBridge } from '../lib/api-client';
 
 interface NodeInfo {
   agent_id: string;
@@ -11,23 +13,25 @@ interface NodeInfo {
   last_active: number;
 }
 
-export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: string, t?: any) => void }) {
+export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; notify: (msg: string, t?: any) => void }) {
+  const { bridge } = useNexus();
+  const effectiveBridge: NexusBridge | null = bridge ?? (_bridgeProp as NexusBridge | null);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [targetId, setTargetId] = useState('');
   const [message, setMessage] = useState('');
 
   const fetchNodes = useCallback(async () => {
+    if (!effectiveBridge) return;
     try {
-      const res = await fetch('/api/v1/nodes');
-      const data = await res.json();
+      const data = await effectiveBridge.fetchRaw('/api/v1/nodes');
       setNodes(data.nodes || []);
     } catch (e) {
       notify(`Error fetching nodes: ${e}`, 'error');
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [effectiveBridge, notify]);
 
   useEffect(() => { 
     fetchNodes(); 
@@ -37,14 +41,13 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
   usePolling('nodes-fetch', fetchNodes, { interval: 'standard', enabled: true });
 
   const sendMessage = async () => {
-    if (!targetId || !message) return;
+    if (!targetId || !message || !effectiveBridge) return;
     try {
-      const res = await fetch(`/api/v1/nodes/${encodeURIComponent(targetId)}/send`, {
+      const data = await effectiveBridge.fetchRaw(`/api/v1/nodes/${encodeURIComponent(targetId)}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: 'dashboard', payload: message, msg_type: 'direct' }),
       });
-      const data = await res.json();
       if (data.delivered) {
         notify(`Message delivered to ${targetId}`, 'info');
         setMessage('');
@@ -57,9 +60,9 @@ export function NodesTab({ bridge, notify }: { bridge: unknown; notify: (msg: st
   };
 
   const registerNode = async () => {
+    if (!effectiveBridge) return;
     try {
-      const res = await fetch('/api/v1/nodes/dashboard/register', { method: 'POST' });
-      const data = await res.json();
+      const data = await effectiveBridge.fetchRaw('/api/v1/nodes/dashboard/register', { method: 'POST' });
       notify(`Node registered: ${data.status || 'ok'}`, 'info');
       fetchNodes();
     } catch (e) {

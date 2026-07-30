@@ -76,6 +76,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   // --- Recent Sidebar State ---
   const [showRecentSidebar, setShowRecentSidebar] = useState(false);
   const [recentNodes, setRecentNodes] = useState<GraphNode[]>([]);
+  const [recentLoaded, setRecentLoaded] = useState(false);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
@@ -144,6 +145,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
       setRecentNodes(res);
     } catch (e) {
       console.error('Failed to load recent nodes:', e);
+      setRecentNodes([]);
+    } finally {
+      setRecentLoaded(true);
     }
   }, [bridge]);
 
@@ -655,8 +659,10 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2">
-                  {recentNodes.length === 0 ? (
+                  {!recentLoaded ? (
                     <p className="text-xs text-slate-500 text-center py-4">Cargando...</p>
+                  ) : recentNodes.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-4">Sin datos recientes</p>
                   ) : (
                     recentNodes.map((node, i) => {
                       const timeAgo = node.created_at 

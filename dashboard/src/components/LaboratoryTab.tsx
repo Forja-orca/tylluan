@@ -14,35 +14,7 @@ interface Props {
 
 export function LaboratoryTab({ bridge, notify }: Props) {
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<AutoResearchSummary>({
-    status: "Idle",
-    current_mutation: null,
-    progress: {
-      current_step: 0,
-      total_steps: 100,
-      last_improvement_at: 0
-    },
-    metrics: {
-      baseline: { recall_1: 0.65, recall_5: 0.90, latency_ms: 202.0 },
-      current: { recall_1: 0.65, recall_5: 0.90, latency_ms: 202.0 }
-    },
-    lineage: [
-      {
-        step: 1,
-        target: "retrolink_orphans_score",
-        val: 0.22,
-        recall_1: 0.67,
-        status: "Committed"
-      },
-      {
-        step: 2,
-        target: "Jina_threshold",
-        val: 0.75,
-        recall_1: 0.65,
-        status: "Reverted"
-      }
-    ]
-  });
+  const [data, setData] = useState<AutoResearchSummary | null>(null);
 
   const fetchData = async () => {
     if (!bridge) return;
@@ -51,6 +23,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
       setData(summary);
     } catch (err) {
       console.error("Failed to fetch AutoResearch summary", err);
+      setData(null);
     }
   };
 
@@ -116,7 +89,19 @@ export function LaboratoryTab({ bridge, notify }: Props) {
     }
   };
 
-  const recallImprovement = data.metrics.current.recall_1 - data.metrics.baseline.recall_1;
+  const recallImprovement = data ? data.metrics.current.recall_1 - data.metrics.baseline.recall_1 : 0;
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <Beaker className="w-12 h-12 text-slate-700" />
+        <div className="text-center space-y-1">
+          <p className="text-sm font-bold text-slate-400">AutoResearch no disponible</p>
+          <p className="text-xs text-slate-500">El endpoint de AutoResearch no respondio o no esta habilitado en este kernel.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
