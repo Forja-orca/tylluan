@@ -741,6 +741,161 @@ pub struct ExternalProvider {
     pub models: Vec<String>,
 }
 
+/// SSRF guard result for an external provider config entry.
+#[derive(Debug)]
+pub enum ExternalProviderRisk {
+    Safe,
+    DangerousUrl(String),
+    MissingKeyEnv,
+    SuspiciousKeyEnv(String),
+}
+
+/// Validate an ExternalProvider config entry against SSRF and env-var
+/// exfiltration risks. Returns [`ExternalProviderRisk::Safe`] only when
+/// the entry is safe to use.
+///
+/// ## URL rules (SSRF)
+/// - **Deny**: cloud metadata IPs (`169.254.169.254`), wildcard `0.0.0.0`,
+///   private RFC-1918 ranges (`10.x`, `172.16-31.x`, `192.168.x`) — these
+///   are never valid inference endpoints.
+/// - **Allow**: `localhost`, `127.0.0.1`, `[::1]` on any port.
+/// - **Allow**: any public / well-known hostname (e.g. `api.openai.com`).
+///
+/// ## api_key_env rules (env-var exfiltration)
+/// - **Block**: names that are *never* API keys (`HOME`, `PATH`, `USER`,
+///   `SHELL`, `PWD`, `LD_PRELOAD`, `TMPDIR`, `TEMP`, `TMP`, `HOSTNAME`,
+///   `HOST`, `COMPUTERNAME`, `USERNAME`, `OS`, `PROCESSOR_*`).
+/// - **Allow**: names containing `KEY`, `TOKEN`, `SECRET`, `API_KEY`, `AUTH`,
+///   `PASS`, `CREDENTIAL` (case-insensitive), OR names in the known-good
+///   list (`OPENAI_BASE_URL`, `LITELLM_API_BASE`, `OLLAMA_HOST`).
+/// - **Warn** (still allow): names that match neither pattern, so we don't
+///   break legit custom names — but the warning is visible at startup.
+pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderRisk {
+    // ── URL validation ──────────────────────────────────────────────
+    let url_ok = (|| -> Result<(), String> {
+        let base = provider.base_url.trim();
+        if !base.starts_with("http://") && !base.starts_with("https://") {
+            return Err(format!("base_url '{}' must start with http:// or https://", provider.base_url));
+        }
+        // Extract host: between :// and next / or end
+        let after_scheme = base.split("://").nth(1).unwrap_or("");
+        let host = after_scheme.split('/').next().unwrap_or("")
+            .split(':').next().unwrap_or("") // strip port
+            .trim_start_matches('[').trim_end_matches(']'); // strip IPv6 brackets
+
+        // Always deny cloud metadata IP
+        if host == "169.254.169.254" {
+            return Err("cloud metadata endpoint (169.254.169.254)".into());
+        }
+        // Deny 0.0.0.0 (wildcard bind)
+        if host == "0.0.0.0" {
+            return Err("wildcard address 0.0.0.0".into());
+        }
+        // Allow localhost/loopback freely (Ollama, LM Studio, local llama.cpp)
+        if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+            return Ok(());
+        }
+        // Parse as IP and check private ranges
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            if ip.is_loopback() {
+                return Ok(());
+            }
+            if let std::net::IpAddr::V4(v4) = ip {
+                if v4.is_private() {
+                    return Err(format!("private RFC-1918 IP range ('{host}')"));
+                }
+            }
+        }
+        Ok(())
+    })();
+
+    if let Err(ref reason) = url_ok {
+        return ExternalProviderRisk::DangerousUrl(format!(
+            "base_url '{}' — {reason}",
+            provider.base_url
+        ));
+    }
+
+    // ── api_key_env validation ──────────────────────────────────────
+    let env_name = provider.api_key_env.trim();
+    if env_name.is_empty() {
+        return ExternalProviderRisk::MissingKeyEnv;
+    }
+
+    // Hard-block list: env vars that are NEVER credentials
+    const NEVER_CREDENTIALS: &[&str] = &[
+        "HOME", "PATH", "USER", "SHELL", "PWD", "OLDPWD",
+        "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
+        "TMPDIR", "TEMP", "TMP", "HOSTNAME", "HOST",
+        "COMPUTERNAME", "USERNAME", "OS", "LOGNAME",
+        "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
+        "PROCESSOR_LEVEL", "PROCESSOR_REVISION",
+        "SYSTEMDRIVE", "SYSTEMROOT", "WINDIR", "PUBLIC",
+        "ALLUSERSPROFILE", "APPDATA", "LOCALAPPDATA",
+        "COMMONPROGRAMFILES", "PROGRAMDATA", "PROGRAMFILES",
+        "PSMODULEPATH", "PATHEXT",
+    ];
+    let upper = env_name.to_uppercase();
+    if NEVER_CREDENTIALS.contains(&upper.as_str()) {
+        return ExternalProviderRisk::SuspiciousKeyEnv(format!(
+            "api_key_env '{}' is a system environment variable, not an API key — blocked",
+            provider.api_key_env
+        ));
+    }
+
+    // Known-good names that don't necessarily contain KEY/TOKEN etc
+    const KNOWN_GOOD: &[&str] = &[
+        "OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST",
+    ];
+    if KNOWN_GOOD.contains(&upper.as_str()) {
+        return ExternalProviderRisk::Safe;
+    }
+
+    // Strict suffix convention: api_key_env must end with _API_KEY or _TOKEN
+    // (uppercase, underscores only). This prevents exotic env var names like
+    // AWS_SECRET_ACCESS_KEY (which doesn't end in _API_KEY or _TOKEN) from
+    // being silently used for secret exfiltration via the test-connection
+    // endpoint. Known-good exceptions are handled above.
+    let suffix_valid = upper.ends_with("_API_KEY") || upper.ends_with("_TOKEN");
+    if !suffix_valid {
+        return ExternalProviderRisk::SuspiciousKeyEnv(format!(
+            "api_key_env '{}' does not follow the naming convention (must end with _API_KEY or _TOKEN) — rename it, e.g. {}_API_KEY",
+            provider.api_key_env, upper
+        ));
+    }
+
+    ExternalProviderRisk::Safe
+}
+
+impl ExternalProvider {
+    /// Returns `Ok(())` if the provider config is safe, or a description
+    /// of what's wrong. Runs both URL (SSRF) and api_key_env checks.
+    pub fn is_safe(&self) -> Result<(), String> {
+        match check_external_provider(self) {
+            ExternalProviderRisk::Safe => Ok(()),
+            ExternalProviderRisk::DangerousUrl(msg) => Err(msg),
+            ExternalProviderRisk::MissingKeyEnv => Err(
+                format!("External provider '{}': api_key_env is empty — set it to the env var name that holds the API key", self.name)
+            ),
+            ExternalProviderRisk::SuspiciousKeyEnv(msg) => Err(msg),
+        }
+    }
+
+    /// Validate all external providers in a config. Logs warnings and
+    /// removes unsafe entries. Called from `validate_security()`.
+    pub fn validate_all(cfg: &mut TylluanConfig) {
+        cfg.external_providers.retain(|p| {
+            match p.is_safe() {
+                Ok(()) => true,
+                Err(msg) => {
+                    warn!("Removing unsafe external provider '{name}': {msg}", name = p.name);
+                    false
+                }
+            }
+        });
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SilvaConfig {
     #[serde(default = "default_silva_db_path")]
@@ -1538,6 +1693,8 @@ impl TylluanConfig {
             );
             self.nexus.host = "127.0.0.1".to_string();
         }
+        // SSRF + env-var exfiltration guard for external providers
+        ExternalProvider::validate_all(self);
     }
 
     /// Set by main.rs when `--config <path>` is passed on the CLI. Checked
@@ -1828,5 +1985,127 @@ code = "permissive"
         // resolve_docker_profile should return global, not session
         let (_profile, origin) = resolve_docker_profile("bash").await;
         assert_eq!(origin, "global");
+    }
+
+    // ─── External provider SSRF + env-var exfiltration tests ────────
+
+    #[test]
+    fn test_external_provider_accepts_https_public_url() {
+        let p = ExternalProvider {
+            name: "openai".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com".into(),
+            api_key_env: "OPENAI_API_KEY".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::Safe));
+    }
+
+    #[test]
+    fn test_external_provider_accepts_ollama_localhost() {
+        let p = ExternalProvider {
+            name: "ollama".into(),
+            provider_type: ExternalProviderType::OllamaCompatible,
+            base_url: "http://127.0.0.1:11434".into(),
+            api_key_env: "OLLAMA_HOST".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::Safe));
+    }
+
+    #[test]
+    fn test_external_provider_rejects_cloud_metadata_ip() {
+        let p = ExternalProvider {
+            name: "evil".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "http://169.254.169.254/latest/meta-data/".into(),
+            api_key_env: "MY_API_KEY".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::DangerousUrl(_)));
+    }
+
+    #[test]
+    fn test_external_provider_rejects_private_lan_ip() {
+        let p = ExternalProvider {
+            name: "lan".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "http://192.168.1.5:8080".into(),
+            api_key_env: "MY_API_KEY".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::DangerousUrl(_)));
+    }
+
+    #[test]
+    fn test_external_provider_rejects_bad_api_key_env_name() {
+        let p = ExternalProvider {
+            name: "aws".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com".into(),
+            api_key_env: "AWS_SECRET_ACCESS_KEY".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::SuspiciousKeyEnv(_)));
+    }
+
+    #[test]
+    fn test_external_provider_rejects_system_env_var() {
+        let p = ExternalProvider {
+            name: "test".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com".into(),
+            api_key_env: "HOME".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::SuspiciousKeyEnv(_)));
+    }
+
+    #[test]
+    fn test_external_provider_rejects_empty_key_env() {
+        let p = ExternalProvider {
+            name: "test".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com".into(),
+            api_key_env: "".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::MissingKeyEnv));
+    }
+
+    #[test]
+    fn test_external_provider_accepts_known_good_key_env() {
+        let p = ExternalProvider {
+            name: "ollama".into(),
+            provider_type: ExternalProviderType::OllamaCompatible,
+            base_url: "http://127.0.0.1:11434".into(),
+            api_key_env: "OLLAMA_HOST".into(),
+            models: vec![],
+        };
+        assert!(matches!(check_external_provider(&p), ExternalProviderRisk::Safe));
+    }
+
+    #[test]
+    fn test_external_provider_is_safe_ok() {
+        let p = ExternalProvider {
+            name: "openai".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "https://api.openai.com".into(),
+            api_key_env: "OPENAI_API_KEY".into(),
+            models: vec![],
+        };
+        assert!(p.is_safe().is_ok());
+    }
+
+    #[test]
+    fn test_external_provider_is_safe_err() {
+        let p = ExternalProvider {
+            name: "evil".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: "http://169.254.169.254/latest".into(),
+            api_key_env: "MY_API_KEY".into(),
+            models: vec![],
+        };
+        assert!(p.is_safe().is_err());
     }
 }
