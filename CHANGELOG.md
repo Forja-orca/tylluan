@@ -4,6 +4,42 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.15.0] — 2026-07-30 — Connection audit · mandatory mesh encryption · CoherenceGate Layer 4 live
+
+155 commits since v0.14.0 (2026-07-27). The theme of this release is different from most: instead of adding new surface area, most of this cycle went into auditing what earlier milestones claimed was "wired" or "in production" and verifying it against a live, running kernel — real HTTP calls, real SQL queries, real inference, not just reading code and assuming it worked. Several real bugs only surfaced this way.
+
+**Full connection audit — guild IPC, memory writes, dashboard data**
+- 5 guilds (`coloquio`, `coloquio_digest`, `coordinator`, `scheduler`, `memory_bridge`) had their kernel IPC defaulting to port `3030` — ForjaMCPo3's port, not Tylluan's `4000` — with no live traffic ever confirming it worked. `memory_bridge.py` additionally read the wrong environment variable for its auth token and turned out to be dead code (never registered as a reachable guild).
+- `silva_utils.py`'s `add_node()`/`add_edge_direct()` wrote directly to `silva.db` via SQLite from a Python guild process, bypassing the kernel entirely — nodes created this way never got a real embedding and were invisible to semantic search. Routed through the kernel's HTTP IPC instead, which now also generates the embedding it was missing. A near-duplicate copy of the same file under `guilds/scholars/plugins/` had the identical bug; confirmed unused by any real caller and replaced with a re-export of the canonical module.
+- Dashboard: 3 panels showing fabricated or stuck-loading data (a hardcoded AutoResearch summary, a "Cargando..." spinner that never resolved on fetch failure, a captured-but-never-rendered error state) fixed to show honest empty states instead. 4 components made raw unauthenticated `fetch()` calls that bypassed the app's auth layer entirely — harmless under `dev_mode`, but would have silently 401'd the moment auth was ever required in production.
+
+**Mandatory Noise NK encryption for mesh gossip**
+- The production gossip loop (peer discovery / routing-table maintenance) sent its `GossipEntry` payloads over plain HTTP with zero encryption, despite the federation memory-sync path already having real Noise NK + ChaCha20 crypto wired and tested. Root cause: gossip peers only ever carried a `node_id` — a one-way SHA-256 hash of the Ed25519 public key — never the actual pubkey Noise NK needs.
+- `GossipEntry` and the DHT's `KBucketEntry` now carry an optional Ed25519 pubkey field, propagated naturally as peers gossip with each other. Once a peer's pubkey is known, all further traffic with it uses real Noise NK (forward secrecy); a configurable shared secret covers first contact before a pubkey has propagated; plaintext remains the last-resort fallback for peers that don't have this fix yet.
+- Documented directly in the code: this construction gives confidentiality but not sender authentication — anyone who knows a peer's public key can encrypt a message claiming to be any node ID. Not a regression (the previous plaintext gossip had zero protection against this either), but not to be assumed otherwise.
+
+**CoherenceGate Layer 4 — hybrid filter live in production**
+- The deterministic-heuristics-plus-LLM hybrid classifier (trigger zones on cosine similarity, provenance, score proximity, keyword overlap) is now wired into both real recall call sites, running in observation mode — it logs its verdict via the friction log without affecting scores yet, so its decisions can be evaluated against real traffic before anything depends on them.
+- A 3-model SLM debate (propose → critique → synthesize) was tried as an alternative and NO-GO'd earlier this cycle: sub-2B models converge to a constant answer regardless of prompt design, confirming the deterministic-heuristics approach was the right call.
+
+**Guild registry completeness**
+- Activated 13 additional "v1-port" guilds via a new `[guilds.v2]` config section (`audit`, `code`, `memory`, `search`, `sequential_thinking`, `biome_warden`, `ast_surgeon`, `audio_tools`, `ffmpeg_tools`, `screenshot_tools`, `clipboard_tools`, `local_llm_proxy`, `cron_scheduler`), plus `n8n_bridge`.
+- New structural test (`test_lazy_or_always_on_guilds_are_registered`) fails CI if a guild is ever present in the catalog but unreachable at runtime through any registration path — this exact bug (catalog entry, no runtime registration, `tylluan_do` answering "Unknown guild") had shipped silently twice before this test existed.
+- `biome_warden` is registered but not functional yet — the `biome` CLI binary isn't installed on the reference machine; noted as a known gap, not hidden.
+
+**Vision pipeline — real embedding, real GPU stability fix**
+- Root-caused an intermittent MCP transport disconnect in the vision guild to Windows GPU driver TDR (Timeout Detection and Recovery): compiling 3 ONNX sessions on DirectML while the kernel simultaneously used DirectML for BGE-M3 triggered a driver reset that killed the guild subprocess. Forced CPU execution for vision inference — slower per call, but stable under real contention; documented the DirectML-warmup path as a future optimization rather than rushing it.
+- `pyproject.toml` was missing `transformers` (needed by `AutoTokenizer`) despite `numpy`/`onnxruntime`/`huggingface_hub`/`tokenizers` already being declared from an earlier fix — the vision guild had been silently failing to load in the real kernel `.venv`.
+- End-to-end verified with real evidence, not code review: a live `vision_analyze` call on a real image now produces a coherent description and a real `node_id`, confirmed via direct SQL against `node_embeddings` to carry an actual 1024-dim BGE-M3 vector.
+
+**Also this cycle**
+- `GET /api/v1/config/device/status` + a dashboard badge reporting the real active ONNX execution provider (no more assuming CPU without checking).
+- `agent_roles` now exposed in `GET /api/v1/guilds` (previously tracked internally but never serialized).
+- Friction logging (Sessions/Workflows/Events) shipped with a live dashboard panel; its composite scoring weights are explicitly documented as provisional pending real production data to calibrate against.
+- A STUN hostname-resolution bug fixed in `tylluan-link` — NAT external-address discovery had never worked with the default (hostname-based) STUN servers, always silently falling back to LAN-only.
+
+Test counts: 570 kernel lib + 63 `tylluan-link` + 12 `tylluan-fsrs` = **645**, all green, serial and parallel. Full list of individual commits: `git log v0.14.0..v0.15.0`.
+
 ## [v0.14.0] — 2026-07-27 — A2A protocol · Signal Loop + Coherence Gate · Dashboard Sovereign Substrate GUI
 
 269 commits since v0.13.0 (2026-07-09), including a full week of production dogfooding
