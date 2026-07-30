@@ -22,8 +22,6 @@
     "fs:default",
     "log:default",
     "notification:default",
-    "process:default",
-    "os:default",
-    "global-shortcut:default"
+    "os:default"
   ]
 }
