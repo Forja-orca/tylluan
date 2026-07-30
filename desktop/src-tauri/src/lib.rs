@@ -137,8 +137,46 @@ pub fn run() {
                 // Non-fatal: app can still run without quick pane
             }
 
-            // NOTE: Application menu is built from JavaScript for i18n support
-            // See src/lib/menu.ts for the menu implementation
+            // NOTE: The template's own JS-built menu (src/lib/menu.ts) is never
+            // invoked -- this app's devUrl points straight at Tylluan's real
+            // dashboard, not the template's bundled frontend that would call
+            // buildAppMenu(). menu.ts also imports @tauri-apps/plugin-updater,
+            // which was removed from the Rust side (see 84f35e0) -- it would
+            // fail if ever wired up as-is.
+            //
+            // Minimal native menu instead, built in Rust so it works regardless
+            // of what the loaded page does: just a Reload item, since the
+            // dashboard has no reload affordance of its own and native window
+            // chrome (decorations:true, 378de43) doesn't provide a browser-style
+            // reload button either.
+            #[cfg(desktop)]
+            {
+                use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+                let reload_item = MenuItem::with_id(
+                    app,
+                    "reload",
+                    "Reload",
+                    true,
+                    Some("CmdOrCtrl+R"),
+                )?;
+                let view_menu = Submenu::with_items(
+                    app,
+                    "View",
+                    true,
+                    &[&reload_item, &PredefinedMenuItem::quit(app, None)?],
+                )?;
+                let menu = Menu::with_items(app, &[&view_menu])?;
+                app.set_menu(menu)?;
+
+                app.on_menu_event(move |app_handle, event| {
+                    if event.id() == "reload" {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.eval("location.reload()");
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })
