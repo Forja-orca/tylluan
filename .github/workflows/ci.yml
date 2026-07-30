@@ -26,7 +26,7 @@ jobs:
 
       - run: cargo check -p tylluan-kernel
       - run: cargo test -p tylluan-kernel --lib
-      - run: cargo clippy -p tylluan-kernel -- -D warnings
+      - run: cargo clippy -p tylluan-kernel --all-targets -- -D warnings
 
       - name: Check reproducible build (debug, fast)
         run: |
