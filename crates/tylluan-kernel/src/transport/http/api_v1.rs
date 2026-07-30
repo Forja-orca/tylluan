@@ -256,6 +256,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
 
         .route("/api/v1/security/events", get(security_events_handler))
         .route("/api/v1/inference/providers", get(list_inference_providers_handler).post(add_inference_provider_handler))
+        .route("/api/v1/inference/providers/{name}/test", post(test_inference_provider_handler))
+        .route("/api/v1/external-providers", get(list_external_providers_handler))
+        .route("/api/v1/external-providers/{name}/test", post(test_external_provider_handler))
         .route("/api/v1/mcp/external", get(list_mcp_servers_handler).post(add_mcp_server_handler))
         .route("/api/v1/mcp/external/discover", post(discover_mcp_servers_handler))
         .route("/api/v1/mcp/external/{name}", delete(remove_mcp_server_handler).put(update_mcp_server_handler))

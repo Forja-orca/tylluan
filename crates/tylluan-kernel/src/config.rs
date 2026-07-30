@@ -128,6 +128,8 @@ pub struct TylluanConfig {
     pub proxy: ProxyConfig,
 
     #[serde(default)]
+    pub external_providers: Vec<ExternalProvider>,
+    #[serde(default)]
     pub inference: InferenceConfig,
 
     #[serde(default)]
@@ -716,6 +718,27 @@ pub struct InferenceProvider {
     pub mcp_server: String, // Name of the MCP server that provides this model
     pub model_id: String,
     pub capability: Vec<String>, // ["chat", "vision", "thinking"]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ExternalProviderType {
+    #[serde(rename = "openai_compatible")]
+    OpenAICompatible,
+    #[serde(rename = "anthropic_compatible")]
+    AnthropicCompatible,
+    #[serde(rename = "ollama_compatible")]
+    OllamaCompatible,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalProvider {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub provider_type: ExternalProviderType,
+    pub base_url: String,
+    pub api_key_env: String,
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

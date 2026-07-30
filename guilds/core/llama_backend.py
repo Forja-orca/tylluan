@@ -78,10 +78,194 @@ def _get_config():
             pass  # keep stale config if file is temporarily unreadable
     return _CFG
 
-# P1: External backend support — if user has Ollama/LM Studio/LiteLLM running,
-# use that instead of starting our own llama-server. Detected on first query
-# via environment variables or auto-discovery on common ports.
-_EXTERNAL_API_BASE = None
+# P1: External backend support — if the user has external LLM providers
+# configured via `[[external_providers]]` in tylluan.toml (OpenAI-compatible,
+# Anthropic-compatible, or Ollama-compatible), use those instead of starting
+# our own llama-server. Supports MULTIPLE providers simultaneously.
+#
+# Config format (tylluan.toml):
+#   [[external_providers]]
+#   name = "openai"
+#   type = "openai_compatible"
+#   base_url = "https://api.openai.com/v1"
+#   api_key_env = "OPENAI_API_KEY"
+#   models = ["gpt-4o", "gpt-4o-mini"]
+#
+# Falls back to legacy env-var detection (OPENAI_BASE_URL, OLLAMA_HOST, etc.)
+# when no [[external_providers]] are configured.
+_EXTERNAL_PROVIDERS = {}       # name -> {type, base_url, api_key, models}
+_EXTERNAL_API_BASE = None      # backward-compat: first reachable URL
+_EXTERNAL_PROVIDERS_LOADED_TS = 0.0
+
+
+def _read_external_providers():
+    """Read [[external_providers]] from tylluan.toml.
+    Returns list of provider dicts with resolved api_key from env vars.
+    Only includes providers whose api_key_env is set (if required)."""
+    import tomllib
+    root = Path(__file__).resolve().parent.parent.parent
+    config_path = root / "tylluan.toml"
+    try:
+        with open(config_path, "rb") as f:
+            cfg = tomllib.load(f)
+        ext = cfg.get("external_providers", [])
+    except Exception:
+        ext = []
+
+    results = []
+    for p in ext:
+        ptype = p.get("type", "openai_compatible")
+        name = p.get("name", "unnamed")
+        base_url = p.get("base_url", "").rstrip("/")
+        api_key_env = p.get("api_key_env", "")
+
+        # API key from environment, NEVER from config file
+        api_key = os.environ.get(api_key_env, "") if api_key_env else ""
+        models = p.get("models", [])
+
+        # Skip providers where the API key is required but missing
+        if not api_key and ptype in ("openai_compatible", "anthropic_compatible"):
+            continue
+
+        results.append({
+            "name": name,
+            "type": ptype,
+            "base_url": base_url,
+            "api_key": api_key,
+            "models": models,
+        })
+    return results
+
+
+def _reload_external_providers():
+    """Reload external provider config from tylluan.toml at most once per 60s."""
+    global _EXTERNAL_PROVIDERS, _EXTERNAL_API_BASE, _EXTERNAL_PROVIDERS_LOADED_TS
+    now = time.time()
+    if now - _EXTERNAL_PROVIDERS_LOADED_TS < 60 and _EXTERNAL_PROVIDERS:
+        return
+
+    providers = _read_external_providers()
+    _EXTERNAL_PROVIDERS = {p["name"]: p for p in providers}
+
+    # Backward-compat: set _EXTERNAL_API_BASE to the first reachable provider
+    for p in providers:
+        if _is_backend_reachable(p["base_url"]):
+            _EXTERNAL_API_BASE = p["base_url"]
+            _EXTERNAL_PROVIDERS_LOADED_TS = now
+            return
+
+    # No reachable provider from config: fall back to legacy detection
+    _EXTERNAL_API_BASE = None
+    for env_var in ["OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST"]:
+        val = os.environ.get(env_var)
+        if val:
+            normalized = _normalize_backend_url(val, is_ollama_host=(env_var == "OLLAMA_HOST"))
+            if _is_backend_reachable(normalized):
+                sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
+                _EXTERNAL_API_BASE = normalized
+                _EXTERNAL_PROVIDERS_LOADED_TS = now
+                return
+            sys.stderr.write(f"[llama_backend] {env_var}={val} set but not reachable at {normalized}, ignoring\n")
+
+    # Auto-discovery on common ports (legacy)
+    import urllib.request as _urllib
+    for port in [11434, 1234, 8000]:
+        try:
+            url = f"http://127.0.0.1:{port}/api/tags" if port == 11434 else f"http://127.0.0.1:{port}/v1/models"
+            req = _urllib.Request(url, method="GET")
+            with _urllib.urlopen(req, timeout=2) as r:
+                if r.status == 200:
+                    _EXTERNAL_API_BASE = f"http://127.0.0.1:{port}/v1"
+                    sys.stderr.write(f"[llama_backend] External backend detected on port {port}\n")
+                    _EXTERNAL_PROVIDERS_LOADED_TS = now
+                    return
+        except Exception:
+            pass
+    _EXTERNAL_PROVIDERS_LOADED_TS = now
+
+
+def _get_external_providers():
+    """Return dict of {name: provider_info} for all configured external providers."""
+    _reload_external_providers()
+    return dict(_EXTERNAL_PROVIDERS)
+
+
+def _get_provider_for_model(model_name):
+    """Find the external provider that supports the given model name.
+    Returns provider dict or None."""
+    for p in _get_external_providers().values():
+        if model_name in p.get("models", []):
+            return p
+    return None
+
+
+def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, grammar=""):
+    """Call an external LLM provider with the given prompt.
+    Handles both OpenAI-compatible and Anthropic-compatible endpoints."""
+    import urllib.request as _urllib
+    ptype = provider["type"]
+    base = provider["base_url"].rstrip("/")
+    api_key = provider["api_key"]
+    model = provider["models"][0] if provider["models"] else "gpt-4o-mini"
+
+    if ptype == "anthropic_compatible":
+        url = f"{base}/v1/messages"
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        data = json.dumps(body).encode("utf-8")
+        req = _urllib.Request(
+            url, data=data,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        with _urllib.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            # Anthropic response format: content[0].text
+            return result["content"][0]["text"]
+
+    elif ptype == "ollama_compatible":
+        url = f"{base}/api/chat"
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        data = json.dumps(body).encode("utf-8")
+        req = _urllib.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _urllib.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            return result["message"]["content"]
+
+    else:
+        # openai_compatible (default)
+        url = f"{base}/v1/chat/completions"
+        body = {
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": False,
+        }
+        if grammar:
+            body["grammar"] = grammar
+        data = json.dumps(body).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        req = _urllib.Request(url, data=data, headers=headers, method="POST")
+        with _urllib.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            return result["choices"][0]["message"]["content"]
 
 
 def _normalize_backend_url(val, is_ollama_host=False):
@@ -116,36 +300,15 @@ def _is_backend_reachable(base_url):
 
 
 def _detect_external_backend():
-    """Check for external LLM backends. Returns API base URL or None."""
-    global _EXTERNAL_API_BASE
-    if _EXTERNAL_API_BASE is not None:
-        return _EXTERNAL_API_BASE
-
-    for env_var in ["OPENAI_BASE_URL", "LITELLM_API_BASE", "OLLAMA_HOST"]:
-        val = os.environ.get(env_var)
-        if val:
-            normalized = _normalize_backend_url(val, is_ollama_host=(env_var == "OLLAMA_HOST"))
-            if _is_backend_reachable(normalized):
-                sys.stderr.write(f"[llama_backend] Using {env_var}={val} -> {normalized}\n")
-                _EXTERNAL_API_BASE = normalized
-                return normalized
-            sys.stderr.write(f"[llama_backend] {env_var}={val} set but not reachable at {normalized}, ignoring\n")
-
-    import socket
-    import urllib.request as _urllib
-    for port in [11434, 1234, 8000]:
-        try:
-            url = f"http://127.0.0.1:{port}/api/tags" if port == 11434 else f"http://127.0.0.1:{port}/v1/models"
-            req = _urllib.Request(url, method="GET")
-            with _urllib.urlopen(req, timeout=2) as r:
-                if r.status == 200:
-                    base = f"http://127.0.0.1:{port}/v1"
-                    sys.stderr.write(f"[llama_backend] External backend detected on port {port}\n")
-                    _EXTERNAL_API_BASE = base
-                    return base
-        except Exception:
-            pass
-    return None
+    """Check for external LLM backends. Returns API base URL or None.
+    
+    Priority order:
+    1. [[external_providers]] from tylluan.toml (first reachable provider)
+    2. Legacy env vars (OPENAI_BASE_URL, LITELLM_API_BASE, OLLAMA_HOST)
+    3. Auto-discovery on common ports (11434, 1234, 8000)
+    """
+    _reload_external_providers()
+    return _EXTERNAL_API_BASE
 
 
 def _get_backend_url():
@@ -435,24 +598,34 @@ async def _stop_llama_server():
 
 
 @mcp.tool()
-async def query_model(prompt: str, max_tokens: int = 256, temperature: float | None = None, grammar: str = "") -> str:
-    """Query the llama.cpp backend with a prompt. Returns generated text.
+async def query_model(prompt: str, model: str = "", max_tokens: int = 256, temperature: float | None = None, grammar: str = "") -> str:
+    """Query the LLM backend with a prompt. Returns generated text.
 
-    The first call starts llama-server if not already running.
-    Uses OpenAI-compatible /v1/chat/completions endpoint internally.
+    Routes to an external provider if one matches the requested model,
+    otherwise falls back to the local llama-server.
 
     Args:
         prompt: The prompt to send to the model.
+        model: Optional model name. If set, routes to an external provider
+            that lists this model. If empty, uses the first available backend.
         max_tokens: Maximum tokens to generate (default 256).
         temperature: Sampling temperature. Defaults to tylluan.toml's
             [inference.llama].temperature when not given.
-        grammar: Optional GBNF grammar string to constrain output.
-            Example: 'root ::= \"KEEP\" | \"REJECT\"' forces the model
-            to only output one of those two words. llama.cpp native feature.
-            Empty string = no constraint (free generation).
+        grammar: Optional GBNF grammar string to constrain output
+            (only works with local llama-server, ignored for external providers).
     """
     import urllib.request as _urllib
 
+    # Try routing to a configured external provider by model name
+    if model:
+        provider = _get_provider_for_model(model)
+        if provider:
+            t = temperature if temperature is not None else _get_config()["temperature"]
+            return await asyncio.to_thread(
+                _call_external_provider, provider, prompt, max_tokens, t, grammar
+            )
+
+    # Fall back to legacy backend URL
     backend_url = _get_backend_url()
     is_external = _detect_external_backend() is not None
 
@@ -488,15 +661,27 @@ async def query_model(prompt: str, max_tokens: int = 256, temperature: float | N
 
 @mcp.tool()
 async def backend_health() -> str:
-    """Check llama-server status: running/stopped, model, port, params."""
+    """Check backend status: local llama-server + all configured external providers."""
     status = "running" if (_model_loaded and _llama_process is not None
                           and _llama_process.poll() is None) else "stopped"
+
+    ext_providers = _get_external_providers()
     return json.dumps({
         "status": status,
         "model": f"{DEFAULT_MODEL}::{DEFAULT_MODEL_FILE}",
         "port": LLAMA_PORT,
         "backend": "llama.cpp",
         "external_backend": _detect_external_backend(),
+        "external_providers": [
+            {
+                "name": name,
+                "type": info["type"],
+                "base_url": info["base_url"],
+                "models": info["models"],
+                "has_key": bool(info["api_key"]),
+            }
+            for name, info in ext_providers.items()
+        ],
         "params": {
             "n_gpu_layers": _get_config()["n_gpu_layers"],
             "ctx_size": _get_config()["ctx_size"],
