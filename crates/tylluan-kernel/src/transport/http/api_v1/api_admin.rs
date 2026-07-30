@@ -6,9 +6,296 @@ use axum::{
 };
 use std::sync::Arc;
 use std::fs;
+use std::collections::HashMap;
 use serde::Deserialize;
 use crate::transport::http::{HttpState, SaveConfigRequest};
 use rmcp::model::CallToolRequestParam;
+
+/// Result of a real MCP ping against a provider's backend.
+#[derive(Debug, serde::Serialize)]
+pub struct ProviderTestResult {
+    pub ok: bool,
+    pub status: String,
+    pub provider: String,
+    pub mcp_server: String,
+    pub model_id: String,
+    pub endpoint: String,
+    pub http_status: u16,
+    pub latency_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_snippet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Make a real MCP ping against an HTTP Streamable MCP server URL.
+/// Used by the test endpoint and directly tested against a real TCP server.
+pub async fn mcp_ping_server(endpoint: &str, timeout_secs: u64) -> ProviderTestResult {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return ProviderTestResult {
+            ok: false,
+            status: "error".into(),
+            provider: String::new(),
+            mcp_server: String::new(),
+            model_id: String::new(),
+            endpoint: endpoint.to_string(),
+            http_status: 0,
+            latency_ms: 0,
+            response_snippet: None,
+            error: Some(format!("HTTP client build failed: {e}")),
+        },
+    };
+
+    let ping_payload = serde_json::json!({"jsonrpc": "2.0", "id": "1", "method": "ping"});
+
+    let start = std::time::Instant::now();
+    let result = client.post(endpoint)
+        .header("Content-Type", "application/json")
+        .json(&ping_payload)
+        .send()
+        .await;
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(resp) => {
+            let http_status = resp.status().as_u16();
+            let body_text = resp.text().await.unwrap_or_default();
+            let mcp_ok = serde_json::from_str::<serde_json::Value>(&body_text)
+                .ok()
+                .map(|v| v.get("result").is_some())
+                .unwrap_or(false);
+
+            ProviderTestResult {
+                ok: mcp_ok,
+                status: if mcp_ok { "online".into() } else { "unexpected_response".into() },
+                provider: String::new(),
+                mcp_server: String::new(),
+                model_id: String::new(),
+                endpoint: endpoint.to_string(),
+                http_status,
+                latency_ms,
+                response_snippet: Some(body_text.chars().take(200).collect()),
+                error: if mcp_ok { None } else {
+                    Some("HTTP succeeded but MCP ping response lacks 'result' field".into())
+                },
+            }
+        }
+        Err(e) => ProviderTestResult {
+            ok: false,
+            status: "offline".into(),
+            provider: String::new(),
+            mcp_server: String::new(),
+            model_id: String::new(),
+            endpoint: endpoint.to_string(),
+            http_status: 0,
+            latency_ms,
+            response_snippet: None,
+            error: Some(format!("Connection failed: {e}")),
+        },
+    }
+}
+
+/// Result of testing an external LLM provider (OpenAI/Anthropic/Ollama compatible).
+#[derive(Debug, serde::Serialize)]
+pub struct ExternalProviderTestResult {
+    pub ok: bool,
+    pub status: String,
+    pub provider: String,
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    pub base_url: String,
+    pub model_tested: Option<String>,
+    pub http_status: u16,
+    pub latency_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_snippet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Make a real API call against an external LLM provider.
+/// Uses the appropriate endpoint format based on type:
+/// - openai_compatible: POST /v1/chat/completions
+/// - anthropic_compatible: POST /v1/messages
+/// - ollama_compatible: POST /api/chat
+pub async fn test_external_provider(
+    provider_type: &str,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    timeout_secs: u64,
+) -> ExternalProviderTestResult {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return ExternalProviderTestResult {
+            ok: false, status: "error".into(),
+            provider: String::new(), provider_type: provider_type.to_string(),
+            base_url: base_url.to_string(), model_tested: Some(model.to_string()),
+            http_status: 0, latency_ms: 0,
+            response_snippet: None, error: Some(format!("HTTP client build failed: {e}")),
+        },
+    };
+
+    let (endpoint_path, request_body, extra_headers) = match provider_type {
+        "anthropic_compatible" => {
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "Respond with a single letter: A"}],
+            });
+            let headers = vec![
+                ("anthropic-version".to_string(), "2023-06-01".to_string()),
+                ("x-api-key".to_string(), api_key.to_string()),
+            ];
+            ("/v1/messages".to_string(), body, headers)
+        }
+        "ollama_compatible" => {
+            let body = serde_json::json!({
+                "model": model,
+                "messages": [{"role": "user", "content": "Respond with a single letter: A"}],
+                "stream": false,
+            });
+            ("/api/chat".to_string(), body, vec![])
+        }
+        _ => { // openai_compatible
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "Respond with a single letter: A"}],
+            });
+            ("/v1/chat/completions".to_string(), body, vec![])
+        }
+    };
+
+    let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint_path);
+
+    let mut req = client.post(&url)
+        .header("Content-Type", "application/json")
+        .json(&request_body);
+
+    if !api_key.is_empty() {
+        // Anthropic's real API authenticates via x-api-key only (added below via
+        // extra_headers) -- it doesn't use or expect a Bearer Authorization header.
+        // Sending both isn't what "the real Anthropic format" should look like,
+        // even if a lenient server tolerates the extra header.
+        if provider_type != "anthropic_compatible" {
+            req = req.header("Authorization", format!("Bearer {api_key}"));
+        }
+        for (hdr, val) in extra_headers {
+            req = req.header(&hdr, val);
+        }
+    }
+
+    let start = std::time::Instant::now();
+    let result = req.send().await;
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(resp) => {
+            let http_status = resp.status().as_u16();
+            let body_text = resp.text().await.unwrap_or_default();
+            let op_ok = (200..300).contains(&http_status);
+            ExternalProviderTestResult {
+                ok: op_ok,
+                status: if op_ok { "online".into() } else { "error".into() },
+                provider: String::new(),
+                provider_type: provider_type.to_string(),
+                base_url: base_url.to_string(),
+                model_tested: Some(model.to_string()),
+                http_status,
+                latency_ms,
+                response_snippet: Some(body_text.chars().take(300).collect()),
+                error: if op_ok { None } else {
+                    Some(format!("Provider returned HTTP {http_status}: {}", body_text.chars().take(200).collect::<String>()))
+                },
+            }
+        }
+        Err(e) => ExternalProviderTestResult {
+            ok: false,
+            status: "offline".into(),
+            provider: String::new(),
+            provider_type: provider_type.to_string(),
+            base_url: base_url.to_string(),
+            model_tested: Some(model.to_string()),
+            http_status: 0,
+            latency_ms,
+            response_snippet: None,
+            error: Some(format!("Connection failed: {e}")),
+        },
+    }
+}
+
+/// POST /api/v1/external-providers/{name}/test
+pub async fn test_external_provider_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let provider = {
+        let config = state.config.read().await;
+        config.external_providers.iter().find(|p| p.name == name).cloned()
+    };
+
+    let provider = match provider {
+        Some(p) => p,
+        None => {
+            let names: Vec<String> = {
+                let config = state.config.read().await;
+                config.external_providers.iter().map(|p| p.name.clone()).collect()
+            };
+            return (StatusCode::NOT_FOUND, crate::transport::http::Utf8Json(serde_json::json!({
+                "ok": false,
+                "error": format!("External provider '{name}' not found. Available: {}", names.join(", "))
+            }))).into_response();
+        }
+    };
+
+    // Use override model from query param if provided
+    let model = params.get("model").cloned()
+        .or_else(|| provider.models.first().cloned())
+        .unwrap_or_else(|| "gpt-4o-mini".to_string());
+
+    // Read API key from environment (never from config)
+    let api_key = std::env::var(&provider.api_key_env).unwrap_or_default();
+    if api_key.is_empty() {
+        return (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": false,
+            "status": "no_key",
+            "provider": provider.name,
+            "type": provider.provider_type,
+            "base_url": provider.base_url,
+            "error": format!("Environment variable '{}' is not set or empty. Set it with the API key.", provider.api_key_env),
+        }))).into_response();
+    }
+
+    let type_str = match provider.provider_type {
+        crate::config::ExternalProviderType::OpenAICompatible => "openai_compatible",
+        crate::config::ExternalProviderType::AnthropicCompatible => "anthropic_compatible",
+        crate::config::ExternalProviderType::OllamaCompatible => "ollama_compatible",
+    };
+
+    let result = test_external_provider(type_str, &provider.base_url, &api_key, &model, 10).await;
+
+    (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
+        "ok": result.ok,
+        "status": result.status,
+        "provider": provider.name,
+        "type": result.provider_type,
+        "base_url": result.base_url,
+        "model_tested": result.model_tested,
+        "http_status": result.http_status,
+        "latency_ms": result.latency_ms,
+        "response_snippet": result.response_snippet,
+        "error": result.error,
+    }))).into_response()
+}
 
 #[derive(Deserialize)]
 pub struct SetDeviceRequest { pub device: String }
@@ -580,6 +867,92 @@ pub async fn update_wsl_config_handler() -> impl IntoResponse { StatusCode::OK }
 
 pub async fn list_inference_providers_handler() -> impl IntoResponse { StatusCode::OK }
 pub async fn add_inference_provider_handler() -> impl IntoResponse { StatusCode::OK }
+
+/// GET /api/v1/external-providers
+pub async fn list_external_providers_handler(
+    State(state): State<Arc<HttpState>>,
+) -> impl IntoResponse {
+    let providers: Vec<serde_json::Value> = {
+        let config = state.config.read().await;
+        config.external_providers.iter().map(|p| {
+            serde_json::json!({
+                "name": p.name,
+                "type": p.provider_type,
+                "base_url": p.base_url,
+                "api_key_env": p.api_key_env,
+                "models": p.models,
+                "api_key_set": std::env::var(&p.api_key_env).is_ok(),
+            })
+        }).collect()
+    };
+    (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!(providers)))
+}
+
+/// POST /api/v1/inference/providers/{name}/test
+/// Makes a real MCP ping against the provider's backend server and returns
+/// success/failure with measured latency. Resolves provider → MCP server →
+/// server URL, then POSTs a minimal `{"jsonrpc":"2.0","id":"1","method":"ping"}`.
+///
+/// Only works for HTTP Streamable MCP servers (url field). SSE and stdio
+/// servers return a clear error explaining the limitation rather than a false positive.
+pub async fn test_inference_provider_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    // 1. Find the provider in config
+    let (mcp_server_name, model_id) = {
+        let config = state.config.read().await;
+        match config.inference.providers.iter().find(|p| p.name == name) {
+            Some(p) => (p.mcp_server.clone(), p.model_id.clone()),
+            None => return (StatusCode::NOT_FOUND, crate::transport::http::Utf8Json(serde_json::json!({
+                "ok": false,
+                "error": format!("Provider '{name}' not found. Available: {}",
+                    config.inference.providers.iter().map(|p| p.name.as_str()).collect::<Vec<&str>>().join(", "))
+            }))).into_response(),
+        }
+    };
+
+    // 2. Resolve MCP server URL from external_mcp
+    let server_url = {
+        let config = state.config.read().await;
+        config.external_mcp.iter()
+            .find(|s| s.name == mcp_server_name)
+            .and_then(|s| s.url.clone())
+    };
+
+    let target_url = match server_url {
+        Some(url) => {
+            // Normalise: strip trailing slash, append /messages for Streamable HTTP
+            let base = url.trim_end_matches('/').to_string();
+            if base.contains("/messages") { base } else { format!("{base}/messages") }
+        }
+        None => return (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": false,
+            "status": "unsupported",
+            "provider": name,
+            "mcp_server": mcp_server_name,
+            "error": format!("MCP server '{mcp_server_name}' has no HTTP URL (SSE or stdio). Only HTTP Streamable MCP servers can be tested remotely."),
+            "model_id": model_id,
+        }))).into_response(),
+    };
+
+    // 3. Real MCP ping via shared logic
+    let result = mcp_ping_server(&target_url, 10).await;
+
+    // Stamp provider metadata onto the result
+    (StatusCode::OK, crate::transport::http::Utf8Json(serde_json::json!({
+        "ok": result.ok,
+        "status": result.status,
+        "provider": name,
+        "mcp_server": mcp_server_name,
+        "model_id": model_id,
+        "endpoint": result.endpoint,
+        "http_status": result.http_status,
+        "latency_ms": result.latency_ms,
+        "response_snippet": result.response_snippet,
+        "error": result.error,
+    }))).into_response()
+}
 
 pub async fn health_detailed_handler(
     State(state): State<Arc<HttpState>>
@@ -1365,4 +1738,192 @@ pub async fn set_inference_llama_config_handler(
         "status": "saved",
         "message": "Configuración [inference.llama] guardada exitosamente en tylluan.toml"
     }))).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: start a mock MCP server on a random port and return the URL.
+    /// Reads the HTTP request, then responds with a valid HTTP response.
+    async fn start_mock_mcp(status: u16, body: &'static str) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{addr}/messages");
+
+        tokio::spawn(async move {
+            let Ok((mut stream, _)) = listener.accept().await else { return };
+            // Read the request so reqwest can finish sending
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = vec![0u8; 4096];
+            let _ = stream.read(&mut buf).await;
+            // Write a well-formed HTTP/1.1 response
+            let response = format!(
+                "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+
+        // Small delay to let the spawned task start
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        url
+    }
+
+    #[tokio::test]
+    async fn test_mcp_ping_success() {
+        let url = start_mock_mcp(200, r#"{"jsonrpc":"2.0","id":"1","result":{}}"#).await;
+        let res = mcp_ping_server(&url, 5).await;
+        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert_eq!(res.status, "online");
+        assert_eq!(res.http_status, 200);
+        assert!(res.latency_ms < 5000, "latency too high: {}ms", res.latency_ms);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_ping_unexpected_response() {
+        let url = start_mock_mcp(200, r#"{"jsonrpc":"2.0","id":"1","error":{"code":-32601,"message":"Method not found"}}"#).await;
+        let res = mcp_ping_server(&url, 5).await;
+        assert!(!res.ok, "expected ok=false for missing result field");
+        assert_eq!(res.status, "unexpected_response");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_ping_connection_refused() {
+        let url = "http://127.0.0.1:46891/messages".to_string();
+        let res = mcp_ping_server(&url, 3).await;
+        assert!(!res.ok, "expected ok=false for connection refused, got {:?}", res);
+        assert_eq!(res.status, "offline");
+    }
+
+    // ── External provider tests ─────────────────────────────────────
+
+    /// Helper: start a mock HTTP server that responds to external LLM API calls.
+    async fn start_mock_external(
+        _path: &'static str,
+        status: u16,
+        body: &'static str,
+    ) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url = format!("http://{addr}");
+
+        tokio::spawn(async move {
+            let Ok((mut stream, _)) = listener.accept().await else { return };
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = vec![0u8; 4096];
+            let _ = stream.read(&mut buf).await;
+            let response = format!(
+                "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        base_url
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_openai_success() {
+        let base = start_mock_external(
+            "/v1/chat/completions",
+            200,
+            r#"{"id":"chatcmpl-x","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"A"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}"#,
+        ).await;
+        let res = test_external_provider("openai_compatible", &base, "sk-test-key", "gpt-4o-mini", 5).await;
+        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert_eq!(res.status, "online");
+        assert_eq!(res.http_status, 200);
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_anthropic_success() {
+        let base = start_mock_external(
+            "/v1/messages",
+            200,
+            r#"{"id":"msg_01X","type":"message","role":"assistant","content":[{"type":"text","text":"A"}],"model":"claude-3-opus-20240229","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":1}}"#,
+        ).await;
+        let res = test_external_provider("anthropic_compatible", &base, "sk-ant-key", "claude-3-opus-20240229", 5).await;
+        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert_eq!(res.status, "online");
+        assert_eq!(res.http_status, 200);
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_ollama_success() {
+        let base = start_mock_external(
+            "/api/chat",
+            200,
+            r#"{"model":"llama3.2","created_at":"2024-01-01T00:00:00Z","message":{"role":"assistant","content":"A"},"done":true}"#,
+        ).await;
+        let res = test_external_provider("ollama_compatible", &base, "", "llama3.2", 5).await;
+        assert!(res.ok, "expected ok=true, got {:?}", res);
+        assert_eq!(res.status, "online");
+        assert_eq!(res.http_status, 200);
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_http_error() {
+        let base = start_mock_external(
+            "/v1/chat/completions",
+            401,
+            r#"{"error":{"message":"Invalid API key","type":"authentication_error"}}"#,
+        ).await;
+        let res = test_external_provider("openai_compatible", &base, "bad-key", "gpt-4o-mini", 5).await;
+        assert!(!res.ok, "expected ok=false for HTTP 401");
+        assert_eq!(res.status, "error");
+        assert_eq!(res.http_status, 401);
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_connection_refused() {
+        let res = test_external_provider("openai_compatible", "http://127.0.0.1:46892", "sk-test", "gpt-4o-mini", 3).await;
+        assert!(!res.ok, "expected ok=false for connection refused");
+        assert_eq!(res.status, "offline");
+    }
+
+    #[tokio::test]
+    async fn test_external_provider_anthropic_has_headers() {
+        // Verify Anthropic path sends anthropic-version and x-api-key headers
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url = format!("http://{addr}");
+
+        let captured_headers = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
+        let ch = captured_headers.clone();
+
+        tokio::spawn(async move {
+            let Ok((mut stream, _)) = listener.accept().await else { return };
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = vec![0u8; 4096];
+            let n = stream.read(&mut buf).await.unwrap_or(0);
+            let request_text = String::from_utf8_lossy(&buf[..n]);
+            // Collect headers
+            let mut hdrs = ch.lock().await;
+            for line in request_text.lines() {
+                if line.to_lowercase().starts_with("anthropic-version:")
+                    || line.to_lowercase().starts_with("x-api-key:")
+                {
+                    hdrs.push(line.to_string());
+                }
+            }
+            drop(hdrs);
+            let body = r#"{"id":"msg_01X","type":"message","role":"assistant","content":[{"type":"text","text":"A"}],"model":"claude","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":1}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let res = test_external_provider("anthropic_compatible", &base_url, "sk-ant-key", "claude-3", 5).await;
+        assert!(res.ok, "Anthropic test should succeed, got {:?}", res);
+
+        let hdrs = captured_headers.lock().await;
+        let hdr_text = hdrs.join("\n");
+        assert!(hdr_text.contains("anthropic-version"), "should send anthropic-version header, got: {hdr_text}");
+        assert!(hdr_text.contains("x-api-key"), "should send x-api-key header, got: {hdr_text}");
+    }
 }
