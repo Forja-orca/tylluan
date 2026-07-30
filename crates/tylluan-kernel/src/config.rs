@@ -800,10 +800,10 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
             if ip.is_loopback() {
                 return Ok(());
             }
-            if let std::net::IpAddr::V4(v4) = ip {
-                if v4.is_private() {
-                    return Err(format!("private RFC-1918 IP range ('{host}')"));
-                }
+            if let std::net::IpAddr::V4(v4) = ip
+                && v4.is_private()
+            {
+                return Err(format!("private RFC-1918 IP range ('{host}')"));
             }
         }
         Ok(())
