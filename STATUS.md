@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** bfd6d9f · **645 total** green (570 kernel lib + 63 link lib + 12 fsrs) — 0 fallos, verificado en serie y en paralelo con `scripts/check_test_count.sh --fix` (2026-07-30). Auditoría de conexión real completa (Deep + Mimo + Claude): 5 guilds con IPC apuntando al puerto 3030 de ForjaMCPo3 en vez del 4000 real de Tylluan, escrituras a SilvaDB saltándose el pipeline de embedding del kernel, 3 paneles de dashboard con datos falsos/atascados, 4 componentes saltándose la capa de auth — los 14 hallazgos arreglados y verificados en vivo. Gossip de producción ahora cifra con Noise NK real una vez se propaga la pubkey del peer (antes viajaba en texto plano pese a que la capa Noise ya existía y estaba testeada). CoherenceGate Layer 4 híbrido wireado en los 2 puntos reales de recall, modo observación. `[guilds.v2]` activó 13 guilds más + test estructural que impide que el bug de catálogo↔runtime vuelva a colarse en silencio. Pipeline de visión: causa raíz real del crash intermitente confirmada (TDR de GPU en Windows por contención con el propio DirectML del kernel), arreglado forzando CPU; el fix de embedding de v0.14.0 quedó verificado end-to-end por primera vez con SQL directo contra `node_embeddings`.
+**Commit:** c05fe7e · **655 total** green (580 kernel lib + 63 link lib + 12 fsrs) — 0 fallos, verificado en serie y en paralelo con `scripts/check_test_count.sh --fix` (2026-07-30). Auditoría de conexión real completa (Deep + Mimo + Claude): 5 guilds con IPC apuntando al puerto 3030 de ForjaMCPo3 en vez del 4000 real de Tylluan, escrituras a SilvaDB saltándose el pipeline de embedding del kernel, 3 paneles de dashboard con datos falsos/atascados, 4 componentes saltándose la capa de auth — los 14 hallazgos arreglados y verificados en vivo. Gossip de producción ahora cifra con Noise NK real una vez se propaga la pubkey del peer (antes viajaba en texto plano pese a que la capa Noise ya existía y estaba testeada). CoherenceGate Layer 4 híbrido wireado en los 2 puntos reales de recall, modo observación. `[guilds.v2]` activó 13 guilds más + test estructural que impide que el bug de catálogo↔runtime vuelva a colarse en silencio. Pipeline de visión: causa raíz real del crash intermitente confirmada (TDR de GPU en Windows por contención con el propio DirectML del kernel), arreglado forzando CPU; el fix de embedding de v0.14.0 quedó verificado end-to-end por primera vez con SQL directo contra `node_embeddings`.
 
 ---
 
@@ -96,7 +96,7 @@
 - `tylluan start` polls `/health` until kernel is ready (30s timeout)
 
 ### Python guilds
-- 42 guilds across 5 categories (core/builders/scholars/wardens/watchers) via FastMCP — auto-discovered at startup
+- 49 guilds across 5 categories (core/builders/scholars/wardens/watchers) via FastMCP — auto-discovered at startup
 - Guild catalog in `registry.json`; lazy on-demand loading
 - Security: `_security.py` per-guild ACL layer
 
