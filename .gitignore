@@ -3,6 +3,9 @@
 /target_tmp/
 /dist/
 /dashboard/dist/
+/desktop/src-tauri/target/
+/desktop/dist/
+**/node_modules/
 
 # Runtime data (NEVER commit)
 /data/
