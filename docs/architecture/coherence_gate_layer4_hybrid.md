@@ -68,7 +68,13 @@ no_trigger:
     if clean → KEEP (Layers 1-3 found no issues)
 ```
 
-Expected: ~20-30% of recall candidates trigger the LLM (not all 52).
+**Corrected 2026-07-29** (originally estimated ~20-30% here): real measured trigger rate against
+live `tylluan_recall` traffic is **59.6% (31/52 candidates)** — Zone A alone accounts for the bulk
+of it, and Zone C is a full subset of Zone A. The 20-30% figure below was a directional guess made
+before the real trigger-rate script existed; kept crossed out rather than silently deleted so the
+correction has a paper trail. See `benchmarks/spikes/coherence_gate_reasoning/trigger_rate_live.json`.
+
+~~Expected: ~20-30% of recall candidates trigger the LLM (not all 52).~~
 
 ## 4. LLM Classification (Cheap, Not Reasoning)
 
