@@ -257,6 +257,15 @@ pub async fn test_external_provider_handler(
         }
     };
 
+    // Defense-in-depth: re-check SSRF + env-var safety before touching anything
+    if let Err(msg) = provider.is_safe() {
+        return (StatusCode::FORBIDDEN, crate::transport::http::Utf8Json(serde_json::json!({
+            "ok": false,
+            "status": "blocked",
+            "error": msg,
+        }))).into_response();
+    }
+
     // Use override model from query param if provided
     let model = params.get("model").cloned()
         .or_else(|| provider.models.first().cloned())
