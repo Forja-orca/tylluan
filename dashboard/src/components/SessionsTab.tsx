@@ -70,7 +70,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
             <Users className="w-5 h-5 text-emerald-400" />
             <h2 className="text-xl font-bold text-slate-50 tracking-tight">Access Management</h2>
           </div>
-          <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">Active Sovereign Sessions</p>
+          <p className="text-xs text-slate-500 font-medium">Active Sovereign Sessions</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -81,13 +81,13 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
               placeholder="Filter sessions..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-emerald-500/50 transition-colors w-64"
+              className="bg-slate-900 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-emerald-500/50 transition-colors w-64"
             />
           </div>
           <button 
             onClick={() => bridge?.fetchRaw('/api/v1/sessions', {})}
             disabled={globalLoading}
-            className="p-2 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
+            className="p-2 bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4 text-slate-400", globalLoading && "animate-spin")} />
           </button>
@@ -95,10 +95,10 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
       </div>
 
       {/* Sessions Table */}
-      <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+      <div className="bg-slate-900/50 rounded-2xl overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-800/30 border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-medium text-slate-500">
               <th className="px-6 py-4">Client Name</th>
               <th className="px-6 py-4">Agent Identity</th>
               <th className="px-6 py-4 text-center">Tools</th>
@@ -112,7 +112,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
               <tr key={session.id} className="group hover:bg-slate-800/20 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 text-slate-400">
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
                       <User className="w-4 h-4" />
                     </div>
                     <div>
@@ -132,7 +132,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                   )}
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300">
+                      <span className="px-2 py-1 rounded bg-slate-800 text-xs font-mono text-slate-300">
                     {session.tool_count}
                   </span>
                 </td>
@@ -154,7 +154,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                 </td>
                 <td className="px-6 py-4 text-right">
                   {session.id === currentSessionId ? (
-                    <span className="text-[10px] font-bold text-emerald-500/40 uppercase tracking-widest px-3 py-1.5 border border-emerald-500/10 rounded-lg">Current Session</span>
+                    <span className="text-[10px] font-medium text-emerald-500/40 px-3 py-1.5 rounded-lg">Current Session</span>
                   ) : (
                     <button
                       onClick={() => revokeSession(session.id)}
@@ -163,7 +163,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                         "p-2 rounded-xl transition-all",
                         revokingIds.has(session.id) 
                           ? "bg-slate-800 cursor-not-allowed" 
-                          : "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40"
+                          : "bg-red-500/10 hover:bg-red-500/20 text-red-400"
                       )}
                       title="Revoke Session"
                     >
@@ -194,7 +194,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
       <div className="flex items-center gap-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10">
         <Shield className="w-5 h-5 text-amber-500/60 shrink-0" />
         <div className="text-[11px] text-slate-500 leading-relaxed">
-          <span className="font-bold text-amber-500/80 uppercase mr-2">Security Note:</span>
+          <span className="font-bold text-amber-500/80 mr-2">Security Note:</span>
           Revoking a session will immediately disconnect the associated client. All pending tool calls from that session will be aborted.
           Sessions automatically expire after 1 hour of inactivity.
         </div>

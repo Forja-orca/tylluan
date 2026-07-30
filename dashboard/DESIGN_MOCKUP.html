@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tylluan Design Direction — Nocturnal Observatory</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: #0B0F17;
+      color: #F1F5F9;
+      padding: 40px;
+      line-height: 1.5;
+    }
+    
+    h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+    h2 { font-size: 16px; font-weight: 600; margin: 40px 0 16px; color: #D4A030; }
+    h3 { font-size: 13px; font-weight: 500; margin-bottom: 12px; color: #94A3B8; }
+    .subtitle { font-size: 13px; color: #64748B; margin-bottom: 32px; }
+    
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 40px;
+    }
+    
+    .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748B;
+      margin-bottom: 12px;
+    }
+    
+    /* ═══════════════════════════════════════════
+       CURRENT STATE (left column)
+       ═══════════════════════════════════════════ */
+    
+    .current .card {
+      background: rgba(11, 15, 23, 0.9);
+      border: 1px solid rgba(34, 43, 61, 0.8);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    
+    .current .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    
+    .current .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #F1F5F9;
+    }
+    
+    .current .icon { color: #00F5D4; }
+    
+    .current .badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+    }
+    
+    .current .badge-ok {
+      background: rgba(0, 245, 212, 0.1);
+      color: #00F5D4;
+      border: 1px solid rgba(0, 245, 212, 0.3);
+    }
+    
+    .current .badge-warn {
+      background: rgba(255, 46, 147, 0.1);
+      color: #FF2E93;
+      border: 1px solid rgba(255, 46, 147, 0.3);
+    }
+    
+    .current .stat-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748B;
+      font-family: ui-monospace, monospace;
+      margin-bottom: 4px;
+    }
+    
+    .current .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: ui-monospace, monospace;
+      color: #F1F5F9;
+    }
+    
+    .current .stat-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    
+    .current .stat-box {
+      background: rgba(15, 23, 42, 1);
+      border: 1px solid rgba(34, 43, 61, 0.8);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    
+    .current .btn {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: ui-monospace, monospace;
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 245, 212, 0.4);
+      background: rgba(0, 245, 212, 0.1);
+      color: #00F5D4;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .current .btn:hover {
+      background: rgba(0, 245, 212, 0.2);
+      border-color: rgba(0, 245, 212, 0.5);
+    }
+    
+    .current .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748B;
+      font-family: ui-monospace, monospace;
+      margin-bottom: 8px;
+    }
+    
+    /* ═══════════════════════════════════════════
+       PROPOSED STATE (right column)
+       ═══════════════════════════════════════════ */
+    
+    .proposed .card {
+      background: rgba(17, 24, 39, 0.6);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    
+    .proposed .card-highlighted {
+      border: 1px solid rgba(212, 160, 48, 0.2);
+    }
+    
+    .proposed .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    
+    .proposed .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #F1F5F9;
+    }
+    
+    .proposed .icon { color: #D4A030; }
+    .proposed .icon-signal { color: #00F5D4; }
+    
+    .proposed .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    
+    .proposed .badge-ok {
+      background: rgba(212, 160, 48, 0.12);
+      color: #E8B84A;
+    }
+    
+    .proposed .badge-warn {
+      background: rgba(239, 68, 68, 0.12);
+      color: #EF4444;
+    }
+    
+    .proposed .badge-signal {
+      background: rgba(0, 245, 212, 0.1);
+      color: #00F5D4;
+    }
+    
+    .proposed .stat-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #94A3B8;
+      margin-bottom: 4px;
+    }
+    
+    .proposed .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-family: ui-monospace, monospace;
+      color: #F1F5F9;
+    }
+    
+    .proposed .stat-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    
+    .proposed .stat-box {
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    
+    .proposed .btn-primary {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 10px;
+      border: none;
+      background: #B8860B;
+      color: #FFF8E7;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .proposed .btn-primary:hover {
+      background: #D4A030;
+    }
+    
+    .proposed .btn-signal {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 245, 212, 0.3);
+      background: rgba(0, 245, 212, 0.08);
+      color: #00F5D4;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .proposed .btn-signal:hover {
+      background: rgba(0, 245, 212, 0.15);
+    }
+    
+    .proposed .section-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #94A3B8;
+      margin-bottom: 8px;
+    }
+    
+    /* ═══════════════════════════════════════════
+       PALETTE SWATCHES
+       ═══════════════════════════════════════════ */
+    
+    .swatches {
+      display: flex;
+      gap: 12px;
+      margin: 24px 0;
+      flex-wrap: wrap;
+    }
+    
+    .swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .swatch-color {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      border: 2px solid rgba(255,255,255,0.1);
+    }
+    
+    .swatch-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .swatch-hex {
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: #94A3B8;
+    }
+    
+    /* ═══════════════════════════════════════════
+       ANTI-PATTERN TABLE
+       ═══════════════════════════════════════════ */
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 12px;
+    }
+    
+    th {
+      text-align: left;
+      font-weight: 600;
+      color: #94A3B8;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(34, 43, 61, 0.8);
+    }
+    
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(34, 43, 61, 0.4);
+      color: #CBD5E1;
+    }
+    
+    .yes { color: #EF4444; font-weight: 600; }
+    .no { color: #10B981; font-weight: 600; }
+    .fix { color: #D4A030; font-weight: 600; }
+    
+    .note {
+      font-size: 12px;
+      color: #64748B;
+      margin: 8px 0;
+      padding-left: 12px;
+      border-left: 2px solid rgba(212, 160, 48, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+<h1>Design Direction: Nocturnal Observatory</h1>
+<p class="subtitle">Tylluan Dashboard — proposed palette + typography direction. NOT implemented, just mocked up.</p>
+
+<h2>Proposed Palette</h2>
+
+<div class="swatches">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #0B0F17;"></div>
+    <span class="swatch-label">Base</span>
+    <span class="swatch-hex">#0B0F17</span>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #111827;"></div>
+    <span class="swatch-label">Raised</span>
+    <span class="swatch-hex">#111827</span>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #1E293B;"></div>
+    <span class="swatch-label">Emphasis</span>
+    <span class="swatch-hex">#1E293B</span>
+  </div>
+  <div class="swatch" style="margin-left: 24px;">
+    <div class="swatch-color" style="background: #D4A030;"></div>
+    <span class="swatch-label">Primary</span>
+    <span class="swatch-hex">#D4A030</span>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #E8B84A;"></div>
+    <span class="swatch-label">Primary Hover</span>
+    <span class="swatch-hex">#E8B84A</span>
+  </div>
+  <div class="swatch" style="margin-left: 24px;">
+    <div class="swatch-color" style="background: #00F5D4;"></div>
+    <span class="swatch-label">Signal</span>
+    <span class="swatch-hex">#00F5D4</span>
+  </div>
+  <div class="swatch" style="margin-left: 24px;">
+    <div class="swatch-color" style="background: #94A3B8;"></div>
+    <span class="swatch-label">Quiet</span>
+    <span class="swatch-hex">#94A3B8</span>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #F1F5F9;"></div>
+    <span class="swatch-label">Text</span>
+    <span class="swatch-hex">#F1F5F9</span>
+  </div>
+</div>
+
+<h2>Before vs After: CoherenceGate Header</h2>
+
+<div class="comparison">
+  <div class="current">
+    <div class="label">Current — Cyan everywhere</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span class="icon">🛡</span>
+          CoherenceGate Layer 4
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span class="badge badge-ok">● Active</span>
+          <span class="badge badge-warn">● 1 blocked</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-label">Judged</div>
+          <div class="stat-value" style="color: #00F5D4;">1,247</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Passed</div>
+          <div class="stat-value" style="color: #00F5D4;">1,246</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" style="color: #FF2E93;">1</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn">Refresh Stats</button>
+        <button class="btn">View Details</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="proposed">
+    <div class="label">Proposed — Amber primary, cyan reserved</div>
+    <div class="card card-highlighted">
+      <div class="card-header">
+        <div class="card-title">
+          <span class="icon">🛡</span>
+          CoherenceGate Layer 4
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span class="badge badge-signal">● Active</span>
+          <span class="badge badge-warn">1 blocked</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-label">Judged</div>
+          <div class="stat-value">1,247</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Passed</div>
+          <div class="stat-value">1,246</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Blocked</div>
+          <div class="stat-value" style="color: #EF4444;">1</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-primary">Refresh Stats</button>
+        <button class="btn-signal">View Live</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  The "Active" badge changes from cyan (overused) to cyan (reserved — it means "this is live right now").<br>
+  Primary actions use amber. The "View Live" button keeps cyan because it opens a real-time view.
+</div>
+
+<h2>Before vs After: Stat Card</h2>
+
+<div class="comparison">
+  <div class="current">
+    <div class="label">Current — Uniform mono labels, cyan values</div>
+    <div class="card">
+      <div class="section-label">Memory</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div>
+          <div class="stat-label">SilvaDB Nodes</div>
+          <div class="stat-value" style="color: #00F5D4; font-size: 24px;">3,847</div>
+        </div>
+        <div style="text-align: right;">
+          <div class="stat-label">Edges</div>
+          <div class="stat-value" style="color: #00F5D4; font-size: 24px;">12,491</div>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <div class="stat-label">Retention</div>
+        <div style="height: 4px; background: #1E293B; border-radius: 2px; overflow: hidden;">
+          <div style="height: 100%; width: 78%; background: #00F5D4; border-radius: 2px;"></div>
+        </div>
+        <div class="stat-label" style="margin-top: 4px;">78.2%</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="proposed">
+    <div class="label">Proposed — Mixed-case labels, mono values, amber focus</div>
+    <div class="card card-highlighted">
+      <div class="section-label">Memory</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div>
+          <div class="stat-label">SilvaDB Nodes</div>
+          <div class="stat-value" style="font-size: 24px;">3,847</div>
+        </div>
+        <div style="text-align: right;">
+          <div class="stat-label">Edges</div>
+          <div class="stat-value" style="font-size: 24px;">12,491</div>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <div class="stat-label">Retention</div>
+        <div style="height: 4px; background: #1E293B; border-radius: 2px; overflow: hidden;">
+          <div style="height: 100%; width: 78%; background: linear-gradient(90deg, #B8860B, #D4A030); border-radius: 2px;"></div>
+        </div>
+        <div class="stat-label" style="margin-top: 4px;">78.2%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  Labels: mixed case, sans-serif, 11px medium (not uppercase mono 9px).<br>
+  Values: mono but white (not colored), 18-24px bold. Color reserved for status meaning.<br>
+  Progress bar: amber gradient instead of cyan.
+</div>
+
+<h2>Anti-Pattern Evaluation</h2>
+
+<table>
+  <tr>
+    <th>Pattern</th>
+    <th>Current</th>
+    <th>Proposed</th>
+    <th>Verdict</th>
+  </tr>
+  <tr>
+    <td>Near-black + single neon accent</td>
+    <td class="yes">YES (cyan everywhere)</td>
+    <td class="no">Three-tier: amber/cyan/slate</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>Monospace everywhere</td>
+    <td class="yes">YES (labels, badges, values, forms)</td>
+    <td class="no">Reserved for data values only</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>Everything centered</td>
+    <td class="yes">Partial</td>
+    <td class="no">Left-aligned headings</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>Same radius everywhere</td>
+    <td class="yes">rounded-xl (12px) on everything</td>
+    <td class="no">Radius hierarchy (6/10/16px)</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>Tiny text (8px floor)</td>
+    <td class="yes">8px-11px dominant</td>
+    <td class="no">Floor raised to 10-11px</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>No visual hierarchy</td>
+    <td class="yes">All same size/weight/color</td>
+    <td class="no">Size + weight + color tiers</td>
+    <td class="fix">FIXED</td>
+  </tr>
+  <tr>
+    <td>Inter/Space Grotesk "safe" font</td>
+    <td class="no">System stack (no import)</td>
+    <td class="no">System stack (no import)</td>
+    <td>N/A</td>
+  </tr>
+</table>
+
+<h2>Key Rules for Implementation</h2>
+
+<table>
+  <tr><th>Rule</th><th>Details</th></tr>
+  <tr>
+    <td>Cyan = live signal only</td>
+    <td>Use #00F5D4 ONLY for: "active/connected" badges, live process indicators, real-time data highlights. NOT for buttons, icons, borders, or general accent.</td>
+  </tr>
+  <tr>
+    <td>Amber = primary action</td>
+    <td>All primary buttons, focus rings, active tab indicators, and "most important thing on screen" get amber (#D4A030).</td>
+  </tr>
+  <tr>
+    <td>Labels: mixed case, sans</td>
+    <td>Replace UPPERCASE TRACKING-WIDER MONO labels with Sentence case, sans-serif, medium weight. Reserve uppercase for true alerts.</td>
+  </tr>
+  <tr>
+    <td>Values: mono, white</td>
+    <td>Data values stay mono but are white (#F1F5F9), not colored. Color only means status (green=ok, amber=warn, red=error).</td>
+  </tr>
+  <tr>
+    <td>Text floor: 10px</td>
+    <td>No text smaller than 10px. Section headings 12-13px. Card titles 13-14px.</td>
+  </tr>
+  <tr>
+    <td>Body gradient: warm</td>
+    <td>Change emerald+blue gradient to amber+slate: rgba(212, 160, 48, 0.03).</td>
+  </tr>
+</table>
+
+<p style="margin-top: 40px; font-size: 11px; color: #64748B;">
+  Mockup by Mimo — 2026-07-30. For review by José before any implementation.
+</p>
+
+</body>
+</html>

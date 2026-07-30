@@ -136,7 +136,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
         <button
           onClick={loadSkills}
           disabled={loading}
-          className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors"
+          className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
           title="Refresh skills"
         >
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -147,17 +147,17 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
         {/* Left Column: Skill List */}
         <div className="lg:col-span-1 space-y-4">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-400">Available Skills</span>
+            <span className="text-[11px] font-medium font-mono text-slate-400">Available Skills</span>
             <button
               onClick={() => openEditor()}
-              className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-xs font-bold font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-medium font-mono rounded-lg flex items-center gap-1.5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               New
             </button>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-850 rounded-2xl overflow-hidden divide-y divide-slate-800">
+          <div className="bg-slate-900/60 rounded-2xl overflow-hidden divide-y divide-slate-800">
             {error ? (
               <div className="p-8 text-center space-y-2">
                 <ServerOff className="w-8 h-8 mx-auto text-slate-600" />
@@ -202,9 +202,9 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
         {/* Right Column: Editor / Viewer */}
         <div className="lg:col-span-2">
           {isCreating || editingSkill ? (
-            <div className="p-6 bg-slate-900/40 border border-slate-850 rounded-2xl space-y-4 min-h-[400px] flex flex-col">
+            <div className="p-6 bg-slate-900/40 rounded-2xl space-y-4 min-h-[400px] flex flex-col">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-400">
+                <span className="text-[11px] font-medium font-mono text-slate-400">
                   {isCreating ? 'Create New Skill' : 'Edit Skill'}
                 </span>
                 <button
@@ -217,24 +217,24 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
               <div className="space-y-4 flex-1 flex flex-col">
                 <div>
-                  <label className="text-[10px] font-mono text-slate-500 block mb-1 uppercase font-bold">Skill Name / Identifier</label>
+                  <label className="text-[10px] font-mono text-slate-500 block mb-1 font-medium">Skill Name / Identifier</label>
                   <input
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     disabled={!isCreating}
                     placeholder="e.g. format-guidelines"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:border-amber-500 focus:outline-none disabled:opacity-50"
                   />
                 </div>
                 
                 <div className="flex-1 flex flex-col">
-                  <label className="text-[10px] font-mono text-slate-500 block mb-1 uppercase font-bold">Content / Instructions</label>
+                  <label className="text-[10px] font-mono text-slate-500 block mb-1 font-medium">Content / Instructions</label>
                   <textarea
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
                     placeholder="Describe the context or instructions that agents should follow when invoking this skill..."
-                    className="w-full flex-1 min-h-[200px] p-4 bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl font-mono text-xs text-slate-200 placeholder-slate-600 resize-none leading-relaxed"
+                    className="w-full flex-1 min-h-[200px] p-4 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl font-mono text-xs text-slate-200 placeholder-slate-600 resize-none leading-relaxed"
                   />
                 </div>
               </div>
@@ -243,7 +243,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
                 <button
                   onClick={handleSave}
                   disabled={loading || !newName.trim() || !newContent.trim()}
-                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono text-xs rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold font-mono text-xs rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
                   Save Skill
@@ -251,7 +251,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-slate-500 font-mono text-xs py-12 gap-3 border border-slate-850 border-dashed rounded-2xl bg-slate-900/20">
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-slate-500 font-mono text-xs py-12 gap-3 rounded-2xl bg-slate-900/20">
               <Eye className="w-12 h-12 text-slate-700 animate-pulse" />
               <div className="text-center">
                 <p>No skill selected</p>

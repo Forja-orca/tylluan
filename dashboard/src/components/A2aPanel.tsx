@@ -120,11 +120,11 @@ export default function A2aPanel({ notify }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         
         {/* Left: Agent Card */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="bg-slate-900/60 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800/50 pb-3">
             <div className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">A2A Agent Card Manifest</h3>
+              <h3 className="text-sm font-medium text-slate-100">A2A Agent Card Manifest</h3>
             </div>
             <button
               onClick={fetchAgentCard}
@@ -144,43 +144,43 @@ export default function A2aPanel({ notify }: Props) {
             <div className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 uppercase font-mono block">Agent Name</span>
+                  <span className="text-[10px] text-slate-500 font-mono block">Agent Name</span>
                   <span className="font-bold text-slate-200">{card.name}</span>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 uppercase font-mono block">Protocol Version</span>
+                  <span className="text-[10px] text-slate-500 font-mono block">Protocol Version</span>
                   <span className="font-mono text-emerald-400 font-bold">{card.protocolVersion}</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-mono block">JSON-RPC A2A Endpoint</span>
-                <span className="font-mono text-slate-300 block bg-slate-950 p-2 rounded-lg border border-slate-800 truncate select-all">{card.url}</span>
+                <span className="text-[10px] text-slate-500 font-mono block">JSON-RPC A2A Endpoint</span>
+                <span className="font-mono text-slate-300 block bg-slate-950 p-2 rounded-lg truncate select-all">{card.url}</span>
               </div>
 
               <div className="space-y-2">
-                <span className="text-[10px] text-slate-500 uppercase font-mono block">Capabilities & Skills ({card.skills.length})</span>
+                <span className="text-[10px] text-slate-500 font-mono block">Capabilities & Skills ({card.skills.length})</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {card.skills.map((skill, idx) => (
-                    <div key={idx} className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex flex-col space-y-1">
-                      <span className="font-bold text-slate-300 font-mono text-[10px]">{skill.name}</span>
-                      <span className="text-[9px] text-slate-500 leading-tight">{skill.description}</span>
+                    <div key={idx} className="p-2 rounded-lg bg-slate-950 flex flex-col space-y-1">
+                      <span className="font-medium text-slate-300 text-[10px]">{skill.name}</span>
+                      <span className="text-[10px] text-slate-500 leading-tight">{skill.description}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-2 border-t border-slate-800/50 pt-3">
-                <span className="text-[10px] text-slate-500 uppercase font-mono block">Security & Authentication</span>
+                <span className="text-[10px] text-slate-500 font-mono block">Security & Authentication</span>
                 {Object.entries(card.securitySchemes).map(([key, value]: [string, any]) => (
-                  <div key={key} className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start gap-2.5">
+                  <div key={key} className="p-3 rounded-lg bg-slate-950 flex items-start gap-2.5">
                     <Key className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-200 font-mono text-[10px]">{key}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[8px] font-bold uppercase font-mono">{value.scheme}</span>
+                        <span className="font-medium text-slate-200 font-mono text-[10px]">{key}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 text-[10px] font-medium">{value.scheme}</span>
                       </div>
-                      <p className="text-[9px] text-slate-500 mt-1 leading-tight">{value.description}</p>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-tight">{value.description}</p>
                     </div>
                   </div>
                 ))}
@@ -192,10 +192,10 @@ export default function A2aPanel({ notify }: Props) {
         </div>
 
         {/* Right: Task Inspector */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <div className="bg-slate-900/60 rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-800/50 pb-3">
             <Layers className="w-5 h-5 text-indigo-400" />
-            <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">A2A Task Inspector</h3>
+            <h3 className="text-sm font-medium text-slate-100">A2A Task Inspector</h3>
           </div>
 
           <div className="space-y-3">
@@ -238,11 +238,11 @@ export default function A2aPanel({ notify }: Props) {
             <div className="space-y-4 text-xs border-t border-slate-800/50 pt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 uppercase font-mono block">Task ID</span>
+                  <span className="text-[10px] text-slate-500 font-mono block">Task ID</span>
                   <span className="font-bold font-mono text-slate-200">{searchedTask.id}</span>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[10px] text-slate-500 uppercase font-mono block">Status / State</span>
+                  <span className="text-[10px] text-slate-500 font-mono block">Status / State</span>
                   <span className={cn(
                     "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase font-mono border inline-block",
                     searchedTask.state === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
@@ -256,12 +256,12 @@ export default function A2aPanel({ notify }: Props) {
               </div>
 
               <div className="space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-mono block">Client Agent ID</span>
-                <span className="font-mono text-slate-300 font-bold bg-slate-950 px-2 py-1.5 rounded-lg border border-slate-800 block">{searchedTask.client_agent_id}</span>
+                <span className="text-[10px] text-slate-500 font-mono block">Client Agent ID</span>
+                <span className="font-mono text-slate-300 font-medium bg-slate-950 px-2 py-1.5 rounded-lg block">{searchedTask.client_agent_id}</span>
               </div>
 
               <div className="space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-mono block">Result / Output</span>
+                <span className="text-[10px] text-slate-500 font-mono block">Result / Output</span>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] leading-relaxed text-slate-300 whitespace-pre-wrap max-h-36 overflow-y-auto">
                   {searchedTask.result || <span className="text-slate-500 italic">No output yet (Task is still in progress)</span>}
                 </div>
@@ -271,14 +271,14 @@ export default function A2aPanel({ notify }: Props) {
                 <div className="flex items-center gap-1.5 text-slate-500">
                   <Clock className="w-3.5 h-3.5" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase font-mono tracking-tighter">Created At</span>
+                    <span className="text-[10px] font-medium text-slate-400">Created At</span>
                     <span className="text-[10px] font-mono text-slate-400">{new Date(searchedTask.created_at).toLocaleTimeString()}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-slate-500">
                   <Clock className="w-3.5 h-3.5" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase font-mono tracking-tighter">Updated At</span>
+                    <span className="text-[10px] font-medium text-slate-400">Updated At</span>
                     <span className="text-[10px] font-mono text-slate-400">{new Date(searchedTask.updated_at).toLocaleTimeString()}</span>
                   </div>
                 </div>
@@ -289,13 +289,13 @@ export default function A2aPanel({ notify }: Props) {
       </div>
 
       {/* Action Approvals (Human-in-the-Loop) */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 flex-1 min-h-0 flex flex-col">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+      <div className="bg-slate-900/60 rounded-xl p-5 flex-1 min-h-0 flex flex-col">
+        <div className="flex items-center justify-between border-b border-slate-800/50 pb-3 mb-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-amber-500" />
-            <h3 className="text-sm font-bold text-slate-50 uppercase tracking-wider">A2A Sandbox Approvals (Human-in-the-Loop)</h3>
+            <h3 className="text-sm font-medium text-slate-100">A2A Sandbox Approvals (Human-in-the-Loop)</h3>
           </div>
-          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold font-mono">
+          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[11px] font-medium">
             {approvals.length} PENDING
           </span>
         </div>
@@ -309,10 +309,10 @@ export default function A2aPanel({ notify }: Props) {
         ) : (
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
             {approvals.map((app) => (
-              <div key={app.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div key={app.id} className="p-4 rounded-xl bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1.5 max-w-2xl">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[9px] font-bold font-mono rounded uppercase">
+                    <span className="px-2 py-0.5 bg-red-500/10 text-red-400 text-[10px] font-medium rounded-md">
                       Blocked Action
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono">ID: {app.id}</span>

@@ -93,8 +93,8 @@ function StatTile({
   subtitle?: string;
 }) {
   return (
-    <div className="flex-1 min-w-[140px] p-3.5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-xl group hover:border-slate-700 transition-all">
-      <div className="flex items-center gap-1.5 text-slate-400 text-[10px] uppercase font-bold tracking-widest font-mono mb-1.5">
+    <div className="flex-1 min-w-[140px] p-3.5 bg-slate-900/60 rounded-xl group transition-all">
+      <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-medium font-mono mb-1.5">
         <Icon className={cn('w-3.5 h-3.5', accent)} />
         {label}
       </div>
@@ -141,10 +141,10 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/60 rounded-2xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded">
+            <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 rounded-md">
               Friction Log
             </span>
           </div>
@@ -159,7 +159,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
         <button
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-amber-500/50 text-xs text-slate-200 font-mono font-medium rounded-xl transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-mono font-medium rounded-xl transition-all disabled:opacity-50"
         >
           <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
           <span>{loading ? 'Polling...' : 'Sync Stats'}</span>
@@ -173,11 +173,11 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
       )}
 
       {/* Friction Score — hero tile */}
-      <div className="flex items-center gap-6 p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl">
+      <div className="flex items-center gap-6 p-5 bg-slate-900/60 rounded-2xl">
         <ScoreRing score={stats?.total_friction_score ?? 0} max={Math.max(10, stats?.total_friction_score ?? 10)} />
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Total Friction Score</span>
+            <span className="text-xs font-medium text-slate-400 font-mono">Total Friction Score</span>
             <TrendBadge current={stats?.total_friction_score ?? 0} previous={prevScore} />
           </div>
           <div className="text-3xl font-bold text-slate-100 font-mono">
@@ -191,7 +191,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
 
       {/* Stat tiles — event type counters */}
       <div className="space-y-2">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-2">
+        <h3 className="text-[11px] font-medium text-slate-400 font-mono flex items-center gap-2">
           <Gauge className="w-3.5 h-3.5 text-amber-400" />
           Event Counters
         </h3>
@@ -235,7 +235,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
             icon={Zap}
             label="Guild Errors"
             value={formatVal(stats?.guild_errors)}
-            accent="text-cyan-400"
+            accent="text-amber-400"
             subtitle="Guild execution failures"
           />
         </div>
@@ -243,7 +243,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
 
       {/* Workflow stats */}
       <div className="space-y-2">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-2">
+        <h3 className="text-[11px] font-medium text-slate-400 font-mono flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-amber-400" />
           Workflow Aggregates
         </h3>
@@ -281,7 +281,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
 
       {/* Coloquio roundtrips */}
       {((stats?.coloquio_roundtrips ?? 0) > 0) && (
-        <div className="p-4 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl flex items-center gap-4">
+        <div className="p-4 bg-slate-900/60 rounded-2xl flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-indigo-500/15 flex items-center justify-center">
             <Users className="w-5 h-5 text-indigo-400" />
           </div>

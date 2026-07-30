@@ -160,7 +160,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   };
 
   const getStatusBadge = (status: BackgroundJob['status']) => {
-    const base = "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border leading-none";
+    const base = "px-2 py-0.5 rounded-full text-[10px] font-medium leading-none";
     switch (status) {
       case 'pending':
         return cn(base, "bg-emerald-500/10 text-emerald-400 border-emerald-500/20");
@@ -192,19 +192,19 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
       </div>
 
       {/* Start Job Form */}
-      <div className="flex items-center gap-2 p-4 bg-slate-900/60 border border-slate-850 rounded-2xl">
+      <div className="flex items-center gap-2 p-4 bg-slate-900/60 rounded-2xl">
         <input
           type="text"
           value={intent}
           onChange={(e) => setIntent(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleStartJob()}
           placeholder="e.g. deep analysis of the codebase architecture"
-          className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl text-xs font-mono text-slate-200 placeholder-slate-600"
+          className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl text-xs font-mono text-slate-200 placeholder-slate-600"
         />
         <button
           onClick={handleStartJob}
           disabled={starting || !intent.trim()}
-          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono text-xs rounded-xl flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold font-mono text-xs rounded-xl flex items-center gap-1.5 transition-colors disabled:opacity-50"
         >
           <Play className="w-3.5 h-3.5" />
           Start
@@ -215,11 +215,11 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Jobs List (Left / Span 2) */}
         <div className="lg:col-span-2 space-y-4">
-          <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-400 block">
+          <span className="text-[11px] font-medium font-mono text-slate-400 block">
             Tracked This Session
           </span>
 
-          <div className="bg-slate-900/60 border border-slate-850 rounded-2xl overflow-hidden divide-y divide-slate-850">
+          <div className="bg-slate-900/60 rounded-2xl overflow-hidden divide-y divide-slate-850">
             {jobs.length === 0 ? (
               <div className="p-12 text-center text-slate-500 font-mono text-xs">
                 No background jobs started yet.
@@ -253,7 +253,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
                   {job.status !== 'pending' && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setSelectedJobId(job.id); }}
-                      className="px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-mono rounded-xl flex items-center gap-1.5 transition-all self-end md:self-auto"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded-xl flex items-center gap-1.5 transition-all self-end md:self-auto"
                     >
                       <Eye className="w-3.5 h-3.5 text-emerald-400" />
                       View Result
@@ -267,23 +267,23 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
 
         {/* Selected Job Result (Right / Span 1) */}
         <div className="lg:col-span-1 space-y-4">
-          <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-400 block">Result Inspector</span>
+          <span className="text-[11px] font-medium font-mono text-slate-400 block">Result Inspector</span>
 
-          <div className="bg-slate-900/40 border border-slate-850 rounded-2xl p-6 min-h-[300px] flex flex-col justify-between">
+          <div className="bg-slate-900/40 rounded-2xl p-6 min-h-[300px] flex flex-col justify-between">
             {selectedJob ? (
               <div className="space-y-4 flex-1 flex flex-col justify-between font-mono text-xs">
                 <div>
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-                    <span className="text-xs font-bold text-slate-400">Result: {selectedJob.id}</span>
+                    <span className="text-xs font-medium text-slate-400">Result: {selectedJob.id}</span>
                     <span className={getStatusBadge(selectedJob.status)}>{selectedJob.status}</span>
                   </div>
-                  <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl text-[11px] text-slate-200 max-h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  <div className="p-3 bg-slate-950 rounded-xl text-[11px] text-slate-200 max-h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed">
                     {selectedJob.result_text || (selectedJob.status === 'pending' ? 'Still running...' : '(no result text)')}
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedJobId(null)}
-                  className="w-full mt-6 py-2 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-50 font-bold font-mono text-xs rounded-xl transition-all"
+                  className="w-full mt-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-50 font-semibold font-mono text-xs rounded-xl transition-all"
                 >
                   Clear Selection
                 </button>

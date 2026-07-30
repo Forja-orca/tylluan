@@ -35,15 +35,15 @@ function TacticalStatCard({
   subtitle?: string;
 }) {
   return (
-    <div className="flex-1 min-w-[160px] p-4 bg-[#0B0F17]/90 border border-slate-800/80 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-all">
-      <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-widest font-mono mb-2">
+    <div className="flex-1 min-w-[160px] p-4 bg-slate-900/60 rounded-xl relative overflow-hidden group hover:bg-slate-900/80 transition-all">
+      <div className="flex items-center justify-between text-slate-400 text-[11px] font-medium mb-2">
         <span className="flex items-center gap-1.5">
           <Icon className={cn('w-3.5 h-3.5', accentColor)} />
           {label}
         </span>
       </div>
       <div className="text-2xl font-bold text-slate-100 font-mono tracking-tight">{value}</div>
-      {subtitle && <div className="mt-1 text-[10px] text-slate-500 font-mono">{subtitle}</div>}
+      {subtitle && <div className="mt-1 text-[10px] text-slate-500">{subtitle}</div>}
     </div>
   );
 }
@@ -86,18 +86,18 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/60 rounded-2xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider uppercase bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/30 rounded">
+            <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
               ADR-011 Active
             </span>
-            <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider uppercase bg-[#FF2E93]/10 text-[#FF2E93] border border-[#FF2E93]/30 rounded">
+            <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-400 rounded-md">
               3-Layer Defense
             </span>
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-100 mt-2 flex items-center gap-2 font-mono">
-            <ShieldAlert className="w-5 h-5 text-[#00F5D4]" />
+          <h2 className="text-xl font-semibold tracking-tight text-slate-100 mt-2 flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-amber-400" />
             Coherence Gate &amp; Signal Loop Telemetry
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -107,15 +107,15 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
         <button
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-[#00F5D4]/50 text-xs text-slate-200 font-mono font-medium rounded-xl transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50"
         >
-          <RefreshCw className={cn('w-3.5 h-3.5 text-[#00F5D4]', loading && 'animate-spin')} />
+          <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
           <span>{loading ? 'Polling...' : 'Sync Stats'}</span>
         </button>
       </div>
 
       {error && (
-        <div className="p-4 bg-[#FF2E93]/10 border border-[#FF2E93]/30 text-[#FF2E93] rounded-xl text-xs font-mono">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs">
           ⚠️ {error}
         </div>
       )}
@@ -123,11 +123,11 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       {/* Coherence Gate Telemetry */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-[#00F5D4]" />
+          <h3 className="text-[11px] font-medium text-slate-400 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-amber-400" />
             Coherence Gate — Live Memory Protection
           </h3>
-          <span className="text-[10px] font-mono text-slate-500">Live Session Counters</span>
+          <span className="text-[10px] text-slate-500">Live Session Counters</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -156,17 +156,17 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
 
         {/* 3-Layer Architecture Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-          <div className="p-3.5 bg-[#0B0F17]/60 border border-slate-800/60 rounded-xl">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 font-mono mb-1">
-              <span className="w-2 h-2 rounded-full bg-[#FF2E93]" />
+          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
               Layer 1: Pattern Interception
             </div>
             <p className="text-[11px] text-slate-400">
               Eliminates known prompt injection signatures before memory is passed to LLM context.
             </p>
           </div>
-          <div className="p-3.5 bg-[#0B0F17]/60 border border-slate-800/60 rounded-xl">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 font-mono mb-1">
+          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
               Layer 2: Trust Provenance
             </div>
@@ -174,9 +174,9 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
               Applies rank penalty to unverified federation peers and untrusted external sources.
             </p>
           </div>
-          <div className="p-3.5 bg-[#0B0F17]/60 border border-slate-800/60 rounded-xl">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 font-mono mb-1">
-              <span className="w-2 h-2 rounded-full bg-[#00F5D4]" />
+          <div className="p-3.5 bg-slate-900/40 rounded-xl">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
+              <span className="w-2 h-2 rounded-full bg-cyan-400" />
               Layer 3: Semantic Drift
             </div>
             <p className="text-[11px] text-slate-400">
@@ -189,44 +189,44 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       {/* Signal Loop Training Progress */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-2">
-            <Activity className="w-3.5 h-3.5 text-[#00F5D4]" />
+          <h3 className="text-[11px] font-medium text-slate-400 flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
             Signal Loop — LightReranker FFN Progress (ADR-011 §3)
           </h3>
-          <span className="text-[10px] font-mono text-slate-500">Threshold: 5,000 Resolved Rows</span>
+          <span className="text-[10px] text-slate-500">Threshold: 5,000 Resolved Rows</span>
         </div>
 
-        <div className="p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl space-y-4">
-          <div className="flex justify-between items-baseline font-mono">
+        <div className="p-5 bg-slate-900/60 rounded-2xl space-y-4">
+          <div className="flex justify-between items-baseline">
             <div className="space-y-1">
               <div className="text-xs text-slate-400">
                 <span className="text-slate-100 font-bold text-sm">{formatStatValue(signal?.resolved)}</span> / {formatStatValue(threshold)} resolved rows
               </div>
               <div className="text-[11px] text-slate-500">
-                Pending resolution: <span className="text-slate-300 font-bold">{formatStatValue(signal?.pending)}</span>
+                Pending resolution: <span className="text-slate-300 font-semibold">{formatStatValue(signal?.pending)}</span>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-xl font-bold text-[#00F5D4]">{progressPct.toFixed(2)}%</div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
+              <div className="text-xl font-bold text-amber-400">{progressPct.toFixed(2)}%</div>
+              <div className="text-[10px] text-slate-500 font-medium">
                 {resolvedCount >= threshold ? 'Ready to Train' : 'Accumulating Signal'}
               </div>
             </div>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+          <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-[#00F5D4] transition-all duration-500 shadow-[0_0_12px_rgba(0,245,212,0.4)]"
+              className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-500"
               style={{ width: `${Math.max(2, progressPct)}%` }}
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-slate-800/60 text-[11px] font-mono text-slate-400">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-slate-800/60 text-[11px] text-slate-400">
             <div className="flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-slate-400" />
               <span>Learned LightReranker (FFN 4→16→1):</span>
-              <span className="text-amber-400 font-bold">
+              <span className="text-amber-400 font-semibold">
                 {resolvedCount >= threshold ? 'Cutover Ready' : 'Standby (Hybrid RRF Active)'}
               </span>
             </div>

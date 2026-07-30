@@ -144,7 +144,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Trash2,
       iconColor: 'text-red-400',
       desc: 'Recupera espacio libre y desfragmenta los archivos de base de datos. Recomendado tras borrados masivos.',
-      btnClass: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20',
+      btnClass: 'bg-red-500/10 hover:bg-red-500/20 text-red-400',
     },
     {
       id: 'checkpoint',
@@ -152,7 +152,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Save,
       iconColor: 'text-blue-400',
       desc: 'Vuelca el Write-Ahead Log (WAL) al archivo principal. Garantiza integridad de persistencia.',
-      btnClass: 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20',
+      btnClass: 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400',
     },
     {
       id: 'decay',
@@ -160,7 +160,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Activity,
       iconColor: 'text-amber-400',
       desc: 'Aplica reducción de peso biológico en SilvaDB. Reduce memorias obsoletas para mantener relevancia.',
-      btnClass: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30',
+      btnClass: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400',
     },
     {
       id: 'export',
@@ -168,7 +168,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Download,
       iconColor: 'text-emerald-400',
       desc: 'Exporta un snapshot del grafo de conocimiento a ./data/exports/. Útil antes de operaciones de riesgo.',
-      btnClass: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20',
+      btnClass: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400',
     },
     {
       id: 'communities',
@@ -176,7 +176,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Network,
       iconColor: 'text-indigo-400',
       desc: 'Ejecuta el algoritmo Louvain sobre SilvaDB para agrupar nodos por comunidades semánticas. Útil para visualización.',
-      btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20',
+      btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400',
     },
     {
       id: 'clean-orphans',
@@ -184,7 +184,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Trash2,
       iconColor: 'text-indigo-400',
       desc: 'Elimina de SilvaDB los nodos huérfanos (aislados, sin relaciones entrantes ni salientes) no protegidos.',
-      btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20',
+      btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400',
     },
     {
       id: 'purge',
@@ -192,7 +192,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: Trash2,
       iconColor: 'text-rose-600',
       desc: '⚠️ ADVERTENCIA: Borra TODOS los nodos y relaciones de SilvaDB. Útil para limpiar el contexto si hay alucinaciones.',
-      btnClass: 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-500 border border-rose-500/40 font-black',
+      btnClass: 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-500 font-bold',
     },
   ];
 
@@ -201,20 +201,20 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">Mantenimiento Soberano</h2>
+          <h2 className="text-sm font-medium text-slate-100">Mantenimiento Soberano</h2>
           <p className="text-xs text-slate-500 mt-0.5">Operaciones sobre SilvaDB y HybridMemory</p>
         </div>
         <button
           type="button"
           onClick={loadStatus}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
         >
           <RefreshCw className="w-3 h-3" /> Actualizar
         </button>
       </div>
 
       {/* Connection Diagnostic */}
-      <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+      <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-900/50">
         <div className={cn("p-2 rounded-lg", probe ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
           {probe ? <Network className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
         </div>
@@ -229,10 +229,10 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ icon: Icon, label, value, sub, color }) => (
-          <div key={label} className="p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+          <div key={label} className="p-4 rounded-2xl bg-slate-900/40">
             <div className="flex items-center gap-2 text-slate-500 mb-2">
               <Icon className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
+              <span className="text-[11px] font-medium">{label}</span>
             </div>
             <div className={cn("text-xl font-bold font-mono truncate", color)}>{value}</div>
             <p className="text-[10px] text-slate-600 mt-1 truncate">{sub}</p>
@@ -241,15 +241,15 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Operations */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
+      <div className="rounded-2xl bg-slate-900/40 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800/50 flex items-center gap-2">
           <Network className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Operaciones</span>
+          <span className="text-xs font-medium text-slate-400">Operaciones</span>
         </div>
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {operations.map(({ id, label, icon: Icon, iconColor, desc, btnClass }) => (
-            <div key={id} className="flex flex-col gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
-              <h3 className="text-xs font-bold flex items-center gap-2 text-slate-200">
+            <div key={id} className="flex flex-col gap-3 p-4 rounded-xl bg-slate-950/40">
+              <h3 className="text-xs font-medium flex items-center gap-2 text-slate-200">
                 <Icon className={cn("w-4 h-4", iconColor)} />
                 {label}
               </h3>
@@ -259,7 +259,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 onClick={() => runAction(id, label)}
                 disabled={!!loading}
                 className={cn(
-                  "w-full py-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
+                  "w-full py-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
                   btnClass
                 )}
               >
@@ -275,9 +275,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
 
       {/* Host Resources Viewer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-6 rounded-2xl border border-slate-800 bg-slate-950/40">
+        <div className="p-6 rounded-2xl bg-slate-950/40">
           <div className="flex items-center gap-2 mb-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
               <Cpu className="w-4 h-4 text-blue-400" /> Host CPU Usage
             </h3>
           </div>
@@ -301,9 +301,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           )}
           <p className="text-[10px] text-slate-600 mt-2 font-mono text-center italic">Kernel process monitor active</p>
         </div>
-        <div className="p-6 rounded-2xl border border-slate-800 bg-slate-950/40">
+        <div className="p-6 rounded-2xl bg-slate-950/40">
           <div className="flex items-center gap-2 mb-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
               <Database className="w-4 h-4 text-emerald-400" /> Host RAM Pressure
             </h3>
           </div>
@@ -319,7 +319,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           ) : (
             <>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)] transition-all duration-1000" style={{ width: `${sysStatus?.system?.memory_percent ?? 0}%` }} />
+                <div className="h-full bg-emerald-500/50 transition-all duration-1000" style={{ width: `${sysStatus?.system?.memory_percent ?? 0}%` }} />
               </div>
               <p className="text-[10px] text-slate-600 mt-2 font-mono text-center italic">
                 {sysStatus?.system?.used_memory_mb ?? 0} MB / {sysStatus?.system?.total_memory_mb ?? 0} MB RAM detectados
@@ -330,7 +330,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Info footer */}
-      <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/30 border border-slate-800/50">
+      <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/30">
         <Database className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
         <p className="text-[11px] text-slate-600 leading-relaxed">
           Las operaciones de mantenimiento actúan sobre <span className="text-slate-400">SilvaDB</span> (grafo de conocimiento)
@@ -341,8 +341,8 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       </div>
 
       {/* Token + Config Section */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-4">
+      <div className="rounded-2xl bg-slate-900/50 p-6">
+        <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2 mb-4">
           <ShieldCheck className="w-4 h-4 text-violet-400" /> Admin Access
         </h3>
         <div className="flex gap-3">
@@ -358,9 +358,9 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: input.value }));
               }
             }}
-            className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-slate-300"
+            className="flex-1 px-3 py-2 bg-slate-950 rounded-xl text-xs font-mono text-slate-300"
           />
-          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token actualizado', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold">
+          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token actualizado', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-medium">
             Save Token
           </button>
         </div>

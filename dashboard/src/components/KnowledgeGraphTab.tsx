@@ -207,31 +207,31 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <Network className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-50 uppercase tracking-wider">Cortex Knowledge</h2>
-            <p className="text-[10px] text-slate-500 font-mono">SilvaDB visualizer & search engine</p>
+            <h2 className="text-sm font-semibold text-slate-50">Cortex Knowledge</h2>
+            <p className="text-[10px] text-slate-500">SilvaDB visualizer & search engine</p>
           </div>
         </div>
 
-        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 gap-1 items-center shrink-0">
+        <div className="flex bg-slate-900 rounded-lg p-1 gap-1 items-center shrink-0">
           <button 
             type="button" 
             onClick={() => setActiveSubView('graph')} 
             className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
-              activeSubView === 'graph' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "text-slate-500 hover:text-slate-300"
+              "px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
+              activeSubView === 'graph' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-300"
             )}
           >
-            <Network className="w-3.5 h-3.5" /> GRAPH CANVAS
+            <Network className="w-3.5 h-3.5" /> Graph Canvas
           </button>
           <button 
             type="button" 
             onClick={() => setActiveSubView('list')} 
             className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
-              activeSubView === 'list' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "text-slate-500 hover:text-slate-300"
+              "px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
+              activeSubView === 'list' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-300"
             )}
           >
-            <List className="w-3.5 h-3.5" /> LIST EXPLORER
+            <List className="w-3.5 h-3.5" /> List Explorer
           </button>
         </div>
       </div>
@@ -243,7 +243,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <>
               <div className="flex-1 min-h-0 flex flex-col">
                 <Suspense fallback={
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-800/80 bg-[#040918] flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
+                  <div className="flex-1 min-h-0 rounded-xl bg-slate-900/60 flex items-center justify-center gap-2 text-xs text-slate-500">
                     <RefreshCw className="w-4 h-4 animate-spin" /> Cargando cortex 3D...
                   </div>
                 }>
@@ -253,7 +253,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
             </>
           ) : (
-            <div className="h-full rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center">
+            <div className="h-full rounded-xl bg-slate-900/60 flex items-center justify-center">
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 Esperando conexion con SilvaDB
@@ -266,7 +266,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           <div className="flex items-center justify-between gap-4">
             <div className="flex gap-2 flex-1 max-w-3xl items-center">
               {results.length > 0 && (
-                <span className="text-[10px] font-mono text-slate-500 whitespace-nowrap">{results.length} patterns</span>
+                <span className="text-[10px] font-medium text-slate-500 whitespace-nowrap">{results.length} patterns</span>
               )}
               <div className="flex-1 relative">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -276,7 +276,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowSearchPanel(true)}
                   placeholder="Buscar en memoria..."
-                  className="w-full pl-10 pr-10 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-sm focus:ring-1 ring-emerald-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2 bg-slate-900/80 rounded-lg text-sm focus:ring-1 ring-emerald-500 transition-all"
                 />
                 {searchQuery && (
                   <button
@@ -291,8 +291,8 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={() => setShowRecentSidebar(!showRecentSidebar)}
                 className={cn(
-                  "p-2 rounded-lg border transition-all",
-                  showRecentSidebar ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-50"
+                  "p-2 rounded-lg transition-all",
+                  showRecentSidebar ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-900 text-slate-500 hover:text-slate-50"
                 )}
                 title="Últimas 24h"
               >
@@ -301,14 +301,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <button
                 onClick={runClustering}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs font-bold text-blue-400 hover:bg-blue-500/20 transition-all"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 text-xs font-medium text-blue-400 hover:bg-blue-500/20 transition-all"
               >
                 <Zap className="w-3.5 h-3.5" /> Detectar Comunidades
               </button>
               <button
                 onClick={loadRecent}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Actualizar
               </button>
@@ -316,32 +316,32 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-bold flex items-center gap-2"
+                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium flex items-center gap-2"
               >
                 {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Explore
               </button>
             </div>
-            <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 shrink-0 gap-1 items-center">
-              <button type="button" onClick={() => setView('grid')} className={cn("px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors", view === 'grid' ? "bg-slate-800 text-emerald-400" : "text-slate-500 hover:text-slate-300")}>GRID</button>
-              <button type="button" onClick={() => setView('table')} className={cn("px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors", view === 'table' ? "bg-slate-800 text-emerald-400" : "text-slate-500 hover:text-slate-300")}>TABLE</button>
+            <div className="flex bg-slate-900 rounded-lg p-1 shrink-0 gap-1 items-center">
+              <button type="button" onClick={() => setView('grid')} className={cn("px-2 py-1 rounded text-[10px] font-medium cursor-pointer transition-colors", view === 'grid' ? "bg-slate-800 text-emerald-400" : "text-slate-500 hover:text-slate-300")}>Grid</button>
+              <button type="button" onClick={() => setView('table')} className={cn("px-2 py-1 rounded text-[10px] font-medium cursor-pointer transition-colors", view === 'table' ? "bg-slate-800 text-emerald-400" : "text-slate-500 hover:text-slate-300")}>Table</button>
               <div className="w-px bg-slate-800 self-stretch my-0.5 mx-1"></div>
               <button 
                 type="button" 
                 onClick={() => setCompactMode(!compactMode)} 
                 className={cn(
-                  "px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors",
-                  compactMode ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "text-slate-500 hover:text-slate-300"
+                  "px-2 py-1 rounded text-[10px] font-medium cursor-pointer transition-colors",
+                  compactMode ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-300"
                 )}
               >
-                {compactMode ? "COMPACT" : "FULL VIEW"}
+                {compactMode ? "Compact" : "Full View"}
               </button>
             </div>
           </div>
 
           {showSearchPanel && searchResults.length > 0 && (
-            <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+            <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 rounded-xl shadow-2xl">
               <div className="sticky top-0 bg-slate-800 px-3 py-2 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Resultados</span>
+                <span className="text-[10px] font-medium text-slate-400">Resultados</span>
                 <button onClick={() => setShowSearchPanel(false)}><X className="w-3 h-3 text-slate-500" /></button>
               </div>
               {searchResults.map((node, i) => (
@@ -355,7 +355,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   }}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[8px] font-bold uppercase text-violet-400">{node.node_type || 'node'}</span>
+                    <span className="text-[8px] font-medium text-violet-400">{node.node_type || 'node'}</span>
                   </div>
                   <p className="text-xs text-slate-300 line-clamp-2">{node.content || node.label || node.id}</p>
                 </div>
@@ -382,9 +382,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           {/* IVF Index Status Widget */}
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-900/80">
             <Layers className="w-4 h-4 text-slate-500 flex-shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">IVF Index</span>
+            <span className="text-[10px] font-medium text-slate-500">IVF Index</span>
             <div className="flex items-center gap-1.5 ml-1">
               {memoryStats?.ivf_ready ? (
                 <>
@@ -429,20 +429,20 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   const nodeType = (node as any).node_type || (node as any).type || 'entity';
                   const nodeContent = fixDoubleEncoding(node.content || (node as any).label || '—');
                   return (
-                    <div key={i} className={cn("group p-4 rounded-xl border transition-all relative overflow-hidden", 
-                      (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "bg-slate-900/50 hover:bg-slate-800/50 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]" :
-                      nodeType === 'consolidated_summary' ? "bg-indigo-950/10 hover:bg-indigo-900/20 border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.1)]" : "bg-slate-900/50 hover:bg-slate-800/50 border-slate-800"
+                    <div key={i} className={cn("group p-4 rounded-lg transition-all relative overflow-hidden", 
+                      (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "bg-slate-900/50 hover:bg-slate-800/50" :
+                      nodeType === 'consolidated_summary' ? "bg-indigo-950/10 hover:bg-indigo-900/20" : "bg-slate-900/50 hover:bg-slate-800/50"
                     )}>
                       <div className="flex items-center gap-2 mb-3">
                         <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
-                          nodeType === 'consolidated_summary' ? "bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]" :
+                          nodeType === 'consolidated_summary' ? "bg-indigo-400" :
                           nodeType === 'lesson' ? "bg-violet-500" :
                           nodeType === 'identity' ? "bg-emerald-500" :
                           nodeType === 'concept' ? "bg-blue-500" : "bg-amber-500"
                         )}></div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{nodeType}</span>
+                        <span className="text-[10px] font-medium text-slate-500">{nodeType}</span>
                         {node.content?.startsWith('[DEPRECATED by') && (
-                          <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-[8px] font-extrabold uppercase text-red-400 border border-red-500/20 animate-pulse">DEPRECATED</span>
+                          <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20 animate-pulse">DEPRECATED</span>
                         )}
                         <span className="text-[9px] font-mono text-slate-600 ml-auto">{node.id.split(':').pop()?.slice(0, 8)}</span>
                       </div>
@@ -492,7 +492,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                     e.stopPropagation();
                                     setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                   }}
-                                  className="text-slate-500 hover:text-slate-300 mt-1 font-bold text-[10px] underline cursor-pointer self-start"
+                                   className="text-slate-500 hover:text-slate-300 mt-1 font-medium text-[10px] underline cursor-pointer self-start"
                                 >
                                   [Minimizar]
                                 </button>
@@ -526,7 +526,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                       e.stopPropagation();
                                       setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                     }}
-                                    className="text-emerald-400 hover:text-emerald-300 mt-1 font-bold text-[10px] underline cursor-pointer"
+                                    className="text-emerald-400 hover:text-emerald-300 mt-1 font-medium text-[10px] underline cursor-pointer"
                                   >
                                     [Ver menos]
                                   </button>
@@ -545,7 +545,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                           {node.provenance && (
                             <div className="flex flex-col border-l border-slate-700/50 pl-3">
                               <span className="text-[8px] text-slate-600 uppercase">Provenance</span>
-                              <span className={cn("text-[9px] font-bold flex items-center gap-1", 
+                               <span className={cn("text-[10px] font-medium flex items-center gap-1", 
                                 (node.provenance === 'federation_peer' || node.provenance === 'unverified') ? "text-amber-500" : "text-slate-400"
                               )}>
                                 {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && <ShieldAlert className="w-3 h-3" />}
@@ -565,14 +565,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             )}
 
             {view === 'table' && (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden overflow-x-auto">
+              <div className="rounded-lg bg-slate-900/50 overflow-hidden overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-800/50 text-[10px] uppercase tracking-widest text-slate-500">
-                      <th className="px-4 py-3 font-bold">Identifier</th>
-                      <th className="px-4 py-3 font-bold">Type</th>
-                      <th className="px-4 py-3 font-bold">Content</th>
-                      <th className="px-4 py-3 font-bold text-right">Weight</th>
+                    <tr className="bg-slate-800/50 text-[11px] text-slate-500">
+                      <th className="px-4 py-3 font-medium">Identifier</th>
+                      <th className="px-4 py-3 font-medium">Type</th>
+                      <th className="px-4 py-3 font-medium">Content</th>
+                      <th className="px-4 py-3 font-medium text-right">Weight</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -583,16 +583,16 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         <tr key={i} className="hover:bg-slate-800/30 transition-colors cursor-pointer" onClick={() => setQuery(node.id)}>
                           <td className="px-4 py-3 text-[10px] font-mono text-violet-400 max-w-[120px] truncate">{node.id}</td>
                           <td className="px-4 py-3">
-                            <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border",
-                              nodeType === 'consolidated_summary' ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" : "bg-slate-800 text-slate-400 border-slate-700"
+                            <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-medium",
+                              nodeType === 'consolidated_summary' ? "bg-indigo-500/20 text-indigo-400" : "bg-slate-800 text-slate-400"
                             )}>
                               {nodeType === 'consolidated_summary' ? 'SYNTHESIS' : nodeType}
                             </span>
                             {node.content?.startsWith('[DEPRECATED by') && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[8px] font-extrabold uppercase text-red-400 border border-red-500/20">DEPRECATED</span>
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20">DEPRECATED</span>
                             )}
                             {(node.provenance === 'federation_peer' || node.provenance === 'unverified') && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[8px] font-extrabold uppercase text-amber-500 border border-amber-500/20 inline-flex items-center gap-1">
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-[9px] font-medium text-amber-500 border border-amber-500/20 inline-flex items-center gap-1">
                                 <ShieldAlert className="w-2.5 h-2.5" /> EXTERNAL
                               </span>
                             )}
@@ -610,7 +610,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           e.stopPropagation();
                                           setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                         }}
-                                        className="text-emerald-400 hover:text-emerald-300 font-bold text-[10px] underline whitespace-nowrap cursor-pointer"
+                                         className="text-emerald-400 hover:text-emerald-300 font-medium text-[10px] underline whitespace-nowrap cursor-pointer"
                                       >
                                         [Ver completo]
                                       </button>
@@ -637,7 +637,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               }
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-right text-[10px] font-bold text-emerald-400">{(node.weight || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-[10px] font-medium text-emerald-400">{(node.weight || 0).toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -648,11 +648,11 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
 
             {/* Recent Nodes Sidebar */}
             {showRecentSidebar && (
-              <div className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
+              <div className="absolute left-4 top-32 w-72 max-h-[60vh] bg-slate-900/95 backdrop-blur-md rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
                 <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-emerald-400" />
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">Últimas 24h</span>
+                    <span className="text-[10px] font-medium text-slate-300">Últimas 24h</span>
                   </div>
                   <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-slate-50">
                     <X className="w-4 h-4" />
@@ -687,14 +687,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         >
                           <div className="flex items-center gap-2 mb-1">
                             <span className={cn(
-                              "text-[8px] font-bold uppercase px-1 py-0.5 rounded",
+                              "text-[9px] font-medium px-1 py-0.5 rounded",
                               node.node_type === 'agent_memory' ? "bg-emerald-500/20 text-emerald-400" :
                               node.node_type === 'concept' ? "bg-blue-500/20 text-blue-400" :
                               node.node_type === 'fact' ? "bg-orange-500/20 text-orange-400" :
                               "bg-slate-700 text-slate-400"
                             )}>{node.node_type?.slice(0, 8) || 'node'}</span>
                             {node.content?.startsWith('[DEPRECATED by') && (
-                              <span className="px-1 py-0.5 rounded bg-red-500/10 text-[8px] font-extrabold uppercase text-red-400 border border-red-500/20">DEPRECATED</span>
+                              <span className="px-1 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20">DEPRECATED</span>
                             )}
                             <span className="text-[9px] text-slate-600 ml-auto">{timeAgo}</span>
                           </div>

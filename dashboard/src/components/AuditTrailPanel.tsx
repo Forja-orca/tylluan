@@ -89,7 +89,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         <button
           onClick={fetchAuditTrail}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 font-medium rounded-xl transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-xs text-slate-300 font-medium rounded-xl transition-all disabled:opacity-50"
         >
           <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
           Refresh Logs
@@ -97,7 +97,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {/* Control Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-slate-900/60 border border-slate-850 rounded-2xl">
+      <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-slate-900/60 rounded-2xl">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-500" />
           <input
@@ -105,7 +105,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             value={agentIdFilter}
             onChange={(e) => setAgentIdFilter(e.target.value)}
             placeholder="Filter by Agent ID..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:outline-none rounded-xl text-xs text-slate-200 placeholder-slate-500 font-mono transition-colors"
+            className="w-full pl-9 pr-4 py-2 bg-slate-950 focus:border-emerald-500 focus:outline-none rounded-xl text-xs text-slate-200 placeholder-slate-500 font-mono transition-colors"
           />
         </div>
         
@@ -114,7 +114,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           <select
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono focus:border-emerald-500 focus:outline-none"
+            className="bg-slate-950 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono focus:border-emerald-500 focus:outline-none"
           >
             <option value={10}>10 records</option>
             <option value={25}>25 records</option>
@@ -125,16 +125,16 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {/* Table Container */}
-      <div className="bg-slate-900/40 border border-slate-850 rounded-2xl overflow-hidden shadow-2xl">
+      <div className="bg-slate-900/40 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-900/60">
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Agent ID</th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Guild</th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Intent (Action Description)</th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono text-center">Status</th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono text-right">Time</th>
+                <th className="px-6 py-3.5 text-[11px] font-medium text-slate-400">Agent ID</th>
+                <th className="px-6 py-3.5 text-[11px] font-medium text-slate-400">Guild</th>
+                <th className="px-6 py-3.5 text-[11px] font-medium text-slate-400">Intent (Action Description)</th>
+                <th className="px-6 py-3.5 text-[11px] font-medium text-slate-400 text-center">Status</th>
+                <th className="px-6 py-3.5 text-[11px] font-medium text-slate-400 text-right">Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850">
@@ -146,7 +146,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                   >
                     <td className="px-4 py-3.5">
                       <span className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded border font-mono text-[10px] font-medium leading-none",
+                        "inline-flex items-center px-2 py-0.5 rounded font-mono text-[10px] font-medium leading-none",
                         entry.agent_id === 'unverified'
                           ? "bg-slate-800/60 text-slate-400 border-slate-750"
                           : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
@@ -166,7 +166,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold font-mono uppercase tracking-wider border leading-none whitespace-nowrap",
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium font-mono leading-none whitespace-nowrap",
                         entry.allowed
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-red-500/10 text-red-400 border-red-500/20"

@@ -53,7 +53,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
 
   if (loading && !canary) {
     return (
-      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 animate-pulse min-h-[280px] flex flex-col justify-between">
+      <div className="p-4 rounded-xl bg-slate-900/50 animate-pulse min-h-[280px] flex flex-col justify-between">
         <div className="flex items-center justify-between mb-4">
           <div className="h-4 w-32 bg-slate-800 rounded" />
           <div className="h-4 w-12 bg-slate-800 rounded" />
@@ -89,10 +89,10 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
   };
 
   return (
-    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col justify-between h-full transition-all hover:border-indigo-500/30">
+    <div className="p-4 rounded-xl bg-slate-900/50 flex flex-col justify-between h-full transition-all hover:bg-slate-900/70">
       <div>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+          <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Canary Assertions
           </div>
           <button 
@@ -107,24 +107,24 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
         {canary ? (
           <div className="space-y-3">
             {/* Health Score Overview */}
-            <div className="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+            <div className="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-lg">
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-500 uppercase tracking-widest font-mono">Assertion Score</span>
-                <span className="text-xl font-black text-slate-200 font-mono">
+                <span className="text-[10px] text-slate-500 font-mono">Assertion Score</span>
+                <span className="text-xl font-bold text-slate-200 font-mono">
                   {canary.score.toFixed(0)}%
                 </span>
               </div>
-              <span className={cn("text-[9px] font-mono font-bold px-2 py-0.5 rounded border", getStatusColor(canary.status))}>
+              <span className={cn("text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md", getStatusColor(canary.status))}>
                 {getStatusText(canary.status)}
               </span>
             </div>
 
             {/* Invariants Probe List */}
             <div className="space-y-1">
-              <div className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">
+              <div className="text-[10px] text-slate-500 font-medium mb-1">
                 Security Invariants
               </div>
-              <div className="max-h-[170px] overflow-y-auto space-y-1.5 pr-1 border border-slate-850 rounded-lg p-2 bg-slate-950/40">
+              <div className="max-h-[170px] overflow-y-auto space-y-1.5 rounded-lg p-2 bg-slate-950/40">
                 {canary.probes.map((probe) => (
                   <div key={probe.name} className="flex items-start gap-2 py-1 border-b border-slate-900 last:border-b-0">
                     {probe.pass ? (
@@ -133,13 +133,13 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
                       <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 uppercase tracking-wider font-semibold">
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 font-medium">
                         <span className="truncate">{probe.name}</span>
                         <span className={probe.pass ? "text-emerald-500" : "text-rose-500"}>
                           {probe.pass ? "PASS" : "FAIL"}
                         </span>
                       </div>
-                      <p className="text-[9px] text-slate-500 truncate font-mono mt-0.5" title={probe.detail}>
+                      <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5" title={probe.detail}>
                         {probe.detail}
                       </p>
                     </div>
