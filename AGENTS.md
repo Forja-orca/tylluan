@@ -1,4 +1,4 @@
-# Tylluan v0.14.0 — Agent Instructions (Codex / OpenCode)
+# Tylluan v0.15.0 — Agent Instructions (Codex / OpenCode)
 
 > Este archivo es leído automáticamente por agentes OpenCode/Codex al conectar (Deep,
 > Mimo, cualquier futuro agente en ese runtime). Si está desactualizado, TODO agente
@@ -34,12 +34,12 @@ cargo run -p tylluan-cli -- start
 
 ---
 
-## Estado actual — v0.14.0
+## Estado actual — v0.15.0
 
-**Tests:** 544 lib tests (kernel) en verde, más suites de integración (federation_audit, a2a, etc.) — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
+**Tests:** 570 lib tests (kernel) + 63 (tylluan-link) + 12 (tylluan-fsrs) = 645 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:4000/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
-### En progreso (2026-07-28): backend `llama.cpp`+GGUF real (P0-P3 cerrado), limpieza del dashboard (fases troceadas y verificadas), diseño de auto-despertar de Coloquio (`docs/architecture/coloquio_wake_scheduling.md`).
+### Cerrado en v0.15.0 (2026-07-30): auditoría completa de conexión real (Deep/Mimo/Claude) — 5 guilds con IPC al puerto equivocado, escrituras a SilvaDB sin embedding, paneles de dashboard con datos falsos; cifrado obligatorio Noise NK para gossip de producción (antes en texto plano); CoherenceGate Layer 4 híbrido wireado en vivo, modo observación; `[guilds.v2]` activó 13 guilds más + test estructural anti-drift; crash de visión por TDR de GPU en Windows, causa raíz confirmada y arreglada.
 
 ### Milestones completados
 

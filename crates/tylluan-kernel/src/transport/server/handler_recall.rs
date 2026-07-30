@@ -530,19 +530,13 @@ if let Some(ref mut s) = stmt {
         scored = gated;
         let gate_warning = gate_stats.should_warn();
 
-        // Layer 4 observation: fire-and-forget reasoning on nodes penalized
-        // by layers 2-3 only (not every survivor) — keeps this to a handful
-        // of LLM calls per recall instead of one per result.
-        if !gate_stats.penalized_nodes.is_empty() {
-            crate::security::coherence_gate::observe_layer4(
-                effective_query.clone(),
-                gate_stats.penalized_nodes.clone(),
-            );
-        }
-
         // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
         // Calls the LLM only for those that trigger any ambiguity zone (A/B/C/D).
         // Observation mode — logs to friction_log, does not modify scores.
+        // Supersedes the older observe_layer4()/reason_about_flagged() path (full
+        // v3/v4 reasoning prompt, 15-20s latency) that used to run here too on the
+        // same penalized-nodes subset — removed to stop double-calling the LLM on
+        // every recall (found during the 2026-07-30 connection audit).
         crate::security::coherence_gate::CoherenceGate::hybrid_classify(
             &effective_query,
             &scored,
@@ -691,16 +685,10 @@ if let Some(ref mut s) = stmt {
             scored = gated;
             let gate_warning = gate_stats.should_warn();
 
-            // Layer 4 observation: fire-and-forget reasoning on nodes penalized
-            // by layers 2-3 only (not every survivor).
-            if !gate_stats.penalized_nodes.is_empty() {
-                crate::security::coherence_gate::observe_layer4(
-                    effective_query.clone(),
-                    gate_stats.penalized_nodes.clone(),
-                );
-            }
-
             // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
+            // Supersedes the older observe_layer4() call that used to run here too
+            // on the same penalized-nodes subset — removed to stop double-calling
+            // the LLM on every recall (2026-07-30 connection audit).
             crate::security::coherence_gate::CoherenceGate::hybrid_classify(
                 &effective_query,
                 &scored,
