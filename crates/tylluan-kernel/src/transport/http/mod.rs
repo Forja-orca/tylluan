@@ -659,27 +659,24 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 // Helper: build encrypted wire bytes for outbound gossip message
                 let build_wire = |body: &[u8], local_id: &str| -> Option<(Vec<u8>, &'static str)> {
                     // Try Noise NK when peer pubkey known
-                    if let Some(ref pk) = peer_pubkey {
-                        if !pk.is_empty() {
-                            if let Ok(enc) = tylluan_link::noise::noise_encrypt_payload(body, &gossip_state.node_identity, pk) {
-                                let mut wire = Vec::with_capacity(1 + NODE_ID_BYTES + enc.len());
-                                wire.push(GOSSIP_DISCR_NOISE);
-                                wire.extend_from_slice(local_id.as_bytes());
-                                wire.extend_from_slice(&enc);
-                                return Some((wire, "application/octet-stream"));
-                            }
+                    if let Some(ref pk) = peer_pubkey
+                        && !pk.is_empty()
+                        && let Ok(enc) = tylluan_link::noise::noise_encrypt_payload(body, &gossip_state.node_identity, pk) {
+                            let mut wire = Vec::with_capacity(1 + NODE_ID_BYTES + enc.len());
+                            wire.push(GOSSIP_DISCR_NOISE);
+                            wire.extend_from_slice(local_id.as_bytes());
+                            wire.extend_from_slice(&enc);
+                            return Some((wire, "application/octet-stream"));
                         }
-                    }
                     // Fallback: ChaCha20 via shared_secret
-                    if !secret.is_empty() {
-                        if let Ok(enc) = crate::federation::encrypt_payload(body, &secret) {
+                    if !secret.is_empty()
+                        && let Ok(enc) = crate::federation::encrypt_payload(body, &secret) {
                             let mut wire = Vec::with_capacity(1 + NODE_ID_BYTES + enc.len());
                             wire.push(GOSSIP_DISCR_CHACHA);
                             wire.extend_from_slice(local_id.as_bytes());
                             wire.extend_from_slice(&enc);
                             return Some((wire, "application/octet-stream"));
                         }
-                    }
                     // Last resort: plaintext JSON
                     Some((body.to_vec(), "application/json"))
                 };

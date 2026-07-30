@@ -2201,11 +2201,9 @@ async fn gossip_handler(
             .and_then(|e| e.ed25519_pubkey.as_deref())
             .map(|s| s.to_string())
     };
-    let encrypted = if let Some(ref pk) = peer_pubkey {
-        if !pk.is_empty() {
-            tylluan_link::noise::noise_encrypt_payload(&response_bytes, &state.node_identity, pk).ok()
-        } else { None }
-    } else { None };
+    let encrypted = peer_pubkey.as_deref()
+        .filter(|pk| !pk.is_empty())
+        .and_then(|pk| tylluan_link::noise::noise_encrypt_payload(&response_bytes, &state.node_identity, pk).ok());
     match encrypted {
         Some(enc) => {
             let mut wire = Vec::with_capacity(1 + crate::transport::http::NODE_ID_BYTES + enc.len());
