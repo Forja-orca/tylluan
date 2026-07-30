@@ -3,6 +3,7 @@ SilvaDB utilities for Python guilds — direct node insertion.
 M17-4 Drift Guard: summary/synthesis/agent_summary cannot be created through guilds.
 """
 
+import os
 import sys
 import sqlite3
 import uuid
@@ -18,9 +19,34 @@ logger = logging.getLogger("tylluan-silva")
 # Guilds (Python) MUST NOT create these to prevent drift de consolidación.
 DRIFT_SENSITIVE_TYPES = frozenset(["summary", "synthesis", "agent_summary"])
 
-KERNEL_URL = "http://127.0.0.1:3030"
-# In dev_mode=true, the token is ignored by the kernel but kept for protocol consistency
-AUTH_TOKEN = "<TYLLUAN_TOKEN>" 
+
+def _resolve_kernel_base() -> str:
+    """Same pattern as guilds/core/coloquio.py's _resolve_kernel_base().
+    KERNEL_URL used to be hardcoded to "http://127.0.0.1:3030" -- that's
+    ForjaMCPo3's port, not Tylluan's (:4000 by default, dynamic otherwise).
+    Every write_edge()/add_node() IPC call silently failed with a connection
+    error until this was found (2026-07-30), confirmed live: a real
+    vision_analyze call produced a correct description but node_id stayed
+    None because the POST never reached the kernel.
+    """
+    if "KERNEL_BASE" in os.environ:
+        return os.environ["KERNEL_BASE"]
+    port_file = Path(__file__).resolve().parent.parent.parent / "data" / "active_port.json"
+    try:
+        data = json.loads(port_file.read_text())
+        port = data.get("port", 4000)
+        return f"http://127.0.0.1:{port}"
+    except Exception:
+        return "http://127.0.0.1:4000"
+
+
+KERNEL_URL = _resolve_kernel_base()
+# In dev_mode=true (the default), the kernel ignores auth entirely -- coloquio.py's
+# _post() sends no Authorization header at all. AUTH_TOKEN used to be a literal
+# unfilled placeholder string ("<TYLLUAN_TOKEN>"), which would have broken auth
+# the moment dev_mode was ever false. None here means "send no auth header",
+# matching coloquio.py's actual behavior instead of a fake token.
+AUTH_TOKEN = os.environ.get("TYLLUAN_TOKEN")
 
 
 # LLMLingua compression logic
@@ -155,10 +181,9 @@ def _http_post(endpoint: str, payload: dict) -> dict:
     """Helper for HTTP IPC with the kernel using standard library only."""
     import urllib.request
     url = f"{KERNEL_URL}{endpoint}"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {AUTH_TOKEN}"
-    }
+    headers = {"Content-Type": "application/json"}
+    if AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {AUTH_TOKEN}"
     body = json.dumps(payload).encode("utf-8")
     try:
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
