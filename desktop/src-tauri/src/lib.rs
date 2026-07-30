@@ -10,6 +10,19 @@ mod utils;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Manager, RunEvent, WindowEvent};
+use tauri_plugin_dialog::DialogExt;
+
+/// Native folder picker dialog. Opens OS-native directory chooser and returns
+/// the absolute path as a string, or null if the user cancelled. This is the
+/// building block for the future sandbox permission system (per-directory
+/// access grants) — no permission logic is implemented yet.
+#[tauri::command]
+fn pick_folder(app: tauri::AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .blocking_pick_folder()
+        .map(|p| p.to_string())
+}
 
 /// Application entry point. Sets up all plugins and initializes the app.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +60,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![pick_folder])
         .on_page_load(|webview, _payload| {
             // Injects a small floating reload button into whatever page just
             // loaded. Fires on every navigation/reload (unlike a one-time
