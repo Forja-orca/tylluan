@@ -357,7 +357,10 @@ fn open_friction_db() -> Result<rusqlite::Connection, String> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("friction mkdir: {e}"))?;
     }
-    crate::config::open_db(db_path).map_err(|e| format!("friction open: {e}"))
+    let conn = crate::config::open_db(db_path).map_err(|e| format!("friction open: {e}"))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5)).ok();
+    ensure_schema(&conn)?;
+    Ok(conn)
 }
 
 fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
