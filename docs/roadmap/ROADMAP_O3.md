@@ -19,6 +19,7 @@ M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), 
 - M33 backlog sin versión fija (J-6, J-7, J-10, J-13, J-14 — no J-11/J-12, esos ya se resolvieron/renumeraron) — ver sección M33 abajo.
 - Inference Mesh: trust boundary cerrado; queda pendiente la validación de latencia real entre 2 nodos físicos (no DST) — ver `docs/architecture/PROPOSAL_distributed_inference_credit_mesh.md` sección 4.
 - Impersonación de `role="human"` en Coloquio: riesgo conocido, aceptado explícitamente, NO cerrado mientras `dev_mode=true` siga activo (decisión de José, ver checkpoint 2026-07-31).
+- **M39 — Adopción MCP 2026-07-28**: núcleo stateless, Tasks, MCP Apps. Compromiso completo, no aplazado — ver sección M39. P0 (fix `protocolVersion`) es trabajo inmediato de 30 min.
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -490,6 +491,26 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | P2 | **UI en dashboard**: panel de servidores MCP externos con estado de conexión y últimas llamadas (ya existe `list_mcp_servers_handler`, falta consumirlo visualmente). | Antigravity | ✅ 2026-07-14 |
 
 **Criterio de cierre:** registrar un servidor MCP externo real (ej. un servidor de prueba local) y conseguir que `tylluan_do` lo invoque de verdad, con el resultado en el audit trail — no solo que aparezca en `GET /api/v1/mcp/external`.
+
+---
+
+### M39 — Adopción MCP 2026-07-28 (spec estable, sin versión fija de Tylluan)
+
+**Norte:** La actualización más grande de MCP desde su nacimiento (spec `2026-07-28`, oficial, SDKs TS/Python cruzando 1.000M de descargas conjuntas) trae núcleo stateless, Tasks como extensión versionada, MCP Apps y hardening de auth. José, 2026-08-09: "no vamos a evitar lo que finalmente debe ocurrir... nosotros no tenemos prisa, nos podemos permitir el lujo de mejorar Tylluan las veces que queramos, es un regalo para el mundo." Sin deadline artificial, sin diluir el alcance por reflejo de cautela — las 3 fases se hacen, no se aplazan indefinidamente.
+
+**Hallazgo real que reduce el riesgo a casi cero:** clientes que hablan `2026-07-28` caen automáticamente al handshake clásico (`initialize`/`initialized`) cuando se conectan a un servidor en `2025-11-25` o anterior — el fallback de compatibilidad viene incorporado en la spec, no hay que construirlo. Migrar no rompe nada existente durante la transición.
+
+**Fases:**
+
+| Fase | Descripción | Estado |
+|------|-------------|--------|
+| P0 | **Corregir el echo de `protocolVersion`**: `api_v1.rs:480` hoy devuelve literalmente lo que el cliente envía como si Tylluan lo soportara, en vez de declarar la versión real que implementa. Bug de honestidad de protocolo, no migración. | ⬜ |
+| P1 | **Declarar Tasks y MCP Apps como extensiones sobre lo que ya existe**: M31-P6 (subagentes = guilds largos en background) ya es funcionalmente Tasks — falta exponerlo con el contrato formal `tasks/get`/`tasks/update`/`tasks/cancel`. M25 (Canvas Event Bridge) ya es funcionalmente MCP Apps — falta declarar las plantillas de UI y el manifiesto de extensión formal. Es anunciar capacidad ya construida con el vocabulario oficial, no reescribir nada. | ⬜ |
+| P2 | **Migración del núcleo de transporte a stateless puro**: eliminar la dependencia de `Mcp-Session-Id`/sesión por handshake en `api_v1.rs`, mover metadata de cliente/capabilities/versión al patrón `_meta` por-request de la spec nueva. Es la pieza grande — toca el transporte real, no es aditivo como P1. Se hace completa, no a medias; el fallback de la spec cubre a los clientes legacy mientras se ejecuta, así que no hay ventana de riesgo real que justifique aplazarla. | ⬜ |
+
+**Notas de la investigación (verificadas, no de memoria):** `Roots` y `Sampling` quedan deprecados como primitivas de primera clase en la spec nueva — pendiente verificar si Tylluan los usa en algún punto antes de cerrar P2. Política de deprecación formal (SEP-2596): mínimo 12 meses entre deprecar algo y eliminarlo, así que el ecosistema tampoco tiene prisa real, pero eso no es motivo para que Tylluan la tenga tampoco en el sentido contrario — se hace porque hay tiempo y ganas, no porque haya presión externa.
+
+**Criterio de cierre:** un cliente que hable `2026-07-28` puro se conecta a Tylluan sin caer al fallback de handshake clásico, y puede invocar un guild en background como Task formal y ver el Canvas anunciado como MCP App real en su manifiesto de capabilities.
 
 ---
 
