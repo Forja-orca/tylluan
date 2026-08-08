@@ -60,5 +60,6 @@ A diferencia de la sincronización de memoria (coste marginal ~cero para quien p
 
 ## 4. Siguiente Paso Real
 
-1. **Prueba de Concepto (Spike)**: Verificar la capacidad de ruteo de `DispatchRouter` para peticiones de inferencia entre 2 nodos con `FederationPeer.approved` activo.
-2. **Validación de Latencia**: Confirmar que el envío de prompts y retorno de stream de tokens vía `p2p.rs` (Noise NK) se percibe fluido desde el cliente IDE/Dashboard.
+1. **Prueba de Concepto (Spike)** — **HECHO, 2026-08-08**: `benchmarks/spikes/inference_mesh/README.md` + `crates/tylluan-link/tests/inference_mesh_spike.rs` (3/3 tests reales pasando). Confirmado: el enrutamiento por capability de modelo entero funciona con cero código nuevo en `DispatchRouter`.
+2. **Hallazgo real del spike**: `DispatchRouter`/`CapabilityRegistry` no conocen `FederationPeer.approved` — son dos capas hoy desconectadas. El filtro de confianza binaria descrito en la sección 2.2 de este documento **no existe todavía en código**; debe añadirse en el punto de ingestión del gossip de capacidades (`registry.ingest()`), no dentro del router. Ver spike para el detalle exacto.
+3. **Validación de Latencia** (pendiente): confirmar que el envío de prompts y retorno de stream de tokens vía `p2p.rs` (Noise NK) se percibe fluido desde el cliente IDE/Dashboard — requiere 2 nodos reales, no DST.
