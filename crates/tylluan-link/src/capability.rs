@@ -71,6 +71,38 @@ impl CapabilityRegistry {
         }
     }
 
+    /// Bulk-ingest, but only entries whose `ed25519_pubkey` is in `trusted_pubkeys`.
+    ///
+    /// This is the trust boundary the router itself deliberately does NOT enforce
+    /// (see `DispatchRouter::route` — it is capability-aware, not identity-aware by
+    /// design). An entry without a pubkey, or with one not in the trusted set, still
+    /// propagates through gossip to other nodes (fortress, not cage — we don't cut
+    /// off the network), but it never enters THIS registry, so `DispatchRouter` can
+    /// never route compute to it. `trusted_pubkeys` should be built from
+    /// `FederationPeer`s with `approved == true` and a non-empty `ed25519_pubkey`.
+    pub fn ingest_from_engine_trusted(
+        &mut self,
+        engine: &GossipEngine,
+        trusted_pubkeys: &std::collections::HashSet<String>,
+    ) {
+        for entry in engine.state.all_entries() {
+            let is_trusted = entry
+                .ed25519_pubkey
+                .as_deref()
+                .is_some_and(|pk| trusted_pubkeys.contains(pk));
+            if !is_trusted {
+                continue;
+            }
+            self.ingest(
+                &entry.node_id,
+                &entry.addr,
+                &entry.hardware,
+                &entry.capabilities,
+                entry.clock,
+            );
+        }
+    }
+
     /// Remove all peers whose last update is older than TTL.
     /// Returns the number of pruned peers.
     pub fn prune_expired(&mut self) -> usize {
@@ -125,6 +157,69 @@ mod tests {
         assert_eq!(record.addr, "10.0.0.1:9000");
         assert_eq!(record.hardware.ram_mb, 4096);
         assert_eq!(record.capabilities, vec!["bash", "git"]);
+    }
+
+    #[test]
+    fn test_ingest_from_engine_trusted_filters_unapproved_peer() {
+        use crate::gossip::message::GossipEntry;
+        use std::collections::HashSet;
+
+        let mut engine = GossipEngine::new("local".into(), GossipConfig::default());
+        let hw = HardwareCaps { ram_mb: 32768, has_gpu: true, load_avg: 0.1, supports_p2p: false, tcp_port: None };
+        engine.store_entries(&[
+            GossipEntry {
+                node_id: "trusted-peer".into(),
+                addr: "10.0.0.1:9000".into(),
+                capabilities: vec!["inference:llama-3-8b-q4".into()],
+                hardware: hw.clone(),
+                clock: 1,
+                ed25519_pubkey: Some("aaaa".into()),
+            },
+            GossipEntry {
+                node_id: "unapproved-stranger".into(),
+                addr: "203.0.113.9:9000".into(),
+                capabilities: vec!["inference:llama-3-8b-q4".into()],
+                hardware: hw,
+                clock: 1,
+                ed25519_pubkey: Some("bbbb".into()),
+            },
+        ]);
+
+        let trusted: HashSet<String> = ["aaaa".to_string()].into_iter().collect();
+        let mut reg = CapabilityRegistry::new(Duration::from_secs(300));
+        reg.ingest_from_engine_trusted(&engine, &trusted);
+
+        assert_eq!(reg.len(), 1, "only the trusted peer's capabilities should be ingested");
+        assert!(reg.get_peer("trusted-peer").is_some());
+        assert!(
+            reg.get_peer("unapproved-stranger").is_none(),
+            "an approved-less peer's capabilities must never reach the registry the router reads from"
+        );
+    }
+
+    #[test]
+    fn test_ingest_from_engine_trusted_rejects_missing_pubkey() {
+        use crate::gossip::message::GossipEntry;
+        use std::collections::HashSet;
+
+        let mut engine = GossipEngine::new("local".into(), GossipConfig::default());
+        let hw = HardwareCaps { ram_mb: 8192, has_gpu: false, load_avg: 0.2, supports_p2p: false, tcp_port: None };
+        engine.store_entries(&[GossipEntry {
+            node_id: "no-pubkey-peer".into(),
+            addr: "10.0.0.5:9000".into(),
+            capabilities: vec!["bash".into()],
+            hardware: hw,
+            clock: 1,
+            ed25519_pubkey: None,
+        }]);
+
+        // Even if this exact address string were (implausibly) in the trusted set,
+        // a peer that never presented a pubkey cannot be matched to identity at all.
+        let trusted: HashSet<String> = HashSet::new();
+        let mut reg = CapabilityRegistry::new(Duration::from_secs(300));
+        reg.ingest_from_engine_trusted(&engine, &trusted);
+
+        assert!(reg.is_empty(), "entries without a pubkey must never be trusted by default");
     }
 
     #[test]
