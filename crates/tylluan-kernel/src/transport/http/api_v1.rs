@@ -89,7 +89,36 @@ pub enum McpDialect {
 /// blindly echoing whatever a client claims, which silently lied about support for
 /// versions Tylluan never implemented (e.g. a client sending "2026-07-28" would get
 /// that version echoed back even though the stateless core doesn't exist yet).
-const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05"];
+/// M39-P2 (stateless core migration) is not implemented yet -- Tylluan still speaks
+/// the stateful initialize/initialized handshake. "2026-07-28" was added here
+/// prematurely while wiring the Tasks extension (M39-P1); reverted after the
+/// 2026-08-09 external audit flagged the resulting interoperability contradiction:
+/// a client could select the new protocol and assume stateless semantics, real MCP
+/// Apps, or fully-conformant Tasks, none of which exist yet. Re-add only once P2 is
+/// actually done.
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+
+/// Statuses `tasks/update` is allowed to set. A task's terminal statuses
+/// (`completed`, `failed`, `cancelled`) can never be updated further -- see the
+/// terminal-status guard in the `tasks/update` handler.
+const VALID_TASK_UPDATE_STATUSES: &[&str] = &["working", "input_required", "completed", "failed", "cancelled"];
+const TERMINAL_TASK_STATUSES: &[&str] = &["completed", "failed", "cancelled", "done"];
+
+/// Validate a `tasks/update` request before it reaches storage. Security finding
+/// from the 2026-08-09 external audit: the endpoint previously accepted any string
+/// as a status (e.g. "banana") and allowed reverting a completed task back to
+/// "pending", corrupting task state for the worker and any polling client.
+fn validate_task_status_transition(new_status: &str, current_status: Option<&str>) -> Result<(), String> {
+    if !VALID_TASK_UPDATE_STATUSES.contains(&new_status) {
+        return Err(format!("invalid status '{new_status}': must be one of {VALID_TASK_UPDATE_STATUSES:?}"));
+    }
+    if let Some(current) = current_status
+        && TERMINAL_TASK_STATUSES.contains(&current)
+    {
+        return Err(format!("task is already in terminal status '{current}', cannot update"));
+    }
+    Ok(())
+}
 
 /// Negotiate the protocol version to declare in `initialize`'s response.
 /// If the client's requested version is one Tylluan actually implements, honor it
@@ -869,20 +898,30 @@ pub async fn mcp_handler(
             if task_id.is_empty() || new_status.is_empty() {
                 serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "taskId and status parameters are required" }, "id": id })
             } else {
-                match state.jobs.update_status(task_id, new_status, meta) {
-                    Ok(true) => {
-                        let updated = state.jobs.get_by_id(task_id).ok().flatten();
-                        serde_json::json!({
-                            "jsonrpc": "2.0",
-                            "result": {
-                                "taskId": task_id,
-                                "status": new_status,
-                                "updated": updated
+                match state.jobs.get_by_id(task_id) {
+                    Ok(existing) => {
+                        let current_status = existing.as_ref().map(|j| j.status.as_str());
+                        match validate_task_status_transition(new_status, current_status) {
+                            Err(msg) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": msg }, "id": id }),
+                            Ok(()) if existing.is_none() => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found for update", task_id) }, "id": id }),
+                            Ok(()) => match state.jobs.update_status(task_id, new_status, meta) {
+                                Ok(true) => {
+                                    let updated = state.jobs.get_by_id(task_id).ok().flatten();
+                                    serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "result": {
+                                            "taskId": task_id,
+                                            "status": new_status,
+                                            "updated": updated
+                                        },
+                                        "id": id
+                                    })
+                                }
+                                Ok(false) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found for update", task_id) }, "id": id }),
+                                Err(e) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32603, "message": format!("database error: {}", e) }, "id": id }),
                             },
-                            "id": id
-                        })
+                        }
                     }
-                    Ok(false) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found for update", task_id) }, "id": id }),
                     Err(e) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32603, "message": format!("database error: {}", e) }, "id": id }),
                 }
             }
@@ -2393,14 +2432,54 @@ mod protocol_negotiation_tests {
     }
 
     #[test]
-    fn negotiates_2026_07_28_and_fallback_for_unknown() {
-        assert_eq!(negotiate_protocol_version("2026-07-28"), "2026-07-28");
-        assert_eq!(negotiate_protocol_version("not-a-real-version"), "2026-07-28");
-        assert_eq!(negotiate_protocol_version(""), "2026-07-28");
+    fn falls_back_to_newest_actually_supported_for_2026_07_28_and_unknown() {
+        // Reverted 2026-08-09: Tylluan does not speak the 2026-07-28 stateless core
+        // yet (M39-P2 pending). A client requesting it, or anything unrecognized,
+        // gets honestly told the newest version this server actually implements.
+        assert_eq!(negotiate_protocol_version("2026-07-28"), "2025-06-18");
+        assert_eq!(negotiate_protocol_version("not-a-real-version"), "2025-06-18");
+        assert_eq!(negotiate_protocol_version(""), "2025-06-18");
     }
 
     #[test]
     fn defaults_to_newest_supported_version() {
         assert_eq!(negotiate_protocol_version("2030-01-01"), SUPPORTED_PROTOCOL_VERSIONS[0]);
+    }
+
+    #[test]
+    fn does_not_declare_2026_07_28_until_stateless_core_exists() {
+        // Regression guard for the 2026-08-09 audit finding: Tylluan must not
+        // claim the 2026-07-28 protocol version until M39-P2 (stateless core) is
+        // actually implemented, not just the Tasks extension on top of it.
+        assert!(!SUPPORTED_PROTOCOL_VERSIONS.contains(&"2026-07-28"));
+    }
+
+    #[test]
+    fn rejects_arbitrary_task_status_strings() {
+        // Security finding, 2026-08-09 audit: any string used to be accepted.
+        assert!(validate_task_status_transition("banana", Some("working")).is_err());
+        assert!(validate_task_status_transition("completed-but-not-really", Some("working")).is_err());
+    }
+
+    #[test]
+    fn accepts_only_the_spec_defined_task_statuses() {
+        for status in ["working", "input_required", "completed", "failed", "cancelled"] {
+            assert!(validate_task_status_transition(status, Some("working")).is_ok());
+        }
+    }
+
+    #[test]
+    fn rejects_updates_to_a_terminal_task() {
+        // Security finding, 2026-08-09 audit: a completed task could be reverted
+        // back to "pending" (or any other status) with no guard.
+        for terminal in ["completed", "failed", "cancelled"] {
+            assert!(validate_task_status_transition("working", Some(terminal)).is_err());
+        }
+    }
+
+    #[test]
+    fn allows_update_when_no_current_status_known_yet_but_still_validates_target() {
+        assert!(validate_task_status_transition("working", None).is_ok());
+        assert!(validate_task_status_transition("banana", None).is_err());
     }
 }
