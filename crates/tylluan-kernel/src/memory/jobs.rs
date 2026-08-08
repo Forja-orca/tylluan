@@ -9,7 +9,7 @@ pub struct JobQueue {
     conn: Mutex<Connection>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Job {
     pub id: String,
     pub task_type: String,
@@ -139,6 +139,64 @@ impl JobQueue {
         Ok(count as usize)
     }
 
+    /// Retrieve a job by its unique ID.
+    pub fn get_by_id(&self, job_id: &str) -> Result<Option<Job>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| {
+            tracing::warn!("JobQueue mutex poisoned, recovering");
+            e.into_inner()
+        });
+        let mut stmt = conn.prepare(
+            "SELECT id, task_type, payload, status, created_at, updated_at FROM tylluan_jobs WHERE id = ?1"
+        )?;
+        let job = stmt.query_row(rusqlite::params![job_id], |row| {
+            Ok(Job {
+                id: row.get(0)?,
+                task_type: row.get(1)?,
+                payload: row.get(2)?,
+                status: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        }).ok();
+        Ok(job)
+    }
+
+    /// Cancel a pending, running, or working job by ID.
+    pub fn cancel(&self, job_id: &str) -> Result<bool> {
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let conn = self.conn.lock().unwrap_or_else(|e| {
+            tracing::warn!("JobQueue mutex poisoned, recovering");
+            e.into_inner()
+        });
+        let rows = conn.execute(
+            "UPDATE tylluan_jobs SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status NOT IN ('done', 'completed', 'failed', 'cancelled')",
+            rusqlite::params![now, job_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    /// Update a job's status and optional payload.
+    pub fn update_status(&self, job_id: &str, status: &str, payload: Option<&Value>) -> Result<bool> {
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let conn = self.conn.lock().unwrap_or_else(|e| {
+            tracing::warn!("JobQueue mutex poisoned, recovering");
+            e.into_inner()
+        });
+        let rows = if let Some(p) = payload {
+            let p_str = serde_json::to_string(p)?;
+            conn.execute(
+                "UPDATE tylluan_jobs SET status = ?1, payload = ?2, updated_at = ?3 WHERE id = ?4",
+                rusqlite::params![status, p_str, now, job_id],
+            )?
+        } else {
+            conn.execute(
+                "UPDATE tylluan_jobs SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                rusqlite::params![status, now, job_id],
+            )?
+        };
+        Ok(rows > 0)
+    }
+
     /// Count jobs stuck in 'running' status for more than 5 minutes (potential zombie jobs).
     pub fn count_stuck(&self) -> Result<u32> {
         let conn = self.conn.lock().unwrap_or_else(|e| {
@@ -212,5 +270,29 @@ mod tests {
 
         let b = q.claim_next("beta").unwrap().unwrap();
         assert!(b.id.contains("beta"));
+    }
+
+    #[test]
+    fn test_mcp_tasks_get_cancel_update() {
+        let q = test_queue();
+        let id = q.enqueue("task_test", &serde_json::json!({"foo": "bar"})).unwrap();
+
+        // test get_by_id
+        let fetched = q.get_by_id(&id).unwrap().expect("should find job");
+        assert_eq!(fetched.id, id);
+        assert_eq!(fetched.status, "pending");
+
+        // test update_status
+        let ok_update = q.update_status(&id, "working", Some(&serde_json::json!({"progress": 50}))).unwrap();
+        assert!(ok_update);
+        let updated = q.get_by_id(&id).unwrap().unwrap();
+        assert_eq!(updated.status, "working");
+        assert!(updated.payload.contains("progress"));
+
+        // test cancel
+        let ok_cancel = q.cancel(&id).unwrap();
+        assert!(ok_cancel);
+        let cancelled = q.get_by_id(&id).unwrap().unwrap();
+        assert_eq!(cancelled.status, "cancelled");
     }
 }

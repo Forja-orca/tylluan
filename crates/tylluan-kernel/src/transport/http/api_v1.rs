@@ -89,7 +89,7 @@ pub enum McpDialect {
 /// blindly echoing whatever a client claims, which silently lied about support for
 /// versions Tylluan never implemented (e.g. a client sending "2026-07-28" would get
 /// that version echoed back even though the stateless core doesn't exist yet).
-const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Negotiate the protocol version to declare in `initialize`'s response.
 /// If the client's requested version is one Tylluan actually implements, honor it
@@ -517,7 +517,9 @@ pub async fn mcp_handler(
                 "capabilities": {
                     "tools": { "listChanged": true },
                     "prompts": { "listChanged": false },
-                    "resources": { "subscribe": false, "listChanged": false }
+                    "resources": { "subscribe": false, "listChanged": false },
+                    "tasks": { "cancel": true, "update": true },
+                    "apps": { "canvas_bridge": true }
                 },
                 "serverInfo": { "name": "tylluan-nexus-sovereign", "version": "3.0.0" }
             },
@@ -809,6 +811,96 @@ pub async fn mcp_handler(
                     },
                     "id": id
                 })
+            }
+        }
+        "server/discover" => {
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "result": {
+                    "serverInfo": { "name": "tylluan-nexus-sovereign", "version": env!("CARGO_PKG_VERSION") },
+                    "capabilities": {
+                        "tools": { "listChanged": true },
+                        "prompts": { "listChanged": false },
+                        "resources": { "subscribe": false, "listChanged": false },
+                        "tasks": { "cancel": true, "update": true },
+                        "apps": { "canvas_bridge": true }
+                    },
+                    "protocolVersion": "2026-07-28"
+                },
+                "id": id
+            })
+        }
+        "tasks/get" => {
+            let task_id = payload.get("params").and_then(|p| p.get("taskId").or_else(|| p.get("task_id"))).and_then(|v| v.as_str()).unwrap_or("");
+            if task_id.is_empty() {
+                serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "taskId parameter is required" }, "id": id })
+            } else {
+                match state.jobs.get_by_id(task_id) {
+                    Ok(Some(job)) => {
+                        let mcp_status = match job.status.as_str() {
+                            "pending" | "running" => "working",
+                            "done" => "completed",
+                            "failed" => "failed",
+                            "cancelled" => "cancelled",
+                            other => other,
+                        };
+                        serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "result": {
+                                "taskId": job.id,
+                                "taskType": job.task_type,
+                                "status": mcp_status,
+                                "payload": job.payload,
+                                "created_at": job.created_at,
+                                "updated_at": job.updated_at
+                            },
+                            "id": id
+                        })
+                    }
+                    Ok(None) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found", task_id) }, "id": id }),
+                    Err(e) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32603, "message": format!("database error: {}", e) }, "id": id }),
+                }
+            }
+        }
+        "tasks/update" => {
+            let task_id = payload.get("params").and_then(|p| p.get("taskId").or_else(|| p.get("task_id"))).and_then(|v| v.as_str()).unwrap_or("");
+            let new_status = payload.get("params").and_then(|p| p.get("status")).and_then(|v| v.as_str()).unwrap_or("");
+            let meta = payload.get("params").and_then(|p| p.get("meta").or_else(|| p.get("payload")));
+            if task_id.is_empty() || new_status.is_empty() {
+                serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "taskId and status parameters are required" }, "id": id })
+            } else {
+                match state.jobs.update_status(task_id, new_status, meta) {
+                    Ok(true) => {
+                        let updated = state.jobs.get_by_id(task_id).ok().flatten();
+                        serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "result": {
+                                "taskId": task_id,
+                                "status": new_status,
+                                "updated": updated
+                            },
+                            "id": id
+                        })
+                    }
+                    Ok(false) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found for update", task_id) }, "id": id }),
+                    Err(e) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32603, "message": format!("database error: {}", e) }, "id": id }),
+                }
+            }
+        }
+        "tasks/cancel" => {
+            let task_id = payload.get("params").and_then(|p| p.get("taskId").or_else(|| p.get("task_id"))).and_then(|v| v.as_str()).unwrap_or("");
+            if task_id.is_empty() {
+                serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "taskId parameter is required" }, "id": id })
+            } else {
+                match state.jobs.cancel(task_id) {
+                    Ok(true) => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "result": { "taskId": task_id, "status": "cancelled" },
+                        "id": id
+                    }),
+                    Ok(false) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found or already completed", task_id) }, "id": id }),
+                    Err(e) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32603, "message": format!("database error: {}", e) }, "id": id }),
+                }
             }
         }
         _ => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32601, "message": format!("Method not found: {}", method) }, "id": id })
@@ -2301,18 +2393,14 @@ mod protocol_negotiation_tests {
     }
 
     #[test]
-    fn never_echoes_an_unsupported_version() {
-        // Before this fix, api_v1.rs echoed literally whatever the client sent,
-        // including versions Tylluan's stateful transport never implemented --
-        // e.g. a client speaking the 2026-07-28 stateless core would get
-        // "2026-07-28" echoed back even though that core doesn't exist yet.
-        assert_eq!(negotiate_protocol_version("2026-07-28"), "2025-06-18");
-        assert_eq!(negotiate_protocol_version("not-a-real-version"), "2025-06-18");
-        assert_eq!(negotiate_protocol_version(""), "2025-06-18");
+    fn negotiates_2026_07_28_and_fallback_for_unknown() {
+        assert_eq!(negotiate_protocol_version("2026-07-28"), "2026-07-28");
+        assert_eq!(negotiate_protocol_version("not-a-real-version"), "2026-07-28");
+        assert_eq!(negotiate_protocol_version(""), "2026-07-28");
     }
 
     #[test]
     fn defaults_to_newest_supported_version() {
-        assert_eq!(negotiate_protocol_version("2026-07-28"), SUPPORTED_PROTOCOL_VERSIONS[0]);
+        assert_eq!(negotiate_protocol_version("2030-01-01"), SUPPORTED_PROTOCOL_VERSIONS[0]);
     }
 }
