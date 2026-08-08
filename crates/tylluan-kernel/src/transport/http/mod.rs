@@ -792,11 +792,24 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             }
 
             // Phase 3: CapabilityRegistry — ingest fresh state + prune expired
+            // Trust boundary: only capabilities from approved federation peers with a
+            // known Ed25519 pubkey ever reach the registry DispatchRouter reads from.
+            // An unapproved peer's entries still propagate through gossip to other
+            // nodes (fortress, not cage), they just never become routable here.
+            let trusted_pubkeys: std::collections::HashSet<String> = gossip_state
+                .peer_db
+                .load_all()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|p| p.approved && !p.ed25519_pubkey.is_empty())
+                .map(|p| p.ed25519_pubkey)
+                .collect();
+
             // Read engine first (async), then lock registry (sync) — avoids holding
             // MutexGuard across an await boundary.
             let engine_snapshot = gossip_state.gossip_engine.read().await;
             let mut reg = gossip_state.capability_registry.lock().unwrap();
-            reg.ingest_from_engine(&engine_snapshot);
+            reg.ingest_from_engine_trusted(&engine_snapshot, &trusted_pubkeys);
             let pruned = reg.prune_expired();
             drop(reg);
             drop(engine_snapshot);
