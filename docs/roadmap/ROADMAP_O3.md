@@ -1,14 +1,24 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-07-29 · v0.14.0 (HEAD `ad5b9c4`) — modelo de producción subido a Qwen2.5-0.5B-Instruct (75.0%, verificado independientemente) · **Sociedad de 3 SLMs (<2B) para CoherenceGate Layer 4 probada y NO-GO'd**: converge a respuesta constante con 0% varianza sin importar el diseño del debate — el 75%/78.85% original era el modelo cayendo al default seguro bajo grammar, no discriminación real · nueva dirección: filtro híbrido determinista+LLM (`docs/architecture/coherence_gate_layer4_hybrid.md`, 2 problemas reales abiertos, sin implementar) · friction logging con TTFUA cerrado · bug real arreglado en `tylluan_think` (filtraba error interno como síntesis) · 627 tests
+> **Última actualización:** 2026-08-08 · v0.15.0 (HEAD `aba645d`) — 53 commits desde el HEAD anterior (`ad5b9c4`), verificado con `git log --oneline ad5b9c4..HEAD`, no de memoria. Cambios reales desde el 2026-07-29: auditoría de conexión completa (14 hallazgos reales cerrados — IPC apuntando al puerto equivocado, escrituras a SilvaDB saltándose el pipeline de embedding, paneles de dashboard con datos falsos, componentes saltándose auth), cifrado Noise NK obligatorio en gossip de producción (antes texto plano hasta que se propagaba la pubkey), CoherenceGate Layer 4 híbrido **wireado en producción** en modo observación (ya no es "sin implementar" — sigue sin decidir, solo observa), 13 guilds nuevos activados vía `[guilds.v2]`, crash intermitente de visión root-causado (TDR de GPU Windows) y arreglado forzando CPU, **Janus-Pro-1B confirmado muerto** (commit `3b71a25`: "Antigravity found zero code" — cualquier mención de esto como "benchmark en marcha" en este documento está desactualizada, no reflejaba código real), y el ciclo de esta sesión: SSRF+exfiltración de env vars cerrado, `handle_tylluan_do` descompuesto, Coloquio channel_id unificado, y **Inference Mesh** diseñado + spike + trust boundary implementado end-to-end (`docs/architecture/PROPOSAL_distributed_inference_credit_mesh.md`, `benchmarks/spikes/inference_mesh/`, commits `15bf0f7`→`aba645d`). 665 tests (588 kernel lib + 65 link + 12 fsrs), clippy limpio, CI verde.
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
 
-## Estado actual — v0.14.0 ✅
+## Estado actual — v0.15.0 ✅
 
-M15-M19, M22, M23-P1, M26-P1/P2, M27, M28, M29, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) avanzó de "solo comparativa" a spikes reales ejecutados hoy — ver sección "Sociedad SLM" más abajo. 627 tests (554 kernel lib + 61 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
+M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), M32, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue con §2-5 abierto (decisión de inserción pendiente, no de benchmark). 665 tests (588 kernel lib + 65 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
+
+**Trabajo genuinamente abierto ahora mismo (verificado, no aspiracional):**
+- CoherenceGate híbrido: en producción solo en modo observación, sin enforcement — graduarlo es el siguiente paso real, no un "sin implementar" como decía este documento hasta hoy.
+- ADR-010 §2-5 — decidir qué modelo va en qué punto de inserción, benchmarks ya existen.
+- LightReranker cutover — bloqueado por datos (~45/5000 filas), no por código.
+- A2A a producción real (M38 histórico se cerró en su forma inicial; interoperar con CUALQUIER agente externo, no solo peers de confianza, sigue pendiente).
+- Puente/Consensus hacia frontera externa — solo investigación (repo público Fugu, sin API de pago), sin spike ejecutado.
+- M33 backlog sin versión fija (J-6, J-7, J-10, J-13, J-14 — no J-11/J-12, esos ya se resolvieron/renumeraron) — ver sección M33 abajo.
+- Inference Mesh: trust boundary cerrado; queda pendiente la validación de latencia real entre 2 nodos físicos (no DST) — ver `docs/architecture/PROPOSAL_distributed_inference_credit_mesh.md` sección 4.
+- Impersonación de `role="human"` en Coloquio: riesgo conocido, aceptado explícitamente, NO cerrado mientras `dev_mode=true` siga activo (decisión de José, ver checkpoint 2026-07-31).
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
