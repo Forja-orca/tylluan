@@ -83,6 +83,26 @@ pub enum McpDialect {
     SseClassic,
 }
 
+/// MCP protocol versions Tylluan's transport actually implements today, newest first.
+/// Tylluan still speaks the stateful `initialize`/`initialized` handshake -- it has not
+/// migrated to the 2026-07-28 stateless core yet (M39-P2). Kept here instead of
+/// blindly echoing whatever a client claims, which silently lied about support for
+/// versions Tylluan never implemented (e.g. a client sending "2026-07-28" would get
+/// that version echoed back even though the stateless core doesn't exist yet).
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+
+/// Negotiate the protocol version to declare in `initialize`'s response.
+/// If the client's requested version is one Tylluan actually implements, honor it
+/// (real negotiation). Otherwise, declare the newest version Tylluan does support --
+/// never echo back a version the server doesn't speak.
+fn negotiate_protocol_version(requested: &str) -> &'static str {
+    SUPPORTED_PROTOCOL_VERSIONS
+        .iter()
+        .find(|&&v| v == requested)
+        .copied()
+        .unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[0])
+}
+
 /// Detect MCP dialect using 5-step heuristic (first match wins)
 fn detect_mcp_dialect(
     headers: &HeaderMap,
@@ -476,11 +496,11 @@ pub async fn mcp_handler(
             .to_string();
         let sess_key = session_id.clone().unwrap_or_else(|| client_name.clone());
         crate::transport::http::create_or_update_session(&state.sessions, &sess_key, &client_name, Some(&client_name)).await;
-        let client_protocol = payload
+        let requested_protocol = payload
             .get("params").and_then(|p| p.get("protocolVersion"))
             .and_then(|v| v.as_str())
-            .unwrap_or("2024-11-05")
-            .to_string();
+            .unwrap_or("2024-11-05");
+        let client_protocol = negotiate_protocol_version(requested_protocol).to_string();
         let session_resumed_info = {
             let sessions = state.sessions.read().await;
             sessions.get(&sess_key).filter(|s| s.tool_count > 0).map(|s| serde_json::json!({
@@ -2265,5 +2285,34 @@ async fn gossip_handler(
         _ => {
             (StatusCode::OK, Json(response)).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod protocol_negotiation_tests {
+    use super::*;
+
+    #[test]
+    fn negotiates_known_version_honestly() {
+        // A client asking for a version Tylluan actually implements gets that
+        // exact version back -- real negotiation, not a fixed answer.
+        assert_eq!(negotiate_protocol_version("2025-03-26"), "2025-03-26");
+        assert_eq!(negotiate_protocol_version("2024-11-05"), "2024-11-05");
+    }
+
+    #[test]
+    fn never_echoes_an_unsupported_version() {
+        // Before this fix, api_v1.rs echoed literally whatever the client sent,
+        // including versions Tylluan's stateful transport never implemented --
+        // e.g. a client speaking the 2026-07-28 stateless core would get
+        // "2026-07-28" echoed back even though that core doesn't exist yet.
+        assert_eq!(negotiate_protocol_version("2026-07-28"), "2025-06-18");
+        assert_eq!(negotiate_protocol_version("not-a-real-version"), "2025-06-18");
+        assert_eq!(negotiate_protocol_version(""), "2025-06-18");
+    }
+
+    #[test]
+    fn defaults_to_newest_supported_version() {
+        assert_eq!(negotiate_protocol_version("2026-07-28"), SUPPORTED_PROTOCOL_VERSIONS[0]);
     }
 }
