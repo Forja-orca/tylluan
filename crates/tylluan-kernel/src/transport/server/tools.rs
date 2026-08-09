@@ -52,7 +52,7 @@ impl super::TylluanServer {
                 serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "intent":   { "type": "string", "description": "What you want to do, in natural language." },
+                        "intent":   { "type": "string", "description": "What you want to do, in natural language. Some intents route to real kernel subtools deterministically instead of guild routing -- e.g. 'whoami'/'quien soy', 'agent bootstrap'/'orientame' (M40-P2: identity + last session + recent memories + pending approvals in one call), 'list available guilds'/'guild capabilities' (M40-P1: required args + permissions + cost per guild), 'register_identity', 'record_experience'." },
                         "guild":    { "type": "string", "description": "Optional. Force routing to a specific guild (e.g. 'bash', 'git', 'filesystem'). Skips the semantic router." },
                         "remember": { "type": "boolean", "default": false, "description": "If true, store the result in long-term memory so it can be retrieved later with tylluan_recall." },
                         "agent_id": { "type": "string", "description": "Optional. Your agent identity (e.g. 'agent-1', 'agent-2'). When set, episodes are auto-saved to your session history and retrievable later with tylluan_recall agent_id filter." },
