@@ -23,9 +23,7 @@ fn read_timestamp(row: &rusqlite::Row, idx: usize) -> rusqlite::Result<Option<St
         rusqlite::types::Value::Null => Ok(None),
         _ => Ok(None),
     }
-}
-
-/// Options for node writes that go beyond the basic upsert.
+}/// Options for node writes that go beyond the basic upsert.
 pub struct NodeWriteOptions<'a> {
     pub valid_from: Option<i64>,
     pub valid_until: Option<i64>,
@@ -34,11 +32,19 @@ pub struct NodeWriteOptions<'a> {
     /// J-8: hierarchical scope tag, e.g. "user:alice/session:s1/agent:claude".
     /// None = unscoped (visible regardless of scope filtering).
     pub owner_scope: Option<&'a str>,
+    /// M40-P4: explicit source — where the knowledge originated
+    /// (e.g. "user_conversation", "documentation", "observation").
+    pub source: Option<&'a str>,
+    /// M40-P4: explicit author — which agent/user created this
+    /// (e.g. "tylluan", "agent:deep", "user:forja").
+    pub author: Option<&'a str>,
+    /// M40-P4: link to original evidence (URL, file path, commit hash).
+    pub evidence_url: Option<&'a str>,
 }
 
 impl<'a> NodeWriteOptions<'a> {
     pub fn new(provenance: &'a str) -> Self {
-        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None }
+        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None, source: None, author: None, evidence_url: None }
     }
     pub fn drift_allowed(mut self, yes: bool) -> Self {
         self.allow_drift = yes;
@@ -48,12 +54,28 @@ impl<'a> NodeWriteOptions<'a> {
         self.valid_until = until;
         self
     }
+
     pub fn valid_from(mut self, from: Option<i64>) -> Self {
         self.valid_from = from;
         self
     }
     pub fn owner_scope(mut self, scope: Option<&'a str>) -> Self {
         self.owner_scope = scope;
+        self
+    }
+    /// M40-P4: set explicit source (where knowledge originated).
+    pub fn source(mut self, s: Option<&'a str>) -> Self {
+        self.source = s;
+        self
+    }
+    /// M40-P4: set explicit author (which agent/user created this).
+    pub fn author(mut self, a: Option<&'a str>) -> Self {
+        self.author = a;
+        self
+    }
+    /// M40-P4: set evidence URL (link to original evidence).
+    pub fn evidence_url(mut self, url: Option<&'a str>) -> Self {
+        self.evidence_url = url;
         self
     }
 }
@@ -112,7 +134,7 @@ impl super::SilvaDB {
         metadata: &str,
         opts: NodeWriteOptions<'_>,
     ) -> Result<()> {
-        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope } = opts;
+        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope, source, author, evidence_url } = opts;
         if !allow_drift && DRIFT_SENSITIVE_TYPES.contains(&node_type) {
             anyhow::bail!(
                 "DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through the public API. \
@@ -147,8 +169,8 @@ impl super::SilvaDB {
             // the FTS index permanently out of sync with the real node content.
             let tx = conn.transaction()?;
             tx.execute(
-                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance, owner_scope)
-                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, ?7, 0, ?8, ?9, ?10, ?11)
+                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance, owner_scope, source, author, evidence_url)
+                 VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, ?7, 0, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(id) DO UPDATE SET
                     content = excluded.content,
                     metadata = excluded.metadata,
@@ -165,8 +187,11 @@ impl super::SilvaDB {
                     content_hash = COALESCE(excluded.content_hash, nodes.content_hash),
                     provenance = excluded.provenance,
                     owner_scope = COALESCE(excluded.owner_scope, nodes.owner_scope),
+                    source = COALESCE(excluded.source, nodes.source),
+                    author = COALESCE(excluded.author, nodes.author),
+                    evidence_url = COALESCE(excluded.evidence_url, nodes.evidence_url),
                     updated_at = CURRENT_TIMESTAMP",
-                params![id, node_type, content, metadata, topic_key, vf, valid_until, federation_source, content_hash, provenance, owner_scope],
+                params![id, node_type, content, metadata, topic_key, vf, valid_until, federation_source, content_hash, provenance, owner_scope, source, author, evidence_url],
             )?;
             // Sync FTS5 index within the same transaction
             if let Ok(rowid) = tx.query_row("SELECT rowid FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)) {
@@ -209,6 +234,22 @@ impl super::SilvaDB {
             let conn = self.conn.blocking_lock();
             conn.query_row("SELECT confidence FROM nodes WHERE id = ?1", params![id], |r| r.get(0))
                 .unwrap_or(1.0)
+        })
+    }
+
+    /// M40-P4 (second cut): read a node's explicit source/author/evidence.
+    /// Same rationale as `get_confidence` — fetched on demand where an
+    /// agent-facing consumer needs to explain provenance, not at every
+    /// internal graph traversal. Returns (source, author, evidence_url),
+    /// all None for nodes written before v20 or without these fields set.
+    pub async fn get_source_info(&self, id: &str) -> (Option<String>, Option<String>, Option<String>) {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.query_row(
+                "SELECT source, author, evidence_url FROM nodes WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ).unwrap_or((None, None, None))
         })
     }
 

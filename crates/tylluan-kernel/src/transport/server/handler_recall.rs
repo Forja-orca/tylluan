@@ -586,19 +586,34 @@ if let Some(ref mut s) = stmt {
         } else {
             format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
         };
-        // M40-P4: confidence is fetched on demand (not stored on GraphNode, see
-        // SilvaDB::get_confidence's doc comment), so this loop can't be a plain
-        // sync .map() over scored -- collect statuses first.
+        // M40-P4: confidence and source/author/evidence are fetched on demand
+        // (not stored on GraphNode, see SilvaDB::get_confidence's doc comment),
+        // so this loop can't be a plain sync .map() over scored.
         let mut statuses = Vec::with_capacity(scored.len());
+        let mut source_infos: Vec<(Option<String>, Option<String>, Option<String>)> = Vec::with_capacity(scored.len());
         for (d, _) in &scored {
             let confidence = server.silva.get_confidence(&d.id).await;
             statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
+            source_infos.push(server.silva.get_source_info(&d.id).await);
         }
-        let summary_body = scored.iter().zip(statuses.iter()).map(|((d, score), status)| {
-            let age = d.created_at.as_deref().unwrap_or("?");
-            let truncated_content = truncate_adaptive(&d.content, *score, compact);
-            format!("- [score={:.2} weight={:.2} type={} age={} status={}] {}", score, d.weight, d.node_type, age, status, truncated_content)
-        }).collect::<Vec<_>>().join("\n");
+        let summary_body = scored.iter().zip(statuses.iter()).zip(source_infos.iter())
+            .map(|(((d, score), status), (source, author, evidence_url))| {
+                let age = d.created_at.as_deref().unwrap_or("?");
+                let truncated_content = truncate_adaptive(&d.content, *score, compact);
+                let mut tag = format!("- [score={:.2} weight={:.2} type={} age={} status={}", score, d.weight, d.node_type, age, status);
+                if let Some(s) = source.as_deref() {
+                    tag.push_str(&format!(" source={s}"));
+                }
+                if let Some(a) = author.as_deref() {
+                    tag.push_str(&format!(" author={a}"));
+                }
+                tag.push_str("] ");
+                let mut line = format!("{tag}{truncated_content}");
+                if let Some(url) = evidence_url.as_deref() {
+                    line.push_str(&format!("\n  \u{21b3} evidence: {url}"));
+                }
+                line
+            }).collect::<Vec<_>>().join("\n");
         let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
         let prefix = session_context.unwrap_or_default();
         return Ok(CallToolResult { content: vec![Content::text(format!("{prefix}{summary}"))], is_error: Some(false) });
@@ -835,21 +850,32 @@ if let Some(ref mut s) = stmt {
             // WER — Weight Exposure in Recall (R21-4)
             // Expose score, weight, node_type and created_at so agents can audit
             // ALD decay, TMS contradictions, and retrieval quality directly.
-            // M40-P4: status is fetched on demand (see the cache-hit path above for
-            // why it can't be a plain sync .map()).
+            // M40-P4: status and source/author/evidence are fetched on demand
+            // (see the cache-hit path above for why it can't be a plain sync .map()).
             let mut statuses = Vec::with_capacity(scored.len());
+            let mut source_infos: Vec<(Option<String>, Option<String>, Option<String>)> = Vec::with_capacity(scored.len());
             for (d, _) in &scored {
                 let confidence = server.silva.get_confidence(&d.id).await;
                 statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
+                source_infos.push(server.silva.get_source_info(&d.id).await);
             }
-            let summary_body = scored.iter().zip(statuses.iter())
-                .map(|((d, score), status)| {
+            let summary_body = scored.iter().zip(statuses.iter()).zip(source_infos.iter())
+                .map(|(((d, score), status), (source, author, evidence_url))| {
                     let age = d.created_at.as_deref().unwrap_or("?");
                     let truncated_content = truncate_adaptive(&d.content, *score, compact);
-                    format!(
-                        "- [score={:.2} weight={:.2} type={} age={} status={}] {}",
-                        score, d.weight, d.node_type, age, status, truncated_content
-                    )
+                    let mut tag = format!("- [score={:.2} weight={:.2} type={} age={} status={}", score, d.weight, d.node_type, age, status);
+                    if let Some(s) = source.as_deref() {
+                        tag.push_str(&format!(" source={s}"));
+                    }
+                    if let Some(a) = author.as_deref() {
+                        tag.push_str(&format!(" author={a}"));
+                    }
+                    tag.push_str("] ");
+                    let mut line = format!("{tag}{truncated_content}");
+                    if let Some(url) = evidence_url.as_deref() {
+                        line.push_str(&format!("\n  \u{21b3} evidence: {url}"));
+                    }
+                    line
                 })
                 .collect::<Vec<_>>().join("\n");
             let mut summary = format!("{header}{summary_body}");
@@ -1064,6 +1090,29 @@ mod tests {
         let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
         let text = result.content[0].as_text().unwrap();
         assert!(text.text.contains("status=confirmed"), "a freshly written, unconflicted node must show status=confirmed: {text:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_output_exposes_source_author_evidence() {
+        // M40-P4 (second cut): source/author/evidence_url should appear in recall
+        // output when set, and be absent when not set.
+        let server = test_server().await;
+        use crate::memory::silva::nodes::NodeWriteOptions;
+        server.silva.upsert_node_with_validity(
+            "src1", "concept", "source author evidence test node for recall",
+            "{}",
+            NodeWriteOptions::new("agent_generated")
+                .source(Some("user_conversation"))
+                .author(Some("agent:deep"))
+                .evidence_url(Some("https://example.com/evidence/1")),
+        ).await.unwrap();
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("source author evidence test".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("source=user_conversation"), "recall output must include source: {text:?}");
+        assert!(text.text.contains("author=agent:deep"), "recall output must include author: {text:?}");
+        assert!(text.text.contains("evidence: https://example.com/evidence/1"), "recall output must include evidence URL: {text:?}");
     }
 
     #[tokio::test(flavor = "multi_thread")]

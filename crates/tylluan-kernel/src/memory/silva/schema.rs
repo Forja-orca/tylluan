@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 19;
+            const SCHEMA_VERSION: i32 = 20;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -216,6 +216,15 @@ impl super::SilvaDB {
                 // silently become "provisional" the moment this column appears.
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0", []);
                 tracing::info!("🌲 SilvaDB: added confidence column (v19, M40-P4)");
+            }
+            if schema_version < 20 {
+                // M40-P4 (second cut): explicit source/author/evidence beyond
+                // generic `provenance`. Nullable — NULL means "not specified",
+                // backward compatible with all existing nodes.
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN source TEXT", []);
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN author TEXT", []);
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN evidence_url TEXT", []);
+                tracing::info!("🌲 SilvaDB: added source/author/evidence_url columns (v20, M40-P4)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
