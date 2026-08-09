@@ -264,16 +264,28 @@ pub async fn handle_tylluan_do(
     // to coloquio. Discoverability debt (P2), logged in Coloquio, fixed here.
     {
         let lower = intent.trim().to_lowercase();
-        let is_list_guilds = lower.contains("list_available_guilds") || lower.contains("list available guild")
+        // SHORT_INTENT_MAX: a real command phrase ("agent bootstrap", "orientame")
+        // is short. A long intent that happens to CONTAIN one of these phrases
+        // deep inside its text (e.g. posting a Coloquio message that quotes
+        // "qué estaba haciendo") must NOT be hijacked by this matcher -- found
+        // live, 2026-08-09: this exact bug swallowed a real Coloquio announcement
+        // whose body contained the phrase, routing it to agent_bootstrap instead
+        // of letting it reach the coloquio guild. Anchoring to short intents only
+        // keeps the deterministic shortcut without shadowing real guild calls.
+        const SHORT_INTENT_MAX: usize = 60;
+        let is_short = lower.len() <= SHORT_INTENT_MAX;
+        let is_list_guilds = is_short && (
+            lower.contains("list_available_guilds") || lower.contains("list available guild")
             || lower.contains("list guilds") || lower.contains("lista de guilds")
             || lower.contains("qué guilds") || lower.contains("que guilds")
             || lower.contains("available guilds") || lower.contains("guild contracts")
-            || lower.contains("guild capabilities");
-        let is_bootstrap = lower.contains("agent_bootstrap") || lower.contains("agent bootstrap")
+            || lower.contains("guild capabilities"));
+        let is_bootstrap = is_short && (
+            lower.contains("agent_bootstrap") || lower.contains("agent bootstrap")
             || lower.contains("bootstrap context") || lower.contains("bootstrap me")
             || lower.contains("orient me") || lower.contains("orientame") || lower.contains("oriéntame")
             || lower.contains("contexto de sesión") || lower.contains("contexto de sesion")
-            || lower.contains("qué estaba haciendo") || lower.contains("que estaba haciendo");
+            || lower.contains("qué estaba haciendo") || lower.contains("que estaba haciendo"));
         if is_list_guilds || is_bootstrap {
             let mut kernel_args = arguments.clone().unwrap_or_default();
             if let Some(aid) = &agent_id {
@@ -1203,6 +1215,29 @@ mod tests {
                 "'{phrase}' must reach list_available_guilds's JSON output, got: {text}"
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn long_intent_containing_bootstrap_phrase_is_not_hijacked() {
+        // Regression guard for the exact bug found live, 2026-08-09: a long
+        // Coloquio post whose body happened to contain "qué estaba haciendo"
+        // got swallowed into agent_bootstrap instead of reaching the real
+        // coloquio guild -- the announcement itself never got posted.
+        let server = test_server().await;
+        let long_intent = format!(
+            "publica en coloquio general: resumen largo del cierre, incluye la frase \
+             qué estaba haciendo el agente en la sesión anterior como parte del contenido. {}",
+            "relleno ".repeat(5)
+        );
+        assert!(long_intent.len() > 60, "test intent must exceed the short-intent threshold");
+        let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": long_intent}).as_object().unwrap().clone())).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(
+            !text.contains("\"identity\"") && !text.contains("\"recent_memories\""),
+            "a long intent that merely mentions a bootstrap phrase must NOT be hijacked into agent_bootstrap, got: {text}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
