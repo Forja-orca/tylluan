@@ -586,10 +586,18 @@ if let Some(ref mut s) = stmt {
         } else {
             format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
         };
-        let summary_body = scored.iter().map(|(d, score)| {
+        // M40-P4: confidence is fetched on demand (not stored on GraphNode, see
+        // SilvaDB::get_confidence's doc comment), so this loop can't be a plain
+        // sync .map() over scored -- collect statuses first.
+        let mut statuses = Vec::with_capacity(scored.len());
+        for (d, _) in &scored {
+            let confidence = server.silva.get_confidence(&d.id).await;
+            statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
+        }
+        let summary_body = scored.iter().zip(statuses.iter()).map(|((d, score), status)| {
             let age = d.created_at.as_deref().unwrap_or("?");
             let truncated_content = truncate_adaptive(&d.content, *score, compact);
-            format!("- [score={:.2} weight={:.2} type={} age={}] {}", score, d.weight, d.node_type, age, truncated_content)
+            format!("- [score={:.2} weight={:.2} type={} age={} status={}] {}", score, d.weight, d.node_type, age, status, truncated_content)
         }).collect::<Vec<_>>().join("\n");
         let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
         let prefix = session_context.unwrap_or_default();
@@ -827,13 +835,20 @@ if let Some(ref mut s) = stmt {
             // WER — Weight Exposure in Recall (R21-4)
             // Expose score, weight, node_type and created_at so agents can audit
             // ALD decay, TMS contradictions, and retrieval quality directly.
-            let summary_body = scored.iter()
-                .map(|(d, score)| {
+            // M40-P4: status is fetched on demand (see the cache-hit path above for
+            // why it can't be a plain sync .map()).
+            let mut statuses = Vec::with_capacity(scored.len());
+            for (d, _) in &scored {
+                let confidence = server.silva.get_confidence(&d.id).await;
+                statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
+            }
+            let summary_body = scored.iter().zip(statuses.iter())
+                .map(|((d, score), status)| {
                     let age = d.created_at.as_deref().unwrap_or("?");
                     let truncated_content = truncate_adaptive(&d.content, *score, compact);
                     format!(
-                        "- [score={:.2} weight={:.2} type={} age={}] {}",
-                        score, d.weight, d.node_type, age, truncated_content
+                        "- [score={:.2} weight={:.2} type={} age={} status={}] {}",
+                        score, d.weight, d.node_type, age, status, truncated_content
                     )
                 })
                 .collect::<Vec<_>>().join("\n");
@@ -1036,6 +1051,19 @@ mod tests {
         assert!(!result.is_error.unwrap_or(false), "no results is not an error");
         let text = result.content[0].as_text().unwrap();
         assert!(text.text.contains("No memories found"), "must say no memories found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_output_exposes_memory_status() {
+        // M40-P4: an agent asking "why do you believe this" should see the status
+        // in the recall output itself, not have to guess or call a separate tool.
+        let server = test_server().await;
+        server.silva.upsert_node("s1", "concept", "confirmed status memory status test node", "{}").await.unwrap();
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("confirmed status memory status test".to_string()));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("status=confirmed"), "a freshly written, unconflicted node must show status=confirmed: {text:?}");
     }
 
     #[tokio::test(flavor = "multi_thread")]

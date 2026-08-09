@@ -198,6 +198,20 @@ impl super::SilvaDB {
         })
     }
 
+    /// M40-P4: read a node's confidence score (default 1.0, fully confident, for
+    /// nodes written before this column existed or missing entirely). Deliberately
+    /// NOT added to `GraphNode` itself -- that struct is constructed at ~20 call
+    /// sites across silva/*.rs, and confidence only matters where an agent-facing
+    /// consumer (tylluan_recall) needs to explain "why do you believe this", not
+    /// every internal graph traversal. Fetched on demand instead.
+    pub async fn get_confidence(&self, id: &str) -> f64 {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.query_row("SELECT confidence FROM nodes WHERE id = ?1", params![id], |r| r.get(0))
+                .unwrap_or(1.0)
+        })
+    }
+
     /// Synchronous internal helper to get a node by ID.
     pub(crate) fn get_node_sync(&self, id: &str, conn: &rusqlite::Connection) -> Result<Option<GraphNode>> {
         let mut stmt = conn.prepare(
