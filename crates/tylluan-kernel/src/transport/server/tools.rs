@@ -43,6 +43,74 @@ impl super::TylluanServer {
         all
     }
 
+    /// Actionable tool discovery (M40-P1/discoverability extension).
+    /// Filters tools and guilds by domain, returning actionable invocation examples,
+    /// required arguments, descriptions, and risk levels.
+    pub fn explore_actionable_tools(domain: &str, available_guilds: &[&crate::router::catalog::GuildDescriptor]) -> serde_json::Value {
+        let domain_lower = domain.trim().to_lowercase();
+        let tools = Self::kernel_tools();
+
+        let matching_tools: Vec<_> = tools.iter()
+            .filter(|t| {
+                if domain_lower.is_empty() || domain_lower == "all" { return true; }
+                let cat = format!("{:?}", t.category).to_lowercase();
+                t.name.to_lowercase().contains(&domain_lower)
+                    || cat.contains(&domain_lower)
+                    || t.description.to_lowercase().contains(&domain_lower)
+                    || t.subtools.iter().any(|s| s.to_lowercase().contains(&domain_lower))
+            })
+            .map(|t| {
+                let required = t.input_schema.get("required")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                serde_json::json!({
+                    "tool": t.name,
+                    "category": format!("{:?}", t.category).to_lowercase(),
+                    "description": t.description,
+                    "risk_level": format!("{:?}", t.risk).to_lowercase(),
+                    "required_args": required,
+                    "example_invocation": format!("tylluan_do(intent=\"{}\")", t.name),
+                    "subtools": t.subtools,
+                })
+            })
+            .collect();
+
+        let matching_guilds: Vec<_> = available_guilds.iter()
+            .filter(|g| {
+                if domain_lower.is_empty() || domain_lower == "all" { return true; }
+                g.name.to_lowercase().contains(&domain_lower)
+                    || g.description.to_lowercase().contains(&domain_lower)
+                    || format!("{:?}", g.category).to_lowercase().contains(&domain_lower)
+            })
+            .map(|g| {
+                let example_arg = if let Some(first_req) = g.required_args.first() {
+                    format!(" {first_req}=\"value\"")
+                } else {
+                    String::new()
+                };
+                serde_json::json!({
+                    "guild": g.name,
+                    "category": g.category.to_string(),
+                    "description": g.description,
+                    "required_args": g.required_args,
+                    "permissions": g.permissions,
+                    "estimated_cost": g.estimated_cost,
+                    "example_invocation": format!("tylluan_do(intent=\"use {}\"{})", g.name, example_arg),
+                })
+            })
+            .collect();
+
+        serde_json::json!({
+            "domain": if domain_lower.is_empty() { "all" } else { &domain_lower },
+            "kernel_tools_count": matching_tools.len(),
+            "guilds_count": matching_guilds.len(),
+            "kernel_tools": matching_tools,
+            "guilds": matching_guilds,
+            "hint": "Call any kernel tool or guild directly using tylluan_do with the example_invocation."
+        })
+    }
+
     /// Defines the built-in kernel tools using the enriched TylluanTool Registry.
     pub fn kernel_tools() -> Vec<TylluanTool> {
         vec![
@@ -587,5 +655,15 @@ mod tests {
     fn explore_empty_domain_returns_all_kernel_tools() {
         let tools = TylluanServer::kernel_tools();
         assert!(!tools.is_empty());
+    }
+
+    #[test]
+    fn test_explore_actionable_tools_returns_example_invocation() {
+        let res = TylluanServer::explore_actionable_tools("memory", &[]);
+        let k_tools = res["kernel_tools"].as_array().expect("kernel_tools is array");
+        assert!(!k_tools.is_empty(), "must return matching memory tools");
+        let first = &k_tools[0];
+        assert!(first.get("example_invocation").is_some(), "tool entry must contain example_invocation");
+        assert!(first.get("risk_level").is_some(), "tool entry must contain risk_level");
     }
 }
