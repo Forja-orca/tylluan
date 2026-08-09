@@ -255,6 +255,35 @@ pub async fn handle_tylluan_do(
         }
     }
 
+    // Deterministic list_available_guilds / agent_bootstrap routing -- same
+    // rationale as whoami above (CONTRACT-01 keeps these off tools/list, so
+    // intent text is the only discovery path for clients that don't already
+    // know the literal tool name). Found live, 2026-08-09: neither was
+    // reachable from natural language at all before this -- the semantic
+    // router misrouted "list available guilds" to bash and "agent bootstrap"
+    // to coloquio. Discoverability debt (P2), logged in Coloquio, fixed here.
+    {
+        let lower = intent.trim().to_lowercase();
+        let is_list_guilds = lower.contains("list_available_guilds") || lower.contains("list available guild")
+            || lower.contains("list guilds") || lower.contains("lista de guilds")
+            || lower.contains("qué guilds") || lower.contains("que guilds")
+            || lower.contains("available guilds") || lower.contains("guild contracts")
+            || lower.contains("guild capabilities");
+        let is_bootstrap = lower.contains("agent_bootstrap") || lower.contains("agent bootstrap")
+            || lower.contains("bootstrap context") || lower.contains("bootstrap me")
+            || lower.contains("orient me") || lower.contains("orientame") || lower.contains("oriéntame")
+            || lower.contains("contexto de sesión") || lower.contains("contexto de sesion")
+            || lower.contains("qué estaba haciendo") || lower.contains("que estaba haciendo");
+        if is_list_guilds || is_bootstrap {
+            let mut kernel_args = arguments.clone().unwrap_or_default();
+            if let Some(aid) = &agent_id {
+                kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
+            }
+            let tool_name = if is_bootstrap { "agent_bootstrap" } else { "list_available_guilds" };
+            return Box::pin(server.handle_kernel_tool(tool_name, Some(kernel_args))).await;
+        }
+    }
+
     // Ouroboros Loop — record half. Deterministic intent match so any client
     // can persist a self-critique of an action's outcome via natural language,
     // per-agent, without a new tool. The agent (the LLM) does the reflection and
@@ -1153,6 +1182,43 @@ mod tests {
         assert_eq!(key, "lesson:intent:run_cargo_test");
         // Should NOT include "for", "kernel", "module", etc.
         assert_ne!(key, "lesson:intent:run_cargo_test_for");
+    }
+
+    // Discoverability regression guards, 2026-08-09: a live checklist verification
+    // found list_available_guilds/agent_bootstrap unreachable via tylluan_do intent
+    // text at all (the semantic router misrouted "list available guilds" to bash
+    // and "agent bootstrap" to coloquio) -- these tests assert the fix from natural
+    // language, not just exact tool-name dispatch, per the discoverability debt
+    // logged in Coloquio.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_list_available_guilds() {
+        let server = test_server().await;
+        for phrase in ["list available guilds", "qué guilds hay disponibles", "guild capabilities"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                text.starts_with('[') || text.contains("\"required_args\""),
+                "'{phrase}' must reach list_available_guilds's JSON output, got: {text}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_agent_bootstrap() {
+        crate::security::grants::init();
+        let server = test_server().await;
+        for phrase in ["agent bootstrap", "orientame", "qué estaba haciendo"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase, "agent_id": "test-agent"}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                text.contains("\"identity\"") && text.contains("\"recent_memories\""),
+                "'{phrase}' must reach agent_bootstrap's JSON output, got: {text}"
+            );
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]
