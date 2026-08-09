@@ -286,12 +286,26 @@ pub async fn handle_tylluan_do(
             || lower.contains("orient me") || lower.contains("orientame") || lower.contains("oriéntame")
             || lower.contains("contexto de sesión") || lower.contains("contexto de sesion")
             || lower.contains("qué estaba haciendo") || lower.contains("que estaba haciendo"));
-        if is_list_guilds || is_bootstrap {
+        // M40-P3: deterministic undo routing. Same guard rationale as the other
+        // matchers here — anchored to short intents only so a long message that
+        // merely quotes "deshacer la última acción" is never hijacked.
+        let is_undo = is_short && (
+            lower.contains("undo_last_action") || lower.contains("undo last action")
+            || lower.contains("undo my last action") || lower.contains("deshacer última acción")
+            || lower.contains("deshacer ultima accion") || lower.contains("deshacer la última")
+            || lower.contains("deshacer la ultima"));
+        if is_list_guilds || is_bootstrap || is_undo {
             let mut kernel_args = arguments.clone().unwrap_or_default();
             if let Some(aid) = &agent_id {
                 kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
             }
-            let tool_name = if is_bootstrap { "agent_bootstrap" } else { "list_available_guilds" };
+            let tool_name = if is_bootstrap {
+                "agent_bootstrap"
+            } else if is_undo {
+                "undo_last_action"
+            } else {
+                "list_available_guilds"
+            };
             return Box::pin(server.handle_kernel_tool(tool_name, Some(kernel_args))).await;
         }
 
@@ -463,6 +477,77 @@ pub async fn handle_tylluan_do(
         server, &result, &agent_id, &intent,
         &resolved.guild_name, &resolved.tool_name, remember,
     ).await;
+
+    // Stage 5 (M40-P3): structured post-execution report for risk >= Medium.
+    // Wrapped only when the action actually modified state (risk gate per
+    // approved design — read-only/Light guilds skip the wrapper, YAGNI).
+    // Report is minimal by default: intended/performed/changed. The
+    // `verified`/`rollback` fields are added ONLY when the guild declares
+    // real metadata (GuildDescriptor.verification / .rollback) — never
+    // fabricated nulls for performative completeness.
+    {
+        let risk_level = server.check_tool_risk(&resolved.tool_name).await;
+        if risk_level != crate::registry::tools::RiskLevel::Low {
+            let desc = server.matcher.available_guilds()
+                .iter()
+                .find(|d| d.name == resolved.guild_name)
+                .cloned();
+            let performed_ok = result.is_error != Some(true);
+            let result_text: String = result.content.iter()
+                .filter_map(|c| c.as_text())
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let changed: String = if performed_ok {
+                let preview: String = result_text.chars().take(400).collect();
+                if preview.is_empty() { "ok".to_string() } else { preview }
+            } else {
+                let preview: String = result_text.chars().take(200).collect();
+                format!("call failed: {}", if preview.is_empty() { "unknown error" } else { &preview })
+            };
+
+            let mut report = serde_json::json!({
+                "intended": intent,
+                "performed": format!("guild='{}' tool='{}' ({})", resolved.guild_name, resolved.tool_name, if performed_ok { "ok" } else { "error" }),
+                "changed": changed,
+            });
+            if let Some(d) = &desc {
+                if let Some(verification) = &d.verification {
+                    report["verified"] = serde_json::json!({
+                        "method": verification,
+                        "status": if performed_ok { "passed" } else { "failed" },
+                    });
+                }
+                // Reversible action: register in undo_log for undo_last_action.
+                // Only when the guild declares a real rollback contract AND the
+                // call succeeded — you can only undo something that happened.
+                if let Some(rollback_spec) = &d.rollback
+                    && performed_ok
+                    && let Ok(mut log) = server.undo_log.lock() {
+                        log.insert(
+                            agent_id.clone().unwrap_or_else(|| "anonymous".to_string()),
+                            super::types::ReversibleAction {
+                                guild: resolved.guild_name.clone(),
+                                tool: resolved.tool_name.clone(),
+                                rollback_spec: rollback_spec.clone(),
+                                intent: intent.clone(),
+                                result_text: result_text.clone(),
+                                ts_unix: chrono::Utc::now().timestamp(),
+                            },
+                        );
+                        report["rollback"] = serde_json::json!({
+                            "spec": rollback_spec,
+                            "recorded": true,
+                            "note": "Call undo_last_action (or 'undo last action') to revert.",
+                        });
+                    }
+            }
+            result.content.push(Content::text(format!(
+                "\n\n---\nACTION_REPORT: {}",
+                serde_json::to_string_pretty(&report).unwrap_or_default()
+            )));
+        }
+    }
 
     let footer = format!("\n\n---\nRouting: guild={} tool={}\nRouting Trace:\n - {}", resolved.guild_name, resolved.tool_name, resolved.routing_trace.join("\n - "));
     result.content.push(rmcp::model::Content::text(footer));
@@ -1284,6 +1369,49 @@ mod tests {
                 "'{phrase}' must reach agent_bootstrap's JSON output, got: {text}"
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_undo_last_action() {
+        // M40-P3 discoverability guard: "undo last action" (and its Spanish
+        // equivalents) must route deterministically to undo_last_action, not
+        // drift to a guild. Verified by the honest "Nothing reversible" reply
+        // — the handler answers even with an empty log, instead of the
+        // semantic router sending it somewhere unrelated.
+        let server = test_server().await;
+        for phrase in ["undo last action", "undo my last action", "deshacer última acción", "deshacer la ultima"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase, "agent_id": "test-agent"}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                text.contains("Nothing reversible"),
+                "'{phrase}' must reach undo_last_action's handler, got: {text}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn long_intent_containing_undo_phrase_is_not_hijacked() {
+        // Same anchoring guard as the bootstrap test: a long message that
+        // merely mentions "deshacer la última acción" must NOT be swallowed
+        // by the undo matcher.
+        let server = test_server().await;
+        let long_intent = format!(
+            "publica en coloquio general: resumen del ciclo, donde explico que para \
+             deshacer la última acción hay que pedirlo explícitamente y no como parte \
+             de un texto largo. {}",
+            "relleno ".repeat(5)
+        );
+        assert!(long_intent.len() > 60, "test intent must exceed the short-intent threshold");
+        let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": long_intent, "agent_id": "test-agent"}).as_object().unwrap().clone())).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(
+            !text.contains("Nothing reversible"),
+            "a long intent that merely mentions an undo phrase must NOT be hijacked, got: {text}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

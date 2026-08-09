@@ -77,6 +77,10 @@ pub struct TylluanServer {
     pub jobs: Option<Arc<crate::memory::jobs::JobQueue>>,
     pub mlp_scorer: Option<Arc<MlpScorer>>,
     pub mlp_replay: Option<Arc<std::sync::Mutex<ReplayBuffer>>>,
+    /// M40-P3: last reversible action per agent_id (see ReversibleAction).
+    /// In-memory only by design — survives within a kernel session; the
+    /// rollback contract itself is declared in GuildDescriptor, not here.
+    pub undo_log: Arc<std::sync::Mutex<std::collections::HashMap<String, ReversibleAction>>>,
     pub models_dir: PathBuf,
 }
 
@@ -132,6 +136,7 @@ impl TylluanServer {
             jobs: None,
             mlp_scorer: None,
             mlp_replay: None,
+            undo_log: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             models_dir: PathBuf::from("models"),
         }
     }

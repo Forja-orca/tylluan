@@ -484,6 +484,16 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     GuildWeight::Heavy => Some("heavy_compute".to_string()),
                 };
 
+                // M40-P3: rollback spec is a real contract, not a checkbox.
+                // Format: "undo_tool(param_from_result)". scheduler.schedule
+                // returns the schedule_id as its raw result text, so
+                // cancel_schedule(schedule_id) can be driven from it. Guilds
+                // without a reversible operation stay `None` (honest minimal
+                // report, no invented metadata).
+                let rollback = match guild_name.as_str() {
+                    "scheduler" => Some("cancel_schedule(schedule_id)".to_string()),
+                    _ => None,
+                };
                 descriptors.push(GuildDescriptor {
                     name: guild_name,
                     description,
@@ -501,7 +511,7 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     examples: vec![],
                     preconditions: vec![],
                     verification: Some("status_check_or_exit_code".to_string()),
-                    rollback: None,
+                    rollback,
                 });
             }
         }
