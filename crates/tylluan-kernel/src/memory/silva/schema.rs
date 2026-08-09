@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 18;
+            const SCHEMA_VERSION: i32 = 19;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -206,6 +206,16 @@ impl super::SilvaDB {
                      CREATE INDEX IF NOT EXISTS idx_recall_feedback_useful ON recall_feedback(useful);"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added recall_feedback table (v18, ADR-011)");
+            }
+            if schema_version < 19 {
+                // M40-P4: explicit confidence for evidence-based memory. `conflicted`
+                // (v1) and `valid_until` (v?) already exist and already carry most of
+                // the "is this still true" signal -- confidence is the one real gap:
+                // no node has ever recorded how sure the system is about its own
+                // content. Defaults to 1.0 (fully confident) so existing nodes don't
+                // silently become "provisional" the moment this column appears.
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0", []);
+                tracing::info!("🌲 SilvaDB: added confidence column (v19, M40-P4)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

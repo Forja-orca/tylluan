@@ -56,6 +56,65 @@ pub struct GraphNode {
     pub provenance: String,
 }
 
+/// M40-P4: derive an explicit 4-value memory status from fields that already
+/// exist (`conflicted`, `valid_until`) plus `confidence` (fetched separately via
+/// `SilvaDB::get_confidence`, not stored on `GraphNode` -- see that function's
+/// doc comment for why). Precedence: contradicted > superseded > provisional >
+/// confirmed -- a node can be both flagged conflicted AND past its valid_until,
+/// and "actively disputed" is the more actionable signal for an agent deciding
+/// whether to trust it.
+pub fn memory_status(conflicted: bool, valid_until: Option<i64>, confidence: f64) -> &'static str {
+    const PROVISIONAL_THRESHOLD: f64 = 0.5;
+    if conflicted {
+        "contradicted"
+    } else if valid_until.is_some_and(|vu| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        vu < now
+    }) {
+        "superseded"
+    } else if confidence < PROVISIONAL_THRESHOLD {
+        "provisional"
+    } else {
+        "confirmed"
+    }
+}
+
+#[cfg(test)]
+mod memory_status_tests {
+    use super::memory_status;
+
+    #[test]
+    fn confirmed_is_the_default() {
+        assert_eq!(memory_status(false, None, 1.0), "confirmed");
+    }
+
+    #[test]
+    fn low_confidence_is_provisional() {
+        assert_eq!(memory_status(false, None, 0.2), "provisional");
+    }
+
+    #[test]
+    fn expired_valid_until_is_superseded() {
+        let past = 1; // 1970-01-01, always in the past
+        assert_eq!(memory_status(false, Some(past), 1.0), "superseded");
+    }
+
+    #[test]
+    fn future_valid_until_is_not_superseded() {
+        let far_future = 4102444800; // 2100-01-01
+        assert_eq!(memory_status(false, Some(far_future), 1.0), "confirmed");
+    }
+
+    #[test]
+    fn conflicted_wins_over_superseded_and_provisional() {
+        let past = 1;
+        assert_eq!(memory_status(true, Some(past), 0.1), "contradicted");
+    }
+}
+
 /// An edge in the knowledge graph.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
