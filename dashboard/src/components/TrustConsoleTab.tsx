@@ -159,6 +159,49 @@ export const TrustConsoleTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Memory Status & Evidence Matrix (M40-P4) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
+        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2 mb-3">
+          <Activity className="w-5 h-5 text-cyan-400" /> Matriz de Estados de Memoria & Procedencia (M40-P4)
+        </h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Estado explícito derivado dinámicamente sobre SilvaDB en cada llamada a <span className="font-mono text-amber-300">tylluan_recall</span>:
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+          <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-bold text-emerald-400">status="confirmed"</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans">Hecho verificado, alta confianza, sin conflicto activo.</p>
+          </div>
+
+          <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-bold text-amber-400">status="provisional"</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans">Registro reciente o bajo nivel de confianza inicial.</p>
+          </div>
+
+          <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-bold text-rose-400">status="contradicted"</span>
+              <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans">En conflicto explícito registrado en SilvaDB.</p>
+          </div>
+
+          <div className="p-3 bg-slate-800/40 border border-slate-700/60 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-bold text-slate-400">status="superseded"</span>
+              <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans">Hecho histórico superado por una versión más reciente.</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
