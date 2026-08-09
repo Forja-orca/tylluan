@@ -352,12 +352,32 @@ fn count_event_type_global(conn: &rusqlite::Connection, event_type: &str) -> i64
     ).unwrap_or(0)
 }
 
+/// Test-only override for the friction DB path. Every lib test that touches
+/// friction log writes to its OWN temp DB (see the tests module) so the suite
+/// never contends with the live kernel, which holds `./data/audit.db` open and
+/// writes friction entries on every tool call. TEST_MUTEX serializes the tests
+/// among themselves but cannot serialize them against another process — that
+/// cross-process contention was the root cause of the flaky
+/// "friction open: unable to open database file: ./data/audit.db" failures.
+#[cfg(test)]
+static TEST_DB_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+
+fn friction_db_path() -> std::path::PathBuf {
+    #[cfg(test)]
+    {
+        if let Some(p) = TEST_DB_PATH.lock().unwrap().clone() {
+            return p;
+        }
+    }
+    std::path::PathBuf::from("./data/audit.db")
+}
+
 fn open_friction_db() -> Result<rusqlite::Connection, String> {
-    let db_path = std::path::Path::new("./data/audit.db");
+    let db_path = friction_db_path();
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("friction mkdir: {e}"))?;
     }
-    let conn = crate::config::open_db(db_path).map_err(|e| format!("friction open: {e}"))?;
+    let conn = crate::config::open_db(&db_path).map_err(|e| format!("friction open: {e}"))?;
     conn.busy_timeout(std::time::Duration::from_secs(5)).ok();
     ensure_schema(&conn)?;
     Ok(conn)
@@ -425,9 +445,19 @@ mod tests {
         format!("test-friction-agent-{n}")
     }
 
+    /// Point every friction call in THIS test at a dedicated temp DB (one per
+    /// test, unique within the process). Production keeps `./data/audit.db`;
+    /// tests never touch it, so the live kernel can hold it without flaking us.
+    fn unique_test_db() {
+        let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("tylluan_friction_test_{}_{}.db", std::process::id(), n));
+        *TEST_DB_PATH.lock().unwrap() = Some(path);
+    }
+
     #[test]
     fn test_full_friction_lifecycle() {
         let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
         let agent = unique_agent();
 
         // Start session
@@ -477,6 +507,7 @@ mod tests {
     #[test]
     fn test_empty_session_has_zero_friction() {
         let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
         end_session(sid).expect("end_session failed");
@@ -489,6 +520,7 @@ mod tests {
     #[test]
     fn test_multiple_workflows() {
         let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
 
@@ -511,6 +543,7 @@ mod tests {
     #[test]
     fn test_ttfua_computed_on_record_result() {
         let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
         let wid = start_workflow(sid, "slow task", "bash", "bash_execute")
@@ -530,6 +563,8 @@ mod tests {
 
     #[test]
     fn test_ttfua_null_without_recorded_result() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
         let wid = start_workflow(sid, "no result recorded", "bash", "bash_execute")
