@@ -255,6 +255,17 @@ impl TylluanServer {
                     }
                 Ok(CallToolResult { content: vec![Content::text("✅ Persona updated")], is_error: Some(false) })
             }
+            "agent_bootstrap" => {
+                // M40-P2: one call instead of whoami + tylluan_recall + list_pending_actions
+                // stitched together by hand. See transport::server::bootstrap.
+                let target_id = arguments.as_ref()
+                    .and_then(|a| a.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&agent_id);
+                let ctx = super::bootstrap::build_agent_bootstrap(self.silva.clone(), target_id).await;
+                Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&ctx).unwrap_or_default())], is_error: Some(false) })
+            }
             "whoami" => {
                 let target_id = arguments.as_ref()
                     .and_then(|a| a.get("agent_id"))
