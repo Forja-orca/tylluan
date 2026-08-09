@@ -294,6 +294,36 @@ pub async fn handle_tylluan_do(
             let tool_name = if is_bootstrap { "agent_bootstrap" } else { "list_available_guilds" };
             return Box::pin(server.handle_kernel_tool(tool_name, Some(kernel_args))).await;
         }
+
+        let explicit_explore = arguments.as_ref()
+            .and_then(|a| a.get("explore"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let is_explore_intent = is_short && (
+            lower.starts_with("explore") || lower.starts_with("explora")
+            || lower.contains("subtools") || lower.contains("discover tools")
+            || lower.contains("descubrir herramientas") || lower.contains("ver herramientas")
+        );
+
+        if explicit_explore.is_some() || is_explore_intent {
+            let target_domain = explicit_explore.unwrap_or_else(|| {
+                let cleaned = lower
+                    .replace("explore", "")
+                    .replace("explora", "")
+                    .replace("subtools", "")
+                    .replace("discover tools", "")
+                    .replace("descubrir herramientas", "")
+                    .replace("ver herramientas", "")
+                    .replace("herramientas", "");
+                cleaned.trim().to_string()
+            });
+            let available_guilds = server.matcher.available_guilds();
+            let result_json = TylluanServer::explore_actionable_tools(&target_domain, &available_guilds);
+            return Ok(CallToolResult {
+                content: vec![Content::text(serde_json::to_string_pretty(&result_json).unwrap_or_default())],
+                is_error: Some(false),
+            });
+        }
     }
 
     // Ouroboros Loop — record half. Deterministic intent match so any client
