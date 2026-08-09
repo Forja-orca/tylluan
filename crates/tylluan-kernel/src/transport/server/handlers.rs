@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::{CallToolResult, Content, JsonObject}};
+use rmcp::{Error as McpError, model::{CallToolResult, Content, JsonObject}};
 use crate::registry::proxy::error_result;
 use serde_json;
 use super::{handler_do, handler_remember, handler_recall, handler_think, handler_graph, handler_ingest, TylluanServer};
@@ -120,6 +120,13 @@ impl TylluanServer {
                         "tools": s.tools_count,
                         "required_args": desc.map(|d| &d.required_args).cloned().unwrap_or_default(),
                         "capabilities": desc.and_then(|d| d.capabilities.clone()),
+                        "permissions": desc.map(|d| &d.permissions).cloned().unwrap_or_default(),
+                        "estimated_cost": desc.and_then(|d| d.estimated_cost.clone()),
+                        "side_effects": desc.map(|d| &d.side_effects).cloned().unwrap_or_default(),
+                        "examples": desc.map(|d| &d.examples).cloned().unwrap_or_default(),
+                        "preconditions": desc.map(|d| &d.preconditions).cloned().unwrap_or_default(),
+                        "verification": desc.and_then(|d| d.verification.clone()),
+                        "rollback": desc.and_then(|d| d.rollback.clone()),
                     })
                 }).collect::<Vec<_>>();
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&list).unwrap_or_default())], is_error: Some(false) })

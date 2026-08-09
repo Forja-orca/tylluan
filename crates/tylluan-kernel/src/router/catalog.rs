@@ -1,4 +1,4 @@
-﻿//! # Guild Catalog
+//! # Guild Catalog
 //!
 //! Auto-discovered from `guilds/` directory structure.
 //! Scans for `.py` files with FastMCP servers at startup.
@@ -46,6 +46,27 @@ pub struct GuildDescriptor {
     /// Null if the guild doesn't declare capabilities.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<serde_json::Value>,
+    /// M40-P1: Recommended permissions required by this guild.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
+    /// M40-P1: Estimated execution cost (e.g., "local_zero_cost", "heavy_gpu").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_cost: Option<String>,
+    /// M40-P1: Side effects triggered by this guild.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub side_effects: Vec<String>,
+    /// M40-P1: Example intent invocations.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<String>,
+    /// M40-P1: Preconditions required before execution.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preconditions: Vec<String>,
+    /// M40-P1: Method to verify execution success.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<String>,
+    /// M40-P1: Rollback strategy if execution fails.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -446,6 +467,23 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
 
                 let capabilities = extract_capabilities(&content);
 
+                let permissions = match guild_name.as_str() {
+                    "bash" => vec!["process_execution".to_string(), "filesystem_write".to_string()],
+                    "filesystem" | "git" | "code" => vec!["filesystem_write".to_string()],
+                    "docker" => vec!["container_admin".to_string(), "process_execution".to_string()],
+                    _ => vec![],
+                };
+                let side_effects = match guild_name.as_str() {
+                    "bash" | "filesystem" | "git" => vec!["file_mutation".to_string()],
+                    "docker" => vec!["container_state_change".to_string()],
+                    _ => vec![],
+                };
+                let estimated_cost = match weight {
+                    GuildWeight::Light => Some("local_zero_cost".to_string()),
+                    GuildWeight::Medium => Some("light_cpu".to_string()),
+                    GuildWeight::Heavy => Some("heavy_compute".to_string()),
+                };
+
                 descriptors.push(GuildDescriptor {
                     name: guild_name,
                     description,
@@ -457,6 +495,13 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     required_args,
                     weight,
                     capabilities,
+                    permissions,
+                    estimated_cost,
+                    side_effects,
+                    examples: vec![],
+                    preconditions: vec![],
+                    verification: Some("status_check_or_exit_code".to_string()),
+                    rollback: None,
                 });
             }
         }

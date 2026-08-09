@@ -46,6 +46,7 @@ const LabConsolidated = lazy(() => import('./components/LabConsolidated'))
 const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
 const FrictionPanel = lazy(() => import('./components/FrictionPanel'))
+const TrustConsoleTab = lazy(() => import('./components/TrustConsoleTab').then(m => ({ default: m.TrustConsoleTab })))
 
 function App() {
   const { theme, setTheme, activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, addMention, showMentionsDropdown, setShowMentionsDropdown, pendingGrant, setPendingGrant } = useAppStore()
@@ -596,6 +597,7 @@ function App() {
               {activeTab === 'audit' && mountedTabs.has('audit') && (
                 <ErrorBoundary>
                   <div className="space-y-8">
+                    <TrustConsoleTab />
                     <AuditTrailPanel
                       bridge={bridge}
                     />
