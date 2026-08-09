@@ -182,7 +182,6 @@ impl super::TylluanServer {
                         "metadata": { "type": "object", "description": "Optional tags or context." },
                         "agent_id": { "type": "string", "description": "Optional. Tag this memory with your agent identity so it appears in your session history." },
                         "expires_in_days": { "type": "integer", "description": "Optional. Number of days until this memory expires. After expiry, retrieval score is penalized ×0.1.", "minimum": 1, "maximum": 3650 },
-                        "explore":  { "type": "string", "description": "Optional. Discover sub-tools under this branch without executing." }
                     },
                     "required": ["content"]
                 }),
@@ -201,7 +200,6 @@ impl super::TylluanServer {
                         "query":    { "type": "string", "description": "What to search for in memory." },
                         "limit":    { "type": "number", "default": 5 },
                         "agent_id": { "type": "string", "description": "Optional. Filter recall results to episodes from this agent identity." },
-                        "explore":  { "type": "string", "description": "Optional. Discover sub-tools under this branch without executing." }
                     },
                     "required": ["query"]
                 }),
@@ -224,7 +222,6 @@ impl super::TylluanServer {
                         "depth":    { "type": "number", "description": "Graph traversal depth (1-3)", "default": 2 },
                         "chain":    { "type": "boolean", "description": "Enable multi-hop reasoning chain expansion", "default": false },
                         "agent_id": { "type": "string", "description": "Optional agent identity" },
-                        "explore":  { "type": "string", "description": "Optional. Discover sub-tools under this branch without executing." }
                     },
                     "required": ["query"]
                 }),
@@ -250,7 +247,6 @@ impl super::TylluanServer {
                         "seeds":    { "type": "array", "items": { "type": "string" }, "description": "Seed node IDs for PPR" },
                         "alpha":    { "type": "number", "default": 0.85, "description": "Damping factor for PPR" },
                         "top_k":    { "type": "integer", "default": 10, "description": "Number of PPR results to return" },
-                        "explore":  { "type": "string", "description": "Optional. Discover sub-tools under this branch without executing." }
                     },
                     "required": ["command"]
                 }),
