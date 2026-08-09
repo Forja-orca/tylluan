@@ -21,6 +21,7 @@ M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), 
 - Impersonación de `role="human"` en Coloquio: riesgo conocido, aceptado explícitamente, NO cerrado mientras `dev_mode=true` siga activo (decisión de José, ver checkpoint 2026-07-31).
 - **M39 — Adopción MCP 2026-07-28**: P0 ✅, P1 🟡 (Tasks con guards reales, Apps con manifiestos pendiente), P2 ⬜ (stateless puro). Ver sección M39.
 - **M40 — Capa de continuidad/confianza/acción (v0.16.0)**: nuevo, 6 fases priorizadas por José. Ver sección M40. **v0.16.0 no cierra sin M39+M40 completos.**
+- **Deuda de infra P1 (2026-08-09, verificado, no bloqueante)**: `security::friction_log::*` no es flaky de CI — es defecto real de aislamiento. `open_friction_db()` (`friction_log.rs:355`) hardcodea `./data/audit.db`, sin punto de inyección para tests; `ensure_schema` corre `CREATE`/`ALTER` en cada conexión, y el manejo de `"duplicate column"` (`friction_log.rs:409`) ignora el batch de migración entero, no columna por columna — carrera real bajo paralelismo, no falso positivo. Solución propuesta (Deep): abstracción `FrictionStore::open(path)`, producción usa `./data/audit.db`, tests reciben `TempDir` aislado; separar cada `ALTER TABLE` con verificación individual de columna. No forzado ahora para no dispersar el foco de M39/M40 — backlog real, no ignorar si vuelve a aparecer.
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
