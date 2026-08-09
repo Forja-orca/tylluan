@@ -89,6 +89,13 @@ impl super::TylluanServer {
                 } else {
                     String::new()
                 };
+                let subtool_examples: Vec<_> = g.subtools.iter().map(|s| {
+                    serde_json::json!({
+                        "subtool": s,
+                        "example_invocation": format!("tylluan_do(intent=\"use {} {}\")", g.name, s)
+                    })
+                }).collect();
+
                 serde_json::json!({
                     "guild": g.name,
                     "category": g.category.to_string(),
@@ -96,6 +103,8 @@ impl super::TylluanServer {
                     "required_args": g.required_args,
                     "permissions": g.permissions,
                     "estimated_cost": g.estimated_cost,
+                    "subtools": g.subtools,
+                    "subtool_examples": subtool_examples,
                     "example_invocation": format!("tylluan_do(intent=\"use {}\"{})", g.name, example_arg),
                 })
             })
@@ -679,5 +688,20 @@ mod tests {
         let first = &k_tools[0];
         assert!(first.get("example_invocation").is_some(), "tool entry must contain example_invocation");
         assert!(first.get("risk_level").is_some(), "tool entry must contain risk_level");
+    }
+
+    #[test]
+    fn test_explore_guild_subtools_down_to_individual_tools() {
+        let mut desc = crate::router::catalog::builtin_catalog().first().cloned().unwrap();
+        desc.subtools = vec!["schedule".to_string(), "cancel_schedule".to_string()];
+        let res = TylluanServer::explore_actionable_tools(&desc.name, &[&desc]);
+        let guilds = res["guilds"].as_array().expect("guilds is array");
+        assert!(!guilds.is_empty(), "must return matching guild");
+        let g = &guilds[0];
+        let subtools = g["subtools"].as_array().expect("subtools array");
+        assert_eq!(subtools.len(), 2);
+        let subtool_examples = g["subtool_examples"].as_array().expect("subtool_examples array");
+        assert_eq!(subtool_examples.len(), 2);
+        assert!(subtool_examples[0]["example_invocation"].as_str().unwrap().contains("schedule"));
     }
 }

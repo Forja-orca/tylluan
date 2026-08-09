@@ -67,6 +67,9 @@ pub struct GuildDescriptor {
     /// M40-P1: Rollback strategy if execution fails.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rollback: Option<String>,
+    /// M40 Discoverability: Individual FastMCP tool functions exposed by this guild.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -412,6 +415,37 @@ fn extract_capabilities(content: &str) -> Option<serde_json::Value> {
     serde_json::from_str(&json_str).ok()
 }
 
+/// Extract individual tool names declared via `@mcp.tool` / `@app.tool` / `@tool` in Python guild files.
+fn extract_subtools(content: &str) -> Vec<String> {
+    let mut tools = Vec::new();
+    let mut expect_def = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("@mcp.tool") || trimmed.contains("@app.tool") || trimmed.starts_with("@tool") {
+            expect_def = true;
+            continue;
+        }
+        if expect_def {
+            if trimmed.starts_with("def ") || trimmed.starts_with("async def ") {
+                if let Some(name_part) = trimmed.split("def ").nth(1) {
+                    if let Some(func_name) = name_part.split('(').next() {
+                        let name = func_name.trim();
+                        if !name.is_empty() && !name.starts_with('_') && !tools.contains(&name.to_string()) {
+                            tools.push(name.to_string());
+                        }
+                    }
+                }
+                expect_def = false;
+            } else if !trimmed.starts_with('@') && !trimmed.is_empty() {
+                expect_def = false;
+            }
+        }
+    }
+
+    tools
+}
+
 /// Scan the guilds directory and auto-discover all guilds.
 /// Returns descriptors derived from file paths and docstrings.
 pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
@@ -494,6 +528,7 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     "scheduler" => Some("cancel_schedule(schedule_id)".to_string()),
                     _ => None,
                 };
+                let subtools = extract_subtools(&content);
                 descriptors.push(GuildDescriptor {
                     name: guild_name,
                     description,
@@ -512,6 +547,7 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                     preconditions: vec![],
                     verification: Some("status_check_or_exit_code".to_string()),
                     rollback,
+                    subtools,
                 });
             }
         }
