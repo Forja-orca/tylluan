@@ -2345,13 +2345,11 @@ async fn setup_hint_apply_handler(
         let _ = std::fs::create_dir_all(parent);
     }
 
-    if file_exists {
-        if let Err(e) = std::fs::copy(&target_file, &backup_path) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Failed to create backup at {}: {e}", backup_path.display())}))
-            ).into_response();
-        }
+    if file_exists && let Err(e) = std::fs::copy(&target_file, &backup_path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to create backup at {}: {e}", backup_path.display())}))
+        ).into_response();
     }
 
     if let Err(e) = std::fs::write(&target_file, updated_content) {
