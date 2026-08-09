@@ -92,6 +92,7 @@ impl super::TylluanServer {
                 "nodo_list".into(),
                 "whoami".into(),
                 "register_identity".into(),
+                "agent_bootstrap".into(),
             ]),
             TylluanTool::new(
                 "tylluan_remember",
@@ -498,6 +499,19 @@ impl super::TylluanServer {
                     "properties": {
                         "agent_id": { "type": "string", "description": "Your agent identity." },
                         "timezone": { "type": "string", "description": "Optional. IANA timezone name (e.g. 'Asia/Tokyo', 'Europe/Madrid') to get local time alongside UTC." }
+                    },
+                    "required": ["agent_id"]
+                }),
+                ToolCategory::Kernel,
+                RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "agent_bootstrap",
+                "M40-P2: one call instead of stitching together whoami + tylluan_recall + list_pending_actions by hand. Returns your identity (or a hint to register if you're new), your last session summary, your most recent memories, and any pending actions waiting on your approval. Call this once at session start.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity." }
                     },
                     "required": ["agent_id"]
                 }),

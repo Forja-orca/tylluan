@@ -11,6 +11,7 @@ pub mod logic;
 pub mod utils;
 pub mod intent_enhancer;
 pub mod background_jobs;
+pub mod bootstrap;
 
 use types::*;
 use crate::registry::guild_process::GuildRegistry;
