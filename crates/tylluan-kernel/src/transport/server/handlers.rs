@@ -127,6 +127,7 @@ impl TylluanServer {
                         "preconditions": desc.map(|d| &d.preconditions).cloned().unwrap_or_default(),
                         "verification": desc.and_then(|d| d.verification.clone()),
                         "rollback": desc.and_then(|d| d.rollback.clone()),
+                        "subtools": desc.map(|d| &d.subtools).cloned().unwrap_or_default(),
                     })
                 }).collect::<Vec<_>>();
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&list).unwrap_or_default())], is_error: Some(false) })
