@@ -1,12 +1,12 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-08-08 · v0.15.0 (HEAD `aba645d`) — 53 commits desde el HEAD anterior (`ad5b9c4`), verificado con `git log --oneline ad5b9c4..HEAD`, no de memoria. Cambios reales desde el 2026-07-29: auditoría de conexión completa (14 hallazgos reales cerrados — IPC apuntando al puerto equivocado, escrituras a SilvaDB saltándose el pipeline de embedding, paneles de dashboard con datos falsos, componentes saltándose auth), cifrado Noise NK obligatorio en gossip de producción (antes texto plano hasta que se propagaba la pubkey), CoherenceGate Layer 4 híbrido **wireado en producción** en modo observación (ya no es "sin implementar" — sigue sin decidir, solo observa), 13 guilds nuevos activados vía `[guilds.v2]`, crash intermitente de visión root-causado (TDR de GPU Windows) y arreglado forzando CPU, **Janus-Pro-1B confirmado muerto** (commit `3b71a25`: "Antigravity found zero code" — cualquier mención de esto como "benchmark en marcha" en este documento está desactualizada, no reflejaba código real), y el ciclo de esta sesión: SSRF+exfiltración de env vars cerrado, `handle_tylluan_do` descompuesto, Coloquio channel_id unificado, y **Inference Mesh** diseñado + spike + trust boundary implementado end-to-end (`docs/architecture/PROPOSAL_distributed_inference_credit_mesh.md`, `benchmarks/spikes/inference_mesh/`, commits `15bf0f7`→`aba645d`). 665 tests (588 kernel lib + 65 link + 12 fsrs), clippy limpio, CI verde.
+> **Última actualización:** 2026-08-09 · HEAD `962dffd`, camino a v0.16.0 — **v0.16.0 NO cierra hasta que M39 (P0-P2) y M40 estén ambos completos, decisión explícita de José, 2026-08-09**. Desde v0.15.0: M39-P0 cerrado (negociación real de `protocolVersion`), M39-P1 implementado por Antigravity (`57d72cd`) y luego corregido por Claude (`962dffd`) tras un audit externo encontrar `tasks/update` sin validación de estados y `2026-07-28` declarado prematuramente — ambos cerrados con 6 tests nuevos. Un cliente MCP real conectado en vivo detectó además que el kernel corriendo (`3e81661`) estaba desactualizado respecto al código (`b5323e6`+) — hallazgo que se convirtió directamente en M40-P6 (Trust Console). **M40 — Tylluan como capa de continuidad, confianza y acción del agente** añadido el mismo día, 6 fases priorizadas por José, ver sección M40.
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
 ---
 
-## Estado actual — v0.15.0 ✅
+## Estado actual — v0.15.0 cerrado, trabajando hacia v0.16.0 (M39 + M40) 🟡
 
 M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), M32, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue con §2-5 abierto (decisión de inserción pendiente, no de benchmark). 665 tests (588 kernel lib + 65 link + 12 fsrs), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
 
@@ -19,7 +19,8 @@ M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), 
 - M33 backlog sin versión fija (J-6, J-7, J-10, J-13, J-14 — no J-11/J-12, esos ya se resolvieron/renumeraron) — ver sección M33 abajo.
 - Inference Mesh: trust boundary cerrado; queda pendiente la validación de latencia real entre 2 nodos físicos (no DST) — ver `docs/architecture/PROPOSAL_distributed_inference_credit_mesh.md` sección 4.
 - Impersonación de `role="human"` en Coloquio: riesgo conocido, aceptado explícitamente, NO cerrado mientras `dev_mode=true` siga activo (decisión de José, ver checkpoint 2026-07-31).
-- **M39 — Adopción MCP 2026-07-28**: núcleo stateless, Tasks, MCP Apps. Compromiso completo, no aplazado — ver sección M39. P0 (fix `protocolVersion`) es trabajo inmediato de 30 min.
+- **M39 — Adopción MCP 2026-07-28**: P0 ✅, P1 🟡 (Tasks con guards reales, Apps con manifiestos pendiente), P2 ⬜ (stateless puro). Ver sección M39.
+- **M40 — Capa de continuidad/confianza/acción (v0.16.0)**: nuevo, 6 fases priorizadas por José. Ver sección M40. **v0.16.0 no cierra sin M39+M40 completos.**
 
 Lo que ya tenemos (verificado 2026-07-25):
 - Binario único, 4 targets (x86_64/aarch64 × Linux/Windows/macOS)
@@ -504,13 +505,38 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| P0 | **Corregir el echo de `protocolVersion`**: `api_v1.rs:480` hoy devuelve literalmente lo que el cliente envía como si Tylluan lo soportara, en vez de declarar la versión real que implementa. Bug de honestidad de protocolo, no migración. | ⬜ |
-| P1 | **Declarar Tasks y MCP Apps como extensiones sobre lo que ya existe**: M31-P6 (subagentes = guilds largos en background) ya es funcionalmente Tasks — falta exponerlo con el contrato formal `tasks/get`/`tasks/update`/`tasks/cancel`. M25 (Canvas Event Bridge) ya es funcionalmente MCP Apps — falta declarar las plantillas de UI y el manifiesto de extensión formal. Es anunciar capacidad ya construida con el vocabulario oficial, no reescribir nada. | ⬜ |
-| P2 | **Migración del núcleo de transporte a stateless puro**: eliminar la dependencia de `Mcp-Session-Id`/sesión por handshake en `api_v1.rs`, mover metadata de cliente/capabilities/versión al patrón `_meta` por-request de la spec nueva. Es la pieza grande — toca el transporte real, no es aditivo como P1. Se hace completa, no a medias; el fallback de la spec cubre a los clientes legacy mientras se ejecuta, así que no hay ventana de riesgo real que justifique aplazarla. | ⬜ |
+| P0 | **Corregir el echo de `protocolVersion`**: negociación real contra `SUPPORTED_PROTOCOL_VERSIONS`, nunca echo ciego. | ✅ 2026-08-09, commit `b5323e6`, 3 tests |
+| P1 | **Tasks + `server/discover`**: implementado por Antigravity (`57d72cd`) — `tasks/get`/`tasks/update`/`tasks/cancel` sobre `JobQueue`. **Auditoría externa el mismo día encontró 2 huecos reales**: `tasks/update` aceptaba cualquier string como estado (sin enum, sin guard de estado terminal) y `SUPPORTED_PROTOCOL_VERSIONS` declaraba `2026-07-28` prematuramente pese a que el núcleo stateless (P2) no existe. Ambos cerrados por Claude en `962dffd` (enum cerrado de 5 estados + guard terminal + revert de la versión prematura, 6 tests). MCP Apps (manifiestos reales, no solo capability flag) sigue sin hacer dentro de P1. | 🟡 parcial — Tasks con guards reales, Apps pendiente |
+| P2 | **Migración del núcleo de transporte a stateless puro**: eliminar la dependencia de `Mcp-Session-Id`/sesión por handshake en `api_v1.rs`, mover metadata de cliente/capabilities/versión al patrón `_meta` por-request de la spec nueva. No declarar `2026-07-28` como versión soportada hasta que esto esté cerrado (lección del hallazgo de P1). | ⬜ |
 
 **Notas de la investigación (verificadas, no de memoria):** `Roots` y `Sampling` quedan deprecados como primitivas de primera clase en la spec nueva — pendiente verificar si Tylluan los usa en algún punto antes de cerrar P2. Política de deprecación formal (SEP-2596): mínimo 12 meses entre deprecar algo y eliminarlo, así que el ecosistema tampoco tiene prisa real, pero eso no es motivo para que Tylluan la tenga tampoco en el sentido contrario — se hace porque hay tiempo y ganas, no porque haya presión externa.
 
+**Lección de proceso (2026-08-09, no perder):** declarar una capacidad MCP (versión, Tasks, Apps) antes de que su contrato esté completo y verificado es exactamente el error que un cliente MCP real detectó en cuestión de minutos — auditar contra un cliente real, no solo contra tests internos, antes de anunciar una fase cerrada.
+
 **Criterio de cierre:** un cliente que hable `2026-07-28` puro se conecta a Tylluan sin caer al fallback de handshake clásico, y puede invocar un guild en background como Task formal y ver el Canvas anunciado como MCP App real en su manifiesto de capabilities.
+
+---
+
+### M40 — Tylluan como capa de continuidad, confianza y acción del agente (v0.16.0)
+
+**Norte (tesis de producto, José + revisión externa vía cliente MCP real, 2026-08-09):** "La oportunidad principal no es añadir más guilds. Es convertir Tylluan en la capa de continuidad, confianza y acción de un agente." Antes/después: *"Un agente conectado a Tylluan no empieza cada tarea desde cero, no pierde su identidad, no olvida sus decisiones y no ejecuta acciones importantes sin poder explicar por qué."* No es visión especulativa — 2 de los 10 puntos (Trust Console y contratos de guild autodocumentados) nacen directamente de dos bugs reales vividos en la sesión de cierre de M39-P1: el kernel vivo corriendo `3e81661` mientras el código real estaba en `b5323e6`+, y el guild `audit` exigiendo `path` sin que el schema de `tylluan_do` lo documentara.
+
+**Regla de versión (José, 2026-08-09): v0.16.0 NO cierra hasta que M39 completo (P0-P2) y M40 completo estén ambos cerrados.** No se libera antes.
+
+**Fases (prioridad explícita de José, en este orden):**
+
+| Fase | Descripción | Prioridad | Estado |
+|------|-------------|-----------|--------|
+| P1 | **Contratos MCP honestos y autodocumentados**: cada guild publica automáticamente esquema completo de argumentos, permisos, coste estimado, efectos secundarios, ejemplos, precondiciones, método de verificación y de rollback — cierra directamente el hueco real de `audit`+`path` encontrado el 2026-08-09. | 1 | ⬜ |
+| P2 | **"Agent bootstrap context" unificado**: una sola llamada MCP que devuelve identidad, qué estaba haciendo el agente, decisiones tomadas, tareas abiertas, qué sabe Tylluan del proyecto, qué acciones puede ejecutar y cuáles necesitan aprobación — hoy esto se pide disperso (M31-P3 resume + M31-P4 repo-map + recall por separado). | 2 | ⬜ |
+| P3 | **Ciclo `tylluan_do` completo**: `intención → plan → revisión de riesgos → aprobación → ejecución → verificación → memoria`, con cada acción devolviendo qué iba a hacer, qué hizo, qué cambió, cómo se verificó, cómo deshacerlo y qué aprendió. M31-P2 (`plan=true`) ya cubre plan→aprobación; falta verificación + rollback formal — pieza genuinamente nueva, no dispersa. | 3 | ⬜ |
+| P4 | **Memoria basada en evidencia y procedencia**: cada recuerdo con fuente, autor/agente, fecha, confianza, frescura, evidencia original, y estado (confirmado/provisional/contradicho/superado) — extiende M35 (bi-temporal) y M34 (trust gate), que cubren parte pero no el estado explícito de 4 valores. | 4 | ⬜ |
+| P5 | **Continuidad perfecta entre sesiones y clientes**: pulir M31-P3 (ya cierra la base técnica) hasta que transferir una tarea de un cliente a otro sea impecable, no solo funcional; distinguir memoria personal/proyecto/equipo/pública. | 5 | ⬜ |
+| P6 | **Runtime/version drift visible y autocorrectivo ("Trust Console")**: estado real del kernel ejecutado, commit cargado, versión de contratos, capacidades efectivamente disponibles, salud por guild, latencia, últimas acciones, fallos recientes, divergencia código↔config↔runtime — cierra directamente el hallazgo real del 2026-08-09 (kernel en `3e81661`, código en `b5323e6`+, nadie lo detectó hasta que un cliente MCP real lo notó). | 6 | ⬜ |
+
+**Deliberadamente fuera de esta lista de 6 (mencionados en la revisión pero ya cubiertos o de menor prioridad):** memoria social de agentes (Coloquio+SilvaDB ya lo hacen parcialmente, formalizar consenso/disputa es candidato de backlog M33, no M40), distribución sin fricción (M15 Rufus + M19 CLI ya lo resuelven en su mayoría), contexto curado sin volcar resultados de baja relevancia (bloqueado por datos de LightReranker, no por diseño — no es trabajo nuevo de M40).
+
+**Criterio de cierre de M40:** un agente que se conecta a Tylluan puede — sin ayuda humana — llamar bootstrap una vez y saber quién es y qué estaba haciendo; llamar un guild sin adivinar sus argumentos porque el contrato es autodocumentado; ejecutar una acción reversible con verificación real; y el propio Tylluan le dice si el kernel que está usando coincide con el código que cree estar usando.
 
 ---
 
