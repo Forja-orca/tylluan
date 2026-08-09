@@ -103,10 +103,24 @@ impl TylluanServer {
                 Ok(CallToolResult { content: vec![Content::text(report)], is_error: Some(false) })
             }
             "list_available_guilds" => {
+                // M40-P1: self-documenting guild contracts. Before this, a caller had no
+                // way to discover a guild's required_args ahead of time -- e.g. the
+                // 'audit' guild rejects a tylluan_do call for missing 'path' with no
+                // hint of where that requirement was documented (found live, 2026-08-09).
+                // required_args and capabilities already existed on GuildDescriptor
+                // (catalog.rs) but were never surfaced here.
                 let reg = self.registry.read().await;
                 let statuses = reg.status_all();
+                let descriptors = self.matcher.available_guilds();
                 let list = statuses.into_iter().map(|s| {
-                    serde_json::json!({ "name": s.name, "running": s.running, "tools": s.tools_count })
+                    let desc = descriptors.iter().find(|d| d.name == s.name);
+                    serde_json::json!({
+                        "name": s.name,
+                        "running": s.running,
+                        "tools": s.tools_count,
+                        "required_args": desc.map(|d| &d.required_args).cloned().unwrap_or_default(),
+                        "capabilities": desc.and_then(|d| d.capabilities.clone()),
+                    })
                 }).collect::<Vec<_>>();
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&list).unwrap_or_default())], is_error: Some(false) })
             }
@@ -416,6 +430,36 @@ mod tests {
         assert!(text.contains("status"), "should contain 'status' field");
         assert!(text.contains("guilds"), "should contain 'guilds' field");
         assert!(text.contains("storage"), "should contain 'storage' field");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_list_available_guilds_exposes_required_args() {
+        // M40-P1: a caller must be able to discover a guild's required_args before
+        // calling it, not just find out via a runtime error. Regression guard for
+        // the real gap found 2026-08-09: 'audit' required 'path' with zero schema
+        // hint, and 'coloquio_digest'/'whats_new' have the same pattern for
+        // 'channel_id' -- the exact bug that already bit an agent live in Coloquio.
+        let server = test_server().await;
+        let result = server.handle_kernel_tool("list_available_guilds", None).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(false));
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        let list: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+        let entries = list.as_array().expect("list is an array");
+        let audit = entries.iter().find(|e| e["name"] == "audit");
+        if let Some(audit) = audit {
+            let required = audit["required_args"].as_array().expect("required_args is an array");
+            assert!(
+                required.iter().any(|v| v == "path"),
+                "audit guild must expose 'path' as a required_args entry, got: {required:?}"
+            );
+        }
+        // Every entry must at least carry the required_args key, even when empty,
+        // so a caller never has to guess whether the field is simply absent.
+        for entry in entries {
+            assert!(entry.get("required_args").is_some(), "every guild entry must expose required_args");
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]
