@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** [ver git log] · **701 total** green (624 kernel lib + 65 link lib + 12 fsrs). M40 P1-P3, P5, P6 completos, P2/P4 primer corte, P7/P8 backlog. Auditoría externa (Codex) el 2026-08-09 encontró y se cerró: `health`/`list_pending_actions` sin routing determinista desde `tylluan_do` (se desviaban a `bash`/`filesystem` silenciosamente, `isError=false`); campo `explore` declarado en 4 de las 5 tools soberanas (`remember`/`recall`/`think`/`graph`) sin implementación real — eliminado por honestidad de schema, solo `tylluan_do` lo tiene de verdad. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** `d5284c9` · **708 total** green (631 kernel lib + 65 link lib + 12 fsrs). M40 P1-P3, P5, P6 completos, P2 (segundo corte)/P4 (segundo corte) completos, P7/P8 en curso (Deep/Antigravity). M39: P0-P1 completos, P2 (stateless core) tiene primitivas de validación (`parse_stateless_request_meta`, `validate_stateless_routing_headers`) sin cablear en `mcp_handler` todavía — `2026-07-28` deliberadamente fuera de `SUPPORTED_PROTOCOL_VERSIONS` hasta que esté completo (regresión reintroducida y revertida por segunda vez el 2026-08-09, ver `d5284c9`). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 
