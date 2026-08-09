@@ -84,10 +84,13 @@ pub enum McpDialect {
 }
 
 /// MCP protocol versions Tylluan's transport implements, newest first.
-/// The 2026 entry is advertised only after the stateless core and its tests are
-/// complete. Legacy clients continue to negotiate against the older list below.
-const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05"];
-const LEGACY_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+/// The 2026 entry is deliberately NOT in this list -- M39-P2 (stateless core
+/// routing) is still validation primitives only (parse_stateless_request_meta,
+/// validate_stateless_routing_headers), not the actual session-bypass routing.
+/// Declaring it here before that's wired and verified regressed once already
+/// (reverted in 962dffd); do not re-add until the stateless path is complete.
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+const LEGACY_PROTOCOL_VERSIONS: &[&str] = SUPPORTED_PROTOCOL_VERSIONS;
 const STATELESS_PROTOCOL_VERSION: &str = "2026-07-28";
 const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
 const META_CLIENT_INFO: &str = "io.modelcontextprotocol/clientInfo";
