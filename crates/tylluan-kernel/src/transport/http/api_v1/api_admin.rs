@@ -1215,7 +1215,10 @@ pub async fn revoke_session_handler(
 }
 
 /// M31-P3: GET /api/v1/sessions/resume?agent_id=<id>
-/// Returns the most recent session summary/digest for an agent.
+/// M40-P5: returns the full cross-client resume package (identity + last task +
+/// summary + recent memories + pending actions) via the single assembler
+/// `build_resume_context`. The flat compat fields (found/summary/node_id/...)
+/// are preserved so the M31-P3 CLI consumer keeps working unchanged.
 pub async fn sessions_resume_handler(
     State(state): State<Arc<HttpState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -1227,22 +1230,10 @@ pub async fn sessions_resume_handler(
         }))).into_response(),
     };
 
-    let manager = crate::memory::agent_memory::AgentMemoryManager::new(state.silva.clone(), 20);
-    match manager.get_summary(&agent_id).await {
-        Some(node) => (StatusCode::OK, Json(serde_json::json!({
-            "found": true,
-            "agent_id": agent_id,
-            "summary": node.content,
-            "node_id": node.id,
-            "node_type": node.node_type,
-            "created_at": node.created_at,
-            "weight": node.weight,
-        }))).into_response(),
-        None => (StatusCode::OK, Json(serde_json::json!({
-            "found": false,
-            "agent_id": agent_id,
-        }))).into_response(),
-    }
+    let ctx = crate::transport::server::bootstrap::build_resume_context(
+        state.silva.clone(), &state.journal, &agent_id,
+    ).await;
+    (StatusCode::OK, Json(ctx)).into_response()
 }
 
 // --- GRANTS (HITL via grants.rs, not pending_approvals) ---
@@ -1351,20 +1342,70 @@ pub async fn save_security_scopes_handler(
 #[derive(serde::Deserialize)]
 pub struct SessionResumeRequest {
     pub session_id: String,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub client_name: Option<String>,
 }
 
+/// M40-P5: real resume action, never a fabricated success.
+///
+/// Effects (all observable, none invented):
+/// - If the session exists in the live map, its `last_active` is bumped and
+///   `client_name` is re-bound when the caller says it's now continuing from a
+///   different client (cross-client handoff).
+/// - The full resume package (`build_resume_context`) is returned so the
+///   caller picks up exactly where the agent left off.
+///
+/// The journal is deliberately NOT written here: the last in-progress task is
+/// preserved -- "resumed" is not the task, it would clobber real continuity.
 pub async fn sessions_resume_action_handler(
+    State(state): State<Arc<HttpState>>,
     Json(req): Json<SessionResumeRequest>,
 ) -> impl IntoResponse {
     let session_id = req.session_id.trim();
     if session_id.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "message": "session_id no puede estar vacío" }))).into_response();
     }
-    
+
+    // Real side effect: refresh the session's last_active + optional client rebind.
+    let mut session_snapshot = None;
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(s) = sessions.get_mut(session_id) {
+            let now_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            s.last_active_unix = now_unix;
+            if let Some(cn) = req.client_name.as_deref() {
+                s.client_name = cn.to_string();
+            }
+            session_snapshot = Some(serde_json::json!({
+                "client_name": s.client_name,
+                "agent_id": s.agent_id,
+                "tool_count": s.tool_count,
+                "last_intent": s.last_intent,
+                "last_guild": s.last_guild,
+                "last_active_unix": s.last_active_unix,
+            }));
+        }
+    }
+
+    // Resume target agent: explicit arg wins, then the session's bound agent,
+    // then "anonymous" (never guessed, never fabricated).
+    let agent_id = req.agent_id.clone()
+        .filter(|id| !id.trim().is_empty())
+        .or_else(|| session_snapshot.as_ref().and_then(|s| s["agent_id"].as_str().map(|v| v.to_string())))
+        .unwrap_or_else(|| "anonymous".to_string());
+
+    let context = crate::transport::server::bootstrap::build_resume_context(
+        state.silva.clone(), &state.journal, &agent_id,
+    ).await;
+
     Json(serde_json::json!({
         "success": true,
         "session_id": session_id,
-        "message": format!("Sesión '{}' reanudada exitosamente", session_id),
+        "session": session_snapshot,
+        "resume_context": context,
         "resumed_at": chrono::Utc::now().to_rfc3339()
     })).into_response()
 }

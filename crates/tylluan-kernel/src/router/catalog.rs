@@ -428,12 +428,12 @@ fn extract_subtools(content: &str) -> Vec<String> {
         }
         if expect_def {
             if trimmed.starts_with("def ") || trimmed.starts_with("async def ") {
-                if let Some(name_part) = trimmed.split("def ").nth(1) {
-                    if let Some(func_name) = name_part.split('(').next() {
-                        let name = func_name.trim();
-                        if !name.is_empty() && !name.starts_with('_') && !tools.contains(&name.to_string()) {
-                            tools.push(name.to_string());
-                        }
+                if let Some(name_part) = trimmed.split("def ").nth(1)
+                    && let Some(func_name) = name_part.split('(').next()
+                {
+                    let name = func_name.trim();
+                    if !name.is_empty() && !name.starts_with('_') && !tools.contains(&name.to_string()) {
+                        tools.push(name.to_string());
                     }
                 }
                 expect_def = false;

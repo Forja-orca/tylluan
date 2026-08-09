@@ -918,13 +918,25 @@ def test_{snake}_tool_registered():
             match client.get(&url).query(&[("agent_id", &agent_id)]).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await?;
+                    println!("📋 Resume session for agent: {}", json["agent_id"]);
                     if json["found"].as_bool().unwrap_or(false) {
-                        println!("📋 Resume session for agent: {}", json["agent_id"]);
                         println!("   Summary: {}", json["summary"].as_str().unwrap_or("(empty)"));
                         println!("   Node:    {} ({})", json["node_id"].as_str().unwrap_or("?"), json["node_type"].as_str().unwrap_or("?"));
                         println!("   Created: {}", json["created_at"].as_str().unwrap_or("?"));
                     } else {
-                        println!("📭 No session history found for agent '{agent_id}'");
+                        println!("   Summary: (no session digest yet)");
+                    }
+                    if let Some(lt) = json.get("last_task").filter(|v| !v.is_null()) {
+                        let stale = lt["stale"].as_bool().unwrap_or(false);
+                        let stale_mark = if stale { " ⚠️ stale" } else { "" };
+                        println!("   Last task: {}{}", lt["task"].as_str().unwrap_or("?"), stale_mark);
+                    }
+                    let pending = json["pending_actions_for_me"].as_array().map(|a| a.len()).unwrap_or(0);
+                    if pending > 0 {
+                        println!("   Pending actions: {pending}");
+                    }
+                    if json["identity"]["registered"].as_bool().unwrap_or(false) {
+                        println!("   Identity: registered");
                     }
                 }
                 Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
