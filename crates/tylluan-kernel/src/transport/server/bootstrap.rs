@@ -67,6 +67,22 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
         })
     }).collect();
 
+    // M40-P8: quickstart_intents for zero-config immediate natural language action
+    let quickstart_intents = vec![
+        serde_json::json!({
+            "intent": "explore actionable tools",
+            "description": "Lists all available tools and guilds with actionable invocation examples."
+        }),
+        serde_json::json!({
+            "intent": "summarize project repo-map",
+            "description": "Obtains project directory structure, languages, and key manifest files."
+        }),
+        serde_json::json!({
+            "intent": "check active friction log",
+            "description": "Reviews recent workflow friction points and execution bottlenecks."
+        }),
+    ];
+
     serde_json::json!({
         "agent_id": agent_id,
         "identity": {
@@ -79,6 +95,7 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
         "pending_actions_for_me": my_pending,
         "project_knowledge": repo_map_summary,
         "executable_capabilities": executable_capabilities,
+        "quickstart_intents": quickstart_intents,
         "register_hint": if needs_real_bio {
             Some(serde_json::json!({
                 "message": "Your biography is a placeholder or unset. Call register_identity with real values.",
@@ -250,7 +267,7 @@ mod tests {
         // parity, since drift there WOULD indicate a real composition bug.
         let boot = build_agent_bootstrap(silva, "agent-x").await;
         let live_scan_keys = ["project_knowledge", "executable_capabilities"];
-        for key in ["agent_id", "identity", "last_session_summary", "recent_memories", "pending_actions_for_me", "project_knowledge", "executable_capabilities", "register_hint"] {
+        for key in ["agent_id", "identity", "last_session_summary", "recent_memories", "pending_actions_for_me", "project_knowledge", "executable_capabilities", "quickstart_intents", "register_hint"] {
             assert!(ctx.get(key).is_some(), "resume context lost bootstrap key '{key}'");
             if live_scan_keys.contains(&key) {
                 assert!(!ctx[key].is_null(), "resume context's '{key}' must not be null");
@@ -306,5 +323,9 @@ mod tests {
         assert!(!caps.is_empty(), "must surface available guild capabilities");
         assert!(caps[0].get("guild").is_some());
         assert!(caps[0].get("subtools").is_some());
+
+        let quick = ctx["quickstart_intents"].as_array().expect("quickstart_intents array");
+        assert!(!quick.is_empty(), "must surface quickstart natural language intents");
+        assert!(quick[0].get("intent").is_some());
     }
 }

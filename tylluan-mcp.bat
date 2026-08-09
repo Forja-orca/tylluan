@@ -63,7 +63,14 @@ if "%REBUILD_DASH%"=="1" (
 )
 
 REM Start kernel (foreground)
-echo Starting tylluan-nexus...
+echo ======================================================================
+echo  TYLLUAN NEXUS KERNEL IS STARTING (M40-P8 Zero-Config Invisible Onboarding)
+echo  ----------------------------------------------------------------------
+echo  Server Address:    http://127.0.0.1:4000 (SSE: /sse)
+echo  Claude Code Quick: /mcp add tylluan sse http://127.0.0.1:4000/sse
+echo  Codex Quick:       npx -y mcp-remote http://127.0.0.1:4000/sse
+echo  Health Check:      curl http://127.0.0.1:4000/health
+echo ======================================================================
 pushd crates\tylluan-kernel
 ..\..\target\release\tylluan-nexus.exe
 popd
