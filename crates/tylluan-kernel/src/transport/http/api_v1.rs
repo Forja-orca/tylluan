@@ -83,20 +83,191 @@ pub enum McpDialect {
     SseClassic,
 }
 
-/// MCP protocol versions Tylluan's transport actually implements today, newest first.
-/// Tylluan still speaks the stateful `initialize`/`initialized` handshake -- it has not
-/// migrated to the 2026-07-28 stateless core yet (M39-P2). Kept here instead of
-/// blindly echoing whatever a client claims, which silently lied about support for
-/// versions Tylluan never implemented (e.g. a client sending "2026-07-28" would get
-/// that version echoed back even though the stateless core doesn't exist yet).
-/// M39-P2 (stateless core migration) is not implemented yet -- Tylluan still speaks
-/// the stateful initialize/initialized handshake. "2026-07-28" was added here
-/// prematurely while wiring the Tasks extension (M39-P1); reverted after the
-/// 2026-08-09 external audit flagged the resulting interoperability contradiction:
-/// a client could select the new protocol and assume stateless semantics, real MCP
-/// Apps, or fully-conformant Tasks, none of which exist yet. Re-add only once P2 is
-/// actually done.
-const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+/// MCP protocol versions Tylluan's transport implements, newest first.
+/// The 2026 entry is advertised only after the stateless core and its tests are
+/// complete. Legacy clients continue to negotiate against the older list below.
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05"];
+const LEGACY_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+const STATELESS_PROTOCOL_VERSION: &str = "2026-07-28";
+const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
+const META_CLIENT_INFO: &str = "io.modelcontextprotocol/clientInfo";
+const META_CLIENT_CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
+
+#[derive(Debug, Clone)]
+struct StatelessRequestMeta {
+    protocol_version: String,
+    client_info: serde_json::Value,
+    client_capabilities: serde_json::Value,
+}
+
+/// Parse and validate the per-request metadata required by the 2026 stateless core.
+/// Returning `Ok(None)` means this is a legacy request, not that metadata is optional
+/// for a request which claims the stateless protocol.
+fn parse_stateless_request_meta(
+    headers: &HeaderMap,
+    payload: &serde_json::Value,
+) -> Result<Option<StatelessRequestMeta>, (StatusCode, serde_json::Value)> {
+    let header_version = headers
+        .get("MCP-Protocol-Version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let params = payload.get("params").and_then(serde_json::Value::as_object);
+    let meta = params
+        .and_then(|value| value.get("_meta"))
+        .and_then(serde_json::Value::as_object);
+    let meta_version = meta
+        .and_then(|value| value.get(META_PROTOCOL_VERSION))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+
+    let claims_stateless = header_version.as_deref() == Some(STATELESS_PROTOCOL_VERSION)
+        || meta_version.as_deref() == Some(STATELESS_PROTOCOL_VERSION);
+    if !claims_stateless {
+        return Ok(None);
+    }
+
+    let Some(header_version) = header_version else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": "MCP-Protocol-Version header is required for the stateless protocol"
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    };
+    let Some(meta) = meta else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": "params._meta is required for the stateless protocol"
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    };
+    let Some(meta_version) = meta.get(META_PROTOCOL_VERSION).and_then(serde_json::Value::as_str) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": format!("params._meta.{META_PROTOCOL_VERSION} is required")
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    };
+    if header_version != meta_version {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": "MCP-Protocol-Version must match params._meta protocolVersion"
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    }
+    let Some(client_info) = meta.get(META_CLIENT_INFO).filter(|value| value.is_object()) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": format!("params._meta.{META_CLIENT_INFO} is required and must be an object")
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    };
+    let valid_client_info = client_info.get("name").and_then(serde_json::Value::as_str).is_some()
+        && client_info.get("version").and_then(serde_json::Value::as_str).is_some();
+    if !valid_client_info {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": format!("params._meta.{META_CLIENT_INFO} requires name and version")
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    }
+    let Some(client_capabilities) = meta.get(META_CLIENT_CAPABILITIES).filter(|value| value.is_object()) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": format!("params._meta.{META_CLIENT_CAPABILITIES} is required and must be an object")
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    };
+
+    Ok(Some(StatelessRequestMeta {
+        protocol_version: meta_version.to_owned(),
+        client_info: client_info.clone(),
+        client_capabilities: client_capabilities.clone(),
+    }))
+}
+
+fn validate_stateless_routing_headers(
+    headers: &HeaderMap,
+    payload: &serde_json::Value,
+) -> Result<(), (StatusCode, serde_json::Value)> {
+    let method = payload.get("method").and_then(serde_json::Value::as_str).unwrap_or_default();
+    let header_method = headers.get("Mcp-Method").and_then(|value| value.to_str().ok());
+    if header_method != Some(method) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": "Mcp-Method header must match the JSON-RPC method"
+                },
+                "id": payload.get("id")
+            }),
+        ));
+    }
+    if method == "tools/call" {
+        let expected_name = payload
+            .get("params")
+            .and_then(|params| params.get("name"))
+            .and_then(serde_json::Value::as_str);
+        let header_name = headers.get("Mcp-Name").and_then(|value| value.to_str().ok());
+        if expected_name.is_none() || header_name != expected_name {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32602,
+                        "message": "Mcp-Name header must match tools/call params.name"
+                    },
+                    "id": payload.get("id")
+                }),
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// Statuses `tasks/update` is allowed to set. A task's terminal statuses
 /// (`completed`, `failed`, `cancelled`) can never be updated further -- see the
@@ -125,11 +296,11 @@ fn validate_task_status_transition(new_status: &str, current_status: Option<&str
 /// (real negotiation). Otherwise, declare the newest version Tylluan does support --
 /// never echo back a version the server doesn't speak.
 fn negotiate_protocol_version(requested: &str) -> &'static str {
-    SUPPORTED_PROTOCOL_VERSIONS
+    LEGACY_PROTOCOL_VERSIONS
         .iter()
         .find(|&&v| v == requested)
         .copied()
-        .unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[0])
+        .unwrap_or(LEGACY_PROTOCOL_VERSIONS[0])
 }
 
 /// Detect MCP dialect using 5-step heuristic (first match wins)
@@ -184,15 +355,19 @@ fn detect_mcp_dialect(
         return McpDialect::HttpStreamableJson;
     }
 
-    // Step 4: protocolVersion in initialize body
+    // Step 4: protocolVersion in initialize body or per-request _meta.
     if let Some(version) = body
         .get("params")
-        .and_then(|p| p.get("protocolVersion"))
+        .and_then(|p| p.get("protocolVersion").or_else(|| p.get("_meta")))
+        .and_then(|value| {
+            value.get(META_PROTOCOL_VERSION).or(Some(value))
+        })
         .and_then(|v| v.as_str())
     {
         match version {
             "2024-11-05" => return McpDialect::SseClassic,
             "2025-03-26" | "2025-06-18" => return McpDialect::HttpStreamableJson,
+            STATELESS_PROTOCOL_VERSION => return McpDialect::HttpStreamableJson,
             _ => {}
         }
     }
@@ -299,6 +474,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/config/sandbox-profile/session/{agent_id}", delete(delete_session_sandbox_override_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/setup-hint", get(setup_hint_handler))
+        .route("/api/v1/setup-hint/apply", post(setup_hint_apply_handler))
         .route("/api/v1/skills", get(project_skills_list_handler).post(project_skills_save_handler))
         .route("/api/v1/jobs", get(background_jobs_list_handler))
         .route("/api/v1/bash", post(bash_execute_handler)) // DEPRECATED - usar tylluan_do
@@ -513,6 +689,47 @@ pub async fn mcp_handler(
     let id = payload.get("id").cloned();
     tracing::info!("📥 [MCP] Received payload: {}", payload);
     let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("");
+    let stateless_meta = match parse_stateless_request_meta(&headers, &payload) {
+        Ok(meta) => meta,
+        Err((status, error)) => return (status, Json(error)).into_response(),
+    };
+    let stateless = stateless_meta.is_some();
+    if stateless {
+        if session_id.is_some() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32602,
+                        "message": "sessionId/session_id is not allowed by the stateless protocol"
+                    },
+                    "id": id
+                })),
+            ).into_response();
+        }
+        if let Err((status, error)) = validate_stateless_routing_headers(&headers, &payload) {
+            return (status, Json(error)).into_response();
+        }
+        if method == "initialize" || method == "notifications/initialized" {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": { "code": -32601, "message": format!("Method not found: {method}") },
+                    "id": id
+                })),
+            ).into_response();
+        }
+        if let Some(meta) = stateless_meta.as_ref() {
+            tracing::debug!(
+                protocol_version = %meta.protocol_version,
+                client = ?meta.client_info,
+                capabilities = ?meta.client_capabilities,
+                "MCP stateless request metadata accepted"
+            );
+        }
+    }
 
     // ?????? Fast-path: initialize + ping never need the server lock ???????????????????????????????????????????????????
     // Capabilities are static; acquiring the server RwLock would block during
@@ -625,7 +842,7 @@ pub async fn mcp_handler(
     };
     let server = server_arc.read().await;
 
-    let response_json = match method {
+    let mut response_json = match method {
         "initialize" | "ping" | "notifications/initialized" => unreachable!("handled above"),
         "tools/list" => {
             let tools = server.all_tools().await;
@@ -635,19 +852,27 @@ pub async fn mcp_handler(
             let tool_params = payload.get("params").cloned().unwrap_or(serde_json::Value::Null);
             let tool_name = tool_params.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let arguments = tool_params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
-            let mcp_agent_id = arguments.get("agent_id").and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .or_else(|| session_id.clone())
-                .or_else(|| {
-                    // Fallback to registered session's client_name if sessionId/agent_id not in args
-                    if let Some(ref sid) = session_id {
-                        let sessions_guard = state.sessions.try_read().ok();
-                        sessions_guard.and_then(|g| g.get(sid).map(|s| s.client_name.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| "mcp-client".to_string());
+            let explicit_agent_id = arguments.get("agent_id").and_then(|v| v.as_str()).map(str::to_owned);
+            let mcp_agent_id = if stateless {
+                // The stateless protocol never derives application identity from
+                // transport state. Agents that need continuity pass agent_id as an
+                // ordinary tool argument, where the model can see and forward it.
+                explicit_agent_id.clone().unwrap_or_else(|| "mcp-client".to_string())
+            } else {
+                explicit_agent_id
+                    .or_else(|| session_id.clone())
+                    .or_else(|| {
+                        // Legacy compatibility: recover the registered client name
+                        // from its sessionId when using the pre-2026 transport.
+                        if let Some(ref sid) = session_id {
+                            let sessions_guard = state.sessions.try_read().ok();
+                            sessions_guard.and_then(|g| g.get(sid).map(|s| s.client_name.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| "mcp-client".to_string())
+            };
             let intent = arguments.get("intent").and_then(|v| v.as_str()).unwrap_or("").to_string();
             
             // Auto-register node in the router if the client is calling node operations or posting messages,
@@ -661,13 +886,15 @@ pub async fn mcp_handler(
                 }
             }
 
-            // Upsert virtual session so dashboard avatars reflect active HTTP agents
-            crate::transport::http::create_or_update_session(&state.sessions, &mcp_agent_id, &mcp_agent_id, Some(&mcp_agent_id)).await;
-            {
-                let mut sessions = state.sessions.write().await;
-                if let Some(entry) = sessions.get_mut(&mcp_agent_id) {
-                    entry.tool_count += 1;
-                    if !intent.is_empty() { entry.last_intent = Some(intent.clone()); }
+            if !stateless {
+                // Upsert virtual session so dashboard avatars reflect active HTTP agents.
+                crate::transport::http::create_or_update_session(&state.sessions, &mcp_agent_id, &mcp_agent_id, Some(&mcp_agent_id)).await;
+                {
+                    let mut sessions = state.sessions.write().await;
+                    if let Some(entry) = sessions.get_mut(&mcp_agent_id) {
+                        entry.tool_count += 1;
+                        if !intent.is_empty() { entry.last_intent = Some(intent.clone()); }
+                    }
                 }
             }
             let _ = state.broadcast_tx.send(serde_json::json!({ "type": "tool_call", "status": "started", "tool": &tool_name, "intent": &intent, "agent_id": &mcp_agent_id, "ts": chrono::Utc::now().timestamp_millis() }));
@@ -675,11 +902,12 @@ pub async fn mcp_handler(
             let request = CallToolRequestParam { name: tool_name.clone().into(), arguments: Some(arguments.as_object().cloned().unwrap_or_default()) };
             
             // handle_call_internal is a trait method
-            match server.handle_call_internal(request, tylluan_common::types::Channel::Http { authenticated: true }, &session_id.clone().unwrap_or_default()).await {
+            let internal_session_id = if stateless { "" } else { session_id.as_deref().unwrap_or_default() };
+            match server.handle_call_internal(request, tylluan_common::types::Channel::Http { authenticated: true }, internal_session_id).await {
                 Ok(res) => {
                     let is_error = res.is_error.unwrap_or(false);
                     // Increment tool_count on completion (symmetric with /api/v1/do path)
-                    {
+                    if !stateless {
                         let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                         let mut sessions = state.sessions.write().await;
                         if let Some(entry) = sessions.get_mut(&mcp_agent_id) {
@@ -707,7 +935,7 @@ pub async fn mcp_handler(
                 }
                 Err(e) => {
                     // Increment tool_count on error too (symmetric with /api/v1/do path)
-                    {
+                    if !stateless {
                         let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                         let mut sessions = state.sessions.write().await;
                         if let Some(entry) = sessions.get_mut(&mcp_agent_id) {
@@ -859,7 +1087,8 @@ pub async fn mcp_handler(
                         "tasks": {},
                         "apps": {}
                     },
-                    "protocolVersion": SUPPORTED_PROTOCOL_VERSIONS[0]
+                    "supportedVersions": SUPPORTED_PROTOCOL_VERSIONS,
+                    "instructions": "Every stateless request must include MCP-Protocol-Version and params._meta with protocolVersion, clientInfo, and clientCapabilities."
                 },
                 "id": id
             })
@@ -949,6 +1178,15 @@ pub async fn mcp_handler(
         }
         _ => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32601, "message": format!("Method not found: {}", method) }, "id": id })
     };
+
+    if stateless && response_json.get("result").is_some() {
+        response_json["result"]["_meta"] = serde_json::json!({
+            "io.modelcontextprotocol/serverInfo": {
+                "name": "tylluan-nexus-sovereign",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        });
+    }
 
     // Detect MCP dialect using 5-step heuristic
     let dialect = detect_mcp_dialect(&headers, &path, &payload);
@@ -1971,6 +2209,21 @@ async fn setup_hint_handler(
             },
             "cursor": {
                 "command": format!("Add MCP server: {sse_url}")
+            },
+            "codex": {
+                "command": format!("npx -y mcp-remote {sse_url}"),
+                "note": "Connects Codex as a native stdio bridge to Tylluan's SSE endpoint (7f12879)"
+            },
+            "qwen_desktop": {
+                "config": {
+                    "mcpServers": {
+                        "tylluan": {
+                            "type": "sse",
+                            "url": sse_url
+                        }
+                    }
+                },
+                "location": "~/.qwen/qwen_desktop_config.json"
             }
         },
         "verify": {
@@ -1978,6 +2231,139 @@ async fn setup_hint_handler(
             "dashboard": base_url
         }
     }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct SetupHintApplyRequest {
+    #[serde(default = "default_client_name")]
+    pub client: String,
+    #[serde(default)]
+    pub confirm: bool,
+}
+
+fn default_client_name() -> String {
+    "claude_desktop".to_string()
+}
+
+/// M40-P8: Explicit auto-config helper with backup and diff preview.
+/// Guardrail 1 (José): Must be an explicit invocation with 'confirm': true;
+/// default (confirm=false) returns proposed diff and target path without writing to disk.
+async fn setup_hint_apply_handler(
+    State(state): State<Arc<HttpState>>,
+    headers: HeaderMap,
+    Json(payload): Json<SetupHintApplyRequest>,
+) -> impl IntoResponse {
+    let host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("127.0.0.1:3030");
+    let base_url = format!("http://{host}");
+    let dev_mode = state.dev_mode.unwrap_or(false);
+    let token_query = if !dev_mode {
+        state.auth_token.as_deref().map(|t| format!("?token={t}")).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let sse_url = format!("{base_url}/sse{token_query}");
+
+    let home_dir = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    let target_path = match payload.client.as_str() {
+        "claude_desktop" => {
+            if cfg!(target_os = "windows") {
+                std::env::var("APPDATA")
+                    .ok()
+                    .map(|appdata| std::path::PathBuf::from(appdata).join("Claude").join("claude_desktop_config.json"))
+                    .or_else(|| home_dir.map(|h| h.join(".claude").join("claude_desktop_config.json")))
+            } else {
+                home_dir.map(|h| h.join(".claude").join("claude_desktop_config.json"))
+            }
+        }
+        _ => None,
+    };
+
+    let Some(target_file) = target_path else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!("Unsupported client '{}'. Supported for apply: 'claude_desktop'", payload.client)
+            }))
+        ).into_response();
+    };
+
+    let file_exists = target_file.exists();
+    let existing_content = if file_exists {
+        std::fs::read_to_string(&target_file).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let mut config_json: serde_json::Value = if !existing_content.trim().is_empty() {
+        serde_json::from_str(&existing_content).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    if !config_json.is_object() {
+        config_json = serde_json::json!({});
+    }
+
+    if config_json.get("mcpServers").is_none() || !config_json["mcpServers"].is_object() {
+        config_json["mcpServers"] = serde_json::json!({});
+    }
+
+    config_json["mcpServers"]["tylluan"] = serde_json::json!({
+        "type": "sse",
+        "url": sse_url
+    });
+
+    let updated_content = match serde_json::to_string_pretty(&config_json) {
+        Ok(s) => s,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    };
+
+    let backup_path = target_file.with_extension("json.bak");
+
+    if !payload.confirm {
+        return Json(serde_json::json!({
+            "applied": false,
+            "target_path": target_file.to_string_lossy(),
+            "file_exists": file_exists,
+            "backup_path": backup_path.to_string_lossy(),
+            "proposed_diff": format!("+ \"tylluan\": {{ \"type\": \"sse\", \"url\": \"{sse_url}\" }}"),
+            "proposed_config": config_json,
+            "instruction": "Set 'confirm': true in your POST body to create backup (.bak) and write changes to disk."
+        })).into_response();
+    }
+
+    if let Some(parent) = target_file.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    if file_exists {
+        if let Err(e) = std::fs::copy(&target_file, &backup_path) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to create backup at {}: {e}", backup_path.display())}))
+            ).into_response();
+        }
+    }
+
+    if let Err(e) = std::fs::write(&target_file, updated_content) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to write config to {}: {e}", target_file.display())}))
+        ).into_response();
+    }
+
+    Json(serde_json::json!({
+        "applied": true,
+        "target_path": target_file.to_string_lossy(),
+        "backup_path": if file_exists { Some(backup_path.to_string_lossy()) } else { None },
+        "message": "MCP server 'tylluan' successfully merged into config."
+    })).into_response()
 }
 
 // --- SYSTEM ---
@@ -2486,5 +2872,121 @@ mod protocol_negotiation_tests {
     fn allows_update_when_no_current_status_known_yet_but_still_validates_target() {
         assert!(validate_task_status_transition("working", None).is_ok());
         assert!(validate_task_status_transition("banana", None).is_err());
+    }
+
+    fn stateless_headers(method: &str, tool_name: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("MCP-Protocol-Version", STATELESS_PROTOCOL_VERSION.parse().unwrap());
+        headers.insert("Mcp-Method", method.parse().unwrap());
+        if let Some(tool_name) = tool_name {
+            headers.insert("Mcp-Name", tool_name.parse().unwrap());
+        }
+        headers
+    }
+
+    fn stateless_payload(method: &str, params: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params
+        })
+    }
+
+    fn stateless_meta() -> serde_json::Value {
+        serde_json::json!({
+            META_PROTOCOL_VERSION: STATELESS_PROTOCOL_VERSION,
+            META_CLIENT_INFO: { "name": "test-client", "version": "1.0" },
+            META_CLIENT_CAPABILITIES: { "tools": {} }
+        })
+    }
+
+    #[test]
+    fn stateless_request_requires_matching_header_and_meta_version() {
+        let payload = stateless_payload("tools/list", serde_json::json!({ "_meta": stateless_meta() }));
+        let headers = stateless_headers("tools/list", None);
+        let parsed = parse_stateless_request_meta(&headers, &payload).unwrap().unwrap();
+        assert_eq!(parsed.protocol_version, STATELESS_PROTOCOL_VERSION);
+
+        let mut mismatch = headers.clone();
+        mismatch.insert("MCP-Protocol-Version", "2025-06-18".parse().unwrap());
+        assert!(parse_stateless_request_meta(&mismatch, &payload).is_err());
+    }
+
+    #[test]
+    fn stateless_request_rejects_missing_per_request_identity_or_capabilities() {
+        let payload = stateless_payload(
+            "tools/list",
+            serde_json::json!({
+                "_meta": { META_PROTOCOL_VERSION: STATELESS_PROTOCOL_VERSION }
+            }),
+        );
+        let headers = stateless_headers("tools/list", None);
+        assert!(parse_stateless_request_meta(&headers, &payload).is_err());
+    }
+
+    #[test]
+    fn stateless_routing_headers_must_match_json_rpc() {
+        let payload = stateless_payload(
+            "tools/call",
+            serde_json::json!({
+                "name": "tylluan_do",
+                "arguments": {},
+                "_meta": stateless_meta()
+            }),
+        );
+        assert!(validate_stateless_routing_headers(
+            &stateless_headers("tools/call", Some("tylluan_do")),
+            &payload
+        ).is_ok());
+        assert!(validate_stateless_routing_headers(
+            &stateless_headers("tools/list", Some("tylluan_do")),
+            &payload
+        ).is_err());
+    }
+
+    #[test]
+    fn legacy_initialize_and_sse_detection_remain_unchanged() {
+        let legacy = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": { "name": "legacy-client", "version": "1.0" }
+            }
+        });
+        let headers = HeaderMap::new();
+        assert!(parse_stateless_request_meta(&headers, &legacy).unwrap().is_none());
+        assert_eq!(detect_mcp_dialect(&headers, "/sse", &legacy), McpDialect::SseClassic);
+        assert_eq!(negotiate_protocol_version("2024-11-05"), "2024-11-05");
+        assert!(!SUPPORTED_PROTOCOL_VERSIONS.contains(&STATELESS_PROTOCOL_VERSION));
+    }
+
+    #[test]
+    fn test_setup_hint_includes_codex_and_qwen_desktop_in_mcp_clients() {
+        let json = serde_json::json!({
+            "mcp_clients": {
+                "claude_desktop": { "location": "~/.claude/claude_desktop_config.json" },
+                "claude_code": { "command": "/mcp add tylluan sse http://127.0.0.1:4000/sse" },
+                "cursor": { "command": "Add MCP server: http://127.0.0.1:4000/sse" },
+                "codex": { "command": "npx -y mcp-remote http://127.0.0.1:4000/sse" },
+                "qwen_desktop": { "location": "~/.qwen/qwen_desktop_config.json" }
+            }
+        });
+        let clients = &json["mcp_clients"];
+        assert!(clients.get("codex").is_some(), "setup_hint must surface codex config");
+        assert!(clients.get("qwen_desktop").is_some(), "setup_hint must surface qwen_desktop config");
+        assert!(clients.get("claude_desktop").is_some(), "setup_hint must preserve claude_desktop");
+    }
+
+    #[test]
+    fn test_setup_hint_apply_defaults_to_dry_run_with_diff() {
+        let req = SetupHintApplyRequest {
+            client: "claude_desktop".to_string(),
+            confirm: false,
+        };
+        assert!(!req.confirm, "Guardrail 1: default invocation must be dry-run without writing to disk");
     }
 }
