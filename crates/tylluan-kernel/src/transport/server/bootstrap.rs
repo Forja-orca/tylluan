@@ -39,6 +39,34 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
         .filter(|g| g.get("agent_id").and_then(|v| v.as_str()) == Some(agent_id))
         .collect();
 
+    // M40-P2: project knowledge (repo-map summary)
+    let repo_map_summary = {
+        let root_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let map = crate::repo_map::RepoMap::build(&root_path);
+        let mut top_languages: Vec<_> = map.languages.keys().cloned().collect();
+        top_languages.sort();
+        serde_json::json!({
+            "root": map.root,
+            "total_files": map.total_files,
+            "total_dirs": map.total_dirs,
+            "total_lines": map.total_lines,
+            "top_languages": top_languages,
+            "key_files": map.key_files.iter().map(|f| &f.path).collect::<Vec<_>>(),
+        })
+    };
+
+    // M40-P2: executable capabilities (guilds and subtools summary)
+    let catalog = crate::router::catalog::builtin_catalog();
+    let executable_capabilities: Vec<_> = catalog.iter().map(|g| {
+        serde_json::json!({
+            "guild": g.name,
+            "category": g.category.to_string(),
+            "required_args": g.required_args,
+            "permissions": g.permissions,
+            "subtools": g.subtools,
+        })
+    }).collect();
+
     serde_json::json!({
         "agent_id": agent_id,
         "identity": {
@@ -49,6 +77,8 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
         "last_session_summary": summary,
         "recent_memories": recent_memories,
         "pending_actions_for_me": my_pending,
+        "project_knowledge": repo_map_summary,
+        "executable_capabilities": executable_capabilities,
         "register_hint": if needs_real_bio {
             Some(serde_json::json!({
                 "message": "Your biography is a placeholder or unset. Call register_identity with real values.",
@@ -209,7 +239,7 @@ mod tests {
         // Every bootstrap field must survive the composition (parity: no drift
         // between what agent_bootstrap returns and what resume returns).
         let boot = build_agent_bootstrap(silva, "agent-x").await;
-        for key in ["agent_id", "identity", "last_session_summary", "recent_memories", "pending_actions_for_me", "register_hint"] {
+        for key in ["agent_id", "identity", "last_session_summary", "recent_memories", "pending_actions_for_me", "project_knowledge", "executable_capabilities", "register_hint"] {
             assert!(ctx.get(key).is_some(), "resume context lost bootstrap key '{key}'");
             assert_eq!(ctx[key], boot[key], "resume context drifted from bootstrap on '{key}'");
         }
@@ -244,5 +274,21 @@ mod tests {
         assert_eq!(ctx["found"], true);
         assert!(ctx["summary"].as_str().is_some(), "summary must be the real node content");
         assert!(ctx["node_id"].as_str().is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bootstrap_surfaces_project_knowledge_and_executable_capabilities() {
+        ensure_grants_init();
+        let silva = test_silva().await;
+        let ctx = build_agent_bootstrap(silva, "agent-y").await;
+
+        let proj = &ctx["project_knowledge"];
+        assert!(proj.get("root").is_some());
+        assert!(proj.get("total_files").is_some());
+
+        let caps = ctx["executable_capabilities"].as_array().expect("executable_capabilities array");
+        assert!(!caps.is_empty(), "must surface available guild capabilities");
+        assert!(caps[0].get("guild").is_some());
+        assert!(caps[0].get("subtools").is_some());
     }
 }
