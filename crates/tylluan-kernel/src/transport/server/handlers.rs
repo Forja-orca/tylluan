@@ -266,6 +266,115 @@ impl TylluanServer {
                 let ctx = super::bootstrap::build_agent_bootstrap(self.silva.clone(), target_id).await;
                 Ok(CallToolResult { content: vec![Content::text(serde_json::to_string_pretty(&ctx).unwrap_or_default())], is_error: Some(false) })
             }
+            "undo_last_action" => {
+                // M40-P3: revert the agent's last reversible action. Only actions
+                // recorded in undo_log (risk>=medium, guild with declared rollback
+                // contract, call succeeded) can be undone. The rollback_spec format
+                // is "undo_tool(param_from_result)" — for scheduler the result of
+                // schedule() IS the schedule_id, so the captured result_text drives
+                // the cancel call. Never invents an undo when nothing is on record.
+                //
+                // Consumption semantics: a broken spec or an empty/error result is
+                // consumed (cleared) because it can never be undone; a guild that is
+                // momentarily unloaded KEEPS the entry so the agent can request_guild
+                // and retry; a real rollback call consumes the entry whether it
+                // succeeded or failed (the attempt happened).
+                let target_id = arguments.as_ref()
+                    .and_then(|a| a.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&agent_id)
+                    .to_string();
+                let action = {
+                    let log = self.undo_log.lock().map_err(|_| McpError::internal_error("undo_log poisoned", None))?;
+                    log.get(&target_id).cloned()
+                };
+                let Some(action) = action else {
+                    return Ok(error_result(&format!(
+                        "Nothing reversible on record for agent '{target_id}'. \
+                         Only risk>=medium calls to guilds with a declared rollback contract \
+                         (e.g. scheduler) are recorded — and only when they succeeded."
+                    )));
+                };
+
+                let spec = action.rollback_spec.as_str();
+                let parse = spec.split_once('(').and_then(|(tool, rest)| {
+                    let param = rest.trim_end_matches(')').trim();
+                    if tool.is_empty() || param.is_empty() { None } else { Some((tool, param)) }
+                });
+                let Some((undo_tool, undo_param)) = parse else {
+                    // Kernel bug or broken contract: the entry can never be undone,
+                    // so consume it instead of blocking future undos with a zombie.
+                    {
+                        let mut log = self.undo_log.lock().map_err(|_| McpError::internal_error("undo_log poisoned", None))?;
+                        log.remove(&target_id);
+                    }
+                    return Ok(error_result(&format!(
+                        "Guild '{}' declares rollback spec '{}' without a callable tool(param) shape — kernel bug, report it. \
+                         Record cleared.", action.guild, spec
+                    )));
+                };
+
+                let result_text = action.result_text.trim();
+                if result_text.to_lowercase().starts_with("error:") || result_text.is_empty() {
+                    {
+                        let mut log = self.undo_log.lock().map_err(|_| McpError::internal_error("undo_log poisoned", None))?;
+                        log.remove(&target_id);
+                    }
+                    return Ok(error_result(&format!(
+                        "Cannot undo: the recorded result of the original action looks like an error ('{}'), \
+                         so there is nothing to revert. Record cleared.", action.result_text
+                    )));
+                }
+
+                let mut args = serde_json::Map::new();
+                args.insert(undo_param.to_string(), serde_json::Value::String(result_text.to_string()));
+                let call_params = rmcp::model::CallToolRequestParam {
+                    name: undo_tool.to_string().into(),
+                    arguments: Some(args),
+                };
+                let undo_result = {
+                    let reg = self.registry.read().await;
+                    match reg.guilds.get(&action.guild) {
+                        Some(guild) => guild.call_tool_readonly(call_params).await,
+                        None => {
+                            // Entry KEPT: the guild may come back (request_guild).
+                            return Ok(error_result(&format!(
+                                "Guild '{}' is not loaded, so the rollback '{}' could not run. \
+                                 Request the guild (request_guild) and call undo_last_action again — \
+                                 your recorded action is preserved.", action.guild, undo_tool
+                            )));
+                        }
+                    }
+                };
+
+                let is_err = undo_result.is_error == Some(true);
+                {
+                    let mut log = self.undo_log.lock().map_err(|_| McpError::internal_error("undo_log poisoned", None))?;
+                    log.remove(&target_id);
+                }
+                let undo_text: String = undo_result.content.iter()
+                    .filter_map(|c| c.as_text())
+                    .map(|t| t.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let summary = serde_json::json!({
+                    "undo": "executed",
+                    "agent_id": target_id,
+                    "guild": action.guild,
+                    "original_tool": action.tool,
+                    "original_intent": action.intent,
+                    "rollback_tool": undo_tool,
+                    "rollback_param": undo_param,
+                    "rollback_value": result_text,
+                    "rollback_success": !is_err,
+                    "rollback_output": undo_text.chars().take(300).collect::<String>(),
+                });
+                Ok(CallToolResult {
+                    content: vec![Content::text(serde_json::to_string_pretty(&summary).unwrap_or_default())],
+                    is_error: Some(is_err),
+                })
+            }
             "whoami" => {
                 let target_id = arguments.as_ref()
                     .and_then(|a| a.get("agent_id"))
@@ -485,7 +594,6 @@ mod tests {
         let server = test_server().await;
         let args = Some(serde_json::json!({"target": "benchmark"}).as_object().unwrap().clone());
         let result = server.handle_kernel_tool("doctor_repair", args).await;
-        assert!(result.is_ok(), "repair benchmark should succeed");
         let r = result.unwrap();
         assert_eq!(r.is_error, Some(false));
         let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
@@ -568,5 +676,106 @@ mod tests {
         assert!(result.is_ok());
         let r = result.unwrap();
         assert_eq!(r.is_error, Some(true), "unknown target should error");
+    }
+
+    // ── M40-P3: Plan → Verify → Rollback cycle ────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_last_action_no_record_returns_clear_message() {
+        // Nothing reversible on record must NOT invent an undo — honest minimal
+        // contract (approved design decision 1: no fabricated metadata).
+        let server = test_server().await;
+        let args = Some(serde_json::json!({"agent_id": "test-agent"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("undo_last_action", args).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert_eq!(r.is_error, Some(true), "no record must error clearly");
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("Nothing reversible"), "must say nothing is on record, got: {text}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_last_action_reads_recorded_action() {
+        // Record a reversible action directly (as the Stage-5 wrapper would)
+        // and check the undo handler parses the rollback spec and attempts
+        // the real rollback call against the guild.
+        let server = test_server().await;
+        server.undo_log.lock().unwrap().insert(
+            "test-agent".to_string(),
+            crate::transport::server::types::ReversibleAction {
+                guild: "scheduler".to_string(),
+                tool: "schedule".to_string(),
+                rollback_spec: "cancel_schedule(schedule_id)".to_string(),
+                intent: "schedule a wake-up".to_string(),
+                result_text: "abc-123-schedule-id".to_string(),
+                ts_unix: chrono::Utc::now().timestamp(),
+            },
+        );
+        let args = Some(serde_json::json!({"agent_id": "test-agent"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("undo_last_action", args).await;
+        // Guild isn't loaded in the test server, so the rollback call itself
+        // can't run — the contract surface must still be exercised: spec
+        // parsed, param bound, and the entry KEPT for a retry after
+        // request_guild (unloaded guild ≠ consumed action).
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(
+            text.contains("not loaded"),
+            "expected guild-not-loaded path for the real rollback call, got: {text}"
+        );
+        assert!(
+            text.contains("preserved"),
+            "message must say the recorded action is preserved, got: {text}"
+        );
+        assert!(
+            server.undo_log.lock().unwrap().get("test-agent").is_some(),
+            "entry must be KEPT when the guild is unloaded so the agent can retry"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_last_action_removes_entry_on_parse_failure() {
+        // A malformed rollback spec (no callable tool) is a kernel bug; the
+        // handler must report it and still clear the record instead of
+        // leaving a poisoned entry that would block future undos.
+        let server = test_server().await;
+        server.undo_log.lock().unwrap().insert(
+            "test-agent".to_string(),
+            crate::transport::server::types::ReversibleAction {
+                guild: "scheduler".to_string(),
+                tool: "schedule".to_string(),
+                rollback_spec: "no_parens_spec".to_string(),
+                intent: "schedule a wake-up".to_string(),
+                result_text: "abc-123".to_string(),
+                ts_unix: chrono::Utc::now().timestamp(),
+            },
+        );
+        let args = Some(serde_json::json!({"agent_id": "test-agent"}).as_object().unwrap().clone());
+        let result = server.handle_kernel_tool("undo_last_action", args).await;
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("without a callable tool"), "must flag the broken spec, got: {text}");
+        assert!(
+            server.undo_log.lock().unwrap().get("test-agent").is_none(),
+            "poisoned entry must be cleared"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_scheduler_descriptor_declares_rollback_contract() {
+        // M40-P3: the rollback contract is real catalog data, so the Stage-5
+        // wrapper (handler_do) and the undo handler both read the same source
+        // of truth. Regression guard: scheduler must declare its cancel tool.
+        let descriptors = crate::router::catalog::builtin_catalog();
+        let scheduler = descriptors.iter().find(|d| d.name == "scheduler");
+        assert!(scheduler.is_some(), "scheduler must be in the catalog");
+        let rollback = scheduler.and_then(|d| d.rollback.clone());
+        assert_eq!(
+            rollback.as_deref(),
+            Some("cancel_schedule(schedule_id)"),
+            "scheduler must declare its rollback contract"
+        );
     }
 }

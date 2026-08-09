@@ -161,6 +161,7 @@ impl super::TylluanServer {
                 "whoami".into(),
                 "register_identity".into(),
                 "agent_bootstrap".into(),
+                "undo_last_action".into(),
             ]),
             TylluanTool::new(
                 "tylluan_remember",
@@ -602,6 +603,19 @@ impl super::TylluanServer {
                 }),
                 ToolCategory::Kernel,
                 RiskLevel::Low,
+            ),
+            TylluanTool::new(
+                "undo_last_action",
+                "M40-P3: revert the agent's last reversible action. The kernel records a rollback only for guilds that declare a real rollback contract (GuildDescriptor.rollback) on a risk>=medium call that succeeded. If nothing reversible is on record for your agent_id, it returns a clear message — it never invents an undo.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "agent_id": { "type": "string", "description": "Your agent identity — the undo targets YOUR last recorded action." }
+                    },
+                    "required": ["agent_id"]
+                }),
+                ToolCategory::Kernel,
+                RiskLevel::Medium,
             ),
         ]
     }

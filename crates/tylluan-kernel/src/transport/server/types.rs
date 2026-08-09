@@ -216,3 +216,18 @@ pub struct BridgeEntry {
     pub output: String,
     pub timestamp: String,
 }
+
+/// M40-P3: last reversible action per agent, for `undo_last_action`.
+/// The kernel records an action only when its guild declares a real
+/// rollback contract (GuildDescriptor.rollback, e.g. scheduler →
+/// "cancel_schedule(schedule_id)"). The result text is kept because for
+/// scheduler the schedule_id IS the raw result of `schedule()`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ReversibleAction {
+    pub guild: String,
+    pub tool: String,
+    pub rollback_spec: String,
+    pub intent: String,
+    pub result_text: String,
+    pub ts_unix: i64,
+}
