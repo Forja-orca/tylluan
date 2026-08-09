@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** [ver git log] · **698 total** green (621 kernel lib + 65 link lib + 12 fsrs). M40 al día 2026-08-09: **P1 completo** (Antigravity), **P2 primer corte** (Claude), **P3 completo** (Deep), **P4 primer corte** (Claude), **P5 completo** (Deep — `build_resume_context` unifica identidad+sesión+memorias+pendientes+última tarea del journal en un solo paquete, consumido por MCP bootstrap, GET/POST `/sessions/resume` y CLI `tylluan resume` — cierra la asimetría real donde MCP recibía contexto rico y CLI/HTTP recibía casi nada), **P6 completo** (Antigravity). P7/P8 en backlog. Fix aparte: `collapsible_if` en `catalog.rs` que solo el clippy 1.97 de CI detecta (patrón recurrente ya documentado, invisible en clippy local). Todo verificado independientemente antes de comitear en cada fase — historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** [ver git log] · **701 total** green (624 kernel lib + 65 link lib + 12 fsrs). M40 P1-P3, P5, P6 completos, P2/P4 primer corte, P7/P8 backlog. Auditoría externa (Codex) el 2026-08-09 encontró y se cerró: `health`/`list_pending_actions` sin routing determinista desde `tylluan_do` (se desviaban a `bash`/`filesystem` silenciosamente, `isError=false`); campo `explore` declarado en 4 de las 5 tools soberanas (`remember`/`recall`/`think`/`graph`) sin implementación real — eliminado por honestidad de schema, solo `tylluan_do` lo tiene de verdad. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 

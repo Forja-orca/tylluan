@@ -294,7 +294,18 @@ pub async fn handle_tylluan_do(
             || lower.contains("undo my last action") || lower.contains("deshacer última acción")
             || lower.contains("deshacer ultima accion") || lower.contains("deshacer la última")
             || lower.contains("deshacer la ultima"));
-        if is_list_guilds || is_bootstrap || is_undo {
+        // Found live by an external audit, 2026-08-09: 'health' and
+        // 'list_pending_actions' are both real kernel subtools with real MCP
+        // schemas, but had zero deterministic routing -- "health" alone was
+        // misrouted to the bash guild (returned isError=false, making the
+        // failure look like a legitimate result instead of a routing miss).
+        let is_health = is_short && (lower == "health" || lower.contains("kernel health")
+            || lower.contains("salud del kernel") || lower.contains("estado del kernel"));
+        let is_list_pending = is_short && (
+            lower.contains("list_pending_actions") || lower.contains("list pending action")
+            || lower.contains("pending approvals") || lower.contains("acciones pendientes")
+            || lower.contains("aprobaciones pendientes"));
+        if is_list_guilds || is_bootstrap || is_undo || is_health || is_list_pending {
             let mut kernel_args = arguments.clone().unwrap_or_default();
             if let Some(aid) = &agent_id {
                 kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
@@ -303,6 +314,10 @@ pub async fn handle_tylluan_do(
                 "agent_bootstrap"
             } else if is_undo {
                 "undo_last_action"
+            } else if is_health {
+                "health"
+            } else if is_list_pending {
+                "list_pending_actions"
             } else {
                 "list_available_guilds"
             };
@@ -1367,6 +1382,40 @@ mod tests {
             assert!(
                 text.contains("\"identity\"") && text.contains("\"recent_memories\""),
                 "'{phrase}' must reach agent_bootstrap's JSON output, got: {text}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_health_not_bash() {
+        // Found live by an external audit, 2026-08-09: "health" via tylluan_do
+        // was silently misrouted to the bash guild and returned isError=false,
+        // making a routing miss look like a legitimate result.
+        let server = test_server().await;
+        for phrase in ["health", "kernel health", "estado del kernel"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                text.contains("Kernel Health") || text.contains("OK") || text.contains("STOPPED"),
+                "'{phrase}' must reach the real health subtool, got: {text}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_list_pending_actions() {
+        crate::security::grants::init();
+        let server = test_server().await;
+        for phrase in ["list pending actions", "acciones pendientes", "pending approvals"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                text.contains("No pending actions") || text.contains("guild"),
+                "'{phrase}' must reach the real list_pending_actions subtool, got: {text}"
             );
         }
     }
