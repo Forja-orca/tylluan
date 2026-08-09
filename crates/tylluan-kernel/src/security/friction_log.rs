@@ -418,6 +418,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn unique_agent() -> String {
         let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -426,6 +427,7 @@ mod tests {
 
     #[test]
     fn test_full_friction_lifecycle() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         let agent = unique_agent();
 
         // Start session
@@ -474,6 +476,7 @@ mod tests {
 
     #[test]
     fn test_empty_session_has_zero_friction() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
         end_session(sid).expect("end_session failed");
@@ -485,6 +488,7 @@ mod tests {
 
     #[test]
     fn test_multiple_workflows() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
 
@@ -506,6 +510,7 @@ mod tests {
 
     #[test]
     fn test_ttfua_computed_on_record_result() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
         let wid = start_workflow(sid, "slow task", "bash", "bash_execute")
