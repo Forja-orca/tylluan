@@ -547,8 +547,13 @@ pub async fn mcp_handler(
                     "tools": { "listChanged": true },
                     "prompts": { "listChanged": false },
                     "resources": { "subscribe": false, "listChanged": false },
-                    "tasks": { "cancel": true, "update": true },
-                    "apps": { "canvas_bridge": true }
+                    // Presence-flag objects, not boolean sub-fields -- matches the real
+                    // spec's extension-negotiation shape (e.g. "io.modelcontextprotocol/
+                    // tasks": {}). {"cancel": true, "update": true} broke MCP clients'
+                    // own schema validation on reconnect (2026-08-09, caught live by
+                    // Claude Code itself failing to reconnect after a kernel restart).
+                    "tasks": {},
+                    "apps": {}
                 },
                 "serverInfo": { "name": "tylluan-nexus-sovereign", "version": "3.0.0" }
             },
@@ -851,10 +856,10 @@ pub async fn mcp_handler(
                         "tools": { "listChanged": true },
                         "prompts": { "listChanged": false },
                         "resources": { "subscribe": false, "listChanged": false },
-                        "tasks": { "cancel": true, "update": true },
-                        "apps": { "canvas_bridge": true }
+                        "tasks": {},
+                        "apps": {}
                     },
-                    "protocolVersion": "2026-07-28"
+                    "protocolVersion": SUPPORTED_PROTOCOL_VERSIONS[0]
                 },
                 "id": id
             })
