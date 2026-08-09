@@ -12,6 +12,7 @@ use crate::memory::agent_memory::AgentMemoryManager;
 use crate::memory::identity::IdentityManager;
 use crate::memory::silva::SilvaDB;
 use crate::security::grants;
+use crate::transport::http::api_v1::api_journal::{JournalDb, is_stale};
 
 /// How many recent memories to surface. Small on purpose -- bootstrap is meant
 /// to be a compact orientation, not a memory dump (the M40 vision explicitly
@@ -63,6 +64,59 @@ pub async fn build_agent_bootstrap(silva: Arc<SilvaDB>, agent_id: &str) -> serde
             }))
         } else { None },
     })
+}
+
+/// M40-P5: the single cross-client resume package. Everything `build_agent_bootstrap`
+/// already assembles (identity + summary + recent memories + pending actions) plus the
+/// journal's last in-progress task -- "what was I doing" -- with staleness. One
+/// assembler, every client path (MCP bootstrap subtool, GET/POST /sessions/resume, CLI
+/// `tylluan resume`) reads the same shape, so an agent handoff between clients never
+/// loses context.
+///
+/// Also flattens the summary into compatibility fields (`found`/`summary`/`node_id`/
+/// `node_type`/`created_at`/`weight`) so the M31-P3 CLI consumer keeps working without
+/// schema churn. `last_task` is `null` when the journal has no entry -- absence is
+/// explicit, never fabricated.
+pub async fn build_resume_context(
+    silva: Arc<SilvaDB>,
+    journal: &JournalDb,
+    agent_id: &str,
+) -> serde_json::Value {
+    let mut ctx = build_agent_bootstrap(silva, agent_id).await;
+
+    let last_task = match journal.recover(agent_id) {
+        Ok(Some(entry)) => {
+            let (stale, stale_secs) = is_stale(entry.updated_at);
+            Some(serde_json::json!({
+                "task": entry.task,
+                "updated_at_unix": entry.updated_at,
+                "stale": stale,
+                "stale_secs": stale_secs,
+            }))
+        }
+        _ => None,
+    };
+
+    let summary = ctx["last_session_summary"].clone();
+    let obj = ctx.as_object_mut().expect("resume context is an object");
+    obj.insert("last_task".to_string(), last_task.unwrap_or(serde_json::Value::Null));
+
+    // Compatibility flatten: the M31-P3 CLI and callers read these flat fields.
+    obj.insert("agent_id".to_string(), serde_json::json!(agent_id));
+    match summary.as_object() {
+        Some(s) => {
+            obj.insert("found".to_string(), serde_json::json!(true));
+            obj.insert("summary".to_string(), s.get("content").cloned().unwrap_or(serde_json::Value::Null));
+            obj.insert("node_id".to_string(), s.get("id").cloned().unwrap_or(serde_json::Value::Null));
+            obj.insert("node_type".to_string(), s.get("node_type").cloned().unwrap_or(serde_json::Value::Null));
+            obj.insert("created_at".to_string(), s.get("created_at").cloned().unwrap_or(serde_json::Value::Null));
+            obj.insert("weight".to_string(), s.get("weight").cloned().unwrap_or(serde_json::Value::Null));
+        }
+        None => {
+            obj.insert("found".to_string(), serde_json::json!(false));
+        }
+    }
+    ctx
 }
 
 #[cfg(test)]
@@ -137,5 +191,58 @@ mod tests {
         let pending = ctx["pending_actions_for_me"].as_array().unwrap();
         assert_eq!(pending.len(), 1, "must only see its own pending action, not agent-b's");
         assert_eq!(pending[0]["agent_id"], "agent-a");
+    }
+
+    fn test_journal() -> JournalDb {
+        JournalDb::open(":memory:").unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_context_is_bootstrap_superset_and_flattens_summary_for_compat() {
+        ensure_grants_init();
+        let silva = test_silva().await;
+        let journal = test_journal();
+        journal.checkin("agent-x", "tool:tylluan_do").unwrap();
+
+        let ctx = build_resume_context(silva.clone(), &journal, "agent-x").await;
+
+        // Every bootstrap field must survive the composition (parity: no drift
+        // between what agent_bootstrap returns and what resume returns).
+        let boot = build_agent_bootstrap(silva, "agent-x").await;
+        for key in ["agent_id", "identity", "last_session_summary", "recent_memories", "pending_actions_for_me", "register_hint"] {
+            assert!(ctx.get(key).is_some(), "resume context lost bootstrap key '{key}'");
+            assert_eq!(ctx[key], boot[key], "resume context drifted from bootstrap on '{key}'");
+        }
+
+        // Compatibility flatten: M31-P3 CLI consumers read found/summary/node_id...
+        assert_eq!(ctx["found"], false, "no summary recorded -> found:false, never fabricated");
+        assert_eq!(ctx["last_task"]["task"], "tool:tylluan_do");
+        assert!(ctx["last_task"]["updated_at_unix"].as_i64().is_some());
+        assert!(ctx["last_task"]["stale"].is_boolean());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_context_omits_last_task_when_journal_has_no_entry() {
+        ensure_grants_init();
+        let silva = test_silva().await;
+        let journal = test_journal();
+        let ctx = build_resume_context(silva, &journal, "agent-unknown").await;
+        assert!(ctx["last_task"].is_null(), "absence must be explicit null, not fabricated");
+        assert_eq!(ctx["found"], false);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_context_flattens_real_summary_when_one_exists() {
+        ensure_grants_init();
+        let silva = test_silva().await;
+        let journal = test_journal();
+        let mem_mgr = AgentMemoryManager::new(silva.clone(), 20);
+        mem_mgr.record_memory("agent-x", "decided to use approach A over B", 1.0).await;
+        mem_mgr.create_session_digest("agent-x", "session-abc123").await;
+
+        let ctx = build_resume_context(silva, &journal, "agent-x").await;
+        assert_eq!(ctx["found"], true);
+        assert!(ctx["summary"].as_str().is_some(), "summary must be the real node content");
+        assert!(ctx["node_id"].as_str().is_some());
     }
 }
