@@ -754,6 +754,12 @@ pub async fn mcp_handler(
             .to_string();
         let sess_key = session_id.clone().unwrap_or_else(|| client_name.clone());
         crate::transport::http::create_or_update_session(&state.sessions, &sess_key, &client_name, Some(&client_name)).await;
+        let client_supports_apps = crate::transport::http::mcp_apps::client_supports_mcp_apps(&payload);
+        if client_supports_apps {
+            if let Some(session) = state.sessions.write().await.get_mut(&sess_key) {
+                session.mcp_apps = true;
+            }
+        }
         let requested_protocol = payload
             .get("params").and_then(|p| p.get("protocolVersion"))
             .and_then(|v| v.as_str())
@@ -782,7 +788,11 @@ pub async fn mcp_handler(
                     // own schema validation on reconnect (2026-08-09, caught live by
                     // Claude Code itself failing to reconnect after a kernel restart).
                     "tasks": {},
-                    "apps": {}
+                    "extensions": {
+                        "io.modelcontextprotocol/ui": {
+                            "mimeTypes": ["text/html;profile=mcp-app"]
+                        }
+                    }
                 },
                 "serverInfo": { "name": "tylluan-nexus-sovereign", "version": "3.0.0" }
             },
@@ -858,6 +868,24 @@ pub async fn mcp_handler(
         "initialize" | "ping" | "notifications/initialized" => unreachable!("handled above"),
         "tools/list" => {
             let tools = server.all_tools().await;
+            let request_supports_apps = crate::transport::http::mcp_apps::client_supports_mcp_apps(&payload);
+            if request_supports_apps {
+                if let Some(session_key) = session_id.as_deref() {
+                    if let Some(session) = state.sessions.write().await.get_mut(session_key) {
+                        session.mcp_apps = true;
+                    }
+                }
+            }
+            let session_supports_apps = if stateless {
+                false
+            } else {
+                session_id
+                    .as_deref()
+                    .and_then(|session_key| state.sessions.try_read().ok()?.get(session_key).map(|session| session.mcp_apps))
+                    .unwrap_or(false)
+            };
+            let apps_enabled = request_supports_apps || session_supports_apps;
+            let tools = crate::transport::http::mcp_apps::tools_json(&tools, apps_enabled);
             serde_json::json!({ "jsonrpc": "2.0", "result": { "tools": tools }, "id": id })
         }
         "tools/call" => {
@@ -918,6 +946,11 @@ pub async fn mcp_handler(
             match server.handle_call_internal(request, tylluan_common::types::Channel::Http { authenticated: true }, internal_session_id).await {
                 Ok(res) => {
                     let is_error = res.is_error.unwrap_or(false);
+                    let structured_content = if tool_name == "tylluan_graph" {
+                        crate::transport::http::mcp_apps::graph_structured_content(&res)
+                    } else {
+                        None
+                    };
                     // Increment tool_count on completion (symmetric with /api/v1/do path)
                     if !stateless {
                         let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
@@ -939,10 +972,13 @@ pub async fn mcp_handler(
                             }
                         }
                     }
-                    let result_obj = serde_json::json!({
+                    let mut result_obj = serde_json::json!({
                         "content": res.content,
                         "isError": is_error,
                     });
+                    if let Some(structured_content) = structured_content {
+                        result_obj["structuredContent"] = structured_content;
+                    }
                     serde_json::json!({ "jsonrpc": "2.0", "result": result_obj, "id": id })
                 }
                 Err(e) => {
@@ -1040,20 +1076,43 @@ pub async fn mcp_handler(
         "resources/list" => {
             serde_json::json!({
                 "jsonrpc": "2.0",
-                "result": {
-                    "resources": [{
-                        "uri": "tylluan://skills",
+                    "result": {
+                        "resources": [{
+                            "uri": "tylluan://skills",
                         "name": "Tylluan Skill Catalog",
                         "description": "Example intents organized by guild ??? paste any of these into tylluan_do",
                         "mimeType": "text/plain"
-                    }]
+                        }, crate::transport::http::mcp_apps::graph_resource_descriptor()]
                 },
                 "id": id
             })
         }
         "resources/read" => {
             let uri = payload.get("params").and_then(|p| p.get("uri")).and_then(|v| v.as_str()).unwrap_or("");
-            if uri != "tylluan://skills" {
+            if uri == crate::transport::http::mcp_apps::GRAPH_APP_URI {
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "contents": [{
+                            "uri": crate::transport::http::mcp_apps::GRAPH_APP_URI,
+                            "mimeType": crate::transport::http::mcp_apps::MCP_APP_MIME,
+                            "text": crate::transport::http::mcp_apps::GRAPH_APP_HTML,
+                            "_meta": {
+                                "ui": {
+                                    "csp": {
+                                        "connectDomains": [],
+                                        "resourceDomains": [],
+                                        "frameDomains": [],
+                                        "baseUriDomains": []
+                                    },
+                                    "prefersBorder": true
+                                }
+                            }
+                        }]
+                    },
+                    "id": id
+                })
+            } else if uri != "tylluan://skills" {
                 serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "unknown resource uri" }, "id": id })
             } else {
                 let text = "# Tylluan Skill Catalog — example intents for tylluan_do\n\n\
@@ -1097,7 +1156,11 @@ pub async fn mcp_handler(
                         "prompts": { "listChanged": false },
                         "resources": { "subscribe": false, "listChanged": false },
                         "tasks": {},
-                        "apps": {}
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"]
+                            }
+                        }
                     },
                     "supportedVersions": SUPPORTED_PROTOCOL_VERSIONS,
                     "instructions": "Every stateless request must include MCP-Protocol-Version and params._meta with protocolVersion, clientInfo, and clientCapabilities."

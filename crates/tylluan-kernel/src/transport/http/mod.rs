@@ -8,6 +8,7 @@ pub mod oauth;
 pub mod sse;
 pub mod api_v1;
 pub mod a2a;
+pub mod mcp_apps;
 
 use axum::{
     Router, Json,
@@ -157,6 +158,8 @@ pub struct McpSession {
     pub last_intent: Option<String>,
     pub last_guild: Option<String>,
     #[serde(default)]
+    pub mcp_apps: bool,
+    #[serde(default)]
     pub created_unix: u64,
     #[serde(default)]
     pub last_active_unix: u64,
@@ -184,6 +187,7 @@ pub async fn create_or_update_session(
         tool_count: 0,
         last_intent: None,
         last_guild: None,
+        mcp_apps: false,
     });
     entry.last_active = now;
     entry.last_active_unix = now_unix;

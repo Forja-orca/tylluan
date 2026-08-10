@@ -148,6 +148,23 @@ async fn mcp_call(
     serde_json::from_slice(&bytes).unwrap_or(serde_json::json!({}))
 }
 
+async fn raw_mcp_call(
+    app: axum::Router,
+    body: serde_json::Value,
+    uri: &str,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::json!({})))
+}
+
 async fn stateless_mcp_call(
     app: axum::Router,
     method: &str,
@@ -317,6 +334,75 @@ async fn test_sovereign_tools_exactly_5() {
     names.sort();
     assert_eq!(names,
         vec!["tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mcp_apps_manifest_is_negotiated_and_persisted_for_legacy_session() {
+    let state = test_state().await;
+    let app = build_test_app(state.clone());
+    let initialize = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "clientInfo": {"name": "mcp-apps-test", "version": "1.0"},
+            "capabilities": {
+                "extensions": {
+                    "io.modelcontextprotocol/ui": {
+                        "mimeTypes": ["text/html;profile=mcp-app"]
+                    }
+                }
+            }
+        }
+    });
+    let (status, response) = raw_mcp_call(app.clone(), initialize, "/mcp?sessionId=mcp-apps-session").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "initialize failed: {response:?}");
+    assert_eq!(
+        response["result"]["capabilities"]["extensions"]["io.modelcontextprotocol/ui"]["mimeTypes"][0],
+        "text/html;profile=mcp-app"
+    );
+
+    let (status, response) = raw_mcp_call(
+        app,
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+        "/mcp?sessionId=mcp-apps-session",
+    ).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "tools/list failed: {response:?}");
+    let graph = response["result"]["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["name"] == "tylluan_graph"))
+        .expect("tylluan_graph must remain one of the five sovereign tools");
+    assert_eq!(graph["_meta"]["ui"]["resourceUri"], "ui://tylluan/knowledge-graph-canvas");
+    assert_eq!(graph["_meta"]["ui"]["visibility"][0], "model");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mcp_apps_resource_and_structured_graph_result_are_real() {
+    let state = test_state().await;
+    let app = build_test_app(state);
+
+    let (_, response) = raw_mcp_call(
+        app.clone(),
+        json!({"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}),
+        "/mcp",
+    ).await;
+    let resource = response["result"]["resources"]
+        .as_array()
+        .and_then(|resources| resources.iter().find(|resource| resource["uri"] == "ui://tylluan/knowledge-graph-canvas"))
+        .expect("MCP Apps resource descriptor missing");
+    assert_eq!(resource["mimeType"], "text/html;profile=mcp-app");
+
+    let (_, response) = raw_mcp_call(
+        app.clone(),
+        json!({"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"ui://tylluan/knowledge-graph-canvas"}}),
+        "/mcp",
+    ).await;
+    assert_eq!(response["result"]["contents"][0]["mimeType"], "text/html;profile=mcp-app");
+    assert!(response["result"]["contents"][0]["text"].as_str().unwrap_or("").contains("Tylluan knowledge graph"));
+
+    let response = mcp_call(app, "tools/call", "tylluan_graph", json!({"command":"stats"})).await;
+    assert!(response["result"]["structuredContent"].is_object(), "graph result must expose structuredContent: {response:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
