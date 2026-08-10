@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `f3e74ea` · **714 total** lib green (637 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (12, incl. 2 de MCP Apps). M39 (P0-P2) y M40 (P1-P8) completos, cerrados y **verificados contra el kernel vivo real** (no solo CI) — condición de José para v0.16.0 cumplida. M39-P1 ahora también completo: MCP Apps con manifiestos reales (`ui://tylluan/knowledge-graph-canvas`, diseño y auditoría file:line de Codex) — cierra el único hueco honesto que quedaba en M39. Ciclo de módulos 2026-08-11 (backlog M33): J-13 validado con tests, CoherenceGate auditado (NO-GO enforcement), DeepEval+Python 3.14 validado. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40/M33.
+**Commit:** `735718b` · **719 total** lib green (642 kernel lib + 65 link lib + 12 fsrs). M39 (P0-P2) y M40 (P1-P8) completos, cerrados y **verificados contra el kernel vivo real** (no solo CI) — condición de José para v0.16.0 cumplida. Nuevo: circuito CoherenceGate→dataset fase 1 (`llm_decision_examples`, aditivo, sin entrenar) — corrige una sobreestimación real detectada en el propio ciclo de investigación de hoy (`friction_log` no era un dataset de preferencias; ahora hay uno real, estructurado, con gate_label vs llm_decision como par A/B, split determinista 80/20 sin leak). Diseño consensuado José+Claude+equipo contra investigación real (MoA, multiagent debate MIT, NVIDIA SLM thesis, PLaD/PAD), con una corrección de cita verificada en vivo (abstract verbatim de arXiv:2601.11327). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40/M33.
 
 ---
 
