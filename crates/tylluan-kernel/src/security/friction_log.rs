@@ -362,6 +362,24 @@ fn count_event_type_global(conn: &rusqlite::Connection, event_type: &str) -> i64
 #[cfg(test)]
 static TEST_DB_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 
+#[cfg(test)]
+static TEST_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Point every friction write at a dedicated temp DB (unique within the
+/// process). Production keeps `./data/audit.db`; tests never touch it, so the
+/// live kernel can hold it without flaking us. Visible to other modules'
+/// tests (e.g. router::matcher) whose code paths log friction events.
+#[cfg(test)]
+pub(crate) fn set_unique_test_db() {
+    let n = TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "tylluan_friction_test_{}_{}.db",
+        std::process::id(),
+        n
+    ));
+    *TEST_DB_PATH.lock().unwrap() = Some(path);
+}
+
 fn friction_db_path() -> std::path::PathBuf {
     #[cfg(test)]
     {
@@ -449,9 +467,7 @@ mod tests {
     /// test, unique within the process). Production keeps `./data/audit.db`;
     /// tests never touch it, so the live kernel can hold it without flaking us.
     fn unique_test_db() {
-        let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("tylluan_friction_test_{}_{}.db", std::process::id(), n));
-        *TEST_DB_PATH.lock().unwrap() = Some(path);
+        set_unique_test_db();
     }
 
     #[test]

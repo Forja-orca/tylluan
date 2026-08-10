@@ -911,6 +911,64 @@ mod tests {
     }
 
     #[test]
+    fn test_tiebreaker_semantic_decides_close_keyword_winner() {
+        // J-13 spike: when top-2 blended scores are within 0.15, the guild with
+        // the HIGHER semantic score wins even if keyword scored lower.
+        // Keyword says "docker" (2 name matches → kw=0.667, blended 0.383),
+        // semantics says "git" (sem 0.6 → blended 0.33). Gap 0.05 ≤ 0.15 and
+        // sem(git)=0.6 > sem(docker)=0.15 → tiebreaker flips to git.
+        // Without the tiebreaker the result would be docker.
+        crate::security::friction_log::set_unique_test_db();
+        let mut matcher = test_matcher();
+        matcher.set_embeddings(vec![
+            ("bash".into(), vec![0.0, 1.0, 0.0]),
+            ("git".into(), vec![0.6, 0.8, 0.0]),
+            ("docker".into(), vec![0.15, 0.985, 0.0]),
+        ]);
+
+        let query_emb = vec![1.0, 0.0, 0.0];
+        let result = matcher.match_guild("docker docker anything", Some(&query_emb), 0.3, None);
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert_eq!(m.guild_name, "git");
+        assert_eq!(m.method, MatchMethod::Semantic);
+    }
+
+    #[test]
+    fn test_tiebreaker_respects_wide_keyword_lead() {
+        // J-13 spike guard: the tiebreaker must NOT override a keyword verdict
+        // when the blended gap is > 0.15. Here keyword says "git" (kw 0.5, pure
+        // keyword score since sem(git)=0) but semantics prefers docker (sem 0.5 →
+        // blended 0.275). Gap 0.225 > 0.15 → git wins, tiebreaker stays quiet
+        // even though sem(docker)=0.5 > sem(git)=0.
+        let mut matcher = test_matcher();
+        matcher.set_embeddings(vec![
+            ("bash".into(), vec![0.0, 1.0, 0.0]),
+            ("git".into(), vec![0.4, 0.91, 0.0]),
+            ("docker".into(), vec![0.0, 0.866, 0.5]),
+        ]);
+
+        let query_emb = vec![0.0, 0.0, 1.0];
+        let result = matcher.match_guild("git anything", Some(&query_emb), 0.3, None);
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert_eq!(m.guild_name, "git");
+        assert_eq!(m.method, MatchMethod::Keyword);
+    }
+
+    #[test]
+    fn test_tiebreaker_inert_without_engine() {
+        // J-13 spike guard: with no embeddings all semantic scores are 0, so the
+        // tiebreaker must be inert and pure keyword routing must win unchanged.
+        let matcher = test_matcher(); // No embeddings set
+        let result = matcher.match_guild("docker anything", Some(&[1.0, 0.0, 0.0]), 0.3, None);
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert_eq!(m.guild_name, "docker");
+        assert_eq!(m.method, MatchMethod::Keyword);
+    }
+
+    #[test]
     fn test_match_all_returns_multiple() {
         let matcher = test_matcher();
         let results = matcher.match_all("database SQL queries", None, 0.2);
