@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `b89dd70` · **708 total** lib green (631 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 nuevos de stateless routing). M40 P1-P3, P5, P6, P7, P8 completos; P4 completo con QA verificado (Freebuff). M39: P0-P1 completos, P2 (stateless core) ahora cableado end-to-end en `mcp_handler` — `2026-07-28` declarado en `SUPPORTED_PROTOCOL_VERSIONS`, negociación legacy sigue exclusivamente sobre `LEGACY_PROTOCOL_VERSIONS` (lista independiente, no alias). Pendiente: probar contra kernel vivo reconstruido (`/health` seguía en `2f707fd` al cierre de este commit). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** `6242f17` · **709 total** lib green (632 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 de stateless routing). M39 (P0-P2) y M40 (P1-P8) completos y verificados contra el kernel vivo real (no solo CI) — condición de José para v0.16.0 cumplida. Fix real 2026-08-10: `explore_actionable_tools` devolvía vacío para dominios multi-palabra (`"explore memory and communication"` nunca coincidía) — corregido con matching por palabra. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 
