@@ -305,7 +305,24 @@ pub async fn handle_tylluan_do(
             lower.contains("list_pending_actions") || lower.contains("list pending action")
             || lower.contains("pending approvals") || lower.contains("acciones pendientes")
             || lower.contains("aprobaciones pendientes"));
-        if is_list_guilds || is_bootstrap || is_undo || is_health || is_list_pending {
+        // Found live by Qwen Desktop's diagnostic report, 2026-08-11: "doctor_diagnose"
+        // had zero deterministic routing and fell through to the semantic router,
+        // which anchor-matched it to sequential_thinking's compare_options (score
+        // 0.923) instead -- a real kernel subtool made unreachable by natural
+        // language, same class of bug as health/list_pending_actions above.
+        // doctor_diagnose takes no args, safe to route on the bare phrase alone.
+        // doctor_repair requires 'target' via structured arguments (not parsed from
+        // free text here) -- routing it deterministically just means a missing
+        // target now returns handlers.rs's clear guidance message instead of a
+        // wrong-guild misroute.
+        let is_doctor_diagnose = is_short && (
+            lower.contains("doctor_diagnose") || lower.contains("doctor diagnose")
+            || lower.contains("diagnóstico del kernel") || lower.contains("diagnostico del kernel"));
+        let is_doctor_repair = is_short && (
+            lower.contains("doctor_repair") || lower.contains("doctor repair")
+            || lower.contains("reparar kernel") || lower.contains("repair kernel"));
+        if is_list_guilds || is_bootstrap || is_undo || is_health || is_list_pending
+            || is_doctor_diagnose || is_doctor_repair {
             let mut kernel_args = arguments.clone().unwrap_or_default();
             if let Some(aid) = &agent_id {
                 kernel_args.entry("agent_id".to_string()).or_insert_with(|| serde_json::Value::String(aid.clone()));
@@ -318,6 +335,10 @@ pub async fn handle_tylluan_do(
                 "health"
             } else if is_list_pending {
                 "list_pending_actions"
+            } else if is_doctor_diagnose {
+                "doctor_diagnose"
+            } else if is_doctor_repair {
+                "doctor_repair"
             } else {
                 "list_available_guilds"
             };
@@ -1418,6 +1439,43 @@ mod tests {
                 "'{phrase}' must reach the real list_pending_actions subtool, got: {text}"
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_doctor_diagnose_not_sequential_thinking() {
+        // Found live by Qwen Desktop's diagnostic report, 2026-08-11: "doctor_diagnose"
+        // via tylluan_do had zero deterministic routing and was anchor-matched by the
+        // semantic router to sequential_thinking's compare_options (score 0.923),
+        // producing "Need at least 2 options to compare, got: 1" -- a routing miss
+        // disguised as a tool-usage error.
+        let server = test_server().await;
+        for phrase in ["doctor_diagnose", "doctor diagnose", "diagnóstico del kernel"] {
+            let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": phrase}).as_object().unwrap().clone())).await;
+            assert!(result.is_ok(), "'{phrase}' should route successfully");
+            let r = result.unwrap();
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            assert!(
+                !text.contains("compare_options") && !text.contains("Need at least 2 options"),
+                "'{phrase}' must not be hijacked by sequential_thinking, got: {text}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn natural_language_reaches_doctor_repair_with_clear_error_when_target_missing() {
+        // doctor_repair requires a structured 'target' argument (not parsed from
+        // free text) -- routing "doctor repair" deterministically means a missing
+        // target surfaces handlers.rs's real guidance message instead of drifting
+        // to an unrelated guild.
+        let server = test_server().await;
+        let result = handle_tylluan_do(&server, Some(serde_json::json!({"intent": "doctor repair"}).as_object().unwrap().clone())).await;
+        assert!(result.is_ok(), "'doctor repair' should route successfully");
+        let r = result.unwrap();
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(
+            text.contains("requires a 'target' argument"),
+            "'doctor repair' without a target must reach doctor_repair's real guidance message, got: {text}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
