@@ -147,6 +147,54 @@ async fn mcp_call(
     serde_json::from_slice(&bytes).unwrap_or(serde_json::json!({}))
 }
 
+async fn stateless_mcp_call(
+    app: axum::Router,
+    method: &str,
+    tool_name: Option<&str>,
+    arguments: serde_json::Value,
+    agent_id: &str,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    let mut params = serde_json::json!({
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+                "name": "pipeline-stateless-client",
+                "version": "1.0"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+                "tools": {}
+            }
+        }
+    });
+    if let Some(tool_name) = tool_name {
+        params["name"] = serde_json::Value::String(tool_name.to_owned());
+        params["arguments"] = arguments;
+    }
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params
+    });
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/mcp")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", method)
+        .header("X-Test-Agent", agent_id);
+    if let Some(tool_name) = tool_name {
+        builder = builder.header("Mcp-Name", tool_name);
+    }
+    let req = builder
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::json!({})))
+}
+
 fn build_test_app(state: Arc<HttpState>) -> axum::Router {
     axum::Router::new()
         .merge(api_v1_routes())
@@ -268,6 +316,46 @@ async fn test_sovereign_tools_exactly_5() {
     names.sort();
     assert_eq!(names,
         vec!["tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stateless_tools_list_bypasses_transport_session() {
+    let state = test_state().await;
+    let app = build_test_app(state.clone());
+
+    let (status, response) = stateless_mcp_call(
+        app,
+        "tools/list",
+        None,
+        serde_json::json!({}),
+        "agent-stateless-list",
+    ).await;
+
+    assert_eq!(status, axum::http::StatusCode::OK, "stateless tools/list failed: {response:?}");
+    assert!(response["result"]["tools"].is_array(), "missing tools result: {response:?}");
+    assert_eq!(
+        response["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "tylluan-nexus-sovereign"
+    );
+    assert!(state.sessions.read().await.is_empty(), "stateless request created a transport session");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stateless_tools_call_uses_explicit_identity_without_session() {
+    let state = test_state().await;
+    let app = build_test_app(state.clone());
+
+    let (status, response) = stateless_mcp_call(
+        app,
+        "tools/call",
+        Some("tylluan_graph"),
+        serde_json::json!({ "command": "stats", "agent_id": "agent-stateless-call" }),
+        "agent-stateless-call",
+    ).await;
+
+    assert_eq!(status, axum::http::StatusCode::OK, "stateless tools/call failed: {response:?}");
+    assert!(response["error"].is_null(), "stateless graph call returned an error: {response:?}");
+    assert!(state.sessions.read().await.is_empty(), "stateless tool call created a transport session");
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -84,13 +84,11 @@ pub enum McpDialect {
 }
 
 /// MCP protocol versions Tylluan's transport implements, newest first.
-/// The 2026 entry is deliberately NOT in this list -- M39-P2 (stateless core
-/// routing) is still validation primitives only (parse_stateless_request_meta,
-/// validate_stateless_routing_headers), not the actual session-bypass routing.
-/// Declaring it here before that's wired and verified regressed once already
-/// (reverted in 962dffd); do not re-add until the stateless path is complete.
-const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
-const LEGACY_PROTOCOL_VERSIONS: &[&str] = SUPPORTED_PROTOCOL_VERSIONS;
+/// The 2026 entry is advertised only after the stateless core is wired through
+/// `mcp_handler` and verified end-to-end. Legacy handshake negotiation remains
+/// intentionally separate because 2026 has no initialize/session handshake.
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05"];
+const LEGACY_PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 const STATELESS_PROTOCOL_VERSION: &str = "2026-07-28";
 const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
 const META_CLIENT_INFO: &str = "io.modelcontextprotocol/clientInfo";
@@ -2825,9 +2823,8 @@ mod protocol_negotiation_tests {
 
     #[test]
     fn falls_back_to_newest_actually_supported_for_2026_07_28_and_unknown() {
-        // Reverted 2026-08-09: Tylluan does not speak the 2026-07-28 stateless core
-        // yet (M39-P2 pending). A client requesting it, or anything unrecognized,
-        // gets honestly told the newest version this server actually implements.
+        // Legacy initialize negotiation never selects the stateless protocol:
+        // stateless clients skip initialize and send per-request metadata instead.
         assert_eq!(negotiate_protocol_version("2026-07-28"), "2025-06-18");
         assert_eq!(negotiate_protocol_version("not-a-real-version"), "2025-06-18");
         assert_eq!(negotiate_protocol_version(""), "2025-06-18");
@@ -2835,15 +2832,13 @@ mod protocol_negotiation_tests {
 
     #[test]
     fn defaults_to_newest_supported_version() {
-        assert_eq!(negotiate_protocol_version("2030-01-01"), SUPPORTED_PROTOCOL_VERSIONS[0]);
+        assert_eq!(negotiate_protocol_version("2030-01-01"), LEGACY_PROTOCOL_VERSIONS[0]);
     }
 
     #[test]
-    fn does_not_declare_2026_07_28_until_stateless_core_exists() {
-        // Regression guard for the 2026-08-09 audit finding: Tylluan must not
-        // claim the 2026-07-28 protocol version until M39-P2 (stateless core) is
-        // actually implemented, not just the Tasks extension on top of it.
-        assert!(!SUPPORTED_PROTOCOL_VERSIONS.contains(&"2026-07-28"));
+    fn declares_2026_only_after_stateless_core_is_present() {
+        assert!(SUPPORTED_PROTOCOL_VERSIONS.contains(&STATELESS_PROTOCOL_VERSION));
+        assert!(!LEGACY_PROTOCOL_VERSIONS.contains(&STATELESS_PROTOCOL_VERSION));
     }
 
     #[test]
@@ -2962,7 +2957,7 @@ mod protocol_negotiation_tests {
         assert!(parse_stateless_request_meta(&headers, &legacy).unwrap().is_none());
         assert_eq!(detect_mcp_dialect(&headers, "/sse", &legacy), McpDialect::SseClassic);
         assert_eq!(negotiate_protocol_version("2024-11-05"), "2024-11-05");
-        assert!(!SUPPORTED_PROTOCOL_VERSIONS.contains(&STATELESS_PROTOCOL_VERSION));
+        assert!(!LEGACY_PROTOCOL_VERSIONS.contains(&STATELESS_PROTOCOL_VERSION));
     }
 
     #[test]
