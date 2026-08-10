@@ -677,6 +677,17 @@ pub async fn mcp_handler(
         Err(_) => return (StatusCode::BAD_REQUEST, "Body too large").into_response(),
     };
 
+    // TEMP DIAGNOSTIC (2026-08-10, remove once Qwen Desktop hang is root-caused):
+    // Qwen Desktop hangs on Tylluan calls with no error surfaced client-side.
+    // detect_mcp_dialect has no explicit branch for it, so we need its real
+    // headers to know which of the 5 heuristic steps it's actually hitting.
+    tracing::warn!(
+        target: "qwen_diag",
+        headers = ?headers,
+        body_preview = %String::from_utf8_lossy(&body).chars().take(500).collect::<String>(),
+        "🔍 [QWEN-DIAG] raw /messages request received"
+    );
+
     let session_id = params.get("sessionId").cloned().or_else(|| params.get("session_id").cloned());
     let payload: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
