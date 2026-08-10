@@ -33,13 +33,27 @@ pub fn sse_routes() -> Router<Arc<HttpState>> {
 async fn sse_handler(
     State(state): State<Arc<HttpState>>,
     method: Method,
+    headers: axum::http::HeaderMap,
     Query(params): Query<SseParams>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     if method == Method::POST || method == Method::OPTIONS {
-        let req = axum::http::Request::builder()
+        // Real bug, found live 2026-08-10/11: this used to rebuild the request with
+        // ONLY method + body, dropping every header from the real client (Accept,
+        // User-Agent, MCP-Protocol-Version, etc.) and hardcoding the URI to "/mcp".
+        // detect_mcp_dialect's 5-step heuristic never saw the client's real Accept
+        // header or the real "/sse" path, so a client POSTing to /sse asking for
+        // text/event-stream always got a plain application/json response instead --
+        // a classic-SSE client waiting for event-stream framing (or an async reply
+        // over the open GET stream) would hang forever on a response shape it
+        // doesn't recognize. Suspected root cause of Qwen Desktop's SSE-mode hang.
+        let mut builder = axum::http::Request::builder()
             .method(method)
-            .uri("/mcp")
+            .uri("/sse");
+        if let Some(h) = builder.headers_mut() {
+            *h = headers;
+        }
+        let req = builder
             .body(axum::body::Body::from(body))
             .expect("valid SSE builder request");
         return crate::transport::http::api_v1::mcp_handler(
