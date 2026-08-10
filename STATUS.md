@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `6242f17` · **709 total** lib green (632 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 de stateless routing). M39 (P0-P2) y M40 (P1-P8) completos y verificados contra el kernel vivo real (no solo CI) — condición de José para v0.16.0 cumplida. Fix real 2026-08-10: `explore_actionable_tools` devolvía vacío para dominios multi-palabra (`"explore memory and communication"` nunca coincidía) — corregido con matching por palabra. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** `423b600` · **711 total** lib green (634 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 de stateless routing). M39 (P0-P2) y M40 (P1-P8) completos y verificados contra el kernel vivo real (no solo CI) — condición de José para v0.16.0 cumplida. Fixes reales encontrados en vivo por agentes del equipo, 2026-08-10/11: `explore_actionable_tools` no matcheaba dominios multi-palabra; `doctor_diagnose`/`doctor_repair` sin routing determinista (hallado por Qwen Desktop, caía en sequential_thinking.compare_options). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 
