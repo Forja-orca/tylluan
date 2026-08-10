@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tylluan knowledge graph</title>
+  <style>
+    :root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+    body { margin: 0; padding: 12px; background: #111827; color: #e5e7eb; }
+    h1 { margin: 0 0 8px; font-size: 16px; }
+    #status { color: #93c5fd; margin-bottom: 8px; }
+    svg { display: block; width: 100%; min-height: 280px; border: 1px solid #374151; border-radius: 8px; background: #0b1220; }
+    line { stroke: #64748b; stroke-width: 1.5; }
+    circle { fill: #38bdf8; stroke: #e0f2fe; stroke-width: 1.5; }
+    text { fill: #e5e7eb; font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
+    pre { max-height: 160px; overflow: auto; white-space: pre-wrap; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <h1>Tylluan knowledge graph</h1>
+  <div id="status">Waiting for a tylluan_graph result…</div>
+  <svg id="graph" role="img" aria-label="Knowledge graph visualization"></svg>
+  <pre id="fallback" hidden></pre>
+  <script>
+    (() => {
+      const svg = document.getElementById("graph");
+      const status = document.getElementById("status");
+      const fallback = document.getElementById("fallback");
+
+      const clear = () => { while (svg.firstChild) svg.removeChild(svg.firstChild); };
+      const element = (name, attributes, text) => {
+        const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+        Object.entries(attributes || {}).forEach(([key, value]) => node.setAttribute(key, String(value)));
+        if (text !== undefined) node.textContent = String(text);
+        return node;
+      };
+
+      function render(message) {
+        const value = message && (message.structuredContent || message.result || message);
+        let data = value;
+        if (Array.isArray(message && message.content)) {
+          const text = message.content.find(item => item && item.type === "text");
+          if (text) { try { data = JSON.parse(text.text); } catch (_) {} }
+        }
+        const nodes = Array.isArray(data && data.nodes) ? data.nodes : [];
+        const edges = Array.isArray(data && data.edges) ? data.edges : [];
+        clear();
+        fallback.hidden = nodes.length > 0;
+        if (nodes.length === 0) {
+          fallback.textContent = JSON.stringify(data, null, 2);
+          status.textContent = "Result received (no expandable graph nodes).";
+          return;
+        }
+        const width = Math.max(svg.clientWidth || 560, 320);
+        const height = 280;
+        const center = { x: width / 2, y: height / 2 };
+        const positions = new Map();
+        nodes.forEach((node, index) => {
+          const angle = (Math.PI * 2 * index) / nodes.length;
+          const radius = Math.min(width, height) * 0.32;
+          positions.set(String(node.id || node.label || index), {
+            x: center.x + Math.cos(angle) * radius,
+            y: center.y + Math.sin(angle) * radius
+          });
+        });
+        edges.forEach(edge => {
+          const from = positions.get(String(edge.source));
+          const to = positions.get(String(edge.target));
+          if (from && to) svg.appendChild(element("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y }));
+        });
+        nodes.forEach((node, index) => {
+          const point = positions.get(String(node.id || node.label || index));
+          if (!point) return;
+          svg.appendChild(element("circle", { cx: point.x, cy: point.y, r: 20 }));
+          svg.appendChild(element("text", { x: point.x, y: point.y }, node.label || node.id || index));
+        });
+        status.textContent = `${nodes.length} node${nodes.length === 1 ? "" : "s"}, ${edges.length} edge${edges.length === 1 ? "" : "s"}`;
+      }
+
+      window.addEventListener("message", event => {
+        const message = event.data;
+        if (message && message.method === "ui/notifications/tool-result") render(message.params || {});
+      });
+      window.parent.postMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "ui/initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "tylluan-knowledge-graph-canvas", version: "0.1.0" } }
+      }, "*");
+      window.parent.postMessage({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }, "*");
+    })();
+  </script>
+</body>
+</html>
