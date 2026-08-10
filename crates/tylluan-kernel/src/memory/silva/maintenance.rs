@@ -309,6 +309,7 @@ impl super::SilvaDB {
                     tool_count: row.get::<_, i64>(4)? as u64,
                     last_intent: row.get(5)?,
                     last_guild: row.get(6)?,
+                    mcp_apps: false,
                     created_unix: row.get::<_, i64>(7)? as u64,
                     created_at: std::time::Instant::now(),
                     last_active: std::time::Instant::now(),
