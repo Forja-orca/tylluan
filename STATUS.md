@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `d5284c9` · **708 total** green (631 kernel lib + 65 link lib + 12 fsrs). M40 P1-P3, P5, P6 completos, P2 (segundo corte)/P4 (segundo corte) completos, P7/P8 en curso (Deep/Antigravity). M39: P0-P1 completos, P2 (stateless core) tiene primitivas de validación (`parse_stateless_request_meta`, `validate_stateless_routing_headers`) sin cablear en `mcp_handler` todavía — `2026-07-28` deliberadamente fuera de `SUPPORTED_PROTOCOL_VERSIONS` hasta que esté completo (regresión reintroducida y revertida por segunda vez el 2026-08-09, ver `d5284c9`). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** `b89dd70` · **708 total** lib green (631 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 nuevos de stateless routing). M40 P1-P3, P5, P6, P7, P8 completos; P4 completo con QA verificado (Freebuff). M39: P0-P1 completos, P2 (stateless core) ahora cableado end-to-end en `mcp_handler` — `2026-07-28` declarado en `SUPPORTED_PROTOCOL_VERSIONS`, negociación legacy sigue exclusivamente sobre `LEGACY_PROTOCOL_VERSIONS` (lista independiente, no alias). Pendiente: probar contra kernel vivo reconstruido (`/health` seguía en `2f707fd` al cierre de este commit). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 
