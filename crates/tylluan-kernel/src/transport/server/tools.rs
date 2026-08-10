@@ -48,16 +48,31 @@ impl super::TylluanServer {
     /// required arguments, descriptions, and risk levels.
     pub fn explore_actionable_tools(domain: &str, available_guilds: &[&crate::router::catalog::GuildDescriptor]) -> serde_json::Value {
         let domain_lower = domain.trim().to_lowercase();
+        // Multi-word domains ("memory and communication") must match on ANY
+        // meaningful word, not the whole phrase as one substring -- the phrase
+        // never literally appears in a single-word category like "memory",
+        // so a naive .contains() on the full domain silently returns nothing.
+        // Filter out short connector words so "and"/"y"/"de" don't cause noise.
+        const STOPWORDS: &[&str] = &["and", "y", "de", "the", "el", "la", "los", "las", "of", "a"];
+        let domain_words: Vec<&str> = domain_lower
+            .split_whitespace()
+            .filter(|w| w.len() > 1 && !STOPWORDS.contains(w))
+            .collect();
+        let matches_domain = |haystack: &str| {
+            if domain_lower.is_empty() || domain_lower == "all" { return true; }
+            if domain_words.is_empty() { return haystack.contains(&domain_lower); }
+            domain_words.iter().any(|w| haystack.contains(w))
+        };
         let tools = Self::kernel_tools();
 
         let matching_tools: Vec<_> = tools.iter()
             .filter(|t| {
                 if domain_lower.is_empty() || domain_lower == "all" { return true; }
                 let cat = format!("{:?}", t.category).to_lowercase();
-                t.name.to_lowercase().contains(&domain_lower)
-                    || cat.contains(&domain_lower)
-                    || t.description.to_lowercase().contains(&domain_lower)
-                    || t.subtools.iter().any(|s| s.to_lowercase().contains(&domain_lower))
+                matches_domain(&t.name.to_lowercase())
+                    || matches_domain(&cat)
+                    || matches_domain(&t.description.to_lowercase())
+                    || t.subtools.iter().any(|s| matches_domain(&s.to_lowercase()))
             })
             .map(|t| {
                 let required = t.input_schema.get("required")
@@ -79,9 +94,9 @@ impl super::TylluanServer {
         let matching_guilds: Vec<_> = available_guilds.iter()
             .filter(|g| {
                 if domain_lower.is_empty() || domain_lower == "all" { return true; }
-                g.name.to_lowercase().contains(&domain_lower)
-                    || g.description.to_lowercase().contains(&domain_lower)
-                    || format!("{:?}", g.category).to_lowercase().contains(&domain_lower)
+                matches_domain(&g.name.to_lowercase())
+                    || matches_domain(&g.description.to_lowercase())
+                    || matches_domain(&format!("{:?}", g.category).to_lowercase())
             })
             .map(|g| {
                 let example_arg = if let Some(first_req) = g.required_args.first() {
@@ -684,6 +699,21 @@ mod tests {
         let first = &k_tools[0];
         assert!(first.get("example_invocation").is_some(), "tool entry must contain example_invocation");
         assert!(first.get("risk_level").is_some(), "tool entry must contain risk_level");
+    }
+
+    /// Regression test for a real bug found live 2026-08-10: intent "explore
+    /// memory and communication" -> after stripping "explore", domain became
+    /// the literal phrase "memory and communication", which the old
+    /// whole-phrase .contains() check could never match against a single-word
+    /// category like "memory" -- explore silently returned zero results.
+    #[test]
+    fn test_explore_actionable_tools_multi_word_domain_matches_any_word() {
+        let res = TylluanServer::explore_actionable_tools("memory and communication", &[]);
+        let k_tools = res["kernel_tools"].as_array().expect("kernel_tools is array");
+        assert!(
+            !k_tools.is_empty(),
+            "multi-word domain 'memory and communication' must still match memory tools via the word 'memory', got empty: {res}"
+        );
     }
 
     #[test]
