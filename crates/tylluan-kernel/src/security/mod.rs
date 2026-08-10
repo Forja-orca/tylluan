@@ -14,6 +14,7 @@ pub mod coherence_gate;
 pub mod poison_patterns;
 pub mod agents_contract;
 pub mod friction_log;
+pub mod llm_examples;
 
 #[cfg(test)]
 mod integration_tests;
