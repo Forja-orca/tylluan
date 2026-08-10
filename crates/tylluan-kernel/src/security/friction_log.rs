@@ -362,6 +362,13 @@ fn count_event_type_global(conn: &rusqlite::Connection, event_type: &str) -> i64
 #[cfg(test)]
 static TEST_DB_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 
+/// Serializa los tests que escriben a la DB de test (friction_log,
+/// llm_examples, router matcher): TODOS apuntan al mismo TEST_DB_PATH global,
+/// así que un seteo concurrente desviaría los INSERTs a otra db temporal.
+/// Tómalo en cualquier test que (transitivamente) escriba al audit path.
+#[cfg(test)]
+pub(crate) static TEST_DB_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 static TEST_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
@@ -380,7 +387,10 @@ pub(crate) fn set_unique_test_db() {
     *TEST_DB_PATH.lock().unwrap() = Some(path);
 }
 
-fn friction_db_path() -> std::path::PathBuf {
+/// Resolve the friction DB path. Tests may redirect it via
+/// `set_unique_test_db()`; other modules (e.g. `llm_examples`) reuse it so
+/// all audit-style writes share the same DB and test isolation.
+pub(crate) fn friction_db_path() -> std::path::PathBuf {
     #[cfg(test)]
     {
         if let Some(p) = TEST_DB_PATH.lock().unwrap().clone() {
@@ -456,7 +466,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
-    static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use super::TEST_DB_MUTEX as TEST_MUTEX;
 
     fn unique_agent() -> String {
         let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);

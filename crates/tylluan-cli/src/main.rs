@@ -87,6 +87,12 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         entries: usize,
     },
+    /// Export LLM decision examples (CoherenceGate dataset) to JSONL
+    ExportExamples {
+        /// Output file (default: llm_decision_examples.jsonl)
+        #[arg(short, long)]
+        out: Option<std::path::PathBuf>,
+    },
     /// Generate a tylluan.toml for the given installation profile
     Install {
         /// Installation profile (portable|clinic|server)
@@ -471,8 +477,39 @@ async fn main() -> Result<()> {
                 Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
             }
         }
-        Commands::Eval { action } => match action {
-            EvalAction::Longmemevals { num_queries, seed } => {
+        Commands::ExportExamples { out } => {
+            println!("📦 Exporting LLM decision examples (CoherenceGate dataset)...");
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()?;
+            let url = format!("http://127.0.0.1:{DEFAULT_PORT}/api/v1/llm-examples/export");
+            match client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let stats_json = resp
+                        .headers()
+                        .get("X-Export-Stats")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("{}")
+                        .to_string();
+                    let body = resp.text().await?;
+                    let path = out.unwrap_or_else(|| {
+                        std::path::PathBuf::from("llm_decision_examples.jsonl")
+                    });
+                    std::fs::write(&path, &body)?;
+                    let stats: serde_json::Value = serde_json::from_str(&stats_json).unwrap_or_default();
+                    let total = stats["total"].as_u64().unwrap_or(0);
+                    let train = stats["train"].as_u64().unwrap_or(0);
+                    let heldout = stats["heldout"].as_u64().unwrap_or(0);
+                    let agreement = stats["gate_llm_agreement"].as_f64().unwrap_or(0.0);
+                    println!("✅ Exported {total} examples to {}", path.display());
+                    println!("   Split:        {train} train / {heldout} heldout (determinista por node_id, sin leak)");
+                    println!("   Acuerdo gate↔LLM: {:.1}%", agreement * 100.0);
+                }
+                Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
+                Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
+            }
+        }
+        Commands::Eval { action } => match action {            EvalAction::Longmemevals { num_queries, seed } => {
                 println!("🧪 Running LongMemEval-S benchmark...");
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(300))

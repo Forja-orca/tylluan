@@ -276,16 +276,24 @@ impl CoherenceGate {
     /// zone, spawn a fire-and-forget LLM call to classify as IRRELEVANT/
     /// AMBIGUOUS/RELEVANT. Logs decisions via friction_log (observation mode).
     /// Does NOT modify scores. Safe to call after every filter() invocation.
+    ///
+    /// `penalized_node_ids`: ids the deterministic gate penalized in layers 2-3
+    /// (from `GateStats.penalized_nodes`). Used to build the structured A/B
+    /// example (`llm_examples::DecisionExample`): gate_label = REJECT for those
+    /// nodes, KEEP otherwise. Aditivo y no bloqueante — el recolector falla
+    /// silenciosamente.
     pub fn hybrid_classify(
         query: &str,
         survivors: &[(GraphNode, f32)],
         silva: std::sync::Arc<crate::memory::silva::SilvaDB>,
         query_embedding: Option<Vec<f32>>,
+        penalized_node_ids: &[String],
     ) {
         if survivors.is_empty() {
             return;
         }
 
+        let penalized: std::collections::HashSet<String> = penalized_node_ids.iter().cloned().collect();
         let query_clone = query.to_string();
         let query_words = tokenize_query(query);
         let survivors_clone: Vec<(GraphNode, f32)> = survivors.iter()
@@ -328,9 +336,43 @@ impl CoherenceGate {
                         "{HYBRID_CLASSIFY_PROMPT}\n\nQUERY: {query_preview}\nCONTENT: {content_preview}\nCosine: {cosim:.2}\nFlagged by: {flagged_by}\n\nRespond with one word: IRRELEVANT, AMBIGUOUS, or RELEVANT."
                     );
 
+                    let started = std::time::Instant::now();
                     if let Ok(response) = call_reasoning_backend_with_grammar(&prompt, HYBRID_GRAMMAR).await {
                         let decision = parse_hybrid_response(&response);
                         log_hybrid_decision(&node.id, &trigger, &decision);
+
+                        // Fase 1 circuito: ejemplo estructurado A/B (best-effort).
+                        let zones = [
+                            ("A", trigger.zone_a), ("B", trigger.zone_b),
+                            ("C", trigger.zone_c), ("D", trigger.zone_d),
+                        ].iter().filter(|(_, active)| *active).map(|(z, _)| *z).collect::<Vec<_>>().join(",");
+                        let llm = match decision {
+                            HybridDecision::Keep => "KEEP",
+                            HybridDecision::KeepSoft => "KEEP_SOFT",
+                            HybridDecision::Reject => "REJECT",
+                        };
+                        let gate_label = if penalized.contains(node.id.as_str()) {
+                            crate::security::llm_examples::GateLabel::Reject
+                        } else {
+                            crate::security::llm_examples::GateLabel::Keep
+                        };
+                        let ex = crate::security::llm_examples::DecisionExample {
+                            // Fase 1: el caller del recall no expone workflow_id;
+                            // TODO fase 2: enlazar sesión/workflow real.
+                            workflow_id: 0,
+                            query: query_clone.chars().take(500).collect(),
+                            node_id: node.id.clone(),
+                            trigger_zones: zones,
+                            llm_decision: llm.to_string(),
+                            llm_confidence: None,
+                            gate_label: gate_label.as_str().to_string(),
+                            score_before: None,
+                            score_after: *(_score),
+                            model: "unknown".to_string(),
+                            latency_ms: started.elapsed().as_millis() as i64,
+                            created_at: chrono::Utc::now().to_rfc3339(),
+                        };
+                        let _ = crate::security::llm_examples::log_decision_example(&ex);
                     }
                 }
             }
