@@ -71,13 +71,12 @@ pub fn tools_json(tools: &[rmcp::model::Tool], apps_enabled: bool) -> Value {
         .map(|tool| serde_json::to_value(tool).unwrap_or_else(|_| json!({})))
         .collect::<Vec<_>>();
 
-    if apps_enabled {
-        if let Some(graph) = tools
+    if apps_enabled
+        && let Some(graph) = tools
             .iter_mut()
             .find(|tool| tool.get("name").and_then(Value::as_str) == Some("tylluan_graph"))
-        {
-            graph["_meta"] = graph_tool_meta();
-        }
+    {
+        graph["_meta"] = graph_tool_meta();
     }
 
     Value::Array(tools)
