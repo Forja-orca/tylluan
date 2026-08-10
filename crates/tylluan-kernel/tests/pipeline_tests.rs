@@ -3,6 +3,7 @@
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::api_v1::mcp_handler;
+use tylluan_kernel::transport::http::sse::sse_routes;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -380,4 +381,38 @@ async fn test_think_shows_stigmergy_heat() {
     let text = extract_text(&res);
     assert!(text.contains("accesos"),
         "stigmergy heat: esperado 'accesos' en resultado, got: {text}");
+}
+
+/// Regression test for a real bug found live 2026-08-10/11 (suspected root
+/// cause of Qwen Desktop's SSE-mode hang): POST /sse used to rebuild the
+/// downstream request with method+body ONLY, dropping every real header
+/// (Accept, User-Agent, etc.) and hardcoding the URI to "/mcp". A client
+/// posting to /sse asking for text/event-stream got a plain application/json
+/// response instead -- a classic-SSE client waiting for event-stream framing
+/// would hang on a response shape it doesn't recognize.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_post_sse_with_event_stream_accept_gets_sse_content_type() {
+    let state = test_state().await;
+    let app = axum::Router::new()
+        .merge(api_v1_routes())
+        .merge(sse_routes())
+        .route("/mcp", axum::routing::post(mcp_handler))
+        .with_state(state);
+
+    let body = json!({"jsonrpc":"2.0","id":1,"method":"tools/list"});
+    let req = Request::builder()
+        .method("POST")
+        .uri("/sse")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::ACCEPT, "text/event-stream")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let content_type = resp.headers().get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert!(
+        content_type.contains("text/event-stream"),
+        "POST /sse with Accept: text/event-stream must get an SSE-framed response \
+         (the real client's Accept header must reach detect_mcp_dialect), got content-type: {content_type}"
+    );
 }
