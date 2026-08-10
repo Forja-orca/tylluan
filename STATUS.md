@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `b522549` · **714 total** lib green (637 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (10). M39 (P0-P2) y M40 (P1-P8) completos, cerrados y **verificados contra el kernel vivo real** (no solo CI) — condición de José para v0.16.0 cumplida. Ciclo de módulos 2026-08-11 (backlog M33, reparto entre Deep/Antigravity/Codex/Freebuff/Qwen): J-13 (spike tiebreaker embedding en `matcher.rs`) validado y cubierto con tests — el mecanismo ya existía sin cobertura, no reimplementado; CoherenceGate auditado (NO-GO para enforcement síncrono, hoja de ruta de 3 fases); MCP Apps diseñado (hueco real confirmado: `"apps": {}` es solo flag vacío); DeepEval+Python 3.14 validado como candidato real para J-6/J-7/J-14. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40/M33.
+**Commit:** `f3e74ea` · **714 total** lib green (637 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (12, incl. 2 de MCP Apps). M39 (P0-P2) y M40 (P1-P8) completos, cerrados y **verificados contra el kernel vivo real** (no solo CI) — condición de José para v0.16.0 cumplida. M39-P1 ahora también completo: MCP Apps con manifiestos reales (`ui://tylluan/knowledge-graph-canvas`, diseño y auditoría file:line de Codex) — cierra el único hueco honesto que quedaba en M39. Ciclo de módulos 2026-08-11 (backlog M33): J-13 validado con tests, CoherenceGate auditado (NO-GO enforcement), DeepEval+Python 3.14 validado. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40/M33.
 
 ---
 
