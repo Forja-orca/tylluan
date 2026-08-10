@@ -16,7 +16,7 @@
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 
-**Commit:** `423b600` · **711 total** lib green (634 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (9, incl. 2 de stateless routing). M39 (P0-P2) y M40 (P1-P8) completos y verificados contra el kernel vivo real (no solo CI) — condición de José para v0.16.0 cumplida. Fixes reales encontrados en vivo por agentes del equipo, 2026-08-10/11: `explore_actionable_tools` no matcheaba dominios multi-palabra; `doctor_diagnose`/`doctor_repair` sin routing determinista (hallado por Qwen Desktop, caía en sequential_thinking.compare_options). Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
+**Commit:** `1bd7dfd` · **711 total** lib green (634 kernel lib + 65 link lib + 12 fsrs) + suites de integración `concurrency_load` (2) y `pipeline_tests` (10, incl. 2 de stateless routing + 1 de dialecto SSE, este último no cuenta en el total lib por ser test de integración). M39 (P0-P2) y M40 (P1-P8) completos, cerrados y **verificados contra el kernel vivo real** (no solo CI) — condición de José para v0.16.0 cumplida. Ciclo 2026-08-10/11: 3 bugs reales cerrados end-to-end (root-cause → fix → test → CI → kernel vivo → cliente real) — `explore_actionable_tools` multi-palabra, `doctor_diagnose`/`doctor_repair` sin routing (hallado por Qwen Desktop), y el hallazgo mayor: `sse_handler` descartaba los headers reales del cliente en `POST /sse`, causa raíz confirmada del cuelgue histórico de Qwen Desktop en modo SSE — confirmado resuelto por el propio cliente afectado en producción. Historial detallado en `docs/roadmap/ROADMAP_O3.md` sección M39/M40.
 
 ---
 
