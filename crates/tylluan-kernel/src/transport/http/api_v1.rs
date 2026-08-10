@@ -755,11 +755,10 @@ pub async fn mcp_handler(
         let sess_key = session_id.clone().unwrap_or_else(|| client_name.clone());
         crate::transport::http::create_or_update_session(&state.sessions, &sess_key, &client_name, Some(&client_name)).await;
         let client_supports_apps = crate::transport::http::mcp_apps::client_supports_mcp_apps(&payload);
-        if client_supports_apps {
-            if let Some(session) = state.sessions.write().await.get_mut(&sess_key) {
+        if client_supports_apps
+            && let Some(session) = state.sessions.write().await.get_mut(&sess_key) {
                 session.mcp_apps = true;
             }
-        }
         let requested_protocol = payload
             .get("params").and_then(|p| p.get("protocolVersion"))
             .and_then(|v| v.as_str())
@@ -869,13 +868,11 @@ pub async fn mcp_handler(
         "tools/list" => {
             let tools = server.all_tools().await;
             let request_supports_apps = crate::transport::http::mcp_apps::client_supports_mcp_apps(&payload);
-            if request_supports_apps {
-                if let Some(session_key) = session_id.as_deref() {
-                    if let Some(session) = state.sessions.write().await.get_mut(session_key) {
-                        session.mcp_apps = true;
-                    }
+            if request_supports_apps
+                && let Some(session_key) = session_id.as_deref()
+                && let Some(session) = state.sessions.write().await.get_mut(session_key) {
+                    session.mcp_apps = true;
                 }
-            }
             let session_supports_apps = if stateless {
                 false
             } else {
