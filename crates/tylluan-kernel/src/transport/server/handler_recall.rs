@@ -542,6 +542,7 @@ if let Some(ref mut s) = stmt {
             &scored,
             server.silva.clone(),
             query_embedding.map(|e| e.to_vec()),
+            &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
         );
 
         for (node, _) in &scored {
@@ -717,6 +718,7 @@ if let Some(ref mut s) = stmt {
                 &scored,
                 server.silva.clone(),
                 query_embedding.map(|e| e.to_vec()),
+                &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
             );
 
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
