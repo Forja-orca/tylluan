@@ -23,7 +23,9 @@ fn read_timestamp(row: &rusqlite::Row, idx: usize) -> rusqlite::Result<Option<St
         rusqlite::types::Value::Null => Ok(None),
         _ => Ok(None),
     }
-}/// Options for node writes that go beyond the basic upsert.
+}
+
+/// Options for node writes that go beyond the basic upsert.
 pub struct NodeWriteOptions<'a> {
     pub valid_from: Option<i64>,
     pub valid_until: Option<i64>,
