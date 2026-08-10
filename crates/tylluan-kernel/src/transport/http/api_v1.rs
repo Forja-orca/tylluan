@@ -648,6 +648,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // Used by Python guilds (night_reasoner route_intent) to compare
         // intent vs guild description similarity without loading a second copy.
         .route("/api/v1/embed", post(embed_handler))
+        // Fase 1 circuito LLM examples (CoherenceGate → dataset): exporta los
+        // ejemplos estructurados a NDJSON con split train/heldout por node_id.
+        .route("/api/v1/llm-examples/export", get(llm_examples_export_handler))
 }
 
 // --- HANDLERS ---
@@ -1702,6 +1705,34 @@ async fn silva_stats_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
 
 async fn doctor_diagnose_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     Json(state.doctor.diagnose().await)
+}
+
+/// GET /api/v1/llm-examples/export — NDJSON de llm_decision_examples con split
+/// determinista por node_id. Stats en header X-Export-Stats.
+async fn llm_examples_export_handler(State(_state): State<Arc<HttpState>>) -> impl IntoResponse {
+    match crate::security::llm_examples::collect_examples_json() {
+        Ok((rows, stats)) => {
+            let mut body = String::new();
+            for row in &rows {
+                body.push_str(&serde_json::to_string(&row).unwrap_or_else(|_| "{}".to_string()));
+                body.push('\n');
+            }
+            let stats_json = serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string());
+            (
+                StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, "application/x-ndjson".to_string()),
+                    (
+                        axum::http::HeaderName::from_static("X-Export-Stats"),
+                        stats_json,
+                    ),
+                ],
+                body,
+            )
+                .into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
 }
 
 #[derive(serde::Deserialize)]
