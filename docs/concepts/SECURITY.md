@@ -45,7 +45,7 @@ Federation adds peer-to-peer attack surface beyond the local threat model. See [
 | Input validation | ✅ | Intent strings sanitized before guild routing |
 | Docker Sandbox | ✅ Active | Windows UNC path prefix (`\\?`) is automatically stripped for cross-platform support. |
 | ACL Check | ✅ Active | Full role-based validation applied to both `tylluan_do` and direct guild tool routes. |
-| Encryption at Rest | ❌ Inactive | `open_db` is implemented in `config.rs` but not utilized in the codebase; databases are still opened via direct `Connection::open` in plaintext. |
+| Encryption at Rest | ✅ Active (opt-in) | Corrected 2026-08-12 (external audit found the code before believing this stale row): every real database goes through `config::open_db()` (verified — zero direct `rusqlite::Connection::open` calls elsewhere in the crate, 19 call sites use `open_db()`), which applies SQLCipher `PRAGMA hexkey` when `[security] encrypt_at_rest = true`. Defaults to `true` only on binaries built with `--features encryption` (`cfg!(feature = "encryption")`); off on the default build. Key resolution: `TYLLUAN_DB_KEY` env var → `.tylluan-db-key` file → auto-generated. |
 
 ## Reporting Vulnerabilities
 

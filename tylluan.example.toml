@@ -3,7 +3,7 @@
 
 [nexus]
 host = "127.0.0.1"
-port = 3030
+port = 4000
 transport = ["stdio", "http"]
 
 # Security timeouts for tool execution and handshakes
@@ -15,7 +15,7 @@ lazy_load_timeout_secs = 180
 [memory]
 db_path = "data/tylluan.db"
 # embedding_model options:
-#   "bge-m3"  — full quality, ~2.2 GB download, requires 4 GB+ RAM (default)
+#   "bge-m3"  — full quality, ~1.2 GB download, requires 4 GB+ RAM (default)
 #   "none"    — BM25 text search only, zero download, works on any hardware
 # Tip: use "none" on first boot or low-RAM devices, upgrade later with tylluan-cli download-models
 embedding_model = "bge-m3"
