@@ -1709,9 +1709,33 @@ async fn doctor_diagnose_handler(State(state): State<Arc<HttpState>>) -> impl In
 
 /// GET /api/v1/llm-examples/export — NDJSON de llm_decision_examples con split
 /// determinista por node_id. Stats en header X-Export-Stats.
-async fn llm_examples_export_handler(State(_state): State<Arc<HttpState>>) -> impl IntoResponse {
+///
+/// Fase 2 (CoherenceGate P4-P2): cada fila se enriquece con `ground_truth`
+/// cuando existe una resolución real de ADR-011 recall_feedback para ese
+/// node_id (1=útil, -1=no útil después). `null` cuando aún no hay señal
+/// resuelta -- ausencia de dato, no una tercera categoría. Mismo caveat de
+/// honestidad que recall_feedback.rs: es una señal heurística proxy por
+/// solapamiento de palabras, no verdad absoluta.
+async fn llm_examples_export_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     match crate::security::llm_examples::collect_examples_json() {
-        Ok((rows, stats)) => {
+        Ok((mut rows, mut stats)) => {
+            let node_ids: Vec<String> = rows.iter()
+                .filter_map(|r| r.get("node_id").and_then(|v| v.as_str()).map(str::to_string))
+                .collect();
+            let ground_truth = state.silva.get_resolved_feedback_map(&node_ids).await.unwrap_or_default();
+            let mut labeled = 0usize;
+            for row in rows.iter_mut() {
+                let node_id = row.get("node_id").and_then(|v| v.as_str()).unwrap_or("");
+                match ground_truth.get(node_id) {
+                    Some(&useful) => {
+                        row["ground_truth"] = serde_json::json!(useful);
+                        labeled += 1;
+                    }
+                    None => row["ground_truth"] = serde_json::Value::Null,
+                }
+            }
+            stats.ground_truth_labeled = labeled;
+
             let mut body = String::new();
             for row in &rows {
                 body.push_str(&serde_json::to_string(&row).unwrap_or_else(|_| "{}".to_string()));
