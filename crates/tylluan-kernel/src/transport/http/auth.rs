@@ -23,8 +23,21 @@ task_local! {
 }
 
 /// Get the current request's ACL role. Returns "admin" if unset (local/stdio access).
+///
+/// Confirmed 2026-08-12 (external audit, verified in depth): every real HTTP
+/// caller of this function sits behind `bearer_auth_middleware`'s `.layer()`,
+/// which always scopes ACL_ROLE before `next.run()` -- not exploitable via
+/// HTTP today. The unset case is legitimately hit from non-HTTP callers
+/// (e.g. `tylluan_do` reached over stdio, where the whole channel is already
+/// `Channel::is_trusted()`). Logged here so a *future* caller added outside
+/// both the protected router and a trusted-channel context doesn't inherit
+/// this fallback silently -- if this fires from somewhere unexpected, that's
+/// the signal to investigate, not a normal-operation log line to ignore.
 pub fn current_acl_role() -> String {
-    ACL_ROLE.try_with(|r| r.clone()).unwrap_or_else(|_| "admin".to_string())
+    ACL_ROLE.try_with(|r| r.clone()).unwrap_or_else(|_| {
+        tracing::debug!("current_acl_role(): ACL_ROLE unset, defaulting to admin (expected for stdio/local callers outside the HTTP middleware)");
+        "admin".to_string()
+    })
 }
 
 /// Get the bound agent_id for the current request.

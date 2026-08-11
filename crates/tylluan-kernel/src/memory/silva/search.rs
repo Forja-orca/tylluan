@@ -394,26 +394,7 @@ impl super::SilvaDB {
                     param_values.push(Box::new(t.to_string()));
                 }
                 let refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
-                let rows = stmt.query_map(refs.as_slice(), |row| {
-                    Ok(GraphNode {
-                        id: row.get(0)?,
-                        node_type: row.get(1)?,
-                        content: row.get(2)?,
-                        metadata: row.get(3)?,
-                        weight: row.get(4)?,
-                        protected: row.get::<_, i32>(5)? != 0,
-                        conflicted: row.get::<_, i32>(6)? != 0,
-                        topic_key: row.get(7)?,
-                        created_at: row.get(8)?,
-                        updated_at: row.get(9)?,
-                        valid_from: row.get(10)?,
-                        valid_until: row.get(11)?,
-                        shareable: row.get::<_, i32>(12)? != 0,
-                        content_hash: "".to_string(),
-                        provenance: row.get(13)?,
-                        last_touched: Utc::now(),
-                    })
-                })?;
+                let rows = stmt.query_map(refs.as_slice(), Self::map_node_row)?;
                 rows.filter_map(|r| r.ok()).collect()
             } else {
                 let sql = format!(
@@ -423,26 +404,7 @@ impl super::SilvaDB {
                      LIMIT {max_results}"
                 );
                 let mut stmt = conn.prepare(&sql)?;
-                let rows = stmt.query_map(params![pattern], |row| {
-                    Ok(GraphNode {
-                        id: row.get(0)?,
-                        node_type: row.get(1)?,
-                        content: row.get(2)?,
-                        metadata: row.get(3)?,
-                        weight: row.get(4)?,
-                        protected: row.get::<_, i32>(5)? != 0,
-                        conflicted: row.get::<_, i32>(6)? != 0,
-                        topic_key: row.get(7)?,
-                        created_at: row.get(8)?,
-                        updated_at: row.get(9)?,
-                        valid_from: row.get(10)?,
-                        valid_until: row.get(11)?,
-                        shareable: row.get::<_, i32>(12)? != 0,
-                        content_hash: "".to_string(),
-                        provenance: row.get(13)?,
-                        last_touched: Utc::now(),
-                    })
-                })?;
+                let rows = stmt.query_map(params![pattern], Self::map_node_row)?;
                 rows.filter_map(|r| r.ok()).collect()
             };
             Ok(results)

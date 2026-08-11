@@ -51,7 +51,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Tools** | 49 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | Kademlia DHT + Gossip dissemination — encrypted end-to-end with Noise NK once peers know each other, never sent in the clear |
+| **Mesh** | Kademlia DHT + Gossip dissemination — encrypted with Noise NK once peers know each other's pubkey; a legacy no-discriminator wire path exists for backward compat with older peers and does carry plaintext, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **A2A Protocol** | Agent Card discovery + JSON-RPC 2.0 server — interoperates with any Agent2Agent-compliant client (LangGraph, CrewAI, etc.), not just other Tylluan instances |
 | **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
 | **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
@@ -69,7 +69,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Episodic Memory** | Coloquio conversations are automatically stored in the knowledge graph as episodic nodes |
 | **Memory Decay** | Salience fades on a 14-day half-life; using a memory reinforces it |
 | **Guild Dispatch** | Peers discover each other's tool capabilities and can dispatch guild calls remotely over Noise NK, with load/latency-aware routing and a circuit breaker for degraded peers |
-| **Encryption** | AES-256 at rest via SQLCipher (`--features encryption`) |
+| **Encryption** | AES-256 at rest via SQLCipher — `--features encryption` compiles the capability, but it's not yet wired into the default DB-open path (tracked in [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md)); databases are plaintext-on-disk today |
 | **Query Cache** | TTL LRU embedding cache, avoids redundant inference on repeated queries |
 | **Complexity Cascade** | Heuristic scoring escalates multi-step or ambiguous intents to a coordinator, no LLM required |
 | **TRINITY Coordinator** | Thinker/Worker/Verifier pattern for tasks that need real synthesis across steps |
@@ -375,10 +375,11 @@ Point two or more Tylluan instances at each other and they'll share knowledge se
 
 ```toml
 # tylluan.toml
-[federation]
-auto_sync_interval_secs = 3600  # 0 = disabled
-auto_sync_mode = "both"         # "push" | "pull" | "both"
+[silva]
+sync_interval_ms = 3600000      # the key the auto-sync loop actually reads; 0 = disabled
 ```
+
+> `[federation] auto_sync_interval_secs`/`auto_sync_mode` are defined in config but currently unread by any sync loop — dead keys, don't rely on them (tracked in ROADMAP_O3.md).
 
 ```bash
 # Add a peer
