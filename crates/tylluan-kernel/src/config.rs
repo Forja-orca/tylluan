@@ -307,18 +307,37 @@ pub struct MdnsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2pConfig {
     /// Enable the P2P dispatch listener for direct Noise XK connections.
+    ///
+    /// SECURITY (2026-08-12, hotfix): defaults to false. The listener bound
+    /// 0.0.0.0:9123 by default and dispatched guild tool calls (bash, git,
+    /// filesystem, docker, ...) after a successful Noise XK handshake with
+    /// NO check against approved peers -- any host on the LAN that learned
+    /// the responder's pubkey (which propagates via gossip/mDNS/DHT) could
+    /// get unauthenticated remote code execution. Found live by an external
+    /// multi-model security audit of the public repo, verified line-by-line
+    /// before this fix.
+    ///
+    /// This flag flip is the safe stopgap, not the real fix. The real fix
+    /// needs the responder to check the initiator's handshake static key
+    /// (X25519, captured in `NoisedPipe::peer_id`) against `peers.db`'s
+    /// approved list (Ed25519) before ever calling the dispatch handler --
+    /// and `noise.rs` documents that Ed25519 cannot be reconstructed from
+    /// the X25519 conversion, so that check needs its own careful design
+    /// (e.g. storing the derived X25519 pubkey alongside Ed25519 in
+    /// peers.db at approval time), not a rushed hotfix. Until that lands,
+    /// P2P dispatch stays opt-in and documented as such.
     #[serde(default = "default_p2p_enabled")]
     pub enabled: bool,
     /// TCP port for the P2P dispatch listener.
     #[serde(default = "default_p2p_listen_port")]
     pub listen_port: u16,
 }
-fn default_p2p_enabled() -> bool { true }
+fn default_p2p_enabled() -> bool { false }
 fn default_p2p_listen_port() -> u16 { 9123 }
 impl Default for P2pConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             listen_port: 9123,
         }
     }
@@ -1805,6 +1824,28 @@ mod tests {
         assert_eq!(config.memory.vector_dimensions, 1024); // BGE-M3 nativo
         assert_eq!(config.guilds.core.always_on, vec!["bash", "memory", "filesystem"]);
         assert_eq!(config.guilds.core.lazy_load_timeout_secs, 300);
+    }
+
+    /// Security regression, 2026-08-12: the P2P dispatch listener used to be
+    /// enabled by default, binding 0.0.0.0:9123 and dispatching guild tool
+    /// calls (bash/git/filesystem/docker) after a Noise XK handshake with no
+    /// check against approved peers -- unauthenticated RCE for anyone on the
+    /// LAN who learned the responder's pubkey (which propagates via gossip).
+    /// Found live by an external security audit. Must stay opt-in until the
+    /// real peer-authorization check (X25519 handshake key -> peers.db's
+    /// Ed25519 approved list) is designed and implemented.
+    #[test]
+    fn test_p2p_dispatch_listener_disabled_by_default() {
+        let config = TylluanConfig::default();
+        assert!(
+            !config.p2p.enabled,
+            "P2P dispatch listener must default to disabled -- it dispatches guild tool \
+             calls with no peer authorization check, see config.rs P2pConfig doc comment"
+        );
+        // Serde default must agree with Default::default(), since #[serde(default = ...)]
+        // is what actually governs a tylluan.toml that omits [p2p] entirely.
+        let parsed: TylluanConfig = toml::from_str("").unwrap();
+        assert!(!parsed.p2p.enabled, "serde default for p2p.enabled must also be false");
     }
 
     #[test]
