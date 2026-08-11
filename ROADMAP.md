@@ -235,6 +235,43 @@ Delivered:
 
 ---
 
+## v0.14.0 — A2A Interop + Signal Loop/Coherence Gate + Dashboard Sovereign Substrate (complete)
+
+**Goal:** Interoperate with external agent frameworks over an open standard, and close the first real recall-path memory-poisoning defense.
+
+Delivered (269 commits since v0.13.0, including a week of production dogfooding — "vivir Tylluan"):
+- [x] **M38 — A2A (Agent2Agent, Linux Foundation) interoperability** — real Agent Card + JSON-RPC 2.0 server (`message/send`, `tasks/get`, `tasks/cancel`); orthogonal to Tylluan's own P2P mesh (which is for trusted Tylluan-to-Tylluan sync; A2A is for delegating to/from external frameworks like LangGraph/CrewAI). HITL grant coverage for `input-required` states + mitigation for `client_agent_id` spoofing.
+- [x] **ADR-011 — Signal Loop + Coherence Gate + LightReranker** — `recall_feedback` table (SilvaDB v18) logs which memories are returned per agent, resolved via Jaccard word-overlap against later calls. `CoherenceGate`: 3-layer recall-path defense against memory poisoning (known patterns, untrusted provenance, semantic drift), wired into both live-query and cache-hit paths. `LightReranker` scaffolded, deliberately not cut over yet (needs ≥5,000 resolved feedback rows).
+- [x] **ADR-010 — Embedded SLM research spike, closed NO-GO** — sep-CMA-ES trained coordinator vs fixed role assignment: 33.3% win rate on real HTTP fitness, below the 60% threshold — honest null result, not shipped.
+- [x] Dashboard Sovereign Substrate GUI — live Coherence Gate + Signal Loop telemetry panel.
+
+## v0.15.0 — Connection Audit + Mandatory Mesh Encryption (complete)
+
+**Goal:** Verify what earlier milestones claimed was "wired" against a live running kernel, not just code review — several real bugs only surfaced this way.
+
+Delivered (155 commits since v0.14.0):
+- [x] Full connection audit — 5 guilds found defaulting IPC to ForjaMCPo3's port `3030` instead of Tylluan's `4000`, dead code (`memory_bridge.py`) removed, Python guild writes bypassing kernel embedding generation fixed, 3 dashboard panels showing fabricated/stuck data replaced with honest empty states.
+- [x] Mandatory Noise NK encryption for mesh gossip — previously sent `GossipEntry` payloads over plain HTTP; `GossipEntry`/`KBucketEntry` now carry an optional Ed25519 pubkey, upgrading to real Noise NK once known; plaintext remains last-resort fallback for peers without the fix yet.
+- [x] CoherenceGate Layer 4 live in production — hybrid deterministic+LLM classifier wired into both real recall call sites in observation mode. A 3-model SLM debate alternative was tried and NO-GO'd (sub-2B models converge to a constant answer regardless of prompt).
+- [x] 13 additional "v1-port" guilds activated via `[guilds.v2]`; new structural test prevents catalog/registration drift.
+- [x] Vision pipeline: root-caused an intermittent GPU driver TDR crash (DirectML contention between vision + BGE-M3), forced CPU execution for stability; missing `transformers` dependency fixed.
+
+**570 kernel lib + 63 link + 12 fsrs = 645 tests**, all green.
+
+## v0.16.0 — MCP 2026-07-28 Adoption + Continuity/Trust/Action Layer + CoherenceGate Dataset Circuit (complete)
+
+**Goal:** Adopt the latest MCP spec honestly, and give agents a real continuity/trust/action layer — not speculative feature work, closing gaps found live in production.
+
+Delivered (85 commits since v0.15.0):
+- [x] **M39 — MCP spec 2026-07-28** — honest `protocolVersion` negotiation, `tasks/get`/`update`/`cancel` over a closed 5-state `JobQueue` enum, a real MCP App (`ui://tylluan/knowledge-graph-canvas`, self-contained SVG+JS, no external fetch), stateless-core request handling verified live with curl (legacy negotiation unaffected).
+- [x] **M40 — Continuity/Trust/Action layer** (8 phases) — self-documenting guild contracts, unified `agent_bootstrap` (identity + last session + pending approvals + repo-map in one call), full `tylluan_do` action cycle with tested `undo_last_action`, evidence/provenance fields on memory (`confidence`/`status`/`source`/`author`/`evidence_url`), unified session continuity across MCP/HTTP/CLI, Trust Console dashboard panel, 8-parallel-agent concurrency test suite, near-invisible setup (startup banner + opt-in MCP auto-configurator).
+- [x] 3 real bugs found live and fixed end-to-end: multi-word `explore` queries returning zero results, `doctor_diagnose`/`doctor_repair` with no deterministic routing, and the headline fix — `sse_handler` discarding every real client header on `POST /sse`, forcing the wrong MCP dialect regardless of what the client asked for (root cause of a long-standing client hang).
+- [x] CoherenceGate → dataset circuit, phases 1–2 — `llm_decision_examples` structured A/B pairs (deterministic gate vs LLM judge) with leak-free 80/20 split; real post-hoc ground truth via the existing `recall_feedback` Signal Loop. Nothing trained yet — phase 3 (offline fine-tuning) waits for real data volume.
+
+**644 kernel lib + 65 link + 12 fsrs = 721 tests**, all green. Full commit list: `git log v0.15.0..v0.16.0`.
+
+---
+
 ## v1.0.0 — Production Ready
 
 **Goal:** Safe to deploy in real environments.
