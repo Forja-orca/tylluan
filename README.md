@@ -69,7 +69,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Episodic Memory** | Coloquio conversations are automatically stored in the knowledge graph as episodic nodes |
 | **Memory Decay** | Salience fades on a 14-day half-life; using a memory reinforces it |
 | **Guild Dispatch** | Peers discover each other's tool capabilities and can dispatch guild calls remotely over Noise NK, with load/latency-aware routing and a circuit breaker for degraded peers |
-| **Encryption** | AES-256 at rest via SQLCipher — `--features encryption` compiles the capability, but it's not yet wired into the default DB-open path (tracked in [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md)); databases are plaintext-on-disk today |
+| **Encryption** | AES-256 at rest via SQLCipher (`--features encryption`) — active by default on binaries built with that feature, off otherwise; every real database goes through the same `open_db()` path, see [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) |
 | **Query Cache** | TTL LRU embedding cache, avoids redundant inference on repeated queries |
 | **Complexity Cascade** | Heuristic scoring escalates multi-step or ambiguous intents to a coordinator, no LLM required |
 | **TRINITY Coordinator** | Thinker/Worker/Verifier pattern for tasks that need real synthesis across steps |
