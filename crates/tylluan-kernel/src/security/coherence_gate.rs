@@ -98,6 +98,17 @@ fn parse_hybrid_response(response: &str) -> HybridDecision {
     else { HybridDecision::KeepSoft } // AMBIGUOUS or unrecognized -> soft keep
 }
 
+/// Resolve the kernel's own bearer token the same way `config.rs` does at
+/// startup (TYLLUAN_TOKEN env var, then `.tylluan-token` file), so this
+/// internal self-call authenticates like any other client would.
+fn resolve_self_auth_token() -> Option<String> {
+    if let Ok(token) = std::env::var("TYLLUAN_TOKEN")
+        && !token.trim().is_empty() {
+            return Some(token);
+        }
+    std::fs::read_to_string(".tylluan-token").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
 /// Call llama_backend with grammar-constrained output for hybrid classification.
 async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
@@ -112,10 +123,18 @@ async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Res
     });
 
     let client = reqwest::Client::new();
-    let resp = client
+    // Real bug found live 2026-08-12 (external audit): this call had no
+    // Authorization header, so it 401'd against itself the moment auth was
+    // actually enabled (dev_mode=false) -- Layer 4 classification silently
+    // failed on every real deployment, only ever exercised with auth off.
+    let mut req = client
         .post(format!("{kernel_base}/api/v1/guilds/llama_backend/tools/query_model"))
         .json(&body)
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(30));
+    if let Some(token) = resolve_self_auth_token() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| format!("HTTP error: {e}"))?;
