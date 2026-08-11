@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.15.0-blue.svg" alt="v0.15.0">
+  <img src="https://img.shields.io/badge/version-0.16.0-blue.svg" alt="v0.16.0">
   <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -204,7 +204,7 @@ On the very first run, BGE-M3 downloads with a progress bar (5–15 minutes depe
 
 ```
 Downloading BGE-M3 embedding model... [##########] 1.2 GB
-✅ Tylluan v0.15.0 running at http://127.0.0.1:4000
+✅ Tylluan v0.16.0 running at http://127.0.0.1:4000
 ```
 
 Check it's actually up:
@@ -275,12 +275,15 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 
 ---
 
-## Where things stand — v0.15.0
+## Where things stand — v0.16.0
 
-This release is the result of a full connection audit across the stack: instead of trusting that everything wired up in earlier milestones was actually reachable end-to-end, we went back and verified every layer against a live, running kernel — and fixed what we found broken along the way. A few examples: a guild that silently pointed its IPC calls at the wrong port for weeks, a vision pipeline that crashed under real GPU contention but worked fine in isolated tests, and a production gossip loop that had never actually encrypted anything despite the crypto primitives being ready and tested. None of that shows up in a milestone table — it's the unglamorous work of making sure "done" actually means done.
+This release adopts the MCP 2026-07-28 spec end to end (stateless core, Tasks, real MCP Apps manifests) and closes an 8-phase push to make Tylluan itself an agent's continuity, trust, and action layer — self-documenting guild contracts, unified bootstrap/resume, evidence-backed memory, a Trust Console for runtime/code drift, and a first real dataset circuit turning CoherenceGate's LLM judge decisions into structured, ground-truth-labeled examples. Three real bugs were found live and fixed the same way as always: root cause first, then a regression test, then verified against the live kernel — including a long-standing SSE-mode hang traced to a header-forwarding bug and confirmed fixed by the affected client itself.
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
+| **MCP 2026-07-28 adoption (M39)** | Stateless core wired end-to-end and verified live with curl, Tasks with closed-state guards, real MCP Apps manifests (`ui://tylluan/knowledge-graph-canvas`) replacing a bare capability flag | ✅ |
+| **Continuity/Trust/Action layer (M40)** | 8 phases: self-documenting guild contracts, unified `agent_bootstrap`/resume, full plan→act→verify→undo cycle, evidence/provenance on memory, Trust Console drift detection, concurrency test suite, near-invisible setup | ✅ |
+| **CoherenceGate → dataset circuit** | Structured A/B examples (gate vs LLM judge) with real post-hoc ground truth from the existing Signal Loop — phase 1+2 shipped, nothing trained yet by design | ✅ |
 | **Connection audit (v0.15.0)** | Full stack re-verified against a live kernel: guild IPC pointed at the wrong port in 5 places, vision inference crashed under real GPU/kernel contention (fixed by forcing CPU after root-causing a Windows driver timeout), silent writes bypassing the embedding pipeline, dashboard panels showing stale or fabricated data | ✅ |
 | **Mesh encryption (v0.15.0)** | Production gossip loop now encrypts with Noise NK once a peer's public key has propagated, with a config-gated fallback for first contact — previously sent entirely in the clear despite the crypto layer existing and being tested | ✅ |
 | **Guild registry completeness (v0.15.0)** | 13 additional guilds activated via `[guilds.v2]`, plus a structural test that fails CI if a guild is ever registered in the catalog but unreachable at runtime — this exact class of bug had shipped silently twice before | ✅ |

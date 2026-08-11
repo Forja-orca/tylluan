@@ -4,6 +4,38 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [v0.16.0] — 2026-08-11 — MCP 2026-07-28 adoption (M39) · Continuity/Trust/Action layer (M40) · CoherenceGate dataset circuit
+
+85 commits since v0.15.0 (2026-07-30). José's explicit gate for this release, set 2026-08-09: "v0.16.0 NO cierra hasta que M39 (P0-P2) y M40 estén ambos completos" — no shipping partial milestones. Both close in this release, each verified against the live running kernel with real curl/MCP calls, not just CI green.
+
+**M39 — MCP spec 2026-07-28 adoption**
+- P0: honest `protocolVersion` negotiation against what Tylluan actually implements — never echo back a version the server doesn't speak.
+- P1: `tasks/get`/`tasks/update`/`tasks/cancel` over `JobQueue` with a closed 5-state enum and terminal-state guards (an external audit found the first cut accepted arbitrary strings); real MCP Apps — `ui://tylluan/knowledge-graph-canvas` resource with a self-contained SVG+JS canvas (no external fetch, verified), `_meta.ui` manifest on `tylluan_graph` only, `structuredContent` on its `tools/call` results — replacing what had been a bare `"apps": {}` capability flag with no manifest behind it.
+- P2: the stateless core wired end-to-end in `mcp_handler` — a request claiming the 2026-07-28 protocol rejects `sessionId` outright, derives identity only from explicit `agent_id`, and gets 404 on `initialize`/`initialized` (no handshake exists in the new spec). Verified live with curl against the running kernel: legacy negotiation unaffected, stateless requests correctly accepted and rejected.
+
+**M40 — Tylluan as an agent's continuity, trust, and action layer**
+Eight phases, all closing real gaps found live in production, not speculative feature work:
+- Self-documenting guild contracts (permissions, cost, side effects, rollback) surfaced through `list_available_guilds`, closing a real "guild wanted `path`, schema never said so" incident.
+- Unified `agent_bootstrap` — identity, last session, pending approvals, repo-map summary, executable capabilities in one call, replacing what used to be four separate round-trips.
+- Full `tylluan_do` action cycle — plan → risk review → approval → execution → verification → memory, with `undo_last_action` as a real, tested subtool.
+- Explicit evidence and provenance on memory: `confidence`/`status` (v19) and now `source`/`author`/`evidence_url` (v20) surfaced directly in `tylluan_recall` output.
+- Session continuity unified across MCP/HTTP/CLI resume paths onto one payload (`build_resume_context`), fixing a real asymmetry where `agent_bootstrap` silently omitted `last_task`.
+- Trust Console dashboard panel — live kernel commit vs HEAD drift, MCP extension manifest, closing the exact gap that let a stale kernel run undetected for a full session earlier this cycle.
+- A systematic concurrency test suite (8 parallel agents against the real HTTP router) plus the friction_log DB-isolation bug it surfaced along the way.
+- Near-invisible setup: a startup banner with a copy-pasteable connect command, `quickstart_intents` in `agent_bootstrap`, and an opt-in (never silent) MCP client auto-configurator with dry-run-by-default and automatic backup.
+
+**Three real bugs found live and fixed end-to-end (root cause → fix → regression test → CI → live kernel → real client), 2026-08-10/11**
+- `explore_actionable_tools` silently returned zero results for any multi-word domain (`"explore memory and communication"`) — the old matcher required the whole phrase as one substring against single-word categories.
+- `doctor_diagnose`/`doctor_repair` had zero deterministic routing and were being anchor-matched by the semantic router to an unrelated guild — found live by Qwen Desktop's own diagnostic report, verified before accepting.
+- The headline fix of the cycle: `sse_handler` discarded every real client header on `POST /sse`, forcing the wrong MCP dialect regardless of what the client actually asked for — the confirmed root cause of Qwen Desktop's long-standing hang in SSE mode. Fixed, verified with curl before/after, and confirmed resolved by the affected client itself running live afterward.
+
+**CoherenceGate → dataset circuit — phases 1 and 2**
+Grounded in real research (Mixture-of-Agents, MIT multiagent debate, NVIDIA's small-language-models-for-agentic-AI thesis, PLaD/PAD preference distillation), reasoned through with José end to end, corrected against verbatim source text at least once along the way rather than trusting a paraphrase.
+- Phase 1: `llm_decision_examples` — a real structured A/B pair (`gate_label` from what the deterministic gate actually penalized vs `llm_decision` from the Layer 4 LLM judge), deterministic 80/20 train/heldout split by node_id with no leak, JSONL export endpoint + CLI. Corrects an overstatement made earlier in the same research conversation: `friction_log` was free-text event logging, not a preference-pair dataset, until this shipped.
+- Phase 2: real post-hoc ground truth via ADR-011's existing `recall_feedback` Signal Loop — was the memory actually referenced again afterward, independent of what either the gate or the LLM judge said. Nothing is trained yet; phase 3 (offline fine-tuning once enough labeled volume accumulates) is deliberately not started.
+
+Test counts: 644 kernel lib + 65 `tylluan-link` + 12 `tylluan-fsrs` = **721**, all green. Full list of individual commits: `git log v0.15.0..v0.16.0`.
+
 ## [v0.15.0] — 2026-07-30 — Connection audit · mandatory mesh encryption · CoherenceGate Layer 4 live
 
 155 commits since v0.14.0 (2026-07-27). The theme of this release is different from most: instead of adding new surface area, most of this cycle went into auditing what earlier milestones claimed was "wired" or "in production" and verifying it against a live, running kernel — real HTTP calls, real SQL queries, real inference, not just reading code and assuming it worked. Several real bugs only surfaced this way.
