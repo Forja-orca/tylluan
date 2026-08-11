@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-07-30 (v0.15.0: full connection audit across the stack, verified against a live kernel rather than code review alone — 5 guilds had IPC pointing at the wrong port, SilvaDB writes bypassing the kernel's embedding pipeline, dashboard panels showing fabricated/stuck data, 4 components skipping the auth layer, all fixed; production mesh gossip now encrypts with Noise NK once a peer's pubkey has propagated, previously sent in the clear; CoherenceGate Layer 4 hybrid filter wired live into both recall call sites in observation mode; 13 more guilds activated via `[guilds.v2]` plus a structural test preventing the catalog/runtime registration drift bug from shipping silently a third time; vision pipeline's intermittent crash root-caused to Windows GPU driver TDR under contention with the kernel's own DirectML usage, fixed by forcing CPU; embedding fix from v0.14.0 verified end-to-end for the first time via direct SQL against `node_embeddings`)
+> Last updated: 2026-08-11 (v0.16.0: MCP 2026-07-28 adoption complete — M39 P0-P2, stateless core verified live with curl, Tasks with closed-state guards, real MCP Apps manifests replacing a bare capability flag; M40 complete — 8 phases making Tylluan an agent's continuity/trust/action layer: self-documenting guild contracts, unified bootstrap/resume, full plan→act→verify→undo cycle, evidence/provenance on memory, Trust Console drift detection, concurrency test suite, near-invisible setup; 3 real bugs found live and fixed end-to-end including Qwen Desktop's long-standing SSE-mode hang, root-caused to `sse_handler` discarding real client headers and confirmed fixed by the affected client itself; CoherenceGate→dataset circuit phases 1+2 shipped — structured A/B examples with real post-hoc ground truth via the existing Signal Loop, nothing trained yet by design)
 
 ## CI
 
@@ -22,7 +22,7 @@
 
 ## Version
 
-**v0.15.0** (Cargo.toml) — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.16.0** (Cargo.toml) — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 
