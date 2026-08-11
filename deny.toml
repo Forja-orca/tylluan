@@ -16,9 +16,18 @@ ignore = [
     # The advisory notes 1.3.3 is considered complete; no safe upgrade exists without a schema migration.
     # Tracked for v0.12.0: replace with postcard. Breaking change requires HNSW BLOB rebuild on upgrade.
     "RUSTSEC-2025-0141",
-    # RUSTSEC-2026-0002 — lru 0.12.5 IterMut unsound. Upgrade requires lru >=0.16.3, which pulls
-    # image 0.25.10 -> rustc 1.88+, exceeding our toolchain pin (1.85). Not triggered in our usage.
+    # RUSTSEC-2026-0002 — lru 0.12.5 IterMut unsound. Upgrade requires lru >=0.16.3. Not
+    # triggered in our usage (embeddings.rs only calls get()/put(), never iterates).
     "RUSTSEC-2026-0002",
+    # RUSTSEC-2026-0253 — lru 0.12.5 pop() use-after-free if a stored key's Drop impl panics
+    # during unwinding. Our only usage (router/embeddings.rs) keys by String, which has no
+    # custom Drop and cannot panic on drop -- unreachable in our code. Upgrading our own
+    # direct dep to lru 0.18 (the fix) is not viable without splitting the dependency graph:
+    # `mainline` (tylluan-link, optional `mainline-dht` feature) independently pins
+    # `lru = "^0.12.2"` and has no newer release compatible with our other pins -- bumping
+    # just our side reintroduces a duplicate-version `bans` failure instead of an advisory
+    # one. Revisit if `mainline` ever relaxes its lru requirement.
+    "RUSTSEC-2026-0253",
 ]
 
 [licenses]
