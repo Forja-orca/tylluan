@@ -144,6 +144,12 @@ pub struct ExportStats {
     pub train: usize,
     pub heldout: usize,
     pub gate_llm_agreement: f32,
+    /// Fase 2 (P4-P2): cuántas filas llevan `ground_truth` real (resolución
+    /// ADR-011 recall_feedback), no solo el contraste gate vs LLM de fase 1.
+    /// Fijado por el caller HTTP tras enriquecer -- 0 en cualquier llamada
+    /// directa a `export_examples_jsonl`/`collect_examples_json` sin pasar
+    /// por el handler, que es honesto: sin enriquecimiento no hay etiquetas.
+    pub ground_truth_labeled: usize,
 }
 
 /// Leer todos los ejemplos con su split, listos para serializar.

@@ -140,6 +140,45 @@ impl SilvaDB {
                 .map_err(anyhow::Error::from)
         })
     }
+
+    /// CoherenceGate P4-P2: bulk lookup of resolved post-hoc outcomes for a set
+    /// of node ids, used to enrich `llm_decision_examples` exports with real
+    /// ground truth instead of only the teacher-vs-gate agreement measured in
+    /// phase 1. Same honesty caveat as the rest of this module: this is the
+    /// word-overlap heuristic proxy signal from ADR-011, not infallible truth
+    /// — it answers "was this memory referenced again afterward", not "was the
+    /// gate's decision correct" in any deeper sense.
+    ///
+    /// Returns memory_id -> latest resolved `useful` value (1 or -1). A node
+    /// with no resolved row (still pending, or never recalled) is simply
+    /// absent from the map — callers must treat missing as "no ground truth
+    /// yet", not as a negative label.
+    pub async fn get_resolved_feedback_map(&self, memory_ids: &[String]) -> Result<std::collections::HashMap<String, i64>> {
+        if memory_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let placeholders = memory_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT memory_id, useful FROM recall_feedback \
+                 WHERE useful != 0 AND memory_id IN ({placeholders}) \
+                 ORDER BY resolved_at ASC"
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let params: Vec<&dyn rusqlite::ToSql> = memory_ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            let rows = stmt.query_map(params.as_slice(), |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            // ORDER BY resolved_at ASC + insert-overwrite: last write wins, so
+            // the map ends up holding each memory_id's most recent resolution.
+            let mut map = std::collections::HashMap::new();
+            for row in rows.flatten() {
+                map.insert(row.0, row.1);
+            }
+            Ok(map)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -265,5 +304,30 @@ mod tests {
             conn.execute("UPDATE recall_feedback SET useful = 1 WHERE memory_id = 'mem1'", []).unwrap();
         });
         assert_eq!(db.resolved_feedback_count().await.unwrap(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_resolved_feedback_map_excludes_pending_and_missing() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.log_recall_feedback("mem-resolved", "agent-a", "task-1", "q", 0).await.unwrap();
+        db.log_recall_feedback("mem-pending", "agent-a", "task-2", "q", 0).await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE recall_feedback SET useful = -1, resolved_at = datetime('now') WHERE memory_id = 'mem-resolved'", []).unwrap();
+        });
+
+        let ids = vec!["mem-resolved".to_string(), "mem-pending".to_string(), "mem-never-recalled".to_string()];
+        let map = db.get_resolved_feedback_map(&ids).await.unwrap();
+
+        assert_eq!(map.get("mem-resolved"), Some(&-1));
+        assert!(!map.contains_key("mem-pending"), "still useful=0 -> must not appear as ground truth");
+        assert!(!map.contains_key("mem-never-recalled"), "no row at all -> must not appear");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_resolved_feedback_map_empty_input_returns_empty_map() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let map = db.get_resolved_feedback_map(&[]).await.unwrap();
+        assert!(map.is_empty());
     }
 }
