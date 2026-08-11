@@ -88,8 +88,8 @@ PID=$!
 
 say "Waiting for kernel to be ready..."
 for i in $(seq 1 30); do
-  if curl -s "http://127.0.0.1:3030/health" >/dev/null 2>&1; then
-    say "Tylluan is running at http://127.0.0.1:3030"
+  if curl -s "http://127.0.0.1:4000/health" >/dev/null 2>&1; then
+    say "Tylluan is running at http://127.0.0.1:4000"
     break
   fi
   if [ "$i" -eq 30 ]; then
@@ -106,18 +106,18 @@ say "  Claude Desktop (~/.claude/claude_desktop_config.json):"
 echo '  {'
 echo '    "mcpServers": {'
 echo '      "tylluan": { "type": "sse",'
-echo '        "url": "http://127.0.0.1:3030/sse" }'
+echo '        "url": "http://127.0.0.1:4000/sse" }'
 echo '    }'
 echo '  }'
 say ""
 say "  Claude Code:"
-say '    /mcp add tylluan sse http://127.0.0.1:3030/sse'
+say '    /mcp add tylluan sse http://127.0.0.1:4000/sse'
 say ""
 say "  Cursor:"
-say "    Add MCP server: http://127.0.0.1:3030/sse"
+say "    Add MCP server: http://127.0.0.1:4000/sse"
 say ""
 say "  curl (verify):"
-say "    curl http://127.0.0.1:3030/health"
+say "    curl http://127.0.0.1:4000/health"
 say ""
 say "Getting started:"
 say "  tylluan start    Start the Tylluan kernel"
