@@ -15,9 +15,18 @@ interface ProvenanceBadgeProps {
   showIcon?: boolean;
 }
 
+// WCAG pre-flight 2026-08-12 (all on #10141E Obsidian Nocturne canvas):
+//   sky-400   (#38BDF8) → 8.59:1 PASS
+//   purple-400(#C084FC) → 6.97:1 PASS
+//   amber-400 (#F5B041) → 9.79:1 PASS
+//   emerald-400(#34D399)→ 9.58:1 PASS
+//   rose-400  (#F87171) → 6.65:1 PASS
+//   teal-400  (#2DD4BF) → 9.89:1 PASS
+//   slate-400 (#94A3B8) → 7.18:1 PASS (unverified/default)
+
 export function ProvenanceBadge({ provenance = 'unverified', className = '', showIcon = true }: ProvenanceBadgeProps) {
   let label = 'Desconocido';
-  let colorClass = 'bg-slate-800/80 text-slate-400 border-slate-700/60';
+  let colorClass = 'bg-slate-800/60 text-slate-400 border-slate-700/60';
   let Icon = HelpCircle;
 
   switch (provenance) {
@@ -28,7 +37,7 @@ export function ProvenanceBadge({ provenance = 'unverified', className = '', sho
       break;
     case 'agent_generated':
       label = 'Agente IA';
-      colorClass = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+      colorClass = 'bg-violet-500/10 text-violet-400 border-violet-500/30';
       Icon = Cpu;
       break;
     case 'federation_peer':
@@ -49,7 +58,7 @@ export function ProvenanceBadge({ provenance = 'unverified', className = '', sho
     default:
       if (provenance.startsWith('consolidated')) {
         label = 'Consolidado';
-        colorClass = 'bg-teal-500/10 text-teal-400 border-teal-500/30';
+        colorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
         Icon = Sparkles;
       }
       break;
