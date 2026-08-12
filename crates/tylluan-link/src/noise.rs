@@ -36,6 +36,25 @@ fn node_id_from_ed25519_bytes(pubkey: &[u8; 32]) -> String {
     hex::encode(&Sha256::digest(pubkey)[..16])
 }
 
+/// Convert an Ed25519 public key (hex) to its X25519 Montgomery form (hex).
+/// This is the reverse-mapping the Noise XK *responder* needs: it learns the
+/// initiator's X25519 static key during the handshake (`get_remote_static`),
+/// but peers are stored by their Ed25519 identity. Comparing the handshake
+/// static key against `ed25519_pub_to_x25519(peer_ed_pubkey)` bindingly proves
+/// the initiator holds the Ed25519 private key of an approved peer (the X25519
+/// private key is derived from the same secret). Returns None for invalid hex
+/// or a non-canonical point.
+pub fn x25519_from_ed25519_hex(ed_hex: &str) -> Option<[u8; 32]> {
+    let bytes = hex::decode(ed_hex).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    let pk = VerifyingKey::from_bytes(&arr).ok()?;
+    Some(ed25519_pub_to_x25519(&pk))
+}
+
 // ─── Stateless NK payload encryption (for HTTP federation) ──────────────
 
 const NK_PARAMS: &str = "Noise_NK_25519_ChaChaPoly_BLAKE2s";
@@ -375,6 +394,25 @@ mod tests {
         let node_id = node_id_from_ed25519_bytes(&arr);
         assert_eq!(node_id.len(), 32, "node_id must be 32 hex chars (16 bytes)");
         assert!(node_id.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_x25519_from_ed25519_hex_matches_direct_conversion() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let pk = sk.verifying_key();
+        let ed_hex = hex::encode(pk.to_bytes());
+        let x = x25519_from_ed25519_hex(&ed_hex).expect("valid hex");
+        assert_eq!(x, ed25519_pub_to_x25519(&pk));
+    }
+
+    #[test]
+    fn test_x25519_from_ed25519_hex_rejects_bad_input() {
+        // Invalid hex
+        assert!(x25519_from_ed25519_hex("zzzz").is_none());
+        // Wrong length
+        assert!(x25519_from_ed25519_hex("deadbeef").is_none());
+        // Empty string
+        assert!(x25519_from_ed25519_hex("").is_none());
     }
 
     #[tokio::test]

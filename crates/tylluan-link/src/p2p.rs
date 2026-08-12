@@ -143,12 +143,34 @@ pub async fn execute_remote_tcp(
 /// Async handler for inbound P2P dispatch requests.
 pub type P2pHandlerFn = Arc<dyn Fn(GuildDispatchRequest) -> Pin<Box<dyn Future<Output = GuildDispatchResponse> + Send>> + Send + Sync + 'static>;
 
+/// Provider of approved peers' X25519 static keys for the responder side.
+/// Returned list may be empty (fail-closed: nothing executes). In production
+/// the kernel derives these from `peers.db` Ed25519 pubkeys of approved peers
+/// via `noise::x25519_from_ed25519_hex`; a closure allows runtime updates
+/// (approving a peer does not require a listener restart).
+pub type ApprovedPeersFn = Arc<dyn Fn() -> Vec<[u8; 32]> + Send + Sync + 'static>;
+
+fn peer_is_approved(remote_x25519_hex: &str, approved: &[[u8; 32]]) -> bool {
+    let Ok(remote) = hex::decode(remote_x25519_hex) else {
+        return false;
+    };
+    remote.len() == 32
+        && approved
+            .iter()
+            .any(|expected| expected.as_slice() == remote.as_slice())
+}
+
 /// Start a P2P listener that accepts Noise XK connections and handles GuildDispatchRequest.
+/// Only calls `handler` for peers whose X25519 static key (learned during the
+/// handshake) matches one of the approved keys from `approved_x25519`.
+/// Unapproved peers get an encrypted error response and the connection is
+/// closed BEFORE any request is read or executed (no guild callback).
 /// Returns a JoinHandle and the bound SocketAddr (useful when port=0 for dynamic assignment).
 pub async fn start_p2p_listener_noise(
     addr: SocketAddr,
     identity: Arc<NodeIdentity>,
     handler: P2pHandlerFn,
+    approved_x25519: ApprovedPeersFn,
 ) -> tokio::io::Result<(tokio::task::JoinHandle<()>, SocketAddr)> {
     let listener = TcpListener::bind(addr).await?;
     let bound_addr = listener.local_addr()?;
@@ -159,6 +181,7 @@ pub async fn start_p2p_listener_noise(
                 Ok((mut stream, peer_addr)) => {
                     let id = identity.clone();
                     let h = handler.clone();
+                    let approved = approved_x25519.clone();
                     tokio::spawn(async move {
                         // Perform Noise XK handshake
                         let pipe = match noise_accept(&mut stream, &id).await {
@@ -168,6 +191,35 @@ pub async fn start_p2p_listener_noise(
                                 return;
                             }
                         };
+
+                        // Peer authorization: the initiator's X25519 static key
+                        // (pipe.peer_id) must match an approved peer's derived key.
+                        if !peer_is_approved(&pipe.peer_id, &approved()) {
+                            tracing::warn!(
+                                "P2P dispatch rejected: peer {} (x25519={}) is NOT approved",
+                                peer_addr,
+                                pipe.peer_id
+                            );
+                            let (mut _read, mut write) = stream.into_split();
+                            let mut session = pipe.session;
+                            let resp_bytes = match serde_json::to_vec(&GuildDispatchResponse {
+                                request_id: "".to_string(),
+                                success: false,
+                                result: serde_json::Value::Null,
+                                error: Some("peer not approved".to_string()),
+                                executor_id: "local".to_string(),
+                                duration_ms: 0,
+                            }) {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    tracing::warn!("serialize rejection for {}: {}", peer_addr, e);
+                                    return;
+                                }
+                            };
+                            let _ = session.async_encrypt_write(&mut write, &resp_bytes).await;
+                            return;
+                        }
+
                         let (read, write) = stream.into_split();
                         let mut session = PooledSession {
                             noise: pipe.session,
@@ -248,5 +300,155 @@ mod tests {
     fn test_dispatch_error_timeout() {
         let err = DispatchError::Timeout;
         assert_eq!(format!("{err}"), "dispatch timed out");
+    }
+
+    #[test]
+    fn test_peer_is_approved_matches_exact_key() {
+        let approved = [[7u8; 32], [9u8; 32]];
+        assert!(peer_is_approved(&hex::encode([7u8; 32]), &approved));
+        assert!(peer_is_approved(&hex::encode([9u8; 32]), &approved));
+        // Key not in the approved set
+        assert!(!peer_is_approved(&hex::encode([8u8; 32]), &approved));
+        // Invalid hex and wrong-length decodes never match
+        assert!(!peer_is_approved("zzz", &approved));
+        // Empty approved set is fail-closed
+        assert!(!peer_is_approved(&hex::encode([7u8; 32]), &[]));
+    }
+
+    fn test_identity(label: &str, counter: &std::sync::atomic::AtomicU64) -> (Arc<NodeIdentity>, std::path::PathBuf) {
+        use std::sync::atomic::Ordering;
+        let id = counter.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("tylluan_p2p_{label}_{id}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("identity.key");
+        let identity = Arc::new(NodeIdentity::load_or_create(&path).expect("identity"));
+        (identity, dir)
+    }
+
+    fn approved_set(peers: &[Arc<NodeIdentity>]) -> ApprovedPeersFn {
+        let keys: Vec<[u8; 32]> = peers
+            .iter()
+            .filter_map(|p| crate::noise::x25519_from_ed25519_hex(p.public_key_hex()))
+            .collect();
+        Arc::new(move || keys.clone())
+    }
+
+    #[tokio::test]
+    async fn test_listener_runs_handler_only_for_approved_peer() {
+        use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+        let counter = AtomicU64::new(0);
+        let (server, server_dir) = test_identity("aprv_s", &counter);
+        let (approved, approved_dir) = test_identity("aprv_a", &counter);
+        let (intruder, intruder_dir) = test_identity("aprv_i", &counter);
+
+        let server_pubkey_hex = server.public_key_hex().to_string();
+        let executed = Arc::new(AtomicUsize::new(0));
+        let handler: P2pHandlerFn = {
+            let executed = executed.clone();
+            Arc::new(move |req: GuildDispatchRequest| {
+                let executed = executed.clone();
+                Box::pin(async move {
+                    executed.fetch_add(1, Ordering::Relaxed);
+                    GuildDispatchResponse {
+                        request_id: req.request_id,
+                        success: true,
+                        result: serde_json::json!("ok"),
+                        error: None,
+                        executor_id: "local".to_string(),
+                        duration_ms: 0,
+                    }
+                })
+            })
+        };
+
+        // Approve only `approved`. `intruder` is NOT in the set.
+        let approved_set: ApprovedPeersFn = approved_set(&[approved.clone()]);
+
+        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let (handle, bound_addr) =
+            start_p2p_listener_noise(addr, server.clone(), handler, approved_set)
+                .await
+                .unwrap();
+
+        // Approved peer dispatch: handler must run.
+        let approved_pubkey = server_pubkey_hex.clone();
+        let approved_resp = {
+            let approved = approved.clone();
+            tokio::spawn(async move {
+                let mut stream = tokio::net::TcpStream::connect(bound_addr).await.unwrap();
+                let mut pipe = noise_connect(&mut stream, &approved, &approved_pubkey).await.unwrap();
+                let (mut _read, mut write) = stream.into_split();
+                let req = GuildDispatchRequest {
+                    request_id: "r-approved".into(),
+                    guild: "bash".into(),
+                    tool: "run".into(),
+                    args: serde_json::json!({}),
+                    sender_id: "approved-peer".into(),
+                    timeout_secs: Some(5),
+                };
+                pipe.session
+                    .async_encrypt_write(&mut write, &serde_json::to_vec(&req).unwrap())
+                    .await
+                    .unwrap();
+                let resp_bytes = pipe.session.async_decrypt_read(&mut _read).await.unwrap();
+                let resp: GuildDispatchResponse = serde_json::from_slice(&resp_bytes).unwrap();
+                resp
+            })
+        };
+
+        // Unapproved (intruder) peer dispatch: handler must NOT run, gets a
+        // rejection response with success=false before the loop reads a request.
+        let intruder_pubkey = server_pubkey_hex.clone();
+        let intruder_resp = {
+            let intruder = intruder.clone();
+            tokio::spawn(async move {
+                let mut stream = tokio::net::TcpStream::connect(bound_addr).await.unwrap();
+                let mut pipe = noise_connect(&mut stream, &intruder, &intruder_pubkey).await.unwrap();
+                let (mut _read, _write) = stream.into_split();
+                // The listener rejects BEFORE reading any request; emulate by
+                // only reading the rejection frame (no request is sent).
+                let resp_bytes =
+                    tokio::time::timeout(Duration::from_secs(3), pipe.session.async_decrypt_read(&mut _read))
+                        .await;
+                match resp_bytes {
+                    Ok(Ok(b)) => {
+                        let resp: GuildDispatchResponse = serde_json::from_slice(&b).unwrap();
+                        resp
+                    }
+                    _ => GuildDispatchResponse {
+                        request_id: String::new(),
+                        success: false,
+                        result: serde_json::Value::Null,
+                        error: Some("no response (timeout/err)".into()),
+                        executor_id: String::new(),
+                        duration_ms: 0,
+                    },
+                }
+            })
+        };
+
+        let approved_resp =
+            tokio::time::timeout(Duration::from_secs(5), approved_resp).await.unwrap().unwrap();
+        assert!(approved_resp.success, "approved peer should execute and succeed");
+
+        let intruder_resp =
+            tokio::time::timeout(Duration::from_secs(5), intruder_resp).await.unwrap().unwrap();
+        assert!(!intruder_resp.success, "intruder must be rejected");
+        assert!(
+            intruder_resp.error.as_deref().unwrap_or("").contains("not"),
+            "rejection should carry a 'not approved' message, got: {:?}",
+            intruder_resp.error
+        );
+
+        assert_eq!(
+            executed.load(Ordering::Relaxed),
+            1,
+            "handler must run exactly once (only the approved peer)"
+        );
+
+        handle.abort();
+        let _ = std::fs::remove_dir_all(&server_dir);
+        let _ = std::fs::remove_dir_all(&approved_dir);
+        let _ = std::fs::remove_dir_all(&intruder_dir);
     }
 }
