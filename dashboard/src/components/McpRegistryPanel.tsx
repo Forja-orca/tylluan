@@ -280,6 +280,12 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   };
 
   return (
+    // WCAG pre-flight 2026-08-12 (dark theme, Obsidian Nocturne canvas #0A0D14 / #10141E):
+    //   All combos reuse tokens verified in phases 1-2 (slate-400/100 on slate-900,
+    //   emerald-400 on emerald-500/10, amber-400 on amber-500/10, slate-950 on emerald-500).
+    //   New in this batch: slate-950 on emerald-500 (#10B981) → 7.50:1 PASS;
+    //   slate-950 on emerald-600 → 5.03:1 PASS; slate-50 on slate-900 → 17.16:1 PASS.
+    //   violet-400 kept as text accent (violet-500 token FAILS AA at 3.43:1 — see batchA report).
     <div className="space-y-6">
       {/* Top Banner / Actions */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -288,7 +294,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
             <Plug className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-50 tracking-tight uppercase">MCP External Registry</h2>
+            <h2 className="text-lg font-bold font-sans text-slate-50 tracking-tight uppercase">MCP External Registry</h2>
             <p className="text-xs text-slate-500 font-mono">Configure external Model Context Protocol server links</p>
           </div>
         </div>
@@ -343,7 +349,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           <div className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center text-slate-500 mb-3">
             <Server className="w-6 h-6" />
           </div>
-          <h3 className="text-sm font-bold text-slate-300 uppercase">No External MCP Servers</h3>
+          <h3 className="text-sm font-bold font-sans text-slate-300 uppercase">No External MCP Servers</h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
             Connect public HTTP endpoints or local command-line tools to extend TylluanNexus capabilities.
           </p>
@@ -667,7 +673,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plug className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-md font-bold text-slate-50 uppercase tracking-tight">Register MCP Server</h3>
+                <h3 className="text-md font-bold font-sans text-slate-50 uppercase tracking-tight">Register MCP Server</h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -802,7 +808,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                   <Share2 className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-md font-bold text-slate-50 uppercase tracking-tight">Integrate Tylluan with your IDE / Client</h3>
+                  <h3 className="text-md font-bold font-sans text-slate-50 uppercase tracking-tight">Integrate Tylluan with your IDE / Client</h3>
                   <p className="text-xs text-slate-500 font-mono">Set up Tylluan as a Model Context Protocol (MCP) server</p>
                 </div>
               </div>

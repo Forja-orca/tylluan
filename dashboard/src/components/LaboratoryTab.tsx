@@ -103,21 +103,24 @@ export function LaboratoryTab({ bridge, notify }: Props) {
     );
   }
 
+  // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
+  //  violet-400 on violet-500/15: 6.20:1 (chip) · on /10: 6.55:1 (widget) · violet-400 on slate-950 7.14:1
+  //  violet-300 title 10.53:1 · red-400 on red-500/20: 5.32:1 (rejected chip) · emerald-400 on emerald-500/10: 8.14:1
   return (
     <div className="space-y-6">
       {/* Header Widget */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gradient-to-r from-slate-900 via-indigo-950/20 to-slate-900 border border-slate-800 rounded-3xl gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gradient-to-r from-slate-900 via-indigo-600/10 to-slate-900 border border-slate-800 rounded-3xl gap-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center border border-indigo-500/30 text-indigo-400">
             <Beaker className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-50 tracking-tight flex items-center gap-2">
+            <h2 className="text-lg font-bold font-sans text-slate-50 tracking-tight flex items-center gap-2">
               AutoResearch Calibration Lab
               <span className={cn(
                 "text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded-full border",
                 data.status === "Running" 
-                  ? "bg-purple-950/50 border-purple-500/40 text-purple-400 animate-pulse"
+                  ? "bg-violet-500/15 border-violet-500/40 text-violet-400 animate-pulse"
                   : "bg-slate-900 border-slate-800 text-slate-500"
               )}>
                 {data.status}
@@ -167,7 +170,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
         {/* Metric Comparison Panel */}
         <div className="lg:col-span-2 space-y-6">
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-emerald-400" />
               Métricas de Recuperación: Baseline vs Calibrado
             </h3>
@@ -242,22 +245,22 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
           {/* Active Mutation Widget */}
           {data.status === "Running" && data.current_mutation && (
-            <div className="p-6 bg-purple-950/20 border border-purple-500/20 rounded-2xl animate-pulse">
-              <h3 className="text-sm font-bold text-purple-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-purple-400" />
+            <div className="p-6 bg-violet-500/10 border border-violet-500/20 rounded-2xl animate-pulse">
+              <h3 className="text-sm font-bold font-sans text-violet-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-violet-400" />
                 Mutación en Progreso Activo
               </h3>
               
-              <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950/60 p-4 border border-purple-500/10 rounded-xl gap-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950/60 p-4 border border-violet-500/10 rounded-xl gap-4">
                 <div className="space-y-1">
-                  <div className="text-xs font-mono text-purple-400 font-bold">{data.current_mutation.id}</div>
+                  <div className="text-xs font-mono text-violet-400 font-bold">{data.current_mutation.id}</div>
                   <div className="text-sm text-slate-50 font-bold">{data.current_mutation.target}</div>
                 </div>
                 
                 <div className="flex items-center gap-4 text-sm font-mono bg-slate-900 px-4 py-2 rounded-lg border border-slate-800">
                   <div className="text-slate-500">original: <span className="text-slate-50 font-bold">{data.current_mutation.original_val}</span></div>
-                  <ArrowRight className="w-4 h-4 text-purple-400" />
-                  <div className="text-purple-400 font-bold">trial: {data.current_mutation.mutated_val}</div>
+                  <ArrowRight className="w-4 h-4 text-violet-400" />
+                  <div className="text-violet-400 font-bold">trial: {data.current_mutation.mutated_val}</div>
                 </div>
               </div>
             </div>
@@ -265,7 +268,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
           {/* Lineage Tree Visualization */}
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <GitBranch className="w-4 h-4 text-indigo-400" />
               Historial de Calibración & Lineaje (Commit/Revert)
             </h3>
@@ -295,8 +298,8 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     <span className={cn(
                       "text-[9px] uppercase font-mono tracking-wider font-bold px-2 py-0.5 rounded-md border",
                       item.status === "Committed"
-                        ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400"
-                        : "bg-red-950/40 border-red-500/20 text-red-400"
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                        : "bg-red-500/20 border-red-500/20 text-red-400"
                     )}>
                       {item.status}
                     </span>
@@ -316,7 +319,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
         {/* Configurations & Targets Panel */}
         <div className="space-y-6">
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Settings className="w-4 h-4 text-indigo-400" />
               Parámetros Bajo Calibración
             </h3>
@@ -401,7 +404,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           </div>
 
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Clock className="w-4 h-4 text-emerald-400" />
               Gating de Homeostasia
             </h3>

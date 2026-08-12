@@ -172,10 +172,13 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
     return globalSessions || [];
   }, [capabilities, globalSessions]);
 
+  // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
+  //  slate-50 on slate-900 17.16:1 · header gradient worst (emerald-700/30): 12.91:1 · hover slate-850 15.98:1
+  //  violet-400 (purple->violet map): 7.14:1 on slate-950 · emerald-400 on emerald-500/10: 8.14-9.00:1
   return (
     <div className="space-y-6 p-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-900/30 via-slate-900/80 to-slate-950/80 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+      <div className="bg-gradient-to-r from-emerald-700/30 via-slate-900/80 to-slate-950/80 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden shadow-xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="space-y-2">
           <div className="flex items-center gap-3">
@@ -183,7 +186,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <Link2 className="w-5 h-5 text-slate-950" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-50 tracking-tight">Connectors & Discovery</h1>
+              <h1 className="text-2xl font-black font-sans text-slate-50 tracking-tight">Connectors & Discovery</h1>
               <p className="text-xs text-emerald-400/80 font-mono tracking-wider uppercase">Milestone M24 Sovereign Integrations</p>
             </div>
           </div>
@@ -369,10 +372,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Col: Sovereign Contract */}
             <div className="space-y-4">
-              <div className="p-5 bg-gradient-to-br from-emerald-950/25 to-slate-900/50 border border-emerald-500/20 rounded-2xl shadow-md">
+              <div className="p-5 bg-gradient-to-br from-emerald-700/25 to-slate-900/50 border border-emerald-500/20 rounded-2xl shadow-md">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-4.5 h-4.5 text-emerald-400" />
-                  <h3 className="text-sm font-black text-slate-50 tracking-wide uppercase">Sovereign Contract (5 Tools)</h3>
+                  <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Sovereign Contract (5 Tools)</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
                   CONTRACT-01 guarantees that clients always see exactly these 5 tools. Any guild work is requested through them, preventing context overload.
@@ -394,7 +397,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <div className="p-5 bg-slate-900/30 border border-slate-800 rounded-2xl space-y-4">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-black text-slate-50 uppercase tracking-wider">MCP Discovery Registry</h3>
+                  <h3 className="text-xs font-black font-sans text-slate-50 uppercase tracking-wider">MCP Discovery Registry</h3>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -410,7 +413,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Resources Catalog</div>
                     {capabilities?.mcp.resources.map((r) => (
                       <div key={r.uri} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg space-y-1">
-                        <div className="text-xs font-mono text-purple-400 truncate">{r.uri}</div>
+                        <div className="text-xs font-mono text-violet-400 truncate">{r.uri}</div>
                         <div className="text-[10px] text-slate-300 font-medium">{r.name}</div>
                         <div className="text-[9px] text-slate-500">{r.description}</div>
                       </div>
@@ -426,7 +429,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Cpu className="w-4.5 h-4.5 text-blue-400" />
-                    <h3 className="text-sm font-black text-slate-50 tracking-wide uppercase">Active Guild Modules</h3>
+                    <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Active Guild Modules</h3>
                   </div>
                   <span className="text-xs text-slate-500 font-mono">Total Underlying Tools: {capabilities?.all_guild_tools.length ?? 0}</span>
                 </div>
@@ -438,7 +441,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       className={cn(
                         "p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 bg-slate-950/40",
                         g.running 
-                          ? "border-emerald-500/20 shadow-emerald-950/5" 
+                          ? "border-emerald-500/20 shadow-emerald-700/10" 
                           : "border-slate-800"
                       )}
                     >
@@ -504,7 +507,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
                   guideTab === 'cursor' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-950/20 border-emerald-500/30 text-white shadow-md" 
+                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -517,7 +520,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
                   guideTab === 'vscode' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-950/20 border-emerald-500/30 text-white shadow-md" 
+                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -530,7 +533,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
                   guideTab === 'claude' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-950/20 border-emerald-500/30 text-white shadow-md" 
+                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -543,7 +546,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all font-bold text-xs uppercase tracking-wide flex items-center justify-between",
                   guideTab === 'custom' 
-                    ? "bg-gradient-to-r from-slate-900 to-emerald-950/20 border-emerald-500/30 text-white shadow-md" 
+                    ? "bg-gradient-to-r from-slate-900 to-emerald-700/20 border-emerald-500/30 text-slate-50 shadow-md" 
                     : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-850/30"
                 )}
               >
@@ -557,7 +560,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'cursor' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Cursor MCP Integration</h3>
+                    <h3 className="text-base font-bold font-sans text-slate-50 tracking-tight">Cursor MCP Integration</h3>
                     <p className="text-xs text-slate-400">Configure Cursor to connect to Tylluan's sovereign hub using standard MCP Stdio Client.</p>
                   </div>
 
@@ -573,7 +576,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       <span>Add this entry inside <code>project.json</code> or global Cursor config:</span>
                       <button 
                         onClick={() => handleCopy(cursorConfig, 'Cursor Config')}
-                        className="flex items-center gap-1 hover:text-white transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
                       >
                         {copiedText === 'Cursor Config' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copy Code</span>
@@ -593,7 +596,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'vscode' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-slate-50 tracking-tight">VS Code (Cline / Roo Code) Configuration</h3>
+                    <h3 className="text-base font-bold font-sans text-slate-50 tracking-tight">VS Code (Cline / Roo Code) Configuration</h3>
                     <p className="text-xs text-slate-400">Add TylluanNexus as a custom MCP server inside Cline or Roo Code extension settings.</p>
                   </div>
 
@@ -602,7 +605,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       <span>Add this configuration to your <code>cline_mcp_settings.json</code>:</span>
                       <button 
                         onClick={() => handleCopy(clineConfig, 'VS Code Config')}
-                        className="flex items-center gap-1 hover:text-white transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
                       >
                         {copiedText === 'VS Code Config' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copy Code</span>
@@ -627,7 +630,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'claude' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Claude Desktop Integration</h3>
+                    <h3 className="text-base font-bold font-sans text-slate-50 tracking-tight">Claude Desktop Integration</h3>
                     <p className="text-xs text-slate-400">Integrate TylluanNexus into the official Anthropic Claude Desktop client.</p>
                   </div>
 
@@ -636,7 +639,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       <span>Add this server entry inside your <code>claude_desktop_config.json</code>:</span>
                       <button 
                         onClick={() => handleCopy(claudeConfig, 'Claude Desktop Config')}
-                        className="flex items-center gap-1 hover:text-white transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
                       >
                         {copiedText === 'Claude Desktop Config' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copy Code</span>
@@ -652,7 +655,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               {guideTab === 'custom' && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-base font-bold text-slate-50 tracking-tight">Custom REST Client / Script Integration</h3>
+                    <h3 className="text-base font-bold font-sans text-slate-50 tracking-tight">Custom REST Client / Script Integration</h3>
                     <p className="text-xs text-slate-400">Call TylluanNexus directly via HTTP REST API from custom shell scripts, Python programs, or fetch calls.</p>
                   </div>
 
@@ -661,7 +664,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       <span>Example cURL request to execute an intent:</span>
                       <button 
                         onClick={() => handleCopy(restCurl, 'cURL command')}
-                        className="flex items-center gap-1 hover:text-white transition-colors"
+                        className="flex items-center gap-1 hover:text-slate-50 transition-colors"
                       >
                         {copiedText === 'cURL command' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>Copy Code</span>
