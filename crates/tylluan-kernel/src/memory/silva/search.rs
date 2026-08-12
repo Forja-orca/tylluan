@@ -246,6 +246,20 @@ impl super::SilvaDB {
 
         let mut final_results: Vec<(GraphNode, f32)> = rrf_scores.into_values().collect();
 
+        // ASI06: exclude quarantined nodes from recall. Filtered here (post-fusion,
+        // single query) rather than in each of the 3 upstream sources (vector/graph/
+        // BM25-LIKE) -- one choke point, can't be missed by adding a 4th source later.
+        // Quarantined content stays in SilvaDB for manual review, it just never
+        // surfaces through tylluan_recall.
+        if !final_results.is_empty() {
+            let quarantined_ids = self.quarantined_ids_among(
+                &final_results.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>()
+            ).await.unwrap_or_default();
+            if !quarantined_ids.is_empty() {
+                final_results.retain(|(node, _)| !quarantined_ids.contains(&node.id));
+            }
+        }
+
         // Apply post-RRF type filter if provided
         if let Some(filter) = type_filter {
             final_results.retain(|(node, _)| node.node_type.to_lowercase() == filter.to_lowercase());
@@ -424,5 +438,69 @@ impl super::SilvaDB {
             for row in rows { results.push(row?); }
             Ok(results)
         })
+    }
+
+    /// ASI06: given a set of node ids, return which of them are currently
+    /// quarantined. Used by `search_hybrid` as a single post-fusion filter
+    /// point instead of threading the check through every candidate source.
+    pub(crate) async fn quarantined_ids_among(&self, ids: &[String]) -> Result<std::collections::HashSet<String>> {
+        if ids.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        let ids = ids.to_vec();
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT id FROM nodes WHERE quarantined = 1 AND id IN ({placeholders})");
+            let mut stmt = conn.prepare(&sql)?;
+            let params_slice: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            let rows = stmt.query_map(params_slice.as_slice(), |row| row.get::<_, String>(0))?;
+            let mut out = std::collections::HashSet::new();
+            for row in rows { out.insert(row?); }
+            Ok(out)
+        })
+    }
+}
+
+#[cfg(test)]
+mod asi06_tests {
+    use super::super::SilvaDB;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn quarantined_ids_among_returns_only_quarantined() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("n1", "note", "safe content", "{}").await.unwrap();
+        db.upsert_node("n2", "note", "flagged content", "{}").await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET quarantined = 1 WHERE id = 'n2'", []).unwrap();
+        });
+
+        let ids = db.quarantined_ids_among(&["n1".to_string(), "n2".to_string()]).await.unwrap();
+        assert!(!ids.contains("n1"));
+        assert!(ids.contains("n2"));
+        assert_eq!(ids.len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn quarantined_ids_among_empty_input_returns_empty() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let ids = db.quarantined_ids_among(&[]).await.unwrap();
+        assert!(ids.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn search_hybrid_excludes_quarantined_nodes_from_bm25_path() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("keep", "note", "tylluan sovereign memory design", "{}").await.unwrap();
+        db.upsert_node("quarantined", "note", "tylluan sovereign memory design flagged", "{}").await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET quarantined = 1 WHERE id = 'quarantined'", []).unwrap();
+        });
+
+        let results = db.search_hybrid("tylluan sovereign memory design", None, 10, None, true).await.unwrap();
+        assert!(results.iter().any(|(n, _)| n.id == "keep"));
+        assert!(!results.iter().any(|(n, _)| n.id == "quarantined"), "quarantined node must not appear in recall results");
     }
 }

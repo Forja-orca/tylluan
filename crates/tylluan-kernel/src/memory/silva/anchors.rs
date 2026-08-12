@@ -150,14 +150,17 @@ impl super::SilvaDB {
         })
     }
 
-    /// Get all shareable local nodes (excludes nodes received from federation to prevent echo loops).
+    /// Get all shareable local nodes (excludes nodes received from federation to
+    /// prevent echo loops, and ASI06-quarantined nodes -- a node the write-gate
+    /// judge flagged as suspicious must never propagate to peers, even though it
+    /// stays readable locally for manual review).
     pub async fn get_shareable_nodes(&self) -> Result<Vec<GraphNode>> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let mut stmt = conn.prepare(
                 "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, valid_from, valid_until, shareable, provenance
                  FROM nodes
-                 WHERE shareable = 1 AND federation_source IS NULL"
+                 WHERE shareable = 1 AND federation_source IS NULL AND quarantined = 0"
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(GraphNode {
@@ -267,5 +270,29 @@ impl super::SilvaDB {
             tracing::info!("🌱 Anchor reembed: {}/{} embeddings generated", done, total);
         }
         Ok(done)
+    }
+}
+
+#[cfg(test)]
+mod asi06_shareable_tests {
+    use super::super::SilvaDB;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn get_shareable_nodes_excludes_quarantined() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("shareable_ok", "note", "safe content", "{}").await.unwrap();
+        db.upsert_node("shareable_quarantined", "note", "flagged content", "{}").await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET shareable = 1 WHERE id IN ('shareable_ok', 'shareable_quarantined')", []).unwrap();
+            conn.execute("UPDATE nodes SET quarantined = 1 WHERE id = 'shareable_quarantined'", []).unwrap();
+        });
+
+        let shareable = db.get_shareable_nodes().await.unwrap();
+        assert!(shareable.iter().any(|n| n.id == "shareable_ok"));
+        assert!(
+            !shareable.iter().any(|n| n.id == "shareable_quarantined"),
+            "a quarantined node must never be shareable to federation peers"
+        );
     }
 }
