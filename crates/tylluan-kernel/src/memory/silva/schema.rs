@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 20;
+            const SCHEMA_VERSION: i32 = 21;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -226,6 +226,18 @@ impl super::SilvaDB {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN evidence_url TEXT", []);
                 tracing::info!("🌲 SilvaDB: added source/author/evidence_url columns (v20, M40-P4)");
             }
+            if schema_version < 21 {
+                // ASI06: ingestion-time coherence gate for tylluan_remember. Deliberately
+                // orthogonal to `status`/`memory_status()` (confidence-over-time) --
+                // quarantine is a security/coherence-at-write-time signal, a node can be
+                // `confirmed` in memory_status and `quarantined=1` at the same time, they
+                // answer different questions. Defaults to 0 (not quarantined) so existing
+                // nodes are unaffected. `quarantine_reason` is nullable: NULL means never
+                // quarantined or reason not recorded.
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0", []);
+                let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantine_reason TEXT", []);
+                tracing::info!("🌲 SilvaDB: added quarantined/quarantine_reason columns (v21, ASI06)");
+            }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
                 tracing::info!("🌲 SilvaDB schema migrado a v{}", SCHEMA_VERSION);
@@ -237,6 +249,7 @@ impl super::SilvaDB {
                  CREATE INDEX IF NOT EXISTS idx_nodes_updated ON nodes(updated_at);
                  CREATE INDEX IF NOT EXISTS idx_nodes_topic ON nodes(topic_key);
                  CREATE INDEX IF NOT EXISTS idx_nodes_conflicted ON nodes(conflicted);
+                 CREATE INDEX IF NOT EXISTS idx_nodes_quarantined ON nodes(quarantined);
                  CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source);
                  CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target);
 

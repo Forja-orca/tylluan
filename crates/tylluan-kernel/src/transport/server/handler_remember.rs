@@ -51,6 +51,22 @@ pub async fn handle_tylluan_remember(
     if raw_content.trim().is_empty() {
         return Ok(error_result("tylluan_remember requires a non-empty 'content' argument."));
     }
+
+    // ASI06 Layer 1: reject known injection patterns before ANYTHING else --
+    // before Coloquio post, before DCR, before any write. Same pattern list
+    // `tylluan_recall` already uses to eliminate results silently (never
+    // penalized, never returned) -- there is no legitimate use case for
+    // content matching these patterns, so ingestion gets the same severity
+    // as recall: hard rejection, not quarantine. Checked against raw_content
+    // (pre-wrapper-cleaning) so a wrapper can't be used to smuggle a pattern
+    // past a post-clean check.
+    if crate::security::poison_patterns::matches_injection_pattern(&raw_content) {
+        tracing::warn!("🛡️ tylluan_remember rejected: content matches a known injection pattern (ASI06 Layer 1)");
+        return Ok(error_result(
+            "ACCESS_DENIED: content matches a known prompt-injection pattern and was rejected before being written to memory."
+        ));
+    }
+
     let content = clean_operational_wrapper(&raw_content);
     let coloquio_post = if content.starts_with("@coloquio:") {
         let rest = content.strip_prefix("@coloquio:").unwrap_or("");
@@ -217,6 +233,13 @@ pub async fn handle_tylluan_remember(
             let mgr = crate::memory::agent_memory::AgentMemoryManager::new(server.silva.clone(), 20);
             mgr.record_memory(aid, &content, importance).await
         };
+
+        // ASI06 Layer 2: fire-and-forget LLM judge, runs after the node already
+        // exists. Does not block this response and never fails the write --
+        // Layer 1 (above, before any write) already rejected known injection
+        // patterns hard; this is the softer, slower net for content that isn't
+        // a known pattern but still reads as manipulative to a real judge.
+        crate::security::write_gate::spawn_write_gate_judge(server.silva.clone(), nid.clone(), content.clone());
 
         if importance > 0.7
             && let Ok(mut h) = server.hormones.lock() {

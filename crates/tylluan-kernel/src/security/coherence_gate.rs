@@ -110,7 +110,11 @@ fn resolve_self_auth_token() -> Option<String> {
 }
 
 /// Call llama_backend with grammar-constrained output for hybrid classification.
-async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
+/// `pub(crate)`: reused by ASI06's write-path judge (`security::write_gate`) so
+/// it doesn't duplicate the self-auth-token HTTP-call plumbing and risk
+/// re-introducing the missing-Authorization-header bug fixed on this exact
+/// function 2026-08-12.
+pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:4000".to_string());
 
