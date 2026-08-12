@@ -350,6 +350,15 @@ pub fn sanitize_query(query: &str) -> String {
 }
 
 /// Extracts auth token from HeaderMap or query string.
+///
+/// The query-string fallback (`?token=` / `?Authorization=`) exists only for
+/// SSE clients (dashboard, some MCP clients) that cannot set a custom header
+/// on an `EventSource` connection. External audit (2026-08-12) correctly
+/// flagged this as a real exposure surface: a query-string token ends up in
+/// reverse-proxy access logs and browser history in a way a header never
+/// does. `sanitize_query()` already redacts it from *our own* logs; the
+/// `warn!` below makes every other use visible in the operator's own logs
+/// too, so the header path stays the one to actually prefer.
 pub fn extract_token(headers: &HeaderMap, query: &str) -> Option<String> {
     headers
         .get("authorization")
@@ -360,6 +369,11 @@ pub fn extract_token(headers: &HeaderMap, query: &str) -> Option<String> {
             query.split('&').find_map(|pair| {
                 if let Some((k, v)) = pair.split_once('=') {
                     if k == "token" || k == "Authorization" {
+                        warn!(
+                            "extract_token(): auth token supplied via query string, not header -- \
+                             this leaks into reverse-proxy access logs and browser history. \
+                             Prefer 'Authorization: Bearer <token>' where the client can set it."
+                        );
                         if let Ok(decoded) = urlencoding::decode(v) {
                             Some(decoded.into_owned())
                         } else {
@@ -594,5 +608,19 @@ mod tests {
 
         let role = resolve_acl_role_inner(Some("tok"), Some("any-agent"), &acl, &contract);
         assert_eq!(role, "viewer", "empty contract must not apply any role");
+    }
+
+    #[test]
+    fn test_current_acl_role_falls_back_to_admin_outside_scope() {
+        // External audit (2026-08-12) flagged current_acl_role()'s fallback to
+        // "admin" when ACL_ROLE is unset as a footgun -- not exploitable today
+        // (every real HTTP caller sits behind bearer_auth_middleware, which
+        // always scopes ACL_ROLE first), but only a test pins that behavior
+        // down so a future caller added outside the protected router doesn't
+        // silently inherit the admin default without anyone noticing.
+        //
+        // Calling current_acl_role() here, with no ACL_ROLE.scope(...) active,
+        // reproduces exactly the "unset" case documented on the function.
+        assert_eq!(current_acl_role(), "admin");
     }
 }
