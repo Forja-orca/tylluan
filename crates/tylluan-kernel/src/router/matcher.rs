@@ -918,6 +918,9 @@ mod tests {
         // semantics says "git" (sem 0.6 → blended 0.33). Gap 0.05 ≤ 0.15 and
         // sem(git)=0.6 > sem(docker)=0.15 → tiebreaker flips to git.
         // Without the tiebreaker the result would be docker.
+        // El tiebreak loguea al audit path: tomar el mutex global de DB de test
+        // (compartido con friction_log/llm_examples) para no pisar su path.
+        let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap();
         crate::security::friction_log::set_unique_test_db();
         let mut matcher = test_matcher();
         matcher.set_embeddings(vec![
