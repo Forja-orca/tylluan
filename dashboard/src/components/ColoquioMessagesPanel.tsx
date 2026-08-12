@@ -240,7 +240,7 @@ export function ColoquioMessagesPanel({
       <>
         {renderDateDiv(msg, prev)}
         <div className={cn(
-          'flex group/msg rounded-lg transition-colors hover:bg-white/[0.02]',
+          'flex group/msg rounded-lg transition-colors hover:bg-foreground/[0.02]',
           compactMode ? 'gap-1.5 py-0.5 px-1' : 'gap-2.5 py-1 px-2.5',
           isHuman ? 'flex-row-reverse' : ''
         )}>
@@ -316,7 +316,7 @@ export function ColoquioMessagesPanel({
                             }));
                           }
                         }}
-                        className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-slate-50 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Network className="w-3 h-3" /> Visualizar en Pizarra
                       </button>
@@ -493,7 +493,7 @@ export function ColoquioMessagesPanel({
             onDrop={e => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) handleFileUpload(e.dataTransfer.files); }}
           />
           <button onClick={postMessage} disabled={posting || (!draft.trim() && !attachments.length)}
-            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-white transition-all shrink-0 shadow-lg shadow-indigo-900/30">
+            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-slate-50 transition-all shrink-0 shadow-lg shadow-indigo-900/30">
             <Send className="w-4 h-4" />
           </button>
         </div>

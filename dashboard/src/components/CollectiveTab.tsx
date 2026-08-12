@@ -198,7 +198,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
     sky:     { bg: 'bg-sky-500/10',     border: 'border-sky-500/30',     text: 'text-sky-400',     ring: 'ring-sky-500/40' },
     amber:   { bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   text: 'text-amber-400',   ring: 'ring-amber-500/40' },
     rose:    { bg: 'bg-rose-500/10',    border: 'border-rose-500/30',    text: 'text-rose-400',    ring: 'ring-rose-500/40' },
-    teal:    { bg: 'bg-teal-500/10',    border: 'border-teal-500/30',    text: 'text-teal-400',    ring: 'ring-teal-500/40' },
+    teal:    { bg: 'bg-emerald-500/10',    border: 'border-emerald-500/30',    text: 'text-emerald-400',    ring: 'ring-emerald-500/40' },
   };
 
   // Show empty state if no profiles have been registered

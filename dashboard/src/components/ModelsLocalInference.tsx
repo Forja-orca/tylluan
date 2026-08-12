@@ -303,12 +303,12 @@ export function ModelsLocalInference({
 
           <div className={cn(
             "bg-slate-950 p-3 rounded-lg flex flex-col justify-between transition-all",
-            (config?.system?.total_memory_mb ?? 16000) > 16384 ? "ring-1 ring-purple-500/30" : "opacity-70"
+            (config?.system?.total_memory_mb ?? 16000) > 16384 ? "ring-1 ring-violet-500/30" : "opacity-70"
           )}>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold font-mono text-purple-400">⚡ Tower</span>
-                <span className="text-[10px] bg-purple-500/10 text-purple-300 px-1.5 py-0.5 rounded font-mono">GPU / High RAM</span>
+                <span className="text-xs font-semibold font-mono text-violet-400">⚡ Tower</span>
+                <span className="text-[10px] bg-violet-500/10 text-violet-300 px-1.5 py-0.5 rounded font-mono">GPU / High RAM</span>
               </div>
               <p className="text-[11px] text-slate-300 font-semibold mb-1">Generativo: Gemma-4-E2B & Extensiones</p>
               <p className="text-[10px] text-slate-400 leading-relaxed">
@@ -317,7 +317,7 @@ export function ModelsLocalInference({
             </div>
             <div className="mt-3 pt-2 border-t border-slate-800/60 text-[9px] text-slate-500 font-mono flex justify-between">
               <span>tier = "tower"</span>
-              {(config?.system?.total_memory_mb ?? 16000) > 16384 && <span className="text-purple-400 font-semibold">● ACTIVO</span>}
+              {(config?.system?.total_memory_mb ?? 16000) > 16384 && <span className="text-violet-400 font-semibold">● ACTIVO</span>}
             </div>
           </div>
         </div>
@@ -585,7 +585,7 @@ export function ModelsLocalInference({
             type="button"
             onClick={handleSaveGgufConfig}
             disabled={savingGguf}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-violet-900/30"
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-slate-50 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-violet-900/30"
           >
             {savingGguf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Guardar Configuración GGUF

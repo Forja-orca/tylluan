@@ -266,7 +266,7 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
       </div>
 
       {/* iframe sandbox */}
-      <div className="flex-1 relative overflow-hidden bg-white">
+      <div className="flex-1 relative overflow-hidden bg-background">
         {srcdoc ? (
           <iframe
             ref={iframeRef}
@@ -607,7 +607,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
               </span>
               <button
                 onClick={restoreVersion}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-md cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-500 text-slate-50 text-[10px] font-semibold px-2 py-0.5 rounded-md cursor-pointer"
               >
                 Restaurar esta versión
               </button>
@@ -675,7 +675,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
             <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createDoc()}
               placeholder="Título..." className="flex-1 bg-slate-800 border border-indigo-500/40 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none min-w-0" />
-              <button onClick={createDoc} className="text-[10px] bg-indigo-600 text-white px-1.5 rounded-md cursor-pointer">✓</button>
+              <button onClick={createDoc} className="text-[10px] bg-indigo-600 text-slate-50 px-1.5 rounded-md cursor-pointer">✓</button>
           </div>
         )}
         <div className="flex-1 overflow-y-auto">
@@ -1062,7 +1062,7 @@ function KnowledgeTab({ channelId, nodes, setNodes, edges, setEdges, wsStatus, s
           </div>
 
           <button onClick={addNode} disabled={!newNodeLabel.trim()}
-            className="py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg cursor-pointer">
+            className="py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 text-xs font-semibold rounded-lg cursor-pointer">
             Añadir
           </button>
         </div>
@@ -1208,7 +1208,7 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
               {tab.icon}
               {tab.label}
               {badge > 0 && (
-                <span className="bg-indigo-600 text-white text-[9px] font-semibold px-1 rounded-full leading-none py-0.5">
+                <span className="bg-indigo-600 text-slate-50 text-[9px] font-semibold px-1 rounded-full leading-none py-0.5">
                   {badge}
                 </span>
               )}
