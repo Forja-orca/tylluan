@@ -53,7 +53,11 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
         {   let cfg = cfg_lock.read().await;
             let acl = &cfg.security.acl;
             if !acl.roles.is_empty() {
-                let role = crate::transport::http::auth::current_acl_role();
+                let Some(role) = crate::transport::http::auth::current_acl_role() else {
+                    return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                        "error": "ACL context unavailable; refusing guild access"
+                    }))).into_response();
+                };
                 if !crate::transport::http::auth::acl_can_access(&role, &guild, acl) {
                     return (StatusCode::FORBIDDEN, Json(serde_json::json!({
                         "error": format!("Role '{}' does not have access to guild '{}'", role, guild)

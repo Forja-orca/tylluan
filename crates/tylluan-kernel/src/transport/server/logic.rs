@@ -62,6 +62,26 @@ impl super::TylluanServer {
         channel: tylluan_common::types::Channel,
         _session_id: &str
     ) -> Result<CallToolResult, McpError> {
+        let Some(acl_context) = crate::transport::http::auth::context_for_channel(&channel) else {
+            return Ok(error_result(
+                "ACCESS_DENIED: ACL context unavailable for this invocation",
+            ));
+        };
+
+        crate::transport::http::auth::ACL_CONTEXT
+            .scope(
+                acl_context,
+                self.handle_call_internal_scoped(request, channel, _session_id),
+            )
+            .await
+    }
+
+    async fn handle_call_internal_scoped(
+        &self,
+        request: CallToolRequestParam,
+        channel: tylluan_common::types::Channel,
+        _session_id: &str,
+    ) -> Result<CallToolResult, McpError> {
         let tool_name = request.name.to_string();
         let risk_level = self.check_tool_risk(&tool_name).await;
         
