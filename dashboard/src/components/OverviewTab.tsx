@@ -507,7 +507,7 @@ export function OverviewTab({
                   <div className={cn("w-1.5 h-1.5 rounded-full", g.running ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-slate-700")}></div>
                   <span className="text-xs font-mono text-slate-300">{g.name}</span>
                   {(g.restarts_5m ?? 0) > 3 && (
-                    <span className="text-[7px] bg-red-500 text-white px-1 rounded-sm font-bold animate-pulse">DEGRADED</span>
+                    <span className="text-[7px] bg-red-500 text-slate-50 px-1 rounded-sm font-bold animate-pulse">DEGRADED</span>
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0">
