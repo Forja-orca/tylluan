@@ -60,23 +60,37 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors cursor-help',
+        'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-mono font-semibold tracking-wider transition-all duration-300 backdrop-blur-md cursor-help shadow-sm select-none',
         !hasRealData
-          ? 'bg-slate-900 border-slate-800 text-slate-500'
+          ? 'bg-slate-900/60 border-slate-800 text-slate-500 hover:border-slate-700'
           : isGpu
-          ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400'
-          : 'bg-slate-900 border-slate-800 text-slate-300'
+          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+          : 'bg-slate-900/80 border-amber-500/40 text-slate-200 hover:border-amber-500/60'
       )}
       title={tooltip}
     >
+      <span className="relative flex h-2 w-2 shrink-0">
+        {!hasRealData ? (
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500/60" />
+        ) : isGpu ? (
+          <>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </>
+        ) : (
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+        )}
+      </span>
+
       {!hasRealData ? (
-        <HelpCircle className="w-3 h-3" />
+        <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
       ) : isGpu ? (
-        <Zap className="w-3 h-3" />
+        <Zap className="w-3.5 h-3.5 text-emerald-400" />
       ) : (
-        <Cpu className="w-3 h-3" />
+        <Cpu className="w-3.5 h-3.5 text-amber-400" />
       )}
-      <span className="text-[10px] font-bold uppercase tracking-wider font-mono">{label}</span>
+
+      <span className="uppercase tracking-widest text-[10px] font-bold">{label}</span>
     </div>
   );
 }
