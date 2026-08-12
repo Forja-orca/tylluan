@@ -666,7 +666,11 @@ async fn resolve_and_prepare_tool_call(
         let cfg = config_lock.read().await;
         let acl = &cfg.security.acl;
         if !acl.roles.is_empty() || !acl.tokens.is_empty() {
-            let role = crate::transport::http::auth::current_acl_role();
+            let Some(role) = crate::transport::http::auth::current_acl_role() else {
+                let msg = "ACCESS_DENIED: ACL context unavailable for this invocation";
+                warn!("{}", msg);
+                return Err(error_result(msg));
+            };
             if !crate::transport::http::auth::acl_can_access(&role, &guild_name, acl) {
                 let msg = format!(
                     "ACCESS_DENIED: role '{role}' does not have access to guild '{guild_name}'. \

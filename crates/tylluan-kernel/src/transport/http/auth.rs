@@ -13,31 +13,70 @@ use crate::transport::http::HttpState;
 use crate::security::guard::ExecutionGuard;
 use crate::config::AclConfig;
 
+/// Explicit authorization context for a request or internal invocation.
+/// The absence of a context is deliberately not equivalent to `admin`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AclContext {
+    /// HTTP/SSE passed bearer authentication and has a resolved ACL role.
+    HttpAuthenticated { role: String },
+    /// The kernel's local MCP stdio channel.
+    StdioLocalTrusted,
+    /// A trusted in-process or CLI invocation.
+    InternalTrusted,
+    /// An explicit operator-selected development bypass.
+    DevBypass,
+}
+
+impl AclContext {
+    /// Resolve the role represented by this explicit context.
+    pub fn role(&self) -> Option<&str> {
+        match self {
+            Self::HttpAuthenticated { role } => Some(role.as_str()),
+            Self::StdioLocalTrusted | Self::InternalTrusted | Self::DevBypass => Some("admin"),
+        }
+    }
+}
+
 task_local! {
     /// Current ACL role for the request, set by bearer_auth_middleware.
-    /// Defaults to "admin" when no ACL is configured (stdio/local access).
+    /// Absence is not a role and is handled fail-closed.
     pub static ACL_ROLE: String;
+    /// Explicit transport/invocation context. Trusted contexts must be
+    /// installed by their boundary; it has no implicit default.
+    pub static ACL_CONTEXT: AclContext;
     /// M31-P1: Bound agent_id for the request, resolved from the bearer token.
     /// Empty if no binding is configured (backwards compatible — any agent_id allowed).
     pub static ACL_AGENT_ID: String;
 }
 
-/// Get the current request's ACL role. Returns "admin" if unset (local/stdio access).
-///
-/// Confirmed 2026-08-12 (external audit, verified in depth): every real HTTP
-/// caller of this function sits behind `bearer_auth_middleware`'s `.layer()`,
-/// which always scopes ACL_ROLE before `next.run()` -- not exploitable via
-/// HTTP today. The unset case is legitimately hit from non-HTTP callers
-/// (e.g. `tylluan_do` reached over stdio, where the whole channel is already
-/// `Channel::is_trusted()`). Logged here so a *future* caller added outside
-/// both the protected router and a trusted-channel context doesn't inherit
-/// this fallback silently -- if this fires from somewhere unexpected, that's
-/// the signal to investigate, not a normal-operation log line to ignore.
-pub fn current_acl_role() -> String {
-    ACL_ROLE.try_with(|r| r.clone()).unwrap_or_else(|_| {
-        tracing::debug!("current_acl_role(): ACL_ROLE unset, defaulting to admin (expected for stdio/local callers outside the HTTP middleware)");
-        "admin".to_string()
+/// Get the explicit current ACL context. The middleware's ACL_ROLE task-local
+/// is accepted as the authenticated HTTP context for existing protected
+/// routes; local and internal transports must install ACL_CONTEXT explicitly.
+pub fn current_acl_context() -> Option<AclContext> {
+    ACL_CONTEXT.try_with(|ctx| ctx.clone()).ok().or_else(|| {
+        ACL_ROLE.try_with(|role| AclContext::HttpAuthenticated { role: role.clone() }).ok()
     })
+}
+
+/// Get the current request's ACL role. Missing context is fail-closed.
+pub fn current_acl_role() -> Option<String> {
+    current_acl_context().and_then(|ctx| ctx.role().map(str::to_owned))
+}
+
+/// Derive the explicit ACL context required at a transport boundary.
+pub fn context_for_channel(channel: &tylluan_common::types::Channel) -> Option<AclContext> {
+    use tylluan_common::types::Channel;
+
+    match channel {
+        Channel::Stdio => Some(AclContext::StdioLocalTrusted),
+        Channel::Cli | Channel::Local => Some(AclContext::InternalTrusted),
+        Channel::Http { authenticated: true } | Channel::Sse { authenticated: true } => {
+            current_acl_role().map(|role| AclContext::HttpAuthenticated { role })
+        }
+        Channel::Http { authenticated: false }
+        | Channel::Sse { authenticated: false }
+        | Channel::Unknown(_) => None,
+    }
 }
 
 /// Get the bound agent_id for the current request.
@@ -611,16 +650,27 @@ mod tests {
     }
 
     #[test]
-    fn test_current_acl_role_falls_back_to_admin_outside_scope() {
-        // External audit (2026-08-12) flagged current_acl_role()'s fallback to
-        // "admin" when ACL_ROLE is unset as a footgun -- not exploitable today
-        // (every real HTTP caller sits behind bearer_auth_middleware, which
-        // always scopes ACL_ROLE first), but only a test pins that behavior
-        // down so a future caller added outside the protected router doesn't
-        // silently inherit the admin default without anyone noticing.
-        //
-        // Calling current_acl_role() here, with no ACL_ROLE.scope(...) active,
-        // reproduces exactly the "unset" case documented on the function.
-        assert_eq!(current_acl_role(), "admin");
+    fn test_current_acl_role_fails_closed_outside_scope() {
+        assert_eq!(current_acl_role(), None);
+        assert_eq!(current_acl_context(), None);
+    }
+
+    #[test]
+    fn test_context_for_channel_requires_authenticated_http_context() {
+        use tylluan_common::types::Channel;
+
+        assert!(context_for_channel(&Channel::Http { authenticated: false }).is_none());
+        assert!(context_for_channel(&Channel::Unknown("test".into())).is_none());
+        assert_eq!(context_for_channel(&Channel::Stdio), Some(AclContext::StdioLocalTrusted));
+        assert_eq!(context_for_channel(&Channel::Local), Some(AclContext::InternalTrusted));
+    }
+
+    #[tokio::test]
+    async fn test_explicit_trusted_context_is_required_for_admin_role() {
+        ACL_CONTEXT
+            .scope(AclContext::StdioLocalTrusted, async {
+                assert_eq!(current_acl_role().as_deref(), Some("admin"));
+            })
+            .await;
     }
 }
