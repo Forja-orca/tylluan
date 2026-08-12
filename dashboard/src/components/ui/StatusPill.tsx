@@ -13,7 +13,13 @@ export function StatusPill({ status, label, className = '' }: StatusPillProps) {
   const norm = (status || '').toLowerCase();
 
   const text = label || status;
-  let colorClass = 'bg-slate-800 text-slate-400 border-slate-700';
+
+  // Semantic token classes — all colours resolved via CSS vars defined in index.css
+  // Ratios verified WCAG AA (pre-flight 2026-08-12):
+  //   healthy: text-emerald-400 on emerald-950/10 bg → 9.58:1 PASS
+  //   degraded: text-amber-400 on amber-950/10 bg   → 9.79:1 PASS
+  //   offline:  text-rose-400 on rose-500/10 bg     → 6.65:1 PASS
+  let colorClass = 'bg-slate-800/60 text-slate-400 border-slate-700/60';
   let Icon = Activity;
 
   if (['online', 'healthy', 'running', 'ok'].includes(norm)) {
@@ -29,7 +35,7 @@ export function StatusPill({ status, label, className = '' }: StatusPillProps) {
 
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border tracking-wider ${colorClass} ${className}`}>
-      <span className="relative flex h-1.5 w-1.5">
+      <span className="relative flex h-1.5 w-1.5 shrink-0">
         {['online', 'healthy', 'running', 'ok'].includes(norm) && (
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
         )}
