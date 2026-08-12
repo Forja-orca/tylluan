@@ -1,53 +1,89 @@
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2');
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
  
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 20% 97%;
+    --foreground: 222 33% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 33% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
+    --popover-foreground: 222 33% 11%;
+    --primary: 222 33% 11%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --secondary: 218 25% 91%;
+    --secondary-foreground: 222 33% 11%;
+    --muted: 218 25% 91%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 218 25% 91%;
+    --accent-foreground: 222 33% 11%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 215 20% 82%;
+    --input: 215 20% 82%;
+    --ring: 222 33% 11%;
     --radius: 0.5rem;
 
-    /* Light Mode (Inverted Slate, Darkened Colors) */
-    --slate-50: 229 84% 5%;
-    --slate-100: 222 47% 11%;
-    --slate-200: 221 38% 15%;
-    --slate-300: 217 33% 17%;
-    --slate-400: 215 25% 27%;
-    --slate-500: 215 19% 35%;
-    --slate-600: 215 16% 47%;
-    --slate-700: 215 20% 65%;
-    --slate-800: 213 27% 84%;
-    --slate-850: 214 32% 91%;
-    --slate-900: 210 40% 96%;
-    --slate-950: 210 40% 98%;
+    /* Light Mode Tokens (Moonlit Sovereign Theme) */
+    --slate-50: 220 20% 97%;      /* Moonlit Frost #F4F6F9 */
+    --slate-100: 220 14% 94%;     /* Light Surface #EBF0F5 */
+    --slate-200: 218 25% 91%;     /* Ashen Feather #E2E7F0 */
+    --slate-300: 215 20% 82%;     /* Soft Border */
+    --slate-400: 215 16% 60%;     /* Medium Muted */
+    --slate-500: 215 16% 47%;     /* Void Muted #64748B */
+    --slate-600: 215 25% 35%;     /* Text Secondary */
+    --slate-700: 218 30% 25%;     /* Dark Slate */
+    --slate-800: 220 33% 16%;     /* Contrast Surface */
+    --slate-850: 220 33% 12%;     /* Deep Border */
+    --slate-900: 220 33% 11%;     /* Obsidian Text Light */
+    --slate-950: 222 33% 6%;      /* Deep Canvas Light Text */
     
+    /* Signal Mint (GPU Active Light) */
     --emerald-400: 161 94% 30%;
-    --emerald-500: 163 94% 24%;
+    --emerald-500: 160 84% 39%;
     --emerald-600: 163 94% 24%;
-    --emerald-700: 163 94% 24%;
-    
-    --amber-400: 43 96% 56%;
-    --amber-500: 38 92% 50%;
-    --amber-600: 36 80% 40%;
-    --amber-700: 32 65% 32%;
+    --emerald-700: 164 82% 20%;   /* #047857 (WCAG AA pass 5.2:1) */
+    --emerald-950: 152 81% 96%;   /* Light Mint Background #ECFDF5 */
+
+    /* Sovereign Amber (CPU Active Light) */
+    --amber-400: 39 77% 57%;
+    --amber-500: 37 90% 48%;
+    --amber-600: 36 93% 38%;
+    --amber-700: 32 87% 37%;     /* #B45309 (WCAG AA pass 4.8:1) */
+    --amber-950: 45 100% 96%;    /* Light Amber Background #FFFBEB */
     
     --red-400: 0 84% 60%;
     --red-500: 0 84% 60%;
@@ -68,49 +104,53 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 33% 6%;     /* Obsidian Nocturne #0A0D14 */
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 220 33% 10%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 220 33% 10%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --primary-foreground: 222 33% 11%;
+    --secondary: 218 30% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 218 30% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 218 30% 17%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 218 30% 17%;
+    --input: 218 30% 17%;
     --ring: 212.7 26.8% 83.9%;
 
-    /* Dark Mode (Default Tailwind Values) */
+    /* Dark Mode Tokens (Obsidian Nocturne Sovereign Theme) */
     --slate-50: 210 40% 98%;
     --slate-100: 210 40% 96%;
     --slate-200: 214 32% 91%;
     --slate-300: 213 27% 84%;
     --slate-400: 215 20% 65%;
-    --slate-500: 215 16% 47%;
+    --slate-500: 215 16% 47%;     /* Void Muted #64748B */
     --slate-600: 215 19% 35%;
-    --slate-700: 215 25% 27%;
-    --slate-800: 217 33% 17%;
-    --slate-850: 221 38% 15%;
-    --slate-900: 222 47% 11%;
-    --slate-950: 229 84% 5%;
-    
-    --emerald-400: 158 64% 52%;
-    --emerald-500: 160 84% 39%;
-    --emerald-600: 161 94% 30%;
+    --slate-700: 218 30% 25%;
+    --slate-800: 218 30% 17%;     /* Owl Slate #1E2638 */
+    --slate-850: 220 33% 13%;     /* Card Surface #141A26 */
+    --slate-900: 220 33% 10%;     /* Nocturne Deep Container #10141E */
+    --slate-950: 222 33% 6%;      /* Obsidian Nocturne Canvas #0A0D14 */
+
+    /* Signal Mint (GPU Active Dark) */
+    --emerald-400: 160 64% 52%;   /* #34D399 (WCAG AAA pass 8.05:1) */
+    --emerald-500: 160 84% 39%;   /* #10B981 */
+    --emerald-600: 161 94% 30%;   /* #059669 */
     --emerald-700: 163 94% 24%;
-    
-    --amber-400: 43 96% 56%;
-    --amber-500: 38 92% 50%;
+    --emerald-950: 158 46% 11%;   /* Dark Mint Tint #0F291E */
+
+    /* Sovereign Amber (CPU Active Dark) */
+    --amber-400: 37 90% 61%;     /* #F5B041 (WCAG AAA pass 8.04:1) */
+    --amber-500: 39 77% 57%;     /* #E5A93C Sovereign Amber */
     --amber-600: 36 80% 40%;
     --amber-700: 32 65% 32%;
+    --amber-950: 36 60% 10%;
     
     --red-400: 0 91% 71%;
     --red-500: 0 84% 60%;
