@@ -52,17 +52,22 @@ async fn test_p2p_noise_roundtrip() {
     });
 
     // Start listener on port 0 (dynamic)
+    let client_identity = make_identity(&tmp_dir, "client");
+    let approved_client_x: Vec<[u8; 32]> =
+        tylluan_link::noise::x25519_from_ed25519_hex(client_identity.public_key_hex())
+            .map(|k| vec![k])
+            .unwrap_or_default();
     let (handle, bound_addr) = start_p2p_listener_noise(
         "127.0.0.1:0".parse().unwrap(),
         identity_arc.clone(),
         handler,
+        Arc::new(move || approved_client_x.clone()),
     ).await.unwrap();
 
     // Give listener time to start
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Connect as client and send request
-    let client_identity = make_identity(&tmp_dir, "client");
     let mut pool = tylluan_link::p2p::P2pSessionPool::new(4, 300);
     let request = GuildDispatchRequest {
         guild: "bash".to_string(),
@@ -113,16 +118,21 @@ async fn test_p2p_error_response() {
     });
 
     // Start listener
+    let client_identity = make_identity(&tmp_dir, "client2");
+    let approved_client_x: Vec<[u8; 32]> =
+        tylluan_link::noise::x25519_from_ed25519_hex(client_identity.public_key_hex())
+            .map(|k| vec![k])
+            .unwrap_or_default();
     let (handle, bound_addr) = start_p2p_listener_noise(
         "127.0.0.1:0".parse().unwrap(),
         identity_arc.clone(),
         handler,
+        Arc::new(move || approved_client_x.clone()),
     ).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Client request
-    let client_identity = make_identity(&tmp_dir, "client2");
     let mut pool = tylluan_link::p2p::P2pSessionPool::new(4, 300);
     let request = GuildDispatchRequest {
         guild: "bash".to_string(),

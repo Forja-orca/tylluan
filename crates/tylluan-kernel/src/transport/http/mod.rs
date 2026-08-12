@@ -971,7 +971,22 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 }
             })
         });
-        match start_p2p_listener_noise(addr, identity, handler).await {
+        // M14-F Phase 3: P2P dispatch listener. Peer authorization (fix of the
+        // 2026-08-12 RCE audit): only peers whose Ed25519 pubkey is stored AND
+        // approved in peers.db can execute guilds. The Noise XK handshake
+        // reveals the initiator's X25519 static key; we compare it against the
+        // X25519 form of every approved peer's Ed25519 pubkey. Empty set =
+        // fail-closed: nothing executes even if the listener is force-enabled.
+        let p2p_peers = p2p_state.peer_db.clone();
+        let approved_x25519: tylluan_link::p2p::ApprovedPeersFn = Arc::new(move || {
+            let peers = p2p_peers.load_all().unwrap_or_default();
+            peers
+                .iter()
+                .filter(|p| p.approved && !p.ed25519_pubkey.is_empty())
+                .filter_map(|p| tylluan_link::noise::x25519_from_ed25519_hex(&p.ed25519_pubkey))
+                .collect::<Vec<[u8; 32]>>()
+        });
+        match start_p2p_listener_noise(addr, identity, handler, approved_x25519).await {
             Ok((handle, bound_addr)) => {
                 tracing::info!("P2P dispatch listener started on {}", bound_addr);
                 if let Err(e) = handle.await {

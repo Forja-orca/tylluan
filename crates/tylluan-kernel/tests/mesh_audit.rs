@@ -431,10 +431,20 @@ async fn test_kernel_remote_dispatch_routes_via_real_noise_xk_p2p() {
             }
         })
     });
+
+    let local_identity = Arc::new(NodeIdentity::load_or_create(&tmp_dir.join("local.json")).unwrap());
+    let local_pubkey_hex = local_identity.public_key_hex().to_string();
+    let approved_x25519: tylluan_link::p2p::ApprovedPeersFn = Arc::new(move || {
+        tylluan_link::noise::x25519_from_ed25519_hex(&local_pubkey_hex)
+            .map(|k| vec![k])
+            .unwrap_or_default()
+    });
+
     let (listener_handle, bound_addr) = start_p2p_listener_noise(
         "127.0.0.1:0".parse().unwrap(),
         remote_identity.clone(),
         handler,
+        approved_x25519,
     ).await.unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -460,7 +470,6 @@ async fn test_kernel_remote_dispatch_routes_via_real_noise_xk_p2p() {
         &remote_pubkey, &bound_addr.to_string(), &hw, &["test-guild".to_string()], 1,
     );
 
-    let local_identity = Arc::new(NodeIdentity::load_or_create(&tmp_dir.join("local.json")).unwrap());
     let state = dst_test_state(shared_registry, local_identity).await;
     let app = api_v1_routes().with_state(state);
 
