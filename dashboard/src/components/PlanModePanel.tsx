@@ -314,7 +314,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
               className={cn(
                 'flex items-center gap-2 px-6 py-2.5 font-mono text-xs font-bold rounded-xl transition-all disabled:opacity-50 shadow-lg',
                 planResult.would_execute.destructive
-                  ? 'bg-[#FF2E93] hover:bg-[#FF2E93]/90 text-white shadow-[#FF2E93]/20'
+                  ? 'bg-[#FF2E93] hover:bg-[#FF2E93]/90 text-slate-50 shadow-[#FF2E93]/20'
                   : 'bg-[#00F5D4] hover:bg-[#00F5D4]/90 text-slate-950 shadow-[#00F5D4]/20'
               )}
             >
