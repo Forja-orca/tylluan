@@ -58,12 +58,15 @@ export const TrustConsoleTab: React.FC = () => {
     return () => clearInterval(timer);
   }, [bridge]);
 
+  // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
+  //  emerald-400 on emerald-700/40: 6.31:1 (RUNNING cell/card) · amber-400 on amber-600/40: 5.42:1
+  //  rose-400 on rose-700/40: 4.97:1 (contradicted card) · emerald-400 on slate-900 9.59:1
   return (
     <div className="p-6 space-y-6 bg-slate-950 text-slate-100 min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3 text-amber-400">
+          <h1 className="text-2xl font-bold font-sans flex items-center gap-3 text-amber-400">
             <Shield className="w-7 h-7" /> Trust Console — Capa de Confianza & Continuidad
           </h1>
           <p className="text-sm text-slate-400 mt-1">
@@ -106,16 +109,16 @@ export const TrustConsoleTab: React.FC = () => {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">MCP Spec & Extensiones</span>
-            <Layers className="w-4 h-4 text-cyan-400" />
+            <Layers className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-xl font-mono text-cyan-400 font-bold">2026-07-28</div>
-          <div className="text-xs text-slate-400 mt-2">Extensiones: <span className="text-cyan-300">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
+          <div className="text-xl font-mono text-emerald-400 font-bold">2026-07-28</div>
+          <div className="text-xs text-slate-400 mt-2">Extensiones: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
         </div>
       </div>
 
       {/* Guild Self-Documented Contracts (M40-P1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
-        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2 mb-4">
+        <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-4">
           <FileCode className="w-5 h-5 text-amber-400" /> Contratos Autodocumentados de Guilds (M40-P1)
         </h2>
         {contracts.length === 0 ? (
@@ -136,13 +139,13 @@ export const TrustConsoleTab: React.FC = () => {
               <tbody className="divide-y divide-slate-800/60 font-mono">
                 {contracts.map((g) => (
                   <tr key={g.name} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 px-3 font-bold text-amber-300">{g.name}</td>
+                    <td className="py-2.5 px-3 font-bold text-amber-400">{g.name}</td>
                     <td className="py-2.5 px-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] ${g.running ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-800 text-slate-400'}`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] ${g.running ? 'bg-emerald-700/40 text-emerald-400 border border-emerald-700/40' : 'bg-slate-800 text-slate-400'}`}>
                         {g.running ? 'RUNNING' : 'STOPPED'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-cyan-300">
+                    <td className="py-2.5 px-3 text-emerald-400">
                       {g.required_args && g.required_args.length > 0 ? g.required_args.join(', ') : <span className="text-slate-600">ninguno</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
@@ -162,14 +165,14 @@ export const TrustConsoleTab: React.FC = () => {
 
       {/* Memory Status & Evidence Matrix (M40-P4) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
-        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2 mb-3">
-          <Activity className="w-5 h-5 text-cyan-400" /> Matriz de Estados de Memoria & Procedencia (M40-P4)
+        <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-3">
+          <Activity className="w-5 h-5 text-emerald-400" /> Matriz de Estados de Memoria & Procedencia (M40-P4)
         </h2>
         <p className="text-xs text-slate-400 mb-4">
-          Estado explícito derivado dinámicamente sobre SilvaDB en cada llamada a <span className="font-mono text-amber-300">tylluan_recall</span>:
+          Estado explícito derivado dinámicamente sobre SilvaDB en cada llamada a <span className="font-mono text-amber-400">tylluan_recall</span>:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-          <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg">
+          <div className="p-3 bg-emerald-700/40 border border-emerald-700/60 rounded-lg">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-emerald-400">status="confirmed"</span>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -177,7 +180,7 @@ export const TrustConsoleTab: React.FC = () => {
             <p className="text-[11px] text-slate-400 font-sans">Hecho verificado, alta confianza, sin conflicto activo.</p>
           </div>
 
-          <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg">
+          <div className="p-3 bg-amber-600/40 border border-amber-700/60 rounded-lg">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-amber-400">status="provisional"</span>
               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -185,7 +188,7 @@ export const TrustConsoleTab: React.FC = () => {
             <p className="text-[11px] text-slate-400 font-sans">Registro reciente o bajo nivel de confianza inicial.</p>
           </div>
 
-          <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg">
+          <div className="p-3 bg-rose-700/40 border border-rose-700/60 rounded-lg">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-rose-400">status="contradicted"</span>
               <span className="w-2 h-2 rounded-full bg-rose-400"></span>

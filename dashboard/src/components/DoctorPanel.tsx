@@ -114,12 +114,15 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
   const StatusIcon = report.status === 'healthy' ? CheckCircle2 :
                      report.status === 'degraded' ? AlertTriangle : XCircle;
 
+  // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
+  //  slate-950 on emerald-500 7.50:1 · hover emerald-600 5.03:1 · [#00F5D4] -> emerald-400 token
+  //  emerald-500/amber-500/red-500 on card bg (slate-900/60): 7.18 / 9.09 / 4.92:1
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-50 flex items-center gap-2">
+          <h2 className="text-xl font-bold font-sans tracking-tight text-slate-50 flex items-center gap-2">
             <Stethoscope className="w-5 h-5 text-emerald-500" />
             System Doctor
           </h2>
@@ -185,7 +188,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
             {/* GPU EP Real Hardware Telemetry Badge */}
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
               <span className="text-slate-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#00F5D4] animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Execution Provider:
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400">
@@ -316,7 +319,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
           <button
             onClick={handleFullFix}
             disabled={repairing || report.status === 'healthy'}
-            className="mt-4 px-4 py-2 w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/30 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed"
+            className="mt-4 px-4 py-2 w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/30 text-slate-950 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed"
           >
             <RotateCcw className={cn("w-4 h-4", repairing && "animate-spin")} />
             {repairing ? "Repairing Subsystems..." : "Run Full Fix"}

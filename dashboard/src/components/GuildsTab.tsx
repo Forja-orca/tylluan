@@ -47,7 +47,7 @@ const STATUS_STYLE: Record<GuildStatus, { label: string; dot: string; badge: str
   degraded: { label: 'DEGRADED', dot: 'bg-amber-500 animate-pulse',                             badge: 'bg-amber-500/20 text-amber-400 border-amber-500/20' },
   crashed:  { label: 'CRASH_LOOP', dot: 'bg-red-500 animate-pulse',                             badge: 'bg-red-500/20 text-red-400 border-red-500/20' },
   down:     { label: 'DOWN',     dot: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse', badge: 'bg-red-500/20 text-red-400 border-red-500/20' },
-  lazy:     { label: 'LAZY',     dot: 'bg-sky-500/60',                                          badge: 'bg-sky-500/10 text-sky-400 border-sky-500/20', tooltip: 'Starts on first use' },
+  lazy:     { label: 'LAZY',     dot: 'bg-blue-500/60',                                          badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20', tooltip: 'Starts on first use' },
 };
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -234,8 +234,8 @@ export function GuildsTab({ bridge, notify, events }: Props) {
         'p-4 rounded-lg border bg-slate-900/50 transition-all duration-200',
         status === 'running' ? 'border-emerald-500/30' :
         status === 'degraded' ? 'border-emerald-500/30' :
-        status === 'crashed' ? 'border-red-500/30 bg-red-950/10' :
-        status === 'down' ? 'border-red-500/30 bg-red-950/5' :
+        status === 'crashed' ? 'border-red-500/30 bg-red-500/10' :
+        status === 'down' ? 'border-red-500/30 bg-red-500/5' :
         'border-slate-800'
       )}>
         {/* Card Header */}
@@ -372,9 +372,9 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               {isSandboxActive && (
                 <span 
                   title="Enforced Docker Sandbox Active"
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[9px] font-mono font-bold uppercase tracking-tight"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono font-bold uppercase tracking-tight"
                 >
-                  <ShieldCheck className="w-2.5 h-2.5 text-sky-400" />
+                  <ShieldCheck className="w-2.5 h-2.5 text-blue-400" />
                   Sandbox
                 </span>
               )}
@@ -530,11 +530,11 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               <button type="button"
                 onClick={() => handleGuildAction(guild.name, 'start')}
                 disabled={loading === guild.name}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 border border-sky-500/20 rounded text-xs font-bold transition-all disabled:opacity-50 cursor-pointer">
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20 rounded text-xs font-bold transition-all disabled:opacity-50 cursor-pointer">
                 {loading === guild.name ? (
                   <RefreshCw className="w-3 h-3 animate-spin animate-spin-fast" />
                 ) : (
-                  <Zap className="w-3 h-3 text-sky-400" />
+                  <Zap className="w-3 h-3 text-blue-400" />
                 )}
                 Wake
               </button>
@@ -571,6 +571,9 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   const alwaysOnGuilds = filteredGuilds.filter(g => g.always_on);
   const onDemandGuilds = filteredGuilds.filter(g => !g.always_on);
 
+  // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
+  //  blue-400 (sky->blue map) on slate-950 7.72:1 · on blue-500/10 6.99:1 · /15 6.54:1 · /20 6.09:1 · /25 5.60:1
+  //  red-400 on red-500/10 6.50:1 · slate-300 on red-500/10 card 12.14:1 · rose-400 on rose-500/10 6.60:1 (kept, token)
   return (
     <div className="space-y-4">
       {/* Docker offline warning */}
@@ -709,21 +712,21 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                   label: 'Strict',
                   desc: 'Full isolation: Docker for all guilds, process_execution=false, network=none, filesystem=read-only workspace.',
                   color: 'hover:border-red-500/30 active:border-red-500/50',
-                  activeColor: 'border-red-500 bg-red-950/10 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.05)]'
+                  activeColor: 'border-red-500 bg-red-500/10 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.05)]'
                 },
                 {
                   id: 'balanced',
                   label: 'Balanced',
                   desc: 'Moderate isolation: Docker for bash/code only, enforcement per declared capabilities, network/filesystem per guild declaration. (Default)',
                   color: 'hover:border-blue-500/30 active:border-blue-500/50',
-                  activeColor: 'border-blue-500 bg-blue-950/10 text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.05)]'
+                  activeColor: 'border-blue-500 bg-blue-500/10 text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.05)]'
                 },
                 {
                   id: 'permissive',
                   label: 'Permissive',
                   desc: 'No isolation: no Docker, process_execution allowed, full network and filesystem access. Advisory-only capability declarations.',
                   color: 'hover:border-emerald-500/30 active:border-emerald-500/50',
-                  activeColor: 'border-emerald-500 bg-emerald-950/10 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.05)]'
+                  activeColor: 'border-emerald-500 bg-emerald-500/10 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.05)]'
                 }
               ].map((p) => {
                 const isActive = sandboxProfile === p.id;
@@ -781,7 +784,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                 <div className="border-b border-slate-800/80 pb-2">
                   <div className="flex items-baseline justify-between gap-4 flex-wrap">
                     <h3 className="text-sm font-bold text-slate-300 uppercase font-mono tracking-wider flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-sky-400" />
+                      <Zap className="w-4 h-4 text-blue-400" />
                       On-Demand Guilds
                     </h3>
                     <span className="text-[10px] text-slate-500 font-mono">Start automatically when needed</span>
