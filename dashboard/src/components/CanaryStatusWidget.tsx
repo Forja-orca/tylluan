@@ -98,7 +98,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
           <button 
             onClick={fetchCanary}
             disabled={refreshing}
-            className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+            className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
           >
             <RefreshCw className={cn("w-3 h-3", refreshing && "animate-spin")} />
           </button>
