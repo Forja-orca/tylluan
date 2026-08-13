@@ -62,7 +62,7 @@ Tylluan's posture against [OWASP ASI 2026](https://genai.owasp.org/resource/owas
 | ASI03 | Identity Abuse | ⚠️ agent_id is self-reported |
 | ASI04 | Supply Chain | ✅ Guilds loaded from local disk only |
 | ASI05 | Code Execution | ✅ Optional Docker sandbox for bash/code guilds |
-| ASI06 | Memory Poisoning | 🟡 Partial — `tylluan_remember` still has no ingestion-time validation, but every `tylluan_recall` now passes through the ADR-011 Coherence Gate before results reach the caller (see below) |
+| ASI06 | Memory Poisoning | ✅ Closed (2026-08-13/14) — both directions covered: `tylluan_recall` passes through the ADR-011 Coherence Gate (below), and `tylluan_remember` now has a real 2-layer ingestion-time gate (see below) |
 | ASI07 | Insecure Inter-Agent | ✅ Localhost-only mitigates |
 | ASI08 | Cascading Failures | ✅ Supervisor with crash loop detection |
 | ASI09 | Trust Exploitation | ⚠️ No confidence warnings on tylluan_think |
@@ -92,8 +92,27 @@ since kernel start are exposed at `GET /api/v1/security/coherence-gate/stats`.
 This defends against the recall-path variants documented in 2025-2026
 agentic-memory-poisoning literature (ShadowMerge, eTAMP, Sleeper Memory
 Poisoning — see [ADR-011](../reference/adr/ADR011_learned_reranker_coherence_gate.md)
-§1 for primary sources). It does **not** validate content at ingestion time
-(`tylluan_remember`) — that remains the ASI06 gap above.
+§1 for primary sources).
+
+## Write Gate (ASI06) — ingestion-path memory poisoning defense
+
+The Coherence Gate above only protected reads: nothing stopped poisoned
+content from being written via `tylluan_remember` in the first place. The
+**Write Gate** (`security::write_gate`, in production since 2026-08-13)
+closes that gap with two layers, deliberately not blocking on the second:
+
+| Layer | When | Detects | Action |
+|-------|------|---------|--------|
+| 1. Known injection patterns | Synchronous, before Coloquio post / DCR / any write | Same `poison_patterns.rs` list the Coherence Gate uses | Hard rejection — the node is never created |
+| 2. LLM judge | Async, fire-and-forget, after the node already exists | Manipulative/instructive content that isn't a known static pattern | Marks `quarantined = 1` + reason; never blocks the write, never deletes |
+
+Quarantined nodes are excluded from `tylluan_recall` (single post-fusion
+filter covering all 3 candidate sources) and from federation
+(`get_shareable_nodes()`) — but not physically deleted, so a false positive
+stays recoverable for manual review. The `quarantined` field is deliberately
+orthogonal to `memory_status()` (confidence-over-time, in `silva/mod.rs`) —
+a node can be `confirmed` in status and `quarantined` at the same time,
+they answer different questions.
 
 A companion **Signal Loop** records implicit usefulness feedback per recall
 (`recall_feedback` table) toward training a learned reranker once 5,000
