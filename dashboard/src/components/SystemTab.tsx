@@ -27,10 +27,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('doctor')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'doctor'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Stethoscope className="w-4 h-4" />
@@ -40,10 +40,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('maintenance')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'maintenance'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Wrench className="w-4 h-4" />
@@ -53,10 +53,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('logs')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'logs'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Terminal className="w-4 h-4" />
@@ -66,10 +66,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('models')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'models'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Cpu className="w-4 h-4" />
@@ -79,10 +79,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('scopes')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'scopes'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Layers className="w-4 h-4" />
@@ -92,10 +92,10 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('a2a')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
             view === 'a2a'
-              ? "bg-slate-800 text-slate-200 shadow-sm"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+              ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Globe className="w-4 h-4" />

@@ -159,7 +159,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
         <button
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-mono font-medium rounded-xl transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-mono font-medium rounded-xl transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
         >
           <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
           <span>{loading ? 'Polling...' : 'Sync Stats'}</span>

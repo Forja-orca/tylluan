@@ -101,7 +101,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
       <div className="flex flex-col items-center justify-center p-8 text-red-400 gap-4">
         <ServerOff className="w-8 h-8 opacity-50" />
         <span className="text-sm font-mono">{error}</span>
-        <button onClick={loadReport} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300">Retry</button>
+        <button onClick={loadReport} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">Retry</button>
       </div>
     );
   }
@@ -133,7 +133,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={loadReport}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 rounded-lg transition-colors"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
             title="Refresh Diagnostics"
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -225,7 +225,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
                     <button
                       onClick={() => handleRepair('guild', g.name)}
                       disabled={repairing}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
                     >
                       <RotateCcw className="w-3 h-3" />
                       Restart
@@ -281,7 +281,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
               <button
                 onClick={() => handleRepair('storage')}
                 disabled={repairing}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg flex items-center justify-center gap-2 transition-colors mt-2 disabled:opacity-50"
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg flex items-center justify-center gap-2 transition-colors mt-2 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
               >
                 <Wrench className="w-3.5 h-3.5" />
                 Optimize (VACUUM / Rebuild)
@@ -319,7 +319,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
           <button
             onClick={handleFullFix}
             disabled={repairing || report.status === 'healthy'}
-            className="mt-4 px-4 py-2 w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/30 text-slate-950 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed"
+            className="mt-4 px-4 py-2 w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/30 text-slate-950 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-slate-100 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
           >
             <RotateCcw className={cn("w-4 h-4", repairing && "animate-spin")} />
             {repairing ? "Repairing Subsystems..." : "Run Full Fix"}
