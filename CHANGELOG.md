@@ -4,6 +4,37 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [Unreleased] — 2026-08-11 to 2026-08-14 — external audit hardening · ASI06 write gate · A2A F1-F4 · dashboard sovereign palette
+
+34 commits since v0.16.0 (`5900e97`). Not tagged as a release yet — this cycle's theme was closing real gaps found by two rounds of external multi-model audit, plus completing A2A interop with arbitrary external agents, not a planned feature list. Every fix in this window follows the same pipeline: verify the claim against the real code before acting, implement, test, verify against the real tree (not the isolated worktree a piece may have been built in), commit, verify real CI before announcing.
+
+**Critical security — closed same-day both times**
+- **P2P dispatch listener RCE** (`4674f84`): the listener was enabled by default, bound `0.0.0.0:9123`, executed guilds after a Noise XK handshake with zero check that the peer was approved — anyone on the LAN who learned a node's Ed25519 pubkey (propagated by gossip/mDNS/DHT since v0.15.0) had unauthenticated RCE. Emergency mitigation: `p2p.enabled = false` by default. Real fix landed later the same audit cycle (`ebbc998`): Noise XK's handshake reveals the initiator's X25519 static key; the listener now derives the X25519 form of every approved peer's stored Ed25519 key and compares before reading or executing anything. `p2p.enabled` stays `false` by default deliberately — this fix makes re-enabling it safe, doesn't flip the default itself.
+- **ACL fail-open footgun** (`09b9668`): `current_acl_role()` fell back to `"admin"` when no ACL context was in scope. Redesigned to fail-closed: new `AclContext` enum (`HttpAuthenticated`/`StdioLocalTrusted`/`InternalTrusted`/`DevBypass`), `current_acl_role()` now returns `Option<String>`, installed at the one real choke point every tool call passes through (`logic.rs::handle_call_internal`).
+- **ASI06 — memory poisoning via `tylluan_remember`** (`2bd0416`): the read path (`tylluan_recall`) has had the ADR-011 Coherence Gate for a while; the write path had zero ingestion-time validation until now, confirmed live that Coloquio gets a post *before* the dedup/DCR check in `handler_remember.rs`. New 2-layer write gate: synchronous hard rejection on known injection patterns (reuses `poison_patterns.rs`, before any write), async LLM judge that marks `quarantined = 1` post-write without blocking or deleting. New schema columns (`quarantined`, `quarantine_reason`, v20→v21) deliberately kept orthogonal to the existing `memory_status()` 4-state field — different question (security-at-write-time vs confidence-over-time), checked for the collision before designing. Quarantined nodes excluded from recall and federation sharing.
+
+**Infra debt closed**
+- **`FrictionStore::open(path)`** (`c7aa0d8`): `open_friction_db()` hardcoded `./data/audit.db` with no injection point for tests, and `"duplicate column"` handling silently no-op'd the whole migration batch instead of checking per-column — real DB-isolation race under parallel tests, not a CI flake. Production path unchanged; tests get an isolated `TempDir`.
+- **`api_v1.rs` split** (`8008c50`): 3114 lines → `mod.rs` (1910, remaining handlers), `mcp.rs` (962, `McpDialect`/`mcp_handler`/stateless protocol), `routes.rs` (268, `api_v1_routes()`). Purely mechanical, external consumers unaffected.
+
+**A2A — interop with arbitrary external agents, not just trusted P2P peers (F1-F4 complete)** (`3f4ce1e`)
+- F1: outbound client (`a2a_client.rs`) — card discovery, `message/send`, `tasks/get` polling, `tasks/cancel`, v0.2.x fallback. Live-verified against the official `a2a-sdk` (not just mocks) via `tools/a2a_echo_agent.py`; found and fixed a real bug in the process — the fallback endpoint for cards without a `url` field (dropped from the proto in SDK v1.1.x) returned the bare base URL instead of `{base}/a2a`, where the SDK actually mounts JSON-RPC.
+- F2: REST exposure (`api_a2a_agents.rs`) + deterministic `@agent <name>: <message>` intent prefix (`handler_do/a2a.rs`), same fail-closed ACL as the guild gate. Persisted in SilvaDB (`a2a_agents` table, schema v22).
+- F3: `message/stream` SSE, wire verified against the SDK's own source rather than assumed. Shared execution path with `message/send` (`execute_intent_and_store`) — same rate limiter/ACL/HITL grants/persistence, not a parallel code path.
+- F4: 1 MiB JSON-RPC body limit with a real `-32600` error instead of a bare 413; documented decisions on private-IP handling and stream timeouts.
+
+**Dashboard — sovereign visual identity, phases 1-4** (`e4f94ef`, `5d02f02`, `9c8db1d`, `4ada70f`, `2d3c73b`, `3d7a311`)
+Diagnosed with evidence, not opinion: `tailwind.config.js` used unmodified shadcn slate/emerald/amber defaults — exactly the generic AI-look pattern the (already-installed, previously unused) `frontend-design` skill catalogs as a default to avoid. Named palette (Obsidian Nocturne/Owl Slate/Sovereign Amber/Signal Mint/Void Muted) + self-hosted typography (zero CDN, per the sovereignty principle), piloted on one component first, then extended to shared primitives and ~20 components across 4 verified phases. WCAG AA verified with real contrast computation throughout, several real failures caught and fixed before commit (not assumed to pass). Keyboard `focus-visible` accessibility pilot on 17 buttons closes a gap found the same way: 46 components had `<button>`, only 22 had any focus styling.
+
+**Process lessons this cycle actually taught, not just claimed**
+- Verifying that a *document* accurately quotes another *document* is not the same as verifying the underlying *code* claim — caught on myself (`61716c8`) after trusting stale `SECURITY.md` text about encryption-at-rest without reading `config.rs::open_db()` directly.
+- `git commit -m "..."` with no pathspec commits the *entire index*, not just what was just `git add`-ed — a rename from an unrelated in-progress refactor (Deep's `api_v1.rs` split) landed inside a dashboard commit this way and broke `main`'s build for ~2 pushes (`044ab5b` fixed it, isolating the other agent's WIP with `git stash` before touching anything).
+- Real interop testing (A2A against the official SDK, not mocks) found a bug that unit tests with mocks never could have.
+
+**J-13 spike (embedding tiebreaker in `matcher.rs`)** (`7da27d0`): code works (3/3 unit tests), but the live kernel tested against was 42 commits behind real HEAD and the benchmark's own tiebreak logic didn't match the real matcher.rs logic — recorded as still open, not accepted as a demonstrated improvement.
+
+Test counts: 674 kernel lib + 69 `tylluan-link` + 12 `tylluan-fsrs` = **755**, all green locally; real CI confirmed per-commit throughout this window (see individual commit messages for the several test-count doc-drift catches along the way — CI's own gate caught more than one).
+
 ## [v0.16.0] — 2026-08-11 — MCP 2026-07-28 adoption (M39) · Continuity/Trust/Action layer (M40) · CoherenceGate dataset circuit
 
 85 commits since v0.15.0 (2026-07-30). José's explicit gate for this release, set 2026-08-09: "v0.16.0 NO cierra hasta que M39 (P0-P2) y M40 estén ambos completos" — no shipping partial milestones. Both close in this release, each verified against the live running kernel with real curl/MCP calls, not just CI green.
