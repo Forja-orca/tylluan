@@ -8,6 +8,7 @@ pub mod oauth;
 pub mod sse;
 pub mod api_v1;
 pub mod a2a;
+pub mod a2a_client;
 pub mod mcp_apps;
 
 use axum::{
@@ -138,6 +139,10 @@ pub struct HttpState {
     pub p2p_pool: Arc<tokio::sync::Mutex<P2pSessionPool>>,
     pub repo_map: Arc<crate::repo_map::RepoMap>,
     pub a2a_task_manager: Arc<a2a::A2aTaskManager>,
+    /// A2A outbound: configured external agents (persisted in SilvaDB) and the
+    /// HTTP client used to reach them. F2 — see crates/tylluan-kernel/src/transport/http/a2a_client.rs
+    pub a2a_agents: Arc<a2a_client::A2aAgentStore>,
+    pub a2a_client: Arc<a2a_client::A2aClient>,
     /// M19-P5: Declarative agent contract loaded from `.tylluan/agents.toml`.
     /// Empty contract when the file doesn't exist (fully optional feature).
     /// Used as a third-tier role resolution source after explicit token mappings
@@ -462,6 +467,10 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     };
 
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
+    let a2a_agents = Arc::new(a2a_client::A2aAgentStore::new(silva.clone()));
+    let a2a_client = Arc::new(
+        a2a_client::A2aClient::new().expect("a2a http client init failed")
+    );
 
     // M19-P5: Load declarative agent contract from .tylluan/agents.toml
     // Use find_workspace_root() (walks up from CWD searching for tylluan.toml)
@@ -538,6 +547,8 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         p2p_pool: p2p_pool.clone(),
         repo_map,
         a2a_task_manager: a2a_task_manager.clone(),
+        a2a_agents: a2a_agents.clone(),
+        a2a_client: a2a_client.clone(),
         gossip_engine: Arc::new(tokio::sync::RwLock::new(
             tylluan_link::gossip::GossipEngine::new(
                 node_identity.node_id().to_string(),

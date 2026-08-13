@@ -16,6 +16,7 @@ mod coloquio;
 mod forget;
 mod skill;
 mod correct;
+mod a2a;
 
 pub use embedding::re_embed_legacy_nodes;
 pub(crate) use embedding::distill_for_embedding;
@@ -29,6 +30,7 @@ pub(crate) use skill::handle_skill_prefix;
 pub(crate) use correct::handle_correct_prefix;
 pub(crate) use coloquio::handle_coloquio_prefix;
 pub(crate) use forget::handle_forget_shortcut;
+pub(crate) use a2a::handle_a2a_agent_prefix;
 
 use coloquio_utils::{parse_coloquio_intent, _parse_coloquio_pagination};
 use routing::{resolve_guild_name, run_agent_handshake, record_activity_trace};
@@ -222,6 +224,12 @@ pub async fn handle_tylluan_do(
     // Deterministic nodo/node prefix — agent-to-agent messaging
     // Uses existing AgentNodeRouter + parse_node_intent from agent_nodes.rs
     if let Some(result) = handle_nodo_prefix(server, &intent, &agent_id).await {
+        return result;
+    }
+
+    // Deterministic @agent prefix — dispatch to configured external A2A agents
+    // (roster persisted in SilvaDB, managed via REST /api/v1/a2a/agents). F2.
+    if let Some(result) = handle_a2a_agent_prefix(server, &intent, &agent_id).await {
         return result;
     }
 

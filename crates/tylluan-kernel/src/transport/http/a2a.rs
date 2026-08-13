@@ -5,21 +5,29 @@
 //! ## Implemented methods
 //!
 //! - `message/send` — Create and execute a task from an intent.
+//! - `message/stream` — Same as `message/send`, but the JSON-RPC response is
+//!   delivered as a Server-Sent-Events stream (W3C framing) whose `data:` lines
+//!   are JSON-RPC success messages carrying v0.3-compat events: a
+//!   `status-update` (`working`) first, then a terminal `task` (`completed`,
+//!   reply in `history`) or `status-update` (`failed`, `final: true`). The
+//!   stream closes after the terminal event. Wire verified 2026-08-14 against
+//!   a2a-sdk 1.1.2 (`a2a/compat/v0_3/jsonrpc_transport.py::_send_stream_request`),
+//!   which parses each `data:` line as `{id, result}` and infers the event kind
+//!   from `kind`/`taskId`/`id` keys; enum states are lowercase v0.3 names.
 //! - `tasks/get` — Query task state and result.
 //! - `tasks/cancel` — Cancel a non-terminal task.
 //!
 //! ## Out of scope (M38)
 //!
-//! `message/stream` (SSE push) is intentionally **not implemented** in M38.
-//! See backlog item M33/J-3 for discussion. Only polling via `tasks/get` is
-//! available for result retrieval. SSE push notifications may be added later
-//! once the A2A task lifecycle is stabilized in production.
+//! `tasks/resubscribe` and push notifications are intentionally **not
+//! implemented** in M38. See backlog item M33/J-3 for discussion.
 
 use axum::{
     Json,
+    body::Bytes,
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response, sse::{Event, Sse}},
     routing::{get, post},
     Router,
 };
@@ -81,7 +89,7 @@ pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl Int
         preferred_transport: "JSONRPC".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         capabilities: serde_json::json!({
-            "streaming": false,
+            "streaming": true,
             "pushNotifications": false,
             "stateTransitionHistory": true,
         }),
@@ -144,7 +152,7 @@ pub struct JsonRpcRequest {
     pub id: serde_json::Value,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jsonrpc: Option<String>,
@@ -155,7 +163,7 @@ pub struct JsonRpcResponse {
     pub id: serde_json::Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
@@ -334,25 +342,56 @@ impl A2aTaskManager {
 
 // ─── JSON-RPC Handlers ──────────────────────────────────────────────────────────
 
+/// Hard cap for JSON-RPC request bodies. Intents are plain text and 1 MiB is
+/// far beyond any legitimate payload; anything larger is rejected with a
+/// JSON-RPC error (more useful to A2A clients than a raw 413).
+pub const MAX_JSONRPC_BODY_BYTES: usize = 1024 * 1024;
+
 pub async fn a2a_jsonrpc_handler(
     State(state): State<Arc<HttpState>>,
-    Json(body): Json<serde_json::Value>,
-) -> Json<JsonRpcResponse> {
+    body: Bytes,
+) -> Response {
+    if body.len() > MAX_JSONRPC_BODY_BYTES {
+        return Json(jsonrpc_error(
+            -32600,
+            &format!(
+                "Request body too large ({} bytes, limit {})",
+                body.len(),
+                MAX_JSONRPC_BODY_BYTES
+            ),
+            serde_json::Value::Null,
+        ))
+        .into_response();
+    }
+
+    let body: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return Json(jsonrpc_error(-32700, &format!("Parse error: {e}"), serde_json::Value::Null))
+                .into_response();
+        }
+    };
+
     let req: JsonRpcRequest = match serde_json::from_value(body.clone()) {
         Ok(r) => r,
         Err(e) => {
             let id = body.get("id").cloned().unwrap_or(serde_json::Value::Null);
-            return Json(jsonrpc_error(-32700, &format!("Parse error: {e}"), id));
+            return Json(jsonrpc_error(-32700, &format!("Parse error: {e}"), id)).into_response();
         }
     };
 
     let task_mgr = &state.a2a_task_manager;
+    let method = req.method.clone();
+    let request_id = req.id.clone();
 
-    match req.method.as_str() {
-        "message/send" => handle_message_send(task_mgr, &state, &req.params, req.id).await,
-        "tasks/get" => handle_tasks_get(task_mgr, &req.params, req.id).await,
-        "tasks/cancel" => handle_tasks_cancel(task_mgr, &req.params, req.id).await,
-        _ => Json(jsonrpc_error(-32601, "Method not found", req.id)),
+    match method.as_str() {
+        "message/send" => handle_message_send(task_mgr, &state, &req.params, request_id).await.into_response(),
+        "message/stream" => {
+            handle_message_stream(state, req.params.as_ref().unwrap_or(&serde_json::Value::Null), request_id).await
+        }
+        "tasks/get" => handle_tasks_get(task_mgr, &req.params, request_id).await.into_response(),
+        "tasks/cancel" => handle_tasks_cancel(task_mgr, &req.params, request_id).await.into_response(),
+        _ => Json(jsonrpc_error(-32601, "Method not found", request_id)).into_response(),
     }
 }
 
@@ -436,54 +475,14 @@ async fn handle_message_send(
     let task_id_clone = task_id.clone();
 
     tokio::spawn(async move {
-        let result = if let Some(srv) = &state_clone.server {
-            let server_guard = srv.read().await;
-            let mut args = serde_json::Map::new();
-            args.insert("intent".into(), serde_json::Value::String(intent_owned));
-            args.insert("agent_id".into(), serde_json::Value::String(agent_id_owned.clone()));
-            args.insert("remember".into(), serde_json::Value::Bool(false));
-            crate::transport::server::handler_do::handle_tylluan_do(&server_guard, Some(args)).await
-        } else {
-            task_mgr_clone.update_state(&task_id_clone, A2aTaskState::Failed,
-                Some(serde_json::json!({"error": "Server not available"})), None).await;
-            return;
-        };
-
-        match result {
-            Ok(call_result) => {
-                let is_error = call_result.is_error.unwrap_or(false);
-                let text = call_result.content.into_iter()
-                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-
-                if is_error {
-                    task_mgr_clone.update_state(&task_id_clone, A2aTaskState::Failed,
-                        Some(serde_json::json!({"error": text})), None).await;
-                } else {
-                    // owner_scope: task_id already carries the "a2a_" prefix from
-                    // create_task() -- do not prepend it again here.
-                    let owner_scope = format!("user:external/session:{task_id_clone}/agent:{agent_id_owned}");
-                    if let Some(srv) = state_clone.server.as_ref() {
-                        let silva = srv.read().await.silva.clone();
-                        let node_id = format!("a2a:{task_id_clone}:result");
-                        let meta = serde_json::json!({
-                            "owner_scope": owner_scope,
-                            "source": "a2a",
-                            "task_id": task_id_clone,
-                            "client_agent_id": agent_id_owned,
-                        }).to_string();
-                        let opts = crate::memory::silva::nodes::NodeWriteOptions::new("guild_output")
-                            .owner_scope(Some(&owner_scope));
-                        let _ = silva.upsert_node_with_validity(&node_id, "a2a_result", &text, &meta, opts).await;
-                    }
-                    task_mgr_clone.update_state(&task_id_clone, A2aTaskState::Completed,
-                        Some(serde_json::json!({"result": text})), None).await;
-                }
+        match execute_intent_and_store(&state_clone, &task_id_clone, &agent_id_owned, &intent_owned).await {
+            Ok(text) => {
+                task_mgr_clone.update_state(&task_id_clone, A2aTaskState::Completed,
+                    Some(serde_json::json!({"result": text})), None).await;
             }
-            Err(e) => {
+            Err(err) => {
                 task_mgr_clone.update_state(&task_id_clone, A2aTaskState::Failed,
-                    Some(serde_json::json!({"error": e.to_string()})), None).await;
+                    Some(serde_json::json!({"error": err})), None).await;
             }
         }
     });
@@ -492,6 +491,213 @@ async fn handle_message_send(
         "id": task_id,
         "state": "working",
     }), id))
+}
+
+/// Runs the real `tylluan_do` pathway (rate limiter, guild ACL, HITL grants)
+/// for a task, persists the result node into SilvaDB when successful, and
+/// returns the reply text (`Ok`) or the error text (`Err`). The task state
+/// itself is not updated here -- callers do that so they can interleave
+/// stream events. Shared by `message/send` (background spawn) and
+/// `message/stream` (inline while the SSE connection is open).
+async fn execute_intent_and_store(
+    state: &Arc<HttpState>,
+    task_id: &str,
+    agent_id: &str,
+    intent: &str,
+) -> Result<String, String> {
+    let server_guard = match &state.server {
+        Some(srv) => srv.read().await,
+        None => return Err("Server not available".into()),
+    };
+    let mut args = serde_json::Map::new();
+    args.insert("intent".into(), serde_json::Value::String(intent.to_string()));
+    args.insert("agent_id".into(), serde_json::Value::String(agent_id.to_string()));
+    args.insert("remember".into(), serde_json::Value::Bool(false));
+    let result = crate::transport::server::handler_do::handle_tylluan_do(&server_guard, Some(args)).await;
+    drop(server_guard);
+
+    match result {
+        Ok(call_result) => {
+            let is_error = call_result.is_error.unwrap_or(false);
+            let text = call_result.content.into_iter()
+                .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            if is_error {
+                return Err(text);
+            }
+            // owner_scope: task_id already carries the "a2a_" prefix from
+            // create_task() -- do not prepend it again here.
+            let owner_scope = format!("user:external/session:{task_id}/agent:{agent_id}");
+            if let Some(srv) = state.server.as_ref() {
+                let silva = srv.read().await.silva.clone();
+                let node_id = format!("a2a:{task_id}:result");
+                let meta = serde_json::json!({
+                    "owner_scope": owner_scope,
+                    "source": "a2a",
+                    "task_id": task_id,
+                    "client_agent_id": agent_id,
+                }).to_string();
+                let opts = crate::memory::silva::nodes::NodeWriteOptions::new("guild_output")
+                    .owner_scope(Some(&owner_scope));
+                let _ = silva.upsert_node_with_validity(&node_id, "a2a_result", &text, &meta, opts).await;
+            }
+            Ok(text)
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+// ─── message/stream (SSE) ────────────────────────────────────────────────────────
+
+/// `message/stream` — JSON-RPC method served over Server-Sent-Events.
+///
+/// Wire (verified against a2a-sdk 1.1.2): the request body is a normal JSON-RPC
+/// POST to `/a2a` with `method: "message/stream"`; the response is
+/// `text/event-stream` and every SSE event is a `data:` line containing a
+/// JSON-RPC success message `{"jsonrpc":"2.0","id":...,"result":<event>}`.
+/// Events use v0.3-compat shapes (camelCase aliases, lowercase states):
+///   1. `{"kind":"status-update","taskId":...,"contextId":...,"status":{"state":"working"},"final":false}`
+///   2. terminal, on success:
+///      `{"kind":"task","id":...,"contextId":...,"status":{"state":"completed",...},"history":[<reply message>]}`
+///      or, on failure: a `status-update` with `state:"failed"`, `final:true`.
+///
+/// The stream closes after the terminal event.
+async fn handle_message_stream(
+    state: Arc<HttpState>,
+    params: &serde_json::Value,
+    id: serde_json::Value,
+) -> Response {
+    let task_mgr = Arc::clone(&state.a2a_task_manager);
+    let agent_id = params.get("agent_id").and_then(|v| v.as_str()).unwrap_or("a2a-client").to_string();
+    let intent = extract_intent(params);
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, std::convert::Infallible>>(8);
+
+    tokio::spawn(async move {
+        let send = async |tx: &tokio::sync::mpsc::Sender<Result<Event, std::convert::Infallible>>, value: serde_json::Value| {
+            let json = serde_json::to_string(&value).unwrap_or_default();
+            let _ = tx.send(Ok(Event::default().data(json))).await;
+        };
+
+        if intent.is_empty() {
+            send(&tx, jsonrpc_error_json(JsonRpcError {
+                code: -32602,
+                message: "Invalid params: 'intent', or 'message' as a string or a spec-shaped {parts:[{kind:\"text\",text}]} object, is required".into(),
+                data: None,
+            }, id)).await;
+            return;
+        }
+
+        let task_id = task_mgr.create_task(&agent_id, "message/stream", &serde_json::json!({ "intent": intent })).await;
+        let context_id = task_id.clone();
+        task_mgr.update_state(&task_id, A2aTaskState::Working, None, None).await;
+
+        send(&tx, stream_working_event(&task_id, &context_id, &id)).await;
+
+        match execute_intent_and_store(&state, &task_id, &agent_id, &intent).await {
+            Ok(reply) => {
+                task_mgr.update_state(&task_id, A2aTaskState::Completed,
+                    Some(serde_json::json!({"result": reply})), None).await;
+                send(&tx, stream_terminal_task_event(&task_id, &context_id, &reply, &id)).await;
+            }
+            Err(err) => {
+                task_mgr.update_state(&task_id, A2aTaskState::Failed,
+                    Some(serde_json::json!({"error": err})), None).await;
+                send(&tx, stream_failed_event(&task_id, &context_id, &err, &id)).await;
+            }
+        }
+    });
+
+    Sse::new(tokio_stream::wrappers::ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::default())
+        .into_response()
+}
+
+fn jsonrpc_error_json(error: JsonRpcError, id: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": error,
+    })
+}
+
+fn stream_working_event(task_id: &str, context_id: &str, id: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": {
+            "kind": "status-update",
+            "taskId": task_id,
+            "contextId": context_id,
+            "status": { "state": "working" },
+            "final": false,
+        },
+    })
+}
+
+fn stream_terminal_task_event(task_id: &str, context_id: &str, reply: &str, id: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": {
+            "kind": "task",
+            "id": task_id,
+            "contextId": context_id,
+            "status": {
+                "state": "completed",
+                "messageId": Uuid::new_v4().to_string(),
+                "timestamp": iso_timestamp(),
+            },
+            "history": [{
+                "kind": "message",
+                "messageId": Uuid::new_v4().to_string(),
+                "role": "agent",
+                "parts": [{"kind": "text", "text": reply}],
+            }],
+        },
+    })
+}
+
+fn stream_failed_event(task_id: &str, context_id: &str, error_text: &str, id: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": {
+            "kind": "status-update",
+            "taskId": task_id,
+            "contextId": context_id,
+            "status": {
+                "state": "failed",
+                "timestamp": iso_timestamp(),
+            },
+            "metadata": { "error": error_text },
+            "final": true,
+        },
+    })
+}
+
+/// RFC 3339 UTC timestamp with second precision, e.g. `2026-08-14T12:00:00Z`.
+fn iso_timestamp() -> String {
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH)
+        .unwrap_or_default().as_secs();
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    // Civil-from-days (Howard Hinnant's algorithm, public domain).
+    let z = days as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    let h = rem / 3600;
+    let min = (rem % 3600) / 60;
+    let s = rem % 60;
+    format!("{y:04}-{m:02}-{d:02}T{h:02}:{min:02}:{s:02}Z")
 }
 
 async fn handle_tasks_get(
@@ -709,5 +915,73 @@ mod tests {
         let agent_id = "test-agent";
         let owner_scope = format!("user:external/session:{task_id}/agent:{agent_id}");
         assert_eq!(owner_scope, "user:external/session:a2a_1712345678/agent:test-agent");
+    }
+
+    // ─── message/stream event wire (a2a-sdk 1.1.2 v0.3-compat) ──────────────────
+
+    #[test]
+    fn test_stream_working_event_shape() {
+        let ev = stream_working_event("a2a_1", "a2a_1", &serde_json::json!(7));
+        assert_eq!(ev["jsonrpc"], "2.0");
+        assert_eq!(ev["id"], 7);
+        let result = &ev["result"];
+        assert_eq!(result["kind"], "status-update");
+        assert_eq!(result["taskId"], "a2a_1");
+        assert_eq!(result["contextId"], "a2a_1");
+        assert_eq!(result["status"]["state"], "working");
+        assert_eq!(result["final"], false);
+    }
+
+    #[test]
+    fn test_stream_terminal_task_event_shape() {
+        let ev = stream_terminal_task_event("a2a_2", "a2a_2", "hello back", &serde_json::json!(7));
+        let result = &ev["result"];
+        assert_eq!(result["kind"], "task");
+        assert_eq!(result["id"], "a2a_2");
+        assert_eq!(result["status"]["state"], "completed");
+        assert!(result["status"]["messageId"].is_string());
+        assert!(result["status"]["timestamp"].is_string());
+        let msg = &result["history"][0];
+        assert_eq!(msg["kind"], "message");
+        assert_eq!(msg["role"], "agent");
+        assert_eq!(msg["parts"][0]["kind"], "text");
+        assert_eq!(msg["parts"][0]["text"], "hello back");
+    }
+
+    #[test]
+    fn test_stream_failed_event_shape() {
+        let ev = stream_failed_event("a2a_3", "a2a_3", "boom", &serde_json::json!(7));
+        let result = &ev["result"];
+        assert_eq!(result["kind"], "status-update");
+        assert_eq!(result["taskId"], "a2a_3");
+        assert_eq!(result["status"]["state"], "failed");
+        assert_eq!(result["metadata"]["error"], "boom");
+        assert_eq!(result["final"], true);
+    }
+
+    #[test]
+    fn test_stream_error_json_shape() {
+        let ev = jsonrpc_error_json(JsonRpcError {
+            code: -32602,
+            message: "bad params".into(),
+            data: None,
+        }, serde_json::json!(9));
+        assert_eq!(ev["jsonrpc"], "2.0");
+        assert_eq!(ev["id"], 9);
+        assert_eq!(ev["error"]["code"], -32602);
+        assert_eq!(ev["error"]["message"], "bad params");
+    }
+
+    #[test]
+    fn test_iso_timestamp_format() {
+        let ts = iso_timestamp();
+        assert_eq!(ts.len(), 20, "RFC3339 UTC: {ts}");
+        assert!(ts.ends_with('Z'));
+        let digits: Vec<char> = ts.chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect();
+        assert!(digits.len() >= 14, "year-month-day-h-m-s: {ts}");
+        let y: u32 = ts[0..4].parse().unwrap();
+        assert!((2020..=2100).contains(&y), "year out of range: {ts}");
     }
 }
