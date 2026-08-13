@@ -45,7 +45,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 21;
+            const SCHEMA_VERSION: i32 = 22;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -237,6 +237,25 @@ impl super::SilvaDB {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0", []);
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN quarantine_reason TEXT", []);
                 tracing::info!("🌲 SilvaDB: added quarantined/quarantine_reason columns (v21, ASI06)");
+            }
+            if schema_version < 22 {
+                // A2A external agents (runtime config via REST, persisted in SilvaDB):
+                // which arbitrary external A2A agents the kernel may delegate to. The
+                // auth_token column is a bearer secret for the REMOTE agent -- stored
+                // locally, never logged. enabled=0 keeps the agent registered but
+                // disallows delegation (fail-closed).
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS a2a_agents (
+                        id          TEXT PRIMARY KEY,
+                        name        TEXT NOT NULL,
+                        url         TEXT NOT NULL,
+                        auth_token  TEXT NOT NULL DEFAULT '',
+                        enabled     INTEGER NOT NULL DEFAULT 1,
+                        created_at  INTEGER NOT NULL,
+                        updated_at  INTEGER NOT NULL
+                    );"
+                ).ok();
+                tracing::info!("🌲 SilvaDB: added a2a_agents table (v22)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

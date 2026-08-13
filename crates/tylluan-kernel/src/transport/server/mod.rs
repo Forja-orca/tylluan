@@ -249,12 +249,32 @@ impl TylluanServer {
                     size: None,
                 },
                 None,
-            )],
+            ),
+            Resource::new(
+                RawResource {
+                    uri: crate::transport::http::mcp_apps::GRAPH_APP_URI.into(),
+                    name: "tylluan_knowledge_graph_canvas".into(),
+                    description: Some("Interactive graph view for tylluan_graph results; stdio hosts use the text fallback.".into()),
+                    mime_type: Some(crate::transport::http::mcp_apps::MCP_APP_MIME.into()),
+                    size: Some(crate::transport::http::mcp_apps::GRAPH_APP_HTML.len() as u32),
+                },
+                None,
+            ),
+            ],
             next_cursor: None,
         })
     }
 
     pub async fn read_resource_internal(&self, request: ReadResourceRequestParam) -> Result<ReadResourceResult, McpError> {
+        if request.uri == crate::transport::http::mcp_apps::GRAPH_APP_URI {
+            return Ok(ReadResourceResult {
+                contents: vec![ResourceContents::TextResourceContents {
+                    uri: crate::transport::http::mcp_apps::GRAPH_APP_URI.into(),
+                    mime_type: Some(crate::transport::http::mcp_apps::MCP_APP_MIME.into()),
+                    text: crate::transport::http::mcp_apps::GRAPH_APP_HTML.into(),
+                }],
+            });
+        }
         if request.uri != "tylluan://skills" {
             return Err(McpError::invalid_params("unknown resource uri", None));
         }

@@ -124,20 +124,93 @@ async fn test_a2a_unknown_method_returns_minus_32601() {
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
-        "method": "message/stream",
+        "method": "tasks/subscribe",
         "params": {},
         "id": 42,
     });
 
-    let axum::Json(resp) = a2a::a2a_jsonrpc_handler(
+    let response = a2a::a2a_jsonrpc_handler(
         axum::extract::State(state),
-        axum::Json(body),
+        axum::body::Bytes::from(serde_json::to_vec(&body).unwrap()),
     ).await;
+    let body_bytes = axum::body::to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+    let resp: a2a::JsonRpcResponse = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(resp.result.is_none(), "Unknown method should not have a result");
     let err = resp.error.expect("Unknown method should return error");
     assert_eq!(err.code, -32601, "Should return Method not found error");
     assert_eq!(err.message, "Method not found");
+}
+
+// F3: message/stream responds with W3C SSE framing (text/event-stream) and
+// each `data:` line is a JSON-RPC message. Empty intent => single JSON-RPC
+// error event (-32602), then the stream closes.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_message_stream_returns_sse_error_for_empty_intent() {
+    let state = build_minimal_state().await;
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "message/stream",
+        "params": {},
+        "id": 7,
+    });
+
+    let response = a2a::a2a_jsonrpc_handler(
+        axum::extract::State(state),
+        axum::body::Bytes::from(serde_json::to_vec(&body).unwrap()),
+    ).await;
+
+    let content_type = response
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        content_type.starts_with("text/event-stream"),
+        "SSE content type, got: {content_type}"
+    );
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+    let sse = String::from_utf8_lossy(&body_bytes);
+    let data_line = sse.lines().find(|l| l.starts_with("data: ")).expect("SSE data line");
+    let payload: serde_json::Value =
+        serde_json::from_str(data_line.strip_prefix("data: ").unwrap()).unwrap();
+
+    assert_eq!(payload["jsonrpc"], "2.0");
+    assert_eq!(payload["id"], 7);
+    assert_eq!(payload["error"]["code"], -32602);
+    let msg = payload["error"]["message"].as_str().unwrap();
+    assert!(
+        msg.contains("intent") || msg.contains("message"),
+        "error should mention the missing intent/message, got: {msg}"
+    );
+}
+
+// F4: oversized JSON-RPC bodies are rejected with -32600 before any work.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jsonrpc_oversized_body_rejected() {
+    let state = build_minimal_state().await;
+
+    let big_text = "x".repeat(a2a::MAX_JSONRPC_BODY_BYTES + 200);
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "message/send",
+        "params": { "intent": big_text },
+        "id": 11,
+    });
+
+    let response = a2a::a2a_jsonrpc_handler(
+        axum::extract::State(state),
+        axum::body::Bytes::from(serde_json::to_vec(&body).unwrap()),
+    ).await;
+    let body_bytes = axum::body::to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+    let resp: a2a::JsonRpcResponse = serde_json::from_slice(&body_bytes).unwrap();
+
+    let err = resp.error.expect("oversized body should return an error");
+    assert_eq!(err.code, -32600, "should be an invalid request error");
+    assert!(err.message.contains("too large"), "got: {}", err.message);
 }
 
 async fn build_minimal_state() -> Arc<HttpState> {
@@ -196,7 +269,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
         registry: registry_handle,
         doctor,
         memory,
-        silva,
+        silva: silva.clone(),
         mailbox,
         coloquio,
         broadcast_tx,
@@ -277,5 +350,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
         )),
         repo_map,
         a2a_task_manager,
+        a2a_agents: Arc::new(tylluan_kernel::transport::http::a2a_client::A2aAgentStore::new(silva.clone())),
+        a2a_client: Arc::new(tylluan_kernel::transport::http::a2a_client::A2aClient::new().unwrap()),
     })
 }
