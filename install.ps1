@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Tylluan Windows Installer — v0.12.0
+# Tylluan Windows Installer
 # Usage: irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
 param(
@@ -31,7 +31,7 @@ switch ($Arch) {
     default { Write-Err "Unsupported architecture: $Arch. Tylluan supports x86_64 and ARM64 on Windows." }
 }
 
-Write-Host "=== Tylluan Installer - v0.12.0 ===" -ForegroundColor White
+Write-Host "=== Tylluan Installer ===" -ForegroundColor White
 Write-Step "Detected: Windows ($Target)"
 
 Write-Step "Detecting latest release..."
@@ -76,7 +76,7 @@ if ($PathEntries -notcontains $BinDir) {
 
 Write-Step "Starting Tylluan..."
 try {
-    $null = Start-Process -FilePath "$BinDir\tylluan" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
+    $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
 } catch {
     Write-Err "Failed to start Tylluan: $_"
 }
@@ -86,7 +86,7 @@ $Ready = $false
 $ErrorCount = 0
 for ($i = 0; $i -lt 30; $i++) {
     try {
-        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:3030/health" -UseBasicParsing -ErrorAction Stop
+        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:4000/health" -UseBasicParsing -ErrorAction Stop
         if ($Response.StatusCode -eq 200) {
             $Ready = $true
             break
@@ -103,16 +103,16 @@ if (-not $Ready) {
 }
 
 # Verify the binary responds
-$Status = & "$BinDir\tylluan" status 2>&1
+$Status = & "$BinDir\tylluan-cli" status 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-OK "Tylluan v$Version is running at http://127.0.0.1:3030"
+    Write-OK "Tylluan v$Version is running at http://127.0.0.1:4000"
     Write-Host ""
     Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
-    Write-Host "  CLI:       $BinDir\tylluan.exe" -ForegroundColor Cyan
+    Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
     Write-Host "  Config:    $DataDir\config.toml" -ForegroundColor Cyan
     Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
 } else {
-    Write-Warning "'tylluan status' returned error (try in a new terminal): $Status"
+    Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
     Write-OK "Tylluan v$Version installed to $BinDir (kernel may need manual start)"
 }
 
@@ -123,19 +123,19 @@ Write-Host "  Claude Desktop (~/.claude/claude_desktop_config.json):" -Foregroun
 Write-Host '  {'
 Write-Host '    "mcpServers": {'
 Write-Host '      "tylluan": { "type": "sse",'
-Write-Host '        "url": "http://127.0.0.1:3030/sse" }'
+Write-Host '        "url": "http://127.0.0.1:4000/sse" }'
 Write-Host '    }'
 Write-Host '  }'
 Write-Host ""
 Write-Host "  Claude Code:" -ForegroundColor White
-Write-Host '    /mcp add tylluan sse http://127.0.0.1:3030/sse'
+Write-Host '    /mcp add tylluan sse http://127.0.0.1:4000/sse'
 Write-Host ""
 Write-Host "  Cursor:" -ForegroundColor White
-Write-Host "    Add MCP server: http://127.0.0.1:3030/sse"
+Write-Host "    Add MCP server: http://127.0.0.1:4000/sse"
 Write-Host ""
 Write-Host "  curl (verify):" -ForegroundColor White
-Write-Host "    curl http://127.0.0.1:3030/health"
+Write-Host "    curl http://127.0.0.1:4000/health"
 Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
-Write-Host "  tylluan download-models"
+Write-Host "  tylluan-cli download-models"
 Write-Host ""

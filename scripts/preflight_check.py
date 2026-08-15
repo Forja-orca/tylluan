@@ -7,7 +7,11 @@ Uso: python scripts/preflight_check.py
 
 import subprocess, sys, os
 
-WORKDIR = r"E:\TylluanMCPo3"
+# Auto-detect workspace root (where Cargo.toml lives)
+WORKDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if not os.path.isfile(os.path.join(WORKDIR, "Cargo.toml")):
+    print(f"[WARN] Cannot find Cargo.toml in {WORKDIR}, falling back to cwd")
+    WORKDIR = os.getcwd()
 
 # Scripts temporales para evitar problemas de escape de cadenas en comandos inline
 GUILD_TEST_SCRIPT = os.path.join(WORKDIR, "scripts", "_guild_check.py")
@@ -23,6 +27,7 @@ init = json.dumps({\
 
 env = dict(os.environ)
 env['PYTHONPATH'] = r'%s'
+
 env['PYTHONUNBUFFERED'] = '1'
 
 guild = sys.argv[1] if len(sys.argv) > 1 else 'knowledge'

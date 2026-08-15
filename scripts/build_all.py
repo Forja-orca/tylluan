@@ -15,7 +15,7 @@ def build_target(target):
     print(f"🏗️  Building for {target}...")
     
     # Check if we need 'cross' for Linux/ARM on Windows
-    cmd = ["cargo", "build", "--release", "--target", target, "-p", "tylluan-nexus", "-p", "tylluan-cli"]
+    cmd = ["cargo", "build", "--release", "--target", target, "-p", "tylluan-kernel", "-p", "tylluan-cli"]
     
     if "linux" in target or "aarch64" in target:
         if os.name == 'nt':
