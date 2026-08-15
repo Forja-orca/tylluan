@@ -163,20 +163,47 @@ def keyword_router(intent):
     return best_guild, best_score
 
 def keyword_router_with_tiebreak(intent):
-    """Keyword first, embedding fallback when keyword score is zero or tied."""
-    kw_guild, kw_score = keyword_router(intent)
-    if kw_score > 0:
-        return kw_guild, 1.0  # keyword decided
-    # No keywords matched — use embedding
+    """Simulate J-13: blended 55% semantic + 45% keyword per guild,
+    semantic tiebreaker when top-2 blended scores differ by <=0.15.
+
+    NOTE: This is a Python approximation of matcher.rs logic for comparison.
+    Router 5 (hybrid_router) calls the REAL production matcher and is the
+    authoritative measurement. This Router 4 exists to show what the blend
+    looks like without the full keyword scoring infrastructure (trigger
+    phrases, verb bonuses, negative penalties) that matcher.rs has.
+    """
+    intent_lower = intent.lower()
+    intent_tokens = set(intent_lower.split())
     intent_emb = _embed(intent)
-    best_guild = list(GUILD_DESCRIPTIONS.keys())[0]
-    best_sim = -1
-    for guild in _guild_embeddings:
-        sim = cosine_sim(intent_emb, _guild_embeddings[guild])
-        if sim > best_sim:
-            best_sim = sim
-            best_guild = guild
-    return best_guild, best_sim
+
+    sem_weight = 0.55
+    kw_weight = 0.45
+
+    results = []  # (guild, blended_score, pure_sem)
+    for guild, desc in GUILD_DESCRIPTIONS.items():
+        # Semantic score
+        guild_emb = _guild_embeddings.get(guild)
+        sem_score = cosine_sim(intent_emb, guild_emb) if guild_emb else 0.0
+
+        # Simplified keyword score (word overlap, no trigger phrases)
+        desc_tokens = set(desc.lower().split())
+        name_tokens = set(guild.replace('_', ' ').lower().split())
+        kw_matches = sum(2 if t in name_tokens else 1 for t in intent_tokens if t in desc_tokens or t in name_tokens)
+        kw_max = len(intent_tokens) * 2 if intent_tokens else 1
+        kw_score = min(kw_matches / kw_max, 1.0)
+
+        blended = sem_weight * sem_score + kw_weight * kw_score if sem_score > 0 else kw_score
+        results.append((guild, blended, sem_score))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    if len(results) < 2:
+        return (results[0][0] if results else 'bash', 0.0)
+
+    top1, top2 = results[0], results[1]
+    # J-13 tiebreaker: if blended scores close (<=0.15), prefer higher semantic
+    if abs(top1[1] - top2[1]) <= 0.15 and top2[2] > top1[2]:
+        return (top2[0], top2[1])
+    return (top1[0], top1[1])
 
 # ── Embedding router ────────────────────────────────────────────────────────
 def embedding_router(intent):
