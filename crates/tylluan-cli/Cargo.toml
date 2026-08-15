@@ -9,10 +9,6 @@ license.workspace = true
 name = "tylluan-cli"
 path = "src/main.rs"
 
-[[bin]]
-name = "tylluan"
-path = "src/main.rs"
-
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 tokio = { workspace = true }
