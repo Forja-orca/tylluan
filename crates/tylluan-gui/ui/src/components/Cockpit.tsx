@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -63,8 +63,7 @@ export const Cockpit: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-6">
-            <Metric label="RAM" value="1.2GB" color="text-primary" />
-            <Metric label="LATENCY" value="12ms" color="text-green-400" />
+            <Metric label="PORT" value=":4000" color="text-primary" />
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
               <span className="text-xs font-mono text-green-500/80 uppercase">Kernel Online</span>
@@ -139,7 +138,7 @@ const IngestPanel: React.FC<{
       const form = new FormData();
       form.append('file', file);
       try {
-        const res = await fetch('http://localhost:3030/api/v1/ingest/upload', { method: 'POST', body: form });
+        const res = await fetch('http://localhost:4000/api/v1/ingest/upload', { method: 'POST', body: form });
         const data = await res.json() as { status?: string; result?: { content?: { text?: string }[] }[]; error?: string };
         batch.push({
           filename: file.name,
