@@ -297,8 +297,15 @@ impl CoherenceGate {
 
     /// Layer 4 hybrid classification: for each survivor flagged by any trigger
     /// zone, spawn a fire-and-forget LLM call to classify as IRRELEVANT/
-    /// AMBIGUOUS/RELEVANT. Logs decisions via friction_log (observation mode).
-    /// Does NOT modify scores. Safe to call after every filter() invocation.
+    /// AMBIGUOUS/RELEVANT. Effects on future recalls (never on the current one,
+    /// which already returned before the async judge completes):
+    ///
+    /// - **Reject** (IRRELEVANT): node is quarantined (`quarantined = 1`) via
+    ///   the same mechanism ASI06 uses — excluded from all future `search_hybrid`
+    ///   results until manually unquarantined.
+    /// - **KeepSoft** (AMBIGUOUS): node weight is halved (multiplier ×0.5) to
+    ///   lower its future ranking, without quarantining it.
+    /// - **Keep** (RELEVANT): no action.
     ///
     /// `penalized_node_ids`: ids the deterministic gate penalized in layers 2-3
     /// (from `GateStats.penalized_nodes`). Used to build the structured A/B
@@ -363,6 +370,34 @@ impl CoherenceGate {
                     if let Ok(response) = call_reasoning_backend_with_grammar(&prompt, HYBRID_GRAMMAR).await {
                         let decision = parse_hybrid_response(&response);
                         log_hybrid_decision(&node.id, &trigger, &decision);
+
+                        // ── Enforcement (Layer 4 → real effect on future recalls) ──
+                        // The current recall already returned; these mutations only
+                        // affect future search_hybrid calls via the quarantine filter
+                        // (ASI06) and weight-based ranking.
+                        match &decision {
+                            HybridDecision::Reject => {
+                                // Quarantine: reuse the exact ASI06 mechanism.
+                                let node_id = node.id.clone();
+                                let silva_clone = silva.clone();
+                                let conn = silva_clone.conn_lock();
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let c = conn.blocking_lock();
+                                    c.execute(
+                                        "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+                                        rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", node_id],
+                                    )
+                                }).await;
+                            }
+                            HybridDecision::KeepSoft => {
+                                // Penalize weight: halve it to lower future ranking.
+                                // Uses reinforce_node (multiplier < 1 = decay).
+                                let _ = silva.reinforce_node(&node.id, 0.5).await;
+                            }
+                            HybridDecision::Keep => {
+                                // No action — LLM says relevant, keep as-is.
+                            }
+                        }
 
                         // Fase 1 circuito: ejemplo estructurado A/B (best-effort).
                         let zones = [
@@ -583,5 +618,156 @@ mod tests {
         assert_eq!(parse_hybrid_response("AMBIGUOUS"), HybridDecision::KeepSoft);
         assert_eq!(parse_hybrid_response("AMBIGU"), HybridDecision::KeepSoft);
         assert_eq!(parse_hybrid_response("gibberish"), HybridDecision::KeepSoft);
+    }
+
+    // ── Layer 4 enforcement tests ──────────────────────────────────────────
+    // These test the enforcement logic that hybrid_classify applies after the
+    // async LLM verdict. The LLM call itself is tested via the integration
+    // tests (requires running kernel); here we verify the DB mutations that
+    // the enforcement performs — same pattern as ASI06 write_gate tests and
+    // search.rs quarantine tests.
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enforcement_reject_quarantines_node() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("flagged", "lesson", "some content", "{}").await.unwrap();
+        db.upsert_node("safe", "lesson", "other content", "{}").await.unwrap();
+
+        // Simulate what hybrid_classify does on Reject verdict:
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+                rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", "flagged"],
+            ).unwrap();
+        });
+
+        // Verify: flagged node is quarantined
+        let quarantined = db.quarantined_ids_among(&["flagged".into(), "safe".into()]).await.unwrap();
+        assert!(quarantined.contains("flagged"), "Reject verdict must quarantine the node");
+        assert!(!quarantined.contains("safe"), "safe node must not be quarantined");
+
+        // Verify: quarantine_reason is set
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let reason: Option<String> = conn
+                .query_row(
+                    "SELECT quarantine_reason FROM nodes WHERE id = 'flagged'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(
+                reason.as_ref().is_some_and(|r| r.contains("Layer 4 hybrid")),
+                "quarantine_reason must document the Layer 4 origin, got {reason:?}"
+            );
+        });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enforcement_keepsoft_halves_weight() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("ambiguous", "lesson", "some content", "{}").await.unwrap();
+
+        // Set initial weight to a known value
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "UPDATE nodes SET weight = 0.8 WHERE id = 'ambiguous'",
+                [],
+            ).unwrap();
+        });
+
+        // Simulate what hybrid_classify does on KeepSoft verdict:
+        db.reinforce_node("ambiguous", 0.5).await.unwrap();
+
+        // Verify: weight is halved
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let weight: f64 = conn
+                .query_row(
+                    "SELECT weight FROM nodes WHERE id = 'ambiguous'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!((weight - 0.4).abs() < 0.01, "KeepSoft must halve weight, got {weight}");
+        });
+
+        // Verify: NOT quarantined
+        let quarantined = db.quarantined_ids_among(&["ambiguous".into()]).await.unwrap();
+        assert!(quarantined.is_empty(), "KeepSoft must not quarantine the node");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enforcement_keep_no_changes() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("relevant", "lesson", "good content", "{}").await.unwrap();
+
+        // Set initial weight
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "UPDATE nodes SET weight = 0.9 WHERE id = 'relevant'",
+                [],
+            ).unwrap();
+        });
+
+        // Keep verdict: no action taken (simulated by doing nothing)
+
+        // Verify: weight unchanged
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let weight: f64 = conn
+                .query_row(
+                    "SELECT weight FROM nodes WHERE id = 'relevant'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!((weight - 0.9).abs() < 0.01, "Keep must not change weight, got {weight}");
+        });
+
+        // Verify: NOT quarantined
+        let quarantined = db.quarantined_ids_among(&["relevant".into()]).await.unwrap();
+        assert!(quarantined.is_empty(), "Keep must not quarantine the node");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enforcement_reject_excluded_from_search_hybrid() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("keep_me", "lesson", "tylluan sovereign memory", "{}").await.unwrap();
+        db.upsert_node("quarantine_me", "lesson", "tylluan sovereign memory design", "{}").await.unwrap();
+
+        // Simulate Layer 4 Reject: quarantine the node
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+                rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", "quarantine_me"],
+            ).unwrap();
+        });
+
+        // Verify: search_hybrid excludes quarantined nodes (existing ASI06 filter)
+        let results = db.search_hybrid("tylluan sovereign memory", None, 10, None, true).await.unwrap();
+        assert!(results.iter().any(|(n, _)| n.id == "keep_me"), "non-quarantined node must appear");
+        assert!(!results.iter().any(|(n, _)| n.id == "quarantine_me"), "quarantined node must be excluded by search_hybrid");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enforcement_keepsoft_does_not_quarantine() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("soft", "lesson", "tylluan design patterns", "{}").await.unwrap();
+
+        // Set weight and apply KeepSoft (halve)
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET weight = 1.0 WHERE id = 'soft'", []).unwrap();
+        });
+        db.reinforce_node("soft", 0.5).await.unwrap();
+
+        // Verify: still appears in search results (weight penalized, not quarantined)
+        let results = db.search_hybrid("tylluan design", None, 10, None, true).await.unwrap();
+        assert!(results.iter().any(|(n, _)| n.id == "soft"), "KeepSoft node must still appear in search (penalized, not quarantined)");
     }
 }
