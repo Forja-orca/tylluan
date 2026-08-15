@@ -59,7 +59,7 @@ tar xzf "$TMP_ARCHIVE" -C "$BIN_DIR" --strip-components=1
 rm -f "$TMP_ARCHIVE"
 trap - EXIT
 
-chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli "$BIN_DIR"/tylluan 2>/dev/null || true
+chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli 2>/dev/null || true
 # Backward compat: symlink tylluan-cli -> tylluan if only one exists
 if [ ! -f "$BIN_DIR/tylluan" ] && [ -f "$BIN_DIR/tylluan-cli" ]; then
   ln -sf "$BIN_DIR/tylluan-cli" "$BIN_DIR/tylluan"

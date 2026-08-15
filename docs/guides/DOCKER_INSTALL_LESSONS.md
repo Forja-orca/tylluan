@@ -151,7 +151,7 @@ curl http://127.0.0.1:4000/health
 | Script | Plataforma | Qué hace |
 |---|---|---|
 | `scripts/docker-init-clean.ps1` | Windows (PowerShell) | Crea `data-docker/`, genera token, imprime comandos |
-| `scripts/install.sh` | Linux | Instalación nativa con systemd, descarga binarios pre-compilados |
+| `install.sh` (raíz del repo) | Linux | Instalación nativa con systemd, descarga binarios pre-compilados |
 | Docker compose | Multi-plataforma | `docker compose up -d` arranque inmediato |
 
 ### Checklist pre-release (lo que el mantenedor debe verificar)

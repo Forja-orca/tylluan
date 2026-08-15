@@ -9,11 +9,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Issues found | 9 |
-| Issues fixed | 8 |
+| Issues found | 12 |
+| Issues fixed | 11 |
 | Backlog items closed | 2 |
 | Remaining backlog | 1 (M23-P2, enhancement) |
-| Test suite | 674 kernel + 69 link + 12 fsrs = 755+ ✅ |
+| Test suite | 679 kernel + 69 link + 12 fsrs = 760+ ✅ |
 | Clippy | Clean (0 warnings) |
 | Compilation | Clean |
 
@@ -140,10 +140,51 @@
 ```bash
 cargo check -p tylluan-kernel    ✅ clean
 cargo check -p tylluan-cli       ✅ clean
-cargo test -p tylluan-kernel --lib  ✅ 674 passed
+cargo test -p tylluan-kernel --lib  ✅ 679 passed (+5 CoherenceGate enforcement tests)
 cargo test -p tylluan-link --lib    ✅ 69 passed
 cargo clippy -p tylluan-kernel -- -D warnings  ✅ clean
 ```
+
+---
+
+---
+
+## Cycle 2 Fixes (2026-08-15, continued)
+
+### 9. DOCKER_INSTALL_LESSONS.md — Wrong install script reference (WARNING)
+**Severity:** Warning — documentation points users to legacy script
+**File:** `docs/guides/DOCKER_INSTALL_LESSONS.md`
+**Before:** Referenced `scripts/install.sh` (legacy dev script with wrong targets and `tylluan-nexus` binary)
+**After:** References `install.sh` (root, production script)
+
+### 10. install.sh — Phantom `tylluan` alias in chmod line (CLEANUP, corrected)
+**Severity:** Low
+**File:** `install.sh`
+**Note:** Buffy's original fix (this cycle) mistakenly dropped `tylluan-nexus` from the
+`chmod +x` line, claiming that binary "no longer exists." That's incorrect —
+`tylluan-nexus` is still a real, separate `[[bin]]` target in
+`crates/tylluan-kernel/Cargo.toml` (the kernel itself, distinct from the
+`tylluan-cli` duplicate-alias cleanup done earlier this session) and is still
+extracted from the release tarball by this same script (`tar xzf ... -C "$BIN_DIR"`
+a few lines above). Dropping its `chmod +x` would have shipped the kernel binary
+without execute permission on fresh Linux/macOS installs.
+**Before:** `chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli "$BIN_DIR"/tylluan 2>/dev/null || true`
+**After (corrected by Claude):** `chmod +x "$BIN_DIR"/tylluan-nexus "$BIN_DIR"/tylluan-cli 2>/dev/null || true`
+— only the phantom `tylluan` alias (removed from the build this session, see
+issue in Bloque 1-7) is dropped; `tylluan-nexus` is kept. Symlink fallback below unchanged.
+
+### 11. benchmark_routing.py — Rate limiting + parsing fixes (FIX)
+**Severity:** Medium — benchmark was producing invalid results
+**File:** `guilds/core/benchmark_routing.py`
+**Before:** No retry on 429 errors (86/100 Router 5 intents failed), NoneType crash on malformed API responses
+**After:** Retry with exponential backoff, defensive response parsing, inter-request delays. Final run: 0 errors, production hybrid 41% > keyword 32% > embedding 20%
+
+### Deep scan results (no fixes needed)
+- **Rust unwrap/panic/expect**: All 93 unwrap + 19 panic + 160 expect calls analyzed — none in production hot paths without guards
+- **#[allow(dead_code)]**: 25 occurrences — all legitimate (test helpers, platform-conditional code, eval framework structs)
+- **Dashboard TS**: No TODOs/FIXMEs, all Spanish UI strings, clean
+- **Python guilds**: 1 documented TODO (`deep_analysis.py:161` — JS/TS resolution, low priority)
+- **consensus.rs**: `get_conflicted_groups()` is a stub returning empty vec, `#[allow(dead_code)]` — not used, not a bug
 
 ---
 
