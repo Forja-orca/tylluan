@@ -8,7 +8,7 @@ Baseline discipline:
 ALL three measured on the SAME held-out intents from guild_audit_log.
 Guild description embeddings are cached: 1 call per guild, not per intent.
 """
-import json, sys, urllib.request, sqlite3, re, math, time
+import json, sys, urllib.request, urllib.error, sqlite3, re, math, time
 from pathlib import Path
 from collections import Counter
 
@@ -26,6 +26,25 @@ def _resolve_kernel_base():
 
 KERNEL_URL = _resolve_kernel_base()
 DATA_DIR = Path("data")
+
+# ── Retry helper ────────────────────────────────────────────────────────────
+def _api_call(url, data_dict, timeout=30, max_retries=5):
+    """POST JSON to kernel API with retry + exponential backoff for 429s."""
+    payload = json.dumps(data_dict).encode("utf-8")
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                wait = min(2 ** attempt, 30)
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError("Max retries exceeded")
 
 # ── Guild descriptions (from catalog.rs) ────────────────────────────────────
 GUILD_DESCRIPTIONS = {
@@ -73,18 +92,15 @@ GUILD_DESCRIPTIONS = {
 _guild_embeddings = {}
 
 def _embed(text):
-    data = json.dumps({"text": text}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{KERNEL_URL}/api/v1/embed", data=data,
-        headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())["embedding"]
+    result = _api_call(f"{KERNEL_URL}/api/v1/embed", {"text": text})
+    return result["embedding"]
 
 def warmup():
     """Pre-compute guild description embeddings (1 API call per guild)."""
     t0 = time.time()
     for guild, desc in GUILD_DESCRIPTIONS.items():
         _guild_embeddings[guild] = _embed(f"{guild}: {desc}")
+        time.sleep(0.1)  # small delay between warmup calls
     t = time.time() - t0
     print(f"  Warmup: {len(_guild_embeddings)} guilds in {t:.1f}s ({t/len(_guild_embeddings):.2f}s each)")
 
@@ -110,11 +126,6 @@ def load_audit_intents(limit=200):
                 continue
             cols = [c[1] for c in cur.execute(f"PRAGMA table_info({table})")]
             if "intent" in cols and "guild" in cols:
-                # Exclude guilds always routed via explicit hint (calling agent
-                # already knows the target). coloquio, whats_new, coloquio_digest
-                # are chat-channel ops -- no content classifier can pick an agent's
-                # destination channel from natural language alone. Including them
-                # would be apples vs oranges.
                 skip_guilds = ("coloquio", "whats_new", "coloquio_digest")
                 placeholders = ",".join(["?" for _ in skip_guilds])
                 cur.execute(f"""
@@ -218,26 +229,20 @@ def embedding_router(intent):
     return best_guild, best_sim
 
 # ── Real production router (hybrid semantic+keyword, matcher.rs) ───────────
-# Queries the ACTUAL match_guild() blend (0.55 semantic + 0.45 keyword) via
-# Plan mode (plan=true resolves guild+tool+args without executing). This is
-# the router genuinely running in production today -- comparing pure
-# embedding-only and pure keyword-only against each other and never against
-# THIS was the real gap in the first two runs (Jose, 2026-07-27): the
-# question isn't "replace keyword with embedding", it's "does the existing
-# hybrid already beat both naive approaches" -- production already hybridizes
-# instead of choosing one.
 def hybrid_router(intent):
-    data = json.dumps({"intent": intent, "plan": True}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{KERNEL_URL}/api/v1/do", data=data,
-        headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read())
-        # The plan_info payload (with "guild") is nested under "result" in the
-        # HTTP envelope ({"status":"ok","content":[...],"result":{...}}), not
-        # at the top level -- the previous version read result.get("guild")
-        # directly and always got the default, scoring a false 0.00%.
-        return result.get("result", {}).get("guild", "unknown")
+    """Call production matcher via plan=true with retry."""
+    result = _api_call(f"{KERNEL_URL}/api/v1/do", {"intent": intent, "plan": True})
+    # Response may be nested: {"status":"ok","content":[...],"result":{"guild":"..."}}
+    # or flat: {"guild":"..."} or even just a list/dict at top level.
+    if isinstance(result, dict):
+        inner = result.get("result", result)
+        if isinstance(inner, dict) and "guild" in inner:
+            return inner["guild"]
+        # Fallback: search for 'guild' key at any depth
+        for key in ("guild", "routed_guild", "target_guild"):
+            if key in result:
+                return result[key]
+    return "unknown"
 
 # ── Benchmark ───────────────────────────────────────────────────────────────
 def benchmark():
@@ -291,11 +296,12 @@ def benchmark():
                 print(f"  [{i+1}/{sample_size}] acc={emb_correct/(i+1)*100:.1f}%")
         except Exception as e:
             print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+        time.sleep(0.15)  # rate limit guard
     emb_acc = emb_correct / sample_size
     emb_avg_lat = sum(emb_latencies)/len(emb_latencies) if emb_latencies else 0
     print(f"  Final: {emb_acc*100:.2f}% ({emb_correct}/{sample_size}) avg_lat={emb_avg_lat:.2f}s")
 
-    # Router 4: Keyword-first, embedding tiebreaker when no keywords match
+    # Router 4: Blended keyword+semantic with J-13 tiebreaker
     print(f"\n--- Router 4: Keyword + embedding tiebreaker on {sample_size} intents ---")
     kw2_correct = 0
     kw2_latencies = []
@@ -311,15 +317,16 @@ def benchmark():
                 print(f"  [{i+1}/{sample_size}] acc={kw2_correct/(i+1)*100:.1f}%")
         except Exception as e:
             print(f"  [{i+1}/{sample_size}] ERROR: {e}")
+        time.sleep(0.15)  # rate limit guard
     kw2_acc = kw2_correct / sample_size
     kw2_avg_lat = sum(kw2_latencies)/len(kw2_latencies) if kw2_latencies else 0
     print(f"  Final: {kw2_acc*100:.2f}% ({kw2_correct}/{sample_size}) avg_lat={kw2_avg_lat:.2f}s")
 
     # Router 5: Real production hybrid (matcher.rs via plan=true)
-    # plan=true fix verified live (turn 269): returns plan without executing.
     print(f"\n--- Router 5: Production hybrid (matcher.rs via plan=true) on {sample_size} intents ---")
     hyb_correct = 0
     hyb_latencies = []
+    hyb_errors = 0
     for i, (intent, actual) in enumerate(sample):
         t0 = time.time()
         try:
@@ -329,22 +336,26 @@ def benchmark():
             if pred == actual:
                 hyb_correct += 1
             if (i + 1) % 10 == 0:
-                print(f"  [{i+1}/{sample_size}] acc={hyb_correct/(i+1)*100:.1f}%")
+                valid = i + 1 - hyb_errors
+                print(f"  [{i+1}/{sample_size}] acc={hyb_correct/max(valid,1)*100:.1f}% (errors={hyb_errors})")
         except Exception as e:
+            hyb_errors += 1
             print(f"  [{i+1}/{sample_size}] ERROR: {e}")
-    hyb_acc = hyb_correct / sample_size
+        time.sleep(0.3)  # heavier rate limit guard for /api/v1/do
+    hyb_valid = sample_size - hyb_errors
+    hyb_acc = hyb_correct / hyb_valid if hyb_valid > 0 else 0
     hyb_avg_lat = sum(hyb_latencies)/len(hyb_latencies) if hyb_latencies else 0
-    print(f"  Final: {hyb_acc*100:.2f}% ({hyb_correct}/{sample_size}) avg_lat={hyb_avg_lat:.2f}s")
+    print(f"  Final: {hyb_acc*100:.2f}% ({hyb_correct}/{hyb_valid} valid, {hyb_errors} errors) avg_lat={hyb_avg_lat:.2f}s")
 
     # Summary
     print(f"\n{'='*72}")
-    print("SUMMARY — 5 routers compared on {sample_size} intents")
+    print(f"SUMMARY — 5 routers compared on {sample_size} intents")
     print(f"{'='*72}")
     print(f"  1. Majority class ('{majority_guild}'): {maj_acc*100:6.2f}%")
     print(f"  2. Keyword-only (naive sim):      {kw_acc*100:6.2f}%")
     print(f"  3. Embedding-only (BGE-M3):       {emb_acc*100:6.2f}%  ({emb_avg_lat:.2f}s/intent)")
     print(f"  4. Keyword+embedding tiebreaker:  {kw2_acc*100:6.2f}%  ({kw2_avg_lat:.2f}s/intent)")
-    print(f"  5. Production hybrid (matcher.rs):{hyb_acc*100:6.2f}%  ({hyb_avg_lat:.2f}s/intent)")
+    print(f"  5. Production hybrid (matcher.rs):{hyb_acc*100:6.2f}%  ({hyb_avg_lat:.2f}s/intent, {hyb_errors} errors)")
     if hyb_acc > kw_acc and hyb_acc > emb_acc:
         print(f"  [OK] Production hybrid beats both pure approaches")
     elif hyb_acc > kw_acc:
