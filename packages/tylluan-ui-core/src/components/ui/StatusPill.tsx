@@ -1,5 +1,4 @@
-import React from 'react';
-import { CheckCircle2, AlertTriangle, XCircle, Activity } from 'lucide-react';
+
 
 export type StatusType = 'online' | 'healthy' | 'degraded' | 'offline' | 'critical' | 'running' | 'idle' | 'stopped' | string;
 
@@ -20,17 +19,13 @@ export function StatusPill({ status, label, className = '' }: StatusPillProps) {
   //   degraded: text-amber-400 on amber-950/10 bg   → 9.79:1 PASS
   //   offline:  text-rose-400 on rose-500/10 bg     → 6.65:1 PASS
   let colorClass = 'bg-slate-800/60 text-slate-400 border-slate-700/60';
-  let Icon = Activity;
 
   if (['online', 'healthy', 'running', 'ok'].includes(norm)) {
     colorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    Icon = CheckCircle2;
   } else if (['degraded', 'warning', 'idle'].includes(norm)) {
     colorClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-    Icon = AlertTriangle;
   } else if (['offline', 'critical', 'stopped', 'error', 'failed'].includes(norm)) {
     colorClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
-    Icon = XCircle;
   }
 
   return (

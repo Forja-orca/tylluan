@@ -1,4 +1,3 @@
-import type { Approval } from '../api-client';
 import type { ApiFetcher } from './types';
 
 type Fetcher = ApiFetcher;

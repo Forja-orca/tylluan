@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Save, AlertTriangle, RefreshCw, Cpu, Sparkles, ShieldCheck, ChevronDown, Zap, Gauge, Target, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StatusPill } from './ui/StatusPill';
@@ -55,21 +55,21 @@ interface Props {
 }
 
 export function ModelsLocalInference({
-  bridge, config, models, selectedDevice, initialDevice, onDeviceChange, onRestartRequired,
+  bridge, config, models: _models, selectedDevice, initialDevice, onDeviceChange, onRestartRequired,
 }: Props) {
-  const [selectedGgufModel, setSelectedGgufModel] = useState(
+  const [selectedGgufModel, _setSelectedGgufModel] = useState(
     (config?.inference?.primary_model || config?.inference?.llama?.primary_model || 'qwen2.5-1.5b-instruct') as string
   );
-  const [activeProvider, setActiveProvider] = useState(
+  const [activeProvider, _setActiveProvider] = useState(
     (config?.inference?.llama?.provider || config?.inference?.provider || 'llama-server') as string
   );
-  const [providerUrl, setProviderUrl] = useState(
+  const [providerUrl, _setProviderUrl] = useState(
     (config?.inference?.llama?.endpoint || config?.inference?.endpoint || 'http://127.0.0.1:9000') as string
   );
-  const [llamaPort, setLlamaPort] = useState(
+  const [llamaPort, _setLlamaPort] = useState(
     (config?.inference?.llama?.port || config?.inference?.port || 9000) as number
   );
-  const [contextLen, setContextLen] = useState(
+  const [contextLen, _setContextLen] = useState(
     (config?.inference?.llama?.ctx_size || config?.inference?.llama?.context_size || config?.inference?.ctx_size || 4096) as number
   );
   const [gpuLayers, setGpuLayers] = useState(
