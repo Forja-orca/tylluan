@@ -53,6 +53,16 @@ const AGENT_COLORS = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb923c
 function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | 'error') => void }) {
   const { sessions, events, bridge } = useNexus();
 
+  const [sseUrl, setSseUrl] = useState<string>(`${window.location.origin}/sse`);
+
+  useEffect(() => {
+    if (!bridge) return;
+    bridge.fetchRaw('/api/v1/setup-hint', {}).then((hint: any) => {
+      const url = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url;
+      if (url) setSseUrl(url);
+    }).catch(() => {});
+  }, [bridge]);
+
   const [activity, setActivity] = useState<Record<string, { tool: string; intent?: string }>>({});
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [memories, setMemories] = useState<AgentMemory[]>([]);
@@ -317,7 +327,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
             <h4 className="text-sm font-bold text-slate-400">No Active Connections</h4>
             <p className="text-xs text-slate-600 max-w-xs mt-2">Connect a MCP client to see it appear here in real-time.</p>
             <div className="mt-4 font-mono text-[10px] text-slate-700 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2">
-              claude mcp add tylluan --transport sse --url http://localhost:3030/sse
+              claude mcp add tylluan --transport sse --url {sseUrl}
             </div>
           </div>
         )}
@@ -427,6 +437,7 @@ export function CollectiveTab() {
   const [heatmap, setHeatmap] = useState<{ date: string; count: number }[]>([]);
   const [reputation, setReputation] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sseUrl, setSseUrl] = useState<string>(`${window.location.origin}/sse`);
 
   const agentColor = (id: string) => AGENT_COLORS[Math.abs(id.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % AGENT_COLORS.length];
 
@@ -438,6 +449,7 @@ export function CollectiveTab() {
         bridge.fetchRaw('/api/v1/collective/timeline', {}),
         bridge.getCollectiveHeatmap(),
         bridge.getCollectiveReputation(),
+        bridge.fetchRaw('/api/v1/setup-hint', {}),
       ]);
       const p = results[0].status === 'fulfilled' ? results[0].value : null;
       const t = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -448,6 +460,10 @@ export function CollectiveTab() {
       if (t) setTimeline(t.events ?? []);
       if (h) setHeatmap(h.heatmap ?? []);
       if (r) setReputation(r.reputation ?? []);
+
+      const hint = results[4].status === 'fulfilled' ? results[4].value : null;
+      const hintUrl = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url;
+      if (hintUrl) setSseUrl(hintUrl);
 
       const anySuccess = results.some(res => res.status === 'fulfilled');
       if (anySuccess) {

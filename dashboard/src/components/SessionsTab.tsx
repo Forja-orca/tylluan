@@ -19,7 +19,7 @@ interface SessionWithStatus extends McpSession {
 }
 
 export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; notify: (msg: string, type?: 'info' | 'error') => void }) {
-  const { sessions: globalSessions, loading: globalLoading } = useNexus();
+  const { sessions: globalSessions, loading: globalLoading, refreshData } = useNexus();
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -85,7 +85,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
             />
           </div>
           <button 
-            onClick={() => bridge?.fetchRaw('/api/v1/sessions', {})}
+            onClick={() => refreshData()}
             disabled={globalLoading}
             className="p-2 bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
           >

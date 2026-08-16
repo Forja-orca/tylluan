@@ -5,6 +5,7 @@ import { usePolling } from '../hooks/usePolling';
 import { useNexus } from '../hooks/useNexus';
 import type { NexusBridge } from '../lib/api-client';
 import { KNOWN_AGENTS, agentStyle } from '../lib/agent-meta';
+import { StatusPill } from './ui/StatusPill';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -203,9 +204,9 @@ function AgentCard({ a }: { a: AgentActivity }) {
         </div>
         <div className="mt-1 flex items-center gap-1.5">
           <div className="text-[9px] text-slate-600">{a.totalTurns} turnos</div>
-          {status === 'online' && <span className="text-[9px] font-bold text-emerald-500 animate-pulse">● activo</span>}
-          {status === 'idle'   && <span className="text-[9px] text-amber-500">● inactivo</span>}
-          {status === 'offline' && a.lastTs > 0 && <span className="text-[9px] text-slate-600">● desconectado</span>}
+          {status === 'online' && <StatusPill status="online" label="activo" />}
+          {status === 'idle'   && <StatusPill status="idle" label="inactivo" />}
+          {status === 'offline' && a.lastTs > 0 && <StatusPill status="offline" label="desconectado" />}
         </div>
       </div>
     </div>

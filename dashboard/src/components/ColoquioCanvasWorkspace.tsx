@@ -1090,16 +1090,11 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
   // Client session ID to prevent reflection loops on WebSocket broadcasts
   const clientId = useMemo(() => Math.random().toString(36).substring(2), []);
 
-  // Elevated WebSocket state for both Canvas tabs
-  const [nodes, setNodes] = useState<CanvasNode[]>([
-    { id: '1', label: 'SilvaDB Core', x: 250, y: 150, type: 'concept' },
-    { id: '2', label: 'Hybrid Routing', x: 120, y: 320, type: 'task' },
-    { id: '3', label: 'Letta Agent Buffer', x: 380, y: 320, type: 'episode' },
-  ]);
-  const [edges, setEdges] = useState<CanvasEdge[]>([
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e1-3', source: '1', target: '3' },
-  ]);
+  // Elevated WebSocket state for both Canvas tabs. Empty by default: the kernel
+  // only replies to request_sync when a canvas_state:{channel} node exists, so
+  // seeding demo nodes here would persist fake data into real canvas state.
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const [edges, setEdges] = useState<CanvasEdge[]>([]);
   const [whiteboardSnapshot, setWhiteboardSnapshot] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
 
@@ -1111,8 +1106,9 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   useEffect(() => {
-    const wsHost = window.location.port === '5173' ? `${window.location.hostname}:3030` : window.location.host;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsHost}/api/v1/canvas/ws`;
+    // Same origin as the dashboard: prod is served by the kernel, dev goes
+    // through the Vite proxy (ws: true on '/api'). No hardcoded port.
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/canvas/ws`;
     setWsStatus('connecting');
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

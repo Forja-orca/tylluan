@@ -86,9 +86,8 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       if (action === 'communities') await bridge.fetchRaw('/api/v1/silva/communities', { method: 'POST' });
       if (action === 'clean-orphans') {
         const res = await bridge.fetchRaw('/api/v1/maintenance/clean-orphans', { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          notify(`Limpieza completada: ${data.deleted_count} nodos eliminados`, 'info');
+        if (res?.status === 'success') {
+          notify(`Limpieza completada: ${res.deleted_count} nodos eliminados`, 'info');
         } else {
           throw new Error('Limpieza falló');
         }

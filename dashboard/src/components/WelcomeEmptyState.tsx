@@ -21,12 +21,23 @@ export function WelcomeEmptyState({
   notify,
   onRefresh
 }: WelcomeEmptyStateProps) {
-  const { agentProfiles } = useNexus();
+  const { agentProfiles, bridge: ctxBridge } = useNexus();
   const [firstQueryText, setFirstQueryText] = useState('What is Tylluan?');
   const [noteText, setNoteText] = useState('Tylluan is running local RAG.');
   const [copied, setCopied] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [querying, setQuerying] = useState(false);
+  const [sseUrl, setSseUrl] = useState<string | null>(null);
+
+  // Kernel is the source of truth for its own address (setup-hint derives the URL
+  // from the request Host header). Never hardcode the port here.
+  useEffect(() => {
+    const b = bridge ?? ctxBridge ?? null;
+    if (!b?.fetchRaw) return;
+    b.fetchRaw('/api/v1/setup-hint')
+      .then((hint: any) => { if (hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url) setSseUrl(hint.mcp_clients.claude_desktop.config.mcpServers.tylluan.url); })
+      .catch(() => {});
+  }, [bridge, ctxBridge]);
 
   // States for checklist (using localStorage and api telemetry)
   const isInstalled = true; // By definition if they see the dashboard
@@ -52,7 +63,7 @@ export function WelcomeEmptyState({
       mcpServers: {
         tylluan: {
           type: "sse",
-          url: `http://127.0.0.1:3030/sse`
+          url: sseUrl || `${bridge?.getBaseUrl?.() ?? window.location.origin}/sse`
         }
       }
     };
@@ -87,17 +98,30 @@ export function WelcomeEmptyState({
   const handleQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstQueryText.trim() || !bridge) return;
-    setQuerying(false);
-    setFirstQueryDone(true);
-    localStorage.setItem('tylluan_wizard_query', 'true');
-    notify('Simulation of query completed!', 'info');
+    setQuerying(true);
+    try {
+      const res = await bridge.fetchRaw('/api/v1/memory/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: firstQueryText.trim(), limit: 5 })
+      });
+      const hits = res?.results?.length ?? res?.nodes?.length ?? 0;
+      notify(hits > 0 ? `Query completado — ${hits} resultados en memoria` : 'Query completado — sin resultados en memoria', 'info');
+      setFirstQueryDone(true);
+      localStorage.setItem('tylluan_wizard_query', 'true');
+      setFirstQueryText('');
+    } catch (err: any) {
+      notify(`Query failed: ${err?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setQuerying(false);
+    }
   };
 
   const mcpConfigJson = `{
   "mcpServers": {
     "tylluan": {
       "type": "sse",
-      "url": "http://127.0.0.1:3030/sse"
+      "url": "${sseUrl || `${bridge?.getBaseUrl?.() ?? window.location.origin}/sse`}"
     }
   }
 }`;

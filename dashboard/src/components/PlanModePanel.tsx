@@ -115,7 +115,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
         notify('No se recibió un plan del kernel', 'error');
       }
     } catch (err: any) {
-      setError(`Failed to reach kernel on :4000: ${err.message}`);
+      setError(`Failed to reach kernel: ${err.message}`);
       notify(`Plan Mode request failed: ${err.message}`, 'error');
     } finally {
       setLoading(false);

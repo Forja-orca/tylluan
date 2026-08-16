@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Cpu, Activity, AlertTriangle, CheckCircle, RefreshCw, Terminal, Layers, FileCode } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
+import { usePolling } from '../hooks/usePolling';
 
 interface HealthData {
   status: string;
@@ -8,16 +9,19 @@ interface HealthData {
   commit: string;
 }
 
+// Mirrors crates/tylluan-kernel/src/registry/guild_process.rs GuildStatus (real fields).
 interface GuildContract {
   name: string;
   running: boolean;
-  tools: number;
-  required_args: string[];
+  always_on: boolean;
+  tools_count: number;
+  idle_seconds: number;
+  restarts_5m: number;
+  total_calls: number;
+  last_latency_ms?: number | null;
+  launcher_type: string;
   capabilities?: Record<string, any>;
-  permissions: string[];
-  estimated_cost?: string;
-  side_effects: string[];
-  verification?: string;
+  agent_roles: string[];
 }
 
 export const TrustConsoleTab: React.FC = () => {
@@ -27,22 +31,15 @@ export const TrustConsoleTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       if (bridge) {
-        // Fetch health
-        const resHealth = await bridge.fetchRaw('/health');
-        if (resHealth.ok) {
-          const data = await resHealth.json();
-          setHealth(data);
-        }
-        // Fetch guild contracts
+        // fetchRaw returns the parsed JSON body (not a Response) — no .ok / .json()
+        const resHealth = await bridge.fetchRaw('/health') as HealthData;
+        if (resHealth?.status) setHealth(resHealth);
         const resGuilds = await bridge.fetchRaw('/api/v1/guilds');
-        if (resGuilds.ok) {
-          const data = await resGuilds.json();
-          setContracts(data);
-        }
+        if (Array.isArray(resGuilds)) setContracts(resGuilds as GuildContract[]);
       }
     } catch (e) {
       console.error('TrustConsole fetch error:', e);
@@ -50,13 +47,14 @@ export const TrustConsoleTab: React.FC = () => {
       setLoading(false);
       setLastRefreshed(new Date().toLocaleTimeString());
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchData();
-    const timer = setInterval(fetchData, 15000);
-    return () => clearInterval(timer);
-  }, [bridge]);
+  }, [fetchData]);
+
+  // Polling via centralized coordinator (replaces 1 scattered setInterval)
+  usePolling('trust-console', fetchData, { interval: 'medium', enabled: !!bridge });
 
   // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
   //  emerald-400 on emerald-700/40: 6.31:1 (RUNNING cell/card) · amber-400 on amber-600/40: 5.42:1
@@ -91,8 +89,8 @@ export const TrustConsoleTab: React.FC = () => {
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado del Kernel</span>
             <CheckCircle className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-xl font-mono text-emerald-400 font-bold">{health?.status?.toUpperCase() || 'OFFLINE'}</div>
-          <div className="text-xs text-slate-400 mt-2">Versión: <span className="font-mono text-slate-200">{health?.version || 'v0.15.0'}</span></div>
+          <div className="text-xl font-mono text-emerald-400 font-bold">{health?.status?.toUpperCase() || '—'}</div>
+          <div className="text-xs text-slate-400 mt-2">Versión: <span className="font-mono text-slate-200">{health?.version || '—'}</span></div>
         </div>
 
         {/* Commit Hash */}
@@ -101,18 +99,18 @@ export const TrustConsoleTab: React.FC = () => {
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Commit Cargado (Runtime)</span>
             <Terminal className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-xl font-mono text-amber-400 font-bold">{health?.commit || 'HEAD'}</div>
-          <div className="text-xs text-slate-400 mt-2">Sin version drift detectado con origin/main</div>
+          <div className="text-xl font-mono text-amber-400 font-bold">{health?.commit?.slice(0, 12) || '—'}</div>
+          <div className="text-xs text-slate-400 mt-2">Commit cargado por el kernel en runtime</div>
         </div>
 
-        {/* MCP Extensions */}
+        {/* MCP Spec & Extensiones */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">MCP Spec & Extensiones</span>
             <Layers className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-xl font-mono text-emerald-400 font-bold">2026-07-28</div>
-          <div className="text-xs text-slate-400 mt-2">Extensiones: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
+          <div className="text-xl font-mono text-emerald-400 font-bold">SSE</div>
+          <div className="text-xs text-slate-400 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensiones: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
         </div>
       </div>
 
@@ -122,7 +120,7 @@ export const TrustConsoleTab: React.FC = () => {
           <FileCode className="w-5 h-5 text-amber-400" /> Contratos Autodocumentados de Guilds (M40-P1)
         </h2>
         {contracts.length === 0 ? (
-          <div className="text-sm text-slate-500 py-4">Cargando contratos de guilds...</div>
+          <div className="text-sm text-slate-500 py-4">{loading ? 'Cargando contratos de guilds...' : 'Sin guilds registradas'}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -130,10 +128,11 @@ export const TrustConsoleTab: React.FC = () => {
                 <tr className="border-b border-slate-800 text-slate-400">
                   <th className="py-2 px-3">Guild</th>
                   <th className="py-2 px-3">Estado</th>
-                  <th className="py-2 px-3">Argumentos Requeridos</th>
-                  <th className="py-2 px-3">Permisos</th>
-                  <th className="py-2 px-3">Efectos Secundarios</th>
-                  <th className="py-2 px-3">Coste Estimado</th>
+                  <th className="py-2 px-3">Launcher</th>
+                  <th className="py-2 px-3">Tools</th>
+                  <th className="py-2 px-3">Agent Roles</th>
+                  <th className="py-2 px-3">Restarts 5m</th>
+                  <th className="py-2 px-3">Total Calls</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -145,16 +144,20 @@ export const TrustConsoleTab: React.FC = () => {
                         {g.running ? 'RUNNING' : 'STOPPED'}
                       </span>
                     </td>
+                    <td className="py-2.5 px-3 text-slate-300">
+                      {g.launcher_type || <span className="text-slate-600">—</span>}
+                    </td>
                     <td className="py-2.5 px-3 text-emerald-400">
-                      {g.required_args && g.required_args.length > 0 ? g.required_args.join(', ') : <span className="text-slate-600">ninguno</span>}
+                      {g.tools_count}
+                      {g.always_on && <span className="text-[9px] text-slate-500 ml-1">always_on</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
-                      {g.permissions && g.permissions.length > 0 ? g.permissions.join(', ') : <span className="text-slate-600">lectura_estándar</span>}
+                      {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600">todos</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
-                      {g.side_effects && g.side_effects.length > 0 ? g.side_effects.join(', ') : <span className="text-slate-600">sin_efectos</span>}
+                      {g.restarts_5m}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-400">{g.estimated_cost || 'light_cpu'}</td>
+                    <td className="py-2.5 px-3 text-slate-400">{g.total_calls}</td>
                   </tr>
                 ))}
               </tbody>

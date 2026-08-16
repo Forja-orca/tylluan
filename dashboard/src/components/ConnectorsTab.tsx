@@ -58,13 +58,18 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   const [guideTab, setGuideTab] = useState<'cursor' | 'vscode' | 'claude' | 'custom'>('cursor');
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [hint, setHint] = useState<any>(null);
 
   const fetchCapabilities = useCallback(async () => {
     if (!bridge) return;
     setLocalLoading(true);
     try {
-      const data = await bridge.getCapabilities() as CapabilitiesData;
-      setCapabilities(data);
+      const [data, hintData] = await Promise.allSettled([
+        bridge.getCapabilities(),
+        bridge.fetchRaw('/api/v1/setup-hint'),
+      ]);
+      if (data.status === 'fulfilled') setCapabilities(data.value as CapabilitiesData);
+      if (hintData.status === 'fulfilled') setHint(hintData.value);
     } catch (e) {
       console.error('Failed to fetch capabilities:', e);
       notify('Failed to load server capabilities', 'error');
@@ -116,24 +121,33 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
     setTimeout(() => setCopiedText(null), 2000);
   };
 
+  // Snippets are built from the kernel's setup-hint (URL derived from the Host
+  // the dashboard used to reach it — correct for legacy 3030, local 4000, or any
+  // custom port). Never hardcode the port.
+  const sseUrl = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url
+    ?? `${bridge?.getBaseUrl() ?? window.location.origin}/sse`;
+
+  // Bridge is mcp-remote (real, published on npm) — NOT '@modelcontextprotocol/client-cli',
+  // which does not exist on the npm registry (verified via `npm view`, 404). That fake
+  // package name previously broke Qwen Desktop/Claude Desktop/Codex silently; see
+  // docs/guides/CLIENT_INTEGRATION_GUIDE.md and commit 7f12879. URL is a positional
+  // arg, not an env var; --allow-http is required for a plain-HTTP local server.
   const cursorConfig = `{
   "mcpServers": {
     "tylluan-nexus": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/client-cli"],
-      "env": {
-        "TYLLUAN_URL": "http://localhost:3030/api/v1/mcp",
-        "TYLLUAN_TOKEN": "TU_TOKEN_AQUI"
-      }
+      "args": ["mcp-remote@latest", "${sseUrl}", "--allow-http"]
     }
   }
 }`;
 
+  // Generic, machine-independent config (previously pointed at a machine-specific
+  // path: C:/Users/FoRJa/...). Same mcp-remote bridge as the other editors.
   const clineConfig = `{
   "mcpServers": {
     "tylluan-nexus": {
-      "command": "node",
-      "args": ["C:/Users/FoRJa/.gemini/antigravity/mcp/tylluan_mcp_client.js"],
+      "command": "npx",
+      "args": ["mcp-remote@latest", "${sseUrl}", "--allow-http"],
       "disabled": false,
       "alwaysOn": true
     }
@@ -144,19 +158,12 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   "mcpServers": {
     "tylluan-nexus": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/client-cli"
-      ],
-      "env": {
-        "TYLLUAN_URL": "http://127.0.0.1:3030/mcp",
-        "TYLLUAN_TOKEN": "TU_TOKEN_AQUI"
-      }
+      "args": ["mcp-remote@latest", "${sseUrl}", "--allow-http"]
     }
   }
 }`;
 
-  const restCurl = `curl -X POST http://localhost:3030/api/v1/do \\
+  const restCurl = `curl -X POST ${hint?.verify?.dashboard ?? `${bridge?.getBaseUrl() ?? window.location.origin}`}/api/v1/do \\
   -H "Authorization: Bearer TU_TOKEN_AQUI" \\
   -H "Content-Type: application/json" \\
   -d '{

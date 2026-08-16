@@ -55,6 +55,9 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:4000',
         changeOrigin: true,
+        // WebSocket upgrade support (canvas /api/v1/canvas/ws) — Vite does not
+        // enable ws proxying on custom proxy entries by default.
+        ws: true,
       },
       '/health': {
         target: 'http://127.0.0.1:4000',

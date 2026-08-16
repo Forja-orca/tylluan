@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, Layers, ChevronDown, ChevronUp, Clock, Tag, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Upload, Layers, ChevronDown, ChevronUp, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -17,14 +17,10 @@ interface RecentNode {
   ts: number;
 }
 
-const NODE_TYPES = ['fact', 'concept', 'event', 'person', 'place', 'tool', 'note'] as const;
-
 export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [nodeType, setNodeType] = useState<string>('note');
   const [tags, setTags] = useState('');
-  const [importance, setImportance] = useState(0.5);
   const [bulk, setBulk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recent, setRecent] = useState<RecentNode[]>([]);
@@ -241,20 +237,6 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
               {/* Controls row */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Node type */}
-                <div className="flex items-center gap-1.5">
-                  <Tag className="w-3 h-3 text-slate-500" />
-                  <select
-                    value={nodeType}
-                    onChange={e => setNodeType(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-emerald-500/60"
-                  >
-                    {NODE_TYPES.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Tags */}
                 <input
                   type="text"
@@ -263,19 +245,6 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   placeholder="tags (comma-sep)"
                   className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60"
                 />
-
-                {/* Importance slider */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">Imp</span>
-                  <input
-                    type="range"
-                    min={0} max={1} step={0.1}
-                    value={importance}
-                    onChange={e => setImportance(Number(e.target.value))}
-                    className="w-20 accent-emerald-500"
-                  />
-                  <span className="text-[10px] text-slate-400 w-6 text-right">{importance.toFixed(1)}</span>
-                </div>
 
                 {/* Bulk toggle */}
                 <button
@@ -315,7 +284,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 placeholder="https://example.com/article"
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 transition-colors"
               />
-              <p className="text-[10px] text-slate-550">
+              <p className="text-[10px] text-slate-500">
                 Provide a URL to crawl and ingest its content automatically into SilvaDB.
               </p>
             </div>
