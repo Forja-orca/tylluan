@@ -21,6 +21,7 @@ COPY docs/ ./docs/
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+COPY packages/ ./packages/
 COPY dashboard/ ./dashboard/
 RUN cd dashboard && npm install && npm run build
 
