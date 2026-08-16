@@ -30,7 +30,6 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     try {
       const data = await bridge.getDoctorReport();
       setReport(data);
-      setReport(data);
     } catch (err: any) {
       console.warn("Doctor API not available:", err);
       setError(`Doctor API unavailable: ${err.message}`);
