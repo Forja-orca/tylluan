@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import {
-  NexusBridge, NexusEvent,
+  NexusBridge,
+} from '../lib/nexus-bridge';
+import type {
+  NexusEvent,
   Guild, Approval, GraphNode, McpSession,
   GoldenSignals, GuildsUtilization, MemoryRetention, SloSummary,
   Interoception, AgentProfile

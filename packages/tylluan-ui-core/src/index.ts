@@ -16,6 +16,7 @@ export { NexusBridge } from './lib/api-client';
 export { StatusPill } from './components/ui/StatusPill';
 export type { StatusType } from './components/ui/StatusPill';
 export { ModelsLocalInference } from './components/ModelsLocalInference';
+export { TylluanStatusHero } from './components/TylluanStatusHero';
 
 // Hooks
 export { usePolling, pollingCoordinator } from './hooks/usePolling';

@@ -1,11 +1,20 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0a0a0c;
+  --color-foreground: #e2e2e2;
+  --color-glass: rgba(255, 255, 255, 0.05);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-primary: #00f2fe;
+  --color-primary-glow: rgba(0, 242, 254, 0.5);
+  --color-secondary: #a01fe9;
+  --color-secondary-glow: rgba(160, 31, 233, 0.5);
+}
 
 @layer base {
   body {
     @apply bg-background text-foreground overflow-hidden font-sans;
-    background-image: 
+    background-image:
       radial-gradient(at 0% 0%, rgba(0, 242, 254, 0.05) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(160, 31, 233, 0.05) 0px, transparent 50%);
   }
@@ -15,16 +24,16 @@
   .glass-panel {
     @apply bg-glass border border-glass-border backdrop-blur-md rounded-2xl shadow-2xl;
   }
-  
+
   .glass-card {
     @apply bg-white/5 border border-white/10 backdrop-blur-sm rounded-xl transition-all duration-300;
   }
-  
+
   .text-glow {
     text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
   }
 
-  /* Custom Scrollbar for OS look */
+  /* Custom Scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
   }
