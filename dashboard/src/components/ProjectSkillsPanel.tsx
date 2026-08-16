@@ -19,9 +19,8 @@ interface ProjectSkillsPanelProps {
 }
 
 export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPanelProps) {
-  // Real backend (@skill:list) only returns names -- content is fetched lazily
-  // per-skill via @skill:get:<name> when a skill is opened. Mock data carries
-  // full content upfront since there's no real intent round-trip to lazy-load from.
+  // Real backend: /api/v1/skills lists names; content is fetched lazily per
+  // skill via the @skill:get:<name> intent when a skill is opened (see lib/api/memory.ts).
   const [skills, setSkills] = useState<Pick<ProjectSkill, 'name'>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,8 +95,8 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     }
   };
 
-  // @skill:list only returns names -- full content is fetched lazily here,
-  // either via the real @skill:get:<name> intent or from local mock data.
+  // Skill list endpoint only returns names — full content is fetched lazily
+  // via the @skill:get:<name> intent.
   const openEditor = async (skillName?: string) => {
     if (!skillName) {
       setIsCreating(true);

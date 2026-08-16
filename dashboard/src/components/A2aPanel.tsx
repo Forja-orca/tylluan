@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNexus } from '../hooks/useNexus';
-import { Search, ShieldAlert, Check, X, ShieldCheck, Key, Globe, Layers, AlertCircle, RefreshCw, Clock } from 'lucide-react';
+import { Search, Check, X, ShieldCheck, Key, Globe, Layers, AlertCircle, RefreshCw, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface AgentCard {
@@ -20,14 +20,12 @@ interface Props {
 export default function A2aPanel({ notify }: Props) {
   const { approvals, bridge, refreshData } = useNexus();
   const [card, setCard] = useState<AgentCard | null>(null);
-  const [cardSimulated, setCardSimulated] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
 
   // Task Lookup
   const [taskId, setTaskId] = useState('');
   const [searchedTask, setSearchedTask] = useState<any | null>(null);
   const [loadingTask, setLoadingTask] = useState(false);
-  const [taskSimulated, setTaskSimulated] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
 
   // Approval action loading states
@@ -39,11 +37,9 @@ export default function A2aPanel({ notify }: Props) {
     try {
       const data = await bridge.getAgentCard() as AgentCard;
       setCard(data);
-      setCardSimulated(false);
     } catch (e: any) {
       console.error("Error al cargar agent-card.json:", e.message);
       setCard(null);
-      setCardSimulated(false);
     } finally {
       setLoadingCard(false);
     }
@@ -57,11 +53,9 @@ export default function A2aPanel({ notify }: Props) {
     try {
       const res = await bridge.getA2aTaskStatus(taskId.trim());
       setSearchedTask(res);
-      setTaskSimulated(false);
     } catch (e: any) {
       console.error(`Error al consultar tarea A2A '${taskId}':`, e.message);
       setSearchedTask(null);
-      setTaskSimulated(false);
       setTaskError(`No se encontró la tarea A2A '${taskId.trim()}' o la consulta falló: ${e.message}`);
     } finally {
       setLoadingTask(false);
@@ -103,19 +97,6 @@ export default function A2aPanel({ notify }: Props) {
   return (
     <div className="space-y-6 h-full flex flex-col min-h-0 overflow-y-auto">
       
-      {/* Top Banner for simulations */}
-      {(cardSimulated || taskSimulated) && (
-        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-          <ShieldAlert className="w-5 h-5 text-amber-500 flex-shrink-0 animate-pulse" />
-          <div className="text-xs">
-            <span className="font-bold text-amber-400">Modo de Acomodación Activo: </span>
-            {cardSimulated && taskSimulated && "Agent Card y Consulta de Tarea operando sobre datos locales [SIMULADO]."}
-            {cardSimulated && !taskSimulated && "Agent Card operando sobre datos locales [SIMULADO]."}
-            {!cardSimulated && taskSimulated && "Consulta de Tarea operando sobre datos locales [SIMULADO]."}
-          </div>
-        </div>
-      )}
-
       {/* Grid of details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         
@@ -208,7 +189,7 @@ export default function A2aPanel({ notify }: Props) {
                 <input
                   type="text"
                   value={taskId}
-                  onChange={(e) => setPrefixOrId(e.target.value)}
+                  onChange={(e) => setTaskId(e.target.value)}
                   placeholder="e.g. task-a2a-001, task-a2a-003"
                   className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs focus:ring-1 ring-emerald-500 text-slate-200 transition-all placeholder:text-slate-500"
                 />
@@ -349,9 +330,4 @@ export default function A2aPanel({ notify }: Props) {
       </div>
     </div>
   );
-
-  // Small helper to avoid syntax issues during lookup
-  function setPrefixOrId(val: string) {
-    setTaskId(val);
-  }
 }
