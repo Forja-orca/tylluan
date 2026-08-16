@@ -87,6 +87,9 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: "10"
+      - name: Build shared package (@tylluan/ui-core)
+        working-directory: packages/tylluan-ui-core
+        run: npm install && npm run build
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
 
