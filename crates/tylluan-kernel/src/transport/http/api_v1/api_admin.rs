@@ -1573,17 +1573,10 @@ pub async fn audit_trail_handler(
         }));
     }
     
-    if entries.is_empty() {
-        let now = chrono::Utc::now().to_rfc3339();
-        entries.push(serde_json::json!({
-            "agent_id": "antigravity",
-            "guild": "dashboard",
-            "intent_preview": "audit_trail_remediation",
-            "allowed": true,
-            "timestamp": now,
-        }));
-    }
-
+    // No synthetic filler entry when the trail is genuinely empty: the dashboard
+    // (AuditTrailPanel.tsx) already renders an honest "no records" empty state.
+    // A prior version injected a fake 'antigravity/dashboard/audit_trail_remediation'
+    // entry here, presenting fabricated data as a real audit record.
     let total = entries.len();
     Json(serde_json::json!({
         "entries": entries,
