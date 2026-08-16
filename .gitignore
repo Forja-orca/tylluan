@@ -3,6 +3,7 @@
 /target_tmp/
 /dist/
 /dashboard/dist/
+/packages/*/dist/
 /desktop/src-tauri/target/
 /desktop/dist/
 **/node_modules/
