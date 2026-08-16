@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Cpu, Database, MessageSquare, Shield,
   Activity, Settings, FlaskConical, Users, ChevronRight, RefreshCw,
 } from 'lucide-react';
-import { NexusProvider, useNexus, TylluanStatusHero, ModelsLocalInference, StatusPill } from '@tylluan/ui-core';
+import { NexusProvider, useNexus, TylluanStatusHero, ModelsLocalInference, StatusPill, MemoryOverview, GuildsOverview } from '@tylluan/ui-core';
 import type { BlackboardData } from '@tylluan/ui-core';
 import './App.css';
 
@@ -230,6 +230,55 @@ function ModelosPanel() {
   );
 }
 
+/* ── Memory Panel ─────────────────────────────────────────────── */
+
+function MemoryPanel() {
+  const { bridge, memoryStats } = useNexus();
+  const [notifyMsg, setNotifyMsg] = useState<{ msg: string; type: 'info' | 'error' } | null>(null);
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-500">
+      <MemoryOverview
+        bridge={bridge}
+        memoryStats={memoryStats}
+        notify={(msg, type) => { setNotifyMsg({ msg, type: type || 'info' }); setTimeout(() => setNotifyMsg(null), 3000); }}
+      />
+      {notifyMsg && (
+        <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm z-50 ${
+          notifyMsg.type === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+        }`}>
+          {notifyMsg.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Guilds Panel ─────────────────────────────────────────────── */
+
+function GuildsPanel() {
+  const { bridge, guilds, refreshData } = useNexus();
+  const [notifyMsg, setNotifyMsg] = useState<{ msg: string; type: 'info' | 'error' } | null>(null);
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-500">
+      <GuildsOverview
+        bridge={bridge}
+        guilds={guilds}
+        onRefresh={refreshData}
+        notify={(msg, type) => { setNotifyMsg({ msg, type: type || 'info' }); setTimeout(() => setNotifyMsg(null), 3000); }}
+      />
+      {notifyMsg && (
+        <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm z-50 ${
+          notifyMsg.type === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+        }`}>
+          {notifyMsg.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Shell ────────────────────────────────────────────────── */
 
 function Shell() {
@@ -313,7 +362,9 @@ function Shell() {
             >
               {activeView === 'overview' && <OverviewPanel />}
               {activeView === 'models' && <ModelosPanel />}
-              {!['overview', 'models'].includes(activeView) && (
+              {activeView === 'memory' && <MemoryPanel />}
+              {activeView === 'guilds' && <GuildsPanel />}
+              {!['overview', 'models', 'memory', 'guilds'].includes(activeView) && (
                 <PlaceholderView label={current.label} />
               )}
             </motion.div>

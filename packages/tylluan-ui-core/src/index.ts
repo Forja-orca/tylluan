@@ -17,6 +17,10 @@ export { StatusPill } from './components/ui/StatusPill';
 export type { StatusType } from './components/ui/StatusPill';
 export { ModelsLocalInference } from './components/ModelsLocalInference';
 export { TylluanStatusHero } from './components/TylluanStatusHero';
+export { getGuildCategory, CATEGORY_MAP, CATEGORY_STYLE, DEPRECATED_GUILDS } from './lib/guild-meta';
+export type { GuildCategory } from './lib/guild-meta';
+export { MemoryOverview } from './components/MemoryOverview';
+export { GuildsOverview } from './components/GuildsOverview';
 
 // Hooks
 export { usePolling, pollingCoordinator } from './hooks/usePolling';
