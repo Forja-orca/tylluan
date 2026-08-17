@@ -473,6 +473,24 @@ def _is_port_open(port):
         return False
 
 
+def _find_free_port(preferred, max_tries=20):
+    """Find a free TCP port, starting from `preferred` and scanning upward.
+    Never binds to steal a port already in use -- only used to pick an
+    alternative when the preferred one is taken by something else."""
+    for offset in range(max_tries):
+        candidate = preferred + offset
+        if _is_port_open(candidate):
+            return candidate
+    # Extremely unlikely (20 consecutive ports all occupied); let the OS
+    # pick any free ephemeral port rather than give up.
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
 def _is_http_ready(port):
     """Real HTTP readiness probe -- the port being occupied only means
     llama-server has bound the socket, not that it finished loading the
@@ -518,9 +536,26 @@ async def _start_llama_server_locked():
     model_path = await asyncio.to_thread(_resolve_model_path)
 
     if not _is_port_open(LLAMA_PORT):
-        sys.stderr.write(f"[llama_backend] Port {LLAMA_PORT} in use, trying to connect...\n")
-        _model_loaded = True
-        return
+        # Something is already bound to our configured port. It might be a
+        # llama-server we started in a previous run (fine, reuse it) -- or it
+        # might be a completely unrelated process (LM Studio, ComfyUI, some
+        # dev server the user happened to have on 9000). Blindly assuming
+        # "already loaded" made Tylluan silently talk to the wrong service
+        # instead of isolating itself, which is exactly the kind of
+        # interference this guild must never cause. Verify compatibility
+        # first; if it's not one of ours, find a free port instead of
+        # fighting over the occupied one.
+        if await asyncio.to_thread(_is_http_ready, LLAMA_PORT):
+            sys.stderr.write(f"[llama_backend] Port {LLAMA_PORT} in use by a compatible server, reusing it\n")
+            _model_loaded = True
+            return
+        new_port = _find_free_port(LLAMA_PORT)
+        sys.stderr.write(
+            f"[llama_backend] Port {LLAMA_PORT} is occupied by an unrelated process "
+            f"(not an OpenAI-compatible server) -- switching to {new_port} instead of "
+            f"interfering with it\n"
+        )
+        globals()["LLAMA_PORT"] = new_port
 
     threads = _get_config()["threads"] if _get_config()["threads"] > 0 else (os.cpu_count() or 4)
     cmd = [
