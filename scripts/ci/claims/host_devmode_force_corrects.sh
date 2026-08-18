@@ -19,11 +19,33 @@
 # changing the code to hard-refuse. This script now tests the corrected
 # claim: kernel boots (exit 0) AND the CRITICAL_SECURITY_TRIGGER warning is
 # present in its log.
+#
+# I1/I2 (2026-08-18 review fix): the kernel spawns Python guild subprocesses
+# that `kill $KERNEL_PID` alone does not reap. `set -m` gives this script job
+# control so the backgrounded kernel gets its own process group (pgid ==
+# kernel pid); cleanup below kills the whole group with `kill -- -$PGID`,
+# not just the kernel process itself. This trap now ALSO actually kills the
+# kernel (the pre-fix version only did `rm -rf "$CONFIG_DIR"` and leaked the
+# kernel on every run, per I2).
+# I8: the old third assertion block (grep for "Forcing host to '127.0.0.1'")
+# was removed -- it can never fail independently of the CRITICAL_SECURITY_TRIGGER
+# check because config.rs emits both strings on the exact same warn!() line,
+# and it silently no-ops (rather than failing loud) if the log format ever
+# drifts. The CRITICAL_SECURITY_TRIGGER check above already covers what matters.
 set -uo pipefail
+set -m
 
 BINARY="${TYLLUAN_BINARY:-./target/release/tylluan-nexus}"
 CONFIG_DIR=$(mktemp -d)
-trap 'rm -rf "$CONFIG_DIR"' EXIT
+KERNEL_PID=""
+cleanup() {
+  if [ -n "$KERNEL_PID" ]; then
+    kill -- "-$KERNEL_PID" 2>/dev/null || kill "$KERNEL_PID" 2>/dev/null
+    wait "$KERNEL_PID" 2>/dev/null
+  fi
+  rm -rf "$CONFIG_DIR"
+}
+trap cleanup EXIT
 
 cat > "$CONFIG_DIR/tylluan.toml" <<'EOF'
 [nexus]
@@ -48,11 +70,9 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 
-# Clean up regardless of outcome.
-if kill -0 "$KERNEL_PID" 2>/dev/null; then
-  kill "$KERNEL_PID" 2>/dev/null
-  wait "$KERNEL_PID" 2>/dev/null
-else
+# Record whether the kernel already exited on its own (crash) before cleanup
+# tears down the process group -- cleanup() (trap) still runs afterward.
+if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
   wait "$KERNEL_PID" 2>/dev/null
   exit_code=$?
   if [ "$exit_code" -ne 0 ] && [ "$booted" -eq 0 ]; then
@@ -64,12 +84,6 @@ fi
 
 if ! grep -qi "CRITICAL_SECURITY_TRIGGER" "$CONFIG_DIR/out.log"; then
   echo "FAIL: kernel ran with host=0.0.0.0 + dev_mode=true but never logged the expected CRITICAL_SECURITY_TRIGGER warning -- the auto-correction may have been silently removed"
-  cat "$CONFIG_DIR/out.log"
-  exit 1
-fi
-
-if grep -qi "host.*0\.0\.0\.0" "$CONFIG_DIR/out.log" && ! grep -qi "Forcing host to '127.0.0.1'" "$CONFIG_DIR/out.log"; then
-  echo "FAIL: warning logged but no confirmation the host was actually corrected to 127.0.0.1"
   cat "$CONFIG_DIR/out.log"
   exit 1
 fi

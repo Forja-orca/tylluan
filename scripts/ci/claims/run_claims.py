@@ -22,6 +22,55 @@ def load_claims() -> list[dict]:
         return tomllib.load(fh)["claim"]
 
 
+def _test_block_line_numbers(file_text: str) -> set[int]:
+    """Return the set of 1-indexed line numbers that fall inside a
+    `#[cfg(test)]`-attributed item's block (usually `mod tests { ... }`,
+    but also covers a `#[cfg(test)]` directly on a single fn/struct/etc).
+
+    I4 (2026-08-18 review fix): the previous exclusion only skipped the
+    literal `#[cfg(test)]` attribute line itself -- every line inside the
+    actual test block below it still counted as a real match. That made
+    "expect=absent" claims scoped over a whole crate (e.g.
+    encrypt-at-rest-single-choke-point) pass only by accident, until some
+    future test module called the excluded pattern. This is a simple
+    brace-depth state machine over the whole file, not a real Rust parser:
+    once we see a `#[cfg(test)]` attribute line, we track brace depth from
+    the next opening `{` we encounter through to its matching close, and
+    mark every line in between (inclusive) as excluded. This is a heuristic
+    (doesn't understand strings/comments containing braces) but is good
+    enough for this repo's straightforward `mod tests { ... }` style and is
+    strictly more correct than the single-line exclusion it replaces.
+    """
+    excluded: set[int] = set()
+    lines = file_text.splitlines()
+    i = 0
+    n = len(lines)
+    while i < n:
+        if "#[cfg(test)]" in lines[i]:
+            # Find the first `{` at or after the attribute line, then track
+            # brace depth to its match. Also exclude the attribute line and
+            # any lines between it and the opening brace (e.g. `mod tests`
+            # on its own line before `{`).
+            j = i
+            depth = 0
+            opened = False
+            while j < n:
+                for ch in lines[j]:
+                    if ch == "{":
+                        depth += 1
+                        opened = True
+                    elif ch == "}":
+                        depth -= 1
+                excluded.add(j + 1)  # 1-indexed
+                if opened and depth <= 0:
+                    break
+                j += 1
+            i = j + 1
+            continue
+        i += 1
+    return excluded
+
+
 def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     """A static claim's `expect` field controls the polarity:
     - "absent" (default): pattern must NOT appear (outside comments/
@@ -36,11 +85,20 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     exclude_file = claim.get("exclude_file")
     expect = claim.get("expect", "absent")
 
-    args = ["rg", "--line-number", "--no-heading", pattern] + scope
+    # --with-filename is required in addition to --no-heading: ripgrep
+    # omits the filename prefix entirely (even with --no-heading) when a
+    # scope entry is a single explicit file rather than a directory, which
+    # silently corrupts the path:lineno:content split below (found while
+    # verifying the I4 fix -- pre-existing bug, not introduced by it).
+    args = ["rg", "--line-number", "--with-filename", "--no-heading", pattern] + scope
     result = subprocess.run(args, cwd=repo_root, capture_output=True, text=True)
 
     if result.returncode not in (0, 1):
         return False, f"ripgrep error: {result.stderr.strip()}"
+
+    # Pre-compute, per matched file, the set of line numbers that fall
+    # inside a #[cfg(test)] block (I4) so we only read/parse each file once.
+    test_block_lines_by_file: dict[str, set[int]] = {}
 
     real_matches = []
     if result.returncode == 0:
@@ -55,7 +113,13 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
             stripped = content.strip()
             if stripped.startswith("//") or stripped.startswith("#"):
                 continue
-            if "#[cfg(test)]" in content:
+            if path not in test_block_lines_by_file:
+                try:
+                    text = (repo_root / path).read_text(encoding="utf-8")
+                except OSError:
+                    text = ""
+                test_block_lines_by_file[path] = _test_block_line_numbers(text)
+            if int(lineno) in test_block_lines_by_file[path]:
                 continue
             real_matches.append(f"{path}:{lineno}: {stripped}")
 
@@ -70,9 +134,52 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     return False, "; ".join(real_matches[:5])
 
 
+# I3 (2026-08-18 review fix): each dynamic script boots a real kernel
+# (Rust binary + Python guild subprocesses), not a mock -- cold boot with
+# guild startup is real minutes-scale work on CPU-only hardware elsewhere
+# in this project's own stack (see ForjaMCPo3's CLAUDE.md: knowledge guild
+# alone can take 60-120s under CPU inference). These three specific scripts
+# only wait on early boot-log lines (CRITICAL_SECURITY_TRIGGER / HTTP+P2P
+# port announcements), each internally bounded to <=15s of polling, well
+# before any guild subsystem would need to be up -- so 60s has headroom for
+# THESE claims specifically. We still raise it to 90s as cheap insurance
+# against CI runner variance, and -- more importantly -- fix the two real
+# bugs: (1) an uncaught TimeoutExpired crashing the whole runner with a
+# traceback instead of a results table, and (2) subprocess.run's timeout
+# only SIGKILLing the `bash` process, which skips bash's EXIT trap
+# entirely and orphans the kernel + its process group. We now run the
+# script through the `timeout` coreutil (SIGTERM, not SIGKILL) so bash gets
+# a chance to run its EXIT trap and clean up the process group itself,
+# with subprocess.run's own timeout kept as a hard backstop slightly above
+# the inner one in case `timeout` itself somehow doesn't fire.
+DYNAMIC_CLAIM_INNER_TIMEOUT_SECS = 90
+DYNAMIC_CLAIM_OUTER_TIMEOUT_SECS = DYNAMIC_CLAIM_INNER_TIMEOUT_SECS + 15
+
+
 def run_dynamic_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     script = repo_root / claim["script"]
-    result = subprocess.run(["bash", str(script)], cwd=repo_root, capture_output=True, text=True, timeout=60)
+    args = [
+        "timeout",
+        "--signal=TERM",
+        str(DYNAMIC_CLAIM_INNER_TIMEOUT_SECS),
+        "bash",
+        str(script),
+    ]
+    try:
+        result = subprocess.run(
+            args,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=DYNAMIC_CLAIM_OUTER_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"timed out after {DYNAMIC_CLAIM_OUTER_TIMEOUT_SECS}s (outer backstop -- inner `timeout` did not clean up in time)"
+
+    if result.returncode == 124:
+        # GNU `timeout`'s own exit code for "the command was terminated
+        # because the time limit was reached" (SIGTERM sent).
+        return False, f"timed out after {DYNAMIC_CLAIM_INNER_TIMEOUT_SECS}s"
     if result.returncode == 0:
         return True, result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "ok"
     return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:300]
