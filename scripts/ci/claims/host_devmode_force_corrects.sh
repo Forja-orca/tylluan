@@ -62,9 +62,14 @@ EOF
 stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/out.log" 2>&1 &
 KERNEL_PID=$!
 
-# Give it a few seconds to boot (or crash) -- we expect it to keep running.
+# Give it time to boot (or crash) -- we expect it to keep running.
+# Raised from 20*0.5s=10s to 240*0.5s=120s defensively (2026-08-19), matching
+# the same cold-boot timeout floor as the other two dynamic scripts -- this
+# check fires early (config validation, before model/guild loading) so it has
+# never actually needed the extra headroom, but there is no reason to leave
+# it exposed to the same class of runner-variance flake the other two hit.
 booted=0
-for _ in $(seq 1 20); do
+for _ in $(seq 1 240); do
   if grep -qi "CRITICAL_SECURITY_TRIGGER" "$CONFIG_DIR/out.log" 2>/dev/null; then
     booted=1
     break

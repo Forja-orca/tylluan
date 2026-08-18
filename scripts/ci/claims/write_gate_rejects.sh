@@ -52,15 +52,25 @@ EOF
 stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kernel.log" 2>&1 &
 KERNEL_PID=$!
 
+# REAL FIX (2026-08-19, live CI failure even after the stdbuf fix above):
+# stdbuf was necessary but not sufficient. The actual cause was a too-short
+# polling window -- only the very first tracing line (emitted immediately
+# in init_logging(), before any model/guild loading) ever appeared within
+# 15s; the HTTP listener bind happens much later, after BGE-M3 embedding
+# load and always-on guild startup, which this project's own CLAUDE.md
+# already documents as CPU-bound work that can legitimately take 60-120s+
+# ("NUNCA reducir timeouts de guilds -- knowledge guild tarda 60-120s").
+# 15s was never realistic for a cold GitHub Actions runner. Raised to 120s
+# (240 * 0.5s) to match that documented floor.
 port=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 240); do
   port=$(grep -oP 'listening on 127\.0\.0\.1:\K[0-9]+' "$CONFIG_DIR/kernel.log" | head -1)
   [ -n "$port" ] && break
   sleep 0.5
 done
 
 if [ -z "$port" ]; then
-  echo "FAIL: kernel never logged its bound HTTP port within 15s"
+  echo "FAIL: kernel never logged its bound HTTP port within 120s"
   cat "$CONFIG_DIR/kernel.log"
   exit 1
 fi
