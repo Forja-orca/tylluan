@@ -40,7 +40,16 @@ dev_mode = true
 port = 0
 EOF
 
-"$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kernel.log" 2>&1 &
+# stdbuf -oL -eL forces line-buffered stdout/stderr even though we're
+# redirecting to a file -- without it, the kernel's tracing output sits in
+# a full (block) buffer that only flushes on exit or when full, so our
+# polling loop below can spend its whole window watching an empty file even
+# though the real log line was written internally seconds ago. Real bug
+# found live in CI (2026-08-18): both dynamic port-polling claims failed
+# with "kernel never logged its bound HTTP port within 15s" for exactly
+# this reason, confirmed by checking crates/tylluan-kernel/src/main.rs's
+# dual stdout+file tracing layers -- the data was real, just not flushed.
+stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kernel.log" 2>&1 &
 KERNEL_PID=$!
 
 port=""

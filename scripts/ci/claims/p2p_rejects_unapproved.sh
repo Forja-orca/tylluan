@@ -59,7 +59,9 @@ enabled = true
 listen_port = 0
 EOF
 
-"$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kernel.log" 2>&1 &
+# stdbuf -oL -eL: see write_gate_rejects.sh for the full explanation --
+# real CI bug found 2026-08-18, stdout block-buffers when piped to a file.
+stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kernel.log" 2>&1 &
 KERNEL_PID=$!
 
 # Wait for the kernel's HTTP port (to fetch its real pubkey) and P2P port.
