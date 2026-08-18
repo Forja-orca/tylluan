@@ -8,12 +8,13 @@
 # See docs/superpowers/specs/2026-08-18-security-claims-ci-gate-design.md
 
 [[claim]]
-id = "no-lan-bind-p2p-listener"
-doc_source = "docs/concepts/SECURITY.md:7"
-statement = "Listens on 127.0.0.1 only -- never 0.0.0.0 in production"
+id = "p2p-dispatch-wires-peer-approval"
+doc_source = "crates/tylluan-link/src/p2p.rs (peer_is_approved call site, ~line 197)"
+statement = "The P2P dispatch listener's LAN-reachable bind (0.0.0.0, required for real cross-machine federation) is only ever safe because every request is checked against peer_is_approved() before any tool executes -- this claim checks that the wiring exists, not the bind address itself. RULING (2026-08-18, José): the original claim id 'no-lan-bind-p2p-listener' assumed binding 0.0.0.0 was itself the problem; it is not -- federation requires it. The 2026-08-12 RCE's real root cause was missing peer verification, already fixed and tested in p2p.rs (peer_is_approved, fail-closed on empty set). This claim targets that root cause instead of the address family. Scope corrected 2026-08-18: the check/call site lives in p2p.rs, not mod.rs (mod.rs only starts the listener) -- first draft of this claim scoped the wrong file and would have always failed."
 check = "static"
-pattern = '0\.0\.0\.0'
-scope = ["crates/tylluan-link/src/p2p.rs", "crates/tylluan-kernel/src/transport/http/mod.rs"]
+pattern = 'peer_is_approved'
+expect = "present"
+scope = ["crates/tylluan-link/src/p2p.rs"]
 
 [[claim]]
 id = "host-devmode-refuses-to-start"

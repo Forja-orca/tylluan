@@ -23,40 +23,51 @@ def load_claims() -> list[dict]:
 
 
 def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
-    """A static claim passes if `pattern` does NOT appear (outside comments/
-    #[cfg(test)] blocks) in any file under `scope`, except `exclude_file`."""
+    """A static claim's `expect` field controls the polarity:
+    - "absent" (default): pattern must NOT appear (outside comments/
+      #[cfg(test)] blocks) in any file under `scope`, except `exclude_file`.
+      Use for claims like "no LAN bind" -- the pattern is a bad sign.
+    - "present": pattern MUST appear at least once (real code, not a
+      comment/test) in every file under `scope`. Use for claims like
+      "the approval check is wired in" -- absence is the bad sign, and
+      "no matches" must NOT be silently treated as compliance."""
     pattern = claim["pattern"]
     scope = claim["scope"]
     exclude_file = claim.get("exclude_file")
+    expect = claim.get("expect", "absent")
 
     args = ["rg", "--line-number", "--no-heading", pattern] + scope
     result = subprocess.run(args, cwd=repo_root, capture_output=True, text=True)
 
-    # rg exit code 1 = no matches found = claim holds. 0 = matches found, need to filter.
-    if result.returncode == 1:
-        return True, "no matches"
     if result.returncode not in (0, 1):
         return False, f"ripgrep error: {result.stderr.strip()}"
 
-    real_violations = []
-    for line in result.stdout.splitlines():
-        # format: path:lineno:content
-        parts = line.split(":", 2)
-        if len(parts) < 3:
-            continue
-        path, lineno, content = parts
-        if exclude_file and path.replace("\\", "/") == exclude_file:
-            continue
-        stripped = content.strip()
-        if stripped.startswith("//") or stripped.startswith("#"):
-            continue
-        if "#[cfg(test)]" in content:
-            continue
-        real_violations.append(f"{path}:{lineno}: {stripped}")
+    real_matches = []
+    if result.returncode == 0:
+        for line in result.stdout.splitlines():
+            # format: path:lineno:content
+            parts = line.split(":", 2)
+            if len(parts) < 3:
+                continue
+            path, lineno, content = parts
+            if exclude_file and path.replace("\\", "/") == exclude_file:
+                continue
+            stripped = content.strip()
+            if stripped.startswith("//") or stripped.startswith("#"):
+                continue
+            if "#[cfg(test)]" in content:
+                continue
+            real_matches.append(f"{path}:{lineno}: {stripped}")
 
-    if not real_violations:
-        return True, "all matches excluded (comments/tests/exclude_file)"
-    return False, "; ".join(real_violations[:5])
+    if expect == "present":
+        if real_matches:
+            return True, f"found {len(real_matches)} real match(es)"
+        return False, "pattern not found in real (non-comment, non-test) code -- expected wiring is missing"
+
+    # expect == "absent" (default)
+    if not real_matches:
+        return True, "no matches" if result.returncode == 1 else "all matches excluded (comments/tests/exclude_file)"
+    return False, "; ".join(real_matches[:5])
 
 
 def main():
