@@ -57,6 +57,19 @@ jobs:
       - name: Advisory scan (informational — see deny.toml to ignore specific RUSec IDs)
         run: cargo deny check advisories
 
+  security-claims-gate:
+    name: "Security — claims gate"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Build release binary
+        run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
+      - name: Run security claims gate
+        run: python3 scripts/ci/claims/run_claims.py
+
   python-lint-test:
     name: Python — lint + test
     runs-on: ubuntu-latest
