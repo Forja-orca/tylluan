@@ -65,9 +65,13 @@ stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/kern
 KERNEL_PID=$!
 
 # Wait for the kernel's HTTP port (to fetch its real pubkey) and P2P port.
+# REAL FIX (2026-08-19): see write_gate_rejects.sh for the full explanation --
+# 15s was never realistic for a cold-boot kernel (BGE-M3 embedding load +
+# always-on guild startup) on a GitHub Actions runner. Raised to 120s
+# (240 * 0.5s), matching CLAUDE.md's documented CPU-bound guild timeout floor.
 http_port=""
 p2p_port=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 240); do
   [ -z "$http_port" ] && http_port=$(grep -oP 'listening on 127\.0\.0\.1:\K[0-9]+' "$CONFIG_DIR/kernel.log" | head -1)
   [ -z "$p2p_port" ] && p2p_port=$(grep -oP 'P2P dispatch listener started on \S+:\K[0-9]+' "$CONFIG_DIR/kernel.log" | head -1)
   [ -n "$http_port" ] && [ -n "$p2p_port" ] && break
@@ -75,13 +79,13 @@ for _ in $(seq 1 30); do
 done
 
 if [ -z "$http_port" ]; then
-  echo "FAIL: kernel never logged its bound HTTP port within 15s"
+  echo "FAIL: kernel never logged its bound HTTP port within 120s"
   cat "$CONFIG_DIR/kernel.log"
   exit 1
 fi
 
 if [ -z "$p2p_port" ]; then
-  echo "FAIL: kernel never logged a bound P2P port within 15s"
+  echo "FAIL: kernel never logged a bound P2P port within 120s"
   cat "$CONFIG_DIR/kernel.log"
   exit 1
 fi

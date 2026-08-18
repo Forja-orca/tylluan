@@ -158,20 +158,20 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
 # (Rust binary + Python guild subprocesses), not a mock -- cold boot with
 # guild startup is real minutes-scale work on CPU-only hardware elsewhere
 # in this project's own stack (see ForjaMCPo3's CLAUDE.md: knowledge guild
-# alone can take 60-120s under CPU inference). These three specific scripts
-# only wait on early boot-log lines (CRITICAL_SECURITY_TRIGGER / HTTP+P2P
-# port announcements), each internally bounded to <=15s of polling, well
-# before any guild subsystem would need to be up -- so 60s has headroom for
-# THESE claims specifically. We still raise it to 90s as cheap insurance
-# against CI runner variance, and -- more importantly -- fix the two real
-# bugs: (1) an uncaught TimeoutExpired crashing the whole runner with a
-# traceback instead of a results table, and (2) subprocess.run's timeout
-# only SIGKILLing the `bash` process, which skips bash's EXIT trap
-# entirely and orphans the kernel + its process group. We now run the
+# alone can take 60-120s under CPU inference). We now run the
 # script through the `timeout` coreutil (SIGTERM, not SIGKILL) so bash gets
 # a chance to run its EXIT trap and clean up the process group itself,
 # with subprocess.run's own timeout kept as a hard backstop slightly above
 # the inner one in case `timeout` itself somehow doesn't fire.
+#
+# REAL FIX (2026-08-19): 90s was based on an assumption that the port-wait
+# polling loops these scripts run internally only needed <=15s of headroom
+# (an early boot-log line, well before guild subsystems). Live CI proved
+# that assumption wrong -- a cold GitHub Actions runner did not bind the
+# HTTP listener within 15s at all, only the earliest tracing line ever
+# appeared. Each script's own internal polling loop was raised to 120s to
+# match this project's documented CPU-bound-startup floor; this outer
+# budget must comfortably exceed that, so raised accordingly.
 #
 # Re-review fix (2026-08-18): that Python-side backstop, on its own, could
 # NOT actually clean up the kernel if it ever fired -- subprocess.run's
@@ -187,7 +187,7 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
 # instead of trying to manage process groups from Python, which is more
 # correct than teaching subprocess.run to signal a whole tree it never
 # owned a handle to.
-DYNAMIC_CLAIM_INNER_TIMEOUT_SECS = 90
+DYNAMIC_CLAIM_INNER_TIMEOUT_SECS = 180
 DYNAMIC_CLAIM_KILL_AFTER_SECS = 10
 DYNAMIC_CLAIM_OUTER_TIMEOUT_SECS = DYNAMIC_CLAIM_INNER_TIMEOUT_SECS + DYNAMIC_CLAIM_KILL_AFTER_SECS + 15
 
