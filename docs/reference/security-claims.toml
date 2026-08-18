@@ -17,9 +17,9 @@ expect = "present"
 scope = ["crates/tylluan-link/src/p2p.rs"]
 
 [[claim]]
-id = "host-devmode-refuses-to-start"
+id = "host-devmode-force-corrects-with-warning"
 doc_source = "docs/concepts/SECURITY.md:19"
-statement = "Kernel logs a warning and refuses to start if host=0.0.0.0 and dev_mode=true are both set"
+statement = "If host=0.0.0.0 and dev_mode=true are both set, the kernel logs a CRITICAL_SECURITY_TRIGGER warning naming the unsafe host and force-corrects it to 127.0.0.1 before boot -- it does NOT refuse to start. RULING (2026-08-18, José): the original claim ('refuses to start') was found false against real code by this gate's own first dynamic-script construction -- validate_security() in config.rs auto-corrects instead of refusing. José chose to fix the doc to match the real (and already reasonably safe: warned, fail-safe-by-correction) behavior rather than change the code to hard-refuse."
 check = "dynamic"
 script = "scripts/ci/claims/host_devmode_refuses.sh"
 
