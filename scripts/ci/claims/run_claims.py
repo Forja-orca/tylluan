@@ -70,6 +70,14 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     return False, "; ".join(real_matches[:5])
 
 
+def run_dynamic_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
+    script = repo_root / claim["script"]
+    result = subprocess.run(["bash", str(script)], cwd=repo_root, capture_output=True, text=True, timeout=60)
+    if result.returncode == 0:
+        return True, result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "ok"
+    return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:300]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--static-only", action="store_true", help="Skip dynamic claims (before dynamic scripts exist)")
@@ -86,7 +94,8 @@ def main():
             if args.static_only:
                 results.append((claim["id"], claim["check"], None, "skipped (--static-only)"))
             else:
-                results.append((claim["id"], claim["check"], None, "dynamic runner not yet implemented"))
+                passed, msg = run_dynamic_claim(claim, REPO_ROOT)
+                results.append((claim["id"], claim["check"], passed, msg))
         else:
             results.append((claim["id"], claim["check"], False, f"unknown check type: {claim['check']}"))
 
