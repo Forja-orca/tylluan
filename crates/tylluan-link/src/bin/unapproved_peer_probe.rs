@@ -11,12 +11,20 @@
 //! Usage:
 //!   unapproved_peer_probe <peer_addr:port> <peer_pubkey_hex>
 //!
-//! Exit code 0 and prints "REJECTED" if the peer was refused (either an
-//! explicit `{"success":false,"error":"peer not approved"}` response, or the
-//! connection/protocol failing outright -- both are acceptable "not
-//! executed" outcomes for an unapproved throwaway identity).
-//! Exit code 1 and prints "ACCEPTED" if the dispatch actually ran
-//! (`success: true`), which would mean the claim is FALSE.
+//! Exit codes (I6, 2026-08-18 review fix -- a prior version treated ANY
+//! `Err(e)` as "REJECTED: PASS", which would make a completely broken P2P
+//! listener (wrong key encoding, TCP refused, listener wedged) look exactly
+//! as secure as a correctly-enforced rejection. That is no longer true:
+//!   0  REJECTED -- the real auth/protocol rejection path fired: the kernel
+//!      returned `success:false` with `error == "peer not approved"`
+//!      (the literal string p2p.rs's peer_is_approved() rejection branch
+//!      sends, crates/tylluan-link/src/p2p.rs ~line 209).
+//!   1  ACCEPTED -- the dispatch actually ran (`success: true`). Claim FALSE.
+//!   2  INCONCLUSIVE -- a generic connection/protocol error (refused, reset,
+//!      handshake failure, wrong response shape) OR a `success:false` with
+//!      a DIFFERENT error message than "peer not approved". This is NOT
+//!      proof of correct enforcement -- a broken listener produces the same
+//!      symptom -- so the caller must NOT treat this as a pass.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -68,21 +76,37 @@ async fn main() {
     let result = execute_remote_tcp(&mut pool, request, peer_addr, peer_pubkey_hex, &identity).await;
     let _ = std::fs::remove_file(&identity_path);
 
+    const REAL_REJECTION_MESSAGE: &str = "peer not approved";
+
     match result {
         Ok(resp) if resp.success => {
             println!("ACCEPTED: unapproved peer's dispatch executed: {:?}", resp);
             std::process::exit(1);
         }
-        Ok(resp) => {
+        Ok(resp) if resp.error.as_deref() == Some(REAL_REJECTION_MESSAGE) => {
             println!(
-                "REJECTED: kernel returned success=false for unapproved peer (error={:?})",
+                "REJECTED: kernel returned the real auth-rejection path (error={:?})",
                 resp.error
             );
             std::process::exit(0);
         }
+        Ok(resp) => {
+            println!(
+                "INCONCLUSIVE: kernel returned success=false but NOT the expected \
+                 '{}' rejection (error={:?}) -- this does not prove the auth path \
+                 fired, it could be any other failure mode",
+                REAL_REJECTION_MESSAGE, resp.error
+            );
+            std::process::exit(2);
+        }
         Err(e) => {
-            println!("REJECTED: connection/protocol failed for unapproved peer: {}", e);
-            std::process::exit(0);
+            println!(
+                "INCONCLUSIVE: connection/protocol failed before any auth decision could be \
+                 observed ({}) -- this does NOT prove the peer was rejected by the approval \
+                 check; a broken listener would look identical",
+                e
+            );
+            std::process::exit(2);
         }
     }
 }

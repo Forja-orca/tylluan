@@ -24,13 +24,24 @@
 # "0.0.0.0:{listen_port}" (transport/http/mod.rs ~line 942), and logs
 # "P2P dispatch listener started on {bound_addr}" (~line 1002) -- NOT the
 # "P2P listening on 127.0.0.1:PORT" text an earlier draft guessed.
+# I1 (2026-08-18 review fix): `set -m` + killing the whole process group
+# (not just $KERNEL_PID) so the kernel's Python guild subprocesses are
+# actually reaped on cleanup, not orphaned.
 set -uo pipefail
+set -m
 
 BINARY="${TYLLUAN_BINARY:-./target/release/tylluan-nexus}"
 PROBE="${UNAPPROVED_PEER_PROBE:-./target/release/unapproved_peer_probe}"
 CONFIG_DIR=$(mktemp -d)
 KERNEL_PID=""
-trap 'rm -rf "$CONFIG_DIR"; [ -n "$KERNEL_PID" ] && kill "$KERNEL_PID" 2>/dev/null; true' EXIT
+cleanup() {
+  if [ -n "$KERNEL_PID" ]; then
+    kill -- "-$KERNEL_PID" 2>/dev/null || kill "$KERNEL_PID" 2>/dev/null
+    wait "$KERNEL_PID" 2>/dev/null
+  fi
+  rm -rf "$CONFIG_DIR"
+}
+trap cleanup EXIT
 
 if [ ! -x "$PROBE" ]; then
   echo "FAIL: probe binary not found/executable at $PROBE (build with: cargo build --release -p tylluan-link --bin unapproved_peer_probe)"
@@ -83,10 +94,22 @@ fi
 probe_output=$("$PROBE" "127.0.0.1:$p2p_port" "$peer_pubkey" 2>&1)
 probe_exit=$?
 
-if [ "$probe_exit" -ne 0 ]; then
-  echo "FAIL: unapproved peer's dispatch was ACCEPTED (should have been rejected): $probe_output"
-  exit 1
-fi
-
-echo "PASS: unapproved peer's dispatch was rejected: $probe_output"
-exit 0
+# I6 (2026-08-18 review fix): the probe now distinguishes a real auth
+# rejection (exit 0) from a merely INCONCLUSIVE generic connection/protocol
+# failure (exit 2) -- treating exit 2 as a pass would let a broken P2P
+# listener look exactly as secure as a correctly-enforced one. Only exit 0
+# is a real PASS.
+case "$probe_exit" in
+  0)
+    echo "PASS: unapproved peer's dispatch was rejected by the real auth path: $probe_output"
+    exit 0
+    ;;
+  1)
+    echo "FAIL: unapproved peer's dispatch was ACCEPTED (should have been rejected): $probe_output"
+    exit 1
+    ;;
+  *)
+    echo "FAIL: probe result was INCONCLUSIVE, not a confirmed rejection -- a broken listener would look identical: $probe_output"
+    exit 1
+    ;;
+esac

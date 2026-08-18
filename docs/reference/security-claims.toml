@@ -21,11 +21,11 @@ id = "host-devmode-force-corrects-with-warning"
 doc_source = "docs/concepts/SECURITY.md:19"
 statement = "If host=0.0.0.0 and dev_mode=true are both set, the kernel logs a CRITICAL_SECURITY_TRIGGER warning naming the unsafe host and force-corrects it to 127.0.0.1 before boot -- it does NOT refuse to start. RULING (2026-08-18, José): the original claim ('refuses to start') was found false against real code by this gate's own first dynamic-script construction -- validate_security() in config.rs auto-corrects instead of refusing. José chose to fix the doc to match the real (and already reasonably safe: warned, fail-safe-by-correction) behavior rather than change the code to hard-refuse."
 check = "dynamic"
-script = "scripts/ci/claims/host_devmode_refuses.sh"
+script = "scripts/ci/claims/host_devmode_force_corrects.sh"
 
 [[claim]]
 id = "encrypt-at-rest-single-choke-point"
-doc_source = "docs/concepts/SECURITY.md:48"
+doc_source = "docs/concepts/SECURITY.md:56"
 statement = "Every real database goes through config::open_db() -- zero direct rusqlite::Connection::open calls elsewhere"
 check = "static"
 pattern = 'Connection::open\('
@@ -41,7 +41,7 @@ script = "scripts/ci/claims/p2p_rejects_unapproved.sh"
 
 [[claim]]
 id = "write-gate-hard-rejects-known-patterns"
-doc_source = "docs/concepts/SECURITY.md:106"
+doc_source = "docs/concepts/SECURITY.md:114"
 statement = "tylluan_remember hard-rejects known injection patterns -- the node is never created"
 check = "dynamic"
 script = "scripts/ci/claims/write_gate_rejects.sh"

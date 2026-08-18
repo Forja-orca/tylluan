@@ -67,6 +67,8 @@ jobs:
           toolchain: stable
       - name: Build release binary
         run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
+      - name: Build unapproved peer probe
+        run: cargo build --release -p tylluan-link --bin unapproved_peer_probe
       - name: Run security claims gate
         run: python3 scripts/ci/claims/run_claims.py
 
