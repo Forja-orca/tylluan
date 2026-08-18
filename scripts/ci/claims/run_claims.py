@@ -104,7 +104,14 @@ def run_static_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     # silently corrupts the path:lineno:content split below (found while
     # verifying the I4 fix -- pre-existing bug, not introduced by it).
     args = ["rg", "--line-number", "--with-filename", "--no-heading", pattern] + scope
-    result = subprocess.run(args, cwd=repo_root, capture_output=True, text=True)
+    try:
+        result = subprocess.run(args, cwd=repo_root, capture_output=True, text=True)
+    except FileNotFoundError:
+        # Real incident (2026-08-18): the CI runner didn't have ripgrep
+        # installed, and this crashed with an uncaught traceback instead of
+        # a clean FAIL -- fixed the CI job to install it, but also fail
+        # cleanly here as defense-in-depth (local runs, other CI providers).
+        return False, "ripgrep ('rg') not found on PATH -- required for static claim checks"
 
     if result.returncode not in (0, 1):
         return False, f"ripgrep error: {result.stderr.strip()}"
