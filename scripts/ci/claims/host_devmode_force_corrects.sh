@@ -54,7 +54,12 @@ dev_mode = true
 port = 0
 EOF
 
-"$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/out.log" 2>&1 &
+# stdbuf -oL -eL: see write_gate_rejects.sh for the full explanation --
+# real CI bug found 2026-08-18, stdout block-buffers when piped to a file.
+# This particular script passed once by chance (its warning happens to be
+# emitted early enough to hit the buffer's first flush), but is at the same
+# real risk of flaking without this fix.
+stdbuf -oL -eL "$BINARY" --config "$CONFIG_DIR/tylluan.toml" > "$CONFIG_DIR/out.log" 2>&1 &
 KERNEL_PID=$!
 
 # Give it a few seconds to boot (or crash) -- we expect it to keep running.
