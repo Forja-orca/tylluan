@@ -233,7 +233,7 @@ def run_dynamic_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
     # gone much further. Raised to 6000 chars (a real kernel.log dump on a
     # boot failure runs a few KB at most) so a FAIL always carries enough of
     # the real log to diagnose from the printed table alone.
-    return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:6000]
+    return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:20000]
 
 
 def main():
