@@ -225,7 +225,15 @@ def run_dynamic_claim(claim: dict, repo_root: Path) -> tuple[bool, str]:
         return False, f"timed out and had to be force-killed after {DYNAMIC_CLAIM_INNER_TIMEOUT_SECS}+{DYNAMIC_CLAIM_KILL_AFTER_SECS}s -- cleanup may not have run, check for orphaned processes"
     if result.returncode == 0:
         return True, result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "ok"
-    return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:300]
+    # REAL BUG (2026-08-19): this used to cap FAIL detail at 300 chars, which
+    # silently ate the failing scripts' `cat "$CONFIG_DIR/kernel.log"` dump --
+    # exactly the data needed to diagnose a startup hang. Live CI output
+    # looked like the kernel only ever printed one boot line, when in fact
+    # that was just where the 300-char cutoff landed; the real log could have
+    # gone much further. Raised to 6000 chars (a real kernel.log dump on a
+    # boot failure runs a few KB at most) so a FAIL always carries enough of
+    # the real log to diagnose from the printed table alone.
+    return False, (result.stdout.strip() + " " + result.stderr.strip()).strip()[:6000]
 
 
 def main():
