@@ -69,6 +69,23 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ripgrep
+      - name: Install ONNX Runtime shared library
+        # Real bug found live in CI (2026-08-18): the kernel links `ort` with
+        # the `load-dynamic` feature (see tylluan-kernel/Cargo.toml) -- it
+        # never bundles ONNX Runtime, it loads libonnxruntime.so from the
+        # system at runtime. This job builds and runs a real kernel binary
+        # but never installed that library, so it panicked loading the Jina
+        # Turbo reranker before ever binding its HTTP port -- both dynamic
+        # claims failed with a misleading "port never logged" message that
+        # was really "kernel crashed before it got that far". Same version
+        # and install pattern as this repo's own Dockerfile (see Dockerfile
+        # ~line 42-53) so CI matches the real, already-solved production case.
+        run: |
+          curl -L -o /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
+          tar -zxf /tmp/onnxruntime.tgz -C /tmp
+          sudo mv /tmp/onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so* /usr/lib/
+          rm -rf /tmp/onnxruntime*
+          sudo ldconfig
       - name: Build release binary
         run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
       - name: Build unapproved peer probe
