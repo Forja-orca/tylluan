@@ -16,7 +16,15 @@ Tylluan is designed as a **localhost-only** sovereign hub. The attack surface is
 host = "0.0.0.0"   # LAN-reachable
 dev_mode = true     # auth disabled
 ```
-This combination is an unauthenticated LAN RCE. The kernel logs a warning and refuses to start if both are set.
+This combination is an unauthenticated LAN RCE. Corrected 2026-08-18 (the
+security claims CI gate caught this doc claim never matching real code):
+the kernel does **not** refuse to start. `TylluanConfig::validate_security()`
+(`config.rs`) logs `warn!("CRITICAL_SECURITY_TRIGGER: ...")` naming the
+unsafe host value, then force-overwrites it to `127.0.0.1` and boots
+normally -- fail-safe by correction, not fail-closed by refusal. The
+warning is real and visible in logs; there is no silent auto-correction.
+If you need the kernel to hard-refuse instead, that is not current
+behavior and would need its own change.
 
 ### Token management
 - Bearer token lives in `.tylluan-token` at the project root (`.gitignore`d) for source builds; `~/.tylluan/.tylluan-token` for binary installs
