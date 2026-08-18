@@ -410,16 +410,35 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // ─── M12-C: Boot-time NAT external address discovery ──────────
+    // REAL BUG FIX (2026-08-19, found live via the security-claims-gate CI
+    // job hanging for minutes before the HTTP port was ever bound): this used
+    // to `.await` synchronously HERE, before the HTTP server starts (see the
+    // "HTTP Server FIRST — before guilds" comment below) -- but
+    // discover_external_addr()'s result is never consumed anywhere else in
+    // main(), it's pure fire-and-log. Its underlying stun_binding_request()
+    // (tylluan-link/src/nat.rs) uses blocking std::net::UdpSocket with DNS
+    // resolution (to_socket_addrs()) that has NO timeout of its own -- only
+    // the UDP recv is bounded by stun_timeout_secs. On a network that drops
+    // (rather than fast-rejects) this traffic -- a GitHub Actions runner,
+    // or any real operator behind a restrictive firewall/corporate network
+    // -- 2 servers x 3 attempts each meant up to 6 unbounded DNS lookups
+    // blocking kernel startup for minutes, delaying /health and the HTTP
+    // listener bind for a purely optional, best-effort P2P convenience
+    // feature. Moved to a background tokio::spawn, matching the same
+    // "start in background, don't block boot" pattern already used for
+    // guild spawning just below.
     {
         let nat_config = tylluan_link::nat::NatConfig {
             stun_servers: config.nat.stun_servers.clone(),
             stun_timeout_secs: config.nat.stun_timeout_secs,
             stun_retries: config.nat.stun_retries,
         };
-        match tylluan_link::nat::discover_external_addr(&nat_config).await {
-            Ok(addr) => info!("🌐 NAT external IP: {}:{} (via {})", addr.ip, addr.port, addr.stun_server),
-            Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
-        }
+        tokio::spawn(async move {
+            match tylluan_link::nat::discover_external_addr(&nat_config).await {
+                Ok(addr) => info!("🌐 NAT external IP: {}:{} (via {})", addr.ip, addr.port, addr.stun_server),
+                Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
+            }
+        });
     }
 
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
