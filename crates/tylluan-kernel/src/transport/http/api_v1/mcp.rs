@@ -616,7 +616,16 @@ pub async fn mcp_handler(
                             }
                         }
                     }
+                    // REAL BUG FIX (2026-08-19, found live via a real tools/call
+                    // through Claude Code's native MCP connection, after tools/list
+                    // was already fixed): resultType is required on every result
+                    // object under protocol revision 2026-07-28, not just list
+                    // endpoints -- the spec's own tools/call example shows it
+                    // (modelcontextprotocol.io/specification/2026-07-28/server/tools).
+                    // This server never uses the MRTR "input_required" interim-result
+                    // pattern, so "complete" is always correct here.
                     let mut result_obj = serde_json::json!({
+                        "resultType": "complete",
                         "content": res.content,
                         "isError": is_error,
                     });
@@ -670,6 +679,7 @@ pub async fn mcp_handler(
                 serde_json::json!({
                     "jsonrpc": "2.0",
                     "result": {
+                        "resultType": "complete",
                         "description": "Universal multi-agent engineering constitution ??? product-agnostic discipline for any agent building on Tylluan or elsewhere",
                         "messages": [{ "role": "user", "content": { "type": "text", "text": CONSTITUTION } }]
                     },
@@ -715,6 +725,7 @@ pub async fn mcp_handler(
                 serde_json::json!({
                     "jsonrpc": "2.0",
                     "result": {
+                        "resultType": "complete",
                         "description": "TylluanNexus sovereign tool reference and workflow patterns",
                         "messages": [{ "role": "user", "content": { "type": "text", "text": text } }]
                     },
@@ -747,6 +758,7 @@ pub async fn mcp_handler(
                 serde_json::json!({
                     "jsonrpc": "2.0",
                     "result": {
+                        "resultType": "complete",
                         "contents": [{
                             "uri": crate::transport::http::mcp_apps::GRAPH_APP_URI,
                             "mimeType": crate::transport::http::mcp_apps::MCP_APP_MIME,
@@ -794,6 +806,7 @@ pub async fn mcp_handler(
                 serde_json::json!({
                     "jsonrpc": "2.0",
                     "result": {
+                        "resultType": "complete",
                         "contents": [{ "uri": "tylluan://skills", "mimeType": "text/plain", "text": text }]
                     },
                     "id": id
@@ -804,6 +817,7 @@ pub async fn mcp_handler(
             serde_json::json!({
                 "jsonrpc": "2.0",
                 "result": {
+                    "resultType": "complete",
                     "serverInfo": { "name": "tylluan-nexus-sovereign", "version": env!("CARGO_PKG_VERSION") },
                     "capabilities": {
                         "tools": { "listChanged": true },
@@ -839,6 +853,7 @@ pub async fn mcp_handler(
                         serde_json::json!({
                             "jsonrpc": "2.0",
                             "result": {
+                                "resultType": "complete",
                                 "taskId": job.id,
                                 "taskType": job.task_type,
                                 "status": mcp_status,
@@ -873,6 +888,7 @@ pub async fn mcp_handler(
                                     serde_json::json!({
                                         "jsonrpc": "2.0",
                                         "result": {
+                                            "resultType": "complete",
                                             "taskId": task_id,
                                             "status": new_status,
                                             "updated": updated
@@ -897,7 +913,7 @@ pub async fn mcp_handler(
                 match state.jobs.cancel(task_id) {
                     Ok(true) => serde_json::json!({
                         "jsonrpc": "2.0",
-                        "result": { "taskId": task_id, "status": "cancelled" },
+                        "result": { "resultType": "complete", "taskId": task_id, "status": "cancelled" },
                         "id": id
                     }),
                     Ok(false) => serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": format!("task '{}' not found or already completed", task_id) }, "id": id }),
