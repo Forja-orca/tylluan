@@ -33,11 +33,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# REAL BUG FIX (2026-08-19): the transport-default fix (7cd024b) exposed a
+# new real issue -- this config used to accidentally get an EMPTY transport
+# list (the very bug 7cd024b fixed), so only ever getting HTTP was pure
+# accident. With the fix, omitting `transport` here now correctly falls back
+# to the full default (stdio + http + sse). The kernel's stdio transport
+# reads stdin, and this script backgrounds the kernel with `&` under a CI
+# shell where stdin is not an interactive MCP client -- stdin EOFs almost
+# immediately, which correctly (this is intended behavior, not a kernel bug)
+# triggers a graceful shutdown that races the HTTP listener's own bind and
+# kills it mid-flight. This script only drives HTTP, so pin transport to
+# just that.
 cat > "$CONFIG_DIR/tylluan.toml" <<'EOF'
 [nexus]
 host = "127.0.0.1"
 dev_mode = true
 port = 0
+transport = ["http", "sse"]
 EOF
 
 # stdbuf -oL -eL forces line-buffered stdout/stderr even though we're

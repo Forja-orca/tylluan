@@ -48,11 +48,16 @@ if [ ! -x "$PROBE" ]; then
   exit 1
 fi
 
+# Pin transport to http+sse (see write_gate_rejects.sh for the full
+# explanation): the transport-default fix (7cd024b) means omitting
+# `transport` now correctly includes stdio, whose stdin-EOF-triggered
+# graceful shutdown races this script's own HTTP+P2P port-wait loop.
 cat > "$CONFIG_DIR/tylluan.toml" <<'EOF'
 [nexus]
 host = "127.0.0.1"
 dev_mode = true
 port = 0
+transport = ["http", "sse"]
 
 [p2p]
 enabled = true
