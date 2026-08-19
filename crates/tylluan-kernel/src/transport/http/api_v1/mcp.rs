@@ -539,7 +539,18 @@ pub async fn mcp_handler(
             };
             let apps_enabled = request_supports_apps || session_supports_apps;
             let tools = crate::transport::http::mcp_apps::tools_json(&tools, apps_enabled);
-            serde_json::json!({ "jsonrpc": "2.0", "result": { "tools": tools }, "id": id })
+            // REAL BUG FIX: protocol revision 2026-07-28 (which this server
+            // negotiates and claims to support -- see STATELESS_PROTOCOL_VERSION
+            // above) requires every list-style result to carry `resultType`
+            // explicitly. Earlier revisions tolerate its absence via a
+            // client-side compatibility bridge that infers "complete" when the
+            // field is missing, but strict 2026-07-28 clients reject a result
+            // that omits it outright. This server never paginates any list
+            // endpoint (no cursor/nextCursor anywhere in this file), so every
+            // response is always the complete set -- "complete" is always the
+            // correct value here, regardless of which protocol version the
+            // caller negotiated.
+            serde_json::json!({ "jsonrpc": "2.0", "result": { "tools": tools, "resultType": "complete" }, "id": id })
         }
         "tools/call" => {
             let tool_params = payload.get("params").cloned().unwrap_or(serde_json::Value::Null);
@@ -650,6 +661,8 @@ pub async fn mcp_handler(
             }
         }
         "prompts/list" => {
+            // See the resultType comment on tools/list above -- same fix, same
+            // reason: this endpoint never paginates either.
             serde_json::json!({
                 "jsonrpc": "2.0",
                 "result": {
@@ -662,7 +675,8 @@ pub async fn mcp_handler(
                             "name": "tylluan_engineering_constitution",
                             "description": "Universal multi-agent engineering discipline (the 10 sins, red zones, briefing/handoff templates) ??? product-agnostic, useful for building on Tylluan or bootstrapping any new project"
                         }
-                    ]
+                    ],
+                    "resultType": "complete"
                 },
                 "id": id
             })
@@ -727,6 +741,8 @@ pub async fn mcp_handler(
             }
         }
         "resources/list" => {
+            // See the resultType comment on tools/list above -- same fix, same
+            // reason: this endpoint never paginates either.
             serde_json::json!({
                 "jsonrpc": "2.0",
                     "result": {
@@ -735,7 +751,8 @@ pub async fn mcp_handler(
                         "name": "Tylluan Skill Catalog",
                         "description": "Example intents organized by guild ??? paste any of these into tylluan_do",
                         "mimeType": "text/plain"
-                        }, crate::transport::http::mcp_apps::graph_resource_descriptor()]
+                        }, crate::transport::http::mcp_apps::graph_resource_descriptor()],
+                        "resultType": "complete"
                 },
                 "id": id
             })
