@@ -379,7 +379,22 @@ pub struct NexusConfig {
     #[serde(default = "default_port")]
     pub port: u16,
 
-    #[serde(default)]
+    // REAL BUG FIX (2026-08-19, found live via the security-claims-gate CI
+    // job): this used to be plain `#[serde(default)]`, which for a
+    // `Vec<String>` field falls back to `Vec::default()` -- an EMPTY vec --
+    // not the `default_transports()` function below (that function was only
+    // ever reachable via `impl Default for NexusConfig`, i.e. only when the
+    // whole `[nexus]` table is absent from the TOML). Any real tylluan.toml
+    // with a `[nexus]` table that doesn't explicitly list `transport = [...]`
+    // -- exactly what this project's own CI test configs do -- silently
+    // booted a kernel serving NO transport at all: no stdio, no http, no
+    // sse. It printed "✅ TylluanNexus Kernel operational" and "[OK] Kernel
+    // operational — http://127.0.0.1:0" (using the *configured* port 0
+    // literally, since the HTTP block that would resolve the real bound
+    // port never ran) and kept running background jobs (guilds, IdleLab)
+    // forever, with no error and no crash -- a completely silent footgun
+    // for any operator whose config omits `transport`.
+    #[serde(default = "default_transports")]
     pub transport: Vec<String>,
 
     #[serde(default)]
