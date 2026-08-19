@@ -171,48 +171,6 @@ pub fn parse_stateless_request_meta(
     }))
 }
 
-pub fn validate_stateless_routing_headers(
-    headers: &HeaderMap,
-    payload: &serde_json::Value,
-) -> Result<(), (StatusCode, serde_json::Value)> {
-    let method = payload.get("method").and_then(serde_json::Value::as_str).unwrap_or_default();
-    let header_method = headers.get("Mcp-Method").and_then(|value| value.to_str().ok());
-    if header_method != Some(method) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            serde_json::json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32602,
-                    "message": "Mcp-Method header must match the JSON-RPC method"
-                },
-                "id": payload.get("id")
-            }),
-        ));
-    }
-    if method == "tools/call" {
-        let expected_name = payload
-            .get("params")
-            .and_then(|params| params.get("name"))
-            .and_then(serde_json::Value::as_str);
-        let header_name = headers.get("Mcp-Name").and_then(|value| value.to_str().ok());
-        if expected_name.is_none() || header_name != expected_name {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32602,
-                        "message": "Mcp-Name header must match tools/call params.name"
-                    },
-                    "id": payload.get("id")
-                }),
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// Negotiate the protocol version to declare in `initialize`'s response.
 /// If the client's requested version is one Tylluan actually implements, honor it
 /// (real negotiation). Otherwise, declare the newest version Tylluan does support --
@@ -376,9 +334,23 @@ pub async fn mcp_handler(
                 })),
             ).into_response();
         }
-        if let Err((status, error)) = validate_stateless_routing_headers(&headers, &payload) {
-            return (status, Json(error)).into_response();
-        }
+        // REAL BUG FIX (2026-08-19, found live: Claude Code -- and every other
+        // real, standards-compliant MCP client -- connected fine but every
+        // tool call failed): this used to require two custom, self-invented
+        // HTTP headers (Mcp-Method, Mcp-Name) that duplicate data already
+        // present in the JSON-RPC body (`method`, `params.name`) and are not
+        // part of any real MCP spec revision. No real client anywhere sends
+        // them -- only this repo's own test helpers did, which is why 665+
+        // tests never caught this: the tests were written to satisfy their
+        // own invented requirement, not to exercise real client behavior.
+        // Introduced 2026-08-10 (6133b5a, "M39-P2 stateless request meta
+        // (WIP)" -- explicitly marked WIP in its own commit message) and
+        // silently broke every real stateless MCP connection for 9 days.
+        // Checking header==body is not a real security boundary either: an
+        // attacker who can forge the body can trivially forge a matching
+        // header. Removed outright rather than made optional, since making
+        // it optional-but-enforced-if-present would still be dead weight no
+        // real client benefits from.
         if method == "initialize" || method == "notifications/initialized" {
             return (
                 StatusCode::NOT_FOUND,

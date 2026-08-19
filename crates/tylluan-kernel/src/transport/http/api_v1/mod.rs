@@ -1845,25 +1845,9 @@ mod protocol_negotiation_tests {
         assert!(parse_stateless_request_meta(&headers, &payload).is_err());
     }
 
-    #[test]
-    fn stateless_routing_headers_must_match_json_rpc() {
-        let payload = stateless_payload(
-            "tools/call",
-            serde_json::json!({
-                "name": "tylluan_do",
-                "arguments": {},
-                "_meta": stateless_meta()
-            }),
-        );
-        assert!(validate_stateless_routing_headers(
-            &stateless_headers("tools/call", Some("tylluan_do")),
-            &payload
-        ).is_ok());
-        assert!(validate_stateless_routing_headers(
-            &stateless_headers("tools/list", Some("tylluan_do")),
-            &payload
-        ).is_err());
-    }
+    // stateless_routing_headers_must_match_json_rpc removed 2026-08-19 along
+    // with validate_stateless_routing_headers() itself -- see the real-bug-fix
+    // comment in mcp.rs where its call site used to be.
 
     #[test]
     fn legacy_initialize_and_sse_detection_remain_unchanged() {
