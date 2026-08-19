@@ -47,11 +47,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Pin transport to http+sse (see write_gate_rejects.sh for the full
+# explanation): the transport-default fix (7cd024b) means omitting
+# `transport` now correctly includes stdio, whose stdin-EOF-triggered
+# graceful shutdown would race this script's own boot-completion check.
+# This claim only cares about the CRITICAL_SECURITY_TRIGGER warning, which
+# fires during config validation before any transport starts, so it was
+# never actually exposed to the race -- pinned anyway for consistency and
+# to keep this script's "did it exit uncleanly" check meaningful.
 cat > "$CONFIG_DIR/tylluan.toml" <<'EOF'
 [nexus]
 host = "0.0.0.0"
 dev_mode = true
 port = 0
+transport = ["http", "sse"]
 EOF
 
 # stdbuf -oL -eL: see write_gate_rejects.sh for the full explanation --
