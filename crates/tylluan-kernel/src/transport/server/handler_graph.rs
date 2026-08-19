@@ -239,6 +239,44 @@ pub async fn handle_tylluan_graph(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(10) as usize;
 
+            // FASE 1 (2026-08-19, consenso de equipo en Coloquio -- Deep, Antigravity,
+            // Claude Code): distinguir "seed no resuelve a ningun nodo real" de
+            // "seed real pero sin conexiones", con la convencion `warnings` acordada
+            // como patron de referencia para las otras 4 tools soberanas. Antes,
+            // un seed invalido (p.ej. el nombre de una tool en vez de un ID de
+            // memoria) producia `results: []` silencioso e indistinguible de un
+            // subgrafo vacio legitimo -- is_error: false en ambos casos.
+            let resolved = server.silva.existing_node_ids(&seeds).await.unwrap_or_default();
+            let unresolved: Vec<&String> = seeds.iter().filter(|s| !resolved.contains(*s)).collect();
+            let mut warnings: Vec<serde_json::Value> = Vec::new();
+            if !unresolved.is_empty() {
+                warnings.push(serde_json::json!({
+                    "code": "NODE_NOT_FOUND",
+                    "severity": "warn",
+                    "message": format!(
+                        "{} of {} seed(s) are not real node IDs and were never expanded: {}",
+                        unresolved.len(), seeds.len(),
+                        unresolved.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                    "suggestion": "Seeds must be real node IDs (e.g. 'agent_memory:...', 'lesson:...'), not tool or guild names. Use tylluan_graph(command='stats') or list_neighbors to discover valid IDs."
+                }));
+            }
+            if resolved.is_empty() {
+                // No seed resolved at all -- running PPR would be pure noise
+                // (BFS frontier can never expand), so skip the computation and
+                // surface the warning directly instead of a misleadingly
+                // "successful" empty result.
+                return Ok(CallToolResult {
+                    content: vec![Content::text(serde_json::json!({
+                        "action": "ppr",
+                        "seeds": seeds,
+                        "results": [],
+                        "warnings": warnings
+                    }).to_string())],
+                    is_error: Some(false),
+                });
+            }
+
             match server.silva.personalized_pagerank_local(&seeds, alpha, 20, top_k).await {
                 Ok(res) => {
                     let results_json: Vec<serde_json::Value> = res.into_iter().map(|(node_id, score)| {
@@ -248,12 +286,17 @@ pub async fn handle_tylluan_graph(
                         })
                     }).collect();
 
+                    let mut payload = serde_json::json!({
+                        "action": "ppr",
+                        "seeds": seeds,
+                        "results": results_json
+                    });
+                    if !warnings.is_empty() {
+                        payload["warnings"] = serde_json::Value::Array(warnings);
+                    }
+
                     Ok(CallToolResult {
-                        content: vec![Content::text(serde_json::json!({
-                            "action": "ppr",
-                            "seeds": seeds,
-                            "results": results_json
-                        }).to_string())],
+                        content: vec![Content::text(payload.to_string())],
                         is_error: Some(false),
                     })
                 }

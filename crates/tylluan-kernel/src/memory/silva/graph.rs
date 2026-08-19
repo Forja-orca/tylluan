@@ -172,6 +172,32 @@ impl super::SilvaDB {
         }))
     }
 
+    /// Returns the subset of `ids` that exist as real node IDs in `nodes`.
+    /// Used by callers (e.g. ppr's seed validation) that need to distinguish
+    /// "the ID doesn't exist at all" from "it exists but has no connections" --
+    /// a distinction this crate's callers otherwise had no way to make, since
+    /// personalized_pagerank_local's own BFS treats an unresolved seed and an
+    /// isolated real node identically (both just never expand the frontier).
+    pub async fn existing_node_ids(&self, ids: &[String]) -> Result<std::collections::HashSet<String>> {
+        if ids.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut found = std::collections::HashSet::new();
+            for chunk in ids.chunks(100) {
+                let placeholders = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+                let query = format!("SELECT id FROM nodes WHERE id IN ({placeholders})");
+                let mut stmt = conn.prepare(&query)?;
+                let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter()))?;
+                while let Some(row) = rows.next()? {
+                    found.insert(row.get::<_, String>(0)?);
+                }
+            }
+            Ok(found)
+        })
+    }
+
     /// TAREA 1 — Implementar silva.rs:personalized_pagerank_local() (R11-4)
     pub async fn personalized_pagerank_local(
         &self,
