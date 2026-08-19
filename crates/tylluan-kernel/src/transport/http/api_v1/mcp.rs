@@ -511,18 +511,26 @@ pub async fn mcp_handler(
             };
             let apps_enabled = request_supports_apps || session_supports_apps;
             let tools = crate::transport::http::mcp_apps::tools_json(&tools, apps_enabled);
-            // REAL BUG FIX: protocol revision 2026-07-28 (which this server
-            // negotiates and claims to support -- see STATELESS_PROTOCOL_VERSION
-            // above) requires every list-style result to carry `resultType`
-            // explicitly. Earlier revisions tolerate its absence via a
-            // client-side compatibility bridge that infers "complete" when the
-            // field is missing, but strict 2026-07-28 clients reject a result
-            // that omits it outright. This server never paginates any list
-            // endpoint (no cursor/nextCursor anywhere in this file), so every
-            // response is always the complete set -- "complete" is always the
-            // correct value here, regardless of which protocol version the
-            // caller negotiated.
-            serde_json::json!({ "jsonrpc": "2.0", "result": { "tools": tools, "resultType": "complete" }, "id": id })
+            // REAL BUG FIX (2026-08-19, corrected twice): protocol revision
+            // 2026-07-28 requires every list-style result to carry `resultType`
+            // explicitly (this server never paginates, so "complete" is always
+            // correct). It also defines a CacheableResult interface: `ttlMs`
+            // (freshness hint, ms) and `cacheScope` ("public"|"private") --
+            // per the real spec example (modelcontextprotocol.io/specification/
+            // 2026-07-28/server/tools), these live on the RESULT object itself,
+            // as siblings of `tools`, NOT inside each individual tool entry.
+            // An earlier version of this fix put them per-tool instead, which
+            // still failed strict-client validation (the field existed, just
+            // in the wrong place) -- caught live when Claude Code kept
+            // rejecting tools/list even after that fix shipped and restarted.
+            // This server has no result-caching layer, so `ttlMs: 0` (never
+            // cache) and `cacheScope: "private"` (never treat as shareable)
+            // are the conservative, always-correct values.
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "result": { "tools": tools, "resultType": "complete", "ttlMs": 0, "cacheScope": "private" },
+                "id": id
+            })
         }
         "tools/call" => {
             let tool_params = payload.get("params").cloned().unwrap_or(serde_json::Value::Null);
@@ -648,7 +656,9 @@ pub async fn mcp_handler(
                             "description": "Universal multi-agent engineering discipline (the 10 sins, red zones, briefing/handoff templates) ??? product-agnostic, useful for building on Tylluan or bootstrapping any new project"
                         }
                     ],
-                    "resultType": "complete"
+                    "resultType": "complete",
+                    "ttlMs": 0,
+                    "cacheScope": "private"
                 },
                 "id": id
             })
@@ -724,7 +734,9 @@ pub async fn mcp_handler(
                         "description": "Example intents organized by guild ??? paste any of these into tylluan_do",
                         "mimeType": "text/plain"
                         }, crate::transport::http::mcp_apps::graph_resource_descriptor()],
-                        "resultType": "complete"
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "private"
                 },
                 "id": id
             })

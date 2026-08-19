@@ -71,23 +71,6 @@ pub fn tools_json(tools: &[rmcp::model::Tool], apps_enabled: bool) -> Value {
         .map(|tool| serde_json::to_value(tool).unwrap_or_else(|_| json!({})))
         .collect::<Vec<_>>();
 
-    // REAL BUG FIX: protocol revision 2026-07-28 requires every tool entry
-    // to carry per-tool caching hints (`ttlMs`: number, `cacheScope`:
-    // "public"|"private") -- fields the `rmcp` crate (v0.1.5, predates this
-    // revision) has no concept of, so `rmcp::model::Tool`'s own Serialize
-    // impl never emits them. A strict 2026-07-28 client rejects tools/list
-    // outright without them. This server has no result-caching layer at
-    // all, so the conservative, always-correct values are `ttlMs: 0` (never
-    // cache) and `cacheScope: "private"` (never treat a cached result as
-    // shareable across callers) -- injected here the same way `_meta` is
-    // already injected for the graph tool below, just applied uniformly.
-    for tool in tools.iter_mut() {
-        if let Some(obj) = tool.as_object_mut() {
-            obj.entry("ttlMs").or_insert(json!(0));
-            obj.entry("cacheScope").or_insert(json!("private"));
-        }
-    }
-
     if apps_enabled
         && let Some(graph) = tools
             .iter_mut()
