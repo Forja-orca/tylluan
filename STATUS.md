@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-11 (v0.16.0: MCP 2026-07-28 adoption complete — M39 P0-P2, stateless core verified live with curl, Tasks with closed-state guards, real MCP Apps manifests replacing a bare capability flag; M40 complete — 8 phases making Tylluan an agent's continuity/trust/action layer: self-documenting guild contracts, unified bootstrap/resume, full plan→act→verify→undo cycle, evidence/provenance on memory, Trust Console drift detection, concurrency test suite, near-invisible setup; 3 real bugs found live and fixed end-to-end including Qwen Desktop's long-standing SSE-mode hang, root-caused to `sse_handler` discarding real client headers and confirmed fixed by the affected client itself; CoherenceGate→dataset circuit phases 1+2 shipped — structured A/B examples with real post-hoc ground truth via the existing Signal Loop, nothing trained yet by design)
+> Last updated: 2026-08-20 · HEAD `95eeb2c` · v0.16.0 (Cargo.toml)
 
 ## CI
 
@@ -15,8 +15,34 @@
 | Rust — ARM64 portability (aarch64-unknown-linux-gnu) | ✅ pass |
 | Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
 | Docker smoke | ✅ pass (local validated by Antigravity) |
+| Security — claims gate | ✅ pass |
 
-**Commit:** `30f2a19` · **760 total** lib green (679 kernel lib + 69 link lib + 12 fsrs), local Windows -- CI real pendiente de confirmar. **2026-08-15: CoherenceGate Layer 4 enforcement real** (Deep) -- el juicio LLM ya no solo observa: Reject cuarentena el nodo (mismo mecanismo de ASI06), KeepSoft reduce el peso ×0.5, Keep sin acción. La recall que disparó el juicio no se ve afectada, solo las futuras. **2026-08-14: A2A (Deep) F1-F4 completo** -- cliente outbound (a2a_client.rs), exposición REST + intent `@agent <name>: <msg>` con ACL fail-closed (api_a2a_agents.rs, handler_do/a2a.rs), streaming SSE real (`message/stream`), hardening (límite de body 1 MiB, -32600 JSON-RPC). Verificado en vivo contra el SDK oficial (`tools/a2a_echo_agent.py`) -- un bug real encontrado y corregido en el proceso: `resolve_endpoint()` no añadía `/a2a` al hacer fallback cuando la card no trae `url` (caso real del SDK v1.1.x). **2026-08-13: ASI06 cerrado** -- gate de coherencia en ingestión para `tylluan_remember` (2 capas: rechazo síncrono por patrón de inyección conocido antes de cualquier escritura, juicio LLM asíncrono post-escritura que marca `quarantined=1` sin bloquear ni borrar). Nodos en cuarentena excluidos de `tylluan_recall` y de federación (`get_shareable_nodes`). Campo `quarantined` deliberadamente ortogonal al `status` existente (confianza-en-el-tiempo) para no colisionar semánticamente. **2026-08-12, mismo día:** P2P peer authorization real vía Ed25519↔X25519 (Deep) -- cierra el diseño que la mitigación de emergencia `4674f84` dejó pendiente; `FrictionStore::open(path)` con migración columna-por-columna (Mimo); ACL fail-closed vía `AclContext` explícito por transporte (Codex, ver entrada anterior); primer piloto de dirección visual del dashboard -- paleta con nombre propio + tipografía self-hosted, WCAG AA 10/10 verificado (Antigravity, componente `DeviceStatusBadge` únicamente). **2026-08-12: ACL rediseñado fail-closed** (Codex) — `current_acl_role()` ahora devuelve `Option<String>`, `AclContext` explícito por transporte (HTTP autenticado/stdio local/interno/dev-bypass) instalado en el choke point real `handle_call_internal`; ausencia de contexto ya no hereda `admin` implícitamente. M39 (P0-P2) y M40 (P1-P8) completos y verificados contra el kernel vivo real. **2026-08-12: cerrada vulnerabilidad crítica real** (`4674f84`) encontrada por auditoría externa multi-modelo — listener de dispatch P2P activo por defecto en `0.0.0.0:9123`, ejecutaba guilds tras handshake Noise XK sin comprobar peer aprobado (RCE no autenticado en LAN); mitigado con `p2p.enabled=false` por defecto + test de regresión, verificación real de peer sigue pendiente (bloqueada por el mapeo Ed25519↔X25519, no apta para hotfix). Mismo ciclo (`497fa95`): bug funcional de `coherence_gate.rs` (llamada a `llama_backend` sin header de auth, 401 en producción real), 4 contradicciones docs↔código corregidas, dedup de `GraphNode` en `search.rs`. Ver `docs/roadmap/ROADMAP_O3.md` para el detalle completo y la lección de proceso (2ª vez que auditoría externa encuentra lo que revisión interna no cazó).
+**HEAD:** `95eeb2c` · **764 total** lib green (683 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+
+### Trabajo desde v0.16.0 (30 commits, `fe954bb..HEAD`)
+
+**Security Claims CI Gate** (ciclo completo: spec → manifest → checker → scripts → CI → cleanup)
+- Design + spec (`d64265a`, `f8eef30`), claims manifest con 5 propiedades documentadas (`c8f632c`)
+- Checker estático (`cc1243c`) + scripts dinámicos para host/dev_mode/P2P/write-gate (`2cbeed1`)
+- CI wiring (`0667b92`) + fixes de fiabilidad (detail caps 300→20000, timeouts 120s, ONNX runtime, ripgrep)
+- Feature complete + SDD cleanup (`404426f`)
+
+**MCP spec compliance** (6 commits)
+- `resultType` field en tools/list, prompts/list, resources/list (`e684f02`)
+- Caching hints `ttlMs`/`cacheScope` a nivel resultado (`eee1a24`)
+- Eliminación de headers autoinventados `Mcp-Method`/`Mcp-Name` (`7eb9dbb`)
+- `resultType` en todas las success results reales (`d65b5e0`)
+
+**PPR warnings (feat commits `3dda4ff` + `95eeb2c`)
+- Fase 1: PPR distingue seeds no resueltos de subgrafo vacío via `warnings[]` array
+- Fase 2: `query` y `expand` emiten `NODE_NOT_FOUND` warnings + tests (`95eeb2c`)
+
+**Deps y kernel**
+- `h2` 0.4.16 (RUSTSEC-2026-0258) + `spin` 0.9.9 (yanked) (`56f4364`)
+- NAT/STUN discovery ya no bloquea bind HTTP (`8a6ec8c`)
+- `NexusConfig.transport` default a empty, no stdio+http+sse (`7cd024b`)
+- `llama_backend` port conflict fix (`a70d3ca`)
+- Tauri UI: Vite entry point real commitiado (`61479bc`)
 
 ---
 
