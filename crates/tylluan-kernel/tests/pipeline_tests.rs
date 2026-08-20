@@ -7,6 +7,7 @@ use tylluan_kernel::transport::http::sse::sse_routes;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+use tylluan_kernel::transport::http::auth;
 use tylluan_kernel::transport::http::HttpState;
 use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::registry::guild_process::GuildRegistry;
@@ -20,6 +21,7 @@ use tylluan_kernel::doctor::Doctor;
 use tylluan_kernel::registry::actor::RegistryActor;
 use axum::body::Body;
 use axum::http::{Request, header};
+use axum::middleware;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde_json::json;
@@ -219,6 +221,10 @@ fn build_test_app(state: Arc<HttpState>) -> axum::Router {
     axum::Router::new()
         .merge(api_v1_routes())
         .route("/mcp", axum::routing::post(mcp_handler))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::bearer_auth_middleware,
+        ))
         .with_state(state)
 }
 
