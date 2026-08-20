@@ -60,6 +60,22 @@ pub async fn handle_tylluan_graph(
 
             let _ = server.silva.touch_node(&subject, &agent_id, "query").await;
 
+            // FASE 2 (2026-08-20, convención warnings de docs/reference/MCP_WARNINGS_CONVENTION.md):
+            // 'query' es búsqueda híbrida, no lookup exacto. Si el subject no es
+            // un nodo real, los resultados son matches semánticos, NO triples
+            // exactos del subject — eso es un aviso que el caller debe conocer,
+            // no un error (los resultados siguen siendo útiles).
+            let resolved = server.silva.existing_node_ids(&[subject.clone()]).await.unwrap_or_default();
+            let mut warnings: Vec<serde_json::Value> = Vec::new();
+            if !resolved.contains(&subject) {
+                warnings.push(serde_json::json!({
+                    "code": "NODE_NOT_FOUND",
+                    "severity": "warn",
+                    "message": format!("'{subject}' is not a real node ID — results below are semantic matches via hybrid search, not exact triples of the subject."),
+                    "suggestion": "Use tylluan_graph(command='add_triple') to create the node, or list_neighbors/stats to discover valid IDs."
+                }));
+            }
+
             let nodes_with_scores = server.silva.search_hybrid(&subject, None, 5, None, false).await.unwrap_or_default();
             let mut triples = Vec::new();
 
@@ -77,12 +93,17 @@ pub async fn handle_tylluan_graph(
                 }
             }
 
+            let mut payload = serde_json::json!({
+                "query": subject,
+                "results": triples,
+                "count": triples.len()
+            });
+            if !warnings.is_empty() {
+                payload["warnings"] = serde_json::Value::Array(warnings);
+            }
+
             Ok(CallToolResult {
-                content: vec![Content::text(serde_json::json!({
-                    "query": subject,
-                    "results": triples,
-                    "count": triples.len()
-                }).to_string())],
+                content: vec![Content::text(payload.to_string())],
                 is_error: Some(false)
             })
         }
@@ -183,6 +204,31 @@ pub async fn handle_tylluan_graph(
             let node_id = arguments.as_ref().and_then(|a| a.get("node_id")).and_then(|v| v.as_str()).unwrap_or("").to_string();
             let depth = arguments.as_ref().and_then(|a| a.get("depth")).and_then(|v| v.as_u64()).unwrap_or(1).min(3) as usize;
             if node_id.is_empty() { return Ok(error_result("expand requires 'node_id'.")); }
+
+            // FASE 2 (2026-08-20, convención warnings de docs/reference/MCP_WARNINGS_CONVENTION.md):
+            // expand es lookup EXACTO por ID — un node_id que no existe como
+            // nodo real no puede distinguirse de un nodo aislado legítimo
+            // (mismo bug que tenía ppr). Warning NODE_NOT_FOUND: el early return
+            // con el JSON completo mantiene el contrato (center/depth/nodes)
+            // mientras da la señal diagnóstica.
+            let resolved = server.silva.existing_node_ids(&[node_id.clone()]).await.unwrap_or_default();
+            if !resolved.contains(&node_id) {
+                return Ok(CallToolResult {
+                    content: vec![Content::text(serde_json::json!({
+                        "nodes": [],
+                        "edges": [],
+                        "center": node_id,
+                        "depth": depth,
+                        "warnings": [{
+                            "code": "NODE_NOT_FOUND",
+                            "severity": "warn",
+                            "message": format!("'{node_id}' is not a real node ID — nothing to expand."),
+                            "suggestion": "Use tylluan_graph(command='stats') or list_neighbors to discover valid node IDs."
+                        }]
+                    }).to_string())],
+                    is_error: Some(false),
+                });
+            }
 
             let nodes = server.silva.get_context(&node_id, depth).await.unwrap_or_default();
             let node_ids: std::collections::HashSet<String> = nodes.iter().map(|n| n.id.clone()).collect();
@@ -304,5 +350,124 @@ pub async fn handle_tylluan_graph(
             }
         }
         _ => Ok(error_result(&format!("Unknown tylluan_graph command: {command}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::agent_nodes::AgentNodeRouter;
+    use crate::memory::hybrid::HybridMemory;
+    use crate::memory::mailbox::Mailbox;
+    use crate::memory::silva::SilvaDB;
+    use crate::registry::guild_process::GuildRegistry;
+    use crate::router::catalog::builtin_catalog;
+    use crate::router::matcher::GuildMatcher;
+    use crate::transport::server::TylluanServer;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::broadcast;
+    use tokio::sync::RwLock;
+
+    async fn test_server() -> TylluanServer {
+        let reg = GuildRegistry::new(PathBuf::from("."), 300, Default::default(), 3);
+        let test_reg = Arc::new(RwLock::new(reg));
+        let matcher = GuildMatcher::new(builtin_catalog());
+        let (tx, _) = broadcast::channel(16);
+        let node_router = AgentNodeRouter::new(tx);
+        let doctor = Arc::new(crate::doctor::Doctor::new(
+            test_reg.clone(),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
+        ));
+        TylluanServer::new(
+            test_reg,
+            Arc::new(matcher),
+            Arc::new(HybridMemory::in_memory().await.unwrap()),
+            Arc::new(SilvaDB::in_memory().await.unwrap()),
+            Arc::new(Mailbox::in_memory().await.unwrap()),
+            doctor,
+            node_router,
+        )
+    }
+
+    async fn call_graph(
+        server: &TylluanServer,
+        args: serde_json::Map<String, serde_json::Value>,
+    ) -> serde_json::Value {
+        let result = handle_tylluan_graph(server, Some(args)).await
+            .expect("handler must not fail");
+        assert_eq!(result.is_error, Some(false), "expected non-error result");
+        serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn expand_nonexistent_node_returns_warning() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("command".into(), serde_json::Value::String("expand".into()));
+        args.insert("node_id".into(), serde_json::Value::String("nonexistent:node".into()));
+
+        let payload = call_graph(&server, args).await;
+        let warnings = payload["warnings"].as_array().unwrap();
+        assert_eq!(warnings.len(), 1, "must surface exactly one warning");
+        assert_eq!(warnings[0]["code"], "NODE_NOT_FOUND");
+        assert_eq!(payload["nodes"].as_array().unwrap().len(), 0);
+        assert_eq!(payload["center"], "nonexistent:node");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn expand_existing_isolated_node_has_no_warning() {
+        let server = test_server().await;
+        server.silva.upsert_node("g1", "concept", "a real concept", "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("command".into(), serde_json::Value::String("expand".into()));
+        args.insert("node_id".into(), serde_json::Value::String("g1".into()));
+
+        let payload = call_graph(&server, args).await;
+        assert!(payload["warnings"].is_null(), "isolated real node is a legitimate empty result");
+        assert_eq!(payload["center"], "g1");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn expand_missing_node_id_is_error() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("command".into(), serde_json::Value::String("expand".into()));
+
+        let result = handle_tylluan_graph(&server, Some(args)).await.unwrap();
+        assert_eq!(result.is_error, Some(true), "missing node_id must be a schema error, not a warning");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn query_nonexistent_subject_returns_warning() {
+        let server = test_server().await;
+        let mut args = serde_json::Map::new();
+        args.insert("command".into(), serde_json::Value::String("query".into()));
+        args.insert("subject".into(), serde_json::Value::String("nonexistent:subject".into()));
+
+        let payload = call_graph(&server, args).await;
+        let warnings = payload["warnings"].as_array().unwrap();
+        assert_eq!(warnings.len(), 1, "must surface exactly one warning");
+        assert_eq!(warnings[0]["code"], "NODE_NOT_FOUND");
+        assert_eq!(payload["count"], 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn query_existing_subject_has_no_warning() {
+        let server = test_server().await;
+        server.silva.upsert_node("s1", "concept", "s1 subject concept", "{}").await.unwrap();
+        server.silva.upsert_node("o1", "concept", "o1 object concept", "{}").await.unwrap();
+        server.silva.add_edge("s1", "o1", "relates_to", 1.0, "{}").await.unwrap();
+
+        let mut args = serde_json::Map::new();
+        args.insert("command".into(), serde_json::Value::String("query".into()));
+        args.insert("subject".into(), serde_json::Value::String("s1".into()));
+
+        let payload = call_graph(&server, args).await;
+        assert!(payload["warnings"].is_null(), "existing subject must not warn");
+        assert!(payload["count"].as_i64().unwrap() > 0, "must find the edge");
     }
 }
