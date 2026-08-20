@@ -647,7 +647,7 @@ async fn resolve_and_prepare_tool_call(
     effective_intent: &str,
     guild_hint: &Option<String>,
     agent_id: &Option<String>,
-    _arguments: &Option<serde_json::Map<String, serde_json::Value>>,
+    arguments: &Option<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<ResolvedToolCall, CallToolResult> {
     let (guild_name, routing_trace) = match resolve_guild_name(server, routing_intent, guild_hint.clone(), agent_id.as_deref()).await {
         Ok((name, trace)) => (name, trace),
@@ -815,7 +815,25 @@ async fn resolve_and_prepare_tool_call(
                 obj.insert("intent".to_string(), serde_json::Value::String(cn.clone()));
             }
             if tool_hint == "read" {
-                let (limit, offset) = _parse_coloquio_pagination(intent);
+                // REAL BUG FIX: pagination used to come ONLY from regex-parsing
+                // the `intent` text (e.g. "offset 150" written in the sentence).
+                // Any real, structured `limit`/`offset` argument the caller
+                // passed directly to tylluan_do -- exactly what a normal MCP
+                // tool call looks like -- was silently discarded, because
+                // `tool_args` above is built fresh from the intent string and
+                // a fixed field set, never consulting the original `arguments`
+                // map. Found live: an offset argument passed structurally to
+                // tylluan_do(guild="coloquio", command=<channel>, offset=150)
+                // never took effect, always falling back to offset=0. Now
+                // prefer an explicit numeric argument when the caller supplied
+                // one; only fall back to text-parsing the intent when they
+                // didn't (keeps the natural-language "offset 150" / "desde
+                // turno 150" phrasing working exactly as before).
+                let explicit_limit = arguments.as_ref().and_then(|a| a.get("limit")).and_then(|v| v.as_i64());
+                let explicit_offset = arguments.as_ref().and_then(|a| a.get("offset")).and_then(|v| v.as_i64());
+                let (text_limit, text_offset) = _parse_coloquio_pagination(intent);
+                let limit = explicit_limit.unwrap_or(text_limit);
+                let offset = explicit_offset.unwrap_or(text_offset);
                 if limit > 0 { obj.insert("limit".to_string(), serde_json::Value::Number(limit.into())); }
                 if offset > 0 { obj.insert("offset".to_string(), serde_json::Value::Number(offset.into())); }
             }
