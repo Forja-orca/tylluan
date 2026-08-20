@@ -758,8 +758,19 @@ async fn resolve_and_prepare_tool_call(
 
     if (guild_name == "bash" || guild_name == "git")
         && let Some(obj) = tool_args.as_object_mut() {
-            let clean = extract_command_from_intent(intent);
-            obj.insert("command".to_string(), serde_json::Value::String(clean.to_string()));
+            // Same root cause as the limit/offset fix above: `tool_args` is
+            // built fresh from the intent string and a fixed field set, so a
+            // structured `command` argument the caller passed directly to
+            // tylluan_do was silently overwritten by the text-extracted one.
+            // Prefer the explicit argument; fall back to text parsing.
+            let explicit_command = arguments.as_ref()
+                .and_then(|a| a.get("command"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty());
+            let clean = explicit_command
+                .map(str::to_string)
+                .unwrap_or_else(|| extract_command_from_intent(intent).to_string());
+            obj.insert("command".to_string(), serde_json::Value::String(clean));
         }
 
     if guild_name == "bash" && tool_name != "bash_execute" && !is_bash_state_intent(intent) {
@@ -806,13 +817,25 @@ async fn resolve_and_prepare_tool_call(
             },
         }.to_string();
         if let Some(obj) = tool_args.as_object_mut() {
-            if let Some(ref cid) = channel_id {
-                obj.insert("channel_id".to_string(), serde_json::Value::String(cid.clone()));
+            // Same root cause as the limit/offset fix: prefer structured
+            // arguments the caller passed to tylluan_do; fall back to
+            // parsing the intent text (keeps natural-language phrasing
+            // like "post to coloquio general: ..." working unchanged).
+            let explicit_channel = arguments.as_ref()
+                .and_then(|a| a.get("channel_id"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty());
+            if let Some(cid) = explicit_channel.or(channel_id.as_deref()) {
+                obj.insert("channel_id".to_string(), serde_json::Value::String(cid.to_string()));
             }
-            if let Some(ref cn) = content_or_name {
-                obj.insert("content".to_string(), serde_json::Value::String(cn.clone()));
-                obj.insert("message".to_string(), serde_json::Value::String(cn.clone()));
-                obj.insert("intent".to_string(), serde_json::Value::String(cn.clone()));
+            let explicit_content = arguments.as_ref()
+                .and_then(|a| a.get("content"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty());
+            if let Some(cn) = explicit_content.or(content_or_name.as_deref()) {
+                obj.insert("content".to_string(), serde_json::Value::String(cn.to_string()));
+                obj.insert("message".to_string(), serde_json::Value::String(cn.to_string()));
+                obj.insert("intent".to_string(), serde_json::Value::String(cn.to_string()));
             }
             if tool_hint == "read" {
                 // REAL BUG FIX: pagination used to come ONLY from regex-parsing
@@ -837,10 +860,21 @@ async fn resolve_and_prepare_tool_call(
                 if limit > 0 { obj.insert("limit".to_string(), serde_json::Value::Number(limit.into())); }
                 if offset > 0 { obj.insert("offset".to_string(), serde_json::Value::Number(offset.into())); }
             }
-            if !obj.contains_key("author_id") && !intent.to_lowercase().contains("author ")
-                && let Some(aid) = agent_id.as_deref().filter(|a| !a.trim().is_empty()) {
+            if !obj.contains_key("author_id") {
+                // Same root cause: prefer an explicit `author_id` argument;
+                // fall back to "author X" in the intent text, then to the
+                // caller's agent_id.
+                let explicit_author = arguments.as_ref()
+                    .and_then(|a| a.get("author_id"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty());
+                if let Some(aid) = explicit_author {
                     obj.insert("author_id".to_string(), serde_json::Value::String(aid.to_string()));
-                }
+                } else if !intent.to_lowercase().contains("author ")
+                    && let Some(aid) = agent_id.as_deref().filter(|a| !a.trim().is_empty()) {
+                        obj.insert("author_id".to_string(), serde_json::Value::String(aid.to_string()));
+                    }
+            }
         }
     }
 
