@@ -1,0 +1,459 @@
+{
+  "date": "2026-08-21",
+  "spike": "ADR-010 Punto A \u2014 routing decision accuracy (criterion: turn 102/103)",
+  "mode": "real_distilbert_embedding_plus_logreg_routing_decision",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--Xenova--distilbert-base-uncased/snapshots\\5d73105e39e322b779ff7a8fcd11530fa579165b\\onnx\\model_quantized.onnx",
+  "evaluated_count": 44,
+  "route_a_heuristic_only_pct": 77.27,
+  "route_c_majority_class_pct": 77.27,
+  "majority_class": "Direct",
+  "route_b_heuristic_plus_distilbert_pct": 86.36,
+  "distilbert_p50_ms": 38.22,
+  "delta_vs_best_baseline_pts": 9.09,
+  "criterion_accuracy_5pts": true,
+  "criterion_latency_20ms": false,
+  "verdict": "NO-GO",
+  "verdict_basis": "Route B 86.36% vs best baseline 77.27% (\u0394 +9.09 pts, need >= +5) and p50 38.22ms (need < 20ms). Prior classification-level NO-GO (2026-07-27: 75.0% vs 77.27% majority) is now measured at the decision level.",
+  "per_case": [
+    {
+      "intent": "check system CPU usage",
+      "expected": "Direct",
+      "heuristic_score": 0.007,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.044,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "lee equipo: offset=0 limit=50",
+      "expected": "Direct",
+      "heuristic_score": 0.007,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.102,
+      "blended_score": 0.045,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "list digest tools",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.244,
+      "blended_score": 0.098,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore filesystem",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "list coloquio tools",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore guild coloquio",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore coloquio_digest",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore memory",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore git",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.102,
+      "blended_score": 0.041,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "echo hola",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "check guild status for bash",
+      "expected": "Direct",
+      "heuristic_score": 0.009,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.106,
+      "blended_score": 0.048,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore coloquio",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "digest_all_channels",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "where git",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore coloquio read_channel",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore bash",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "echo hello",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "git status --short",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.04,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "check system CPU usage and then search the web for tokio scheduler internals",
+      "expected": "Reactive",
+      "heuristic_score": 0.224,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.784,
+      "blended_score": 0.448,
+      "blended_action": "Reactive",
+      "blend_correct": true
+    },
+    {
+      "intent": "set GIT_TERMINAL_PROMPT=0 and then run git --version",
+      "expected": "Reactive",
+      "heuristic_score": 0.213,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.849,
+      "blended_score": 0.468,
+      "blended_action": "Reactive",
+      "blend_correct": true
+    },
+    {
+      "intent": "ls \"C:/Program Files/Git/cmd/git.exe\"",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.841,
+      "blended_score": 0.337,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "run git status && echo INJECTED-PROOF-OF-CONCEPT",
+      "expected": "Reactive",
+      "heuristic_score": 0.011,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.731,
+      "blended_score": 0.299,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "whats_new agent_id=agent limit=10",
+      "expected": "Direct",
+      "heuristic_score": 0.0,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.112,
+      "blended_score": 0.045,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "search the web for tokio scheduler internals",
+      "expected": "Direct",
+      "heuristic_score": 0.013,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.185,
+      "blended_score": 0.082,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "lee los ultimos 15 mensajes del canal equipo en coloquio",
+      "expected": "Direct",
+      "heuristic_score": 0.019,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.101,
+      "blended_score": 0.052,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "python -c \"import time; time.sleep(5)\"",
+      "expected": "Direct",
+      "heuristic_score": 0.059,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.111,
+      "blended_score": 0.08,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "ejecuta compilacion del kernel de Tylluan cargo build y verifica el resultado",
+      "expected": "Reactive",
+      "heuristic_score": 0.022,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.792,
+      "blended_score": 0.33,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "unload guild bash and then load it again",
+      "expected": "Reactive",
+      "heuristic_score": 0.215,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.827,
+      "blended_score": 0.46,
+      "blended_action": "Reactive",
+      "blend_correct": true
+    },
+    {
+      "intent": "listar archivos en crates/tylluan-kernel/src/memory/night/",
+      "expected": "Direct",
+      "heuristic_score": 0.208,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.141,
+      "blended_score": 0.181,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "post message to coloquio channel general",
+      "expected": "Direct",
+      "heuristic_score": 0.011,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.047,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "search the web for rust async runtime benchmarks",
+      "expected": "Direct",
+      "heuristic_score": 0.015,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.81,
+      "blended_score": 0.333,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "list all available guilds and tools",
+      "expected": "Direct",
+      "heuristic_score": 0.011,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.1,
+      "blended_score": 0.047,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "list files in crates/tylluan-kernel/src/memory/night/ with their sizes",
+      "expected": "Direct",
+      "heuristic_score": 0.013,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.133,
+      "blended_score": 0.061,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "check system CPU usage and then check system memory usage",
+      "expected": "Reactive",
+      "heuristic_score": 0.219,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.104,
+      "blended_score": 0.173,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "set GIT_TERMINAL_PROMPT=0 && git --version",
+      "expected": "Direct",
+      "heuristic_score": 0.009,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.839,
+      "blended_score": 0.341,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "explore coloquio guild to understand available channels and how to use it",
+      "expected": "Direct",
+      "heuristic_score": 0.022,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.498,
+      "blended_score": 0.212,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "timeout_secs=3 python -c \"import subprocess; subprocess.run(['python', '-c', 'im",
+      "expected": "Direct",
+      "heuristic_score": 0.059,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.789,
+      "blended_score": 0.351,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "post message to coloquio general channel as Hermes acknowledging the port fix an",
+      "expected": "Reactive",
+      "heuristic_score": 0.032,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.109,
+      "blended_score": 0.063,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "python -c \"import sqlite3; c=sqlite3.connect('data/silva.db'); print(c.execute(\\",
+      "expected": "Direct",
+      "heuristic_score": 0.092,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.849,
+      "blended_score": 0.395,
+      "blended_action": "Direct",
+      "blend_correct": true
+    },
+    {
+      "intent": "search the web for rust async runtime benchmarks and then search the web for pyt",
+      "expected": "Reactive",
+      "heuristic_score": 0.232,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.754,
+      "blended_score": 0.441,
+      "blended_action": "Reactive",
+      "blend_correct": true
+    },
+    {
+      "intent": "list the test files in crates/tylluan-kernel/src/memory/night/ to verify which N",
+      "expected": "Reactive",
+      "heuristic_score": 0.126,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.519,
+      "blended_score": 0.283,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "diagnostica el estado de recall_feedback: cuantas filas resueltas (useful != 0) ",
+      "expected": "Proactive",
+      "heuristic_score": 0.058,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.339,
+      "blended_score": 0.171,
+      "blended_action": "Direct",
+      "blend_correct": false
+    },
+    {
+      "intent": "ejecuta: python -c \"import sqlite3; c=sqlite3.connect('data/silva.db'); print(c.",
+      "expected": "Direct",
+      "heuristic_score": 0.093,
+      "heuristic_action": "Direct",
+      "distilbert_score": 0.847,
+      "blended_score": 0.395,
+      "blended_action": "Direct",
+      "blend_correct": true
+    }
+  ]
+}

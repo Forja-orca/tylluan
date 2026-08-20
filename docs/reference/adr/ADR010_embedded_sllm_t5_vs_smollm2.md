@@ -1,6 +1,6 @@
 # ADR-010: Evaluación de SLLMs Embebidos — T5-Small vs. SmolLM2
 
-- **Estado:** 🟢 **§2-5 (puntos de inserción y modelos) DECIDIDO** (ver §7, 2026-07-27) — implementación Punto A pendiente de spike real antes de cerrar, Puntos B/C sin modelo en disco todavía — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
+- **Estado:** 🟢 **§2-5 (puntos de inserción y modelos) DECIDIDO** (ver §7, 2026-07-27) — implementación Punto A cerrada con null result de spike (ver §7.6, 2026-08-21: precisión confirmada +9.09 pts, latencia 38.22ms bloquea), Puntos B/C sin modelo en disco todavía — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
 - **Fecha:** 2026-07-25 (revisado 2026-07-26: spike §6 ejecutado y cerrado con HTTP real, ver §6.5.9-6.5.10)
 - **Autores:** Flota de Agentes Soberanos (Antigravity, Claude Code, Deep, Qwen)
 - **Ámbito:** Kernel Rust (`crates/tylluan-kernel`), ONNX Runtime (`ort 2.0.0-rc.10`), Sociedad de Micro-Agentes Internos.
@@ -360,3 +360,24 @@ No se despliega ningún modelo pequeño hasta que haya un punto de dolor concret
 | 3 | C — Digest | Qwen3-1.7B 1.43GB | 6-8h | Descargar modelo (no instalado). Guild no activo en prod. |
 
 El punto A (DistilBERT en routing) es el único accionable hoy sin pasos previos. Los puntos B y C requieren descargar modelos primero. Los 3 son independientes — se pueden implementar en cualquier orden o en paralelo.
+
+### 7.6 Resultado del spike Punto A (2026-08-21) — NO-GO por latencia, precisión confirmada
+
+**Spike ejecutado por Deep (OpenCode)** con el criterio aprobado en Coloquio (turnos 102/103): flag config-driven, path por defecto intacto, NO-GO si DistilBERT no gana ≥5 pts de precisión de decisión de routing sobre el mejor baseline **o** si el p50 del path supera 20ms.
+
+**Método:** mismo modelo real en disco (Xenova distilbert-base-uncased quantizado), mismo head LogReg entrenado con los 62 casos de `train_complexity_mlp.py`, mismos 44 intents reales held-out hand-labeled — pero midiendo la **decisión de routing** (cascade_action sobre el blend 60/40 de `blend_with_mlp`), no la accuracy de clasificación aislada. Script: `benchmarks/spikes/distilbert_complexity/eval_routing_decision.py`. Resultados: `benchmarks/spikes/distilbert_complexity/routing_decision_results.json`.
+
+| Ruta | Precisión decisión | Notas |
+|------|--------------------|-------|
+| A. Heurística (`score_complexity` kernel) | 77.27% (34/44) | Baseline actual de producción |
+| C. Majority class (siempre Direct) | 77.27% (34/44) | Piso de la señal |
+| B. Heurística + DistilBERT (blend 60/40) | **86.36% (38/44)** | **Δ +9.09 pts** sobre el mejor baseline |
+| p50 latencia real (intents reales, max_length=64) | **38.22ms** | Umbral del criterio: <20ms |
+
+**Resultado:** ❌ **NO-GO.** El criterio exige ambas condiciones; la precisión PASA (+9.09 pts ≥ 5), la latencia FALLA (38.22ms ≈ 2× el umbral).
+
+**Hallazgo que corrige la lectura del null result anterior (2026-07-27):** el NO-GO previo (75.00% vs 77.27% majority) medía la accuracy de clasificación pura de DistilBERT+LogReg. A nivel de **decisión de routing** (el blend 60/40 con la heurística, que es el diseño real de §7.2), DistilBERT SÍ aporta: la heurística clava los Direct simples, DistilBERT corrige los Reactive/Proactive. El cuello de botella no es la señal, es la latencia.
+
+**Por qué la latencia real supera el benchmark de §7.2:** el benchmark ADR-010 midió 20.12ms p50 con prompts fijos de 16 tokens; los intents reales de `guild_audit_log` son sustancialmente más largos (comandos `python -c "..."`, cadenas de shell, max_length=64) — duplicando el tiempo de inferencia.
+
+**Cierre:** no se integra `ComplexityClassifier` en `complexity.rs` ni se toca el path de producción. Cierre reversible: si en el futuro se quiere reintentar, las vías documentadas son (a) cuantización 4-bit / modelo menor (bajar el p50), (b) `max_length` más corto con validación de señal, o (c) el A/B condicional con T5-Encoder (5.42ms p50, benchmark §7.2) — pero ninguna está priorizada y ninguna se inicia sin decisión de equipo.
