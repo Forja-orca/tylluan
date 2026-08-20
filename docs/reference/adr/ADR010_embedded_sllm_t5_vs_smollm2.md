@@ -1,6 +1,6 @@
 # ADR-010: Evaluación de SLLMs Embebidos — T5-Small vs. SmolLM2
 
-- **Estado:** 🟡 **§2-5 (T5-Small vs SmolLM2) PENDIENTE DE DECISIÓN** — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
+- **Estado:** 🟢 **§2-5 (puntos de inserción y modelos) DECIDIDO** (ver §7, 2026-07-27) — implementación Punto A pendiente de spike real antes de cerrar, Puntos B/C sin modelo en disco todavía — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
 - **Fecha:** 2026-07-25 (revisado 2026-07-26: spike §6 ejecutado y cerrado con HTTP real, ver §6.5.9-6.5.10)
 - **Autores:** Flota de Agentes Soberanos (Antigravity, Claude Code, Deep, Qwen)
 - **Ámbito:** Kernel Rust (`crates/tylluan-kernel`), ONNX Runtime (`ort 2.0.0-rc.10`), Sociedad de Micro-Agentes Internos.
