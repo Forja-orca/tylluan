@@ -72,6 +72,9 @@ export interface Approval {
   created_at?: string;
 }
 
+export type LifecycleState = 'active' | 'quiet' | 'consolidated' | 'archived';
+export type MemoryStatus = 'confirmed' | 'provisional' | 'superseded' | 'contradicted';
+
 export interface GraphNode {
   id: string;
   type?: string;
@@ -84,6 +87,11 @@ export interface GraphNode {
   last_agent?: string;
   provenance?: string;
   owner_scope?: string;
+  lifecycle_state?: LifecycleState;
+  memory_status?: MemoryStatus;
+  quarantined?: boolean | number;
+  last_agent_access?: number;
+  reactivation_count?: number;
 }
 
 // Golden Signals

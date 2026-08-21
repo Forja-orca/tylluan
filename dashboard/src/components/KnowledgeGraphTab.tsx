@@ -16,6 +16,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
+import { LifecycleBadge } from '../lib/nexus-bridge';
 import type { MemoryStats } from '../hooks/useNexus';
 import { useNexus } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
@@ -441,6 +442,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                           nodeType === 'concept' ? "bg-blue-500" : "bg-amber-500"
                         )}></div>
                         <span className="text-[10px] font-medium text-slate-500">{nodeType}</span>
+                        <LifecycleBadge state={(node as any).lifecycle_state || 'active'} />
                         {node.content?.startsWith('[DEPRECATED by') && (
                           <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20 animate-pulse">DEPRECATED</span>
                         )}
@@ -588,6 +590,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                             )}>
                               {nodeType === 'consolidated_summary' ? 'SYNTHESIS' : nodeType}
                             </span>
+                            <LifecycleBadge state={(node as any).lifecycle_state || 'active'} className="ml-1.5" />
                             {node.content?.startsWith('[DEPRECATED by') && (
                               <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20">DEPRECATED</span>
                             )}
@@ -693,6 +696,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               node.node_type === 'fact' ? "bg-orange-500/20 text-orange-400" :
                               "bg-slate-700 text-slate-400"
                             )}>{node.node_type?.slice(0, 8) || 'node'}</span>
+                            <LifecycleBadge state={(node as any).lifecycle_state || 'active'} className="ml-1" />
                             {node.content?.startsWith('[DEPRECATED by') && (
                               <span className="px-1 py-0.5 rounded bg-red-500/10 text-[9px] font-medium text-red-400 border border-red-500/20">DEPRECATED</span>
                             )}
