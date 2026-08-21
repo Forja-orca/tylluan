@@ -30,6 +30,10 @@ import {
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
 import { usePolling } from './hooks/usePolling'
+import { useThemeManager } from './hooks/useThemeManager'
+import { useHitlGrants } from './hooks/useHitlGrants'
+import { useColoquioMentions } from './hooks/useColoquioMentions'
+import { useSSEBridgeEvents } from './hooks/useSSEBridgeEvents'
 import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -49,35 +53,12 @@ const FrictionPanel = lazy(() => import('./components/FrictionPanel'))
 const TrustConsoleTab = lazy(() => import('./components/TrustConsoleTab').then(m => ({ default: m.TrustConsoleTab })))
 
 function App() {
-  const { theme, setTheme, activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, addMention, showMentionsDropdown, setShowMentionsDropdown, pendingGrant, setPendingGrant } = useAppStore()
+  const { activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
   const setActiveTab = useCallback((id: string) => {
     setTab(id)
   }, [setTab])
 
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
-
-  // Listen to system theme changes in real-time if theme is set to 'system'
-  useEffect(() => {
-    if (theme !== 'system') return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const listener = (e: MediaQueryListEvent) => {
-      const root = window.document.documentElement;
-      root.classList.remove('light', 'dark');
-      root.classList.add(e.matches ? 'dark' : 'light');
-    };
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
-  }, [theme]);
+  const { theme, setTheme } = useThemeManager()
 
   const {
     online, events, guilds, stats, memoryStats, approvals,
@@ -111,129 +92,9 @@ function App() {
     addToast(msg, type, guild);
   }, [addToast]);
 
-  const GRANT_LEVEL_MAP = {
-    once: 'this_time',
-    session: 'this_session',
-    always: 'always_for_guild',
-  } as const;
-
-  const handleApproveGrant = async (scope: 'once' | 'session' | 'always') => {
-    if (!pendingGrant || !bridge) return;
-    const grant_level = GRANT_LEVEL_MAP[scope];
-    try {
-      const result = await bridge.fetchRaw('/api/v1/do', {
-        method: 'POST',
-        body: JSON.stringify({
-          tool: 'approve_action',
-          arguments: {
-            requestId: pendingGrant.requestId,
-            approved: true,
-            grant_level,
-          }
-        })
-      });
-      const isError = result?.content?.some?.((c: any) => c?.text?.includes('not found'))
-        || result?.isError;
-      if (isError) {
-        notify(`Grant '${pendingGrant.requestId}' ya no está pendiente (expiró o fue resuelto).`, 'error');
-        setPendingGrant(null);
-        return;
-      }
-
-      notify(
-        `Grant aprobado para '${pendingGrant.guild}' (${grant_level}).`,
-        'info',
-        'HITL Authorization'
-      );
-
-      const currentGrants = JSON.parse(localStorage.getItem('tylluan_sandbox_grants') || '[]');
-      const newGrant = {
-        id: pendingGrant.requestId,
-        guild: pendingGrant.guild,
-        tool: pendingGrant.tool,
-        scope: grant_level,
-        approved_by: 'Dashboard UI (HITL)',
-        ts: Date.now()
-      };
-      localStorage.setItem('tylluan_sandbox_grants', JSON.stringify([newGrant, ...currentGrants].slice(0, 10)));
-      window.dispatchEvent(new CustomEvent('tylluan_grant_updated'));
-
-      setPendingGrant(null);
-    } catch (e: any) {
-      notify(`Failed to approve grant: ${e.message}`, 'error');
-    }
-  };
-
-  useEffect(() => {
-    const handleMention = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail) return;
-      const { agent_id, channel, message, sender } = detail;
-      
-      if (agent_id === 'jose' || agent_id === 'antigravity' || agent_id === 'all') {
-        const fullMsg = `${sender} en #${channel}: "${message}"`;
-        notify(fullMsg, 'info', 'Mención Recibida');
-        
-        addMention({ sender, channel, message });
-        
-        setColoquioUnread(prev => prev + 1);
-      }
-    };
-    
-    // Backend: security/grants.rs::register() broadcasts
-    // { jsonrpc, method: "grant_required", params: {id, guild, tool_name, agent_id, reason} }
-    // nexus-bridge maps method -> ev.type, params -> ev.data, so this arrives as
-    // a `nexus_event_grant_required` CustomEvent with that params object as detail.
-    const handleCapabilityGrant = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail?.id) return;
-      setPendingGrant({
-        requestId: detail.id,
-        guild: detail.guild || 'unknown',
-        agentId: detail.agent_id || 'unknown',
-        tool: detail.tool_name || 'unknown',
-        blockedReason: detail.reason || 'Requisito de seguridad del sandbox',
-        options: ['once', 'session', 'always'],
-      });
-    };
-
-    window.addEventListener('nexus_mention', handleMention);
-    window.addEventListener('nexus_event_grant_required', handleCapabilityGrant);
-    return () => {
-      window.removeEventListener('nexus_mention', handleMention);
-      window.removeEventListener('nexus_event_grant_required', handleCapabilityGrant);
-    };
-  }, [notify]);
-
-  // Listen to new Event Bridge SSE events (dream_cycle_complete and federation_sync)
-  useEffect(() => {
-    const handleDreamCycle = (e: Event) => {
-      const data = (e as CustomEvent).detail;
-      notify(
-        `Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: ${data?.duplicates_merged ?? 0}, clústeres consolidados: ${data?.clusters_consolidated ?? 0}, nodos decaídos: ${data?.nodes_decayed ?? 0}.`,
-        'info',
-        'Consolidación NREM'
-      );
-    };
-
-    const handleFederationSync = (e: Event) => {
-      const data = (e as CustomEvent).detail;
-      const peer = data?.peer || 'un par';
-      const count = data?.count || 0;
-      notify(
-        `Sincronización de federación completada con ${peer}. Sincronizados ${count} nodos de conocimiento.`,
-        'info',
-        'Federación P2P'
-      );
-    };
-
-    window.addEventListener('nexus_event_dream_cycle_complete', handleDreamCycle);
-    window.addEventListener('nexus_event_federation_sync', handleFederationSync);
-    return () => {
-      window.removeEventListener('nexus_event_dream_cycle_complete', handleDreamCycle);
-      window.removeEventListener('nexus_event_federation_sync', handleFederationSync);
-    };
-  }, [notify]);
+  const { pendingGrant, setPendingGrant, handleApproveGrant } = useHitlGrants({ bridge, notify })
+  useColoquioMentions({ notify })
+  useSSEBridgeEvents({ notify })
 
   // SSE layer — resilient, with error_result → toast routing
   const { connectionStatus, reconnectAttempts } = useNexusSSE(bridge, {
@@ -317,7 +178,7 @@ function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex min-w-0 items-center gap-2 md:gap-4 lg:gap-6">
           <div className="hidden lg:flex items-center gap-4 text-[10px] font-mono text-slate-500">
              <div className="flex flex-col items-end">
                <span className="uppercase opacity-50 tracking-widest text-[8px]">Uptime</span>
@@ -345,10 +206,12 @@ function App() {
             </div>
           )}
 
-          <DeviceStatusBadge bridge={bridge} />
+          <div className="hidden md:block">
+            <DeviceStatusBadge bridge={bridge} />
+          </div>
 
           <div className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
+            'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
             connectionStatus === 'connected'
               ? 'bg-slate-900 border-slate-800'
               : connectionStatus === 'reconnecting'
