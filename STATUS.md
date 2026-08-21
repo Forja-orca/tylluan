@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-20 · HEAD `95eeb2c` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-21 · HEAD `cd45789` · v0.16.0 (Cargo.toml)
 
 ## CI
 
@@ -17,7 +17,23 @@
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `95eeb2c` · **764 total** lib green (683 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `cd45789` · **764 total** lib green (683 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+
+### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
+
+**`tylluan_do` argument-forwarding bug** (root cause + fix en 2 commits)
+- `resolve_and_prepare_tool_call()` construía `tool_args` desde el texto de `intent` + un set fijo de campos, ignorando por completo los argumentos estructurados reales que el caller pasaba a `tylluan_do` — `offset`/`limit` en `read_channel` no tenían ningún efecto real (`0136271`-adyacente, ver commit previo de offset/limit)
+- Extendido el mismo patrón (preferir argumento explícito, fallback a text-parsing) a `command` (bash/git, antes SIEMPRE sobreescrito sin fallback), `channel_id`, `content`/`message`/`intent`, `author_id` (`0fefdd5`, co-autoría Deep)
+- Verificado independientemente: 683/683 lib tests, cargo check limpio
+
+**CI toolchain drift (clippy)** — el runner de GitHub actualizó a rustc 1.98, introduciendo lints nuevos que el toolchain local (1.88) no conocía, rompiendo CI en 3 pushes seguidos sin relación con el código en sí
+- `chunks_exact_to_as_chunks`: 15 sitios preexistentes en `memory/silva/*.rs` + `auto_link.rs`, puramente estilístico → `allow` a nivel de crate en `tylluan-kernel/src/lib.rs` (`639ff84`)
+- `cloned_ref_to_slice_refs`: 3 sitios reales (`handler_graph.rs` ×2, `tylluan-link/src/p2p.rs` ×1) → fix real con `std::slice::from_ref()`, sin allow (`ab28e6a`, `cd45789`)
+- Verificación local desde entonces vía `rustup run stable` (1.97.1, casi idéntico a CI) antes de cada push, para no gastar rondas de CI en tanteo
+
+**`.gitignore` hardening** (`f838f70`) — 9.4GB de artefactos de build sin ignorar, riesgo real ante un `git add -A` descuidado: `target-codex-baseline/` (8.5GB, mismatch guión/guión-bajo en el patrón existente), `crates/*/src-tauri/target/` (862MB, solo `desktop/src-tauri/target/` estaba cubierto), `.freebuff/` (18MB, estado local del agente Freebuff)
+
+**Frontend Fase 1 cerrada** — `crates/tylluan-gui/ui/` eliminado (26 archivos, 7453 líneas), consolidación en `dashboard/` como frontend único confirmada sin referencias rotas
 
 ### Trabajo desde v0.16.0 (30 commits, `fe954bb..HEAD`)
 
