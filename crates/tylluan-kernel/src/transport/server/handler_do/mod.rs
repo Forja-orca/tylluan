@@ -859,6 +859,21 @@ async fn resolve_and_prepare_tool_call(
                 let offset = explicit_offset.unwrap_or(text_offset);
                 if limit > 0 { obj.insert("limit".to_string(), serde_json::Value::Number(limit.into())); }
                 if offset > 0 { obj.insert("offset".to_string(), serde_json::Value::Number(offset.into())); }
+                // Same root cause again: `turn` and `full` are new params on
+                // read_channel() (guilds/core/coloquio.py) added to fix a real
+                // truncation gap (every message body hard-capped at 400 chars
+                // with no way to request the full text via MCP). Found live
+                // 2026-08-21: turn=141 passed to tylluan_do silently had no
+                // effect for the exact same reason offset/limit didn't before
+                // this file's earlier fix -- forward them the same way.
+                let explicit_turn = arguments.as_ref().and_then(|a| a.get("turn")).and_then(|v| v.as_i64());
+                if let Some(t) = explicit_turn.filter(|t| *t > 0) {
+                    obj.insert("turn".to_string(), serde_json::Value::Number(t.into()));
+                }
+                let explicit_full = arguments.as_ref().and_then(|a| a.get("full")).and_then(|v| v.as_bool());
+                if explicit_full == Some(true) {
+                    obj.insert("full".to_string(), serde_json::Value::Bool(true));
+                }
             }
             if !obj.contains_key("author_id") {
                 // Same root cause: prefer an explicit `author_id` argument;

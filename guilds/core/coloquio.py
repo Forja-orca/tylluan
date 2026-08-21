@@ -123,16 +123,32 @@ def _truncate(text: str, max_chars: int = 400) -> str:
     return text[:max_chars] + f"…[+{len(text)-max_chars}c]"
 
 
+def _parse_full(text: str) -> bool:
+    """Detect an explicit request for untruncated message bodies
+    ('full', 'completo', 'sin truncar', 'sin resumir')."""
+    return bool(re.search(r'\b(full|completo|sin\s+truncar|sin\s+resumir|untruncated)\b', text, re.IGNORECASE))
+
+
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
 def read_channel(channel_id: str = "", query: str = "", intent: str = "",
-                 command: str = "", limit: int = 0, offset: int = 0) -> str:
+                 command: str = "", limit: int = 0, offset: int = 0,
+                 turn: int = 0, full: bool = False) -> str:
     """Read messages from a Coloquio channel.
     Use for: lee el canal coloquio, leer coloquio, ver mensajes canal, read coloquio channel,
     mostrar hilo coloquio, get thread, ver conversacion grupal, historial coloquio,
     lee el coloquio, muestra el coloquio, ver canal.
     Supports: limit N, offset N, 'ultimos N', 'last N'.
+    By default each message body is truncated to 400 chars ('...[+Nc]' marker) to keep
+    multi-message reads compact. Pass full=true (or say 'completo'/'full'/'sin truncar'
+    in the intent) to get untruncated bodies -- capped at 20000 chars per message as a
+    DoS guard, matching the pattern used elsewhere in the security claims gate. Pass
+    turn=N to fetch a single message by its turn number in full, regardless of `full`
+    (a targeted turn read is always untruncated -- there would be no point otherwise).
+    Without this, any MCP client without raw filesystem/DB access has no way to recover
+    a message body beyond 400 chars -- confirmed as a real gap, not a design choice
+    (found 2026-08-21, see Coloquio mision-activa).
     """
     raw = query or intent or command or ""
     if not channel_id:
@@ -145,21 +161,33 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         limit = _parse_limit(raw, 50)
     if limit == 0:
         limit = 50
+    if not full:
+        full = _parse_full(raw)
 
     if not channel_id:
         return "❌ Specify a channel name: 'read the coloquio <channel-name>'"
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
-        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={limit}&offset={offset}"
+        # A turn-scoped read fetches a wide-enough window and filters client-side --
+        # the REST API paginates by position, not by turn number, so there's no
+        # direct "get turn N" endpoint to call yet.
+        effective_limit = 500 if turn else limit
+        effective_offset = 0 if turn else offset
+        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={effective_limit}&offset={effective_offset}"
         data = _get(url)
         msgs = data.get("messages", [])
+        if turn:
+            msgs = [m for m in msgs if m.get("turn") == turn]
+            if not msgs:
+                return f"Turn {turn} not found in channel '{channel_id}' (searched last {effective_limit} messages)."
         if not msgs:
             return f"Channel '{channel_id}' exists but has no messages yet (offset={offset})."
+        max_chars = 20000 if (full or turn) else 400
         lines = [f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={offset}) ==="]
         for m in msgs:
             role_icon = "👤" if m.get("role") == "human" else "🤖"
             lines.append(
-                f"[T{m['turn']}] {role_icon} {m['author_id']}: {_truncate(m['content'])}"
+                f"[T{m['turn']}] {role_icon} {m['author_id']}: {_truncate(m['content'], max_chars)}"
             )
         return "\n".join(lines)
     except urllib.error.HTTPError as e:
