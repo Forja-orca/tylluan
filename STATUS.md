@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-21 · HEAD `cd45789` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-21 · HEAD `12dca2e` · v0.16.0 (Cargo.toml)
 
 ## CI
 
@@ -17,7 +17,7 @@
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `242a6db` · **766 total** lib green (685 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `12dca2e` · **766 total** lib green (685 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
@@ -35,7 +35,7 @@
 
 **Frontend Fase 1 cerrada** — `crates/tylluan-gui/ui/` eliminado (26 archivos, 7453 líneas), consolidación en `dashboard/` como frontend único confirmada sin referencias rotas
 
-### Trabajo desde v0.16.0 (30 commits, `fe954bb..HEAD`)
+### Trabajo desde v0.16.0 (32 commits, `fe954bb..HEAD`)
 
 **Security Claims CI Gate** (ciclo completo: spec → manifest → checker → scripts → CI → cleanup)
 - Design + spec (`d64265a`, `f8eef30`), claims manifest con 5 propiedades documentadas (`c8f632c`)
@@ -59,6 +59,10 @@
 - `NexusConfig.transport` default a empty, no stdio+http+sse (`7cd024b`)
 - `llama_backend` port conflict fix (`a70d3ca`)
 - Tauri UI: Vite entry point real commitiado (`61479bc`)
+
+**Docs**
+- Fix test count drift 764→766 after decay.rs fix added 2 tests (`1a5eaaa`)
+- Note retrieval-gate idea from waku-agent as low-priority backlog (`12dca2e`)
 
 ---
 
@@ -107,12 +111,12 @@
 - `fault_dst.rs` — 4 realistic fault scenarios: `partition_heal_convergence` (Partition→Transparent→converge), `latency_injection` (Latency 100ms, +150ms measurable), `drop_rate_eventual_convergence` (Drop 0.3, ≤10 rounds), `error_mode_graceful_failure` (Error mode, no state corruption) (v0.10.0 P1)
 - LightRAG degree bias corrected (v0.10.0 P2-fix): `local_query_graph` in `graph.rs` and `dual_retrieval.rs` now divide by degree factor instead of multiply — penalizes generic hub nodes, improves MRR for specific queries. New test `test_local_query_graph_degree_penalty` added.
 - Retrieval quality benchmark v0.10.0: 44 nodes, 40 edges, 10 queries (5 original + 5 multi-hop). With LightRAG graph ON: Recall@5 20%, Recall@10 30%, MRR 23.15%, p50 5.65ms. Delta vs graph OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix). Results with fake 12-dim embeddings; real BGE-M3 delta expected higher.
-- ADR-004 M14-D Guild Execution Channels spec published: `docs/architecture/M14D_dispatch_spec.md` — Capability-Aware Hybrid Routing, 4-phase implementation plan (~8 sessions), preserves CONTRACT-01
+- ADR-004 M14-D Guild Execution Channels spec published: `docs/reference/adr/M14D_dispatch_spec.md` — Capability-Aware Hybrid Routing, 4-phase implementation plan (~8 sessions), preserves CONTRACT-01
 - M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` added to `GossipEntry`; `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL-based peer store, `prune_expired()`, `ingest_from_engine()`; 6 unit tests (v0.11.0-dev)
-- M14-F Phase 2 — `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)`: Noise XK responder loop (`noise_accept` → decrypt → handler → encrypt write); `DispatchDecision::RemoteTcp { node_id, addr, tcp_port }` variant; `route()` picks best-scoring peer first, then checks `supports_p2p` (bug fix: early return bypassed score threshold — fixed); `tests/p2p_dst.rs` 3 tests: TCP loopback roundtrip, error response, RemoteTcp routing. (v0.13.0)
+- M14-F Phase 2 — `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)`: Noise XK responder loop (`noise_accept` → decrypt → handler → encrypt write); `DispatchDecision::RemoteTcp { node_id, addr, tcp_port }` variant; `route()` picks best-scoring peer first, then checks `supports_p2p` (bug fix: early return bypassed score threshold — fixed); `crates/tylluan-link/tests/p2p_dst.rs` 3 tests: TCP loopback roundtrip, error response, RemoteTcp routing. (v0.13.0)
 - M14-F Phase 1 — `P2pSessionPool` (HashMap, LRU evict, TTL prune) + `execute_remote_tcp()` (Noise XK initiator, pool extract-before-use + reinsert-on-success-only bug fix); `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>`. (v0.13.0)
 - Moondream guild: `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via `moondream` pip (0.5B local vision). (v0.13.0)
-- M14-E — Mesh Integration Test Harness: `tests/mesh_simulation.rs` (full-mesh A↔B↔C, star topology B-hub, split-brain + heal LWW); `tests/dispatch_dst.rs` (GPU peer selection, capability filter, CB fallback, DispatchQueue FIFO/overflow/TTL); `DispatchQueue` moved from kernel to `tylluan-link/src/dispatch.rs`. **M14-D + M14-E both complete.** (v0.13.0)
+- M14-E — Mesh Integration Test Harness: `crates/tylluan-link/tests/mesh_simulation.rs` (full-mesh A↔B↔C, star topology B-hub, split-brain + heal LWW); `crates/tylluan-link/tests/dispatch_dst.rs` (GPU peer selection, capability filter, CB fallback, DispatchQueue FIFO/overflow/TTL); `DispatchQueue` moved from kernel to `tylluan-link/src/dispatch.rs`. **M14-D + M14-E both complete.** (v0.13.0)
 - M14-D Phase 4 — Fallback + Remote Dispatch: `DispatchQueue` (VecDeque + TTL 300s, max 1000); `HttpState` gains `dispatch_router` + `dispatch_queue`; `GET /api/v1/guilds/peers` returns CapabilityRegistry view; `POST /api/v1/guilds/dispatch/remote` routes via DispatchRouter (local or HTTP forward), fallback-enqueues on failure, wires record_success/record_failure. **M14-D milestone complete.** (v0.13.0)
 - M14-D Phase 3 — Guild Dispatch Protocol: `GuildDispatchRequest/Response` structs (Serde); `send/receive_dispatch_request/response` using Noise NK (`noise_encrypt/decrypt_payload` over `dyn MeshTransport`); `POST /api/v1/guilds/dispatch/execute` endpoint — receives request, calls `registry.call_tool()`, returns response with `executor_id` + `duration_ms`; CONTRACT-01 preserved (v0.13.0)
 - M14-D Phase 2 — DispatchRouter: `dispatch.rs` in `tylluan-link` — scoring `(1-load)×(1000/latency)×gpu_mult`, circuit breaker (3 failures + 60s cooldown), default latency 0.0 favoring unknown peers; `HttpState` gains `capability_registry`; gossip tick wires `ingest_from_engine + prune_expired`; 5 unit tests (v0.13.0)
