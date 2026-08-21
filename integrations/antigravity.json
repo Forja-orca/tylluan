@@ -1,7 +1,7 @@
 ﻿{
   "mcpServers": {
     "tylluan": {
-      "serverUrl": "http://127.0.0.1:3030/messages"
+      "serverUrl": "http://127.0.0.1:4000/messages"
     }
   }
 }
