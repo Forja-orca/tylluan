@@ -65,7 +65,7 @@ pub async fn handle_tylluan_graph(
             // un nodo real, los resultados son matches semánticos, NO triples
             // exactos del subject — eso es un aviso que el caller debe conocer,
             // no un error (los resultados siguen siendo útiles).
-            let resolved = server.silva.existing_node_ids(&[subject.clone()]).await.unwrap_or_default();
+            let resolved = server.silva.existing_node_ids(std::slice::from_ref(&subject)).await.unwrap_or_default();
             let mut warnings: Vec<serde_json::Value> = Vec::new();
             if !resolved.contains(&subject) {
                 warnings.push(serde_json::json!({
@@ -211,7 +211,7 @@ pub async fn handle_tylluan_graph(
             // (mismo bug que tenía ppr). Warning NODE_NOT_FOUND: el early return
             // con el JSON completo mantiene el contrato (center/depth/nodes)
             // mientras da la señal diagnóstica.
-            let resolved = server.silva.existing_node_ids(&[node_id.clone()]).await.unwrap_or_default();
+            let resolved = server.silva.existing_node_ids(std::slice::from_ref(&node_id)).await.unwrap_or_default();
             if !resolved.contains(&node_id) {
                 return Ok(CallToolResult {
                     content: vec![Content::text(serde_json::json!({
