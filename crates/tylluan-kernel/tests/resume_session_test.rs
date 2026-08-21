@@ -1,4 +1,5 @@
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
+use tylluan_kernel::transport::http::auth;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tylluan_kernel::transport::http::HttpState;
 use tylluan_kernel::transport::server::TylluanServer;
@@ -14,6 +15,7 @@ use tylluan_kernel::doctor::Doctor;
 use tylluan_kernel::registry::actor::RegistryActor;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use axum::middleware;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
@@ -23,6 +25,10 @@ use std::time::Instant;
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 async fn test_state() -> Arc<HttpState> {
+    // Production calls this at startup (main.rs:888); tests must too —
+    // grants::list_pending() is fail-closed with a panic otherwise.
+    // init() is idempotent (OnceLock set().ok()).
+    tylluan_kernel::security::grants::init();
     let workspace_root = std::env::current_dir().unwrap_or_default();
     let registry_raw = GuildRegistry::new(workspace_root.clone(), 5, TimeoutsConfig::default(), 5);
     let registry_arc = Arc::new(RwLock::new(registry_raw));
@@ -110,6 +116,12 @@ async fn test_state() -> Arc<HttpState> {
 fn build_test_app(state: Arc<HttpState>) -> axum::Router {
     axum::Router::new()
         .merge(api_v1_routes())
+        // Exercise bearer_auth_middleware like production (0136271 pattern):
+        // it installs the ACL_ROLE task-local that protected routes require.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::bearer_auth_middleware,
+        ))
         .with_state(state)
 }
 
