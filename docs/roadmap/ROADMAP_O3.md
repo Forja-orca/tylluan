@@ -443,6 +443,7 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | I-3 | Mesh global (NAT traversal público, DHT cross-instance) | ADR pendiente | Post-v1.0 |
 | I-4 | Permisos asimétricos (criptografía Ed25519 para ACL distribuida) | Diseño interno | Post-v1.0 |
 | I-5 | Incremental PageRank: actualizar solo nodos afectados en lugar de recalc global O(V+E) | faer/nalgebra | Post-M21 |
+| I-6 | Retrieval gate: chequeo barato previo a la recuperación de memoria que decida SI un mensaje necesita buscar en memoria en absoluto, antes de gastar en embedding+ANN. Distinto de `QueryEmbeddingCache` (que cachea resultados de consultas ya decididas, no decide si consultar). Idea real observada en el proyecto educativo waku-agent (github.com/ShenSeanChen/waku-agent), no verificada en código propio, solo README. Bajo riesgo, no relacionado con el debate de `lifecycle`/decaimiento en curso — evaluar aparte. | github.com/ShenSeanChen/waku-agent | Post-lifecycle, sin fecha |
 
 ---
 
