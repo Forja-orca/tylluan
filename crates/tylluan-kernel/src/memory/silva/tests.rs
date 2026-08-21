@@ -339,6 +339,27 @@ async fn test_silva() -> SilvaDB {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_salience_prune_preserves_durable_summaries() {
+        let db = test_silva().await;
+        db.upsert_node("episode:prunable", "episode", "raw episode", "{}").await.unwrap();
+        db.upsert_node_with_validity("summary:agent", "agent_summary", "durable summary", "{}", super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+        db.upsert_node("digest:session", "session_digest", "durable digest", "{}").await.unwrap();
+        db.upsert_node("summary:topic", "consolidated_summary", "topic summary", "{}").await.unwrap();
+
+        {
+            let conn = db.conn.lock().await;
+            conn.execute("UPDATE nodes SET salience_score = 0.01", []).unwrap();
+        }
+
+        let pruned = db.prune_by_salience(0.15).await.unwrap();
+        assert_eq!(pruned, 1, "only the raw episode should be pruned");
+        assert!(db.get_node("episode:prunable").await.unwrap().is_none());
+        assert!(db.get_node("summary:agent").await.unwrap().is_some());
+        assert!(db.get_node("digest:session").await.unwrap().is_some());
+        assert!(db.get_node("summary:topic").await.unwrap().is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_get_triples_for_entity() {
         let db = test_silva().await;
         db.upsert_node("entity1", "concept", "Entity One", "{}").await.unwrap();
@@ -575,6 +596,22 @@ async fn test_silva() -> SilvaDB {
         // Check proportional heat counts
         assert_eq!(count_1, 3, "sim=1.0 should produce exactly 3 diffuse_heat traces");
         assert_eq!(count_2, 1, "sim=0.86 should produce exactly 1 diffuse_heat trace");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_weight_cleanup_preserves_durable_summaries() {
+        let db = test_silva().await;
+        db.upsert_node_with_validity("summary:agent", "agent_summary", "durable summary", "{}", super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+        db.upsert_node("summary:topic", "consolidated_summary", "topic summary", "{}").await.unwrap();
+        {
+            let conn = db.conn.lock().await;
+            conn.execute("UPDATE nodes SET weight = 0.01", []).unwrap();
+        }
+
+        let deleted = db.prune_cold_nodes(0.1).await.unwrap();
+        assert_eq!(deleted, 0, "cold-node cleanup must not delete durable summaries");
+        assert!(db.get_node("summary:agent").await.unwrap().is_some());
+        assert!(db.get_node("summary:topic").await.unwrap().is_some());
     }
 
     #[tokio::test(flavor = "multi_thread")]

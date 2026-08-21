@@ -75,10 +75,11 @@ impl super::SilvaDB {
             // Step 3: Prune dead memories
             let pruned = conn.execute(
                 "DELETE FROM nodes
-                 WHERE type != 'identity' AND protected = 0
-                 AND weight < 0.15
-                 AND julianday('now') - julianday(updated_at) > 30
-                 AND fsrs_stability < 7.0",
+                 WHERE type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')
+                   AND protected = 0
+                   AND weight < 0.15
+                   AND julianday('now') - julianday(updated_at) > 30
+                   AND fsrs_stability < 7.0",
                 [],
             )?;
 
@@ -437,13 +438,20 @@ impl super::SilvaDB {
         })
     }
 
-    /// Remove nodes with salience_score below threshold (ignoring protected/identity nodes).
+    /// Remove nodes with salience_score below threshold.
+    ///
+    /// Durable summaries are intentionally excluded: their purpose is to keep
+    /// a recoverable memory floor after source episodes cool down. They can
+    /// still be removed explicitly through an operator-controlled cleanup.
     pub async fn prune_by_salience(&self, threshold: f64) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let mut conn = self.conn.blocking_lock();
             let ids: Vec<String> = {
                 let mut stmt = conn.prepare(
-                    "SELECT id FROM nodes WHERE protected = 0 AND type != 'identity' AND salience_score < ?1"
+                    "SELECT id FROM nodes
+                     WHERE protected = 0
+                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')
+                       AND salience_score < ?1"
                 )?;
                 stmt.query_map(params![threshold], |r| r.get::<_, String>(0))?
                     .filter_map(|r| r.ok())
@@ -472,7 +480,12 @@ impl super::SilvaDB {
             
             // Find nodes to delete (not protected, weight < threshold, not identity)
             let ids: Vec<String> = {
-                let mut stmt = conn.prepare("SELECT id FROM nodes WHERE protected = 0 AND weight < ?1 AND type != 'identity'")?;
+                let mut stmt = conn.prepare(
+                    "SELECT id FROM nodes
+                     WHERE protected = 0
+                       AND weight < ?1
+                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')"
+                )?;
                 stmt.query_map(params![threshold_weight], |r| r.get(0))?
                     .filter_map(|r| r.ok())
                     .collect()
