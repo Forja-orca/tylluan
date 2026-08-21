@@ -2,7 +2,7 @@
 export { cn, relativeTime } from './lib/utils';
 export * from './lib/nexus-bridge';
 export type {
-  Session, McpSession, NexusEvent, GraphData, Guild, Approval, GraphNode,
+  Session, McpSession, NexusEvent, GraphData, Guild, Approval, GraphNode, LifecycleState, MemoryStatus,
   GoldenSignals, GuildsUtilization, MemoryRetention, SloSummary,
   BlackboardTask, BlackboardData, CollectivePulse, HormoneAmbient,
   NodeTrace, Interoception, AgentMemory, AgentMemorySummary,
@@ -15,6 +15,7 @@ export { NexusBridge } from './lib/api-client';
 // Components
 export { StatusPill } from './components/ui/StatusPill';
 export type { StatusType } from './components/ui/StatusPill';
+export { LifecycleBadge } from './components/ui/LifecycleBadge';
 export { ModelsLocalInference } from './components/ModelsLocalInference';
 export { TylluanStatusHero } from './components/TylluanStatusHero';
 export { getGuildCategory, CATEGORY_MAP, CATEGORY_STYLE, DEPRECATED_GUILDS } from './lib/guild-meta';
