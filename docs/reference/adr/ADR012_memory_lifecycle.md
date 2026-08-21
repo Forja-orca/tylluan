@@ -290,3 +290,56 @@ descubra en produccion:
   en `@tylluan/ui-core`): si `GraphNode` gana `lifecycle_state` sin un default
   seguro en el frontend, el panel de grafo puede fallar al renderizar. Sealado
   por Antigravity.
+
+### 8.6 D3 (supersion) entra en conflicto directo con "NO tocar consensus.rs"
+
+**Encontrado por Deep/Codex (T141, punto 2) — omitido por error en la primera
+revision de este ADR (v2), corregido ahora.** La Decision 3 (durable summaries)
+dice que un summary duradero es removible via "supersion por un resumen mas
+reciente del mismo agente/sesion". Pero `ConsensusEngine` en `consensus.rs`
+hace supersedence por CONTENIDO (deteccion de contradiccion/mejora semantica),
+no por coincidencia de agente/sesion — esa logica de supersedence-por-identidad
+no existe hoy en ningun sitio del codigo.
+
+Implementarla tal cual la describe D3 requeriria tocar `consensus.rs`, lo cual
+contradice la restriccion de la Seccion 5 ("NO se toca decay.rs, tests.rs, ni
+handler_do/mod.rs") en espiritu, aunque `consensus.rs` no estaba en esa lista
+explicitamente — la restriccion nunca considero este caso.
+
+**Resolucion:** Fase 1 debe decidir explicitamente entre dos caminos, no
+asumir que D3 "ya funciona" via `ConsensusEngine` existente:
+1. Ampliar `ConsensusEngine` para reconocer supersedence por agente/sesion
+   como un caso adicional junto al de contenido (cambio real en consensus.rs,
+   requiere su propio ciclo de revision, no incluido en el alcance de Fase 1).
+2. Un trigger SQL/aplicacion nuevo, independiente de `ConsensusEngine`, que
+   solo gestione la supersedence de summaries duraderos por agente/sesion sin
+   tocar la logica de contradiccion por contenido.
+
+Sin esta decision, D3 tal como esta escrita en la Seccion 2 es aspiracional,
+no implementable directamente.
+
+### 8.7 D4 (consolidacion) debe heredar explicitamente el fix de 242a6db, no asumirlo
+
+**Sealado en T144 (relay de un companero sin acceso directo a Coloquio en el
+momento de escribirlo).** Cualquier logica de consolidacion nueva que Fase 3
+introduzca (integracion con NightConsolidation) debe llamar o respetar el
+mismo filtro de exclusion por tipo semantico que ya protege a
+`agent_summary`/`session_digest`/`consolidated_summary` en `decay.rs` (fix
+`242a6db`) y en `maintenance.rs` (fix paralelo, ver commit relacionado). Si
+la nueva ruta de consolidacion escribe sus propias queries de limpieza sin
+heredar ese filtro, reintroduce el mismo hueco que motivo la Fase 0 de este
+ADR — un resumen duradero podria volver a quedar expuesto a traves de una
+ruta de codigo distinta a las 3 ya cerradas.
+
+**Resolucion:** Fase 3 no debe escribir queries de limpieza nuevas desde
+cero. Debe reutilizar la misma clausula `type NOT IN ('identity',
+'agent_summary', 'session_digest', 'consolidated_summary')` (o una funcion
+compartida que la encapsule) en cualquier ruta de borrado/archivado que
+introduzca.
+
+**Nota tecnica adicional de T144, no verificada por mi todavia:** propone
+`tokio::spawn` como mecanismo concreto para el worker asincrono de
+reactivacion de la Seccion 8.4 (version barata de la propuesta de Qwen) —
+compatible con la resolucion ya acordada ahi (write-path barato, sin
+inferencia sincrona). Se anade como detalle de implementacion sugerido, no
+como decision nueva.
