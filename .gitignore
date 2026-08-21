@@ -91,6 +91,14 @@ test_*.bat
 
 # Codex / CI worktrees
 target_codex_*/
+target-codex-*/
+
+# Tauri per-crate build output (desktop/src-tauri/target/ already covered above;
+# other crates embedding a src-tauri/ subproject need their own rule)
+**/src-tauri/target/
+
+# Freebuff agent local state (sqlite db + wal/shm, project-id marker)
+.freebuff/
 
 # Cargo home override (local .cargo/ in repo root)
 .cargo/
