@@ -15,10 +15,10 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">
       {/* Sub Navigation */}
-      <div className="flex border-b border-slate-800 pb-2 gap-2 flex-shrink-0">
+      <div className="flex max-w-full overflow-x-auto border-b border-slate-800 pb-2 gap-2 flex-shrink-0 scrollbar-thin">
         <button
           onClick={() => setSubTab('graph')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
             subTab === 'graph'
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
@@ -29,7 +29,7 @@ export function MemoryConsolidated(props: MemoryConsolidatedProps) {
         </button>
         <button
           onClick={() => setSubTab('nodes')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
             subTab === 'nodes'
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
