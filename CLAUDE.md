@@ -54,7 +54,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ## Estado actual — v0.16.0+ (unreleased)
 
-**Tests:** 674 kernel lib + 69 link lib + 12 fsrs = 755+ en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
+**Tests:** 685 kernel lib + 69 link lib + 12 fsrs = 766+ en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
 **Cargo.toml:** `version = "0.16.0"`, Rust edition 2024, toolchain 1.88.
 
 ### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14):
@@ -131,12 +131,12 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 | `crates/tylluan-kernel/src/transport/server/` | Sovereign tools + `all_tools()` |
 | `crates/tylluan-kernel/src/memory/silva/graph.rs` | `degree_centrality`, `local_query_graph` (PPR + degree penalty) |
 | `crates/tylluan-kernel/src/memory/silva/search.rs` | `search_hybrid` — RRF + type_filter + skip_graph |
-| `crates/tylluan-kernel/src/memory/silva/embeddings.rs` | `embed_batch` — ONNX single mutex, L2-norm |
+| `crates/tylluan-kernel/src/router/embeddings.rs` | `embed_batch` — ONNX single mutex, L2-norm |
 | `crates/tylluan-link/src/capability.rs` | `CapabilityRegistry` — M14-D Phase 1 |
 | `crates/tylluan-link/src/transport.rs` | `PartitionableTransport<T>` — 5 fault modes |
 | `crates/tylluan-link/src/gossip/message.rs` | `GossipEntry` + `HardwareCaps` |
 | `crates/tylluan-evals/src/tests.rs` | Retrieval benchmark (skip_graph A/B) |
-| `docs/architecture/M14D_dispatch_spec.md` | ADR-004 — spec completa M14-D |
+| `docs/reference/adr/M14D_dispatch_spec.md` | ADR-004 — spec completa M14-D |
 | `tylluan.toml` | Config runtime — `dev_mode`, `host`, `port`, `[silva]`, `[federation]` |
 | `.tylluan-token` | Bearer token (untracked) |
 | `benchmarks/benchmark_v0.10.0.json` | Retrieval quality delta (Graph ON vs OFF) |
@@ -174,7 +174,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 674+ kernel lib tests passing
+# Esperado: 685+ kernel lib tests passing
 
 cargo test -p tylluan-link --all-targets 2>&1 | tail -3
 # Esperado: 69+ link tests passing

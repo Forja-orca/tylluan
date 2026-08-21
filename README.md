@@ -379,7 +379,7 @@ Point two or more Tylluan instances at each other and they'll share knowledge se
 sync_interval_ms = 3600000      # the key the auto-sync loop actually reads; 0 = disabled
 ```
 
-> `[federation] auto_sync_interval_secs`/`auto_sync_mode` are defined in config but currently unread by any sync loop — dead keys, don't rely on them (tracked in ROADMAP_O3.md).
+> `[federation] auto_sync_interval_secs`/`auto_sync_mode` are read by the federation API handler but **not** by any background sync loop — `[silva] sync_interval_ms` is the key the auto-sync loop actually reads. Don't rely on `auto_sync_*` for automatic sync scheduling (tracked in ROADMAP_O3.md).
 
 ```bash
 # Add a peer

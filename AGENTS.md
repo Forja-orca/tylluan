@@ -61,7 +61,7 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.16.0+ (unreleased, 34 commits desde el release)
 
-**Tests:** 674 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 755 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
+**Tests:** 685 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 766 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:4000/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
 ### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14, sin tag de versión todavía): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md` sección `[Unreleased]` para el detalle completo.
@@ -117,7 +117,7 @@ cargo run -p tylluan-cli -- start
 | **M15-P1** | `GET /api/v1/setup-hint` — JSON con configs Claude Desktop / Code / Cursor. BM25 como default | ✅ `2df8f73` |
 | **M15-P2** | Docker imagen `ghcr.io/forja-orca/tylluan:latest` — `debian:bookworm-slim` + ONNX 1.22.0 + bundled-dashboard + `always_on=[]` + docker-smoke CI auth | ✅ `a2642da`→`945838c` |
 | **M15-P3** | OpenClaw 368k stars verificados · Hermes Agent compatible · M17 Rama A decidida | ✅ `5c9b32d` |
-| **ADR-006** | Spec Rufus Release — `docs/architecture/ADR006_rufus_release.md` | ✅ |
+| **ADR-006** | Spec Rufus Release — `docs/reference/adr/ADR006_rufus_release.md` | ✅ |
 | **Roadmap** | M15-M19 planificados — `docs/roadmap/ROADMAP_O3.md` | ✅ |
 
 
@@ -141,12 +141,12 @@ cargo run -p tylluan-cli -- start
 | `crates/tylluan-kernel/src/transport/server/` | Handlers MCP sovereign tools |
 | `crates/tylluan-kernel/src/memory/silva/graph.rs` | `degree_centrality`, `local_query_graph` (PPR + degree penalty) |
 | `crates/tylluan-kernel/src/memory/silva/search.rs` | `search_hybrid` — RRF + type_filter + skip_graph |
-| `crates/tylluan-kernel/src/memory/silva/embeddings.rs` | `embed_batch` — ONNX single mutex, L2-norm |
+| `crates/tylluan-kernel/src/router/embeddings.rs` | `embed_batch` — ONNX single mutex, L2-norm |
 | `crates/tylluan-link/src/capability.rs` | `CapabilityRegistry` — M14-D Phase 1 |
 | `crates/tylluan-link/src/transport.rs` | `PartitionableTransport<T>` — 5 fault modes |
 | `crates/tylluan-link/src/gossip/message.rs` | `GossipEntry` + `HardwareCaps` |
 | `crates/tylluan-evals/src/tests.rs` | Retrieval benchmark (skip_graph A/B) |
-| `docs/architecture/M14D_dispatch_spec.md` | ADR-004 — spec completa M14-D |
+| `docs/reference/adr/M14D_dispatch_spec.md` | ADR-004 — spec completa M14-D |
 | `tylluan.toml` | Config runtime — `dev_mode`, `host`, `port`, `[silva]`, `[federation]` |
 | `.tylluan-token` | Bearer token (untracked) |
 | `benchmarks/benchmark_v0.10.0.json` | Retrieval quality delta (Graph ON vs OFF) |
@@ -158,10 +158,10 @@ cargo run -p tylluan-cli -- start
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 273 lib tests passing
+# Esperado: 685+ lib tests passing
 
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
-# Esperado: 88 link tests passing (distribuidos en 7 archivos)
+# Esperado: 69+ link tests passing
 
 cargo test -p tylluan-evals 2>&1 | tail -3
 # Esperado: 2 evals tests passing
@@ -204,7 +204,7 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 5. Nunca dejar trabajo sin commitear acumulándose — commits pequeños y verificados, no todo junto al final.
 6. Nunca atribuir una decisión a José que no diera — si actúas por iniciativa propia, dilo así.
 
-**Perfiles declarativos (M19-P5):** ver [ADR-009](docs/architecture/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
+**Perfiles declarativos (M19-P5):** ver [ADR-009](docs/reference/adr/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
 
 ---
 

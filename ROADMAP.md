@@ -49,7 +49,7 @@ Delivered:
 - [x] Echo-loop prevention: `get_shareable_nodes()` filters `federation_source IS NULL` — received nodes are never re-exported by default (M11-C)
 - [x] Provenance query: `GET /api/v1/federation/nodes?source={peer|local}` (M11-C)
 - [x] Scheduled auto-sync: background `tokio::spawn` loop driven by `[federation] auto_sync_interval_secs` and `auto_sync_mode` (M11-D)
-- [x] Integration test suite: `tests/federation_audit.rs` — 6 tests covering DB, approval gate, token isolation, provenance, echo-loop, auto-sync disable (M11-E)
+- [x] Integration test suite: `crates/tylluan-kernel/tests/federation_audit.rs` — 6 tests covering DB, approval gate, token isolation, provenance, echo-loop, auto-sync disable (M11-E)
 
 Out of scope (v0.4.0):
 - NAT traversal (Libp2p or WireGuard)
@@ -67,7 +67,7 @@ Delivered:
 - [x] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting. Auto-fetch peer pubkey on approval. Backwards compat: skip verify if pubkey not yet stored
 - [x] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
 - [x] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks (external_address populated on approval via M12-C auto-fetch)
-- [x] M12-F — Integration tests: `tests/mesh_audit.rs` (10 tests) + `tests/federation_audit.rs` (6 tests) + `crates/tylluan-link/src/nat.rs` (8 tests). Covers keypair, signature, envelope, STUN RFC 5389 (CRC32, txid mismatch, missing attribute, IPv4 XOR), NAT HTTP endpoint, mDNS startup, federation sync
+- [x] M12-F — Integration tests: `crates/tylluan-kernel/tests/mesh_audit.rs` (10 tests) + `crates/tylluan-kernel/tests/federation_audit.rs` (6 tests) + `crates/tylluan-link/src/nat.rs` (8 tests). Covers keypair, signature, envelope, STUN RFC 5389 (CRC32, txid mismatch, missing attribute, IPv4 XOR), NAT HTTP endpoint, mDNS startup, federation sync
 - [x] M13 — Onboarding: pre-compiled binaries via GitHub Actions (linux-x64, mac-arm64, win-x64), `install.sh` + `install.ps1` one-line installers, `tylluan-cli` management binary, README rewritten to 3-step Quick Start
 
 ## v0.5.0 — Mesh Fabric
@@ -157,7 +157,7 @@ Delivered:
 - [x] P0 — Extended Retrieval Benchmark: 44 nodes + 40 edges + 10 queries (5 original + 5 multi-hop), `skip_graph` A/B flag in `search_hybrid` (internal). Graph ON vs OFF: +2.5% Recall@5, +5% Recall@10, −0.1% MRR (pre-fix), +4ms latency. Results in `benchmarks/benchmark_v0.10.0.json`.
 - [x] P1 — M6-full Fault DST: `fault_dst.rs` — 4 new tests exercising all 5 `PartitionableTransport<T>` modes: partition+heal convergence, latency injection, drop-rate eventual convergence, error mode graceful failure.
 - [x] P2-fix — LinearRAG Degree Bias Fix: `local_query_graph` (`graph.rs:739`) and `dual_retrieval.rs` (lines 30, 69) inverted from multiply to divide — penalizes hub nodes. New test `test_local_query_graph_degree_penalty`. Root cause: degree boost promoted generic hub concepts to top MRR positions.
-- [x] P3-spec — ADR-004 M14-D Guild Dispatch spec: `docs/architecture/M14D_dispatch_spec.md` — Capability-Aware + Latency-Based Hybrid Routing, 4-phase plan (~8 sessions), CONTRACT-01 preserved.
+- [x] P3-spec — ADR-004 M14-D Guild Dispatch spec: `docs/reference/adr/M14D_dispatch_spec.md` — Capability-Aware + Latency-Based Hybrid Routing, 4-phase plan (~8 sessions), CONTRACT-01 preserved.
 
 **273 kernel lib tests + 61 link tests + 2 evals = 336 total** · 0 failures.
 
@@ -179,7 +179,7 @@ Remaining (v0.11.0 backlog):
 
 ## M14-D — Guild Execution Channels (complete — see v0.11.0 above)
 
-**Status:** Complete (v0.11.0-dev). All 4 phases delivered. Spec in `docs/architecture/M14D_dispatch_spec.md` (ADR-004).
+**Status:** Complete (v0.11.0-dev). All 4 phases delivered. Spec in `docs/reference/adr/M14D_dispatch_spec.md` (ADR-004).
 
 **ADR-004 design (2026-07-02):**
 - Capability-Aware + Latency-Based Hybrid Routing — transparent inside `tylluan_do` (CONTRACT-01 preserved)
