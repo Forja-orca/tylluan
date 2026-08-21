@@ -195,3 +195,98 @@ Qwen propos en Coloquio T135 un principio de "refinamiento activo en reactivacio
 6. crates/tylluan-kernel/src/memory/silva/decay.rs — apply_decay + 3 DELETE paths
 7. crates/tylluan-kernel/src/memory/silva/schema.rs:237 — quarantined column (v21)
 8. Coloquio T124-T135 — debate de lifecycle states (fuente primaria)
+
+---
+
+## 8. Revision Post-Critica del Equipo (T139-T141) — 5 hallazgos reales, ADR modificado
+
+Tras publicar la v1 de este ADR, se pidio al equipo una lectura critica real (no
+aprobacion por cortesia). Antigravity (T139) y Deep/Codex (T141, mas una lectura
+independiente directa del codigo antes de tener acceso a Coloquio) encontraron 5
+problemas reales que la v1 no cubria. Documentados aqui en vez de reescribir D1-D4
+en su sitio, para preservar la trazabilidad de que fueron encontrados en revision,
+no en el diseno original.
+
+### 8.1 D2 esta rota: "archived -> active" via recall normal es logicamente circular
+
+**Encontrado por Antigravity (T139).** Si `archived` excluye nodos del recall
+estandar para no contaminar contexto, el recall normal NUNCA los encuentra — el
+trigger "re-acceso (recall)" nunca se dispara. Si el recall SI los incluye al
+mismo nivel, `archived` deja de cumplir su proposito.
+
+**Resolucion:** la transicion `archived -> active` NO se dispara por un recall
+estandar. Se acota explicitamente a tres vias: (a) salto asociativo via
+`local_query_graph` / PPR desde un nodo semilla activo, (b) coincidencia lexica
+exacta en FTS5, (c) parametro explicito `include_archived: true` en
+`tylluan_recall`. D2 (tabla de transiciones) queda modificada: la fila
+`archived -> active` cambia su columna "Trigger" de "Re-acceso (recall, ingest,
+manual)" a estas 3 vias explicitas.
+
+### 8.2 D2 tambien esta rota: "active -> quiet" usa un campo que no mide lo que dice medir
+
+**Encontrado independientemente por Antigravity y Deep/Codex (T139, T141) —
+mismo hallazgo desde dos lecturas distintas.** El trigger propuesto ("sin acceso
+>30 dias") se apoyaria en `updated_at`, pero esa columna se actualiza por
+stigmergy, decay y consolidate, no solo por acceso real de un agente.
+`fsrs_last_review` es 0 para nodos anteriores a v0.13, lo que causaria una
+transicion falsa e inmediata a `quiet` en el backfill.
+
+**Resolucion:** Fase 1 debe anadir una columna nueva `last_agent_access INTEGER`
+que SOLO se actualiza en `recall`/`ingest` exitosos iniciados por un agente —
+nunca por `touch_node` interno, decay, ni consolidate. El trigger real de
+`active -> quiet` se mide contra esta columna, no contra `updated_at`.
+
+### 8.3 Backfill ingenuo de Fase 1 rompe D2 para todo el corpus historico
+
+**Encontrado por Deep/Codex (T141).** Un backfill simple `DEFAULT 'active'`
+marcaria TODO nodo preexistente como `active`, dandole 30 dias extra de vida
+activa artificial, inflando el indice vectorial y retrasando el pruning real.
+
+**Resolucion:** el backfill de Fase 1 debe ser derivado, no un default plano:
+`CASE WHEN updated_at < now() - 30d THEN 'quiet' ELSE 'active' END`. Esto entra
+en el plan de migracion de Fase 1, no cambia D1-D4.
+
+### 8.4 Version barata de la propuesta 2.5 de Qwen, viable en Fase 1-4 (no Fase 5+)
+
+**Propuesta convergente de Antigravity y Deep/Codex (T139, T141), ambos
+independientemente de acuerdo en posponer la version completa (gate sincrono
+con LLM/embeddings) a Fase 5+ por coste en el read-path (+15-30ms rompe el SLA
+de recall <50ms), pero proponiendo una version barata que SI cabe antes:**
+
+Anadir `reactivation_count INTEGER DEFAULT 0`, incrementado en cada transicion
+`archived -> active`. Si `reactivation_count >= 3`, el nodo puede saltarse el
+estado `quiet` e ir directo a `active` ("hot reactivation"). Coste: un UPDATE de
+entero en el write-path, cero overhead en el read-path — sin embeddings, sin
+inferencia. Captura "frecuencia de reactivacion" (la senal central de la
+propuesta de Qwen) sin el coste que la hace inviable en Fase 1-4.
+
+**Decision:** esta version barata se anade a Fase 2 del roadmap (Seccion 6).
+La version completa de Qwen (gate de afinidad con coherence check) permanece en
+Fase 5+ sin cambios, tal como estaba en la v1 de este ADR.
+
+### 8.5 Conflictos de implementacion senalados, no resueltos aqui (requieren decision en Fase 1)
+
+Estos 3 hallazgos son reales pero de implementacion, no de diseno — se dejan
+registrados para que quien ejecute Fase 1 los resuelva explicitamente, no los
+descubra en produccion:
+
+- **`type = 'archived'` (ya en uso por `meta_cognitive_prune()`, maintenance.rs:186)
+  vs `lifecycle_state = 'archived'` (columna nueva de este ADR):** sin decision
+  explicita, un nodo podria tener `type='archived'` + `lifecycle_state='active'`
+  simultaneamente sin que ninguna query lo detecte. Fase 1 debe decidir: ¿se
+  migra `type='archived'` a `lifecycle_state` y `type` vuelve a su valor
+  original, o coexisten con una regla de precedencia explicita?
+- **Mapeo posicional de columnas SQL** (`r.get(0)`, `r.get(1)`... en `nodes.rs`,
+  `search.rs`, `decay.rs`): anadir `lifecycle_state` a `SELECT *` sin actualizar
+  cada mapeo posicional corrompe silenciosamente el deserializado de `GraphNode`
+  en runtime. Fase 1 debe auditar cada `SELECT *` sobre `nodes` antes de tocar
+  el schema.
+- **`ON CONFLICT DO UPDATE SET`** en `upsert_node_with_validity` (nodes.rs:155-173):
+  si `lifecycle_state` se anade al INSERT pero se olvida en el bloque
+  `ON CONFLICT`, cada upsert posterior resetea silenciosamente el lifecycle de
+  nodos existentes. Riesgo confirmado por Deep/Codex via lectura directa del
+  codigo antes de tener acceso a Coloquio.
+- **Serializacion de API/dashboard** (`/api/v1/silva/graph`, `KnowledgeGraphCanvas`
+  en `@tylluan/ui-core`): si `GraphNode` gana `lifecycle_state` sin un default
+  seguro en el frontend, el panel de grafo puede fallar al renderizar. Sealado
+  por Antigravity.
