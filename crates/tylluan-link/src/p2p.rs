@@ -362,7 +362,7 @@ mod tests {
         };
 
         // Approve only `approved`. `intruder` is NOT in the set.
-        let approved_set: ApprovedPeersFn = approved_set(&[approved.clone()]);
+        let approved_set: ApprovedPeersFn = approved_set(std::slice::from_ref(&approved));
 
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let (handle, bound_addr) =
