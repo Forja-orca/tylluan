@@ -156,13 +156,14 @@ impl super::SilvaDB {
                 let mut stmt = conn.prepare(
                     "SELECT id FROM nodes
                      WHERE weight < ?1 AND (
-                         CASE 
+                         CASE
                              WHEN typeof(created_at) = 'integer' THEN created_at
                              WHEN typeof(created_at) = 'real' THEN created_at
                              ELSE CAST(strftime('%s', created_at) AS INTEGER)
                          END
                      ) < ?2
-                       AND type NOT IN ('concept', 'lesson')
+                       AND protected = 0
+                       AND type NOT IN ('concept', 'lesson', 'identity', 'agent_summary', 'session_digest', 'consolidated_summary')
                        AND weight > 0.005
                      LIMIT 100"
                 )?;
@@ -378,7 +379,10 @@ impl super::SilvaDB {
             let conn = self.conn.blocking_lock();
             // Delete nodes that are below threshold and NOT marked as protected/identity.
             let deleted = conn.execute(
-                "DELETE FROM nodes WHERE weight < ?1 AND protected = 0",
+                "DELETE FROM nodes
+                 WHERE weight < ?1
+                   AND protected = 0
+                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')",
                 [threshold],
             )?;
             
@@ -401,7 +405,10 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let deleted = conn.execute(
-                "DELETE FROM nodes WHERE weight < ?1 AND protected = 0 AND type != 'identity' AND type != 'agent_summary'",
+                "DELETE FROM nodes
+                 WHERE weight < ?1
+                   AND protected = 0
+                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')",
                 [min_weight],
             )?;
             let _ = conn.execute(
@@ -422,7 +429,12 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             let deleted = conn.execute(
-                "DELETE FROM nodes WHERE type = ?1 AND id LIKE ?2 AND weight < ?3 AND protected = 0",
+                "DELETE FROM nodes
+                 WHERE type = ?1
+                   AND id LIKE ?2
+                   AND weight < ?3
+                   AND protected = 0
+                   AND type NOT IN ('agent_summary', 'session_digest', 'consolidated_summary')",
                 params!["lesson", "lesson:intent:%", 0.15f32],
             )?;
             let _ = conn.execute(
