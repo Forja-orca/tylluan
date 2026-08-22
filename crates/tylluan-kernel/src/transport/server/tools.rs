@@ -215,6 +215,7 @@ impl super::TylluanServer {
                         "query":    { "type": "string", "description": "What to search for in memory." },
                         "limit":    { "type": "number", "default": 5 },
                         "agent_id": { "type": "string", "description": "Optional. Filter recall results to episodes from this agent identity." },
+                        "include_archived": { "type": "boolean", "default": false, "description": "Optional. Include lifecycle-archived memories and reactivate returned nodes." },
                     },
                     "required": ["query"]
                 }),

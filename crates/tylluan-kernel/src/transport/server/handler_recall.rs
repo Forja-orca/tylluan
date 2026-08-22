@@ -65,6 +65,7 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 #[derive(Clone)]
 pub struct RecallCacheEntry {
     pub query: String,
+    pub include_archived: bool,
     pub results: Vec<(GraphNode, f32)>,
     pub inserted_at: std::time::Instant,
 }
@@ -83,10 +84,11 @@ impl RecallCache {
 
     /// Look up a query by Jaccard similarity. Returns matching results if
     /// any cached query has similarity > 0.85 and is within TTL.
-    pub fn get(&mut self, query: &str) -> Option<&Vec<(GraphNode, f32)>> {
+    pub fn get(&mut self, query: &str, include_archived: bool) -> Option<&Vec<(GraphNode, f32)>> {
         let threshold = 0.85;
         for entry in &self.entries {
-            if entry.inserted_at.elapsed() < RECALL_CACHE_TTL
+            if entry.include_archived == include_archived
+                && entry.inserted_at.elapsed() < RECALL_CACHE_TTL
                 && jaccard_similarity(&entry.query, query) > threshold
             {
                 return Some(&entry.results);
@@ -96,12 +98,13 @@ impl RecallCache {
     }
 
     /// Insert a new entry. Evicts the oldest if at capacity.
-    pub fn put(&mut self, query: String, results: Vec<(GraphNode, f32)>) {
+    pub fn put(&mut self, query: String, include_archived: bool, results: Vec<(GraphNode, f32)>) {
         if self.entries.len() >= self.max_size {
             self.entries.pop_front();
         }
         self.entries.push_back(RecallCacheEntry {
             query,
+            include_archived,
             results,
             inserted_at: std::time::Instant::now(),
         });
@@ -159,6 +162,8 @@ pub async fn handle_tylluan_recall(
         .and_then(|a| a.get("compact")).and_then(|v| v.as_bool()).unwrap_or(true);
     let episodic = arguments.as_ref()
         .and_then(|a| a.get("episodic")).and_then(|v| v.as_bool()).unwrap_or(false);
+    let include_archived = arguments.as_ref()
+        .and_then(|a| a.get("include_archived")).and_then(|v| v.as_bool()).unwrap_or(false);
     let rec_agent_id = arguments.as_ref()
         .and_then(|a| a.get("agent_id")).and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
@@ -508,7 +513,7 @@ if let Some(ref mut s) = stmt {
 
     // Jaccard LRU cache: skip expensive embedding + search if similar query exists
     let mut cache = server.recall_cache.lock().await;
-    let cached_docs = cache.get(&effective_query).cloned();
+    let cached_docs = cache.get(&effective_query, include_archived).cloned();
     drop(cache);
 
     let query_embedding = server.matcher.engine().and_then(|e| {
@@ -544,6 +549,13 @@ if let Some(ref mut s) = stmt {
             query_embedding.map(|e| e.to_vec()),
             &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
         );
+
+        if !include_archived {
+            let archived_ids = server.silva.archived_lifecycle_ids_among(
+                &scored.iter().map(|(node, _)| node.id.clone()).collect::<Vec<_>>(),
+            ).await.unwrap_or_default();
+            scored.retain(|(node, _)| !archived_ids.contains(&node.id));
+        }
 
         for (node, _) in &scored {
             let _ = server.silva.reinforce_node(&node.id, 1.02).await;
@@ -616,6 +628,13 @@ if let Some(ref mut s) = stmt {
                 line
             }).collect::<Vec<_>>().join("\n");
         let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
+        if rec_agent_id.is_some() && !scored.is_empty() {
+            let now = chrono::Utc::now().timestamp();
+            for (node, _) in &scored {
+                let _ = server.silva.record_agent_access(&node.id, now).await;
+            }
+        }
+
         let prefix = session_context.unwrap_or_default();
         return Ok(CallToolResult { content: vec![Content::text(format!("{prefix}{summary}"))], is_error: Some(false) });
     }
@@ -625,7 +644,15 @@ if let Some(ref mut s) = stmt {
         match crate::memory::dual_retrieval::dual_retrieve(
             &server.silva, &effective_query, query_embedding.as_deref(), limit * 3,
         ).await {
-            Ok(r) => r.merged,
+            Ok(mut r) => {
+                if !include_archived {
+                    let archived_ids = server.silva.archived_lifecycle_ids_among(
+                        &r.merged.iter().map(|(node, _)| node.id.clone()).collect::<Vec<_>>(),
+                    ).await.unwrap_or_default();
+                    r.merged.retain(|(node, _)| !archived_ids.contains(&node.id));
+                }
+                r.merged
+            },
             Err(_) => vec![],
         }
     } else {
@@ -636,9 +663,16 @@ if let Some(ref mut s) = stmt {
         // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
         let filter = if episodic { Some("episodic") } else { None };
-        candidates = server.silva
-            .search_hybrid(&effective_query, query_embedding.as_deref(), candidate_pool, filter, false)
-            .await.unwrap_or_default();
+        candidates = server.silva.search_hybrid_for_recall(
+                &effective_query,
+                query_embedding.as_deref(),
+                candidate_pool,
+                filter,
+                false,
+                include_archived,
+            )
+            .await
+            .unwrap_or_default();
 
         if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
             for doc in hybrid {
@@ -696,7 +730,7 @@ if let Some(ref mut s) = stmt {
         }),
         Ok(docs) => {
             // Cache the full results before filtering
-            server.recall_cache.lock().await.put(effective_query.clone(), docs.clone());
+            server.recall_cache.lock().await.put(effective_query.clone(), include_archived, docs.clone());
             let mut scored: Vec<(GraphNode, f32)> = docs;
             let aid = rec_agent_id.as_deref().unwrap_or("anonymous");
 
@@ -930,12 +964,10 @@ if let Some(ref mut s) = stmt {
 
             // ADR-012 Fase 1: actualizar last_agent_access para los nodos devueltos
             // (solo si hay agent_id y nodos devueltos)
-            if let Some(ref aid) = rec_agent_id {
-                if !scored.is_empty() {
-                    let now = chrono::Utc::now().timestamp();
-                    for (node, _) in &scored {
-                        let _ = server.silva.update_last_agent_access(&node.id, aid, now).await;
-                    }
+            if rec_agent_id.is_some() && !scored.is_empty() {
+                let now = chrono::Utc::now().timestamp();
+                for (node, _) in &scored {
+                    let _ = server.silva.record_agent_access(&node.id, now).await;
                 }
             }
 

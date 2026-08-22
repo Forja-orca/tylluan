@@ -155,6 +155,12 @@ pub async fn handle_tylluan_remember(
                     rem_agent_id.as_deref().unwrap_or("anonymous")
                 );
                 let _ = server.silva.reinforce_node(&existing_node.id, 1.05).await;
+                if rem_agent_id.is_some() {
+                    let _ = server.silva.record_agent_access(
+                        &existing_node.id,
+                        chrono::Utc::now().timestamp(),
+                    ).await;
+                }
                 let preview = existing_node.content.chars().take(100).collect::<String>();
                 return Ok(CallToolResult {
                     content: vec![Content::text(format!(
@@ -390,9 +396,9 @@ pub async fn handle_tylluan_remember(
             }
             let preview = if content.chars().count() > 80 { format!("{}...", content.chars().take(80).collect::<String>()) } else { content.clone() };
             // ADR-012 Fase 1: actualizar last_agent_access si hay agent_id
-            if let Some(ref aid) = rem_agent_id {
+            if rem_agent_id.is_some() {
                 let now = chrono::Utc::now().timestamp();
-                let _ = server.silva.update_last_agent_access(&node_id, aid, now).await;
+                let _ = server.silva.record_agent_access(&node_id, now).await;
             }
             Ok(CallToolResult {
                 content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
