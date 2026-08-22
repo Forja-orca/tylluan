@@ -34,6 +34,8 @@ Concretely, that means:
 
 Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
 
+**Air-gapped caveat (verified 2026-08-22):** on every boot, the kernel currently attempts a STUN request to `stun.l.google.com:19302` for NAT discovery, unconditionally — it doesn't check whether federation/mesh is even enabled first. It's backgrounded (won't block boot), but it is real outbound traffic on a host you may have intended to keep fully offline. Set `[nat] stun_servers = []` to disable it until this is gated behind a config flag.
+
 The honest trade-off: several of those other projects have years of community history and production hardening that Tylluan doesn't have yet. [ROADMAP.md](ROADMAP.md) is where we track what's actually shipped versus what's still planned — we'd rather you find out something isn't ready from us than from a broken deploy.
 
 ---
@@ -170,7 +172,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ## Quick Start
 
-> **Setup takes about 10 minutes**, most of it spent downloading the BGE-M3 model on first boot (~1.2 GB, one-time). Set `embedding_model = "none"` in `tylluan.toml` if you'd rather skip that download entirely.
+> **Setup takes about 10 minutes**, most of it spent downloading the BGE-M3 model on first boot (~1.2 GB, one-time). Set `embedding_model = "none"` in `tylluan.toml` to skip that download — but note this only disables the BGE-M3 embedding model, not the Jina reranker. `RerankEngine::load_with_device()` (`main.rs`) still runs unconditionally on boot and requires ONNX Runtime (`libonnxruntime.so`/`.dll`) to be present; if it's missing, the underlying `ort` crate can panic the whole process instead of falling back gracefully. There is no offline/no-ONNX boot path yet (found via external audit, verified 2026-08-22 — see STATUS.md).
 
 **Supported platforms:**
 
@@ -183,7 +185,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ### 1 — Install
 
-No Rust, Python, or Node needed on your end.
+No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 49 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
 
 ```bash
 # Linux / macOS
