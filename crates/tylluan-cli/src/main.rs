@@ -4,7 +4,7 @@ use std::process::Command;
 use std::path::PathBuf;
 use sysinfo::System;
 
-const DEFAULT_PORT: u16 = 3030;
+const DEFAULT_PORT: u16 = 4000;
 
 /// Installation profile — determines which embedding model and default settings to use.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Debug)]
@@ -74,7 +74,7 @@ enum Commands {
         /// Remote SSE URL (e.g. https://tylluan.example.com/sse)
         #[arg(value_hint = ValueHint::Url)]
         url: Option<String>,
-        /// Host (alternative to full URL, e.g. 192.168.1.42:3030)
+        /// Host (alternative to full URL, e.g. 192.168.1.42:4000)
         #[arg(long, short)]
         host: Option<String>,
         /// Bearer token for authenticated instances
@@ -1072,9 +1072,9 @@ fn generate_config(profile: InstallProfile) -> String {
 # ── Core settings ───────────────────────────────────────────────────
 [nexus]
 host = "127.0.0.1"       # Listen address (localhost-only for security)
-port = 3030               # HTTP/S gateway port
+port = 4000               # HTTP/MCP gateway port (architecture invariant)
 dev_mode = false          # NEVER enable in production — disables auth
-transports = ["stdio", "http", "sse"]
+transport = ["stdio", "http"]
 
 # ── Security ─────────────────────────────────────────────────────────
 [security]
