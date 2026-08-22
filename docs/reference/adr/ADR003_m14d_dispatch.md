@@ -1,7 +1,9 @@
 # ADR-003: M14-D Latency-Aware Routing & Cross-Datacenter Federation
 
 ## Status
-**Proposed** — 2026-07-02
+**Partially implemented** — 2026-07-02 (revisado 2026-08-22 en auditoría full-proyecto, Coloquio #mision-activa T196)
+
+El despacho M14-D en sí (latency-aware routing, ver [M14D_dispatch_spec.md](M14D_dispatch_spec.md)) está en producción y cerrado según ROADMAP_O3.md. Las secciones de federación cross-datacenter/DHT de este ADR no tienen evidencia confirmada de implementación — pendiente de que José o el equipo lo verifique explícitamente antes de marcar el documento completo como Accepted.
 
 ## Context
 
