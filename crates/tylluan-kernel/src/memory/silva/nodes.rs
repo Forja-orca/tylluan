@@ -1017,20 +1017,29 @@ impl super::SilvaDB {
         })
     }
 
-    /// ADR-012 Fase 1: actualizar last_agent_access para un nodo.
-    /// Se llama SOLO en recall/ingest exitoso con agent_id explícito.
-    /// NO se llama en touch_node interno (stigmergy, decay, consolidate).
-    pub async fn update_last_agent_access(&self, node_id: &str, _agent_id: &str, timestamp: i64) -> Result<()> {
+    /// Reactivate a node reached through an explicit agent recall/ingest path.
+    /// Quarantined nodes do not advance. Only archived rows increment the
+    /// reactivation counter; ordinary accesses update the timestamp only.
+    pub async fn record_agent_access(&self, node_id: &str, timestamp: i64) -> Result<()> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            // Solo actualizar si el nodo existe y el timestamp es mayor al actual
-            let updated = conn.execute(
-                "UPDATE nodes SET last_agent_access = ?1 WHERE id = ?2 AND last_agent_access < ?1",
+            conn.execute(
+                "UPDATE nodes
+                 SET lifecycle_state = CASE
+                         WHEN lifecycle_state = 'archived' THEN 'active'
+                         ELSE lifecycle_state
+                     END,
+                     reactivation_count = CASE
+                         WHEN lifecycle_state = 'archived' THEN reactivation_count + 1
+                         ELSE reactivation_count
+                     END,
+                     last_agent_access = CASE
+                         WHEN last_agent_access < ?1 THEN ?1
+                         ELSE last_agent_access
+                     END
+                 WHERE id = ?2 AND quarantined = 0",
                 params![timestamp, node_id],
             )?;
-            if updated > 0 {
-                tracing::debug!("🌲 SilvaDB: last_agent_access updated for node={} ts={}", node_id, timestamp);
-            }
             Ok(())
         })
     }

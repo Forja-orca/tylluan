@@ -271,6 +271,39 @@ impl super::SilvaDB {
         Ok(final_results)
     }
 
+    /// Agent-facing hybrid recall with an explicit archived-node policy.
+    /// The existing internal search remains unchanged; this choke point applies
+    /// the lifecycle filter after all retrieval sources have been fused.
+    pub async fn search_hybrid_for_recall(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        limit: usize,
+        type_filter: Option<&str>,
+        skip_graph: bool,
+        include_archived: bool,
+    ) -> Result<Vec<(GraphNode, f32)>> {
+        let source_limit = if include_archived {
+            limit
+        } else {
+            limit.saturating_mul(3).max(limit)
+        };
+        let mut results = self
+            .search_hybrid(query, query_embedding, source_limit, type_filter, skip_graph)
+            .await?;
+        if !include_archived {
+            let archived_ids = self
+                .archived_lifecycle_ids_among(
+                    &results.iter().map(|(node, _)| node.id.clone()).collect::<Vec<_>>(),
+                )
+                .await
+                .unwrap_or_default();
+            results.retain(|(node, _)| !archived_ids.contains(&node.id));
+        }
+        results.truncate(limit);
+        Ok(results)
+    }
+
     /// RRF + cross-encoder reranking. Fetches limit*4 candidates via RRF then reorders
     /// with BGE cross-encoder for higher precision. Falls back to RRF order on reranker error.
     pub async fn search_hybrid_reranked(
@@ -440,6 +473,33 @@ impl super::SilvaDB {
         })
     }
 
+    /// Return lifecycle-archived IDs among a candidate set.
+    pub(crate) async fn archived_lifecycle_ids_among(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::HashSet<String>> {
+        if ids.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        let ids = ids.to_vec();
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT id FROM nodes WHERE lifecycle_state = 'archived' AND id IN ({placeholders})"
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let params_slice: Vec<&dyn rusqlite::ToSql> =
+                ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            let rows = stmt.query_map(params_slice.as_slice(), |row| row.get::<_, String>(0))?;
+            let mut out = std::collections::HashSet::new();
+            for row in rows {
+                out.insert(row?);
+            }
+            Ok(out)
+        })
+    }
+
     /// ASI06: given a set of node ids, return which of them are currently
     /// quarantined. Used by `search_hybrid` as a single post-fusion filter
     /// point instead of threading the check through every candidate source.
@@ -502,5 +562,46 @@ mod asi06_tests {
         let results = db.search_hybrid("tylluan sovereign memory design", None, 10, None, true).await.unwrap();
         assert!(results.iter().any(|(n, _)| n.id == "keep"));
         assert!(!results.iter().any(|(n, _)| n.id == "quarantined"), "quarantined node must not appear in recall results");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn archived_lifecycle_is_opt_in_and_reactivation_is_counted() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("active", "note", "lifecycle archive policy test", "{}").await.unwrap();
+        db.upsert_node("archived", "note", "lifecycle archive policy test", "{}").await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET lifecycle_state = 'archived' WHERE id = 'archived'", []).unwrap();
+        });
+
+        let default_results = db.search_hybrid_for_recall(
+            "lifecycle archive policy test", None, 10, None, true, false,
+        ).await.unwrap();
+        assert!(!default_results.iter().any(|(node, _)| node.id == "archived"));
+
+        let explicit_results = db.search_hybrid_for_recall(
+            "lifecycle archive policy test", None, 10, None, true, true,
+        ).await.unwrap();
+        assert!(explicit_results.iter().any(|(node, _)| node.id == "archived"));
+
+        db.record_agent_access("archived", 1_700_000_000).await.unwrap();
+        let (state, count, access): (String, i64, i64) = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT lifecycle_state, reactivation_count, last_agent_access FROM nodes WHERE id = 'archived'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            ).unwrap()
+        });
+        assert_eq!(state, "active");
+        assert_eq!(count, 1);
+        assert_eq!(access, 1_700_000_000);
+
+        db.record_agent_access("archived", 1_700_000_001).await.unwrap();
+        let count: i64 = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row("SELECT reactivation_count FROM nodes WHERE id = 'archived'", [], |row| row.get(0)).unwrap()
+        });
+        assert_eq!(count, 1, "active follow-up access must not increment reactivation_count");
     }
 }
