@@ -410,7 +410,7 @@ impl super::SilvaDB {
                 "DELETE FROM nodes
                  WHERE weight < ?1
                    AND protected = 0
-                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')",
+                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')",
                 [min_weight],
             )?;
             let _ = conn.execute(

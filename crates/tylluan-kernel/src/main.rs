@@ -1025,6 +1025,15 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // DEPRECATED: decay_half_life_hours no longer affects real decay — FSRS-5
+    // per-node stability governs retrievability (decay.rs). Kept for config
+    // compatibility; warn once at startup if a non-default value is set.
+    if config.silva.decay_half_life_hours != tylluan_kernel::config::default_decay_half_life_hours() {
+        warn!(
+            "⚠️ [Startup] config `silva.decay_half_life_hours` = {} is IGNORED: memory decay is FSRS-driven (per-node stability). Remove the key from tylluan.toml.",
+            config.silva.decay_half_life_hours
+        );
+    }
     let _reaper = lifecycle::start_lifecycle_reaper_with_silva(
         registry_arc.clone(),
         60,
