@@ -29,7 +29,7 @@ Tylluan routes intent to a single guild via semantic matching. For simple querie
 
 - CONTRACT-01 inviolable — coordinator is a **guild**, not a sovereign tool. `tylluan_do` stays unchanged.
 - Sovereignty first — default mode uses no external LLM. Rule-based decomposition only.
-- CPU-first — no blocking loops, no runaway retries. Max 3 sub-tasks per intent, 1 retry per failure.
+- CPU-first — no blocking loops, no runaway retries. Max 5 sub-tasks per intent, 1 retry per failure.
 - No cross-guild imports — guilds communicate only via kernel HTTP (`POST /api/v1/do`).
 - Must be discoverable at startup — auto-discovered via `guilds/core/coordinator.py`.
 
@@ -58,10 +58,10 @@ Split the intent on connectors in priority order:
 
 1. Explicit separator: `" then "`, `" and then "`, `" after that "`, `" finally "`
 2. Numbered list: `^1\. `, `^2\. `, etc.
-3. Sentence boundary (`. ` followed by a verb) — max 3 splits
+3. Sentence boundary (`. ` followed by a verb) — max 5 splits
 4. Fallback: treat entire intent as a single task (passthrough)
 
-Produce an ordered list of sub-task strings, maximum 3. Trim whitespace. Discard empties.
+Produce an ordered list of sub-task strings, maximum 5. Trim whitespace. Discard empties.
 
 **Optional LLM mode:** If `tylluan.toml` sets `[coordinator] llm_url = "http://..."`, the Thinker sends the intent to that endpoint for richer decomposition. Response format: `{"tasks": ["sub-task 1", "sub-task 2", ...]}`. Falls back to rule-based if the endpoint is unreachable.
 
@@ -141,8 +141,8 @@ Single tool — `coordinate`. All three phases happen internally. The `agent_id`
 # llm_url = "http://127.0.0.1:11434/api/generate"
 # llm_model = "llama3"
 
-# Max sub-tasks per intent (default: 3)
-max_tasks = 3
+# Max sub-tasks per intent (default: 5)
+max_tasks = 5
 
 # Sub-task timeout in seconds (default: 120)
 task_timeout_secs = 120

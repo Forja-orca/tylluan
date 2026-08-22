@@ -46,10 +46,12 @@ If your PR touches security-sensitive code (auth, guild execution, token handlin
 
 ## Adding a guild
 
-1. Create a Python file in `guilds/` using `fastmcp`
-2. Register it in `crates/tylluan-kernel/src/router/catalog.rs`
-3. Add trigger phrases and a short description (5-8 words)
-4. Test: `cargo test -p tylluan-kernel --lib`
+Follow the complete [Adding a Guild guide](docs/guides/ADDING_A_GUILD.md) for a copy-paste scaffold, registration details, tests, and a manual `tylluan_do` invocation.
+
+1. Create a Python file in `guilds/` using `FastMCP`, `@mcp.tool()`, and `utils.safe_mcp_run(mcp)`.
+2. Add its runtime module path to `LAZY_GUILDS` or configure it as always-on; update `catalog.rs` overrides only when automatic discovery is insufficient.
+3. Add useful `Use for:` trigger phrases and a short description.
+4. Test: `cargo test -p tylluan-kernel --lib`.
 
 ## Reporting issues
 
