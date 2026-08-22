@@ -427,7 +427,11 @@ async fn main() -> anyhow::Result<()> {
     // feature. Moved to a background tokio::spawn, matching the same
     // "start in background, don't block boot" pattern already used for
     // guild spawning just below.
-    {
+    // OPT-IN (T206, 2026-08-22): STUN discovery phones home to third-party
+    // servers (stun.l.google.com:19302) on every boot — that must not happen
+    // on air-gapped / portable / BM25-only installs without explicit consent.
+    // Gate the whole block behind config.nat.enabled (default false).
+    if config.nat.enabled {
         let nat_config = tylluan_link::nat::NatConfig {
             stun_servers: config.nat.stun_servers.clone(),
             stun_timeout_secs: config.nat.stun_timeout_secs,
@@ -439,6 +443,8 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
             }
         });
+    } else {
+        info!("🌐 NAT/STUN discovery disabled by default (config.nat.enabled=false) -- set it to true to enable NAT traversal");
     }
 
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
@@ -574,13 +580,23 @@ async fn main() -> anyhow::Result<()> {
     let matcher = matcher.with_hormones(hormones_shared.clone());
     let matcher = Arc::new(matcher);
 
-    let reranker = match tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device)) {
-        Ok(r) => {
+    // T206 (2026-08-22): `ort` (v2.0.0-rc.10, feature load-dynamic) PANICS instead
+    // of returning Err when libonnxruntime.so/.dll is missing — without
+    // catch_unwind the whole kernel process dies at boot. Treat a panic the
+    // same as the Err arm: warn + fallback to pure RRF, never crash the boot.
+    let reranker = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device))
+    })) {
+        Ok(Ok(r)) => {
             info!("🔀 Reranker BGE listo");
             Some(Arc::new(r))
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
+            None
+        }
+        Err(_) => {
+            warn!("⚠️ Reranker: ort panicó al cargar (ONNX Runtime ausente o incompatible) -- fallback a RRF puro");
             None
         }
     };

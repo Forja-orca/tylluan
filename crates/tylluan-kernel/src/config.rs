@@ -198,6 +198,12 @@ impl Default for FederationConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatConfig {
+    /// OPT-IN (default false): STUN discovery is an outbound UDP call to
+    /// third-party servers (stun.l.google.com:19302) — it must NOT run on
+    /// air-gapped / portable / BM25-only installs without explicit consent.
+    /// Audited 2026-08-22 (T206): previously ran on EVERY boot unconditionally.
+    #[serde(default)]
+    pub enabled: bool,
     /// STUN servers to try for NAT traversal (ordered: first success wins).
     #[serde(default = "default_stun_servers")]
     pub stun_servers: Vec<String>,
@@ -221,6 +227,7 @@ fn default_stun_retries() -> u32 { 2 }
 impl Default for NatConfig {
     fn default() -> Self {
         Self {
+            enabled: false,
             stun_servers: default_stun_servers(),
             stun_timeout_secs: default_stun_timeout(),
             stun_retries: default_stun_retries(),
