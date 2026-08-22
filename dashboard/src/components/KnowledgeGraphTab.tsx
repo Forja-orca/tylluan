@@ -79,6 +79,27 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   const [recentNodes, setRecentNodes] = useState<GraphNode[]>([]);
   const [recentLoaded, setRecentLoaded] = useState(false);
 
+  // --- Lifecycle Filter State ---
+  const [lifecycleFilter, setLifecycleFilter] = useState<'all' | 'active' | 'quiet' | 'consolidated' | 'archived'>('all');
+
+  const lifecycleCounts = React.useMemo(() => {
+    const counts = { all: results.length, active: 0, quiet: 0, consolidated: 0, archived: 0 };
+    for (const node of results) {
+      const state = (((node as any).lifecycle_state || 'active').toLowerCase()) as keyof typeof counts;
+      if (state in counts && state !== 'all') {
+        counts[state]++;
+      } else {
+        counts.active++;
+      }
+    }
+    return counts;
+  }, [results]);
+
+  const filteredResults = React.useMemo(() => {
+    if (lifecycleFilter === 'all') return results;
+    return results.filter(n => (((n as any).lifecycle_state || 'active').toLowerCase()) === lifecycleFilter);
+  }, [results, lifecycleFilter]);
+
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -423,10 +444,51 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             )}
           </div>
 
+          {/* Lifecycle Filter & Summary Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Ciclo de Vida:</span>
+              <div className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded-md border border-slate-800">
+                {(['all', 'active', 'quiet', 'consolidated', 'archived'] as const).map((filterKey) => {
+                  const count = lifecycleCounts[filterKey];
+                  const isActive = lifecycleFilter === filterKey;
+                  return (
+                    <button
+                      key={filterKey}
+                      type="button"
+                      onClick={() => setLifecycleFilter(filterKey)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-medium font-mono uppercase transition-all flex items-center gap-1 cursor-pointer",
+                        isActive 
+                          ? filterKey === 'active' ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          : filterKey === 'quiet' ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                          : filterKey === 'consolidated' ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                          : filterKey === 'archived' ? "bg-slate-700/60 text-slate-300 border border-slate-600"
+                          : "bg-slate-800 text-slate-200 border border-slate-700"
+                          : "text-slate-500 hover:text-slate-300 hover:bg-slate-900 border border-transparent"
+                      )}
+                    >
+                      <span>{filterKey}</span>
+                      <span className={cn(
+                        "px-1 text-[9px] rounded-full",
+                        isActive ? "bg-slate-950/80 text-white font-bold" : "text-slate-600"
+                      )}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {lifecycleFilter !== 'all' && (
+              <span className="text-[10px] text-slate-500 italic">
+                Mostrando {filteredResults.length} de {results.length} nodos
+              </span>
+            )}
+          </div>
+
           <div className="flex-1 min-h-0 overflow-y-auto">
             {view === 'grid' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {results.map((node, i) => {
+                {filteredResults.map((node, i) => {
                   const nodeType = (node as any).node_type || (node as any).type || 'entity';
                   const nodeContent = fixDoubleEncoding(node.content || (node as any).label || '—');
                   return (
@@ -578,7 +640,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {results.map((node, i) => {
+                    {filteredResults.map((node, i) => {
                       const nodeType = (node as any).node_type || (node as any).type || 'entity';
                       const nodeContent = fixDoubleEncoding(node.content || (node as any).label || '—');
                       return (
@@ -716,6 +778,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 <Database className="w-12 h-12 text-slate-800 mb-4" />
                 <p className="text-slate-600 font-medium">No neural patterns match your scan</p>
                 <button type="button" onClick={loadRecent} className="mt-4 text-xs text-emerald-500 hover:underline">Reset Scan</button>
+              </div>
+            )}
+
+            {results.length > 0 && filteredResults.length === 0 && !searching && (
+              <div className="py-16 text-center flex flex-col items-center">
+                <Database className="w-10 h-10 text-slate-800 mb-3" />
+                <p className="text-slate-500 text-xs font-medium">No hay nodos en estado <span className="font-mono font-bold text-slate-400 uppercase">"{lifecycleFilter}"</span></p>
+                <button type="button" onClick={() => setLifecycleFilter('all')} className="mt-3 text-xs text-emerald-400 hover:underline">Ver todos los nodos ({results.length})</button>
               </div>
             )}
           </div>
