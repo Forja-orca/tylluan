@@ -91,18 +91,27 @@ impl SilvaDB {
                 _ => continue, // memory deleted/decayed since recall -> leave unresolved
             };
 
-            let mut stmt = audit_conn.prepare(
-                "SELECT intent FROM guild_audit_log \
-                 WHERE agent_id = ?1 AND timestamp > ?2 \
-                 ORDER BY timestamp ASC LIMIT ?3",
-            )?;
-            let intents: Vec<String> = stmt
-                .query_map(rusqlite::params![agent_id, accessed_at, RESOLUTION_WINDOW as i64], |r| {
+            // Scoped in its own block so `stmt` (borrows `audit_conn`, whose
+            // rusqlite internals aren't Send) goes out of LEXICAL scope before
+            // the `.await` below. A bare `drop(stmt)` is not enough here --
+            // rustc's async-fn state machine captures a variable across an
+            // await point based on lexical liveness, not just logical drop
+            // order, so an explicit block is the reliable fix. Found as a real
+            // compile error when wiring this into NightConsolidation via
+            // #[async_trait]'s Send-bound future in FeedbackSignalPhase::run.
+            let intents: Vec<String> = {
+                let mut stmt = audit_conn.prepare(
+                    "SELECT intent FROM guild_audit_log \
+                     WHERE agent_id = ?1 AND timestamp > ?2 \
+                     ORDER BY timestamp ASC LIMIT ?3",
+                )?;
+                stmt.query_map(rusqlite::params![agent_id, accessed_at, RESOLUTION_WINDOW as i64], |r| {
                     r.get::<_, Option<String>>(0)
                 })?
-                .flatten()
-                .flatten()
-                .collect();
+                    .flatten()
+                    .flatten()
+                    .collect()
+            };
 
             let referenced = intents.iter().any(|intent| jaccard_words(&content, intent) >= REFERENCE_OVERLAP_THRESHOLD);
             let useful = if referenced { 1 } else { -1 };
@@ -115,6 +124,23 @@ impl SilvaDB {
                     rusqlite::params![useful, row_id],
                 )
             })?;
+
+            // ADR-012/ADR-011 integration: confirmed real usage (useful=1) is a
+            // stronger signal than the passive time-based active->quiet trigger
+            // that ADR-012 D2 uses. Route it through the same atomic,
+            // quarantine-safe path recall/remember already use -- this
+            // reactivates an archived memory the agent actually acted on, and
+            // refreshes last_agent_access for a quiet one, using real proof of
+            // usefulness instead of mere access. Deliberately NOT symmetric:
+            // useful=-1 does NOT downgrade lifecycle_state here. ADR-012 §8.2
+            // treats "not referenced afterward" as weak evidence (the agent may
+            // not have needed it yet, not that it's useless) -- punitive
+            // demotion on a heuristic proxy signal is a real policy decision
+            // this integration does not make on its own.
+            if referenced {
+                let now = chrono::Utc::now().timestamp();
+                let _ = self.record_agent_access(&memory_id, now).await;
+            }
         }
 
         Ok((useful_count, not_useful_count))
@@ -280,6 +306,95 @@ mod tests {
         assert_eq!(useful, 0);
         assert_eq!(not_useful, 1, "no overlap with any subsequent intent -> not useful");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_pending_feedback_reactivates_archived_memory_confirmed_useful() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("mem1", "concept", "how to configure the deployment pipeline", "{}").await.unwrap();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET lifecycle_state = 'archived' WHERE id = 'mem1'", []).unwrap();
+        });
+
+        let old_ts = (chrono::Utc::now() - chrono::Duration::seconds(120)).to_rfc3339();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at) \
+                 VALUES ('mem1', 'agent-a', 'task-1', 'deployment pipeline', 0, ?1)",
+                rusqlite::params![old_ts],
+            ).unwrap();
+        });
+
+        let tmp = std::env::temp_dir().join(format!("test_recall_feedback_audit_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let audit_path = tmp.join("audit.db");
+        {
+            let conn = crate::config::open_db(&audit_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE guild_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, guild TEXT, tool_name TEXT, agent_id TEXT, intent TEXT, status TEXT);"
+            ).unwrap();
+            let now = chrono::Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT INTO guild_audit_log (timestamp,guild,tool_name,agent_id,intent,status) VALUES (?1,'bash','run','agent-a','configure the deployment pipeline now','ok')",
+                rusqlite::params![now],
+            ).unwrap();
+        }
+
+        let (useful, _) = db.resolve_pending_feedback(&audit_path.to_string_lossy(), 60).await.unwrap();
+        assert_eq!(useful, 1);
+
+        let state: String = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row("SELECT lifecycle_state FROM nodes WHERE id = 'mem1'", [], |r| r.get(0)).unwrap()
+        });
+        assert_eq!(state, "active", "real usage confirmation must reactivate an archived memory");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_pending_feedback_does_not_downgrade_lifecycle_on_not_useful() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("mem1", "concept", "completely unrelated content about cooking recipes", "{}").await.unwrap();
+
+        let old_ts = (chrono::Utc::now() - chrono::Duration::seconds(120)).to_rfc3339();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at) \
+                 VALUES ('mem1', 'agent-a', 'task-1', 'cooking', 0, ?1)",
+                rusqlite::params![old_ts],
+            ).unwrap();
+        });
+
+        // Must be a real, openable audit DB with no matching rows -- an
+        // unopenable path makes resolve_pending_feedback bail out early with
+        // Ok((0, 0)) for the whole batch (found as a real test bug: this test
+        // originally used a nonexistent path expecting not_useful=1, which
+        // never happened because the function short-circuits before scoring
+        // any row).
+        let tmp = std::env::temp_dir().join(format!("test_recall_feedback_audit_{}", uuid::Uuid::new_v4().simple()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let audit_path = tmp.join("audit.db");
+        {
+            let conn = crate::config::open_db(&audit_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE guild_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, guild TEXT, tool_name TEXT, agent_id TEXT, intent TEXT, status TEXT);"
+            ).unwrap();
+        }
+
+        let (_, not_useful) = db.resolve_pending_feedback(&audit_path.to_string_lossy(), 60).await.unwrap();
+        assert_eq!(not_useful, 1);
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        let state: String = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row("SELECT lifecycle_state FROM nodes WHERE id = 'mem1'", [], |r| r.get(0)).unwrap()
+        });
+        assert_eq!(state, "active", "a not-useful heuristic signal must not demote lifecycle_state -- that policy is not decided yet");
     }
 
     #[tokio::test(flavor = "multi_thread")]
