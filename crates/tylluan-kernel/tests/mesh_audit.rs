@@ -243,6 +243,7 @@ fn test_nat_config_is_accessible_from_tylluan_config() {
     let config = TylluanConfig::default();
     // Verify NatConfig exists and has default values via TylluanConfig.nat
     assert!(!config.nat.stun_servers.is_empty(), "stun_servers should have defaults");
+    assert!(config.nat.enabled, "STUN stays enabled by default (mesh back-compat)");
     let _ = config.nat.stun_timeout_secs;
     let _ = config.nat.stun_retries;
 }

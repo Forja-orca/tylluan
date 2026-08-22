@@ -17,7 +17,7 @@ pub async fn run_repl() -> Result<()> {
     println!();
 
     let client = Client::new();
-    let url = "http://127.0.0.1:3030/api/v1/do";
+    let url = "http://127.0.0.1:4000/api/v1/do";
     
     // Attempt to read token
     let token = std::env::var("TYLLUAN_TOKEN")

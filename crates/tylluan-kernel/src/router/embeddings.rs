@@ -262,6 +262,16 @@ impl RerankEngine {
         Self::load_with_device(&InferenceDevice::Cpu)
     }
 
+    /// Cross-encoder needs ONNX Runtime (`ort` `load-dynamic`).
+    ///
+    /// `ort` panics (does not return `Err`) if `libonnxruntime.so` is missing,
+    /// which aborts the kernel before HTTP bind. BM25-only / portable must
+    /// never call into `ort` at all.
+    pub fn should_load(embedding_model: &str) -> bool {
+        let m = embedding_model.trim();
+        !m.is_empty() && !m.eq_ignore_ascii_case("none")
+    }
+
     /// M25-A: the cross-encoder is the real latency bottleneck of recall
     /// (40-50 pairs/query) — it needs the GPU even more than the bi-encoder.
     pub fn load_with_device(device: &InferenceDevice) -> Result<Self> {
@@ -300,6 +310,16 @@ mod tests {
         assert!(path.is_some());
         let none_path = EmbeddingEngine::model_path_from_config("none");
         assert!(none_path.is_none());
+    }
+
+    #[test]
+    fn test_reranker_skipped_for_bm25_only() {
+        assert!(!RerankEngine::should_load("none"));
+        assert!(!RerankEngine::should_load(""));
+        assert!(!RerankEngine::should_load("  none  "));
+        assert!(!RerankEngine::should_load("NONE"));
+        assert!(RerankEngine::should_load("bge-m3"));
+        assert!(RerankEngine::should_load("bge-small"));
     }
 
     #[test]

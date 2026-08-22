@@ -198,6 +198,12 @@ impl Default for FederationConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatConfig {
+    /// Boot-time STUN to discover a WAN address (Google/Cloudflare by default).
+    /// Defaults to true so existing mesh nodes keep current behaviour.
+    /// Portable / air-gapped installs set this false — STUN is outbound UDP
+    /// and is not compatible with "no cloud in the critical path".
+    #[serde(default = "default_nat_enabled")]
+    pub enabled: bool,
     /// STUN servers to try for NAT traversal (ordered: first success wins).
     #[serde(default = "default_stun_servers")]
     pub stun_servers: Vec<String>,
@@ -209,6 +215,7 @@ pub struct NatConfig {
     pub stun_retries: u32,
 }
 
+fn default_nat_enabled() -> bool { true }
 fn default_stun_servers() -> Vec<String> {
     vec![
         "stun.l.google.com:19302".to_string(),
@@ -221,6 +228,7 @@ fn default_stun_retries() -> u32 { 2 }
 impl Default for NatConfig {
     fn default() -> Self {
         Self {
+            enabled: default_nat_enabled(),
             stun_servers: default_stun_servers(),
             stun_timeout_secs: default_stun_timeout(),
             stun_retries: default_stun_retries(),
@@ -1861,6 +1869,16 @@ mod tests {
         // is what actually governs a tylluan.toml that omits [p2p] entirely.
         let parsed: TylluanConfig = toml::from_str("").unwrap();
         assert!(!parsed.p2p.enabled, "serde default for p2p.enabled must also be false");
+    }
+
+    #[test]
+    fn test_nat_enabled_defaults_true_and_can_be_opted_out() {
+        let config = TylluanConfig::default();
+        assert!(config.nat.enabled, "STUN stays on by default so existing mesh nodes keep WAN discovery");
+        let parsed: TylluanConfig = toml::from_str("").unwrap();
+        assert!(parsed.nat.enabled, "omitting [nat] must keep STUN enabled (back-compat)");
+        let off: TylluanConfig = toml::from_str("[nat]\nenabled = false\n").unwrap();
+        assert!(!off.nat.enabled);
     }
 
     #[test]
