@@ -30,7 +30,10 @@ impl super::SilvaDB {
                     fsrs_stability REAL DEFAULT 14.0,
                     fsrs_difficulty REAL DEFAULT 0.3,
                     fsrs_last_review INTEGER DEFAULT 0,
-                    content_hash TEXT DEFAULT ''
+                    content_hash TEXT DEFAULT '',
+                    lifecycle_state TEXT NOT NULL DEFAULT 'active',
+                    last_agent_access INTEGER NOT NULL DEFAULT 0,
+                    reactivation_count INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS edges (
@@ -45,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 22;
+            const SCHEMA_VERSION: i32 = 23;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -256,6 +259,40 @@ impl super::SilvaDB {
                     );"
                 ).ok();
                 tracing::info!("🌲 SilvaDB: added a2a_agents table (v22)");
+            }
+            if schema_version < 23 {
+                // ADR-012 Fase 1: Memory Lifecycle State Machine
+                // lifecycle_state: active | quiet | consolidated | archived (4 estados, ADR-012 §2 Decision 1)
+                // last_agent_access: unix timestamp del último acceso REAL de agente (recall/ingest), NO touch_node interno
+                // reactivation_count: contador de reactivaciones archived→active (RAE barata §2.5)
+                let _ = conn.execute(
+                    "ALTER TABLE nodes ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'",
+                    [],
+                );
+                let _ = conn.execute(
+                    "ALTER TABLE nodes ADD COLUMN last_agent_access INTEGER NOT NULL DEFAULT 0",
+                    [],
+                );
+                let _ = conn.execute(
+                    "ALTER TABLE nodes ADD COLUMN reactivation_count INTEGER NOT NULL DEFAULT 0",
+                    [],
+                );
+                // Backfill DERIVADO: no DEFAULT 'active' ciego.
+                // Nodos con updated_at > 30 días → quiet, resto active.
+                // Nodos protected/identity NUNCA se degradan a quiet — son
+                // inmunes al pruning y su lifecycle es estructural (fix review).
+                // last_agent_access = 0 (nunca accedido por agente registrado aún).
+                // reactivation_count = 0.
+                conn.execute_batch(
+                    "UPDATE nodes SET lifecycle_state = CASE
+                        WHEN updated_at < datetime('now', '-30 days') THEN 'quiet'
+                        ELSE 'active'
+                     END
+                     WHERE protected = 0 AND type != 'identity';
+                     UPDATE nodes SET last_agent_access = 0;
+                     UPDATE nodes SET reactivation_count = 0;",
+                )?;
+                tracing::info!("🌲 SilvaDB: added lifecycle_state, last_agent_access, reactivation_count (v23, ADR-012 Fase 1)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

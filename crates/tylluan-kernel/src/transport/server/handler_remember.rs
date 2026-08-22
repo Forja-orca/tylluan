@@ -389,6 +389,11 @@ pub async fn handle_tylluan_remember(
                 });
             }
             let preview = if content.chars().count() > 80 { format!("{}...", content.chars().take(80).collect::<String>()) } else { content.clone() };
+            // ADR-012 Fase 1: actualizar last_agent_access si hay agent_id
+            if let Some(ref aid) = rem_agent_id {
+                let now = chrono::Utc::now().timestamp();
+                let _ = server.silva.update_last_agent_access(&node_id, aid, now).await;
+            }
             Ok(CallToolResult {
                 content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
                 is_error: Some(false),
