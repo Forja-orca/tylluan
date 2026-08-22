@@ -183,6 +183,66 @@ Qwen propos en Coloquio T135 un principio de "refinamiento activo en reactivacio
 
 **Referencia de implementacion para estado archived:** Ver investigacion de compactacion de Antigravity (vector tiering, distilled_from, Coloquio ~turno 129) como modelo de referencia para como los nodos archived podrian preservar informacion comprimida sin consumir espacio de recall activo. Esta referencia es orientativa, no un requisito de implementacion.
 
+### 6.1 Fase 1 — detalle de implementacion real (fusionado desde el companion doc de Deep)
+
+Deep escribio un documento companion separado (`ADR-012_lifecycle_design.md`)
+durante la implementacion de Fase 1. Fusionado aqui tras acuerdo del equipo
+(Coloquio T163-T165: Antigravity, Deep y Buffy coincidieron en que era
+complemento con solapamiento parcial, no duplicado) para evitar el riesgo de
+drift entre dos archivos con nombres casi identicos (`ADR-012_` vs
+`ADR012_`) -- el mismo patron de incidente que ya ocurrio una vez con
+AGENTS.md. El archivo separado fue eliminado tras esta fusion.
+
+**Migracion v23 real, tal como quedo commiteada en `e4d3c5a`:**
+
+```sql
+ALTER TABLE nodes ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE nodes ADD COLUMN last_agent_access INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE nodes ADD COLUMN reactivation_count INTEGER NOT NULL DEFAULT 0;
+
+-- Backfill derivado (no DEFAULT 'active' ciego, ver 8.3):
+UPDATE nodes SET lifecycle_state = CASE
+    WHEN updated_at < datetime('now', '-30 days') THEN 'quiet'
+    ELSE 'active'
+END
+WHERE protected = 0 AND type != 'identity';
+UPDATE nodes SET last_agent_access = 0;
+UPDATE nodes SET reactivation_count = 0;
+```
+
+El `WHERE protected = 0 AND type != 'identity'` en el backfill fue un hallazgo
+real de revision (no estaba en la primera version del diff, corregido en
+T161) -- sin el, nodos protegidos/identidad podrian degradarse a `quiet`
+por antiguedad en el backfill inicial.
+
+**Indices: estrategia condicional, no crear en Fase 1.** Escrituras
+(`touch_node`, decay, consolidate, recall) tocan cualquier indice sobre
+estas columnas; crear uno sin necesidad medida es overhead puro en el
+write-path. Decision: crear `idx_nodes_lifecycle`/`idx_nodes_last_agent_access`
+en Fase 2 SOLO si `EXPLAIN QUERY PLAN` muestra seq scan real en las queries
+que los necesiten -- no antes.
+
+**Checklist de validacion pre-commit (usado para Fase 1, reutilizable en
+fases futuras):**
+```bash
+cargo check -p tylluan-kernel
+cargo clippy -p tylluan-kernel -- -D warnings
+cargo test -p tylluan-kernel --lib
+scripts/check_test_count.sh   # evita el drift de conteo que ya paso una vez (1a5eaaa)
+```
+
+**Nota de honestidad sobre los tests propuestos en el documento original de
+Deep:** su seccion 7 incluia esbozos de tests (`test_lifecycle_migration_
+backfill_derived`, `test_last_agent_access_updated_only_on_agent_access`)
+que llaman a metodos que no existen en el API real
+(`insert_node_with_timestamps`, `migrate_to_v23`, `get_lifecycle_state`,
+`recall_with_agent`) -- eran ilustrativos de la intencion, no codigo
+verificado contra el kernel real. No se fusionan aqui como tests reales;
+quedan como recordatorio de que Fase 1 aun no tiene cobertura de tests
+dedicada para el backfill derivado ni para la separacion `last_agent_access`
+vs `touch_node`, mas alla de que los 685 tests existentes siguen en verde.
+Anadir esa cobertura sigue siendo trabajo pendiente, no cerrado por Fase 1.
+
 ---
 
 ## 7. Referencias
