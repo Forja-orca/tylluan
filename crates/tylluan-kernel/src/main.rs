@@ -427,7 +427,14 @@ async fn main() -> anyhow::Result<()> {
     // feature. Moved to a background tokio::spawn, matching the same
     // "start in background, don't block boot" pattern already used for
     // guild spawning just below.
-    {
+    //
+    // 2026-08-22: STUN still ran on portable/BM25-only boots (gossip off,
+    // no mesh) and hit stun.l.google.com — contradicting the air-gapped
+    // claim. Skip when the operator disabled NAT, or when both gossip and
+    // P2P dispatch are off (local-only node).
+    let stun_wanted = config.nat.enabled
+        && (config.mesh.gossip.enabled || config.p2p.enabled);
+    if stun_wanted {
         let nat_config = tylluan_link::nat::NatConfig {
             stun_servers: config.nat.stun_servers.clone(),
             stun_timeout_secs: config.nat.stun_timeout_secs,
@@ -439,6 +446,8 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => info!("🌐 NAT external address not available (fallback to LAN): {e}"),
             }
         });
+    } else {
+        info!("🌐 NAT/STUN skipped (local-only or nat.enabled=false) — no outbound discovery");
     }
 
     let prefix = db_path.file_stem().unwrap_or_default().to_string_lossy();
@@ -574,14 +583,23 @@ async fn main() -> anyhow::Result<()> {
     let matcher = matcher.with_hormones(hormones_shared.clone());
     let matcher = Arc::new(matcher);
 
-    let reranker = match tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device)) {
-        Ok(r) => {
-            info!("🔀 Reranker BGE listo");
-            Some(Arc::new(r))
-        }
-        Err(e) => {
-            warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
-            None
+    // Portable / BM25-only must not touch ONNX. `ort` with `load-dynamic`
+    // panics (not Err) if libonnxruntime.so is missing, aborting the kernel
+    // before /health ever binds — verified live 2026-08-22 with
+    // embedding_model = "none".
+    let reranker = if !RerankEngine::should_load(&config.memory.embedding_model) {
+        info!("🔀 Reranker skipped (embedding_model=none) — BM25-only, no ONNX load");
+        None
+    } else {
+        match tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device)) {
+            Ok(r) => {
+                info!("🔀 Reranker BGE listo");
+                Some(Arc::new(r))
+            }
+            Err(e) => {
+                warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
+                None
+            }
         }
     };
 

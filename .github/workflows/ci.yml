@@ -103,11 +103,11 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install ruff pytest pytest-asyncio
+          pip install ruff pytest pytest-asyncio -r guilds/requirements.txt
       - name: Ruff lint
         run: ruff check guilds/ tests/python/
       - name: Pytest
-        run: pytest tests/python/ || echo "No Python tests yet"
+        run: pytest tests/python/ --ignore=tests/python/test_memory_bridge_e2e.py
 
   dashboard-lint:
     name: Dashboard — lint
