@@ -17,7 +17,7 @@
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `a505bb9` · **767 total** lib green (686 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `4dae7f6` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
