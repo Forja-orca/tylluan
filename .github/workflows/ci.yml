@@ -168,6 +168,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history needed: the script walks ancestry
+                          # (git merge-base --is-ancestor, git rev-list
+                          # --count) to tolerate citing the parent commit --
+                          # a shallow clone (default depth=1) doesn't have
+                          # that parent at all, so cat-file/merge-base fail
+                          # on a perfectly valid citation. Caught live by
+                          # this exact job on its first real CI run.
       - name: Verify STATUS.md cites exactly one HEAD and it's the real one
         run: bash scripts/check_head_sync.sh
 
