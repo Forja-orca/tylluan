@@ -163,6 +163,14 @@ jobs:
       - name: Verify README.md's claimed test count against a live run
         run: bash scripts/check_test_count.sh
 
+  docs-head-sync-check:
+    name: Docs — STATUS.md HEAD citation matches reality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify STATUS.md cites exactly one HEAD and it's the real one
+        run: bash scripts/check_head_sync.sh
+
   e2e-security-tests:
     name: Rust — security audit tests
     runs-on: ubuntu-latest
