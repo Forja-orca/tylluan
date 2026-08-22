@@ -944,6 +944,11 @@ pub struct SilvaConfig {
     #[serde(default = "default_decay_prune_threshold")]
     pub decay_prune_threshold: f64,
 
+    /// DEPRECATED since v0.13.0: memory decay is FSRS-5 driven (per-node
+    /// stability, see docs/concepts/FSRS_DESIGN.md). `apply_decay()` receives
+    /// this value but discards it (decay.rs). Kept for config compatibility —
+    /// startup warns if a non-default value is set. Removal is a separate
+    /// decision (wired through 7 call sites, see Coloquio T199).
     #[serde(default = "default_decay_half_life_hours")]
     pub decay_half_life_hours: u64,
 
@@ -1622,7 +1627,9 @@ fn default_silva_db_path() -> String { "./data/silva.db".into() }
 fn default_sync_interval() -> u64 { 5000 }
 fn default_decay_interval_hours() -> u64 { 6 }
 fn default_decay_prune_threshold() -> f64 { 0.15 }
-fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
+/// Public because main.rs compares against it to warn about the deprecated
+/// key (decay is FSRS-driven since v0.13.0 — this value has no effect).
+pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
 fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }

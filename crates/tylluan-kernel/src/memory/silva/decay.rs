@@ -474,6 +474,15 @@ impl super::SilvaDB {
     }
 
     /// Remove nodes with weight below threshold (ignoring protected nodes).
+    ///
+    /// NOTE: NOT wired into any production maintenance cycle (audited 2026-08-22,
+    /// Coloquio T199/T200). Production pruning runs `prune_dead_nodes`
+    /// (maintenance.rs) which is a superset — it also cleans orphan edges and
+    /// embeddings in one atomic statement. This method survives as a tested
+    /// public utility because (a) `test_weight_cleanup_preserves_durable_summaries`
+    /// (silva/tests.rs) uses it to validate the durable-summary preservation
+    /// property of the 242a6db fix, and (b) it is the reference implementation
+    /// of the `archived` exclusion that the production path now mirrors.
     pub async fn prune_cold_nodes(&self, threshold_weight: f64) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let mut conn = self.conn.blocking_lock();
