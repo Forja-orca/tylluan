@@ -61,13 +61,13 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 | Capability | Details |
 |------------|---------|
-| **Signal Loop (ADR-011)** | `recall_feedback` table tracks which memories actually got used; resolved during `NightConsolidation` via word-overlap against downstream tool calls |
+| **Signal Loop (ADR-011)** | `recall_feedback` table tracks which memories actually got used; resolved during `NightConsolidation` via word-overlap against downstream tool calls — a confirmed-useful result also reinforces that memory's lifecycle state (see Memory Lifecycle below), so real usage, not just passing time, keeps it accessible |
 | **Coherence Gate** | Layered defense on every recall against memory poisoning — deterministic pattern/provenance/drift filters always active, plus an LLM-backed hybrid classifier for genuinely ambiguous cases, currently running in observation mode |
 | **Plan Mode (M31-P2)** | `tylluan_do(plan=true)` returns the proposed guild/tool/args without executing anything — a dry run you can inspect first |
 | **Agent Contracts (M19-P5)** | `.tylluan/agents.toml` — per-agent role assignment committed alongside `AGENTS.md` |
 | **HNSW Index** | Approximate nearest-neighbor search for larger datasets (kicks in above ~12k nodes) |
 | **Episodic Memory** | Coloquio conversations are automatically stored in the knowledge graph as episodic nodes |
-| **Memory Decay** | Salience fades on a 14-day half-life; using a memory reinforces it |
+| **Memory Lifecycle (ADR-012)** | Memories move through `active → quiet → consolidated → archived` as they age, instead of a binary decay-then-delete — an `archived` memory is never deleted, just excluded from normal recall. Pass `include_archived: true` to `tylluan_recall` to search them anyway; a real usage hit reactivates it back to `active`. Durable summaries (`agent_summary`, `session_digest`) are structurally immune to automatic pruning, not just protected by convention. |
 | **Guild Dispatch** | Peers discover each other's tool capabilities and can dispatch guild calls remotely over Noise NK, with load/latency-aware routing and a circuit breaker for degraded peers |
 | **Encryption** | AES-256 at rest via SQLCipher (`--features encryption`) — active by default on binaries built with that feature, off otherwise; every real database goes through the same `open_db()` path, see [docs/concepts/SECURITY.md](docs/concepts/SECURITY.md) |
 | **Query Cache** | TTL LRU embedding cache, avoids redundant inference on repeated queries |
@@ -99,6 +99,7 @@ Every MCP client that connects to Tylluan sees exactly these five tools — no m
 ```
 tylluan_do        Route a task to a guild, described in natural language
 tylluan_recall    Search long-term memory (hybrid keyword + vector) or an agent's persona
+                  (pass include_archived: true to also search lifecycle-archived memories)
 tylluan_remember  Store knowledge, or update an agent's persona persistently
 tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations — triples, paths, PageRank
