@@ -1,10 +1,10 @@
 use rmcp::{Error as McpError, model::*};
 use serde_json;
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use rusqlite::params;
 
-use crate::memory::silva::GraphNode;
+use crate::memory::silva::{GraphNode, jaccard_similarity};
 use crate::memory::idle_lab::{CANDIDATE_POOL_MULT, RERANK_WINDOW};
 use crate::registry::proxy::error_result;
 use super::TylluanServer;
@@ -50,14 +50,7 @@ impl HotContext {
 
 // ─── Jaccard similarity for cache matching ───────────────────────────────────
 
-fn jaccard_similarity(a: &str, b: &str) -> f64 {
-    let set_a: HashSet<&str> = a.split_whitespace().collect();
-    let set_b: HashSet<&str> = b.split_whitespace().collect();
-    let intersection = set_a.intersection(&set_b).count();
-    let union = set_a.union(&set_b).count();
-    if union == 0 { return 0.0; }
-    intersection as f64 / union as f64
-}
+
 
 // ─── LRU cache for similar recall queries ────────────────────────────────────
 

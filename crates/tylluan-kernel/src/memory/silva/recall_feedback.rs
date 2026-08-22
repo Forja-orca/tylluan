@@ -9,7 +9,7 @@
 //! ADR-011 rather than treated as an infallible label.
 
 use super::SilvaDB;
-use crate::memory::dream_cycle::jaccard_words;
+use super::jaccard_similarity;
 use anyhow::Result;
 
 /// Minimum word-overlap between a recalled memory's content and a subsequent
@@ -113,7 +113,7 @@ impl SilvaDB {
                     .collect()
             };
 
-            let referenced = intents.iter().any(|intent| jaccard_words(&content, intent) >= REFERENCE_OVERLAP_THRESHOLD);
+            let referenced = intents.iter().any(|intent| jaccard_similarity(&content, intent) >= REFERENCE_OVERLAP_THRESHOLD);
             let useful = if referenced { 1 } else { -1 };
             if referenced { useful_count += 1 } else { not_useful_count += 1 }
 

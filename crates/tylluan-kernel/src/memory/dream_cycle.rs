@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
-use crate::memory::silva::SilvaDB;
+use crate::memory::silva::{SilvaDB, jaccard_similarity};
 use crate::config::TylluanConfig;
 
 pub struct DreamCycle {
@@ -144,7 +144,7 @@ impl DreamCycle {
                 report.pair_comparisons += 1;
 
                 // Jaccard on content words as fast pre-filter before embedding cosine
-                let sim = jaccard_words(&nodes[i].content, &nodes[j].content);
+                let sim = jaccard_similarity(&nodes[i].content, &nodes[j].content);
                 if sim < 0.5 { continue; }
 
                 // True cosine via SilvaDB embedding lookup (threshold from IdleLab atomic)
@@ -276,16 +276,6 @@ impl DreamCycle {
     }
 }
 
-// Fast word-level Jaccard for pre-filtering before cosine
-pub(crate) fn jaccard_words(a: &str, b: &str) -> f64 {
-    let set_a: std::collections::HashSet<&str> = a.split_whitespace().collect();
-    let set_b: std::collections::HashSet<&str> = b.split_whitespace().collect();
-    if set_a.is_empty() && set_b.is_empty() { return 1.0; }
-    let inter = set_a.intersection(&set_b).count();
-    let union = set_a.union(&set_b).count();
-    if union == 0 { 0.0 } else { inter as f64 / union as f64 }
-}
-
 fn parse_timestamp(s: &str) -> i64 {
     // Try unix integer first
     if let Ok(n) = s.parse::<i64>() { return n; }
@@ -322,17 +312,17 @@ mod tests {
 
     #[test]
     fn test_jaccard_identical() {
-        assert_eq!(jaccard_words("hello world", "hello world"), 1.0);
+        assert_eq!(jaccard_similarity("hello world", "hello world"), 1.0);
     }
 
     #[test]
     fn test_jaccard_disjoint() {
-        assert_eq!(jaccard_words("foo bar", "baz qux"), 0.0);
+        assert_eq!(jaccard_similarity("foo bar", "baz qux"), 0.0);
     }
 
     #[test]
     fn test_jaccard_partial() {
-        let sim = jaccard_words("rust async await", "rust sync await");
+        let sim = jaccard_similarity("rust async await", "rust sync await");
         assert!(sim > 0.0 && sim < 1.0);
     }
 
