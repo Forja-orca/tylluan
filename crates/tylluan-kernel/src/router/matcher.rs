@@ -1,4 +1,4 @@
-﻿//! # Guild Matcher
+//! # Guild Matcher
 //!
 //! Routes natural language queries to the best matching guild.
 //!
@@ -42,6 +42,21 @@ impl std::fmt::Display for MatchMethod {
         }
     }
 }
+
+/// Canonical verb trigger mapping: first_word → guild_name
+const VERB_TRIGGERS: &[(&str, &str)] = &[
+    ("busca", "search"), ("encuentra", "filesystem"),
+    ("lista", "filesystem"), ("muestra", "filesystem"),
+    ("lee", "filesystem"), ("escribe", "code"),
+    ("crea", "code"), ("compila", "bash"),
+    ("ejecuta", "bash"), ("analiza", "code"),
+    ("monitoriza", "monitor"),
+    ("search", "search"), ("find", "filesystem"),
+    ("show", "filesystem"), ("display", "filesystem"),
+    ("echo", "bash"), ("run", "bash"), ("pwd", "bash"),
+    ("ls", "bash"), ("cat", "bash"), ("grep", "bash"),
+    ("rm", "bash"), ("npm", "bash"), ("pip", "bash"),
+];
 /// Optional context about the calling agent to bias routing.
 #[derive(Debug, Clone, Default)]
 pub struct GuildContext {
@@ -333,20 +348,7 @@ impl GuildMatcher {
         let query_tokens = tokenize(&query_lower);
         let first_word = query_lower.split_whitespace().next().unwrap_or("");
 
-        let verb_triggers: &[(&str, &str)] = &[
-            ("busca", "search"), ("encuentra", "filesystem"),
-            ("lista", "filesystem"), ("muestra", "filesystem"),
-            ("lee", "filesystem"), ("escribe", "code"),
-            ("crea", "code"), ("compila", "bash"),
-            ("ejecuta", "bash"), ("analiza", "code"),
-            ("monitoriza", "monitor"),
-            ("search", "search"), ("find", "filesystem"),
-            ("show", "filesystem"), ("display", "filesystem"),
-            ("echo", "bash"), ("run", "bash"), ("pwd", "bash"),
-            ("ls", "bash"), ("cat", "bash"), ("grep", "bash"),
-            ("rm", "bash"), ("npm", "bash"), ("pip", "bash"),
-        ];
-        let verb_guild = verb_triggers.iter()
+        let verb_guild = VERB_TRIGGERS.iter()
             .find(|(v, _)| *v == first_word)
             .map(|(_, g)| *g);
 
@@ -652,20 +654,8 @@ impl GuildMatcher {
             });
         }
 
-        // Verb trigger map: first_word → guild_name
-        let verb_triggers: &[(&str, &str)] = &[
-            ("busca", "search"), ("encuentra", "filesystem"),
-            ("lista", "filesystem"), ("muestra", "filesystem"),
-            ("lee", "filesystem"), ("escribe", "code"),
-            ("crea", "code"), ("compila", "bash"),
-            ("ejecuta", "bash"), ("analiza", "code"),
-            ("monitoriza", "monitor"),
-            ("search", "search"), ("find", "filesystem"),
-            ("show", "filesystem"), ("display", "filesystem"),
-            ("echo", "bash"), ("run", "bash"), ("pwd", "bash"),
-            ("ls", "bash"), ("cat", "bash"), ("grep", "bash"),
-        ];
-        let verb_guild = verb_triggers.iter()
+        // Verb trigger map: first_word → guild_name using canonical VERB_TRIGGERS
+        let verb_guild = VERB_TRIGGERS.iter()
             .find(|(v, _)| *v == first_word)
             .map(|(_, g)| *g);
 

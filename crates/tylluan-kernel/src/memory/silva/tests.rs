@@ -892,21 +892,35 @@ fn test_build_contextual_text_no_metadata() {
 
 #[test]
 fn test_exponential_decay_formula() {
-    let weight = 1.0_f64;
-    let half_life = 336.0_f64; // 14 days in hours
-    let hours_elapsed = 336.0_f64; // exactly one half-life
-    let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
-    // After exactly one half-life, weight should be 0.5
-    assert!((decayed - 0.5).abs() < 0.001, "Expected ~0.5, got {decayed}");
+    use tylluan_fsrs::FsrsItem;
+    // FSRS retrievability model: R(t) = 2^(-t / stability)
+    let stability_days = 14.0_f64;
+    let item = FsrsItem::with_params(stability_days, 0.3, 0);
+
+    // After exactly 1 stability period (14 days), retrievability R(t) should be 0.5
+    let elapsed_days = 14.0_f64;
+    let r = item.retrievability(elapsed_days);
+    assert!((r - 0.5).abs() < 0.001, "Expected R(14d) ~ 0.5, got {r}");
+
+    // Weight mapping in decay.rs: w = R * 0.99 + 0.01 (min floor 0.01)
+    let mapped_weight = (r * 0.99 + 0.01).max(0.01);
+    assert!((mapped_weight - 0.505).abs() < 0.001, "Expected weight ~ 0.505, got {mapped_weight}");
 }
 
 #[test]
 fn test_exponential_decay_two_halflives() {
-    let weight = 1.0_f64;
-    let half_life = 336.0_f64;
-    let hours_elapsed = 672.0_f64; // 28 days = 2 half-lives
-    let decayed = weight * 0.5_f64.powf(hours_elapsed / half_life);
-    assert!((decayed - 0.25).abs() < 0.001, "Expected ~0.25, got {decayed}");
+    use tylluan_fsrs::FsrsItem;
+    let stability_days = 14.0_f64;
+    let item = FsrsItem::with_params(stability_days, 0.3, 0);
+
+    // After 2 stability periods (28 days), retrievability R(t) should be 0.25
+    let elapsed_days = 28.0_f64;
+    let r = item.retrievability(elapsed_days);
+    assert!((r - 0.25).abs() < 0.001, "Expected R(28d) ~ 0.25, got {r}");
+
+    // Weight mapping in decay.rs: w = R * 0.99 + 0.01
+    let mapped_weight = (r * 0.99 + 0.01).max(0.01);
+    assert!((mapped_weight - 0.2575).abs() < 0.001, "Expected weight ~ 0.2575, got {mapped_weight}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
