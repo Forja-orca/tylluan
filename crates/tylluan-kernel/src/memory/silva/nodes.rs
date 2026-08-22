@@ -511,6 +511,39 @@ impl super::SilvaDB {
         Ok(())
     }
 
+    /// ADR-012 D3: mark previous durable summaries of the same agent as superseded.
+    ///
+    /// Called at summary/digest creation time (`AgentMemoryManager`):
+    /// after a new `agent_summary` or `session_digest` node exists for an agent,
+    /// every older summary/digest of the same agent gets `metadata.superseded_by`
+    /// set to the new node id. This makes supersession-by-identity explicit
+    /// (ADR-012 §2 Decision 3, Opción B-variante aplicación, Coloquio T176)
+    /// without touching ConsensusEngine (content-based contradiction is a
+    /// separate axis, handled by `deprecate_contradictions`).
+    ///
+    /// Reversible: metadata JSON only, never DELETEs. Zero read-path cost.
+    pub async fn supersede_agent_summaries(&self, agent_id: &str, new_summary_id: &str) -> Result<usize> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            // Fixed substring, not a pattern -- instr() avoids LIKE treating a
+            // literal '%' or '_' inside agent_id as a wildcard, which could
+            // otherwise widen the match to unrelated agents.
+            let needle = format!("\"agent_id\":\"{}\"", agent_id.replace('"', ""));
+            let updated = conn.execute(
+                "UPDATE nodes SET metadata = json_set(COALESCE(metadata, '{}'), '$.superseded_by', ?2), updated_at = CURRENT_TIMESTAMP
+                 WHERE id != ?2
+                   AND type IN ('agent_summary', 'session_digest')
+                   AND instr(COALESCE(metadata, ''), ?3) > 0
+                   AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NULL",
+                params![agent_id, new_summary_id, needle],
+            )?;
+            if updated > 0 {
+                tracing::info!("🌲 SilvaDB: superseded {} previous summaries of agent '{}' (new: {})", updated, agent_id, new_summary_id);
+            }
+            Ok(updated)
+        })
+    }
+
     /// Reinforce a node's weight (multiply, cap at 10.0).
     pub async fn reinforce_node(&self, id: &str, multiplier: f64) -> Result<()> {
         tokio::task::block_in_place(|| {

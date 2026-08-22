@@ -1185,3 +1185,49 @@ async fn test_supersession_genuine_tie_flags_conflict() {
     let y_node = db.get_node("Y").await.unwrap().unwrap();
     assert!(y_node.conflicted, "source Y MUST be conflicted after genuine tie");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_supersede_agent_summaries_marks_previous_and_is_scoped_by_agent() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    let opts = |aid: &str| {
+        let meta = format!("{{\"agent_id\":\"{aid}\"}}");
+        (meta,)
+    };
+
+    let (meta_a1,) = opts("agent-a");
+    db.upsert_node_with_validity("summary:a1", "agent_summary", "old summary", &meta_a1, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+    let (meta_a2,) = opts("agent-a");
+    db.upsert_node_with_validity("summary:a2", "agent_summary", "newer summary", &meta_a2, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+    // A different agent's summary must never be touched.
+    let (meta_b,) = opts("agent-b");
+    db.upsert_node_with_validity("summary:b1", "agent_summary", "other agent summary", &meta_b, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+
+    let updated = db.supersede_agent_summaries("agent-a", "summary:a2").await.unwrap();
+    assert_eq!(updated, 1, "only the older summary of the same agent should be marked");
+
+    let old = db.get_node("summary:a1").await.unwrap().unwrap();
+    assert!(old.metadata.contains("\"superseded_by\":\"summary:a2\""), "previous summary must carry superseded_by, got: {}", old.metadata);
+
+    let newest = db.get_node("summary:a2").await.unwrap().unwrap();
+    assert!(!newest.metadata.contains("superseded_by"), "the new summary itself must not be marked");
+
+    let other_agent = db.get_node("summary:b1").await.unwrap().unwrap();
+    assert!(!other_agent.metadata.contains("superseded_by"), "a different agent's summary must never be superseded");
+
+    // Nothing was deleted -- reversible, metadata-only.
+    assert!(db.get_node("summary:a1").await.unwrap().is_some(), "superseded summary must still exist, this is not a delete");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_supersede_agent_summaries_is_idempotent() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    let meta = "{\"agent_id\":\"agent-a\"}";
+    db.upsert_node_with_validity("summary:a1", "agent_summary", "old", meta, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+    db.upsert_node_with_validity("summary:a2", "agent_summary", "new", meta, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+
+    let first = db.supersede_agent_summaries("agent-a", "summary:a2").await.unwrap();
+    assert_eq!(first, 1);
+    // Calling again for the same new_summary_id must not re-touch an already-superseded row.
+    let second = db.supersede_agent_summaries("agent-a", "summary:a2").await.unwrap();
+    assert_eq!(second, 0, "already-superseded rows must be skipped on a repeated call");
+}
