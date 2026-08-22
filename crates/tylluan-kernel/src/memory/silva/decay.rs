@@ -75,7 +75,7 @@ impl super::SilvaDB {
             // Step 3: Prune dead memories
             let pruned = conn.execute(
                 "DELETE FROM nodes
-                 WHERE type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')
+                 WHERE type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')
                    AND protected = 0
                    AND weight < 0.15
                    AND julianday('now') - julianday(updated_at) > 30
@@ -450,7 +450,7 @@ impl super::SilvaDB {
                 let mut stmt = conn.prepare(
                     "SELECT id FROM nodes
                      WHERE protected = 0
-                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')
+                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')
                        AND salience_score < ?1"
                 )?;
                 stmt.query_map(params![threshold], |r| r.get::<_, String>(0))?
@@ -481,10 +481,10 @@ impl super::SilvaDB {
             // Find nodes to delete (not protected, weight < threshold, not identity)
             let ids: Vec<String> = {
                 let mut stmt = conn.prepare(
-                    "SELECT id FROM nodes
-                     WHERE protected = 0
-                       AND weight < ?1
-                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')"
+"SELECT id FROM nodes
+                      WHERE protected = 0
+                        AND weight < ?1
+                        AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')"
                 )?;
                 stmt.query_map(params![threshold_weight], |r| r.get(0))?
                     .filter_map(|r| r.ok())

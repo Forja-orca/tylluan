@@ -928,6 +928,17 @@ if let Some(ref mut s) = stmt {
             let prefix = session_context.unwrap_or_default();
             let full_summary = format!("{prefix}{summary}{footer}");
 
+            // ADR-012 Fase 1: actualizar last_agent_access para los nodos devueltos
+            // (solo si hay agent_id y nodos devueltos)
+            if let Some(ref aid) = rec_agent_id {
+                if !scored.is_empty() {
+                    let now = chrono::Utc::now().timestamp();
+                    for (node, _) in &scored {
+                        let _ = server.silva.update_last_agent_access(&node.id, aid, now).await;
+                    }
+                }
+            }
+
             Ok(CallToolResult {
                 content: vec![Content::text(full_summary)],
                 is_error: Some(false),

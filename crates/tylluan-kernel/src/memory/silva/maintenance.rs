@@ -378,11 +378,13 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
             // Delete nodes that are below threshold and NOT marked as protected/identity.
+            // Durable summaries (agent_summary, session_digest, consolidated_summary) and archived
+            // nodes are intentionally excluded from automatic cleanup.
             let deleted = conn.execute(
                 "DELETE FROM nodes
                  WHERE weight < ?1
                    AND protected = 0
-                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary')",
+                   AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')",
                 [threshold],
             )?;
             

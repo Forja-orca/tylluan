@@ -192,7 +192,15 @@ impl super::SilvaDB {
                     source = COALESCE(excluded.source, nodes.source),
                     author = COALESCE(excluded.author, nodes.author),
                     evidence_url = COALESCE(excluded.evidence_url, nodes.evidence_url),
+                    lifecycle_state = COALESCE(excluded.lifecycle_state, nodes.lifecycle_state),
+                    last_agent_access = COALESCE(excluded.last_agent_access, nodes.last_agent_access),
+                    reactivation_count = COALESCE(excluded.reactivation_count, nodes.reactivation_count),
                     updated_at = CURRENT_TIMESTAMP",
+                // ADR-012 Fase 1: lifecycle columns intentionally OMITTED from INSERT.
+                // New nodes → SQL DEFAULTs kick in (lifecycle_state='active', last_agent_access=0, reactivation_count=0).
+                // Existing nodes → ON CONFLICT: excluded.lifecycle_state is NULL (column omitted) →
+                //   COALESCE(NULL, nodes.lifecycle_state) preserves the current value.
+                // This prevents the T160 bug where hardcoded literals always reset lifecycle_state to 'active'.
                 params![id, node_type, content, metadata, topic_key, vf, valid_until, federation_source, content_hash, provenance, owner_scope, source, author, evidence_url],
             )?;
             // Sync FTS5 index within the same transaction
@@ -1006,6 +1014,24 @@ impl super::SilvaDB {
                 [], |row| row.get(0),
             )?;
             Ok(count as usize)
+        })
+    }
+
+    /// ADR-012 Fase 1: actualizar last_agent_access para un nodo.
+    /// Se llama SOLO en recall/ingest exitoso con agent_id explícito.
+    /// NO se llama en touch_node interno (stigmergy, decay, consolidate).
+    pub async fn update_last_agent_access(&self, node_id: &str, _agent_id: &str, timestamp: i64) -> Result<()> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            // Solo actualizar si el nodo existe y el timestamp es mayor al actual
+            let updated = conn.execute(
+                "UPDATE nodes SET last_agent_access = ?1 WHERE id = ?2 AND last_agent_access < ?1",
+                params![timestamp, node_id],
+            )?;
+            if updated > 0 {
+                tracing::debug!("🌲 SilvaDB: last_agent_access updated for node={} ts={}", node_id, timestamp);
+            }
+            Ok(())
         })
     }
 
