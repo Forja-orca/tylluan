@@ -3,6 +3,22 @@
 > Source of truth for the verified technical state. Updated on each release.
 > Last updated: 2026-08-22 · HEAD `d68fa5a` · v0.16.0 (Cargo.toml)
 
+## Known Gaps (external audit, verified 2026-08-22)
+
+An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not just the test suite. Every item below was independently re-verified against the real source before being listed here (file:line, not taken on the reviewer's word). This is what "verified" means on this line, not "reported."
+
+- **No offline boot path**: `embedding_model = "none"` (recommended in the README to skip the BGE-M3 download) only disables that model — `RerankEngine::load_with_device()` (`main.rs:577`) still runs unconditionally and needs ONNX Runtime present. Missing `libonnxruntime.so`/`.dll` can panic the whole process (`ort` crate, no `catch_unwind` anywhere near this path) instead of degrading to BM25-only.
+- **STUN fires unconditionally at boot** (`main.rs:430-442`) to `stun.l.google.com:19302`, regardless of whether federation/mesh is enabled. Backgrounded (won't block boot) but real outbound traffic on a host meant to stay offline. Workaround: `[nat] stun_servers = []`.
+- **CI Python tests are non-blocking by construction**: `.github/workflows/ci.yml:110` runs `pytest tests/python/ || echo "No Python tests yet"` — any real failure is swallowed. The main CI job also doesn't run `tylluan-link`/`tylluan-fsrs` (81 of the 771 total tests only get exercised by someone running them manually).
+- **`serverInfo.version` hardcoded to `"3.0.0"`** (`api_monitor.rs:289`, `mcp.rs:424`), out of sync with `Cargo.toml`'s `0.16.0`.
+- **`[federation] auto_sync_interval_secs` is dead config**: defined and defaulted, never read anywhere except its own definition. The real auto-sync loop (`api_federation.rs:1025`) uses `[silva] sync_interval_ms` instead — a different config section, different units (ms vs secs).
+- **1770 `.unwrap()` calls** across `crates/` (all crates, including tests) — not inherently wrong, but a real signal of how much of the panic surface hasn't been audited for graceful-failure conversion.
+- **49 guilds require Python 3.12 + FastMCP separately** from the Rust kernel binary — without them, guilds crash-loop and `/api/v1/doctor` reports `degraded`. The README's "no Rust/Python/Node needed" line was true only for the kernel-as-MCP-memory use case, not for `tylluan_do` guild execution; corrected in README 2026-08-22.
+- **Retrieval quality context**: the 82% Recall@5 headline figure (LongMemEval-S) sits alongside a **Precision@5 of 16.4%** in the same results file — both real, but only one made it to marketing copy. Live routing accuracy on that same external benchmark run was ~41% (hybrid), vs the 56-64% measured on the team's own curated I-7/J-13 dataset — the gap is dataset difficulty, not a regression, but worth stating plainly rather than leading with the friendlier number.
+- Not a gap, confirmed correct on inspection: the MCP protocol version negotiation (`mcp.rs:407`) is real and dynamic (echoes whatever `protocolVersion` the client requests, 4 versions supported `2024-11-05`–`2026-07-28`). An external report reading a `2025-03-26` negotiated session as a bug was itself mistaken — that's what its own older test client asked for.
+
+**Overall read**: this is a serious, fast-moving research lab with real engineering (compiled kernel, 771 real tests, a CI gate that catches doc/test-count drift and has already caught and fixed several real regressions this cycle) — not yet a hardened, installable product for strangers. The project's own `DISCLAIMER.md` already says this; the gap above is between that honest self-assessment and what the README's quick-start framing implies for a first-time user.
+
 ## CI
 
 | Job | Status |
