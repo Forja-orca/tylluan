@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-21 · HEAD `12dca2e` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `d68fa5a` · v0.16.0 (Cargo.toml)
 
 ## CI
 
@@ -17,7 +17,9 @@
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `4dae7f6` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `d68fa5a` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+
+**⚠️ Kernel vivo desactualizado:** el binario en ejecución (`:4000`) reporta commit `18e70fa` — 15 commits detrás de este HEAD. Ninguna feature de ADR-012 (lifecycle_state, `include_archived`, supersession, dashboard Fase 4) está activa en el proceso vivo hasta el próximo rebuild/restart. Verificado con `curl http://127.0.0.1:4000/health` el 2026-08-22.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
