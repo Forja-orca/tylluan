@@ -23,6 +23,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+if [ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" = "true" ]; then
+    echo "❌ This is a shallow git clone (fetch-depth < full history)."
+    echo "   This script needs full history to verify a cited HEAD is a real"
+    echo "   ancestor of the current commit. In CI, add 'fetch-depth: 0' to"
+    echo "   the actions/checkout step. Locally, run: git fetch --unshallow"
+    exit 1
+fi
+
 real_head=$(git rev-parse --short=7 HEAD)
 
 # Match `HEAD `abc1234`` (backtick-quoted short hash) anywhere in STATUS.md.
