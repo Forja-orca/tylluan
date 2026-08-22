@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `4610a2d` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `0359771` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `4610a2d` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `0359771` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 **⚠️ Kernel vivo desactualizado:** el binario en ejecución (`:4000`) reporta commit `18e70fa` — 15 commits detrás de este HEAD. Ninguna feature de ADR-012 (lifecycle_state, `include_archived`, supersession, dashboard Fase 4) está activa en el proceso vivo hasta el próximo rebuild/restart. Verificado con `curl http://127.0.0.1:4000/health` el 2026-08-22.
 
