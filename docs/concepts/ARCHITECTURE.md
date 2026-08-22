@@ -49,8 +49,8 @@ SQLite WAL database with:
 - **Node types:** `episodic`, `lesson`, `concept`, `entity`, `decision`, `document`, `agent_memory`, and more
 - **Hybrid search pipeline:** FTS5 BM25 → IVF ANN (BGE-M3 1024d) → LinearRAG graph traversal (Personalized PageRank + degree penalty) → RRF fusion (k=60) → entity boost ×1.25
 - **HNSW fast path:** `instant-distance` index for datasets ≥12k nodes; falls back to IVF, then linear
-- **Salience decay:** `weight * 0.5^(hours / half_life)` — configurable per node type (default T½=336h=14d)
-- **Schema:** v12 (FTS5 at v11, HNSW BLOB at v12)
+- **Salience decay:** FSRS-based retrievability `2^(-elapsed_days / fsrs_stability)` mapped to weight — replaced the old exponential half-life formula; see ADR-012 for the `active/quiet/consolidated/archived` lifecycle states this feeds into. (Corrected 2026-08-22, was describing the pre-FSRS formula — found stale during the full-project audit, Coloquio T197.)
+- **Schema:** v23 (FTS5 at v11, HNSW BLOB at v12, memory lifecycle columns at v23 — see ADR-012; this line was last bumped 2026-08-22, verify against `schema.rs` before trusting it long-term)
 
 ### Core Memory
 `AgentProfile` stores `persona: String` + `preferences: serde_json::Value` — always loaded, never retrieved on demand. Accessible via `tylluan_recall` and `tylluan_remember` subtool routing without adding new sovereign tools.
