@@ -372,7 +372,7 @@ impl SilvaDB {
 
 }
 
-fn jaccard_similarity(a: &str, b: &str) -> f64 {
+pub(crate) fn jaccard_similarity(a: &str, b: &str) -> f64 {
     let set_a: std::collections::HashSet<&str> = a.split_whitespace().collect();
     let set_b: std::collections::HashSet<&str> = b.split_whitespace().collect();
     if set_a.is_empty() && set_b.is_empty() { return 0.0; }
