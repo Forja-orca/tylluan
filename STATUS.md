@@ -35,7 +35,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 
 **HEAD:** `0359771` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**⚠️ Kernel vivo desactualizado:** el binario en ejecución (`:4000`) reporta commit `18e70fa` — 15 commits detrás de este HEAD. Ninguna feature de ADR-012 (lifecycle_state, `include_archived`, supersession, dashboard Fase 4) está activa en el proceso vivo hasta el próximo rebuild/restart. Verificado con `curl http://127.0.0.1:4000/health` el 2026-08-22.
+**✅ Kernel vivo al día (2026-08-22):** rebuild confirmado, `:4000/health` reporta el mismo commit que este HEAD (0 commits de gap) — cerrando la brecha de 16+ commits detectada antes en este mismo ciclo. Verificar en cualquier momento con `bash scripts/check_live_kernel_drift.sh` (local-only, no es un gate de CI — ver el propio script para por qué).
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
