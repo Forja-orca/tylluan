@@ -360,6 +360,10 @@ impl AgentMemoryManager {
 
         let _ = self.silva.upsert_node_with_validity(&summary_id, "agent_summary", &summary, &summary_meta, NodeWriteOptions::new("agent_generated").drift_allowed(true)).await;
 
+        // ADR-012 D3: mark previous summaries of this agent as superseded —
+        // explicit supersession-by-identity, never DELETE, reversible.
+        let _ = self.silva.supersede_agent_summaries(agent_id, &summary_id).await;
+
         let count = to_summarize.len();
 
         // Decay old memories so they are eventually pruned
@@ -424,6 +428,8 @@ impl AgentMemoryManager {
             "episode_count": meaningful.len(),
         }).to_string();
         let _ = self.silva.upsert_node_with_provenance(&digest_id, "session_digest", &digest, &meta, "agent_generated").await;
+        // ADR-012 D3: mark previous digests/summaries of this agent as superseded.
+        let _ = self.silva.supersede_agent_summaries(agent_id, &digest_id).await;
         info!("📝 Session digest created for agent '{}': {} episodes", agent_id, meaningful.len());
     }
 }
