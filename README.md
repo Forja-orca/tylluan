@@ -305,49 +305,16 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ## Architecture
 
-### High-Level Overview
-
-```mermaid
-flowchart TB
-  MCP["MCP Clients<br/>Claude · Cursor · VS Code · LM Studio · any SSE"] -->|"SSE / HTTP Streamable"| NEXUS
-  A2AEXT["External A2A agents<br/>LangGraph · CrewAI · any Agent2Agent-compliant client"] -->|"JSON-RPC 2.0"| NEXUS
-
-  subgraph NEXUS["tylluan-nexus (:4000)"]
-    direction TB
-    MEM["Core Memory<br/>persona · preferences"]
-    SILVA[("SilvaDB<br/>SQLite WAL · BGE-M3 vectors<br/>FTS5 BM25 · knowledge graph<br/>episodic nodes · salience decay")]
-    A2AS["A2A Server<br/>Agent Card · message/send · tasks/get"]
-    GUILDS["Guild Registry<br/>49 Python tools, auto-discovered<br/>e.g. llama_backend (llama.cpp/GGUF)"]
-    COLOQUIO["Coloquio<br/>multi-agent channel"]
-    INFER["Inference: ONNX (BGE-M3 1024d · Jina Reranker Turbo)"]
-    MESH["Federation + Mesh<br/>peers.db · Noise NK/XK · ChaCha20-Poly1305<br/>DHT Kademlia · Gossip"]
-
-    MEM --> SILVA
-    GUILDS --> SILVA
-    COLOQUIO --> SILVA
-    A2AS --> MEM
-    SILVA --> INFER
-    SILVA --> MESH
-  end
-
-  MESH -->|"Noise NK/XK · ChaCha20-Poly1305 encrypted"| PEERS["Peer nodes<br/>LAN / VPN / WAN via DHT"]
-
-  classDef core fill:#15181d,stroke:#34d399,color:#e8e6e1,stroke-width:1.5px;
-  class MEM,SILVA,A2AS,GUILDS,COLOQUIO,INFER,MESH core;
-```
-
-### Detailed Layered Topology & Roadmap Circuits
-
 ```mermaid
 flowchart TB
 %% =========================================================================
 %% CLIENTES Y PROTOCOLOS EXTERNOS
 %% =========================================================================
-  subgraph CLIENTS["Clientes & Ecosistema Conectado"]
+  subgraph CLIENTS["Clients & connected ecosystem"]
     direction LR
-    MCP_IDE["MCP IDEs / Asistentes<br/><code>Claude Code · Cursor · VS Code · Claude Desktop · Qwen</code>"]
-    A2A_CLI["Clientes A2A Externos<br/><code>LangGraph · CrewAI · AutoGen · SDK A2A</code>"]
-    REST_CLI["Herramientas HTTP / UI<br/><code>Dashboard (React) · Tylluan CLI · curl</code>"]
+    MCP_IDE["MCP IDEs / assistants<br/><code>Claude Code · Cursor · VS Code · Claude Desktop · Qwen</code>"]
+    A2A_CLI["External A2A clients<br/><code>LangGraph · CrewAI · any A2A SDK</code>"]
+    REST_CLI["HTTP tools / UI<br/><code>Dashboard (React) · Tylluan CLI · curl</code>"]
   end
 
 %% =========================================================================
