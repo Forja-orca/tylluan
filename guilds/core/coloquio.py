@@ -151,12 +151,23 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
     (found 2026-08-21, see Coloquio mision-activa).
     """
     raw = query or intent or command or ""
+    # `offset` is ambiguous by construction: 0 means both "caller didn't ask
+    # for one" AND "a real, explicit offset of zero". Track which one this
+    # actually is -- it matters below (found 2026-08-23, real bug: read_channel
+    # was always sending offset=0 to the REST API, which silently defeated
+    # that API's own "give me the most recent N messages" fallback and made
+    # every default read return the OLDEST 50 messages in the channel
+    # instead, no matter how many turns the channel had accumulated).
+    offset_explicit = offset != 0
     if not channel_id:
         channel_id, rest = _extract_channel_and_rest(raw)
         if limit == 0:
             limit = _parse_limit(rest, 50)
         if offset == 0:
-            offset = _parse_offset(rest)
+            parsed_offset = _parse_offset(rest)
+            if parsed_offset != 0:
+                offset = parsed_offset
+                offset_explicit = True
     elif limit == 0:
         limit = _parse_limit(raw, 50)
     if limit == 0:
@@ -173,17 +184,28 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         # direct "get turn N" endpoint to call yet.
         effective_limit = 500 if turn else limit
         effective_offset = 0 if turn else offset
-        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={effective_limit}&offset={effective_offset}"
+        # Only send `offset=` when it was genuinely requested (or this is a
+        # turn-scoped read, which needs its own explicit 0). Omitting it
+        # otherwise lets the REST API's own offset=None branch compute
+        # "give me the most recent `limit` messages" instead of always
+        # defaulting to the oldest ones -- see the comment above.
+        offset_param = f"&offset={effective_offset}" if (turn or offset_explicit) else ""
+        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={effective_limit}{offset_param}"
         data = _get(url)
         msgs = data.get("messages", [])
         if turn:
             msgs = [m for m in msgs if m.get("turn") == turn]
             if not msgs:
                 return f"Turn {turn} not found in channel '{channel_id}' (searched last {effective_limit} messages)."
+        # Show the offset the SERVER actually used, not the local variable --
+        # when offset_param was omitted above, the server computed its own
+        # (the "most recent N" default), and echoing our stale local value
+        # here would misreport it.
+        real_offset = data.get("offset", offset)
         if not msgs:
-            return f"Channel '{channel_id}' exists but has no messages yet (offset={offset})."
+            return f"Channel '{channel_id}' exists but has no messages yet (offset={real_offset})."
         max_chars = 20000 if (full or turn) else 400
-        lines = [f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={offset}) ==="]
+        lines = [f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={real_offset}) ==="]
         for m in msgs:
             role_icon = "👤" if m.get("role") == "human" else "🤖"
             lines.append(
