@@ -35,7 +35,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 
 **HEAD:** `3246067` · **772 total** lib green (691 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**✅ Kernel vivo al día (2026-08-22):** rebuild confirmado, `:4000/health` reporta el mismo commit que este HEAD (0 commits de gap) — cerrando la brecha de 16+ commits detectada antes en este mismo ciclo. Verificar en cualquier momento con `bash scripts/check_live_kernel_drift.sh` (local-only, no es un gate de CI — ver el propio script para por qué).
+**⚠️ Kernel vivo desactualizado (2026-08-23):** `:4000/health` reporta `7974d38`, 22 commits detrás de este HEAD -- 6 de ellos tocan código real de kernel (`5d7d5df` guild-timeouts, `e1edc20` dead-code, `8a586e0` el fix real de ONNX/panic=abort, `b4e931e` exclusion lists, `15b9708` load_guild_config, `a750098` config muerta). El kernel vivo no tiene el fix de ONNX ni los timeouts por categoría. Confirmado con `bash scripts/check_live_kernel_drift.sh` (bloqueó correctamente la tarea G5 hasta rebuild). Rebuild pendiente de autorización.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
