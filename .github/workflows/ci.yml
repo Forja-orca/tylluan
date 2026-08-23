@@ -179,6 +179,17 @@ jobs:
       - name: Verify STATUS.md cites exactly one HEAD and it's the real one
         run: bash scripts/check_head_sync.sh
 
+  dead-config-report:
+    name: Docs — dead config field report (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true # report-only by design -- see script header for
+                             # why this heuristic can false-positive and must
+                             # not block unrelated commits until triaged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report config.rs fields that appear unread outside config.rs
+        run: bash scripts/check_dead_config.sh
+
   e2e-security-tests:
     name: Rust — security audit tests
     runs-on: ubuntu-latest
