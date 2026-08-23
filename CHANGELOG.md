@@ -4,9 +4,11 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [Unreleased] — 2026-08-11 to 2026-08-14 — external audit hardening · ASI06 write gate · A2A F1-F4 · dashboard sovereign palette
+## [0.17.0] — 2026-08-24
 
-34 commits since v0.16.0 (`5900e97`). Not tagged as a release yet — this cycle's theme was closing real gaps found by two rounds of external multi-model audit, plus completing A2A interop with arbitrary external agents, not a planned feature list. Every fix in this window follows the same pipeline: verify the claim against the real code before acting, implement, test, verify against the real tree (not the isolated worktree a piece may have been built in), commit, verify real CI before announcing.
+**166 commits since v0.16.0 (`5900e97`).** This entry's detailed narrative below only covers the first 34 (through 2026-08-14, closing real gaps found by two rounds of external multi-model audit, plus completing A2A interop with arbitrary external agents). The remaining ~130 commits since then — ADR-012 memory lifecycle in production, a second real RCE/ACL hardening round, MCP spec compliance, the RRF matcher spike, the 5-pillars repo-governance work (SHA-pinning, CODEOWNERS, CI reality gates), and the 2 global fleet skills — are **not individually itemized here**; retroactively itemizing 130 commits from memory risks inventing detail this project's own discipline exists to prevent. `STATUS.md` is the verified source of truth for that window; read it alongside this entry, not instead of it.
+
+Every fix in this window follows the same pipeline: verify the claim against the real code before acting, implement, test, verify against the real tree (not the isolated worktree a piece may have been built in), commit, verify real CI before announcing.
 
 **Critical security — closed same-day both times**
 - **P2P dispatch listener RCE** (`4674f84`): the listener was enabled by default, bound `0.0.0.0:9123`, executed guilds after a Noise XK handshake with zero check that the peer was approved — anyone on the LAN who learned a node's Ed25519 pubkey (propagated by gossip/mDNS/DHT since v0.15.0) had unauthenticated RCE. Emergency mitigation: `p2p.enabled = false` by default. Real fix landed later the same audit cycle (`ebbc998`): Noise XK's handshake reveals the initiator's X25519 static key; the listener now derives the X25519 form of every approved peer's stored Ed25519 key and compares before reading or executing anything. `p2p.enabled` stays `false` by default deliberately — this fix makes re-enabling it safe, doesn't flip the default itself.
