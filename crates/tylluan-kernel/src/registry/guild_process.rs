@@ -873,7 +873,7 @@ impl GuildRegistry {
     fn guild_timeout_category(name: &str) -> GuildTimeoutCategory {
         const SYSTEM: &[&str] = &["bash", "git", "filesystem", "monitor"];
         const HEAVY: &[&str] = &[
-            "docker", "database", "pdf", "vision", "vision_moondream",
+            "docker", "database", "pdf", "vision",
             "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge",
             "deep_web_research", "audio_tools", "ffmpeg_tools",
         ];

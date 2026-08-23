@@ -56,7 +56,6 @@ GUILD_CATALOG = {
 
     # Multimedia & Perception
     "vision": {"category": "scholar", "desc": "General image analysis, OCR, visual question answering"},
-    "vision_moondream": {"category": "scholar", "desc": "Fast local Moondream vision captioning and object detection"},
     "comfy_ui": {"category": "builder", "desc": "Generate images via local ComfyUI Stable Diffusion workflow"},
     "audio_tools": {"category": "scholar", "desc": "Process, convert, transcribe audio files and spectrograms"},
     "ffmpeg_tools": {"category": "builder", "desc": "Video and audio slicing, encoding, transcode via ffmpeg"},
@@ -136,8 +135,6 @@ CURATED_EXEMPLARS = [
     # --- Vision & Multimedia ---
     {"intent": "describe what is shown in this UI mockup screenshot image.png", "target_guild": "vision", "ambiguity_type": "clear_keyword"},
     {"intent": "extrae el texto de este recibo escaneado usando OCR", "target_guild": "vision", "ambiguity_type": "cross_guild_ambiguity"},
-    {"intent": "generate a quick 1-sentence caption for photo.jpg using moondream", "target_guild": "vision_moondream", "ambiguity_type": "clear_keyword"},
-    {"intent": "detect bounding boxes for all buttons in this phone screenshot", "target_guild": "vision_moondream", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "generate a futuristic cybernetic owl illustration via ComfyUI SDXL", "target_guild": "comfy_ui", "ambiguity_type": "clear_keyword"},
     {"intent": "transcribe speech from audio.mp3 to timestamped subtitles", "target_guild": "audio_tools", "ambiguity_type": "clear_keyword"},
     {"intent": "trim the first 30 seconds of video.mp4 and convert to 1080p webm", "target_guild": "ffmpeg_tools", "ambiguity_type": "clear_keyword"},

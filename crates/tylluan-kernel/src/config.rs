@@ -718,7 +718,9 @@ pub struct InferenceProvider {
     pub name: String,
     pub mcp_server: String, // Name of the MCP server that provides this model
     pub model_id: String,
-    pub capability: Vec<String>, // ["chat", "vision", "thinking"]
+    // NOTE: `capability` field removed 2026-08-24 — was declared, serialized, and
+    // defaulted, but never read anywhere in src/ outside config.rs (grep = 0 hits).
+    // If capability-based routing is needed in the future, re-add with actual consumers.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

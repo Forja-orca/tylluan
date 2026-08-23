@@ -1007,15 +1007,6 @@
       "split": "held_out"
     },
     {
-      "id": "i7_curated_0046",
-      "intent": "generate a quick 1-sentence caption for photo.jpg using moondream",
-      "target_guild": "vision_moondream",
-      "category": "scholar",
-      "ambiguity_type": "clear_keyword",
-      "source": "expert_curated",
-      "split": "held_out"
-    },
-    {
       "id": "i7_curated_0048",
       "intent": "generate a futuristic cybernetic owl illustration via ComfyUI SDXL",
       "target_guild": "comfy_ui",
@@ -1031,15 +1022,6 @@
       "category": "core",
       "ambiguity_type": "historical_real",
       "source": "guild_audit_log",
-      "split": "held_out"
-    },
-    {
-      "id": "i7_curated_0047",
-      "intent": "detect bounding boxes for all buttons in this phone screenshot",
-      "target_guild": "vision_moondream",
-      "category": "scholar",
-      "ambiguity_type": "semantic_paraphrase",
-      "source": "expert_curated",
       "split": "held_out"
     },
     {

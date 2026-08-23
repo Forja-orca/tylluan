@@ -844,9 +844,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     crate::security::grants::set_notifier(broadcast_tx.clone());
 
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
-    let (decay_enabled, decay_interval_secs, decay_half_life_hours) = {
+    let (decay_enabled, decay_interval_secs) = {
         let cfg = state.config.read().await;
-        (cfg.silva.decay_enabled, cfg.silva.decay_interval_hours * 3600, cfg.silva.decay_half_life_hours)
+        (cfg.silva.decay_enabled, cfg.silva.decay_interval_hours * 3600)
     };
 
     sse::spawn_heartbeat(
@@ -857,7 +857,6 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         state.silva.clone(),
         decay_enabled,
         decay_interval_secs,
-        decay_half_life_hours,
         Arc::new(state.registry.clone()),
         state.matcher.clone(),
     );
