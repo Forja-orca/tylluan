@@ -165,7 +165,7 @@
       <!-- Roadmap: Postcard Serde (Translucent) -->
       <rect x="80" y="560" width="640" height="42" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
       <text x="95" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap] Postcard Binary Serde</text>
-      <text x="95" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">Zero-copy serialization migration from bincode 1.3 for HNSW index blobs</text>
+      <text x="95" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">General bincode &#8594; postcard dependency evaluation, no fixed date</text>
 
       <!-- Inference Engine -->
       <rect x="755" y="435" width="460" height="180" rx="10" fill="url(#infer-grad)" stroke="#c084fc" stroke-width="1.5"/>
@@ -204,7 +204,7 @@
       <!-- Roadmap: Coloquio Watch Daemon (Translucent) -->
       <rect x="80" y="760" width="640" height="75" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
       <text x="95" y="784" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap] Coloquio Watch &amp; Two-Tier Wake-Up Daemon</text>
-      <text x="95" y="802" fill="#fde68a" fill-opacity="0.75" font-size="10">• Synchronous deliberative multi-agent debate stream (SSE / Native)</text>
+      <text x="95" y="802" fill="#fde68a" fill-opacity="0.75" font-size="10">• Two-tier wake-up scheduling: native push + universal polling fallback</text>
       <text x="95" y="818" fill="#fde68a" fill-opacity="0.75" font-size="10">• Proactive wakeup scheduler for background autonomous workers</text>
 
       <!-- Federation Mesh -->
