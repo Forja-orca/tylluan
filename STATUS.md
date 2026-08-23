@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `ab16bf7` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `6e3cee1` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,9 +33,26 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `ab16bf7` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `6e3cee1` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**Kernel vivo (2026-08-23):** rebuild autorizado y confirmado a mitad de sesión -- `:4000/health` reportó `e337836` = HEAD exacto en ese momento, cerrando el gap de 22 commits que había bloqueado G5. Desde entonces este HEAD avanzó varios commits más que el kernel vivo todavía no tiene -- drift normal y esperado entre rebuilds, no una alarma. Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado.
+**Kernel vivo:** a fecha de este commit (`6e3cee1`) el kernel vivo está en `be69f11`, 5 commits detrás -- y esta vez SÍ es drift funcional real (`check_live_kernel_drift.sh` lo confirma: 12 archivos de código del kernel cambiaron desde entonces, incluida la firma de `SilvaDB::apply_decay()`). Rebuild pendiente antes de confiar en cualquier medición en vivo:
+```
+taskkill /IM tylluan-nexus.exe /F
+cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
+```
+Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado — el gap anterior de esta misma sesión (22 commits contra `e337836`) sí se cerró y fue puramente cosmético en su momento; este es distinto.
+
+### Ciclo 2026-08-23 (tarde) — RRF en producción + Pilares 2/4 + limpieza de deuda real
+
+**Spike RRF en el matcher** (`07f7e39`) — diagnóstico convergente (investigación propia + un informe externo independiente) de score-incompatibility: el blend 55/45 sesgaba hacia keyword porque combinaba un score sin acotar con una similitud coseno acotada [-1,1]. Fusionado con Reciprocal Rank Fusion (k=60, scale-free), autorizado con 3 condiciones (diff sin commit, benchmark antes/después por categoría, radio de impacto verificado contra `routing.rs`). 2 rondas de revisión real antes de aceptar: `MatchMethod` hardcodeado a `Semantic` incluso en victorias puras por keyword (corregido), y el límite de diseño documentado con honestidad (RRF conservador, filtra por el blend viejo antes de fusionar). Resultado: Live Matcher 47.95%→49.32% (+1.37pp), cero regresiones, artefactos crudos comiteados (`benchmarks/*_rrf.json`).
+
+**Pilar 2 — contratos explícitos** (`0f55844`) — JSON Schemas (Draft-07) para `/api/v1/embed` y `/health`, con `EmbedRequest`/`EmbedResponse`/`HealthResponse` como structs `pub` reales del handler. Primera versión rechazada en revisión: el test de Rust no importaba nada de `crate::`, solo validaba `json!()` escritos a mano contra un validador también escrito a mano — no habría fallado nunca ante un rename real de campo. Corregido para serializar las structs reales con roundtrip de deserialización. `scripts/check_contracts.sh` wired al pipeline, con un bug de portabilidad (`python3` hardcodeado, entorno solo tiene `python`) corregido antes de aceptar.
+
+**Pilar 4 / gate G3** (`3c3944a`) — dead public modules + tests sin aserciones, patrón de `check_dead_config.sh`. 2 bugs reales encontrados con `bash -n` y ejecución end-to-end antes de aceptar: un bloque duplicado rompía la sintaxis (`fi` huérfano), y tras arreglarlo, una búsqueda inversa "qué archivo contiene la función X" con regex de una sola línea fallaba silenciosamente en cualquier test con `#[test]`/`fn` en líneas separadas (0 archivos encontrados, 0 errores, 0 hallazgos — parecía limpio sin revisar nada). Reescrito para iterar por archivo. Encuentra 4 módulos públicos "descosidos" (trabajo iniciado sin terminar: `maintenance`, `guard`, `tunnel`, `metrics_exporter` — no dead code, distinción verificada leyendo cada uno) y 1 test real sin ninguna aserción (`dump_catalog`).
+
+**Limpieza de deuda real** (`6e3cee1`) — auditoría propia (Buffy) sobre `check_dead_config.sh` + `check_dead_code_tests.sh`: `InferenceProvider.capability` (declarado, nunca leído) eliminado; `decay_half_life_hours` desenhebrado de 7 call sites hasta `SilvaDB::apply_decay()` donde se descartaba (`let _hl = ...`, FSRS ya reemplazó la lógica de half-life fijo) — el campo de config se retiene por compatibilidad, solo se quitó el hilo muerto; 4 referencias obsoletas a `vision_moondream` (excluido del catálogo desde `64d8c7c`) purgadas de `guild_process.rs`, el dataset y los scripts de benchmark I-7/J-13, que inflaban el held-out set con un guild que ya no puede rutear. Nota de proceso: el primer intento de esta limpieza fue un reporte de cierre fabricado (solo un doc de auditoría, cero código) — detectado con `grep` en vivo antes de aceptarlo, corregido en la segunda entrega, que sí se verificó real (692/692 tests, diff coincide con lo pedido).
+
+**2 skills globales de la flota** creadas en `~/.agents/skills/` (no solo Tylluan): `verification-discipline` (12 reglas ancladas a incidentes reales de esta sesión, con Incident Log vivo) y `repo-pillars` (los 5 pilares de gobernanza). Evaluación de `uncle-bob` (robert-hoffmann/uncle-bob) cerrada: adopción parcial de `ub-workflow` y `ub-governance` (señales de test hueco, Regla 12), rechazo entero de `ub-quality` (house-style ajeno al repo).
 
 **Gobernanza de repo (2026-08-23, "Cinco Pilares para la Autonomía Segura" adaptado al tamaño real del equipo):**
 - **Proveniencia mínima viable**: las 11 GitHub Actions de terceros usadas en los 5 workflows están fijadas por SHA de commit, no por tag flotante (`983fa92`) -- defensa barata contra el mismo tipo de incidente que `CODEOWNERS` ya citaba (`tj-actions/changed-files`).
