@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `10548ea` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `a750098` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `10548ea` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `a750098` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 **✅ Kernel vivo al día (2026-08-22):** rebuild confirmado, `:4000/health` reporta el mismo commit que este HEAD (0 commits de gap) — cerrando la brecha de 16+ commits detectada antes en este mismo ciclo. Verificar en cualquier momento con `bash scripts/check_live_kernel_drift.sh` (local-only, no es un gate de CI — ver el propio script para por qué).
 
