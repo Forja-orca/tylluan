@@ -16,6 +16,13 @@ use crate::router::embeddings::EmbeddingEngine;
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
+/// RRF (Reciprocal Rank Fusion) constant — standard k=60 (Cornack et al.).
+/// Used to fuse the semantic and keyword rankings instead of a weighted sum
+/// of raw scores, which is biased by score-incompatibility: `kw_total` is
+/// unbounded-ish (0..~1.5) while `sem_score` is bounded [-1, 1], so a 55/45
+/// blend over-weights keyword. RRF operates on ranks, which are scale-free.
+const RRF_K: f32 = 60.0;
+
 /// Result of a guild match operation.
 #[derive(Debug, Clone)]
 pub struct MatchResult {
@@ -344,6 +351,12 @@ impl GuildMatcher {
         let mut top1: Option<(MatchResult, f32, f32)> = None; // (result, blended, pure_sem)
         let mut top2: Option<(MatchResult, f32, f32)> = None;
 
+        // RRF spike (T249): collect raw (sem, kw) signals per guild, then fuse
+        // their RANKINGS with RRF instead of the 55/45 weighted sum of raw
+        // scores. Score-incompatibility (kw_total 0..~1.5 vs sem_score [-1,1])
+        // biases the weighted blend toward keyword; RRF is scale-free.
+        let mut candidates_raw: Vec<(String, f32, f32)> = Vec::new();
+
         info!("🔍 Matcher: hybrid scoring '{}'", query);
         for guild in &self.catalog {
             // Semantic score from pre-computed guild embedding (BGE-M3 cosine similarity)
@@ -365,48 +378,132 @@ impl GuildMatcher {
 
             let kw_total = (kw_score + trigger_bonus + verb_bonus - neg_penalty).max(0.0);
 
-            // Blend: 55% semantic + 45% keyword when embedding available; pure keyword otherwise
-            let score = if sem_score > 0.0 {
-                sem_weight * sem_score + kw_weight * kw_total
+            // RRF spike (T249): every guild participates in the rank fusion,
+            // including sem_score == 0.0 (no semantic signal) — those still
+            // rank at the bottom of the semantic list but can win via the
+            // keyword ranking, preserving the pre-spike behavior where a
+            // strong keyword guild beats a weak semantic one (see
+            // test_tiebreaker_respects_wide_keyword_lead).
+            candidates_raw.push((guild.name.clone(), sem_score, kw_total));
+        }
+
+        // ── RRF fusion pass ──
+        // Rank candidates by semantic and by keyword, fuse with RRF k=60, then
+        // normalize back to the blend's scale so downstream thresholds keep
+        // working (routing.rs MIN_CONFIDENCE=0.20, handler_think.rs:323 0.1).
+        // The scale anchor is the same 55/45 blend value of the top semantic
+        // candidate, computed here for calibration only.
+        // Preserve the pre-spike threshold contract: only guilds whose 55/45
+        // blend passes the caller's threshold compete in the RRF ranking.
+        // Otherwise RRF can promote a guild the blend would have filtered out
+        // (score < threshold) and then the scaled score also lands below the
+        // floor, killing the whole match (see
+        // test_tiebreaker_respects_wide_keyword_lead).
+        candidates_raw.retain(|(_, sem, kw)| {
+            let blend = if *sem > 0.0 {
+                sem_weight * sem + kw_weight * kw
             } else {
-                kw_total
+                *kw
             };
-            let method = if sem_score > 0.0 { MatchMethod::Semantic } else { MatchMethod::Keyword };
+            blend >= threshold
+        });
+        let has_semantic_signal = candidates_raw.iter().any(|(_, sem, _)| *sem > 0.0);
+        if !candidates_raw.is_empty() && has_semantic_signal {
+            let mut by_sem: Vec<&(String, f32, f32)> = candidates_raw.iter().collect();
+            // Guilds with no semantic signal (sem=0) always rank below guilds
+            // with a real semantic signal — otherwise arbitrary tie ordering
+            // among sem=0 guilds corrupts the RRF semantic rank for the
+            // genuine semantic candidates.
+            by_sem.sort_by(|a, b| {
+                let a_sig = if a.1 > 0.0 { 1 } else { 0 };
+                let b_sig = if b.1 > 0.0 { 1 } else { 0 };
+                b_sig.cmp(&a_sig)
+                    .then_with(|| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
+            });
+            let mut by_kw: Vec<&(String, f32, f32)> = candidates_raw.iter().collect();
+            by_kw.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
-            tracing::debug!(
-                "  - [{}] {} | Score: {:.3} (sem={:.3} kw={:.3} trg={:.3} verb={:.3} neg={:.3})",
-                if sem_score > 0.0 { "HYBRID" } else { "KEYWORD" },
-                guild.name, score, sem_score, kw_score, trigger_bonus, verb_bonus, neg_penalty
-            );
+            // RRF score per candidate: 1/(k+rank_sem) + 1/(k+rank_kw).
+            // Guilds with NO semantic signal (sem=0) participate only via the
+            // keyword ranking — giving them a (tie-arbitrary) semantic rank
+            // makes RRF tie exactly when rankings cross (see
+            // test_tiebreaker_respects_wide_keyword_lead: git kw-strong/sem-0
+            // vs docker sem-strong would tie at identical RRF values).
+            let mut fused: Vec<(String, f32, f32)> = candidates_raw.iter()
+                .map(|(name, sem, _kw)| {
+                    let has_sig = *sem > 0.0;
+                    let rank_sem = if has_sig {
+                        by_sem.iter().position(|c| c.0 == *name).unwrap_or(by_sem.len()) as f32 + 1.0
+                    } else {
+                        // No semantic signal: contribute no semantic term, only
+                        // the keyword term. This preserves the pre-spike rule
+                        // "semantic only when available".
+                        by_sem.len() as f32 + 1.0
+                    };
+                    let rank_kw = by_kw.iter().position(|c| c.0 == *name).unwrap_or(by_kw.len()) as f32 + 1.0;
+                    let rrf_score = 1.0 / (RRF_K + rank_sem) + 1.0 / (RRF_K + rank_kw);
+                    (name.clone(), rrf_score, *sem)
+                })
+                .collect();
+            fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            if score >= threshold {
-                let result = MatchResult {
-                    guild_name: guild.name.clone(),
+            // Normalize the top RRF score to the blend scale of the top semantic
+            // candidate (0.55*sem + 0.45*kw of the best sem candidate). This
+            // preserves the approximate output range the consumers expect.
+            let anchor_blend = candidates_raw.iter()
+                .map(|(_, sem, kw)| sem_weight * sem + kw_weight * kw)
+                .fold(f32::MIN, f32::max);
+            let top_rrf = fused.first().map(|(_, s, _)| *s).unwrap_or(1.0);
+            let scale = if top_rrf > 0.0 { anchor_blend / top_rrf } else { 1.0 };
+
+            let scaled: Vec<(MatchResult, f32, f32)> = fused.iter().map(|(name, rrf, sem)| {
+                let score = (rrf * scale).max(0.0);
+                // T255 review fix: propagate the real match method — a guild
+                // that won with sem=0 (no semantic signal, keyword-only) must
+                // be reported as Keyword, not hardcoded Semantic. Consumers
+                // read `method` (telemetry, routing.rs logging, tests).
+                let method = if *sem > 0.0 { MatchMethod::Semantic } else { MatchMethod::Keyword };
+                (MatchResult {
+                    guild_name: name.clone(),
                     score,
-                    method: method.clone(),
-                };
-                // Track top-2 for embedding tiebreaker (J-13)
-                match (&top1, &top2) {
-                    (None, _) => {
-                        top1 = Some((result, score, sem_score));
-                    }
-                    (Some(t1), None) => {
-                        if score > t1.1 {
-                            top2 = Some(t1.clone());
-                            top1 = Some((result, score, sem_score));
-                        } else {
-                            top2 = Some((result, score, sem_score));
-                        }
-                    }
-                    (Some(t1), Some(t2)) => {
-                        if score > t1.1 {
-                            top2 = Some(t1.clone());
-                            top1 = Some((result, score, sem_score));
-                        } else if score > t2.1 {
-                            top2 = Some((result, score, sem_score));
-                        }
-                    }
-                }
+                    method,
+                }, score, *sem)
+            }).collect();
+
+            if let Some(first) = scaled.first() {
+                top1 = Some(first.clone());
+            }
+            if let Some(second) = scaled.get(1) {
+                top2 = Some(second.clone());
+            }
+        } else {
+            // No semantic signal available (embedding absent or all-zero):
+            // pure keyword path, preserving the pre-spike behavior exactly.
+            let mut kw_ranked: Vec<(MatchResult, f32, f32)> = candidates_raw.iter()
+                .map(|(name, sem, kw)| {
+                    (MatchResult {
+                        guild_name: name.clone(),
+                        score: *kw,
+                        method: MatchMethod::Keyword,
+                    }, *kw, *sem)
+                })
+                .collect();
+            kw_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            if let Some(first) = kw_ranked.first() {
+                top1 = Some(first.clone());
+            }
+            if let Some(second) = kw_ranked.get(1) {
+                top2 = Some(second.clone());
+            }
+        }
+
+        // Confidence floor mirroring the old loop: discard matches below the
+        // caller's threshold. (The old per-guild `if score >= threshold` is
+        // now applied here to the top candidates.)
+        if let (Some(t1), _) = (&top1, &top2) {
+            if t1.1 < threshold {
+                top1 = None;
+                top2 = None;
             }
         }
 
