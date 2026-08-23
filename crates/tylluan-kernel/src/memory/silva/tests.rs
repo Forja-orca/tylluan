@@ -174,7 +174,7 @@ async fn test_silva() -> SilvaDB {
             ).unwrap();
         }
 
-        let _changes = db.apply_decay(336).await.unwrap();
+        let _changes = db.apply_decay().await.unwrap();
         assert!(_changes > 0);
 
         let node = db.get_node("old").await.unwrap().unwrap();
@@ -204,7 +204,7 @@ async fn test_silva() -> SilvaDB {
         }
         
         // Apply decay
-        let _changes = db.apply_decay(336).await.unwrap();
+        let _changes = db.apply_decay().await.unwrap();
         
         // Identity node should NOT be affected (protected flag should be auto-set for identity type)
         let node = db.get_node("agent:megaingeniero").await.unwrap().unwrap();
@@ -229,7 +229,7 @@ async fn test_silva() -> SilvaDB {
         }
         
         // Apply decay - should not affect protected node
-        db.apply_decay(336).await.unwrap();
+        db.apply_decay().await.unwrap();
         
         let node = db.get_node("secret-plan").await.unwrap().unwrap();
         assert!((node.weight - 1.0).abs() < 0.01, "Protected node should remain 1.0, got {}", node.weight);

@@ -1129,7 +1129,6 @@ async fn main() -> anyhow::Result<()> {
         registry_arc.clone(),
         60,
         Some(silva.clone()),
-        config.silva.decay_half_life_hours,
     );
     let _supervisor = tylluan_kernel::registry::supervisor::start_supervisor(registry_arc.clone(), 10);
 
@@ -1410,7 +1409,6 @@ async fn main() -> anyhow::Result<()> {
     // Biological decay scheduler (respects config)
     let silva_decay = silva.clone();
     let decay_enabled = config.silva.decay_enabled;
-    let decay_half_life_hours = config.silva.decay_half_life_hours;
     tokio::spawn(async move {
         if !decay_enabled {
             info!("🌲 SilvaDB: Biological decay is DISABLED by config.");
@@ -1422,7 +1420,7 @@ async fn main() -> anyhow::Result<()> {
             let silva_inner = silva_decay.clone();
             let guard = GuardedTask::new("Memory Decay", Duration::from_secs(60));
             let _ = guard.run(async move {
-                silva_inner.apply_decay(decay_half_life_hours).await.map(|_| ())?;
+                silva_inner.apply_decay().await.map(|_| ())?;
                 Ok::<(), anyhow::Error>(())
             }).await;
         }

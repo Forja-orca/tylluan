@@ -15,7 +15,7 @@ impl super::SilvaDB {
     ///
     /// Nodes with retrievability below `prune_threshold` AND stability below
     /// a minimum are candidates for pruning.
-    pub async fn apply_decay(&self, half_life_hours: u64) -> Result<usize> {
+    pub async fn apply_decay(&self) -> Result<usize> {
         tokio::task::block_in_place(|| {
             let mut conn = self.conn.blocking_lock();
             let now_unix = std::time::SystemTime::now()
@@ -43,7 +43,10 @@ impl super::SilvaDB {
                 .collect()
             };
             // Step 2: Compute retrievability from FSRS, update weight
-            let _hl = half_life_hours as f64;
+            // NOTE: `half_life_hours` parameter removed 2026-08-24 — was received and
+            // discarded (let _hl = ... as f64;). Decay is FSRS-driven (per-node stability),
+            // not half-life-based. Config field `silva.decay_half_life_hours` is retained
+            // for backward compatibility with a deprecation warning at startup.
             let node_changes = if !nodes.is_empty() {
                 let tx = conn.transaction()?;
                 let mut count = 0;
