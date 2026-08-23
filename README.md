@@ -308,37 +308,6 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 ### High-Level Overview
 
 ```mermaid
-flowchart TB
-  MCP["MCP Clients<br/>Claude · Cursor · VS Code · LM Studio · any SSE"] -->|"SSE / HTTP Streamable"| NEXUS
-  A2AEXT["External A2A agents<br/>LangGraph · CrewAI · any Agent2Agent-compliant client"] -->|"JSON-RPC 2.0"| NEXUS
-
-  subgraph NEXUS["tylluan-nexus (:4000)"]
-    direction TB
-    MEM["Core Memory<br/>persona · preferences"]
-    SILVA[("SilvaDB<br/>SQLite WAL · BGE-M3 vectors<br/>FTS5 BM25 · knowledge graph<br/>episodic nodes · salience decay")]
-    A2AS["A2A Server<br/>Agent Card · message/send · tasks/get"]
-    GUILDS["Guild Registry<br/>49 Python tools, auto-discovered<br/>e.g. llama_backend (llama.cpp/GGUF)"]
-    COLOQUIO["Coloquio<br/>multi-agent channel"]
-    INFER["Inference: ONNX (BGE-M3 1024d · Jina Reranker Turbo)"]
-    MESH["Federation + Mesh<br/>peers.db · Noise NK/XK · ChaCha20-Poly1305<br/>DHT Kademlia · Gossip"]
-
-    MEM --> SILVA
-    GUILDS --> SILVA
-    COLOQUIO --> SILVA
-    A2AS --> MEM
-    SILVA --> INFER
-    SILVA --> MESH
-  end
-
-  MESH -->|"Noise NK/XK · ChaCha20-Poly1305 encrypted"| PEERS["Peer nodes<br/>LAN / VPN / WAN via DHT"]
-
-  classDef core fill:#15181d,stroke:#34d399,color:#e8e6e1,stroke-width:1.5px;
-  class MEM,SILVA,A2AS,GUILDS,COLOQUIO,INFER,MESH core;
-```
-
-### Detailed Layered Topology & Circuits
-
-```mermaid
 flowchart LR
   CLIENTS["Clients<br/>MCP IDEs · A2A clients · HTTP/UI"]
 
@@ -406,6 +375,15 @@ flowchart LR
   linkStyle 6,7 stroke:#38bdf8,stroke-width:2.5px;
   linkStyle 8,9,10,11 stroke:#f59e0baa,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
+
+### Detailed Layered Topology & Circuits
+
+<p align="center">
+  <a href="docs/assets/architecture.svg" target="_blank">
+    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
+  </a>
+</p>
+<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom.</i></sub></p>
 
 
 ## Stack
