@@ -82,6 +82,17 @@ pub fn memory_status(conflicted: bool, valid_until: Option<i64>, confidence: f64
     }
 }
 
+/// Node types excluded from automatic pruning, decay, and weight-based cleanup.
+/// These represent durable summaries that should survive housekeeping.
+///
+/// Used in `decay.rs` (prune_by_weight, prune_by_salience, full_prune) and
+/// `maintenance.rs` (prune_low_weight, prune_dead_nodes).
+///
+/// **Do NOT use for `meta_cognitive_prune`** — that function intentionally
+/// includes `concept`/`lesson` and excludes `archived` (see b16a7d2 fix).
+pub(crate) const DURABLE_SUMMARY_EXCLUSION: &str =
+    "('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')";
+
 #[cfg(test)]
 mod memory_status_tests {
     use super::memory_status;
