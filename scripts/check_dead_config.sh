@@ -53,8 +53,43 @@ for field in "${fields[@]}"; do
     outside_hits=$( (grep -rlE "\.${field}\b" "$SRC_DIR" --include="*.rs" 2>/dev/null || true) | (grep -v "^${CONFIG_FILE}$" || true) | wc -l)
 
     if [ "$outside_hits" -eq 0 ]; then
-        suspects+=("$field")
-        echo "⚠️  '$field' — declared in config.rs, but \".${field}\" never appears read anywhere outside config.rs (found in $total_hits file(s) total, all config.rs itself)."
+        # Accessor-pattern check (added after the 2026-08-22 triage found this
+        # exact class of false positive 3 times: capabilities_enforce,
+        # dry_run, encrypt_at_rest -- all read only through a wrapper method
+        # defined IN config.rs, e.g. `pub fn guilds_dry_run(&self) -> bool {
+        # self.guilds.dry_run }`, called from elsewhere as `.guilds_dry_run()`
+        # rather than the raw field name ever appearing outside config.rs).
+        #
+        # Find every `pub fn NAME` in config.rs whose body (up to the next
+        # `pub fn`/EOF) references this field, then check whether any such
+        # NAME is itself called from outside config.rs. If so, the field is
+        # genuinely live -- just reached through that accessor, not directly.
+        accessor_names=$(awk -v field="$field" '
+            /pub fn [a-z_][a-z0-9_]*/ {
+                if (name != "" && body ~ ("\\." field)) print name
+                match($0, /pub fn [a-z_][a-z0-9_]*/)
+                name = substr($0, RSTART+7, RLENGTH-7)
+                body = ""
+                next
+            }
+            { body = body $0 "\n" }
+            END { if (name != "" && body ~ ("\\." field)) print name }
+        ' "$CONFIG_FILE")
+
+        is_live_via_accessor=0
+        for acc in $accessor_names; do
+            acc_outside=$( (grep -rlE "\.${acc}\(" "$SRC_DIR" --include="*.rs" 2>/dev/null || true) | (grep -v "^${CONFIG_FILE}$" || true) | wc -l)
+            if [ "$acc_outside" -gt 0 ]; then
+                is_live_via_accessor=1
+                echo "✅ '$field' — read only via accessor '$acc()', which IS called outside config.rs. Not dead."
+                break
+            fi
+        done
+
+        if [ "$is_live_via_accessor" -eq 0 ]; then
+            suspects+=("$field")
+            echo "⚠️  '$field' — declared in config.rs, but \".${field}\" never appears read anywhere outside config.rs (found in $total_hits file(s) total, all config.rs itself)."
+        fi
     fi
 done
 
@@ -65,6 +100,12 @@ if [ "${#suspects[@]}" -eq 0 ]; then
 fi
 
 echo "Found ${#suspects[@]} suspect(s): ${suspects[*]}"
+echo ""
+echo "Known remaining false positive NOT auto-excluded: 'encrypt_at_rest' is"
+echo "read inside open_db() (config.rs), a FREE function (crate::config::open_db(...))"
+echo "rather than a &self accessor method (.method_name()) -- the accessor-"
+echo "pattern check above only matches the latter call syntax. Confirmed live"
+echo "and used from curriculum.rs/federation/agent_memory.rs/agent_profile.rs."
 echo "Each needs a human/agent look -- some may be false positives (macro-only"
 echo "access, a re-export, serde-internal use) rather than genuinely dead."
 echo ""
