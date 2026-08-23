@@ -28,9 +28,15 @@ pub fn load_guild_config(config: &TylluanConfig) -> Vec<GremioDiscovery> {
 
     if let Some(v2_config) = &config.guilds.v2 {
         for gremio in &v2_config.gremios {
-            let guild_md_path = Path::new(&gremio.path).join("guild.md");
-            let plugins_dir = Path::new(&gremio.path).join("plugins");
-            let agents_dir = Path::new(&gremio.path).join("agents");
+            let gremio_path = Path::new(&gremio.path);
+            let (plugins_dir, gremio_dir) = if gremio_path.ends_with("plugins") {
+                (gremio_path.to_path_buf(), gremio_path.parent().unwrap_or(gremio_path).to_path_buf())
+            } else {
+                (gremio_path.join("plugins"), gremio_path.to_path_buf())
+            };
+
+            let guild_md_path = gremio_dir.join("guild.md");
+            let agents_dir = gremio_dir.join("agents");
 
             let guild_md_exists = guild_md_path.exists();
             let plugins = if plugins_dir.exists() {

@@ -754,12 +754,25 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if let Some(v2_config) = &config.guilds.v2 {
-        let _discoveries = load_guild_config(&config);
+        let discoveries = load_guild_config(&config);
         let legacy_path = &v2_config.legacy_fallback;
         for gremioguilds in &v2_config.gremios {
             let base_path = &gremioguilds.path;
+            let discovery = discoveries.iter().find(|d| d.name == gremioguilds.name);
+            if let Some(disc) = discovery
+                && !disc.guild_md_exists {
+                    warn!("⚠️ [V2] Gremio '{}' is missing guild.md specification at {}", gremioguilds.name, base_path);
+                }
+
+            let mut registered_count = 0;
             for plugin in &gremioguilds.plugins {
                 let guild_name = plugin.trim_end_matches(".py");
+                let plugin_file = Path::new(base_path).join(plugin);
+                if !plugin_file.exists() {
+                    warn!("⚠️ [V2] Guild plugin '{}' declared in TOML but missing on disk at {} -- skipping", guild_name, plugin_file.display());
+                    continue;
+                }
+
                 let module_path = format!("{}.{}", base_path.replace("/", "."), guild_name);
                 if !registry_raw.guilds.contains_key(guild_name) {
                     registry_raw.register_v2(guild_name, &module_path, false, None, &gremioguilds.name, gremioguilds.agents.clone());
@@ -771,9 +784,10 @@ async fn main() -> anyhow::Result<()> {
                     && let Some(g) = registry_raw.guilds.get_mut(guild_name) {
                         g.always_on = true;
                     }
+                registered_count += 1;
             }
-            info!("📦 [V2] Loaded gremio '{}' from {} with {} plugins, {} agents",
-                  gremioguilds.name, base_path, gremioguilds.plugins.len(), gremioguilds.agents.len());
+            info!("📦 [V2] Loaded gremio '{}' from {} with {}/{} verified plugins, {} agents",
+                  gremioguilds.name, base_path, registered_count, gremioguilds.plugins.len(), gremioguilds.agents.len());
         }
         info!("📦 [V2] Legacy fallback path: {}", legacy_path);
     }
