@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-23 19:42:05",
+  "timestamp": "2026-08-23 18:27:05",
   "live_kernel": {
     "url": "http://127.0.0.1:4000",
     "commit": "be69f11",
@@ -13,7 +13,7 @@
     "pure_semantic_bge_m3_accuracy": 0.4932,
     "blended_hybrid_accuracy": 0.6164,
     "j13_hybrid_accuracy": 0.6438,
-    "live_matcher_accuracy": 0.4932,
+    "live_matcher_accuracy": 0.4795,
     "isolated_j13_delta": 0.0274,
     "positive_flips": 3,
     "negative_flips": 1,
@@ -50,7 +50,7 @@
       "sem": 2,
       "blend": 4,
       "j13": 4,
-      "live_matcher": 2
+      "live_matcher": 1
     }
   },
   "sample_raw_calls": [
@@ -115,10 +115,10 @@
       "intent": "perform deep research across multiple scientific sources on synaptic decay",
       "full_response": {
         "content": [
-          "{\n  \"arguments\": {\n    \"agent_id\": \"tylluan-cli\",\n    \"command\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"content\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"depth\": 2,\n    \"input\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"language\": \"\",\n    \"max_results\": 50,\n    \"message\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"prompt\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"query\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"server_url\": \"\",\n    \"text\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"timeout_secs\": 30,\n    \"url\": \"\"\n  },\n  \"guild\": \"deep_web_research\",\n  \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n  \"message\": \"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).\",\n  \"plan_id\": \"edd1b5565c76\",\n  \"risk_level\": \"Medium\",\n  \"status\": \"plan\",\n  \"tool\": \"research_topic\"\n}"
+          "{\n  \"arguments\": {\n    \"agent_id\": \"tylluan-cli\",\n    \"command\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"content\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"depth\": 2,\n    \"input\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"language\": \"\",\n    \"max_results\": 50,\n    \"message\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"prompt\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"query\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"server_url\": \"\",\n    \"text\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"timeout_secs\": 30,\n    \"url\": \"\"\n  },\n  \"guild\": \"deep_web_research\",\n  \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n  \"message\": \"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan a35c15b79f88') or approve_action(requestId='a35c15b79f88', approved=true).\",\n  \"plan_id\": \"a35c15b79f88\",\n  \"risk_level\": \"Medium\",\n  \"status\": \"plan\",\n  \"tool\": \"research_topic\"\n}"
         ],
         "is_error": false,
-        "response": "[Annotated { raw: Text(RawTextContent { text: \"{\\n  \\\"arguments\\\": {\\n    \\\"agent_id\\\": \\\"tylluan-cli\\\",\\n    \\\"command\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"content\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"depth\\\": 2,\\n    \\\"input\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"language\\\": \\\"\\\",\\n    \\\"max_results\\\": 50,\\n    \\\"message\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"prompt\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"query\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"server_url\\\": \\\"\\\",\\n    \\\"text\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"timeout_secs\\\": 30,\\n    \\\"url\\\": \\\"\\\"\\n  },\\n  \\\"guild\\\": \\\"deep_web_research\\\",\\n  \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n  \\\"message\\\": \\\"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).\\\",\\n  \\\"plan_id\\\": \\\"edd1b5565c76\\\",\\n  \\\"risk_level\\\": \\\"Medium\\\",\\n  \\\"status\\\": \\\"plan\\\",\\n  \\\"tool\\\": \\\"research_topic\\\"\\n}\" }), annotations: None }]",
+        "response": "[Annotated { raw: Text(RawTextContent { text: \"{\\n  \\\"arguments\\\": {\\n    \\\"agent_id\\\": \\\"tylluan-cli\\\",\\n    \\\"command\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"content\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"depth\\\": 2,\\n    \\\"input\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"language\\\": \\\"\\\",\\n    \\\"max_results\\\": 50,\\n    \\\"message\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"prompt\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"query\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"server_url\\\": \\\"\\\",\\n    \\\"text\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"timeout_secs\\\": 30,\\n    \\\"url\\\": \\\"\\\"\\n  },\\n  \\\"guild\\\": \\\"deep_web_research\\\",\\n  \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n  \\\"message\\\": \\\"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan a35c15b79f88') or approve_action(requestId='a35c15b79f88', approved=true).\\\",\\n  \\\"plan_id\\\": \\\"a35c15b79f88\\\",\\n  \\\"risk_level\\\": \\\"Medium\\\",\\n  \\\"status\\\": \\\"plan\\\",\\n  \\\"tool\\\": \\\"research_topic\\\"\\n}\" }), annotations: None }]",
         "result": {
           "arguments": {
             "agent_id": "tylluan-cli",
@@ -139,8 +139,8 @@
           },
           "guild": "deep_web_research",
           "intent": "perform deep research across multiple scientific sources on synaptic decay",
-          "message": "Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).",
-          "plan_id": "edd1b5565c76",
+          "message": "Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan a35c15b79f88') or approve_action(requestId='a35c15b79f88', approved=true).",
+          "plan_id": "a35c15b79f88",
           "risk_level": "Medium",
           "status": "plan",
           "tool": "research_topic"
