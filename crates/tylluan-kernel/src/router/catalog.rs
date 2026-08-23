@@ -92,6 +92,11 @@ impl std::fmt::Display for GuildCategory {
     }
 }
 
+/// Guild implementations that exist on disk but are intentionally not routable.
+/// Keep the source file for historical/spike purposes without advertising it to
+/// the semantic matcher or runtime registry.
+const EXCLUDED_GUILDS: &[&str] = &["vision_moondream"];
+
 /// Overrides for guilds that need explicit weight or required_args
 /// not inferrable from the Python file alone.
 fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> {
@@ -100,7 +105,6 @@ fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> 
     m.insert("filesystem", (GuildWeight::Medium, vec![]));
     m.insert("memory", (GuildWeight::Light, vec!["content"]));
     m.insert("vision", (GuildWeight::Medium, vec!["path"]));
-    m.insert("vision_moondream", (GuildWeight::Light, vec!["image_path"]));
     m.insert("knowledge", (GuildWeight::Medium, vec!["command"]));
     m.insert("code_analysis", (GuildWeight::Heavy, vec!["command"]));
     m.insert("deep_analysis", (GuildWeight::Heavy, vec!["query"]));
@@ -179,7 +183,6 @@ fn description_override(name: &str) -> Option<&'static str> {
         "knowledge" => "Knowledge graph triple extraction and entity recognition",
         "ingest" => "Ingest documents and code into memory",
         "vision" => "Image analysis and OCR using vision models",
-        "vision_moondream" => "Lightweight image analysis and captioning using Moondream 0.5B",
         "browser" => "Web browser automation with CDP protocol",
         "code" => "Code modification and generation across languages",
         "database" => "Database query and schema management",
@@ -484,6 +487,9 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
                 let content = std::fs::read_to_string(&file_path).unwrap_or_default();
                 if extract_guild_name(&content).is_none() { continue; }
                 let guild_name = name_override(file_stem).unwrap_or(file_stem).to_string();
+                if EXCLUDED_GUILDS.contains(&guild_name.as_str()) {
+                    continue;
+                }
                 let trigger_phrases = extract_trigger_phrases(&content);
 
                 let module_path = if search_dir.ends_with("plugins") {
@@ -652,6 +658,17 @@ mod tests {
     }
 
     #[test]
+    fn test_excluded_guilds_are_not_routable() {
+        let catalog = builtin_catalog();
+        for excluded in EXCLUDED_GUILDS {
+            assert!(
+                !catalog.iter().any(|guild| guild.name == *excluded),
+                "Excluded guild '{excluded}' must not appear in the routable catalog"
+            );
+        }
+    }
+
+    #[test]
     fn test_post_mvp_guilds_present() {
         let catalog = builtin_catalog();
         let names: Vec<&str> = catalog.iter().map(|g| g.name.as_str()).collect();
@@ -777,9 +794,10 @@ mod tests {
         let mut missing_from_catalog: Vec<&str> = Vec::new();
         let mut missing_from_known: Vec<&str> = Vec::new();
 
-        // Every known guild must be in catalog
+        // Every known, routable guild must be in catalog. Excluded spike files
+        // remain covered by the filesystem audit but must not be advertised.
         for &guild in KNOWN_GUILDS {
-            if !catalog_names.contains(guild) {
+            if !EXCLUDED_GUILDS.contains(&guild) && !catalog_names.contains(guild) {
                 missing_from_catalog.push(guild);
             }
         }
@@ -853,7 +871,7 @@ mod tests {
         // is being wired via registry::guild_list::LAZY_GUILDS in a separate change.
         // Left excluded here until that lands so this test doesn't fail on a gap
         // that belongs to that other change.
-        const V2_GREMIO_ONLY_GUILDS: &[&str] = &["vision_moondream", "n8n_bridge"];
+        const V2_GREMIO_ONLY_GUILDS: &[&str] = &["n8n_bridge"];
 
         // sandbox.py is real and extract_guild_name() succeeds on it (so it shows up
         // in builtin_catalog(), which scans the filesystem), but it's explicitly
