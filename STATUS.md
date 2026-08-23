@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `38c5200` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `3246067` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -10,7 +10,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 - ~~No offline boot path~~ **FIXED 2026-08-23**: `onnx_runtime_available()` (main.rs) probes whether ONNX Runtime is loadable via `libloading` before ever calling `ort` -- if not, skips the reranker entirely and falls back to BM25-only. Real gotcha found along the way: T206's `catch_unwind` "fix" never actually worked in the release binary, because this workspace's release profile sets `panic = "abort"` (Cargo.toml:37), under which `catch_unwind` is a documented no-op -- only debug-profile `cargo test`/`cargo check` ever exercised it. Caught by G2 (`boot-smoke-no-onnx` CI job) on its first real run and verified fixed on the next push (CI run green, kernel replied to `/health` in 2s with no ONNX installed on the runner).
 - ~~STUN fires unconditionally at boot~~ **FIXED (T206)**: `NatConfig.enabled` defaults to `false`; the whole discovery block in `main.rs` is gated behind it. Set `[nat] enabled = true` explicitly to opt in.
 - ~~CI Python tests are non-blocking by construction~~ **FIXED**: `.github/workflows/ci.yml:110` no longer has the `|| echo` swallow, installs `guilds/requirements.txt` (the real cause `mcp`/FastMCP was missing), and explicitly `--ignore`s one test confirmed to hardcode a different project's port. The main CI job still doesn't run `tylluan-link`/`tylluan-fsrs` in the same job as `tylluan-kernel` (they're separate, real jobs though -- `docs-test-count-check` exercises all three).
-- **`serverInfo.version` hardcoded to `"3.0.0"`** (`api_monitor.rs:289`, `mcp.rs:424`), out of sync with `Cargo.toml`'s `0.16.0`. Still open.
+- ~~`serverInfo.version` hardcoded to `"3.0.0"`~~ **FIXED**: replaced with `env!(CARGO_PKG_VERSION)` in all 4 places it was found (`api_monitor.rs`, `mcp.rs`'s `serverInfo`, and 2 `clientInfo` call sites in `registry/proxy.rs` found while fixing this).
 - ~~`[federation] auto_sync_interval_secs` is dead config~~ **REMOVED** (a750098): the field itself is gone from `FederationConfig` now, not just documented as unread. The real auto-sync loop (`api_federation.rs`) uses `[silva] sync_interval_ms`, unchanged.
 - **1770 `.unwrap()` calls** across `crates/` (all crates, including tests) — not inherently wrong, but a real signal of how much of the panic surface hasn't been audited for graceful-failure conversion.
 - **49 guilds require Python 3.12 + FastMCP separately** from the Rust kernel binary — without them, guilds crash-loop and `/api/v1/doctor` reports `degraded`. The README's "no Rust/Python/Node needed" line was true only for the kernel-as-MCP-memory use case, not for `tylluan_do` guild execution; corrected in README 2026-08-22.
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `38c5200` · **772 total** lib green (691 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `3246067` · **772 total** lib green (691 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 **✅ Kernel vivo al día (2026-08-22):** rebuild confirmado, `:4000/health` reporta el mismo commit que este HEAD (0 commits de gap) — cerrando la brecha de 16+ commits detectada antes en este mismo ciclo. Verificar en cualquier momento con `bash scripts/check_live_kernel_drift.sh` (local-only, no es un gate de CI — ver el propio script para por qué).
 
