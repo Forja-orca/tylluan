@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `3246067` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `64d8c7c` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -17,7 +17,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 - **Retrieval quality context**: the 82% Recall@5 headline figure (LongMemEval-S) sits alongside a **Precision@5 of 16.4%** in the same results file — both real, but only one made it to marketing copy. Live routing accuracy on that same external benchmark run was ~41% (hybrid), vs the 56-64% measured on the team's own curated I-7/J-13 dataset — the gap is dataset difficulty, not a regression, but worth stating plainly rather than leading with the friendlier number.
 - Not a gap, confirmed correct on inspection: the MCP protocol version negotiation (`mcp.rs:407`) is real and dynamic (echoes whatever `protocolVersion` the client requests, 4 versions supported `2024-11-05`–`2026-07-28`). An external report reading a `2025-03-26` negotiated session as a bug was itself mistaken — that's what its own older test client asked for.
 
-**Overall read**: this is a serious, fast-moving research lab with real engineering (compiled kernel, 772 real tests, a CI gate that catches doc/test-count drift and has already caught and fixed several real regressions this cycle) — not yet a hardened, installable product for strangers. The project's own `DISCLAIMER.md` already says this; the gap above is between that honest self-assessment and what the README's quick-start framing implies for a first-time user.
+**Overall read**: this is a serious, fast-moving research lab with real engineering (compiled kernel, 773 real tests, a CI gate that catches doc/test-count drift and has already caught and fixed several real regressions this cycle) — not yet a hardened, installable product for strangers. The project's own `DISCLAIMER.md` already says this; the gap above is between that honest self-assessment and what the README's quick-start framing implies for a first-time user.
 
 ## CI
 
@@ -33,9 +33,9 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `3246067` · **772 total** lib green (691 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `64d8c7c` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**⚠️ Kernel vivo desactualizado (2026-08-23):** `:4000/health` reporta `7974d38`, 22 commits detrás de este HEAD -- 6 de ellos tocan código real de kernel (`5d7d5df` guild-timeouts, `e1edc20` dead-code, `8a586e0` el fix real de ONNX/panic=abort, `b4e931e` exclusion lists, `15b9708` load_guild_config, `a750098` config muerta). El kernel vivo no tiene el fix de ONNX ni los timeouts por categoría. Confirmado con `bash scripts/check_live_kernel_drift.sh` (bloqueó correctamente la tarea G5 hasta rebuild). Rebuild pendiente de autorización.
+**Kernel vivo (2026-08-23):** rebuild autorizado y confirmado a mitad de sesión -- `:4000/health` reportó `e337836` = HEAD exacto en ese momento, cerrando el gap de 22 commits que había bloqueado G5. Desde entonces este HEAD avanzó 1 commit más (`64d8c7c`, exclusión de `vision_moondream` del catálogo enrutable) que el kernel vivo todavía no tiene -- drift normal y esperado entre rebuilds, no una alarma. Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
