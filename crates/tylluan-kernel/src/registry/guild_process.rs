@@ -886,15 +886,40 @@ impl GuildRegistry {
         }
     }
 
+    /// Guilds main.rs already treats as needing genuinely UNLIMITED patience
+    /// (CPU-bound ONNX/local-LLM inference, killing which mid-run wastes all
+    /// prior computation -- see main.rs's own `cpu_inference_guilds` list and
+    /// its comment). Real bug caught before shipping (2026-08-23, reviewing
+    /// this same commit for doc drift): the Heavy category's 180s
+    /// (heavy_guild_ms default) would have UNDERCUT that existing design --
+    /// deep_analysis alone is documented elsewhere in this project as taking
+    /// 10+ minutes on CPU, and main.rs's `tool_timeout = None` override only
+    /// skips the OUTER guild-level wrapper (guild_process.rs's call_tool) --
+    /// it does nothing about the INNER proxy-level timeout this function
+    /// feeds (proxy.rs's own `tokio::time::timeout`), which would have fired
+    /// regardless and silently cut these guilds down from their previous,
+    /// safe 3600s (the old flat tool_call_secs) to 180s. This list must stay
+    /// in sync with main.rs's cpu_inference_guilds by hand -- there is no
+    /// single source of truth for it yet (a real, separate, smaller finding
+    /// than the one this function exists to fix).
+    const UNLIMITED_PATIENCE_GUILDS: &'static [&'static str] =
+        &["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"];
+
     /// Effective tool-call timeout (seconds) for a specific guild: the
     /// category-specific value from `guild_timeouts` if it's been wired via
     /// `with_guild_timeouts()`, otherwise falls back to the flat
     /// `timeouts.tool_call_secs` (this registry's pre-existing behavior,
-    /// preserved exactly for anyone who hasn't opted in yet).
+    /// preserved exactly for anyone who hasn't opted in yet). Guilds in
+    /// `UNLIMITED_PATIENCE_GUILDS` always get the flat value regardless of
+    /// category, matching their pre-existing "wait as long as it takes"
+    /// contract with main.rs.
     fn effective_tool_call_secs(&self, guild_name: &str) -> u64 {
         let Some(gt) = &self.guild_timeouts else {
             return self.timeouts.tool_call_secs;
         };
+        if Self::UNLIMITED_PATIENCE_GUILDS.contains(&guild_name) {
+            return self.timeouts.tool_call_secs;
+        }
         match Self::guild_timeout_category(guild_name) {
             GuildTimeoutCategory::System => gt.system_guild_ms / 1000,
             GuildTimeoutCategory::Analysis => gt.analysis_guild_ms / 1000,
@@ -1511,6 +1536,39 @@ pub async fn find_python() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unlimited_patience_guilds_keep_flat_timeout_not_heavy_category() {
+        // Real regression caught before shipping (2026-08-23): deep_analysis
+        // and friends are documented elsewhere as needing 10+ minutes on
+        // CPU, but heavy_guild_ms defaults to 180s -- far too short. They
+        // must always get the flat tool_call_secs value, never the Heavy
+        // category's shorter ceiling, regardless of with_guild_timeouts().
+        let registry = GuildRegistry::new(
+            PathBuf::from("."), 300,
+            TimeoutsConfig { handshake_secs: 120, tool_call_secs: 3600 },
+            3,
+        ).with_guild_timeouts(GuildTimeoutsConfig {
+            system_guild_ms: 15_000,
+            analysis_guild_ms: 60_000,
+            heavy_guild_ms: 180_000, // 180s -- must NOT apply to these guilds
+            mcp_client_heartbeat_ms: 8_000,
+        });
+
+        for name in ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"] {
+            assert_eq!(
+                registry.effective_tool_call_secs(name), 3600,
+                "'{name}' must keep the flat 3600s ceiling, not the 180s heavy category"
+            );
+        }
+
+        // A genuinely non-inference heavy guild (docker) SHOULD get the
+        // real category value -- confirms the carve-out is scoped to the
+        // specific unlimited-patience list, not a blanket bypass.
+        assert_eq!(registry.effective_tool_call_secs("docker"), 180);
+        // A system guild gets its own, shorter category value.
+        assert_eq!(registry.effective_tool_call_secs("bash"), 15);
+    }
 
     #[test]
     fn test_guild_process_creation() {
