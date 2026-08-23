@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.16.0-blue.svg" alt="v0.16.0">
+  <img src="https://img.shields.io/badge/version-0.17.0-blue.svg" alt="v0.17.0">
   <img src="https://img.shields.io/badge/rust-1.88+-orange.svg" alt="Rust 1.88+">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/MCP-native-purple.svg" alt="MCP Native">
@@ -207,7 +207,7 @@ On the very first run, BGE-M3 downloads with a progress bar (5–15 minutes depe
 
 ```
 Downloading BGE-M3 embedding model... [##########] 1.2 GB
-✅ Tylluan v0.16.0 running at http://127.0.0.1:4000
+✅ Tylluan v0.17.0 running at http://127.0.0.1:4000
 ```
 
 Check it's actually up:
@@ -278,7 +278,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 
 ---
 
-## Where things stand — v0.16.0
+## Where things stand — v0.17.0
 
 This release adopts the MCP 2026-07-28 spec end to end (stateless core, Tasks, real MCP Apps manifests) and closes an 8-phase push to make Tylluan itself an agent's continuity, trust, and action layer — self-documenting guild contracts, unified bootstrap/resume, evidence-backed memory, a Trust Console for runtime/code drift, and a first real dataset circuit turning CoherenceGate's LLM judge decisions into structured, ground-truth-labeled examples. Three real bugs were found live and fixed the same way as always: root cause first, then a regression test, then verified against the live kernel — including a long-standing SSE-mode hang traced to a header-forwarding bug and confirmed fixed by the affected client itself.
 

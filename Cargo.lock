@@ -4429,7 +4429,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-cli"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4445,7 +4445,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-common"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -4456,7 +4456,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-evals"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -4468,7 +4468,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-fsrs"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4480,7 +4480,7 @@ version = "3.0.0-rc.1"
 
 [[package]]
 name = "tylluan-kernel"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -4547,7 +4547,7 @@ dependencies = [
 
 [[package]]
 name = "tylluan-link"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
