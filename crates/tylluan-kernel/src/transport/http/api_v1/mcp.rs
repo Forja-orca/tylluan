@@ -421,7 +421,7 @@ pub async fn mcp_handler(
                         }
                     }
                 },
-                "serverInfo": { "name": "tylluan-nexus-sovereign", "version": "3.0.0" }
+                "serverInfo": { "name": "tylluan-nexus-sovereign", "version": env!("CARGO_PKG_VERSION") }
             },
             "id": id
         });
