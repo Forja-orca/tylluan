@@ -192,6 +192,81 @@ jobs:
       - name: Report config.rs fields that appear unread outside config.rs
         run: bash scripts/check_dead_config.sh
 
+  boot-smoke-no-onnx:
+    name: Boot smoke — no ONNX (BM25-only config must reach /health)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Build release binary
+        run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
+      - name: Generate minimal BM25-only config
+        # Deliberately does NOT install libonnxruntime: this is the portable /
+        # air-gapped path from README (--profile portable, embedding_model="none").
+        # Before the T206 catch_unwind fix, `ort` (load-dynamic) PANICKED here
+        # instead of returning Err, killing the kernel before it ever bound the
+        # HTTP port -- exactly the bug class this smoke test exists to catch.
+        # host=127.0.0.1 + dev_mode=true is safe (never 0.0.0.0 + dev_mode).
+        run: |
+          cat > /tmp/tylluan-smoke.toml <<'EOF'
+          [nexus]
+          host = "127.0.0.1"
+          port = 4000
+          transport = ["http"]
+          dev_mode = true
+
+          [memory]
+          db_path = "/tmp/tylluan-smoke.db"
+          embedding_model = "none"
+          vector_dimensions = 0
+          vector_limit = 100
+
+          [silva]
+          db_path = "/tmp/tylluan-smoke-silva.db"
+          EOF
+          echo "Config written:"
+          cat /tmp/tylluan-smoke.toml
+      - name: Boot kernel in background and wait for /health
+        run: |
+          ./target/release/tylluan-nexus --config /tmp/tylluan-smoke.toml > /tmp/tylluan-smoke.log 2>&1 &
+          KERNEL_PID=$!
+          echo "Kernel PID: $KERNEL_PID"
+          echo "KERNEL_PID=$KERNEL_PID" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:4000/health > /tmp/tylluan-smoke-health.json 2>/dev/null; then
+              echo "✅ Kernel healthy after ${i}s"
+              cat /tmp/tylluan-smoke-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Kernel did not reach /health within 30s — process may have panicked (ort without ONNX) or hung."
+          echo "--- last 50 log lines ---"
+          tail -50 /tmp/tylluan-smoke.log || true
+          echo "--- process still alive? ---"
+          if kill -0 $KERNEL_PID 2>/dev/null; then echo "process ALIVE (hung, not crashed)"; else echo "process DEAD (crashed at boot)"; fi
+          exit 1
+      - name: Verify health JSON claims BM25-only mode
+        if: always()
+        run: |
+          if [ -f /tmp/tylluan-smoke-health.json ]; then
+            echo "Health payload:"
+            cat /tmp/tylluan-smoke-health.json
+          else
+            echo "No health payload captured."
+          fi
+      - name: Cleanup kernel process
+        if: always()
+        run: |
+          if [ -n "${KERNEL_PID:-}" ] && kill -0 $KERNEL_PID 2>/dev/null; then
+            kill $KERNEL_PID 2>/dev/null || true
+            echo "Kernel process $KERNEL_PID terminated."
+          else
+            echo "No live kernel process to clean up."
+          fi
+
   e2e-security-tests:
     name: Rust — security audit tests
     runs-on: ubuntu-latest
