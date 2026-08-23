@@ -407,7 +407,7 @@ flowchart TB
   classDef infer fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
   classDef exec fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
   classDef mesh fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
-  classDef future fill:#2a1b0a,stroke:#f59e0b,stroke-width:2px,stroke-dasharray:5 5,color:#fef3c7;
+  classDef future fill:#f59e0b12,stroke:#f59e0b88,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7cc;
 
   class MCP_IDE,A2A_CLI,REST_CLI,PEER_REMOTE ext;
   class MCP_SRV,A2A_SRV,REST_SRV ingress;
@@ -419,11 +419,11 @@ flowchart TB
   class RETRIEVAL_GATE,SPARSE_ENG,COLOQUIO_WAKE,POSTCARD_MIG future;
 
   %% Colores de enlace, en orden real de declaracion:
-  %% 0,1,4 ingress->sovereign->memoria (verde) | 2,3,8,12,14 enlaces a nodos futuros (ambar discontinuo)
+  %% 0,1,4 ingress->sovereign->memoria (verde) | 2,3,8,12,14 enlaces a nodos futuros (ambar translúcido)
   %% 5,6,7 router->ejecucion (azul) | 9,10 ejecucion->memoria (verde claro) | 11 memoria<->inferencia (purpura)
   %% 13 memoria<->federacion (cyan) | 15,16,17 clientes externos->ingress (indigo) | 18 mesh->peers (cyan grueso)
   linkStyle 0,1,4 stroke:#34d399,stroke-width:2px;
-  linkStyle 2,3,8,12,14 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 2,3,8,12,14 stroke:#f59e0baa,stroke-width:1.5px,stroke-dasharray:3 3;
   linkStyle 5,6,7 stroke:#60a5fa,stroke-width:1.5px;
   linkStyle 9,10 stroke:#4ade80,stroke-width:1.5px;
   linkStyle 11 stroke:#c084fc,stroke-width:1.5px;
