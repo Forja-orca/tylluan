@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-24 · HEAD `dc28af2` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
+> Last updated: 2026-08-24 · HEAD `e13aa2a` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `dc28af2` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `e13aa2a` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 **Kernel vivo:** a fecha de este commit (`76147ea`) el kernel vivo está en `be69f11`, varios commits detrás -- y esta vez SÍ es drift funcional real (`check_live_kernel_drift.sh` lo confirma: 12 archivos de código del kernel cambiaron desde entonces, incluida la firma de `SilvaDB::apply_decay()`). Rebuild pendiente antes de confiar en cualquier medición en vivo:
 ```

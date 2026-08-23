@@ -336,130 +336,15 @@ flowchart TB
   class MEM,SILVA,A2AS,GUILDS,COLOQUIO,INFER,MESH core;
 ```
 
-### Detailed Layered Topology & Roadmap Circuits
+### Detailed Layered Topology & Circuits
 
-```mermaid
-flowchart TB
-%% =========================================================================
-%% CLIENTS AND EXTERNAL PROTOCOLS
-%% =========================================================================
-  subgraph CLIENTS["Clients & connected ecosystem"]
-    direction LR
-    MCP_IDE["MCP IDEs / assistants<br/><code>Claude Code · Cursor · VS Code · Claude Desktop · Qwen</code>"]
-    A2A_CLI["External A2A clients<br/><code>LangGraph · CrewAI · any A2A SDK</code>"]
-    REST_CLI["HTTP tools / UI<br/><code>Dashboard (React) · Tylluan CLI · curl</code>"]
-  end
+<p align="center">
+  <a href="docs/assets/architecture.svg" target="_blank">
+    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
+  </a>
+</p>
+<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom.</i></sub></p>
 
-%% =========================================================================
-%% TYLLUAN-NEXUS CORE
-%% =========================================================================
-  subgraph NEXUS["tylluan-nexus (:4000) — single Rust process"]
-    direction TB
-
-    %% 1. Ingress
-    subgraph INGRESS["Transport"]
-      MCP_SRV["MCP Server<br/><code>SSE (/sse) · Streamable HTTP (/mcp) · stdio</code>"]
-      A2A_SRV["A2A Server<br/><code>Agent Card · message/send · tasks/get</code>"]
-      REST_SRV["REST API v1<br/><code>/api/v1/embed · /api/v1/do · /health<br/>(JSON Schema contracts)</code>"]
-    end
-
-    %% 2. Sovereign layer & routing
-    subgraph SOVEREIGN["Sovereign layer"]
-      TOOLS["5 Sovereign Tools (CONTRACT-01)<br/><code>tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph</code>"]
-      ROUTER["Guild matcher<br/><code>• RRF (Reciprocal Rank Fusion) BGE-M3 + BM25<br/>• Fast-Paths: lessons → triggers → anchors</code>"]
-      RETRIEVAL_GATE["🚧 [Roadmap I-6] Retrieval Gate<br/><code>intent pre-filter for trivial requests (Waku pattern)</code>"]
-    end
-
-    %% 3. SilvaDB memory
-    subgraph MEMORY["SilvaDB & cognitive state"]
-      direction LR
-      SILVA_STORE[("SilvaDB<br/><code>SQLite WAL + FTS5</code>")]
-      SILVA_GRAPH["Vector + graph engine<br/><code>• HNSW index (1024-dim) · Personalized PageRank<br/>• FSRS-5 decay · night consolidation</code>"]
-      POSTCARD_MIG["🚧 [Roadmap] bincode → postcard<br/><code>general dependency evaluation, no fixed date</code>"]
-    end
-
-    %% 4. Local inference
-    subgraph INFER_GROUP["Inference Engine"]
-      INFER["ONNX Runtime<br/><code>• BGE-M3 embeddings · Jina reranker<br/>• falls back to BM25-only without ONNX</code>"]
-      SPARSE_ENG["🚧 [2026-08-23 research proposal] Sparse Vectors<br/><code>BGE-M3 sparse/SPLADE — investigated, not yet on the roadmap</code>"]
-    end
-
-    %% 5. Execution
-    subgraph EXEC["Task execution & collaboration"]
-      GUILDS_RUN["Python guilds (guilds/), spawned on demand over stdio<br/><code>e.g. llama_backend runs llama.cpp/GGUF generative inference</code>"]
-      COLOQUIO_CH["Coloquio<br/><code>multi-agent channels, persisted in SilvaDB</code>"]
-      WORK_CONTRACTS["Work Contracts (M10)<br/><code>bounded scope, budget, vote</code>"]
-      COLOQUIO_WAKE["🚧 [Roadmap] Wake-Up Scheduling<br/><code>two-tier: native + universal polling, for reactive agents</code>"]
-    end
-
-    %% 6. Federation mesh
-    subgraph FEDERATION["tylluan-link mesh"]
-      PEERS_DB[("peers.db")]
-      P2P_MESH["Gossip + Kademlia DHT<br/><code>• Noise NK/XK (Ed25519↔X25519) · ChaCha20-Poly1305</code>"]
-    end
-
-    %% Internal flows
-    INGRESS --> TOOLS
-    TOOLS --> ROUTER
-    ROUTER -.-> RETRIEVAL_GATE
-    RETRIEVAL_GATE -.-> TOOLS
-    TOOLS --> MEMORY
-    ROUTER --> GUILDS_RUN
-    ROUTER --> COLOQUIO_CH
-    ROUTER --> WORK_CONTRACTS
-    COLOQUIO_CH -.-> COLOQUIO_WAKE
-    GUILDS_RUN --> MEMORY
-    COLOQUIO_CH --> MEMORY
-    MEMORY <--> INFER
-    INFER -.-> SPARSE_ENG
-    MEMORY -.-> POSTCARD_MIG
-    MEMORY <--> FEDERATION
-  end
-
-%% =========================================================================
-%% PEER NODES
-%% =========================================================================
-  PEER_REMOTE["Remote Tylluan peers<br/><code>LAN (mDNS) / WAN (DHT)</code>"]
-
-%% External links
-  MCP_IDE -->|"SSE / HTTP"| MCP_SRV
-  A2A_CLI -->|"JSON-RPC 2.0"| A2A_SRV
-  REST_CLI -->|"HTTP REST"| REST_SRV
-  FEDERATION -->|"Noise-encrypted TCP"| PEER_REMOTE
-
-%% =========================================================================
-%% VISUAL STYLES
-%% =========================================================================
-  classDef ext fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
-  classDef ingress fill:#1e1b4b,stroke:#818cf8,color:#f8fafc,stroke-width:1.5px;
-  classDef sov fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
-  classDef mem fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
-  classDef infer fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
-  classDef exec fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
-  classDef mesh fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
-
-  %% Translucent / blueprint style for roadmap components
-  classDef future fill:#f59e0b12,stroke:#f59e0b88,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7cc;
-
-  class MCP_IDE,A2A_CLI,REST_CLI,PEER_REMOTE ext;
-  class MCP_SRV,A2A_SRV,REST_SRV ingress;
-  class TOOLS,ROUTER sov;
-  class SILVA_STORE,SILVA_GRAPH mem;
-  class INFER infer;
-  class GUILDS_RUN,COLOQUIO_CH,WORK_CONTRACTS exec;
-  class PEERS_DB,P2P_MESH mesh;
-  class RETRIEVAL_GATE,POSTCARD_MIG,SPARSE_ENG,COLOQUIO_WAKE future;
-
-  %% Semantic-color circuits (indices verified 0..18)
-  linkStyle 0,1,4 stroke:#34d399,stroke-width:2px;
-  linkStyle 2,3,8,12,13 stroke:#f59e0baa,stroke-width:1.5px,stroke-dasharray:3 3;
-  linkStyle 5,6,7 stroke:#60a5fa,stroke-width:1.5px;
-  linkStyle 9,10 stroke:#4ade80,stroke-width:1.5px;
-  linkStyle 11 stroke:#c084fc,stroke-width:1.5px;
-  linkStyle 14 stroke:#38bdf8,stroke-width:1.5px;
-  linkStyle 15,16,17 stroke:#818cf8,stroke-width:1.5px;
-  linkStyle 18 stroke:#38bdf8,stroke-width:2px;
-```
 
 ## Stack
 
