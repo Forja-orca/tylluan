@@ -305,39 +305,33 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ## Architecture
 
-```
-┌───────────────────────────┐   ┌───────────────────────────────┐
-│      MCP Clients          │   │   External A2A agents         │
-│ (Claude, Cursor, VS Code, │   │ (LangGraph, CrewAI, any        │
-│  LM Studio, any SSE)      │   │  Agent2Agent-compliant client) │
-└─────────────┬─────────────┘   └───────────────┬────────────────┘
-              │ SSE / HTTP Streamable            │ JSON-RPC 2.0
-┌─────────────▼──────────────────────────────────▼────────────────┐
-│                    tylluan-nexus (:4000)                         │
-│                                                                   │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐│
-│  │  Core Memory     │  │  SilvaDB         │  │  A2A Server      ││
-│  │  persona         │  │  SQLite WAL      │  │  Agent Card      ││
-│  │  preferences     │  │  BGE-M3 vectors  │  │  message/send    ││
-│  └─────────────────┘  │  FTS5 BM25       │  │  tasks/get       ││
-│                        │  knowledge graph │  └──────────────────┘│
-│  ┌─────────────────┐  │  episodic nodes  │                      │
-│  │  Guild Registry  │  │  salience decay  │  ┌──────────────────┐│
-│  │  49 Python tools │  └──────────────────┘  │  Embeddings: ONNX ││
-│  │  auto-discovered │  ┌──────────────────┐  │  CPU / DirectML / ││
-│  └─────────────────┘  │  Coloquio         │  │  CUDA · Generative││
-│                        │  multi-agent      │  │  llama.cpp+GGUF  ││
-│                        │                   │  └──────────────────┘│
-│  ┌──────────────────────────────────────┐                        │
-│  │  Federation + Mesh Layer             │                        │
-│  │  peers.db · Noise NK / ChaCha20     │                        │
-│  │  DHT Kademlia · Gossip · Noise XK   │                        │
-│  └──────────────────────────────────────┘                        │
-└───────────────────────────────────────────────────────────────────┘
-               │ Noise NK / ChaCha20-Poly1305 encrypted
-        ┌──────▼──────┐
-        │  Peer nodes │  (LAN / VPN / WAN via DHT)
-        └─────────────┘
+```mermaid
+flowchart TB
+  MCP["MCP Clients<br/>Claude · Cursor · VS Code · LM Studio · any SSE"] -->|"SSE / HTTP Streamable"| NEXUS
+  A2AEXT["External A2A agents<br/>LangGraph · CrewAI · any Agent2Agent-compliant client"] -->|"JSON-RPC 2.0"| NEXUS
+
+  subgraph NEXUS["tylluan-nexus (:4000)"]
+    direction TB
+    MEM["Core Memory<br/>persona · preferences"]
+    SILVA[("SilvaDB<br/>SQLite WAL · BGE-M3 vectors<br/>FTS5 BM25 · knowledge graph<br/>episodic nodes · salience decay")]
+    A2AS["A2A Server<br/>Agent Card · message/send · tasks/get"]
+    GUILDS["Guild Registry<br/>49 Python tools, auto-discovered"]
+    COLOQUIO["Coloquio<br/>multi-agent channel"]
+    INFER["Embeddings: ONNX (CPU/DirectML/CUDA)<br/>Generative: llama.cpp + GGUF"]
+    MESH["Federation + Mesh<br/>peers.db · Noise NK/XK · ChaCha20-Poly1305<br/>DHT Kademlia · Gossip"]
+
+    MEM --> SILVA
+    GUILDS --> SILVA
+    COLOQUIO --> SILVA
+    A2AS --> MEM
+    SILVA --> INFER
+    SILVA --> MESH
+  end
+
+  MESH -->|"Noise NK/XK · ChaCha20-Poly1305 encrypted"| PEERS["Peer nodes<br/>LAN / VPN / WAN via DHT"]
+
+  classDef core fill:#15181d,stroke:#34d399,color:#e8e6e1,stroke-width:1.5px;
+  class MEM,SILVA,A2AS,GUILDS,COLOQUIO,INFER,MESH core;
 ```
 
 ## Stack
@@ -449,10 +443,6 @@ Full source in [examples/](examples/).
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
 | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) | Detailed setup guide |
 | [docs/concepts/FEDERATION_V3.md](docs/concepts/FEDERATION_V3.md) | Federation protocol spec |
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Forja-orca/tylluan&type=Date)](https://star-history.com/#Forja-orca/tylluan&Date)
 
 ## How to help
 
