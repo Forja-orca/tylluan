@@ -296,15 +296,22 @@ async fn test_no_echo_loop() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_auto_sync_config_zero_disables() {
+    // REAL BUG FIX (2026-08-23, config-muerta gate G1): this test always
+    // set/asserted `federation.auto_sync_interval_secs` -- a field that
+    // spawn_auto_sync() (api_federation.rs) never actually reads. It was a
+    // tautology: the assertion only checked that the value the test itself
+    // set was still there, never verifying real disable behavior. The real
+    // interval spawn_auto_sync reads is `silva.sync_interval_ms` -- found
+    // while removing auto_sync_interval_secs as genuinely dead config.
     let state = test_state().await;
-    // Set auto-sync interval to 0
-    state.config.write().await.federation.auto_sync_interval_secs = 0;
-    
+    // Set the REAL sync interval to 0
+    state.config.write().await.silva.sync_interval_ms = 0;
+
     // Call spawn_auto_sync (should terminate immediately since interval is 0)
     tylluan_kernel::transport::http::api_v1::api_federation::spawn_auto_sync(state.clone());
-    
+
     // We shouldn't see background loop running. Wait a bit and verify state is ok.
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     // Just a sanity check that the system is stable and alive.
-    assert_eq!(state.config.read().await.federation.auto_sync_interval_secs, 0);
+    assert_eq!(state.config.read().await.silva.sync_interval_ms, 0);
 }
