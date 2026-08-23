@@ -4502,6 +4502,7 @@ dependencies = [
  "image",
  "instant-distance",
  "keyring",
+ "libloading",
  "lru",
  "mdns-sd",
  "memmap2",
