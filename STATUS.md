@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-22 · HEAD `64d8c7c` · v0.16.0 (Cargo.toml)
+> Last updated: 2026-08-22 · HEAD `ab16bf7` · v0.16.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,9 +33,15 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `64d8c7c` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `ab16bf7` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**Kernel vivo (2026-08-23):** rebuild autorizado y confirmado a mitad de sesión -- `:4000/health` reportó `e337836` = HEAD exacto en ese momento, cerrando el gap de 22 commits que había bloqueado G5. Desde entonces este HEAD avanzó 1 commit más (`64d8c7c`, exclusión de `vision_moondream` del catálogo enrutable) que el kernel vivo todavía no tiene -- drift normal y esperado entre rebuilds, no una alarma. Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado.
+**Kernel vivo (2026-08-23):** rebuild autorizado y confirmado a mitad de sesión -- `:4000/health` reportó `e337836` = HEAD exacto en ese momento, cerrando el gap de 22 commits que había bloqueado G5. Desde entonces este HEAD avanzó varios commits más que el kernel vivo todavía no tiene -- drift normal y esperado entre rebuilds, no una alarma. Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado.
+
+**Gobernanza de repo (2026-08-23, "Cinco Pilares para la Autonomía Segura" adaptado al tamaño real del equipo):**
+- **Proveniencia mínima viable**: las 11 GitHub Actions de terceros usadas en los 5 workflows están fijadas por SHA de commit, no por tag flotante (`983fa92`) -- defensa barata contra el mismo tipo de incidente que `CODEOWNERS` ya citaba (`tj-actions/changed-files`).
+- **CODEOWNERS extendido a `main`** (`ab16bf7`): `require_code_owner_reviews=true` en la protección real de la rama, activado tras el episodio Grok Build (PR externo con una regresión de seguridad real que podía haber mergeado sin revisión de nadie). `required_approving_review_count` se queda en 0 a propósito -- el modelo real de este repo es un mantenedor humano verificando y empujando diffs de la flota directamente, no PRs internos.
+- **`enforce_admins=true` probado y revertido en la misma sesión**: bloqueó mi propio push directo al instante -- hallazgo real, no teórico. Adoptar esa pieza del pilar de verdad exige pasar todo el flujo de trabajo a PRs, una decisión de equipo pendiente, no un flag que se activa a media sesión.
+- Lista de checks requeridos en `main` ampliada de 1 a 5 (`Rust — build + test`, `Docs — STATUS.md HEAD citation`, `Docs — README test count`, `Boot smoke — no ONNX`, `CodeQL`) -- protege cualquier PR externo futuro sin afectar el push directo del mantenedor.
 
 ### Ciclo 2026-08-21: tylluan_do arg-forwarding bug + CI toolchain drift + frontend Fase 1
 
