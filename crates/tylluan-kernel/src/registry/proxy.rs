@@ -368,7 +368,7 @@ impl HttpMcpProxy {
             "id": init_id,
             "params": {
                 "protocolVersion": "2024-11-05",
-                "clientInfo": { "name": "tylluan-nexus", "version": "3.0.0" },
+                "clientInfo": { "name": "tylluan-nexus", "version": env!("CARGO_PKG_VERSION") },
                 "capabilities": { "tools": {} }
             }
         });
@@ -1028,7 +1028,7 @@ impl SseMcpProxy {
         // Initialize
         let _init = self.jsonrpc("initialize", serde_json::json!({
             "protocolVersion": "2024-11-05",
-            "clientInfo": { "name": "tylluan-nexus", "version": "3.0.0" },
+            "clientInfo": { "name": "tylluan-nexus", "version": env!("CARGO_PKG_VERSION") },
             "capabilities": { "tools": {} }
         })).await?;
 

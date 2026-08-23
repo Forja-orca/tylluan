@@ -286,7 +286,7 @@ pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResp
         "schema_version": "1.0",
         "system": {
             "name": "TylluanNexus o3",
-            "version": "3.0.0",
+            "version": env!("CARGO_PKG_VERSION"),
             "description": "Sovereign cognitive memory kernel. Local CPU-only. No cloud. No OpenAI. BGE-M3 embeddings + Jina Reranker. 90% Recall@5 on LongMemEval-S (frontier tier).",
             "endpoint": format!("http://{}:{}", host, port),
             "mcp_transports": {
