@@ -72,8 +72,32 @@ if [ "$lag" -le "$MAX_LAG" ]; then
     exit 0
 fi
 
+# A commit-count gap can be entirely cosmetic: build.rs embeds whatever HEAD
+# was AT BUILD TIME, so any commit merged after that build -- even a docs
+# typo fix or a CI-only change -- inflates $lag with zero actual behavior
+# difference in the running binary. Found live 2026-08-23: a real rebuild
+# reported "4 commits behind" when the diff across those 4 commits touched
+# only scripts/CI/docs/a Python guild -- zero Rust kernel source changed.
+# Check whether the gap actually touches anything the binary could care
+# about before alarming over a number that means nothing on its own.
+kernel_paths_changed=$(git diff --name-only "$live_commit"..HEAD -- \
+    crates/tylluan-kernel/src crates/tylluan-link/src crates/tylluan-fsrs/src \
+    Cargo.toml Cargo.lock crates/tylluan-kernel/build.rs 2>/dev/null | wc -l)
+
+if [ "$kernel_paths_changed" -eq 0 ]; then
+    echo ""
+    echo "ℹ️  Live kernel is ${lag} commits behind HEAD, but none of those commits"
+    echo "touch kernel source (crates/tylluan-kernel|link|fsrs/src, Cargo.toml/lock,"
+    echo "build.rs) -- the running binary is functionally current. The commit hash"
+    echo "mismatch is cosmetic (build.rs bakes in whatever HEAD was at build time;"
+    echo "any later commit, even docs-only, inflates this count with zero real"
+    echo "drift). No rebuild needed on this basis alone."
+    exit 0
+fi
+
 echo ""
-echo "❌ Live kernel is ${lag} commits behind HEAD."
+echo "❌ Live kernel is ${lag} commits behind HEAD, and ${kernel_paths_changed} of the"
+echo "changed files touch real kernel source -- this IS functional drift."
 echo ""
 echo "Every commit merged since ${live_commit} is NOT active in the running process."
 echo "Rebuild and restart to close the gap:"
