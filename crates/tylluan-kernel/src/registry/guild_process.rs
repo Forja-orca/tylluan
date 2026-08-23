@@ -9,7 +9,7 @@
 //! - **Linux/macOS/RPi**: Tries `python3` first, then `python`
 
 use crate::registry::proxy::{McpProxy, HttpMcpProxy, SseMcpProxy, ProxyKind, error_result};
-use crate::config::TimeoutsConfig;
+use crate::config::{TimeoutsConfig, GuildTimeoutsConfig};
 use anyhow::{Result, bail};
 use rmcp::model::{CallToolRequestParam, CallToolResult, Tool};
 use serde::{Deserialize, Serialize};
@@ -792,6 +792,15 @@ GuildLauncher::Python { module_path } => {
 }
 
 /// Registry that manages all guild processes and provides tool routing.
+/// Timeout tier a guild belongs to, per `[guilds.timeouts]`'s own doc
+/// comments (config.rs) -- see `GuildRegistry::guild_timeout_category()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GuildTimeoutCategory {
+    System,
+    Analysis,
+    Heavy,
+}
+
 pub struct GuildRegistry {
     /// All known guilds, keyed by name
     pub guilds: HashMap<String, GuildProcess>,
@@ -803,6 +812,17 @@ pub struct GuildRegistry {
     pub timeout_secs: u64,
     /// Handsake and call timeouts
     pub timeouts: TimeoutsConfig,
+    /// Category-specific guild call timeouts ([guilds.timeouts] in tylluan.toml).
+    /// `None` (the default for every existing `GuildRegistry::new()` call
+    /// site, including all test helpers) preserves the pre-existing flat
+    /// `timeouts.tool_call_secs` behavior exactly. Only `Some(..)` -- set via
+    /// `with_guild_timeouts()`, which main.rs calls with the real config --
+    /// overrides it per guild category. This distinction matters: this
+    /// config's own defaults (15s/60s/180s) are far shorter than
+    /// `tool_call_secs`'s default (3600s) -- silently applying them to every
+    /// caller, including tests that spawn real guild subprocesses, would
+    /// have been a real regression, not a neutral default.
+    pub guild_timeouts: Option<GuildTimeoutsConfig>,
     /// Max simultaneous calls per guild (configurable)
     pub max_concurrent: usize,
     /// Optional metrics database connection for persisting guild metrics
@@ -818,8 +838,81 @@ impl GuildRegistry {
             guilds_dir,
             timeout_secs,
             timeouts,
+            guild_timeouts: None,
             max_concurrent,
             db_conn: None,
+        }
+    }
+
+    /// Wire real per-category guild timeouts (system/analysis/heavy) into an
+    /// already-constructed registry. Builder-style, matching this codebase's
+    /// existing `.with_curriculum()`/`.with_hormones()` pattern -- opt-in, so
+    /// every pre-existing `GuildRegistry::new()` call site (7+ test helpers)
+    /// keeps compiling unchanged.
+    ///
+    /// Found 2026-08-23 (config-muerta gate G1 triage): [guilds.timeouts]
+    /// (system_guild_ms/analysis_guild_ms/heavy_guild_ms) was declared,
+    /// defaulted, and documented, but never actually read anywhere -- every
+    /// guild shared one flat `timeouts.tool_call_secs` ceiling regardless of
+    /// category. Production (`tylluan.toml`) set that flat value generously
+    /// (3600s, safe for heavy guilds like deep_analysis, but means a hung
+    /// `bash` call would wait up to an hour before erroring). The example
+    /// config new users copy (`tylluan.example.toml`) set it to 120s --
+    /// too short for genuinely heavy guilds. Differentiating by category
+    /// fixes both: light guilds fail fast, heavy guilds keep real headroom.
+    pub fn with_guild_timeouts(mut self, guild_timeouts: GuildTimeoutsConfig) -> Self {
+        self.guild_timeouts = Some(guild_timeouts);
+        self
+    }
+
+    /// Category for a guild name, per the categories [guilds.timeouts]'s own
+    /// doc comments already defined (config.rs) but never wired to anything.
+    /// Unknown guilds fall back to "analysis" (the middle tier) rather than
+    /// either extreme -- a new guild nobody has categorized yet should get a
+    /// reasonable default, not the shortest or the longest ceiling by luck.
+    fn guild_timeout_category(name: &str) -> GuildTimeoutCategory {
+        const SYSTEM: &[&str] = &["bash", "git", "filesystem", "monitor"];
+        const HEAVY: &[&str] = &[
+            "docker", "database", "pdf", "vision", "vision_moondream",
+            "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge",
+            "deep_web_research", "audio_tools", "ffmpeg_tools",
+        ];
+        if SYSTEM.contains(&name) {
+            GuildTimeoutCategory::System
+        } else if HEAVY.contains(&name) {
+            GuildTimeoutCategory::Heavy
+        } else {
+            GuildTimeoutCategory::Analysis
+        }
+    }
+
+    /// Effective tool-call timeout (seconds) for a specific guild: the
+    /// category-specific value from `guild_timeouts` if it's been wired via
+    /// `with_guild_timeouts()`, otherwise falls back to the flat
+    /// `timeouts.tool_call_secs` (this registry's pre-existing behavior,
+    /// preserved exactly for anyone who hasn't opted in yet).
+    fn effective_tool_call_secs(&self, guild_name: &str) -> u64 {
+        let Some(gt) = &self.guild_timeouts else {
+            return self.timeouts.tool_call_secs;
+        };
+        match Self::guild_timeout_category(guild_name) {
+            GuildTimeoutCategory::System => gt.system_guild_ms / 1000,
+            GuildTimeoutCategory::Analysis => gt.analysis_guild_ms / 1000,
+            GuildTimeoutCategory::Heavy => gt.heavy_guild_ms / 1000,
+        }
+    }
+
+    /// `self.timeouts`, but with `tool_call_secs` swapped for this specific
+    /// guild's category-appropriate value (or left untouched if
+    /// `with_guild_timeouts()` was never called -- see `guild_timeouts`'s
+    /// doc comment). `Guild::spawn()` is an instance method with no access
+    /// to the registry's state, so the per-guild adjustment has to happen
+    /// here, at the two call sites that already hold both `self` and the
+    /// guild being spawned, rather than inside `Guild::spawn()` itself.
+    fn timeouts_for(&self, guild_name: &str) -> TimeoutsConfig {
+        TimeoutsConfig {
+            handshake_secs: self.timeouts.handshake_secs,
+            tool_call_secs: self.effective_tool_call_secs(guild_name),
         }
     }
 
@@ -1108,8 +1201,9 @@ impl GuildRegistry {
             .collect();
 
         for name in core_names {
+            let effective_timeouts = self.timeouts_for(&name);
             if let Some(guild) = self.guilds.get_mut(&name) {
-                match guild.spawn(&self.guilds_dir, &self.timeouts).await {
+                match guild.spawn(&self.guilds_dir, &effective_timeouts).await {
                     Ok(_) => {}
                     Err(e) => {
                         error!("Failed to spawn core guild '{}': {}", name, e);
@@ -1148,7 +1242,7 @@ impl GuildRegistry {
         }
 
         let guilds_dir = self.guilds_dir.clone();
-        let timeouts = self.timeouts.clone();
+        let timeouts = self.timeouts_for(guild_name);
         if let Some(guild) = self.guilds.get_mut(guild_name) {
             match guild.spawn(&guilds_dir, &timeouts).await {
                 Ok(_) => {

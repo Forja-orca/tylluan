@@ -110,9 +110,6 @@ pub struct TylluanConfig {
     pub vision: VisionConfig,
 
     #[serde(default)]
-    pub tui: TuiConfig,
-
-    #[serde(default)]
     pub guilds: GuildsConfig,
 
     #[serde(default)]
@@ -123,9 +120,6 @@ pub struct TylluanConfig {
 
     #[serde(default)]
     pub federation_peers: Vec<crate::federation::FederationPeer>,
-
-    #[serde(default)]
-    pub proxy: ProxyConfig,
 
     #[serde(default)]
     pub external_providers: Vec<ExternalProvider>,
@@ -179,18 +173,14 @@ pub struct TylluanConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationConfig {
-    #[serde(default = "default_auto_sync_interval")]
-    pub auto_sync_interval_secs: u64,
     #[serde(default = "default_auto_sync_mode")]
     pub auto_sync_mode: String,
 }
-fn default_auto_sync_interval() -> u64 { 3600 }
 fn default_auto_sync_mode() -> String { "push".to_string() }
 
 impl Default for FederationConfig {
     fn default() -> Self {
         Self {
-            auto_sync_interval_secs: 3600,
             auto_sync_mode: "push".to_string(),
         }
     }
@@ -487,24 +477,6 @@ impl Default for VisionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TuiConfig {
-    #[serde(default = "default_tui_enabled")]
-    pub enabled: bool,
-
-    #[serde(default = "default_refresh_ms")]
-    pub refresh_ms: u64,
-}
-
-impl Default for TuiConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_tui_enabled(),
-            refresh_ms: default_refresh_ms(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuildsConfig {
     #[serde(default)]
     pub core: CoreGuildsConfig,
@@ -622,24 +594,6 @@ pub struct ExternalMcpConfig {
     /// Whether this server is active (spawned). False = registered but dormant (e.g. auto-discovered).
     #[serde(default = "default_true")]
     pub active: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
-pub struct ProxyConfig {
-    #[serde(default)]
-    pub wsl: WslProxyConfig,
-}
-
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WslProxyConfig {
-    #[serde(default = "default_bool_false")]
-    pub enabled: bool,
-    #[serde(default = "default_bool_true")]
-    pub auto_detect: bool,
-    #[serde(default = "default_wsl_port")]
-    pub fallback_port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1059,16 +1013,6 @@ fn default_wsl_bridge_port() -> u16 { 3031 }
 fn default_max_requests_per_agent() -> u32 { 60 }
 
 fn default_model() -> String { "local-v3".into() }
-
-impl Default for WslProxyConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            auto_detect: true,
-            fallback_port: 3031,
-        }
-    }
-}
 
 // ─── Security Configuration (Sandbox + ACL) ─────────────────────────
 
@@ -1621,15 +1565,11 @@ fn default_dimensions() -> u32 {
     crate::router::embeddings::resolve_dimension(&default_embedding_model())
 }
 fn default_vision_model_path() -> String { "HuggingFaceTB/SmolVLM2-256M-Instruct".into() }
-fn default_tui_enabled() -> bool { true }
-fn default_refresh_ms() -> u64 { 1000 }
 fn default_always_on() -> Vec<String> { vec!["bash".into(), "memory".into(), "filesystem".into()] }
 fn default_lazy_timeout() -> u64 { 300 }
 fn default_handshake_secs() -> u64 { 120 }     // 2 mins default
 fn default_tool_call_secs() -> u64 { 3600 }   // 1 hour default (for slow models)
-fn default_bool_false() -> bool { false }
 fn default_bool_true() -> bool { true }
-fn default_wsl_port() -> u16 { 3031 }
 fn default_silva_db_path() -> String { "./data/silva.db".into() }
 fn default_sync_interval() -> u64 { 5000 }
 fn default_decay_interval_hours() -> u64 { 6 }

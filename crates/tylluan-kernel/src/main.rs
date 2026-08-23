@@ -704,7 +704,7 @@ async fn main() -> anyhow::Result<()> {
         config.guilds.core.lazy_load_timeout_secs,
         config.nexus.timeouts.clone(),
         config.guilds.guild_max_concurrent_calls,
-    );
+    ).with_guild_timeouts(config.timeouts.clone());
 
     if let Err(e) = registry_raw.load() {
         warn!("⚠️ [T27] Failed to load registry: {}", e);
