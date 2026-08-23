@@ -17,7 +17,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 - **Retrieval quality context**: the 82% Recall@5 headline figure (LongMemEval-S) sits alongside a **Precision@5 of 16.4%** in the same results file — both real, but only one made it to marketing copy. Live routing accuracy on that same external benchmark run was ~41% (hybrid), vs the 56-64% measured on the team's own curated I-7/J-13 dataset — the gap is dataset difficulty, not a regression, but worth stating plainly rather than leading with the friendlier number.
 - Not a gap, confirmed correct on inspection: the MCP protocol version negotiation (`mcp.rs:407`) is real and dynamic (echoes whatever `protocolVersion` the client requests, 4 versions supported `2024-11-05`–`2026-07-28`). An external report reading a `2025-03-26` negotiated session as a bug was itself mistaken — that's what its own older test client asked for.
 
-**Overall read**: this is a serious, fast-moving research lab with real engineering (compiled kernel, 771 real tests, a CI gate that catches doc/test-count drift and has already caught and fixed several real regressions this cycle) — not yet a hardened, installable product for strangers. The project's own `DISCLAIMER.md` already says this; the gap above is between that honest self-assessment and what the README's quick-start framing implies for a first-time user.
+**Overall read**: this is a serious, fast-moving research lab with real engineering (compiled kernel, 772 real tests, a CI gate that catches doc/test-count drift and has already caught and fixed several real regressions this cycle) — not yet a hardened, installable product for strangers. The project's own `DISCLAIMER.md` already says this; the gap above is between that honest self-assessment and what the README's quick-start framing implies for a first-time user.
 
 ## CI
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `38c5200` · **771 total** lib green (690 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `38c5200` · **772 total** lib green (691 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
 **✅ Kernel vivo al día (2026-08-22):** rebuild confirmado, `:4000/health` reporta el mismo commit que este HEAD (0 commits de gap) — cerrando la brecha de 16+ commits detectada antes en este mismo ciclo. Verificar en cualquier momento con `bash scripts/check_live_kernel_drift.sh` (local-only, no es un gate de CI — ver el propio script para por qué).
 
