@@ -1,7 +1,15 @@
-# CODEOWNERS — enforced on `tylluan-montaraz` (community branch) via branch
-# protection's "require code owner reviews". A community PR touching any of
-# these paths cannot merge without a review from the team account, regardless
-# of how many other approvals it has.
+# CODEOWNERS — enforced on `main` (2026-08-23, extended from
+# `tylluan-montaraz` after the Grok Build episode: an external PR proposed a
+# real security regression, #14, and merging required zero review from
+# anyone) and `tylluan-montaraz` (community branch), both via branch
+# protection's "require code owner reviews". A PR touching any of these
+# paths cannot merge without a review from the team account, regardless of
+# how many other approvals it has. `required_approving_review_count` stays
+# at 0 on `main` deliberately — this repo's real day-to-day model is a
+# single human maintainer verifying and pushing diffs handed off by an AI
+# fleet directly, not a PR-per-change workflow; this rule exists to gate
+# EXTERNAL PRs (forks, unknown agents) on these specific high-risk paths,
+# not to force the internal fleet's own workflow through PRs it doesn't use.
 #
 # Rationale (2026-07-26): this repo now accepts external community
 # contributions via fork+PR into `tylluan-montaraz`. CI workflows and
