@@ -15,6 +15,19 @@ path = "src/lib.rs"
 
 [dependencies]
 regex = "1"
+# Used only to PROBE whether libonnxruntime is loadable before ever calling
+# into `ort` -- see main.rs's onnx_runtime_available(). `ort`'s load-dynamic
+# feature panics (not Result::Err) on a missing library, and that panic is
+# NOT catchable: this workspace's release profile sets panic="abort", under
+# which std::panic::catch_unwind is a documented no-op (it doesn't even
+# attempt to catch -- unwinding itself is compiled out). Confirmed live
+# 2026-08-23: the catch_unwind wrapper added in T206 passed every local
+# cargo check/test (debug profile, panic="unwind" by default) but did NOT
+# prevent the real release binary from panicking on a CI runner with no
+# ONNX installed -- G2's boot-smoke-no-onnx job caught it on its first real
+# run. Already a transitive dependency (via ort itself); pinned here as
+# direct so this crate can call it without depending on ort's internals.
+libloading = "0.8"
 tylluan-common = { path = "../tylluan-common" }
 tylluan_link = { path = "../tylluan-link", package = "tylluan-link" }
 tylluan-fsrs = { path = "../tylluan-fsrs" }

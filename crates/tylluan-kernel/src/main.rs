@@ -224,6 +224,47 @@ fn enforce_security_guard(config: &TylluanConfig, cli_token: &Option<String>) {
     }
 }
 
+/// Checks whether the ONNX Runtime shared library is actually loadable,
+/// WITHOUT ever calling into `ort` -- see the long comment at this
+/// function's call site for why this exists (catch_unwind cannot save us
+/// under `panic = "abort"`, confirmed live 2026-08-23 via G2's CI job).
+///
+/// Mirrors `ort`'s own load-dynamic resolution order: `ORT_DYLIB_PATH` env
+/// var first if set (same variable `ort` and this project's docs already
+/// reference for CUDA/custom builds), otherwise the platform-default shared
+/// library name resolved through the OS's normal dynamic-linker search path
+/// (LD_LIBRARY_PATH on Linux, PATH on Windows, DYLD_LIBRARY_PATH on macOS --
+/// all handled by `libloading`/`dlopen`/`LoadLibrary` themselves, nothing
+/// this function needs to reimplement).
+fn onnx_runtime_available() -> bool {
+    let candidate = std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
+        if cfg!(target_os = "windows") {
+            "onnxruntime.dll".to_string()
+        } else if cfg!(target_os = "macos") {
+            "libonnxruntime.dylib".to_string()
+        } else {
+            "libonnxruntime.so".to_string()
+        }
+    });
+    // Safety: we only probe loadability and immediately drop the handle --
+    // no symbols are looked up, no code from the library is executed beyond
+    // whatever the dynamic linker itself runs on load (identical to what
+    // `ort` would trigger anyway if this check passes and it loads for
+    // real). `libloading::Library::new` is unsafe because arbitrary
+    // dynamic-library load/init code is inherently unsafe in general, not
+    // because of anything specific to this call.
+    match unsafe { libloading::Library::new(&candidate) } {
+        Ok(lib) => {
+            drop(lib);
+            true
+        }
+        Err(e) => {
+            info!("🔍 ONNX Runtime probe: '{}' not loadable ({}) -- will skip ort entirely, BM25-only", candidate, e);
+            false
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env file if present
@@ -580,24 +621,44 @@ async fn main() -> anyhow::Result<()> {
     let matcher = matcher.with_hormones(hormones_shared.clone());
     let matcher = Arc::new(matcher);
 
-    // T206 (2026-08-22): `ort` (v2.0.0-rc.10, feature load-dynamic) PANICS instead
-    // of returning Err when libonnxruntime.so/.dll is missing — without
-    // catch_unwind the whole kernel process dies at boot. Treat a panic the
-    // same as the Err arm: warn + fallback to pure RRF, never crash the boot.
-    let reranker = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device))
-    })) {
-        Ok(Ok(r)) => {
-            info!("🔀 Reranker BGE listo");
-            Some(Arc::new(r))
-        }
-        Ok(Err(e)) => {
-            warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
-            None
-        }
-        Err(_) => {
-            warn!("⚠️ Reranker: ort panicó al cargar (ONNX Runtime ausente o incompatible) -- fallback a RRF puro");
-            None
+    // T206 (2026-08-22) wrapped this in catch_unwind believing it made the boot
+    // panic-proof when libonnxruntime is missing. Verified WRONG 2026-08-23 by
+    // G2's boot-smoke-no-onnx CI job on its first real run: this workspace's
+    // release profile sets `panic = "abort"` (Cargo.toml), and under that
+    // strategy catch_unwind is a documented no-op -- there is no unwind to
+    // catch, so it doesn't even try. `cargo test`/`cargo check` never caught
+    // this because the debug profile defaults to `panic = "unwind"`; only a
+    // real `--release` boot exercises the code path that actually fails.
+    // Researched real alternatives before fixing (Rustonomicon on unwinding;
+    // users.rust-lang.org "Catching panic at FFI boundary, iff unwinding
+    // enabled"; ort's own linking docs on ORT_DYLIB_PATH): the only reliable
+    // fix under panic=abort is to never let `ort` panic in the first place --
+    // probe whether the library is actually loadable via a real Result
+    // (onnx_runtime_available(), below) before ever calling into `ort`.
+    let reranker = if !onnx_runtime_available() {
+        warn!("⚠️ Reranker: ONNX Runtime library not loadable (checked before calling into ort) -- fallback a RRF puro");
+        None
+    } else {
+        // catch_unwind kept as defense-in-depth for panics inside `ort` that
+        // aren't the missing-library case this session found (e.g. a present
+        // but incompatible/corrupt library) -- it still works whenever this
+        // binary happens to run under panic=unwind (tests, a debug build),
+        // and costs nothing when it doesn't.
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device))
+        })) {
+            Ok(Ok(r)) => {
+                info!("🔀 Reranker BGE listo");
+                Some(Arc::new(r))
+            }
+            Ok(Err(e)) => {
+                warn!("⚠️ Reranker no disponible (fallback a RRF puro): {}", e);
+                None
+            }
+            Err(_) => {
+                warn!("⚠️ Reranker: ort panicó al cargar (ONNX Runtime ausente o incompatible) -- fallback a RRF puro");
+                None
+            }
         }
     };
 
@@ -1713,3 +1774,42 @@ fn fastembed_model_cached(model_name: &str) -> bool {
     cached
 }
 
+
+#[cfg(test)]
+mod onnx_probe_tests {
+    use super::onnx_runtime_available;
+    use std::sync::Mutex;
+
+    // ORT_DYLIB_PATH is process-global env state -- serialize these two
+    // tests so they can't interleave and clobber each other's override.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn missing_library_path_is_reported_unavailable() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("ORT_DYLIB_PATH", "/definitely/does/not/exist/libonnxruntime.so"); }
+        assert!(!onnx_runtime_available(), "a nonexistent ORT_DYLIB_PATH must report unavailable, never panic");
+        unsafe { std::env::remove_var("ORT_DYLIB_PATH"); }
+    }
+
+    #[test]
+    fn loadable_system_library_is_reported_available() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // A real, always-present shared library on every platform this
+        // project targets, used only to prove the *positive* path of the
+        // probe (a real loadable library) without depending on ONNX
+        // Runtime actually being installed on the machine running this
+        // test -- CI's own docs-* and boot-smoke jobs deliberately don't
+        // have it, and this test must pass there too.
+        let real_lib = if cfg!(target_os = "windows") {
+            "kernel32.dll"
+        } else if cfg!(target_os = "macos") {
+            "libSystem.dylib"
+        } else {
+            "libc.so.6"
+        };
+        unsafe { std::env::set_var("ORT_DYLIB_PATH", real_lib); }
+        assert!(onnx_runtime_available(), "a real, always-present system library must report available");
+        unsafe { std::env::remove_var("ORT_DYLIB_PATH"); }
+    }
+}
