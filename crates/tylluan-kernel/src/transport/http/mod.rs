@@ -1212,6 +1212,14 @@ pub struct HealthQuery {
     pub verbose: Option<bool>,
 }
 
+/// Standard health response payload returned by GET /health.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HealthResponse {
+    pub status: String,
+    pub version: String,
+    pub commit: String,
+}
+
 async fn health_handler(
     State(state): State<Arc<HttpState>>,
     Query(query): Query<HealthQuery>,
@@ -1255,15 +1263,16 @@ async fn health_handler(
                 "mesh":       { "ok": p2p_sessions > 0 || dht_peers > 0,
                                 "p2p_sessions": p2p_sessions, "dht_peers": dht_peers }
             }
-        })));
+        }))).into_response();
     }
 
     let status = if ready { "ok" } else { "warming_up" };
-    (StatusCode::OK, Json(serde_json::json!({
-        "status": status,
-        "version": env!("CARGO_PKG_VERSION"),
-        "commit": env!("TYLLUAN_GIT_COMMIT"),
-    })))
+    let resp = HealthResponse {
+        status: status.to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        commit: env!("TYLLUAN_GIT_COMMIT").to_string(),
+    };
+    (StatusCode::OK, Json(resp)).into_response()
 }
 
 /// Returns the 5 sovereign MCP tools for agent discovery.

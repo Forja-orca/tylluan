@@ -1053,9 +1053,16 @@ async fn models_handler(State(state): State<Arc<HttpState>>) -> impl IntoRespons
 // BGE-M3 1024-dim embeddings via POST /api/v1/embed.
 // Exists because Python guilds (night_reasoner route_intent) need embedding
 // similarity comparisons without loading a second copy of the model.
-#[derive(serde::Deserialize)]
-struct EmbedRequest {
-    text: String,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct EmbedRequest {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct EmbedResponse {
+    pub embedding: Vec<f32>,
+    pub dimension: usize,
+    pub model: String,
 }
 
 async fn embed_handler(
@@ -1071,11 +1078,14 @@ async fn embed_handler(
         ).into_response(),
         Some(engine) => {
             match engine.embed(&req.text) {
-                Ok(embedding) => Json(serde_json::json!({
-                    "embedding": embedding,
-                    "dimension": embedding.len(),
-                    "model": "bge-m3"
-                })).into_response(),
+                Ok(embedding) => {
+                    let resp = EmbedResponse {
+                        dimension: embedding.len(),
+                        embedding,
+                        model: "bge-m3".to_string(),
+                    };
+                    Json(resp).into_response()
+                }
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({"error": e.to_string()})),

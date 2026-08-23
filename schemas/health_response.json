@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HealthResponse",
+  "description": "JSON Schema contract for GET /health and GET /api/v1/health response",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "degraded",
+        "error"
+      ],
+      "description": "Kernel health status"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semantic version of Tylluan Kernel"
+    },
+    "commit": {
+      "type": "string",
+      "minLength": 7,
+      "description": "Git commit SHA baked at build time"
+    }
+  },
+  "required": [
+    "status",
+    "version",
+    "commit"
+  ],
+  "additionalProperties": false
+}
