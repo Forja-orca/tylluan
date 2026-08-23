@@ -34,17 +34,15 @@ fn validate_json_schema(instance: &Value, schema: &Value) -> Result<(), String> 
                 }
 
                 // Additional properties check
-                if let Some(allow_additional) = schema.get("additionalProperties").and_then(|a| a.as_bool()) {
-                    if !allow_additional {
-                        if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
-                            for key in obj.keys() {
-                                if !properties.contains_key(key) {
-                                    return Err(format!("Unexpected additional property '{key}' not allowed by schema"));
-                                }
+                if let Some(allow_additional) = schema.get("additionalProperties").and_then(|a| a.as_bool())
+                    && !allow_additional
+                    && let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+                        for key in obj.keys() {
+                            if !properties.contains_key(key) {
+                                return Err(format!("Unexpected additional property '{key}' not allowed by schema"));
                             }
                         }
                     }
-                }
 
                 // Validate individual property schemas
                 if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
@@ -58,11 +56,10 @@ fn validate_json_schema(instance: &Value, schema: &Value) -> Result<(), String> 
             }
             "array" => {
                 let arr = instance.as_array().ok_or_else(|| format!("Expected array, got {instance:?}"))?;
-                if let Some(min_items) = schema.get("minItems").and_then(|m| m.as_u64()) {
-                    if (arr.len() as u64) < min_items {
+                if let Some(min_items) = schema.get("minItems").and_then(|m| m.as_u64())
+                    && (arr.len() as u64) < min_items {
                         return Err(format!("Array length {} is less than minItems {}", arr.len(), min_items));
                     }
-                }
                 if let Some(item_schema) = schema.get("items") {
                     for (idx, item) in arr.iter().enumerate() {
                         validate_json_schema(item, item_schema)
@@ -72,11 +69,10 @@ fn validate_json_schema(instance: &Value, schema: &Value) -> Result<(), String> 
             }
             "string" => {
                 let s = instance.as_str().ok_or_else(|| format!("Expected string, got {instance:?}"))?;
-                if let Some(min_len) = schema.get("minLength").and_then(|m| m.as_u64()) {
-                    if (s.len() as u64) < min_len {
+                if let Some(min_len) = schema.get("minLength").and_then(|m| m.as_u64())
+                    && (s.len() as u64) < min_len {
                         return Err(format!("String length {} is less than minLength {}", s.len(), min_len));
                     }
-                }
                 if let Some(enum_vals) = schema.get("enum").and_then(|e| e.as_array()) {
                     let is_in_enum = enum_vals.iter().any(|ev| ev.as_str() == Some(s));
                     if !is_in_enum {
@@ -100,10 +96,8 @@ fn validate_json_schema(instance: &Value, schema: &Value) -> Result<(), String> 
                     }
                 }
             }
-            "boolean" => {
-                if !instance.is_boolean() {
-                    return Err(format!("Expected boolean, got {instance:?}"));
-                }
+            "boolean" if !instance.is_boolean() => {
+                return Err(format!("Expected boolean, got {instance:?}"));
             }
             _ => {}
         }

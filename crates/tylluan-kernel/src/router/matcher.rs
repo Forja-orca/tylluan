@@ -500,12 +500,11 @@ impl GuildMatcher {
         // Confidence floor mirroring the old loop: discard matches below the
         // caller's threshold. (The old per-guild `if score >= threshold` is
         // now applied here to the top candidates.)
-        if let (Some(t1), _) = (&top1, &top2) {
-            if t1.1 < threshold {
+        if let (Some(t1), _) = (&top1, &top2)
+            && t1.1 < threshold {
                 top1 = None;
                 top2 = None;
             }
-        }
 
         // J-13: Embedding tiebreaker — when top-2 blended scores are close
         // (≤ 0.15), prefer the guild with higher pure BGE-M3 semantic similarity.
