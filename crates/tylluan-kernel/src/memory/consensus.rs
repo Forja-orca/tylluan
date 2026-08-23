@@ -128,11 +128,6 @@ impl ConsensusEngine {
         Ok(resolved_count)
     }
 
-    #[allow(dead_code)]
-    pub async fn get_conflicted_groups(&self) -> Result<Vec<Vec<String>>> {
-        Ok(vec![])
-    }
-
     /// Group nodes by deep semantic meaning (Greedy Clustering).
     /// Uses cosine similarity > 0.85 to group different terms for the same concept.
     async fn get_semantic_conflicted_groups(&self) -> Result<HashMap<String, Vec<GraphNode>>> {

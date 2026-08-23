@@ -205,14 +205,6 @@ impl GuildMatcher {
         self.curriculum.clone()
     }
 
-    /// Add a guild to the catalog.
-    #[allow(dead_code)]
-    pub fn add_guild(&mut self, descriptor: GuildDescriptor) {
-        if !self.catalog.iter().any(|g| g.name == descriptor.name) {
-            self.catalog.push(descriptor);
-        }
-    }
-
     /// Load embedding model and pre-compute embeddings for the catalog.
     /// If `allowed_guilds` is provided, only embed those guilds (toaster-friendly).
     /// Otherwise embeds ALL guilds for lazy matching.
@@ -254,12 +246,6 @@ impl GuildMatcher {
     /// Get all available guilds (for lazy loading UI)
     pub fn available_guilds(&self) -> Vec<&GuildDescriptor> {
         self.catalog.iter().collect()
-    }
-
-    /// Get the catalog.
-    #[allow(dead_code)]
-    pub fn catalog(&self) -> &[GuildDescriptor] {
-        &self.catalog
     }
 
     /// Set pre-computed embeddings on the catalog (called when semantic feature is enabled).

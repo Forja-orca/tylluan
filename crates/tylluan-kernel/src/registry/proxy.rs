@@ -284,12 +284,6 @@ impl McpProxy {
         }
     }
 
-    /// Get the guild name this proxy is connected to.
-    #[allow(dead_code)]
-    pub fn guild_name(&self) -> &str {
-        &self.guild_name
-    }
-
     /// Gracefully shut down the proxy and kill the child process.
     pub async fn shutdown(self) -> Result<()> {
         info!("🛑 McpProxy: shutting down guild '{}'", self.guild_name);
