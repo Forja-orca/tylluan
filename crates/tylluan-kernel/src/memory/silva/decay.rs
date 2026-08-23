@@ -5,6 +5,8 @@ use std::sync::Arc;
 use tracing::info;
 use tylluan_fsrs::FsrsItem;
 
+use super::DURABLE_SUMMARY_EXCLUSION;
+
 impl super::SilvaDB {
     /// Apply FSRS-based retrievability decay to nodes, then prune dead memories.
     ///
@@ -74,12 +76,12 @@ impl super::SilvaDB {
 
             // Step 3: Prune dead memories
             let pruned = conn.execute(
-                "DELETE FROM nodes
-                 WHERE type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')
+                &format!("DELETE FROM nodes
+                 WHERE type NOT IN {DURABLE_SUMMARY_EXCLUSION}
                    AND protected = 0
                    AND weight < 0.15
                    AND julianday('now') - julianday(updated_at) > 30
-                   AND fsrs_stability < 7.0",
+                   AND fsrs_stability < 7.0"),
                 [],
             )?;
 
@@ -448,10 +450,10 @@ impl super::SilvaDB {
             let mut conn = self.conn.blocking_lock();
             let ids: Vec<String> = {
                 let mut stmt = conn.prepare(
-                    "SELECT id FROM nodes
+                    &format!("SELECT id FROM nodes
                      WHERE protected = 0
-                       AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')
-                       AND salience_score < ?1"
+                       AND type NOT IN {DURABLE_SUMMARY_EXCLUSION}
+                       AND salience_score < ?1")
                 )?;
                 stmt.query_map(params![threshold], |r| r.get::<_, String>(0))?
                     .filter_map(|r| r.ok())
@@ -490,10 +492,10 @@ impl super::SilvaDB {
             // Find nodes to delete (not protected, weight < threshold, not identity)
             let ids: Vec<String> = {
                 let mut stmt = conn.prepare(
-"SELECT id FROM nodes
+                    &format!("SELECT id FROM nodes
                       WHERE protected = 0
                         AND weight < ?1
-                        AND type NOT IN ('identity', 'agent_summary', 'session_digest', 'consolidated_summary', 'archived')"
+                        AND type NOT IN {DURABLE_SUMMARY_EXCLUSION}")
                 )?;
                 stmt.query_map(params![threshold_weight], |r| r.get(0))?
                     .filter_map(|r| r.ok())
