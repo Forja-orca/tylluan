@@ -307,90 +307,129 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ```mermaid
 flowchart TB
-  subgraph CLIENTS["Clients & connected ecosystem"]
+%% =========================================================================
+%% CLIENTES Y PROTOCOLOS EXTERNOS
+%% =========================================================================
+  subgraph CLIENTS["Clientes & Ecosistema Conectado"]
     direction LR
-    MCP_IDE["MCP IDEs / assistants<br/>Claude Code · Cursor · VS Code · Claude Desktop · Qwen"]
-    A2A_CLI["External A2A clients<br/>LangGraph · CrewAI · any A2A SDK"]
-    REST_CLI["HTTP tools / UI<br/>Dashboard (React) · Tylluan CLI · curl"]
+    MCP_IDE["MCP IDEs / Asistentes<br/><code>Claude Code · Cursor · VS Code · Claude Desktop · Qwen</code>"]
+    A2A_CLI["Clientes A2A Externos<br/><code>LangGraph · CrewAI · AutoGen · SDK A2A</code>"]
+    REST_CLI["Herramientas HTTP / UI<br/><code>Dashboard (React) · Tylluan CLI · curl</code>"]
   end
 
-  subgraph NEXUS["tylluan-nexus (:4000) — single Rust process"]
+%% =========================================================================
+%% NÚCLEO TYLLUAN-NEXUS
+%% =========================================================================
+  subgraph NEXUS["tylluan-nexus (:4000) — Proceso Único en Rust"]
     direction TB
 
-    subgraph INGRESS["Transport"]
-      MCP_SRV["MCP Server<br/>SSE (/sse) · Streamable HTTP (/mcp) · stdio"]
-      A2A_SRV["A2A Server<br/>Agent Card · message/send · tasks/get"]
-      REST_SRV["REST API v1<br/>/api/v1/embed · /api/v1/do · /health<br/>(JSON Schema contracts)"]
+    %% 1. Ingress
+    subgraph INGRESS["1. Transporte & Gateways de Entrada"]
+      MCP_SRV["MCP Server<br/><code>SSE (/sse) · Streamable HTTP (/mcp) · Stdio</code>"]
+      A2A_SRV["A2A Server<br/><code>Agent Card · message/send · tasks/get</code>"]
+      REST_SRV["REST API v1<br/><code>/api/v1/embed · /api/v1/do · /health (Contratos JSON Schema)</code>"]
     end
 
-    subgraph SOVEREIGN["Sovereign layer"]
-      TOOLS["5 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph"]
-      ROUTER["Guild matcher<br/>RRF fusion (BGE-M3 + BM25) · lesson/trigger/anchor fast-paths"]
+    %% 2. Capa Soberana & Enrutamiento
+    subgraph SOVEREIGN["2. Capa Soberana & Router Híbrido"]
+      TOOLS["5 Sovereign Tools (CONTRACT-01)<br/><code>tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph</code>"]
+      ROUTER["Matcher de Gremios<br/><code>• RRF (Reciprocal Rank Fusion) BGE-M3 + BM25<br/>• Fast-Paths: Lecciones → Triggers → Anchors</code>"]
+      RETRIEVAL_GATE["🚧 [Roadmap I-6] Retrieval Gate<br/><code>Pre-filtro barato: ¿este mensaje necesita memoria?</code>"]
     end
 
-    subgraph MEMORY["SilvaDB & cognitive state"]
+    %% 3. Memoria SilvaDB
+    subgraph MEMORY["3. Memoria SilvaDB & Estado Cognitivo"]
       direction LR
-      SILVA_STORE[("SilvaDB<br/>SQLite WAL + FTS5")]
-      SILVA_GRAPH["Vector + graph engine<br/>HNSW index (1024-dim) · Personalized PageRank<br/>FSRS decay · night consolidation"]
+      SILVA_STORE[("SilvaDB Storage<br/><code>SQLite WAL (silva.db / tylluan.db)<br/>+ FTS5 Full-Text Search</code>")]
+      SILVA_GRAPH["Motor de Grafo & Vectores<br/><code>• HNSW Vector Index (1024-dim)<br/>• Personalized PageRank + Degree Penalty<br/>• FSRS-5 Memory Decay & Consolidación</code>"]
     end
 
-    INFER["ONNX Runtime<br/>BGE-M3 embeddings · Jina reranker<br/>falls back to BM25-only without ONNX"]
-
-    subgraph EXEC["Task execution & collaboration"]
-      GUILDS_RUN["Python guilds (guilds/), spawned on demand over stdio<br/>e.g. llama_backend runs llama.cpp/GGUF generative inference"]
-      COLOQUIO_CH["Coloquio<br/>multi-agent channels, persisted in SilvaDB"]
-      WORK_CONTRACTS["Work Contracts (M10)<br/>bounded scope, budget, vote"]
+    %% 4. Inferencia Local
+    subgraph INFER["4. Inferencia Local Embebida (ONNX)"]
+      ONNX_ENG["ONNX Runtime (ort)<br/><code>• BGE-M3 (1024d embeddings) · Jina Reranker Turbo<br/>• Fallback BM25-only automático si no hay ONNX</code>"]
+      SPARSE_ENG["🚧 [Investigación 2026-08-23] Sparse Embeddings<br/><code>BGE-M3 sparse/SPLADE — propuesta de investigación, no en roadmap todavía</code>"]
     end
 
-    subgraph FEDERATION["tylluan-link mesh"]
-      PEERS_DB[("peers.db")]
-      P2P_MESH["Gossip + Kademlia DHT<br/>Noise NK/XK (Ed25519↔X25519) · ChaCha20-Poly1305"]
+    %% 5. Ejecución
+    subgraph EXEC["5. Ejecución de Tareas & Colaboración"]
+      GUILDS_RUN["49 Gremios Python (guilds/)<br/><code>Procesos hijos stdio bajo demanda · FastMCP<br/>(e.g. llama_backend lanza llama-server/GGUF)</code>"]
+      COLOQUIO_CH["Coloquio Subsystem<br/><code>Canales multi-agente persistidos en SilvaDB</code>"]
+      WORK_CONTRACTS["Work Contracts (M10)<br/><code>Bounded Contracts · Presupuestos · Votación</code>"]
+      COLOQUIO_WAKE["🚧 [Roadmap] Wake-Up Scheduling<br/><code>Two-tier: nativo + polling universal, para agentes reactivos</code>"]
     end
 
+    %% 6. Federación Mesh
+    subgraph FEDERATION["6. tylluan-link (Malla Distribuida)"]
+      PEERS_DB[("peers.db (SQLite)")]
+      P2P_MESH["P2P Session Pool & Gossip<br/><code>• Noise NK/XK (Ed25519 ↔ X25519) · ChaCha20-Poly1305<br/>• Gossip push-pull anti-entropy · Kademlia DHT</code>"]
+      POSTCARD_MIG["🚧 [Roadmap] bincode → postcard<br/><code>Evaluación general de dependencias, sin fecha</code>"]
+    end
+
+    %% Flujos internos
     INGRESS --> TOOLS
     TOOLS --> ROUTER
+    ROUTER -.-> RETRIEVAL_GATE
+    RETRIEVAL_GATE -.-> TOOLS
     TOOLS --> MEMORY
+
     ROUTER --> GUILDS_RUN
     ROUTER --> COLOQUIO_CH
     ROUTER --> WORK_CONTRACTS
+    COLOQUIO_CH -.-> COLOQUIO_WAKE
+
     GUILDS_RUN --> MEMORY
     COLOQUIO_CH --> MEMORY
-    MEMORY <--> INFER
+
+    MEMORY <--> ONNX_ENG
+    ONNX_ENG -.-> SPARSE_ENG
     MEMORY <--> FEDERATION
+    FEDERATION -.-> POSTCARD_MIG
   end
 
-  PEER_REMOTE["Remote Tylluan peers<br/>LAN (mDNS) / WAN (DHT)"]
+%% =========================================================================
+%% NODOS PARES
+%% =========================================================================
+  PEER_REMOTE["Instancias Tylluan Remotas<br/><code>Descubrimiento LAN (mDNS) / WAN (DHT)</code>"]
 
-  MCP_IDE -->|"SSE / HTTP"| MCP_SRV
+%% Enlaces externos
+  MCP_IDE -->|"SSE / HTTP Streamable"| MCP_SRV
   A2A_CLI -->|"JSON-RPC 2.0"| A2A_SRV
   REST_CLI -->|"HTTP REST"| REST_SRV
-  FEDERATION -->|"Noise-encrypted TCP"| PEER_REMOTE
+  FEDERATION -->|"TCP P2P Cifrado (Noise XK)"| PEER_REMOTE
 
+%% =========================================================================
+%% PALETA DE ESTILOS VISUALES
+%% =========================================================================
   classDef ext fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
+  classDef ingress fill:#1e1b4b,stroke:#818cf8,color:#f8fafc,stroke-width:1.5px;
   classDef sov fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
   classDef mem fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
   classDef infer fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
   classDef exec fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
   classDef mesh fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
+  classDef future fill:#2a1b0a,stroke:#f59e0b,stroke-width:2px,stroke-dasharray:5 5,color:#fef3c7;
 
   class MCP_IDE,A2A_CLI,REST_CLI,PEER_REMOTE ext;
-  class MCP_SRV,A2A_SRV,REST_SRV,TOOLS,ROUTER sov;
+  class MCP_SRV,A2A_SRV,REST_SRV ingress;
+  class TOOLS,ROUTER sov;
   class SILVA_STORE,SILVA_GRAPH mem;
-  class INFER infer;
+  class ONNX_ENG infer;
   class GUILDS_RUN,COLOQUIO_CH,WORK_CONTRACTS exec;
   class PEERS_DB,P2P_MESH mesh;
+  class RETRIEVAL_GATE,SPARSE_ENG,COLOQUIO_WAKE,POSTCARD_MIG future;
 
-  %% Link colors, in declaration order: 0-1 ingress->sovereign, 2 sovereign->memory,
-  %% 3-5 router->execution, 6-7 execution->memory, 8 memory<->inference,
-  %% 9 memory<->federation, 10-12 external clients->ingress, 13 mesh->peers
-  linkStyle 0,1 stroke:#34d399,stroke-width:2px;
-  linkStyle 2 stroke:#34d399,stroke-width:1.5px;
-  linkStyle 3,4,5 stroke:#60a5fa,stroke-width:1.5px;
-  linkStyle 6,7 stroke:#4ade80,stroke-width:1.5px;
-  linkStyle 8 stroke:#c084fc,stroke-width:1.5px;
-  linkStyle 9 stroke:#38bdf8,stroke-width:1.5px;
-  linkStyle 10,11,12 stroke:#818cf8,stroke-width:1.5px;
-  linkStyle 13 stroke:#38bdf8,stroke-width:2px;
+  %% Colores de enlace, en orden real de declaracion:
+  %% 0,1,4 ingress->sovereign->memoria (verde) | 2,3,8,12,14 enlaces a nodos futuros (ambar discontinuo)
+  %% 5,6,7 router->ejecucion (azul) | 9,10 ejecucion->memoria (verde claro) | 11 memoria<->inferencia (purpura)
+  %% 13 memoria<->federacion (cyan) | 15,16,17 clientes externos->ingress (indigo) | 18 mesh->peers (cyan grueso)
+  linkStyle 0,1,4 stroke:#34d399,stroke-width:2px;
+  linkStyle 2,3,8,12,14 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 5,6,7 stroke:#60a5fa,stroke-width:1.5px;
+  linkStyle 9,10 stroke:#4ade80,stroke-width:1.5px;
+  linkStyle 11 stroke:#c084fc,stroke-width:1.5px;
+  linkStyle 13 stroke:#38bdf8,stroke-width:1.5px;
+  linkStyle 15,16,17 stroke:#818cf8,stroke-width:1.5px;
+  linkStyle 18 stroke:#38bdf8,stroke-width:2px;
 ```
 
 ## Stack
