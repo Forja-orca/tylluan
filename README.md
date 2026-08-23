@@ -34,7 +34,7 @@ Concretely, that means:
 
 Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
 
-**Air-gapped caveat (verified 2026-08-22):** on every boot, the kernel currently attempts a STUN request to `stun.l.google.com:19302` for NAT discovery, unconditionally — it doesn't check whether federation/mesh is even enabled first. It's backgrounded (won't block boot), but it is real outbound traffic on a host you may have intended to keep fully offline. Set `[nat] stun_servers = []` to disable it until this is gated behind a config flag.
+**Air-gapped by default (fixed 2026-08-23):** the kernel used to attempt a STUN request to `stun.l.google.com:19302` on every boot regardless of whether federation/mesh was even enabled — real outbound traffic on a host meant to stay fully offline. STUN discovery is now opt-in: `[nat] enabled = false` by default, gating the whole discovery block. Set `enabled = true` explicitly if you want NAT traversal for the mesh.
 
 The honest trade-off: several of those other projects have years of community history and production hardening that Tylluan doesn't have yet. [ROADMAP.md](ROADMAP.md) is where we track what's actually shipped versus what's still planned — we'd rather you find out something isn't ready from us than from a broken deploy.
 
@@ -166,13 +166,13 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-771 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+772 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
 ## Quick Start
 
-> **Setup takes about 10 minutes**, most of it spent downloading the BGE-M3 model on first boot (~1.2 GB, one-time). Set `embedding_model = "none"` in `tylluan.toml` to skip that download — but note this only disables the BGE-M3 embedding model, not the Jina reranker. `RerankEngine::load_with_device()` (`main.rs`) still runs unconditionally on boot and requires ONNX Runtime (`libonnxruntime.so`/`.dll`) to be present; if it's missing, the underlying `ort` crate can panic the whole process instead of falling back gracefully. There is no offline/no-ONNX boot path yet (found via external audit, verified 2026-08-22 — see STATUS.md).
+> **Setup takes about 10 minutes**, most of it spent downloading the BGE-M3 model on first boot (~1.2 GB, one-time). Set `embedding_model = "none"` in `tylluan.toml` to skip that download. The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
 
 **Supported platforms:**
 
