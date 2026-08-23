@@ -338,12 +338,74 @@ flowchart TB
 
 ### Detailed Layered Topology & Circuits
 
-<p align="center">
-  <a href="docs/assets/architecture.svg" target="_blank">
-    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
-  </a>
-</p>
-<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom.</i></sub></p>
+```mermaid
+flowchart LR
+  CLIENTS["Clients<br/>MCP IDEs · A2A clients · HTTP/UI"]
+
+  subgraph SOVEREIGN["Sovereign layer"]
+    TOOLS["5 Sovereign Tools<br/>tylluan_do · remember · recall · think · graph"]
+    ROUTER["Guild matcher<br/>RRF (BGE-M3+BM25)"]
+  end
+
+  subgraph MEMORY["SilvaDB"]
+    SILVA[("SQLite WAL + FTS5")]
+    GRAPH["HNSW + PageRank + FSRS-5"]
+  end
+
+  subgraph EXEC["Execution"]
+    GUILDS["49 Python guilds"]
+    COLOQUIO["Coloquio channels"]
+    CONTRACTS["Work Contracts"]
+  end
+
+  INFER["ONNX Runtime<br/>BGE-M3 + Jina reranker"]
+
+  subgraph MESH["tylluan-link mesh"]
+    P2P["Gossip + Kademlia DHT<br/>Noise NK/XK"]
+  end
+
+  PEERS["Remote peers<br/>LAN/WAN"]
+
+  RGATE["[I-6] Retrieval Gate"]:::future
+  WAKE["[Roadmap] Wake-Up Scheduling"]:::future
+  SPARSE["[research] Sparse Vectors"]:::future
+  POSTCARD["[Roadmap] postcard migration"]:::future
+
+  CLIENTS ==> TOOLS
+  TOOLS ==> ROUTER
+  TOOLS ==> MEMORY
+  ROUTER ==> EXEC
+  EXEC ==> MEMORY
+  MEMORY <==> INFER
+  MEMORY <==> MESH
+  MESH ==> PEERS
+
+  ROUTER -.-> RGATE
+  COLOQUIO -.-> WAKE
+  INFER -.-> SPARSE
+  MESH -.-> POSTCARD
+
+  classDef sovStyle fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
+  classDef memStyle fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
+  classDef execStyle fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
+  classDef inferStyle fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
+  classDef meshStyle fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
+  classDef extStyle fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
+  classDef future fill:#f59e0b12,stroke:#f59e0b88,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7cc;
+
+  class CLIENTS,PEERS extStyle;
+  class TOOLS,ROUTER sovStyle;
+  class SILVA,GRAPH memStyle;
+  class GUILDS,COLOQUIO,CONTRACTS execStyle;
+  class INFER inferStyle;
+  class P2P meshStyle;
+
+  linkStyle 0,1,2 stroke:#34d399,stroke-width:2.5px;
+  linkStyle 3,4 stroke:#60a5fa,stroke-width:2.5px;
+  linkStyle 5 stroke:#c084fc,stroke-width:2.5px;
+  linkStyle 6,7 stroke:#38bdf8,stroke-width:2.5px;
+  linkStyle 8,9,10,11 stroke:#f59e0baa,stroke-width:1.5px,stroke-dasharray:3 3;
+```
 
 
 ## Stack
