@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""
+Generates the pixel-perfect static vector SVG for Tylluan architecture.
+Eliminates all Mermaid layout glitches on GitHub while providing glowing circuits,
+translucent roadmap blueprint nodes, and crystal-clear typography.
+"""
+
+from pathlib import Path
+
+def generate_svg():
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1020" width="100%" height="100%" style="background:#070b14; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#060913"/>
+    </linearGradient>
+    <linearGradient id="nexus-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#090d16" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="sov-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b"/>
+      <stop offset="100%" stop-color="#022c22"/>
+    </linearGradient>
+    <linearGradient id="mem-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065f46"/>
+      <stop offset="100%" stop-color="#04382c"/>
+    </linearGradient>
+    <linearGradient id="exec-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="infer-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4c1d95"/>
+      <stop offset="100%" stop-color="#2e1065"/>
+    </linearGradient>
+    <linearGradient id="mesh-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#164e63"/>
+      <stop offset="100%" stop-color="#083344"/>
+    </linearGradient>
+
+    <!-- Filters & Glows -->
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Markers -->
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#10b981"/>
+    </marker>
+    <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arr-purple" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#c084fc"/>
+    </marker>
+    <marker id="arr-cyan" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arr-indigo" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#818cf8"/>
+    </marker>
+    <marker id="arr-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="url(#bg-grad)" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- TOP LAYER: EXTERNAL CLIENTS & PROTOCOLS -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <g id="clients-group" filter="url(#shadow)">
+    <rect x="40" y="30" width="1200" height="95" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+    <text x="60" y="52" fill="#94a3b8" font-size="12" font-weight="700" letter-spacing="1.5">CLIENTS &amp; CONNECTED ECOSYSTEM</text>
+    
+    <!-- Client 1: MCP -->
+    <rect x="60" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <text x="75" y="82" fill="#f8fafc" font-size="13" font-weight="600">MCP IDEs / Assistants</text>
+    <text x="75" y="99" fill="#94a3b8" font-size="11">Claude Code · Cursor · VS Code · Claude Desktop · Qwen</text>
+
+    <!-- Client 2: A2A -->
+    <rect x="455" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <text x="470" y="82" fill="#f8fafc" font-size="13" font-weight="600">External A2A Clients</text>
+    <text x="470" y="99" fill="#94a3b8" font-size="11">LangGraph · CrewAI · AutoGen · any A2A SDK</text>
+
+    <!-- Client 3: REST & UI -->
+    <rect x="850" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <text x="865" y="82" fill="#f8fafc" font-size="13" font-weight="600">HTTP Tools &amp; Management UI</text>
+    <text x="865" y="99" fill="#94a3b8" font-size="11">Dashboard (React) · Tylluan CLI · curl / scripts</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN CONTAINER: TYLLUAN NEXUS KERNEL (:4000) -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <g id="nexus-container" filter="url(#shadow)">
+    <!-- Kernel Outer Border with Glow -->
+    <rect x="40" y="170" width="1200" height="700" rx="16" fill="url(#nexus-grad)" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.6"/>
+    <rect x="40" y="170" width="1200" height="700" rx="16" fill="none" stroke="#34d399" stroke-width="1" stroke-opacity="0.3"/>
+    
+    <text x="65" y="200" fill="#38bdf8" font-size="16" font-weight="800" letter-spacing="1">tylluan-nexus (:4000)</text>
+    <text x="245" y="200" fill="#64748b" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
+    <rect x="1100" y="183" width="120" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+    <text x="1115" y="199" fill="#34d399" font-size="11" font-weight="700">MIT SOBERANO</text>
+
+    <!-- SECTION 1: INGRESS & TRANSPORT -->
+    <g id="ingress-sec">
+      <rect x="65" y="225" width="1150" height="75" rx="10" fill="#0f172a" stroke="#818cf8" stroke-width="1.5" stroke-opacity="0.8"/>
+      <text x="80" y="244" fill="#a5b4fc" font-size="11" font-weight="700" letter-spacing="1">1. TRANSPORT &amp; INGRESS GATEWAYS</text>
+      
+      <!-- MCP Server -->
+      <rect x="80" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+      <text x="95" y="269" fill="#f8fafc" font-size="12" font-weight="600">MCP Gateway</text>
+      <text x="95" y="284" fill="#cbd5e1" font-size="10">SSE (/sse) · Streamable HTTP (/mcp) · Stdio</text>
+
+      <!-- A2A Server -->
+      <rect x="460" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+      <text x="475" y="269" fill="#f8fafc" font-size="12" font-weight="600">A2A Protocol Server</text>
+      <text x="475" y="284" fill="#cbd5e1" font-size="10">Agent Card (/api/v1/a2a/agents) · Tasks · Messages</text>
+
+      <!-- REST Server -->
+      <rect x="840" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+      <text x="855" y="269" fill="#f8fafc" font-size="12" font-weight="600">REST API v1</text>
+      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/embed · /api/v1/do · /health (JSON Schema Contracts)</text>
+    </g>
+
+    <!-- SECTION 2: SOVEREIGN CORE & ROUTER -->
+    <g id="sovereign-sec">
+      <rect x="65" y="320" width="1150" height="95" rx="10" fill="url(#sov-grad)" stroke="#10b981" stroke-width="2"/>
+      <text x="80" y="340" fill="#6ee7b7" font-size="11" font-weight="700" letter-spacing="1">2. SOVEREIGN LAYER &amp; COGNITIVE ROUTER (CONTRACT-01)</text>
+
+      <!-- 5 Sovereign Tools -->
+      <rect x="80" y="348" width="460" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
+      <text x="95" y="368" fill="#ffffff" font-size="13" font-weight="700">5 Sovereign Tools</text>
+      <text x="95" y="386" fill="#6ee7b7" font-size="11">tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph</text>
+
+      <!-- Hybrid Router -->
+      <rect x="560" y="348" width="360" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
+      <text x="575" y="368" fill="#ffffff" font-size="13" font-weight="700">Hybrid Matcher &amp; Router</text>
+      <text x="575" y="386" fill="#a7f3d0" font-size="11">RRF Fusion (BGE-M3 + BM25) · Lessons · Triggers · Anchors</text>
+
+      <!-- Roadmap: Retrieval Gate (Translucent) -->
+      <rect x="940" y="348" width="260" height="55" rx="8" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="955" y="368" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap I-6] Retrieval Gate</text>
+      <text x="955" y="386" fill="#fde68a" fill-opacity="0.75" font-size="10">Intent memory pre-filter (Waku pattern)</text>
+    </g>
+
+    <!-- SECTION 3: SILVADB (LEFT) & INFERENCE (RIGHT) -->
+    <g id="memory-infer-sec">
+      <!-- SilvaDB -->
+      <rect x="65" y="435" width="670" height="180" rx="10" fill="url(#mem-grad)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="80" y="455" fill="#a7f3d0" font-size="11" font-weight="700" letter-spacing="1">3. SILVADB &amp; COGNITIVE MEMORY</text>
+
+      <rect x="80" y="465" width="280" height="85" rx="8" fill="#022c22" stroke="#059669" stroke-width="1"/>
+      <text x="95" y="488" fill="#ffffff" font-size="13" font-weight="700">SilvaDB SQLite WAL</text>
+      <text x="95" y="506" fill="#6ee7b7" font-size="11">• SQLite WAL (silva.db / tylluan.db)</text>
+      <text x="95" y="522" fill="#6ee7b7" font-size="11">• FTS5 BM25 Full-Text Search</text>
+      <text x="95" y="538" fill="#6ee7b7" font-size="11">• SQLCipher AES-256 (optional)</text>
+
+      <rect x="380" y="465" width="340" height="85" rx="8" fill="#022c22" stroke="#059669" stroke-width="1"/>
+      <text x="395" y="488" fill="#ffffff" font-size="13" font-weight="700">Vector &amp; Graph Engines</text>
+      <text x="395" y="506" fill="#6ee7b7" font-size="11">• HNSW Vector Index (1024-dim)</text>
+      <text x="395" y="522" fill="#6ee7b7" font-size="11">• Personalized PageRank (Degree Penalty)</text>
+      <text x="395" y="538" fill="#6ee7b7" font-size="11">• FSRS-5 Memory Decay &amp; Consolidation</text>
+
+      <!-- Roadmap: Postcard Serde (Translucent) -->
+      <rect x="80" y="560" width="640" height="42" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="95" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap] Postcard Binary Serde</text>
+      <text x="95" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">Zero-copy serialization migration from bincode 1.3 for HNSW index blobs</text>
+
+      <!-- Inference Engine -->
+      <rect x="755" y="435" width="460" height="180" rx="10" fill="url(#infer-grad)" stroke="#c084fc" stroke-width="1.5"/>
+      <text x="770" y="455" fill="#e9d5ff" font-size="11" font-weight="700" letter-spacing="1">4. LOCAL INFERENCE ENGINE (ONNX)</text>
+
+      <rect x="770" y="465" width="430" height="85" rx="8" fill="#1e1b4b" stroke="#9333ea" stroke-width="1"/>
+      <text x="785" y="488" fill="#ffffff" font-size="13" font-weight="700">ONNX Runtime Embedded (ort)</text>
+      <text x="785" y="506" fill="#d8b4fe" font-size="11">• BGE-M3 (1024-dim dense vector embeddings)</text>
+      <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo (fast cross-encoder)</text>
+      <text x="785" y="538" fill="#d8b4fe" font-size="11">• Fallback to BM25-only without ONNX (G2 Smoke)</text>
+
+      <!-- Roadmap: Sparse Vectors (Translucent) -->
+      <rect x="770" y="560" width="430" height="42" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="785" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap I-7.2] Sparse Vectors (SPLADE)</text>
+      <text x="785" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">BGE-M3 multi-vector lexical weights for sparse search</text>
+    </g>
+
+    <!-- SECTION 4: EXECUTION & GUILDS (LEFT) & FEDERATION MESH (RIGHT) -->
+    <g id="exec-mesh-sec">
+      <!-- Task Execution & Guilds -->
+      <rect x="65" y="635" width="670" height="215" rx="10" fill="url(#exec-grad)" stroke="#60a5fa" stroke-width="1.5"/>
+      <text x="80" y="655" fill="#93c5fd" font-size="11" font-weight="700" letter-spacing="1">5. TASK EXECUTION &amp; AGENTIC COLLABORATION</text>
+
+      <rect x="80" y="665" width="310" height="85" rx="8" fill="#0f172a" stroke="#2563eb" stroke-width="1"/>
+      <text x="95" y="688" fill="#ffffff" font-size="13" font-weight="700">49 Python Guilds</text>
+      <text x="95" y="706" fill="#93c5fd" font-size="11">• FastMCP stdio child processes</text>
+      <text x="95" y="722" fill="#93c5fd" font-size="11">• Dynamic execution on-demand</text>
+      <text x="95" y="738" fill="#93c5fd" font-size="11">• e.g. llama_backend (llama-server/GGUF)</text>
+
+      <rect x="410" y="665" width="310" height="85" rx="8" fill="#0f172a" stroke="#2563eb" stroke-width="1"/>
+      <text x="425" y="688" fill="#ffffff" font-size="13" font-weight="700">Coloquio &amp; Contracts</text>
+      <text x="425" y="706" fill="#93c5fd" font-size="11">• Multi-agent deliberation channels</text>
+      <text x="425" y="722" fill="#93c5fd" font-size="11">• Bounded Work Contracts (M10)</text>
+      <text x="425" y="738" fill="#93c5fd" font-size="11">• Budget tracking &amp; consensus votes</text>
+
+      <!-- Roadmap: Coloquio Watch Daemon (Translucent) -->
+      <rect x="80" y="760" width="640" height="75" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="95" y="784" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap] Coloquio Watch &amp; Two-Tier Wake-Up Daemon</text>
+      <text x="95" y="802" fill="#fde68a" fill-opacity="0.75" font-size="10">• Synchronous deliberative multi-agent debate stream (SSE / Native)</text>
+      <text x="95" y="818" fill="#fde68a" fill-opacity="0.75" font-size="10">• Proactive wakeup scheduler for background autonomous workers</text>
+
+      <!-- Federation Mesh -->
+      <rect x="755" y="635" width="460" height="215" rx="10" fill="url(#mesh-grad)" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="770" y="655" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1">6. TYLLUAN-LINK (DISTRIBUTED MESH)</text>
+
+      <rect x="770" y="665" width="430" height="85" rx="8" fill="#082f49" stroke="#0284c7" stroke-width="1"/>
+      <text x="785" y="688" fill="#ffffff" font-size="13" font-weight="700">Cryptographic P2P Session Pool</text>
+      <text x="785" y="706" fill="#7dd3fc" font-size="11">• Noise NK/XK Handshake (Ed25519 ↔ X25519)</text>
+      <text x="785" y="722" fill="#7dd3fc" font-size="11">• ChaCha20-Poly1305 Encrypted Wire Stream</text>
+      <text x="785" y="738" fill="#7dd3fc" font-size="11">• Transparent TCP Connection Pool &amp; Fallback</text>
+
+      <rect x="770" y="760" width="430" height="75" rx="8" fill="#082f49" stroke="#0284c7" stroke-width="1"/>
+      <text x="785" y="784" fill="#ffffff" font-size="13" font-weight="700">Gossip &amp; DHT Kademlia</text>
+      <text x="785" y="802" fill="#7dd3fc" font-size="11">• Anti-entropy push-pull gossip synchronization</text>
+      <text x="785" y="818" fill="#7dd3fc" font-size="11">• 256 K-buckets DHT · Hardware capabilities exchange</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- BOTTOM LAYER: REMOTE PEER NODES -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <g id="peers-group" filter="url(#shadow)">
+    <rect x="240" y="910" width="800" height="75" rx="12" fill="#082f49" stroke="#38bdf8" stroke-width="2"/>
+    <text x="260" y="934" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1.5">REMOTE TYLLUAN MESH PEERS</text>
+    <text x="260" y="955" fill="#ffffff" font-size="14" font-weight="700">Peer Nodes on LAN (mDNS Discovery) / WAN (BitTorrent DHT Bootstrap)</text>
+    <text x="260" y="972" fill="#bae6fd" font-size="11">ChaCha20-Poly1305 &amp; Noise NK/XK Authenticated Sync · Shared Memory Knowledge</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- CIRCUIT LINES & CONNECTIONS -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- Ingress Circuits (Indigo) -->
+  <path d="M 245 112 L 245 225" stroke="#818cf8" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+  <path d="M 640 112 L 640 225" stroke="#818cf8" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+  <path d="M 1035 112 L 1035 225" stroke="#818cf8" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+  <!-- Transport to Sovereign (Green) -->
+  <path d="M 260 300 L 260 320" stroke="#10b981" stroke-width="2.5" fill="none" marker-end="url(#arr-green)" filter="url(#glow-green)"/>
+  <path d="M 640 300 L 640 320" stroke="#10b981" stroke-width="2.5" fill="none" marker-end="url(#arr-green)" filter="url(#glow-green)"/>
+  <path d="M 1020 300 L 1020 320" stroke="#10b981" stroke-width="2.5" fill="none" marker-end="url(#arr-green)" filter="url(#glow-green)"/>
+
+  <!-- Sovereign to Memory (Green) -->
+  <path d="M 310 415 L 310 435" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arr-green)"/>
+  
+  <!-- Router to Execution (Blue) -->
+  <path d="M 500 415 L 500 635" stroke="#60a5fa" stroke-width="2" fill="none" marker-end="url(#arr-blue)"/>
+
+  <!-- Memory <-> Inference (Purple) -->
+  <path d="M 735 525 L 755 525" stroke="#c084fc" stroke-width="2" fill="none" marker-end="url(#arr-purple)"/>
+
+  <!-- Memory <-> Mesh (Cyan) -->
+  <path d="M 735 740 L 755 740" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arr-cyan)"/>
+
+  <!-- Mesh to Remote Peers (Cyan) -->
+  <path d="M 985 850 L 985 880 L 640 880 L 640 910" stroke="#38bdf8" stroke-width="2.5" fill="none" marker-end="url(#arr-cyan)" filter="url(#glow-cyan)"/>
+
+</svg>
+'''
+    assets_dir = Path("docs/assets")
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    out_file = assets_dir / "architecture.svg"
+    out_file.write_text(svg, encoding="utf-8")
+    print(f"Generated {out_file} ({len(svg)} bytes)")
+
+if __name__ == "__main__":
+    generate_svg()
