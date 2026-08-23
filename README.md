@@ -307,31 +307,90 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ```mermaid
 flowchart TB
-  MCP["MCP Clients<br/>Claude · Cursor · VS Code · LM Studio · any SSE"] -->|"SSE / HTTP Streamable"| NEXUS
-  A2AEXT["External A2A agents<br/>LangGraph · CrewAI · any Agent2Agent-compliant client"] -->|"JSON-RPC 2.0"| NEXUS
-
-  subgraph NEXUS["tylluan-nexus (:4000)"]
-    direction TB
-    MEM["Core Memory<br/>persona · preferences"]
-    SILVA[("SilvaDB<br/>SQLite WAL · BGE-M3 vectors<br/>FTS5 BM25 · knowledge graph<br/>episodic nodes · salience decay")]
-    A2AS["A2A Server<br/>Agent Card · message/send · tasks/get"]
-    GUILDS["Guild Registry<br/>49 Python tools, auto-discovered"]
-    COLOQUIO["Coloquio<br/>multi-agent channel"]
-    INFER["Embeddings: ONNX (CPU/DirectML/CUDA)<br/>Generative: llama.cpp + GGUF"]
-    MESH["Federation + Mesh<br/>peers.db · Noise NK/XK · ChaCha20-Poly1305<br/>DHT Kademlia · Gossip"]
-
-    MEM --> SILVA
-    GUILDS --> SILVA
-    COLOQUIO --> SILVA
-    A2AS --> MEM
-    SILVA --> INFER
-    SILVA --> MESH
+  subgraph CLIENTS["Clients & connected ecosystem"]
+    direction LR
+    MCP_IDE["MCP IDEs / assistants<br/>Claude Code · Cursor · VS Code · Claude Desktop · Qwen"]
+    A2A_CLI["External A2A clients<br/>LangGraph · CrewAI · any A2A SDK"]
+    REST_CLI["HTTP tools / UI<br/>Dashboard (React) · Tylluan CLI · curl"]
   end
 
-  MESH -->|"Noise NK/XK · ChaCha20-Poly1305 encrypted"| PEERS["Peer nodes<br/>LAN / VPN / WAN via DHT"]
+  subgraph NEXUS["tylluan-nexus (:4000) — single Rust process"]
+    direction TB
 
-  classDef core fill:#15181d,stroke:#34d399,color:#e8e6e1,stroke-width:1.5px;
-  class MEM,SILVA,A2AS,GUILDS,COLOQUIO,INFER,MESH core;
+    subgraph INGRESS["Transport"]
+      MCP_SRV["MCP Server<br/>SSE (/sse) · Streamable HTTP (/mcp) · stdio"]
+      A2A_SRV["A2A Server<br/>Agent Card · message/send · tasks/get"]
+      REST_SRV["REST API v1<br/>/api/v1/embed · /api/v1/do · /health<br/>(JSON Schema contracts)"]
+    end
+
+    subgraph SOVEREIGN["Sovereign layer"]
+      TOOLS["5 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph"]
+      ROUTER["Guild matcher<br/>RRF fusion (BGE-M3 + BM25) · lesson/trigger/anchor fast-paths"]
+    end
+
+    subgraph MEMORY["SilvaDB & cognitive state"]
+      direction LR
+      SILVA_STORE[("SilvaDB<br/>SQLite WAL + FTS5")]
+      SILVA_GRAPH["Vector + graph engine<br/>HNSW index (1024-dim) · Personalized PageRank<br/>FSRS decay · night consolidation"]
+    end
+
+    INFER["ONNX Runtime<br/>BGE-M3 embeddings · Jina reranker<br/>falls back to BM25-only without ONNX"]
+
+    subgraph EXEC["Task execution & collaboration"]
+      GUILDS_RUN["Python guilds (guilds/), spawned on demand over stdio<br/>e.g. llama_backend runs llama.cpp/GGUF generative inference"]
+      COLOQUIO_CH["Coloquio<br/>multi-agent channels, persisted in SilvaDB"]
+      WORK_CONTRACTS["Work Contracts (M10)<br/>bounded scope, budget, vote"]
+    end
+
+    subgraph FEDERATION["tylluan-link mesh"]
+      PEERS_DB[("peers.db")]
+      P2P_MESH["Gossip + Kademlia DHT<br/>Noise NK/XK (Ed25519↔X25519) · ChaCha20-Poly1305"]
+    end
+
+    INGRESS --> TOOLS
+    TOOLS --> ROUTER
+    TOOLS --> MEMORY
+    ROUTER --> GUILDS_RUN
+    ROUTER --> COLOQUIO_CH
+    ROUTER --> WORK_CONTRACTS
+    GUILDS_RUN --> MEMORY
+    COLOQUIO_CH --> MEMORY
+    MEMORY <--> INFER
+    MEMORY <--> FEDERATION
+  end
+
+  PEER_REMOTE["Remote Tylluan peers<br/>LAN (mDNS) / WAN (DHT)"]
+
+  MCP_IDE -->|"SSE / HTTP"| MCP_SRV
+  A2A_CLI -->|"JSON-RPC 2.0"| A2A_SRV
+  REST_CLI -->|"HTTP REST"| REST_SRV
+  FEDERATION -->|"Noise-encrypted TCP"| PEER_REMOTE
+
+  classDef ext fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
+  classDef sov fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
+  classDef mem fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
+  classDef infer fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
+  classDef exec fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
+  classDef mesh fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
+
+  class MCP_IDE,A2A_CLI,REST_CLI,PEER_REMOTE ext;
+  class MCP_SRV,A2A_SRV,REST_SRV,TOOLS,ROUTER sov;
+  class SILVA_STORE,SILVA_GRAPH mem;
+  class INFER infer;
+  class GUILDS_RUN,COLOQUIO_CH,WORK_CONTRACTS exec;
+  class PEERS_DB,P2P_MESH mesh;
+
+  %% Link colors, in declaration order: 0-1 ingress->sovereign, 2 sovereign->memory,
+  %% 3-5 router->execution, 6-7 execution->memory, 8 memory<->inference,
+  %% 9 memory<->federation, 10-12 external clients->ingress, 13 mesh->peers
+  linkStyle 0,1 stroke:#34d399,stroke-width:2px;
+  linkStyle 2 stroke:#34d399,stroke-width:1.5px;
+  linkStyle 3,4,5 stroke:#60a5fa,stroke-width:1.5px;
+  linkStyle 6,7 stroke:#4ade80,stroke-width:1.5px;
+  linkStyle 8 stroke:#c084fc,stroke-width:1.5px;
+  linkStyle 9 stroke:#38bdf8,stroke-width:1.5px;
+  linkStyle 10,11,12 stroke:#818cf8,stroke-width:1.5px;
+  linkStyle 13 stroke:#38bdf8,stroke-width:2px;
 ```
 
 ## Stack
