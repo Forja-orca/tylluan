@@ -176,7 +176,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
           </div>
           <div className="p-3.5 bg-slate-900/40 rounded-xl">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 mb-1">
-              <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              <span className="w-2 h-2 rounded-full bg-indigo-400" />
               Layer 3: Semantic Drift
             </div>
             <p className="text-[11px] text-slate-400">

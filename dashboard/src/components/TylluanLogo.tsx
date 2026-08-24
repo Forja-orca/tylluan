@@ -32,8 +32,8 @@ export function TylluanLogo({
     '2xl': 'p-3',
   };
 
-  // Sovereign Color Tokens (Immutable)
-  const CYAN_NEON = '#00F5D4';
+  // Sovereign Color Tokens (Nocturnal Observatory Amber/Gold)
+  const AMBER_GOLD = '#F59E0B';
 
   // 12 Nodes Coordinates (Home vs Constellation Offsets)
   const nodesData = [
@@ -120,15 +120,15 @@ export function TylluanLogo({
 
       {/* Cybernetic Owl Avatar Container */}
       <div className={cn('relative flex items-center justify-center group', containerSizes[size])}>
-        {/* Subtle Outer Cyan HUD Ring */}
+        {/* Subtle Outer Amber HUD Ring */}
         {animated && (
-          <div className="absolute -inset-1 rounded-2xl border border-dashed border-[#00F5D4]/30 pointer-events-none transition-all duration-500 group-hover:border-[#00F5D4]/60" />
+          <div className="absolute -inset-1 rounded-2xl border border-dashed border-amber-500/30 pointer-events-none transition-all duration-500 group-hover:border-amber-500/60" />
         )}
 
         {/* Sovereign Card Base */}
         <div
           className={cn(
-            'relative w-full h-full rounded-2xl bg-[#0B0F17] border border-[#00F5D4]/40 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300',
+            'relative w-full h-full rounded-2xl bg-[#0B0F17] border border-amber-500/40 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300',
             animated && 'animate-sovereign-aura',
             ringPadding[size]
           )}
@@ -146,13 +146,13 @@ export function TylluanLogo({
               <svg viewBox="0 0 30 30" className="w-full h-full text-slate-100">
                 <path
                   fill="#0B0F17"
-                  stroke={CYAN_NEON}
+                  stroke={AMBER_GOLD}
                   strokeWidth="0.8"
                   d="M24.51,28.51H5.49c-2.21,0-4-1.79-4-4V5.49c0-2.21,1.79-4,4-4h19.03c2.21,0,4,1.79,4,4v19.03C28.51,26.72,26.72,28.51,24.51,28.51z"
                 />
-                <path fill={CYAN_NEON} d="M15.47,7.1l-1.3,1.85c-0.2,0.29-0.54,0.47-0.9,0.47h-7.1V7.09C6.16,7.1,15.47,7.1,15.47,7.1z" />
-                <polygon fill="#38BDF8" points="24.3,7.1 13.14,22.91 5.7,22.91 16.86,7.1" />
-                <path fill={CYAN_NEON} d="M14.53,22.91l1.31-1.86c0.2-0.29,0.54-0.47,0.9-0.47h7.09v2.33H14.53z" />
+                <path fill={AMBER_GOLD} d="M15.47,7.1l-1.3,1.85c-0.2,0.29-0.54,0.47-0.9,0.47h-7.1V7.09C6.16,7.1,15.47,7.1,15.47,7.1z" />
+                <polygon fill="#F59E0B" points="24.3,7.1 13.14,22.91 5.7,22.91 16.86,7.1" />
+                <path fill={AMBER_GOLD} d="M14.53,22.91l1.31-1.86c0.2-0.29,0.54-0.47,0.9-0.47h7.09v2.33H14.53z" />
               </svg>
             )}
           </div>
@@ -160,20 +160,20 @@ export function TylluanLogo({
           {/* Layer 2: Subtle Vector Geometry Facets Overlay */}
           <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-15 pointer-events-none">
             {/* Wing Feather Geometry */}
-            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
-            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={CYAN_NEON} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
+            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={AMBER_GOLD} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
+            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={AMBER_GOLD} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
 
-            {/* Precision Eye Retina Rings (Unified Cyan Neon) */}
+            {/* Precision Eye Retina Rings (Unified Amber Gold) */}
             <g className={cn(animated && 'animate-retina-pulse')}>
-              <circle cx="42" cy="42" r="4.5" fill="none" stroke={CYAN_NEON} strokeWidth="1.2" opacity="0.9" />
-              <circle cx="42" cy="42" r="1.5" fill={CYAN_NEON} />
+              <circle cx="42" cy="42" r="4.5" fill="none" stroke={AMBER_GOLD} strokeWidth="1.2" opacity="0.9" />
+              <circle cx="42" cy="42" r="1.5" fill={AMBER_GOLD} />
 
-              <circle cx="58" cy="42" r="4.5" fill="none" stroke={CYAN_NEON} strokeWidth="1.2" opacity="0.9" />
-              <circle cx="58" cy="42" r="1.5" fill={CYAN_NEON} />
+              <circle cx="58" cy="42" r="4.5" fill="none" stroke={AMBER_GOLD} strokeWidth="1.2" opacity="0.9" />
+              <circle cx="58" cy="42" r="1.5" fill={AMBER_GOLD} />
             </g>
           </svg>
 
-          {/* Layer 3: 12 Sequential Pulse Nodes (Unified Cyan Neon) */}
+          {/* Layer 3: 12 Sequential Pulse Nodes (Unified Amber Gold) */}
           <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none">
             {nodesData.map((node) => {
               const pulseDelaySecs = (node.id * 0.25).toFixed(2);
@@ -193,7 +193,7 @@ export function TylluanLogo({
                       cx={node.hx}
                       cy={node.hy}
                       r={node.isEye ? 3 : 2}
-                      fill={CYAN_NEON}
+                      fill={AMBER_GOLD}
                     />
                   </g>
                 </g>
@@ -210,15 +210,15 @@ export function TylluanLogo({
       {showText && (
         <div className="font-mono leading-none">
           <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-100 text-sm">
-            <span className="text-[#00F5D4] tracking-wider uppercase drop-shadow-[0_0_8px_rgba(0,245,212,0.4)]">
+            <span className="text-amber-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]">
               TYLLUAN
             </span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-[#00F5D4]/10 text-[#00F5D4] border border-[#00F5D4]/30 uppercase tracking-widest font-extrabold">
+            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-widest font-extrabold">
               o3
             </span>
           </div>
           <div className="text-[10px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00F5D4] animate-ping" />
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
             <span>Sovereign Substrate</span>
           </div>
         </div>

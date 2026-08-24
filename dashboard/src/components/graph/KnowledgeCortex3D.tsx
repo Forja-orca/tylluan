@@ -316,7 +316,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
           type="button"
           onClick={() => setPaused((p) => !p)}
           title={paused ? 'Reanudar vida ambiental' : 'Pausar vida ambiental'}
-          className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 transition-colors cursor-pointer"
+          className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-amber-300 hover:border-amber-500/40 transition-colors cursor-pointer"
         >
           {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
         </button>
@@ -324,7 +324,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
           type="button"
           onClick={() => fgRef.current?.zoomToFit?.(600, 40)}
           title="Encuadrar todo"
-          className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 transition-colors cursor-pointer"
+          className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-amber-300 hover:border-amber-500/40 transition-colors cursor-pointer"
         >
           <Maximize2 className="w-3.5 h-3.5" />
         </button>

@@ -461,7 +461,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         "px-2 py-0.5 rounded text-[10px] font-medium font-mono uppercase transition-all flex items-center gap-1 cursor-pointer",
                         isActive 
                           ? filterKey === 'active' ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                          : filterKey === 'quiet' ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                          : filterKey === 'quiet' ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                           : filterKey === 'consolidated' ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
                           : filterKey === 'archived' ? "bg-slate-700/60 text-slate-300 border border-slate-600"
                           : "bg-slate-800 text-slate-200 border border-slate-700"
