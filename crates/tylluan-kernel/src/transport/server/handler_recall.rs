@@ -841,6 +841,16 @@ if let Some(ref mut s) = stmt {
             if crate::router::light_reranker::LightReranker::exists(&server.models_dir) {
                 let reranker = crate::router::light_reranker::LightReranker::new(&server.models_dir);
                 if reranker.is_active() {
+                    // Pre-compute agent affinity for each candidate.
+                    // Only queries recall_feedback when reranker is active (model exists).
+                    let mut affinity_map: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+                    let agent_ref = rec_agent_id.as_deref().unwrap_or("");
+                    for (node, _) in &scored {
+                        if !affinity_map.contains_key(&node.id) {
+                            let affinity = server.silva.agent_affinity_for_memory(&node.id, agent_ref).await.unwrap_or(0.0);
+                            affinity_map.insert(node.id.clone(), affinity);
+                        }
+                    }
                     let candidates: Vec<(crate::router::light_reranker::RerankFeatures, usize)> = scored.iter()
                         .enumerate()
                         .map(|(idx, (node, score))| {
@@ -858,7 +868,7 @@ if let Some(ref mut s) = stmt {
                                 score_rrf: *score,
                                 score_graph: *score,
                                 recency_score: 1.0 / (1.0 + days),
-                                agent_affinity: 0.0,
+                                agent_affinity: *affinity_map.get(&node.id).unwrap_or(&0.0),
                             }, idx)
                         })
                         .collect();

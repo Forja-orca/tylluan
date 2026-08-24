@@ -167,6 +167,48 @@ impl SilvaDB {
         })
     }
 
+    /// Compute agent affinity for a specific memory: the fraction of resolved
+    /// feedback rows where this memory was useful to this specific agent.
+    /// Falls back to global affinity (all agents) if no agent-specific data,
+    /// then to 0.0 for completely new memories. Returns a value in [0.0, 1.0].
+    pub async fn agent_affinity_for_memory(&self, memory_id: &str, agent_id: &str) -> Result<f32> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+
+            // Try agent-specific first (COALESCE handles NULL from empty result sets)
+            let agent_result: (i64, i64) = conn.query_row(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN useful > 0 THEN 1 ELSE 0 END), 0),
+                    COUNT(*)
+                 FROM recall_feedback
+                 WHERE memory_id = ?1 AND agent_id = ?2 AND useful != 0",
+                rusqlite::params![memory_id, agent_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            ).map_err(anyhow::Error::from)?;
+
+            if agent_result.1 > 0 {
+                return Ok(agent_result.0 as f32 / agent_result.1 as f32);
+            }
+
+            // Fall back to global (all agents)
+            let global_result: (i64, i64) = conn.query_row(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN useful > 0 THEN 1 ELSE 0 END), 0),
+                    COUNT(*)
+                 FROM recall_feedback
+                 WHERE memory_id = ?1 AND useful != 0",
+                rusqlite::params![memory_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            ).map_err(anyhow::Error::from)?;
+
+            if global_result.1 > 0 {
+                return Ok(global_result.0 as f32 / global_result.1 as f32);
+            }
+
+            Ok(0.0)
+        })
+    }
+
     /// CoherenceGate P4-P2: bulk lookup of resolved post-hoc outcomes for a set
     /// of node ids, used to enrich `llm_decision_examples` exports with real
     /// ground truth instead of only the teacher-vs-gate agreement measured in
@@ -444,5 +486,37 @@ mod tests {
         let db = SilvaDB::in_memory().await.unwrap();
         let map = db.get_resolved_feedback_map(&[]).await.unwrap();
         assert!(map.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn agent_affinity_for_memory_returns_zero_for_unknown() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let affinity = db.agent_affinity_for_memory("mem-never-seen", "agent-x").await.unwrap();
+        assert_eq!(affinity, 0.0, "unknown memory must return 0.0 affinity");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn agent_affinity_for_memory_computes_agent_specific_ratio() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("mem1", "concept", "test", "{}").await.unwrap();
+
+        let old_ts = (chrono::Utc::now() - chrono::Duration::seconds(120)).to_rfc3339();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            // agent-a: 2 useful, 1 not-useful -> 2/3
+            conn.execute("INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at, useful) VALUES ('mem1', 'agent-a', 't1', 'q', 0, ?1, 1)", rusqlite::params![old_ts]).unwrap();
+            conn.execute("INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at, useful) VALUES ('mem1', 'agent-a', 't2', 'q', 1, ?1, 1)", rusqlite::params![old_ts]).unwrap();
+            conn.execute("INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at, useful) VALUES ('mem1', 'agent-a', 't3', 'q', 2, ?1, -1)", rusqlite::params![old_ts]).unwrap();
+            // agent-b: 1 useful -> 1.0
+            conn.execute("INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, accessed_at, useful) VALUES ('mem1', 'agent-b', 't4', 'q', 0, ?1, 1)", rusqlite::params![old_ts]).unwrap();
+        });
+
+        let affinity_a = db.agent_affinity_for_memory("mem1", "agent-a").await.unwrap();
+        let affinity_b = db.agent_affinity_for_memory("mem1", "agent-b").await.unwrap();
+        let affinity_c = db.agent_affinity_for_memory("mem1", "agent-c").await.unwrap();
+
+        assert!((affinity_a - 2.0/3.0).abs() < 0.01, "agent-a affinity should be 2/3, got {affinity_a}");
+        assert!((affinity_b - 1.0).abs() < 0.01, "agent-b affinity should be 1.0, got {affinity_b}");
+        assert!((affinity_c - 0.75).abs() < 0.01, "agent-c has no agent-specific data, should fall back to global 3/4, got {affinity_c}");
     }
 }

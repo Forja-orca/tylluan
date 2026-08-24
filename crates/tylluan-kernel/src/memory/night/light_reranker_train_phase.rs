@@ -98,14 +98,15 @@ async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]
     let rows = tokio::task::block_in_place(|| {
         let conn = ctx.silva.conn.blocking_lock();
         let mut stmt = conn.prepare(
-            "SELECT memory_id, rank_position, useful, accessed_at FROM recall_feedback WHERE useful != 0"
+            "SELECT memory_id, agent_id, rank_position, useful, accessed_at FROM recall_feedback WHERE useful != 0"
         )?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
+                r.get::<_, String>(1)?,
                 r.get::<_, i64>(2)?,
-                r.get::<_, String>(3)?,
+                r.get::<_, i64>(3)?,
+                r.get::<_, String>(4)?,
             ))
         })?;
         Ok::<_, anyhow::Error>(rows.flatten().collect::<Vec<_>>())
@@ -114,7 +115,7 @@ async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]
     let mut inputs = Vec::with_capacity(rows.len());
     let mut targets = Vec::with_capacity(rows.len());
 
-    for (memory_id, rank_position, useful, accessed_at) in &rows {
+    for (memory_id, agent_id, rank_position, useful, accessed_at) in &rows {
         let score_rrf = 1.0 / (1.0 + *rank_position as f32);
         let score_graph = match ctx.silva.get_node(memory_id).await {
             Ok(Some(n)) => n.weight as f32,
@@ -127,7 +128,8 @@ async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]
             }
             Err(_) => 0.0,
         };
-        inputs.push([score_rrf, score_graph, recency_score, 0.0]);
+        let agent_affinity = ctx.silva.agent_affinity_for_memory(memory_id, agent_id).await.unwrap_or(0.0);
+        inputs.push([score_rrf, score_graph, recency_score, agent_affinity]);
         targets.push(if *useful > 0 { 1.0 } else { 0.0 });
     }
 
@@ -148,7 +150,7 @@ fn train_ffn_with_epochs(inputs: &[[f32; 4]], targets: &[f32], epochs: usize) ->
     let mut b2: f32 = 0.0;
 
     if n == 0 {
-        return LightRerankerWeights { w1, b1, w2, b2: vec![0.0], hidden_size: HIDDEN_SIZE };
+        return LightRerankerWeights { w1, b1, w2, b2: 0.0, hidden_size: HIDDEN_SIZE };
     }
 
     for _epoch in 0..epochs {
@@ -207,7 +209,7 @@ fn train_ffn_with_epochs(inputs: &[[f32; 4]], targets: &[f32], epochs: usize) ->
         w1,
         b1,
         w2,
-        b2: vec![b2],
+        b2,
         hidden_size: HIDDEN_SIZE,
     }
 }
@@ -244,7 +246,7 @@ mod tests {
                 .map(|j| (0..4).map(|i| x[i] * weights.w1[i * HIDDEN_SIZE + j]).sum::<f32>() + weights.b1[j])
                 .map(|v| v.max(0.0))
                 .collect();
-            let logit: f32 = (0..HIDDEN_SIZE).map(|j| h_pre[j] * weights.w2[j]).sum::<f32>() + weights.b2[0];
+            let logit: f32 = (0..HIDDEN_SIZE).map(|j| h_pre[j] * weights.w2[j]).sum::<f32>() + weights.b2;
             1.0 / (1.0 + (-logit).exp())
         }).collect();
 
