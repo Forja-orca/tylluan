@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-24 · HEAD `2986d4a` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
+> Last updated: 2026-08-25 · HEAD `9956822` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,9 +33,9 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `2986d4a` · **779 total** lib green (698 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `9956822` · **788 total** lib green (707 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**Kernel vivo:** a fecha de este commit (`2986d4a`) el kernel vivo está en `be69f11`, 23 commits detrás -- drift funcional real (`check_live_kernel_drift.sh` lo confirma: 19 archivos de código del kernel cambiaron desde entonces, incluyendo LifecyclePhase, RRF, dead config cleanup, y vision_moondream exclusion). Rebuild pendiente antes de confiar en cualquier medición en vivo:
+**Kernel vivo:** a fecha de este commit (`9956822`) el kernel vivo está en `6d605df`, 6 commits detrás -- drift funcional real (`check_live_kernel_drift.sh` lo confirma: 19 archivos de código del kernel cambiaron desde entonces, incluyendo LifecyclePhase, RRF, dead config cleanup, y vision_moondream exclusion). Rebuild pendiente antes de confiar en cualquier medición en vivo:
 ```
 taskkill /IM tylluan-nexus.exe /F
 cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
