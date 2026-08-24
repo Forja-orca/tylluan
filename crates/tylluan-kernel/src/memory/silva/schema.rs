@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 23;
+            const SCHEMA_VERSION: i32 = 24;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -293,6 +293,21 @@ impl super::SilvaDB {
                      UPDATE nodes SET reactivation_count = 0;",
                 )?;
                 tracing::info!("🌲 SilvaDB: added lifecycle_state, last_agent_access, reactivation_count (v23, ADR-012 Fase 1)");
+            }
+            if schema_version < 24 {
+                // Learned-sparse retrieval source (fastembed SparseTextEmbedding::BGEM3,
+                // spike dbbf910 GO). Mirrors node_embeddings lifecycle: purged on archive
+                // transition and by the same orphan-cleanups, so archived nodes never
+                // surface through the sparse RRF source either.
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS node_sparse_embeddings (
+                        node_id  TEXT PRIMARY KEY,
+                        indices  BLOB NOT NULL,
+                        vals     BLOB NOT NULL,
+                        model_id TEXT NOT NULL DEFAULT 'bge-m3-sparse'
+                    );"
+                )?;
+                tracing::info!("🌲 SilvaDB: added node_sparse_embeddings table (v24, hybrid sparse source)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

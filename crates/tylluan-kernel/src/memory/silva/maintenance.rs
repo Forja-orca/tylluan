@@ -396,7 +396,7 @@ impl super::SilvaDB {
             
             // Cleanup orphan embeddings
             let _ = conn.execute(
-                "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
                 []
             )?;
             
@@ -419,6 +419,10 @@ impl super::SilvaDB {
             )?;
             let _ = conn.execute(
                 "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
                 [],
             )?;
             if deleted > 0 {
@@ -445,6 +449,10 @@ impl super::SilvaDB {
             )?;
             let _ = conn.execute(
                 "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
                 [],
             )?;
             if deleted > 0 {
@@ -512,20 +520,28 @@ impl super::SilvaDB {
         })?;
 
         // Vector tiering: drop embeddings of archived nodes, keep node+FTS5+edges.
+        // Sparse signatures (v24) follow the same policy — an archived node must
+        // not surface through the sparse RRF source either.
         let purged = tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            conn.execute(
+            let dense = conn.execute(
                 "DELETE FROM node_embeddings WHERE node_id IN
                  (SELECT id FROM nodes WHERE lifecycle_state = 'archived')",
                 [],
-            )
+            );
+            let sparse = conn.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id IN
+                 (SELECT id FROM nodes WHERE lifecycle_state = 'archived')",
+                [],
+            );
+            dense.map(|d| d + sparse.unwrap_or(0))
         })?;
 
         if purged > 0 {
             self.invalidate_vector_indexes().await;
         }
 
-        Ok((a2q as usize, q2c as usize, c2a as usize, purged as usize))
+        Ok((a2q, q2c, c2a, purged as usize))
     }
 
     pub async fn edge_count(&self) -> Result<i64> {
@@ -599,6 +615,10 @@ impl super::SilvaDB {
             // Clean up their embeddings
             let _ = conn.execute(
                 "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                [],
+            )?;
+            let _ = conn.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
                 [],
             )?;
             

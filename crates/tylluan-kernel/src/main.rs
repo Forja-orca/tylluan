@@ -508,6 +508,21 @@ async fn main() -> anyhow::Result<()> {
     silva.init().await?;
     mailbox.init().await?;
 
+    // ─── Learned-sparse retrieval source (opt-in) ───────────────────
+    // Loads a second ONNX model (~1GB RAM). Failure is non-fatal: search_hybrid
+    // keeps running with the pre-existing 3-source fusion.
+    if config.silva.hybrid_sparse_enabled {
+        match tylluan_kernel::router::embeddings::SparseEngine::try_new(&config.inference.device) {
+            Ok(engine) => {
+                silva.install_sparse_engine(std::sync::Arc::new(engine));
+                info!("🧠 Hybrid sparse source: enabled (BGE-M3 sparse fused as 4th RRF signal)");
+            }
+            Err(e) => {
+                warn!("⚠️ SparseEngine failed to load (non-fatal, sparse source disabled): {e:#}");
+            }
+        }
+    }
+
     // ─── Agent Profile Store ────────────────────────────────────────
     let agent_profiles_path = data_dir.join("agent_profiles.db");
     let agent_profiles = match AgentProfileStore::new(&agent_profiles_path.to_string_lossy()) {

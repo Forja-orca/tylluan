@@ -180,6 +180,10 @@ pub struct SilvaDB {
     /// Query embedding cache (TTL 5min, LRU 256). Caches recall-path embeddings
     /// to avoid repeated ONNX inference for semantically identical queries.
     pub query_embed_cache: Arc<query_cache::QueryEmbeddingCache>,
+    /// Optional learned-sparse engine (fastembed SparseTextEmbedding::BGEM3).
+    /// Late-bound via `install_sparse_engine` when `[silva] hybrid_sparse_enabled`
+    /// is on; None keeps search_hybrid behavior byte-identical to pre-sparse.
+    pub(crate) sparse_engine: std::sync::Mutex<Option<std::sync::Arc<crate::router::embeddings::SparseEngine>>>,
 }
 
 impl SilvaDB {
@@ -210,8 +214,28 @@ impl SilvaDB {
             mmap_path: Some(mmap_path),
             hnsw: tokio::sync::RwLock::new(None),
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
+            sparse_engine: std::sync::Mutex::new(None),
         };
         Ok(db)
+    }
+
+    /// Late-bind the learned-sparse retrieval engine (opt-in, config-gated).
+    /// Called from main after `silva.init()`; a failed load must NOT install
+    /// anything — search_hybrid then runs exactly as before.
+    pub fn install_sparse_engine(
+        &self,
+        engine: std::sync::Arc<crate::router::embeddings::SparseEngine>,
+    ) {
+        *self.sparse_engine.lock().unwrap_or_else(|e| e.into_inner()) = Some(engine);
+    }
+
+    pub(crate) fn sparse_engine_ref(
+        &self,
+    ) -> Option<std::sync::Arc<crate::router::embeddings::SparseEngine>> {
+        self.sparse_engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Complete initialization, ensuring the schema is up to date and performance optimizations (WAL) are applied.
@@ -260,6 +284,7 @@ impl SilvaDB {
             mmap_path: None,
             hnsw: tokio::sync::RwLock::new(None),
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
+            sparse_engine: std::sync::Mutex::new(None),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {
@@ -385,8 +410,8 @@ impl SilvaDB {
     /// query serves a ghost vector after node_embeddings rows are purged.
     ///
     /// Used by vector tiering (ADR-012 archived transition). The .fjv1 file is
-    /// NOT deleted here — `consolidate_ivf_index` at next startup treats a
-    /// >1/3 shrink in embedding count as stale and rebuilds from SQLite, which
+    /// NOT deleted here — `consolidate_ivf_index` at next startup treats a shrink
+    /// of more than 1/3 in embedding count as stale and rebuilds from SQLite, which
     /// is the source of truth. The DB-persisted HNSW blob is likewise rebuilt
     /// from the surviving rows by `rebuild_hnsw_if_needed`.
     pub(crate) async fn invalidate_vector_indexes(&self) {
