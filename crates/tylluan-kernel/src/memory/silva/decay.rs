@@ -469,6 +469,7 @@ impl super::SilvaDB {
                     tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;
                     tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
                     tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![id])?;
+                    tx.execute("DELETE FROM node_sparse_embeddings WHERE node_id = ?1", params![id])?;
                     tx.execute("DELETE FROM nodes WHERE id = ?1", params![id])?;
                 }
                 tx.commit()?;

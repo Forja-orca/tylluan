@@ -12,7 +12,7 @@
 //! | `nomic-embed-text` | nomic-ai/nomic-embed-text-v1.5 | 768  | ~274M |
 
 use anyhow::{Result, Context, anyhow};
-use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch};
+use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch, SparseTextEmbedding, SparseInitOptions, SparseModel};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -201,6 +201,132 @@ impl EmbeddingEngine {
     }
 }
 
+/// Learned-sparse vector: vocabulary dimension indices + learned lexical weights
+/// (BGE-M3 sparse head). Stored and compared as-is; scoring is a dot product over
+/// shared indices.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SparseVec {
+    pub indices: Vec<u32>,
+    pub values: Vec<f32>,
+}
+
+impl SparseVec {
+    /// Serialize as [u32 LE indices][f32 LE values] — BLOB-friendly pair.
+    pub fn to_bytes(&self) -> (Vec<u8>, Vec<u8>) {
+        let idx: Vec<u8> = self.indices.iter().flat_map(|i| i.to_le_bytes()).collect();
+        let val: Vec<u8> = self.values.iter().flat_map(|v| v.to_le_bytes()).collect();
+        (idx, val)
+    }
+
+    pub fn from_bytes(indices_blob: &[u8], values_blob: &[u8]) -> Result<Self> {
+        if indices_blob.len() % 4 != 0 || values_blob.len() % 4 != 0 {
+            return Err(anyhow!("sparse blob length not multiple of 4"));
+        }
+        let indices: Vec<u32> = indices_blob
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().expect("4 bytes")))
+            .collect();
+        let values: Vec<f32> = values_blob
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().expect("4 bytes")))
+            .collect();
+        if indices.len() != values.len() {
+            return Err(anyhow!(
+                "sparse indices/values length mismatch: {} vs {}",
+                indices.len(),
+                values.len()
+            ));
+        }
+        Ok(Self { indices, values })
+    }
+
+    /// Dot product over shared dimension indices (SPLADE-style lexical matching).
+    pub fn dot(&self, other: &SparseVec) -> f32 {
+        sparse_dot(&self.indices, &self.values, &other.indices, &other.values)
+    }
+}
+
+/// Pure dot product over parallel index/value vectors. O(n·m); nnz per vector is
+/// small (hundreds), fine for linear candidate scans at Tylluan's scale.
+pub fn sparse_dot(a_idx: &[u32], a_val: &[f32], b_idx: &[u32], b_val: &[f32]) -> f32 {
+    if a_idx.len() > b_idx.len() {
+        return sparse_dot(b_idx, b_val, a_idx, a_val);
+    }
+    use std::collections::HashMap;
+    let b_map: HashMap<u32, f32> = b_idx.iter().copied().zip(b_val.iter().copied()).collect();
+    a_idx.iter()
+        .zip(a_val.iter())
+        .filter_map(|(i, av)| b_map.get(i).map(|bv| av * bv))
+        .sum()
+}
+
+/// Engine for fastembed `SparseTextEmbedding::BGEM3` (BGE-M3 sparse/lexical head).
+///
+/// Separate ONNX model from the dense engine (~1GB RAM when loaded). Validated by
+/// the T289 spike (tests/sparse_signature_spike.rs, commit dbbf910): overlap
+/// near-dup=0.58 vs unrelated=0.16 → GO as a retrieval fusion signal.
+pub struct SparseEngine {
+    model: Mutex<SparseTextEmbedding>,
+    cache: Mutex<LruCache<String, SparseVec>>,
+}
+
+impl SparseEngine {
+    pub const MODEL_ID: &'static str = "bge-m3-sparse";
+
+    pub fn try_new(device: &InferenceDevice) -> Result<Self> {
+        let eps = build_execution_providers(device);
+        let options = SparseInitOptions::new(SparseModel::BGEM3).with_execution_providers(eps);
+        let model = SparseTextEmbedding::try_new(options)
+            .map_err(|e| anyhow!("SparseEngine init failed: {e:?}"))?;
+        info!("🧠 BGE-M3 sparse engine ready (ONNX)");
+        Ok(Self {
+            model: Mutex::new(model),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())),
+        })
+    }
+
+    /// Embed text into a learned-sparse vector (LRU-cached like the dense path).
+    pub fn embed(&self, text: &str) -> Result<SparseVec> {
+        let key = text.trim().to_lowercase();
+        {
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(hit) = cache.get(&key) {
+                return Ok(hit.clone());
+            }
+        }
+        let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
+        let mut out = model
+            .embed(vec![text], None)
+            .map_err(|e| anyhow!("Sparse inference failed: {e:?}"))?;
+        let emb = out.pop().context("No sparse embedding returned")?;
+        // usize → u32: vocabulary dims fit comfortably; clamp defensively.
+        let sv = SparseVec {
+            indices: emb.indices.into_iter().map(|i| u32::try_from(i).unwrap_or(u32::MAX)).collect(),
+            values: emb.values,
+        };
+        drop(model);
+        {
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            cache.put(key, sv.clone());
+        }
+        Ok(sv)
+    }
+
+    pub fn embed_batch(&self, texts: &[&str]) -> Result<Vec<SparseVec>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
+        let out = model
+            .embed(texts, None)
+            .map_err(|e| anyhow!("Sparse batch inference failed: {e:?}"))?;
+        Ok(out.into_iter().map(|emb| SparseVec {
+            indices: emb.indices.into_iter().map(|i| u32::try_from(i).unwrap_or(u32::MAX)).collect(),
+            values: emb.values,
+        }).collect())
+    }
+}
+
 /// Build execution provider list for fastembed based on configured device.
 /// Falls back to CPU automatically if the requested EP is unavailable at runtime.
 fn build_execution_providers(device: &InferenceDevice) -> Vec<ExecutionProviderDispatch> {
@@ -338,5 +464,36 @@ mod tests {
         assert_eq!(resolve_dimension("BGE"), 1024);
         assert_eq!(resolve_dimension(""), 0);
         assert_eq!(resolve_dimension("none"), 0);
+    }
+
+    // ---- SparseVec serialization + scoring (no model needed) ----
+
+    #[test]
+    fn sparse_vec_roundtrip() {
+        let sv = SparseVec { indices: vec![1, 42, 100_000], values: vec![0.5, 2.25, -1.0] };
+        let (ib, vb) = sv.to_bytes();
+        assert_eq!(ib.len(), 12);
+        assert_eq!(vb.len(), 12);
+        let back = SparseVec::from_bytes(&ib, &vb).unwrap();
+        assert_eq!(sv, back);
+    }
+
+    #[test]
+    fn sparse_vec_roundtrip_rejects_corrupt() {
+        assert!(SparseVec::from_bytes(&[1, 2, 3], &[0; 8]).is_err(), "idx not %4");
+        assert!(SparseVec::from_bytes(&[0; 8], &[1, 2, 3]).is_err(), "val not %4");
+        assert!(SparseVec::from_bytes(&[0; 8], &[0; 4]).is_err(), "length mismatch");
+    }
+
+    #[test]
+    fn sparse_dot_shared_indices_only() {
+        let a = SparseVec { indices: vec![1, 2, 3], values: vec![1.0, 2.0, 4.0] };
+        let b = SparseVec { indices: vec![2, 3, 9], values: vec![0.5, 0.5, 10.0] };
+        assert!((a.dot(&b) - 3.0).abs() < 1e-6);
+        assert!((a.dot(&b) - b.dot(&a)).abs() < 1e-6, "commutative");
+        let disjoint = SparseVec { indices: vec![7, 8], values: vec![1.0, 1.0] };
+        assert_eq!(a.dot(&disjoint), 0.0);
+        let empty = SparseVec { indices: vec![], values: vec![] };
+        assert_eq!(a.dot(&empty), 0.0);
     }
 }

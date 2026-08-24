@@ -228,6 +228,22 @@ impl super::SilvaDB {
                 .or_insert((node, rrf));
         }
 
+        // Learned-sparse source (BGE-M3 sparse head, opt-in via hybrid_sparse_enabled).
+        // Works even without a query embedding (text-only mode) since it needs only
+        // the raw query. Nodes with no stored sparse vector are simply absent —
+        // graceful degradation to the pre-existing 3-source fusion.
+        if let Some(sparse_engine) = self.sparse_engine_ref()
+            && let Ok(qsv) = sparse_engine.embed(query)
+            && let Ok(sparse_results) = self.search_sparse_candidates(&qsv, limit).await
+        {
+            for (rank, node) in sparse_results.into_iter().enumerate() {
+                let rrf = 1.0 / (K + rank as f32 + 1.0);
+                rrf_scores.entry(node.id.clone())
+                    .and_modify(|e| e.1 += rrf)
+                    .or_insert((node, rrf));
+            }
+        }
+
         // Entity boost: entity/concept nodes get +25% score (more relevant for knowledge graph)
         for entry in rrf_scores.values_mut() {
             let nt = entry.0.node_type.to_lowercase();
@@ -247,10 +263,10 @@ impl super::SilvaDB {
         let mut final_results: Vec<(GraphNode, f32)> = rrf_scores.into_values().collect();
 
         // ASI06: exclude quarantined nodes from recall. Filtered here (post-fusion,
-        // single query) rather than in each of the 3 upstream sources (vector/graph/
-        // BM25-LIKE) -- one choke point, can't be missed by adding a 4th source later.
-        // Quarantined content stays in SilvaDB for manual review, it just never
-        // surfaces through tylluan_recall.
+        // single query) rather than in each of the 4 upstream sources (vector/graph/
+        // BM25-LIKE/sparse) -- one choke point, can't be missed by adding a 5th
+        // source later. Quarantined content stays in SilvaDB for manual review, it
+        // just never surfaces through tylluan_recall.
         if !final_results.is_empty() {
             let quarantined_ids = self.quarantined_ids_among(
                 &final_results.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>()
@@ -324,6 +340,49 @@ impl super::SilvaDB {
             .take(limit)
             .filter_map(|(idx, score)| candidates.get(idx).map(|(n, _)| (n.clone(), score)))
             .collect())
+    }
+
+    /// Rank nodes by learned-sparse lexical match against the query vector.
+    /// Single JOINed query (no N+1); dot product over shared indices; returns
+    /// only nodes with a positive score, best first. Lifecycle/quarantine
+    /// filtering stays post-fusion in search_hybrid (same as the other sources).
+    pub(crate) async fn search_sparse_candidates(
+        &self,
+        query: &crate::router::embeddings::SparseVec,
+        limit: usize,
+    ) -> Result<Vec<GraphNode>> {
+        use crate::router::embeddings::SparseVec;
+        let mut scored: Vec<(GraphNode, f32)> = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare(
+                "SELECT n.id, n.type, n.content, n.metadata, n.weight, n.protected, n.conflicted,
+                        n.topic_key, n.created_at, n.updated_at, n.valid_from, n.valid_until,
+                        n.shareable, n.content_hash, n.provenance,
+                        s.indices, s.vals
+                 FROM node_sparse_embeddings s
+                 JOIN nodes n ON n.id = s.node_id
+                 WHERE n.weight > 0.005 LIMIT 20000"
+            )?;
+            let mapped = stmt.query_map([], |row| {
+                let node = Self::map_node_row(row)?;
+                let ib: Vec<u8> = row.get(15)?;
+                let vb: Vec<u8> = row.get(16)?;
+                Ok((node, ib, vb))
+            })?;
+            let mut out: Vec<(GraphNode, f32)> = Vec::new();
+            for r in mapped {
+                let (node, ib, vb) = r?;
+                let Ok(sv) = SparseVec::from_bytes(&ib, &vb) else { continue };
+                let score = query.dot(&sv);
+                if score > 0.0 {
+                    out.push((node, score));
+                }
+            }
+            Ok::<_, anyhow::Error>(out)
+        })?;
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+        Ok(scored.into_iter().map(|(n, _)| n).collect())
     }
 
     fn map_node_row(row: &rusqlite::Row) -> rusqlite::Result<GraphNode> {

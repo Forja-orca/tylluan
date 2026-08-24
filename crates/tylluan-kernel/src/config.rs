@@ -923,6 +923,14 @@ pub struct SilvaConfig {
 
     #[serde(default = "default_sync_interval")]
     pub sync_interval_ms: u64,
+
+    /// Opt-in learned-sparse retrieval source (fastembed SparseTextEmbedding::BGEM3).
+    /// When enabled, SilvaDB loads a second ONNX model (~1GB RAM, separate from the
+    /// dense engine) and search_hybrid fuses a sparse lexical signal as an extra
+    /// RRF source (spike dbbf910 GO: overlap near-dup=0.58 vs unrelated=0.16).
+    /// Default OFF: no behavior change and no extra RAM unless explicitly enabled.
+    #[serde(default = "default_hybrid_sparse_enabled")]
+    pub hybrid_sparse_enabled: bool,
 }
 
 impl Default for SilvaConfig {
@@ -934,6 +942,7 @@ impl Default for SilvaConfig {
             decay_prune_threshold: default_decay_prune_threshold(),
             decay_half_life_hours: default_decay_half_life_hours(),
             sync_interval_ms: default_sync_interval(),
+            hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
         }
     }
 }
@@ -1585,6 +1594,8 @@ fn default_decay_prune_threshold() -> f64 { 0.15 }
 /// Public because main.rs compares against it to warn about the deprecated
 /// key (decay is FSRS-driven since v0.13.0 — this value has no effect).
 pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
+
+pub fn default_hybrid_sparse_enabled() -> bool { false }
 fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }

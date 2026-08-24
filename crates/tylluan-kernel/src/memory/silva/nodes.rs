@@ -332,6 +332,35 @@ impl super::SilvaDB {
             )?;
             Ok::<(), anyhow::Error>(())
         })?;
+        // Learned-sparse sidecar (opt-in): single choke point so every dense
+        // write also refreshes the sparse signature. Best-effort — a sparse
+        // failure must never fail the dense write.
+        if let Some(engine) = self.sparse_engine_ref()
+            && let Some(Some(node)) = self.get_node(node_id).await.ok()
+            && let Ok(sv) = engine.embed(&node.content)
+        {
+            let _ = self.save_sparse_embedding(node_id, &sv).await;
+        }
+        Ok(())
+    }
+
+    /// Store a learned-sparse vector for a node (BLOB pair: u32 LE indices, f32 LE values).
+    pub async fn save_sparse_embedding(&self, node_id: &str, sv: &crate::router::embeddings::SparseVec) -> Result<()> {
+        use crate::router::embeddings::SparseEngine;
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let (idx, val) = sv.to_bytes();
+            conn.execute(
+                "INSERT INTO node_sparse_embeddings (node_id, indices, vals, model_id)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(node_id) DO UPDATE SET
+                    indices = excluded.indices,
+                    vals = excluded.vals,
+                    model_id = excluded.model_id",
+                params![node_id, idx, val, SparseEngine::MODEL_ID],
+            )?;
+            Ok::<(), anyhow::Error>(())
+        })?;
         Ok(())
     }
 
@@ -690,6 +719,7 @@ impl super::SilvaDB {
             tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![src])?;
             tx.execute("DELETE FROM edges WHERE source = target", params![])?;
             tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![src])?;
+            tx.execute("DELETE FROM node_sparse_embeddings WHERE node_id = ?1", params![src])?;
             tx.execute("DELETE FROM nodes WHERE id = ?1", params![src])?;
             tx.commit()?;
             Ok::<(), anyhow::Error>(())
@@ -808,6 +838,7 @@ impl super::SilvaDB {
             tx.execute("DELETE FROM edges WHERE source = ?1 OR target = ?1", params![id])?;
             tx.execute("DELETE FROM node_traces WHERE node_id = ?1", params![id])?;
             tx.execute("DELETE FROM node_embeddings WHERE node_id = ?1", params![id])?;
+            tx.execute("DELETE FROM node_sparse_embeddings WHERE node_id = ?1", params![id])?;
             let deleted = tx.execute("DELETE FROM nodes WHERE id = ?1", params![id])?;
             tx.commit()?;
             if let Some(rid) = fts_rowid {
