@@ -23,7 +23,7 @@ pub struct LightRerankerWeights {
     pub w1: Vec<f32>,
     pub b1: Vec<f32>,
     pub w2: Vec<f32>,
-    pub b2: Vec<f32>,
+    pub b2: f32,
     pub hidden_size: usize,
 }
 
@@ -144,7 +144,7 @@ fn score_native(features: &RerankFeatures, w: &LightRerankerWeights) -> f32 {
     let hidden = x.dot(&w1) + &b1;
     let hidden = hidden.mapv(|v| v.max(0.0));
     let logit_arr = hidden.dot(&w2);
-    let logit = logit_arr[0] + w.b2[0];
+    let logit = logit_arr[0] + w.b2;
     1.0 / (1.0 + (-logit).exp())
 }
 
@@ -178,7 +178,7 @@ mod tests {
             w1: vec![0.1; 64],
             b1: vec![0.0; 16],
             w2: vec![0.2; 16],
-            b2: vec![0.0],
+            b2: 0.0,
             hidden_size: 16,
         };
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -200,7 +200,7 @@ mod tests {
             w1: vec![1.0; 64],
             b1: vec![0.0; 16],
             w2: vec![1.0; 16],
-            b2: vec![0.0],
+            b2: 0.0,
             hidden_size: 16,
         };
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -226,7 +226,7 @@ mod tests {
             w1: vec![1.0; 64],
             b1: vec![0.0; 16],
             w2: vec![1.0; 16],
-            b2: vec![0.0],
+            b2: 0.0,
             hidden_size: 16,
         };
         let tmp = tempfile::tempdir().expect("tempdir");
