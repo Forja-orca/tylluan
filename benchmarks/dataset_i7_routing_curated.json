@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "task": "I-7",
   "description": "Curated routing intent dataset with train/held-out split for J-13 tiebreaker validation",
-  "total_count": 181,
+  "total_count": 179,
   "train_count": 108,
   "held_out_count": 73,
   "guild_count": 45,
@@ -199,9 +199,9 @@
     {
       "id": "i7_curated_0075",
       "intent": "convene a council debate between Claude and Deep to evaluate SQLite triggers vs app logic",
-      "target_guild": "council",
+      "target_guild": "night_reasoner",
       "category": "core",
-      "ambiguity_type": "clear_keyword",
+      "ambiguity_type": "cross_guild_ambiguity",
       "source": "expert_curated",
       "split": "train"
     },
@@ -253,9 +253,9 @@
     {
       "id": "i7_curated_0062",
       "intent": "check if there are any unread messages or notifications in channels",
-      "target_guild": "whats_new",
+      "target_guild": "coloquio",
       "category": "watcher",
-      "ambiguity_type": "clear_keyword",
+      "ambiguity_type": "cross_guild_ambiguity",
       "source": "expert_curated",
       "split": "train"
     },
