@@ -381,6 +381,28 @@ impl SilvaDB {
         Ok(())
     }
 
+    /// Drop the in-memory IVF mmap store, IVF searcher, and HNSW index so no
+    /// query serves a ghost vector after node_embeddings rows are purged.
+    ///
+    /// Used by vector tiering (ADR-012 archived transition). The .fjv1 file is
+    /// NOT deleted here — `consolidate_ivf_index` at next startup treats a
+    /// >1/3 shrink in embedding count as stale and rebuilds from SQLite, which
+    /// is the source of truth. The DB-persisted HNSW blob is likewise rebuilt
+    /// from the surviving rows by `rebuild_hnsw_if_needed`.
+    pub(crate) async fn invalidate_vector_indexes(&self) {
+        *self.mmap_store.write().unwrap() = None;
+        *self.ivf_searcher.write().unwrap() = None;
+        *self.hnsw.write().await = None;
+        // Drop the persisted HNSW blob too — otherwise it reloads stale on
+        // next init (load_hnsw_from_db) and serves ghost vectors. rebuild_hnsw_if_needed
+        // rebuilds it from the surviving node_embeddings rows.
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let _ = conn.execute("DELETE FROM hnsw_index WHERE id = 1", []);
+        });
+        tracing::info!("🌲 Vector indexes invalidated after embedding purge");
+    }
+
 }
 
 pub(crate) fn jaccard_similarity(a: &str, b: &str) -> f64 {

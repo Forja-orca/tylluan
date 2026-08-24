@@ -453,6 +453,81 @@ impl super::SilvaDB {
             Ok(deleted)
         })
     }
+    /// ADR-012 lifecycle state machine — Fase 2/3 transitions, run by
+    /// `LifecyclePhase` in NightConsolidation.
+    ///
+    /// Chain: active → quiet (30d) → consolidated (60d) → archived (90d).
+    ///   - Age is measured against `last_agent_access` (real agent recall/ingest
+    ///     only, never internal touch_node/decay — ADR-012 §8.2). Nodes never
+    ///     accessed by an agent (last_agent_access = 0) age from `created_at`.
+    ///   - `protected`, `identity`, and `quarantined` nodes never advance
+    ///     (ADR-012 Decision 4: quarantine is an orthogonal axis).
+    ///   - Durable summaries keep their lifecycle like any node; the
+    ///     DURABLE_SUMMARY_EXCLUSION protects them from *deletion*, not from
+    ///     lifecycle degradation.
+    ///
+    /// Vector tiering: transitioning to `archived` purges the node's embedding
+    /// row (preserving node + FTS5 + edges) and invalidates the in-memory
+    /// IVF/HNSW indexes so no ghost vector is served. The .fjv1 is rebuilt at
+    /// next startup — `consolidate_ivf_index` now also treats a >1/3 shrink
+    /// as stale.
+    ///
+    /// Returns (active→quiet, quiet→consolidated, consolidated→archived,
+    /// embeddings_purged).
+    pub async fn apply_lifecycle_transitions(&self) -> Result<(usize, usize, usize, usize)> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+        let day = 86_400i64;
+        let quiet_cutoff = now - 30 * day;
+        let consolidated_cutoff = now - 60 * day;
+        let archived_cutoff = now - 90 * day;
+
+        let (a2q, q2c, c2a) = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            // Effective age: last_agent_access when > 0, else created_at.
+            let age_expr = "CASE WHEN last_agent_access > 0 THEN last_agent_access
+                             ELSE CAST(strftime('%s', created_at) AS INTEGER) END";
+            let a2q = conn.execute(
+                &format!("UPDATE nodes SET lifecycle_state = 'quiet'
+                 WHERE lifecycle_state = 'active'
+                   AND protected = 0 AND type != 'identity' AND quarantined = 0
+                   AND ({age_expr}) < ?1"),
+                params![quiet_cutoff],
+            )?;
+            let q2c = conn.execute(
+                &format!("UPDATE nodes SET lifecycle_state = 'consolidated'
+                 WHERE lifecycle_state = 'quiet'
+                   AND protected = 0 AND type != 'identity' AND quarantined = 0
+                   AND ({age_expr}) < ?1"),
+                params![consolidated_cutoff],
+            )?;
+            let c2a = conn.execute(
+                &format!("UPDATE nodes SET lifecycle_state = 'archived'
+                 WHERE lifecycle_state = 'consolidated'
+                   AND protected = 0 AND type != 'identity' AND quarantined = 0
+                   AND ({age_expr}) < ?1"),
+                params![archived_cutoff],
+            )?;
+            Ok::<_, anyhow::Error>((a2q, q2c, c2a))
+        })?;
+
+        // Vector tiering: drop embeddings of archived nodes, keep node+FTS5+edges.
+        let purged = tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            conn.execute(
+                "DELETE FROM node_embeddings WHERE node_id IN
+                 (SELECT id FROM nodes WHERE lifecycle_state = 'archived')",
+                [],
+            )
+        })?;
+
+        if purged > 0 {
+            self.invalidate_vector_indexes().await;
+        }
+
+        Ok((a2q as usize, q2c as usize, c2a as usize, purged as usize))
+    }
+
     pub async fn edge_count(&self) -> Result<i64> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();

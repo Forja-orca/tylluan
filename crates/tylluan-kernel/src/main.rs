@@ -1711,6 +1711,7 @@ async fn run_night_consolidation_loop(
         PhaseOrchestrator, PhaseContext,
         DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
         DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
+        LifecyclePhase,
     };
 
     let orchestrator = PhaseOrchestrator::new(vec![
@@ -1723,6 +1724,7 @@ async fn run_night_consolidation_loop(
         Box::new(CurriculumPhase),
         Box::new(IdleLabPhase),
         Box::new(FeedbackSignalPhase),
+        Box::new(LifecyclePhase),
     ]);
 
     let ctx = PhaseContext {
