@@ -838,8 +838,7 @@ if let Some(ref mut s) = stmt {
 
             // ADR-011 LightReranker: reorder by learned score when model available.
             // Additive, opt-in — if no trained model exists, scored is unchanged.
-            if crate::router::light_reranker::LightReranker::exists(&server.models_dir) {
-                let reranker = crate::router::light_reranker::LightReranker::new(&server.models_dir);
+            if let Some(ref reranker) = server.light_reranker {
                 if reranker.is_active() {
                     // Pre-compute agent affinity for each candidate.
                     // Only queries recall_feedback when reranker is active (model exists).

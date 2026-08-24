@@ -85,6 +85,10 @@ pub struct TylluanServer {
     /// rollback contract itself is declared in GuildDescriptor, not here.
     pub undo_log: Arc<std::sync::Mutex<std::collections::HashMap<String, ReversibleAction>>>,
     pub models_dir: PathBuf,
+    /// Cached LightReranker instance — created once in `set_mlp` when
+    /// models_dir is set, reused across all recall calls. Avoids reloading
+    /// ONNX/weights on every request.
+    pub light_reranker: Option<Arc<crate::router::light_reranker::LightReranker>>,
 }
 
 impl TylluanServer {
@@ -142,6 +146,7 @@ impl TylluanServer {
             mlp_replay: None,
             undo_log: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             models_dir: PathBuf::from("models"),
+            light_reranker: None,
         }
     }
 
@@ -149,6 +154,10 @@ impl TylluanServer {
         self.mlp_scorer = Some(Arc::new(scorer));
         self.mlp_replay = Some(Arc::new(std::sync::Mutex::new(ReplayBuffer::new(data_dir))));
         self.models_dir = data_dir.join("models");
+        // Cache LightReranker now that models_dir is known.
+        self.light_reranker = Some(Arc::new(
+            crate::router::light_reranker::LightReranker::new(&self.models_dir),
+        ));
     }
 
     pub fn set_jobs(&mut self, jobs: Arc<crate::memory::jobs::JobQueue>) {
