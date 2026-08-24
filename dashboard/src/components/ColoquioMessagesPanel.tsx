@@ -66,10 +66,10 @@ function parseMarkdown(text: string): string {
     `<li class="list-disc ml-4 my-0.5 text-slate-300">${item}</li>`
   );
   h = h.replace(/(^|[\s,;().!?])#(\d{1,4})\b/g,
-    '$1<span class="cursor-pointer text-cyan-400 hover:text-cyan-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
+    '$1<span class="cursor-pointer text-amber-400 hover:text-amber-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
   );
   h = h.replace(/(^|[\s,;()>.!?])@([A-Za-z0-9_][A-Za-z0-9_-]*)/g,
-    '$1<span class="text-cyan-300 bg-cyan-950/50 border border-cyan-800/40 rounded px-1 font-semibold">@$2</span>'
+    '$1<span class="text-amber-300 bg-amber-950/50 border border-amber-800/40 rounded px-1 font-semibold">@$2</span>'
   );
   return h;
 }
@@ -259,7 +259,7 @@ export function ColoquioMessagesPanel({
             {!cont && (
               <div className={cn('flex items-center gap-2', isHuman ? 'flex-row-reverse' : '')}>
                 <span className={cn('text-[11px] font-semibold', m.color)}>{isHuman ? msg.author_id : `@${msg.author_id}`}</span>
-                <button onClick={() => scrollToTurn(msg.turn)} className="text-[9px] text-slate-600 font-mono hover:text-cyan-400 transition-colors">#{msg.turn}</button>
+                <button onClick={() => scrollToTurn(msg.turn)} className="text-[9px] text-slate-600 font-mono hover:text-amber-400 transition-colors">#{msg.turn}</button>
                 <span className="text-[9px] text-slate-600">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
                   <span className="text-[9px] text-violet-400 bg-violet-950/40 border border-violet-800/40 px-1 py-0.25 rounded flex items-center gap-1">
@@ -275,7 +275,7 @@ export function ColoquioMessagesPanel({
                 compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
                 isHuman ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-50 rounded-tr-sm'
                         : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
-                highlight ? 'ring-2 ring-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.4)]' : ''
+                highlight ? 'ring-2 ring-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.4)]' : ''
               )}>
                 <div onClick={handleThreadClick} dangerouslySetInnerHTML={{
                   __html: msgSearch.trim()
@@ -370,7 +370,7 @@ export function ColoquioMessagesPanel({
                           const isImg = /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(att.file);
                           const url = bridge ? `${bridge.getBaseUrl()}/api/v1/ingest/files/${att.file}` : '';
                           if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-slate-700 cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;
-                          return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 hover:text-cyan-400 transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
+                          return <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 hover:text-amber-400 transition-colors"><FileText className="w-3 h-3" /><span className="truncate max-w-[140px]">{att.name}</span></a>;
                         })}
                       </div>
                     );
@@ -477,7 +477,7 @@ export function ColoquioMessagesPanel({
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
             className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
-              isDragging ? 'border-cyan-500 bg-cyan-950/20 ring-2 ring-cyan-500/30' : 'border-slate-700/60')}
+              isDragging ? 'border-amber-500 bg-amber-950/20 ring-2 ring-amber-500/30' : 'border-slate-700/60')}
             rows={3} placeholder="Escribe un mensaje... Shift+Enter para saltar linea" value={draft}
             onChange={e => {
               setDraft(e.target.value);

@@ -283,7 +283,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
                 description = "Qwen · Auditoría y búsqueda web";
               } else if (aid.includes("hermes")) {
                 costTier = "Inferencia Local (Background)";
-                costColor = "text-cyan-400";
+                costColor = "text-sky-400";
                 description = "Hermes · Autonomía nocturna";
               }
 

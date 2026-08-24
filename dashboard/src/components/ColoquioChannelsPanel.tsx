@@ -142,7 +142,7 @@ export function ColoquioChannelsPanel({
               <span className="font-bold text-sm">Eliminar canal</span>
             </div>
             <p className="text-xs text-slate-300">
-              ¿Eliminar <span className="font-mono text-cyan-400">#{deleteTarget.name}</span> ({deleteTarget.message_count} mensajes)? Irreversible.
+              ¿Eliminar <span className="font-mono text-amber-400">#{deleteTarget.name}</span> ({deleteTarget.message_count} mensajes)? Irreversible.
             </p>
             <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors">
               <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded accent-indigo-500" />

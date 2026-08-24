@@ -46,10 +46,10 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 font-mono">
               <span className="text-sm font-bold text-slate-100">Tylluan Cognitive Substrate</span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-slate-900 text-[#00F5D4] border border-slate-700 rounded">
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-slate-900 text-amber-400 border border-slate-700 rounded">
                 v0.16.0
               </span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded flex items-center gap-1">
+              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
                 CI Passing
               </span>
@@ -62,7 +62,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
 
         <div className="flex max-w-full flex-wrap items-center gap-3 font-mono text-xs text-slate-400">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-850 rounded-xl">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#00F5D4]" />
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
             <span>Coherence Gate:</span>
             <span className="text-slate-200 font-bold">Layer 1/2/3 Active</span>
           </div>
@@ -75,7 +75,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           onClick={() => setSubTab('summary')}
           className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
             subTab === 'summary'
-              ? 'bg-[#00F5D4]/10 border-[#00F5D4]/40 text-[#00F5D4]'
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -86,7 +86,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           onClick={() => setSubTab('interoception')}
           className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
             subTab === 'interoception'
-              ? 'bg-[#00F5D4]/10 border-[#00F5D4]/40 text-[#00F5D4]'
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -97,7 +97,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
           onClick={() => setSubTab('system')}
           className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
             subTab === 'system'
-              ? 'bg-[#00F5D4]/10 border-[#00F5D4]/40 text-[#00F5D4]'
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -208,12 +208,12 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
     <div className="rounded-xl border border-slate-800 bg-[#0B0F17]/90 overflow-hidden font-sans">
       <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between font-mono">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#00F5D4]">Team Pulse (Coloquio)</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Team Pulse (Coloquio)</span>
           {!isIdle && !loading && (
-            <span className="w-2 h-2 rounded-full bg-[#00F5D4] animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           )}
         </div>
-        <MessageSquare className="w-3.5 h-3.5 text-[#00F5D4]" />
+        <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
       </div>
 
       <div className="p-4">
@@ -228,7 +228,7 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
           <div className="divide-y divide-slate-800/40">
             {messages.map((msg: any) => {
               const secondsAgo = Math.max(0, nowSecs - msg.created_at);
-              const authorColor = msg.role === 'human' ? 'text-blue-400' : 'text-[#00F5D4]';
+              const authorColor = msg.role === 'human' ? 'text-blue-400' : 'text-amber-400';
               const textPreview = msg.content.length > 80 ? msg.content.slice(0, 80) + '...' : msg.content;
               
               return (

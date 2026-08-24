@@ -382,10 +382,10 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                       <div key={guild} className="space-y-1">
                         <div className="flex justify-between text-[9px] font-mono">
                           <span className="text-slate-400 uppercase">{guild}</span>
-                          <span className="text-cyan-400">{(value * 100).toFixed(0)}%</span>
+                          <span className="text-amber-400">{(value * 100).toFixed(0)}%</span>
                         </div>
                         <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-cyan-500/50" style={{ width: `${value * 100}%` }} />
+                          <div className="h-full bg-amber-500/50" style={{ width: `${value * 100}%` }} />
                         </div>
                       </div>
                     ))}

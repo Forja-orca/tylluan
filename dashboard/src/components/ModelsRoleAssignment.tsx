@@ -102,7 +102,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
       rec: 'Recomendado: SmolVLM2-256M / Moondream',
       value: roleVision,
       setter: setRoleVision,
-      color: 'border-cyan-500/30'
+      color: 'border-sky-500/30'
     },
   ];
 
