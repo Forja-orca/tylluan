@@ -184,6 +184,10 @@ pub struct SilvaDB {
     /// Late-bound via `install_sparse_engine` when `[silva] hybrid_sparse_enabled`
     /// is on; None keeps search_hybrid behavior byte-identical to pre-sparse.
     pub(crate) sparse_engine: std::sync::Mutex<Option<std::sync::Arc<crate::router::embeddings::SparseEngine>>>,
+    /// Shared handle to the dense embedding engine (same Arc the Matcher owns).
+    /// Late-bound from main so the recall cascade can embed queries itself
+    /// (stage 2) instead of requiring callers to precompute embeddings.
+    pub(crate) dense_engine: std::sync::Mutex<Option<std::sync::Arc<crate::router::embeddings::EmbeddingEngine>>>,
 }
 
 impl SilvaDB {
@@ -215,6 +219,7 @@ impl SilvaDB {
             hnsw: tokio::sync::RwLock::new(None),
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
             sparse_engine: std::sync::Mutex::new(None),
+            dense_engine: std::sync::Mutex::new(None),
         };
         Ok(db)
     }
@@ -233,6 +238,25 @@ impl SilvaDB {
         &self,
     ) -> Option<std::sync::Arc<crate::router::embeddings::SparseEngine>> {
         self.sparse_engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Share the dense embedding engine handle (same Arc as Matcher's).
+    /// Re-install after hot-swaps so the cascade always embeds with the
+    /// currently-active model.
+    pub fn install_dense_engine(
+        &self,
+        engine: std::sync::Arc<crate::router::embeddings::EmbeddingEngine>,
+    ) {
+        *self.dense_engine.lock().unwrap_or_else(|e| e.into_inner()) = Some(engine);
+    }
+
+    pub(crate) fn dense_engine_ref(
+        &self,
+    ) -> Option<std::sync::Arc<crate::router::embeddings::EmbeddingEngine>> {
+        self.dense_engine
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -285,6 +309,7 @@ impl SilvaDB {
             hnsw: tokio::sync::RwLock::new(None),
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
             sparse_engine: std::sync::Mutex::new(None),
+            dense_engine: std::sync::Mutex::new(None),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {

@@ -636,6 +636,12 @@ async fn main() -> anyhow::Result<()> {
     let matcher = matcher.with_hormones(hormones_shared.clone());
     let matcher = Arc::new(matcher);
 
+    // Share the dense engine handle with SilvaDB for the recall cascade
+    // (stage 2 embeds queries itself; re-installed after background hot-swap).
+    if let Some(eng) = matcher.engine_arc() {
+        silva.install_dense_engine(eng);
+    }
+
     // T206 (2026-08-22) wrapped this in catch_unwind believing it made the boot
     // panic-proof when libonnxruntime is missing. Verified WRONG 2026-08-23 by
     // G2's boot-smoke-no-onnx CI job on its first real run: this workspace's
@@ -1017,6 +1023,7 @@ async fn main() -> anyhow::Result<()> {
     server.agent_memory = Some(Arc::new(AgentMemoryManager::new(silva.clone(), 20)));
     server.coloquio = Some(coloquio.clone());
     server.low_memory_mode = low_memory_mode;
+    server.recall_cascade_enabled = config.silva.cascade_enabled;
     // MLP scorer: optional ONNX model for learned complexity scoring
     let models_dir = data_dir.join("models");
     std::fs::create_dir_all(&models_dir).ok();
@@ -1098,16 +1105,24 @@ async fn main() -> anyhow::Result<()> {
     // ─── Background Model Download (instant start) ──────────────────
     if let Some(ref model_name) = bg_model_name {
         let bg_matcher = matcher.clone();
+        let bg_silva = silva.clone();
         let bg_model = model_name.clone();
         let bg_device = config.inference.device.clone();
         let bg_model_inner = bg_model.clone();
+        let hot_swap_target = bg_matcher.clone();
         tokio::spawn(async move {
             info!("📥 [Background] Downloading embedding model '{}'...", bg_model);
             let result = tokio::task::spawn_blocking(move || {
-                bg_matcher.hot_swap_engine(&bg_model_inner, &bg_device)
+                hot_swap_target.hot_swap_engine(&bg_model_inner, &bg_device)
             }).await;
             match result {
-                Ok(Ok(())) => info!("✅ [Background] Model '{}' loaded — hot-switched to semantic search.", bg_model),
+                Ok(Ok(())) => {
+                    info!("✅ [Background] Model '{}' loaded — hot-switched to semantic search.", bg_model);
+                    // Keep the cascade's dense handle in sync with the hot-swap.
+                    if let Some(eng) = bg_matcher.engine_arc() {
+                        bg_silva.install_dense_engine(eng);
+                    }
+                }
                 Ok(Err(e)) => warn!("⚠️ [Background] Model '{}' failed to load: {}", bg_model, e),
                 Err(e) => warn!("⚠️ [Background] Spawn error for '{}': {}", bg_model, e),
             }

@@ -931,6 +931,15 @@ pub struct SilvaConfig {
     /// Default OFF: no behavior change and no extra RAM unless explicitly enabled.
     #[serde(default = "default_hybrid_sparse_enabled")]
     pub hybrid_sparse_enabled: bool,
+
+    /// Opt-in two-stage retrieval cascade (arXiv:2404.13357 Two-Step SPLADE pattern).
+    /// Stage 1 fuses FTS5+learned-sparse lexically; if ≥3 results are backed by BOTH
+    /// signals (independent-agreement proxy), returns without paying the dense query
+    /// embed (2-8s CPU). Otherwise stage 2 runs the full fusion. Requires
+    /// hybrid_sparse_enabled for stage 1 to ever pass the agreement gate.
+    /// Default OFF: recall path byte-identical when disabled.
+    #[serde(default = "default_cascade_enabled")]
+    pub cascade_enabled: bool,
 }
 
 impl Default for SilvaConfig {
@@ -943,6 +952,7 @@ impl Default for SilvaConfig {
             decay_half_life_hours: default_decay_half_life_hours(),
             sync_interval_ms: default_sync_interval(),
             hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
+            cascade_enabled: default_cascade_enabled(),
         }
     }
 }
@@ -1596,6 +1606,8 @@ fn default_decay_prune_threshold() -> f64 { 0.15 }
 pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
 
 pub fn default_hybrid_sparse_enabled() -> bool { false }
+
+pub fn default_cascade_enabled() -> bool { false }
 fn default_system_guild_ms() -> u64 { 15_000 }
 fn default_analysis_guild_ms() -> u64 { 60_000 }
 fn default_heavy_guild_ms() -> u64 { 180_000 }
