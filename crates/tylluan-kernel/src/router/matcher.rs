@@ -773,7 +773,6 @@ impl GuildMatcher {
     }
 
     /// Match all guilds above threshold, sorted by score descending.
-    #[allow(dead_code)]
     pub fn match_all(
         &self,
         query: &str,

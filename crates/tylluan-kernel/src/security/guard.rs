@@ -51,12 +51,6 @@ impl ExecutionGuard {
         }
     }
 
-    /// Legacy check for backward compatibility (defaults to Medium risk for unknown tools).
-    #[deprecated(note = "Use ExecutionGuard::check() with explicit RiskLevel instead")]
-    pub fn check_legacy(tool_name: &str, channel: &Channel) -> GuardResult {
-        Self::check(tool_name, channel, &RiskLevel::Medium)
-    }
-
     /// Constant-time token comparison to prevent timing attacks.
     pub fn secure_compare(token: &str, expected: &str) -> bool {
         token.as_bytes().ct_eq(expected.as_bytes()).into()
