@@ -8,6 +8,7 @@ mod curriculum_phase;
 mod idlelab_phase;
 mod feedback_signal_phase;
 mod light_reranker_train_phase;
+mod lifecycle_phase;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ pub use curriculum_phase::CurriculumPhase;
 pub use idlelab_phase::IdleLabPhase;
 pub use feedback_signal_phase::FeedbackSignalPhase;
 pub use light_reranker_train_phase::LightRerankerTrainPhase;
+pub use lifecycle_phase::LifecyclePhase;
 
 #[derive(Clone)]
 pub struct PhaseContext {
@@ -187,6 +189,7 @@ mod tests {
             Box::new(IdleLabPhase),
             Box::new(FeedbackSignalPhase),
             Box::new(LightRerankerTrainPhase),
+            Box::new(LifecyclePhase),
         ];
         let orch = PhaseOrchestrator::new(phases);
         orch.run_all(&ctx).await;

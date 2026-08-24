@@ -515,7 +515,11 @@ impl super::SilvaDB {
                 ).unwrap_or(0);
 
                 let is_stale = last_build_count == 0
-                    || current_embeddings > last_build_count + (last_build_count / 10);
+                    || current_embeddings > last_build_count + (last_build_count / 10)
+                    // ADR-012 guard: a significant shrink means embeddings were
+                    // purged (prune_dead_nodes, lifecycle-archiving, delete_node)
+                    // while the .fjv1 still references ghost vectors.
+                    || current_embeddings < last_build_count - (last_build_count / 3);
 
                 if !is_stale {
                     return Ok(IvfBuildResult {

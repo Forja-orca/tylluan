@@ -1245,3 +1245,141 @@ async fn test_supersede_agent_summaries_is_idempotent() {
     let second = db.supersede_agent_summaries("agent-a", "summary:a2").await.unwrap();
     assert_eq!(second, 0, "already-superseded rows must be skipped on a repeated call");
 }
+
+// ── ADR-012 Lifecycle transitions ─────────────────
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_active_to_quiet_after_30d_no_agent_access() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n1", "note", "old note", "{}").await.unwrap();
+    // Force last_agent_access to 35 days ago.
+    let old = chrono::Utc::now().timestamp() - 35 * 86_400;
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'active' WHERE id = 'n1'",
+                     rusqlite::params![old]).unwrap();
+    });
+
+    let (a2q, q2c, c2a, _) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(a2q, 1, "should transition one active → quiet");
+    assert_eq!(q2c, 0);
+    assert_eq!(c2a, 0);
+    let node = db.get_node("n1").await.unwrap();
+    assert!(node.is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_quiet_to_consolidated_after_60d() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n2", "note", "quiet note", "{}").await.unwrap();
+    let old = chrono::Utc::now().timestamp() - 65 * 86_400;
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'quiet' WHERE id = 'n2'",
+                     rusqlite::params![old]).unwrap();
+    });
+
+    let (a2q, q2c, c2a, _) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(a2q, 0);
+    assert_eq!(q2c, 1, "should transition one quiet → consolidated");
+    assert_eq!(c2a, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_consolidated_to_archived_after_90d() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n3", "note", "consolidated note", "{}").await.unwrap();
+    let old = chrono::Utc::now().timestamp() - 95 * 86_400;
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'consolidated' WHERE id = 'n3'",
+                     rusqlite::params![old]).unwrap();
+    });
+
+    let (a2q, q2c, c2a, _) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(a2q, 0);
+    assert_eq!(q2c, 0);
+    assert_eq!(c2a, 1, "should transition one consolidated → archived");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_protected_identity_quarantined_never_advance() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    let old = chrono::Utc::now().timestamp() - 100 * 86_400;
+    // Protected node
+    db.upsert_node("p1", "note", "protected", "{}").await.unwrap();
+    db.protect_node("p1").await.unwrap();
+    // Identity node
+    db.upsert_node("agent:x", "identity", "agent x", "{}").await.unwrap();
+    // Quarantined node
+    db.upsert_node("q1", "note", "bad", "{}").await.unwrap();
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'active' WHERE id IN ('p1', 'agent:x')",
+                     rusqlite::params![old]).unwrap();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'active', quarantined = 1 WHERE id = 'q1'",
+                     rusqlite::params![old]).unwrap();
+    });
+
+    let (a2q, _, _, _) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(a2q, 0, "protected, identity, and quarantined nodes must never degrade");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_uses_created_at_when_last_agent_access_is_zero() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("fresh", "note", "recently created", "{}").await.unwrap();
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        // last_agent_access = 0 (default), created_at is moments ago.
+        conn.execute("UPDATE nodes SET last_agent_access = 0, lifecycle_state = 'active' WHERE id = 'fresh'",
+                     []).unwrap();
+    });
+    let (a2q, _, _, _) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(a2q, 0, "fresh node with zero last_agent_access must not age to quiet");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
+    let db = SilvaDB::in_memory().await.unwrap();
+    db.upsert_node("n4", "note", "will-be-archived", "{}").await.unwrap();
+    // Insert an embedding row.
+    let embed_blob: Vec<u8> = vec![0u8; 1024 * 4]; // 1024-dim f32
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("INSERT INTO node_embeddings (node_id, embedding, model_id) VALUES ('n4', ?1, 'bge-m3')",
+                     rusqlite::params![embed_blob]).unwrap();
+    });
+    let count_before: i64 = tokio::task::block_in_place(|| {
+        db.conn.blocking_lock()
+            .query_row("SELECT COUNT(*) FROM node_embeddings", [], |r| r.get(0))
+            .unwrap()
+    });
+    assert_eq!(count_before, 1);
+
+    // Manually set lifecycle_state to archived so the transition logic picks it up for purge.
+    let old = chrono::Utc::now().timestamp() - 95 * 86_400;
+    tokio::task::block_in_place(|| {
+        let conn = db.conn.blocking_lock();
+        conn.execute("UPDATE nodes SET last_agent_access = ?1, lifecycle_state = 'consolidated' WHERE id = 'n4'",
+                     rusqlite::params![old]).unwrap();
+    });
+    let (_, _, _, purged) = db.apply_lifecycle_transitions().await.unwrap();
+    assert_eq!(purged, 1, "embedding must be purged when node transitions to archived");
+
+    let count_after: i64 = tokio::task::block_in_place(|| {
+        db.conn.blocking_lock()
+            .query_row("SELECT COUNT(*) FROM node_embeddings", [], |r| r.get(0))
+            .unwrap()
+    });
+    assert_eq!(count_after, 0);
+    // In-memory indexes must be None after invalidation.
+    {
+        let mmap = db.mmap_store.read().unwrap();
+        assert!(mmap.is_none(), "mmap store must be invalidated");
+        let ivf = db.ivf_searcher.read().unwrap();
+        assert!(ivf.is_none(), "IVF searcher must be invalidated");
+    }
+    let hnsw = db.hnsw.read().await;
+    assert!(hnsw.is_none(), "HNSW index must be invalidated");
+}
