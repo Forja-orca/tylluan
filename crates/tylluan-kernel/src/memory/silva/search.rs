@@ -320,6 +320,139 @@ impl super::SilvaDB {
         Ok(results)
     }
 
+    /// Two-stage retrieval cascade (arXiv:2404.13357 Two-Step SPLADE pattern),
+    /// opt-in via `[silva] cascade_enabled`.
+    ///
+    /// Stage 1 (cheap): FTS5 + learned-sparse lexical fusion. If enough results
+    /// are backed by BOTH independent lexical signals (`cascade_gate`), return
+    /// them WITHOUT paying the dense query embed (2-8s CPU per query).
+    /// Stage 2 (full): embed via the installed dense engine (query_embed_cache-
+    /// backed) and run the standard 4-source `search_hybrid_for_recall`.
+    ///
+    /// Returns (results, Option<embedding>) — callers forward the embedding to
+    /// downstream consumers (CoherenceGate) so a stage-2 hit keeps full parity.
+    /// A stage-1 hit returns None there; that matches BM25-only-mode behavior.
+    ///
+    /// Degraded mode: cascade enabled but dense engine never installed → warn +
+    /// lexical-only results (resilient; visible in logs, opt-in feature).
+    pub async fn search_recall_cascade(
+        &self,
+        query: &str,
+        limit: usize,
+        type_filter: Option<&str>,
+        include_archived: bool,
+    ) -> Result<(Vec<(GraphNode, f32)>, Option<Vec<f32>>)> {
+        // Stage 1: sparse-embed the query when possible; FTS5 always available.
+        let qsv = match self.sparse_engine_ref() {
+            Some(engine) => engine.embed(query).ok(),
+            None => None,
+        };
+        self.search_recall_cascade_inner(query, qsv.as_ref(), limit, type_filter, include_archived)
+            .await
+    }
+
+    /// Cascade body with injectable query-sparse-vector (testability without
+    /// downloading ONNX models). Production entry is `search_recall_cascade`.
+    pub(crate) async fn search_recall_cascade_inner(
+        &self,
+        query: &str,
+        qsv: Option<&crate::router::embeddings::SparseVec>,
+        limit: usize,
+        type_filter: Option<&str>,
+        include_archived: bool,
+    ) -> Result<(Vec<(GraphNode, f32)>, Option<Vec<f32>>)> {
+        // ── Stage 1: lexical-only fusion with per-source agreement tracking ──
+        // Source bits: 1 = FTS5, 2 = learned-sparse, 3 = both.
+        const K: f32 = 60.0;
+        let mut fused: HashMap<String, (GraphNode, f32, u8)> = HashMap::new();
+
+        let text_results = self.search(query, limit * 2, None).await.unwrap_or_default();
+        for (rank, node) in text_results.into_iter().enumerate() {
+            let rrf = 1.0 / (K + rank as f32 + 1.0);
+            fused.entry(node.id.clone())
+                .and_modify(|e| { e.1 += rrf; })
+                .or_insert((node.clone(), rrf, 1));
+        }
+        if let Some(qsv) = qsv {
+            if let Ok(sparse_nodes) = self.search_sparse_candidates(qsv, limit * 2).await {
+                for (rank, node) in sparse_nodes.into_iter().enumerate() {
+                    let rrf = 1.0 / (K + rank as f32 + 1.0);
+                    fused.entry(node.id.clone())
+                        .and_modify(|e| {
+                            e.1 += rrf;
+                            e.2 |= 2;
+                        })
+                        .or_insert((node.clone(), rrf, 2));
+                }
+            }
+        }
+
+        let lexical: Vec<(GraphNode, f32, u8)> = {
+            let mut v: Vec<(String, (GraphNode, f32, u8))> = fused.into_iter().collect();
+            v.sort_by(|a, b| b.1 .1.partial_cmp(&a.1 .1).unwrap_or(std::cmp::Ordering::Equal));
+            v.truncate(limit * 2);
+            v.into_iter().map(|(_, t)| t).collect()
+        };
+
+        let agreement = lexical.iter().filter(|(_, _, src)| *src == 3).count();
+        if cascade_gate(agreement, lexical.len(), limit) {
+            let mut results: Vec<(GraphNode, f32)> =
+                lexical.into_iter().map(|(n, s, _)| (n, s)).collect();
+            self.apply_recall_filters(&mut results, type_filter, include_archived).await?;
+            results.truncate(limit);
+            tracing::info!(
+                gen_ai.operation.name = "retrieval",
+                "cascade: stage-1 hit (agreement={agreement}, total={}) — dense embed skipped", results.len()
+            );
+            return Ok((results, None));
+        }
+
+        // ── Stage 2: full fusion with a freshly-obtained dense embedding ──
+        let Some(engine) = self.dense_engine_ref() else {
+            tracing::warn!("cascade enabled but no dense engine installed — degrading to lexical-only results");
+            let mut results: Vec<(GraphNode, f32)> =
+                lexical.into_iter().map(|(n, s, _)| (n, s)).collect();
+            self.apply_recall_filters(&mut results, type_filter, include_archived).await?;
+            results.truncate(limit);
+            return Ok((results, None));
+        };
+        let emb = self.query_embed_cache.get_or_embed(query, |q| engine.embed(q))?;
+        let results = self
+            .search_hybrid_for_recall(query, Some(&emb), limit, type_filter, false, include_archived)
+            .await?;
+        tracing::info!(gen_ai.operation.name = "retrieval", "cascade: stage-2 full fusion (agreement={agreement})");
+        Ok((results, Some(emb)))
+    }
+
+    /// Shared post-fusion filters for the cascade paths (quarantine ASI06 +
+    /// lifecycle archived + optional type filter) — same policy as the
+    /// standard recall path.
+    async fn apply_recall_filters(
+        &self,
+        results: &mut Vec<(GraphNode, f32)>,
+        type_filter: Option<&str>,
+        include_archived: bool,
+    ) -> Result<()> {
+        if !results.is_empty() {
+            let quarantined_ids = self.quarantined_ids_among(
+                &results.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>()
+            ).await.unwrap_or_default();
+            if !quarantined_ids.is_empty() {
+                results.retain(|(node, _)| !quarantined_ids.contains(&node.id));
+            }
+        }
+        if !include_archived {
+            let archived_ids = self.archived_lifecycle_ids_among(
+                &results.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>()
+            ).await.unwrap_or_default();
+            results.retain(|(node, _)| !archived_ids.contains(&node.id));
+        }
+        if let Some(filter) = type_filter {
+            results.retain(|(node, _)| node.node_type.to_lowercase() == filter.to_lowercase());
+        }
+        Ok(())
+    }
+
     /// RRF + cross-encoder reranking. Fetches limit*4 candidates via RRF then reorders
     /// with BGE cross-encoder for higher precision. Falls back to RRF order on reranker error.
     pub async fn search_hybrid_reranked(
@@ -581,6 +714,17 @@ impl super::SilvaDB {
     }
 }
 
+/// Stage-1 gate for the recall cascade: pass to lexical-only results iff the
+/// two independent lexical signals (FTS5 + learned-sparse) agree on at least
+/// `CASCADE_MIN_AGREEMENT` nodes AND stage 1 filled at least half the budget.
+/// Agreement of independent signals is the relevance proxy — this is why RRF
+/// works at all; a single-source hit is never trusted to skip the dense path.
+pub(crate) const CASCADE_MIN_AGREEMENT: usize = 3;
+
+pub(crate) fn cascade_gate(agreement_count: usize, lexical_total: usize, limit: usize) -> bool {
+    agreement_count >= CASCADE_MIN_AGREEMENT && lexical_total >= (limit / 2).max(1)
+}
+
 #[cfg(test)]
 mod asi06_tests {
     use super::super::SilvaDB;
@@ -662,5 +806,106 @@ mod asi06_tests {
             conn.query_row("SELECT reactivation_count FROM nodes WHERE id = 'archived'", [], |row| row.get(0)).unwrap()
         });
         assert_eq!(count, 1, "active follow-up access must not increment reactivation_count");
+    }
+}
+
+#[cfg(test)]
+mod cascade_tests {
+    use super::{super::SilvaDB, cascade_gate, CASCADE_MIN_AGREEMENT};
+    use crate::router::embeddings::SparseVec;
+
+    #[test]
+    fn cascade_gate_requires_both_conditions() {
+        // Fewer than CASCADE_MIN_AGREEMENT dual-source hits → never pass.
+        assert!(!cascade_gate(0, 20, 10));
+        assert!(!cascade_gate(2, 20, 10));
+        // Enough agreement but stage 1 did not fill half the budget → no pass.
+        assert!(!cascade_gate(3, 2, 10));
+        assert!(!cascade_gate(4, 4, 10));
+        // Both conditions met → pass.
+        assert!(cascade_gate(3, 5, 10));
+        assert!(cascade_gate(4, 10, 8));
+        // Tiny limit: total >= max(limit/2, 1).
+        assert!(cascade_gate(3, 1, 1));
+        assert!(!cascade_gate(3, 0, 1));
+    }
+
+    async fn seed_agreeing_nodes(db: &SilvaDB) {
+        for i in 0..4 {
+            db.upsert_node(
+                &format!("q{i}"),
+                "note",
+                &format!("quantumflux oscillator calibration run {i}"),
+                "{}",
+            ).await.unwrap();
+        }
+    }
+
+    fn overlapping_qsv() -> SparseVec {
+        SparseVec { indices: vec![10, 11, 12], values: vec![1.0, 1.0, 1.0] }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cascade_stage1_hit_skips_dense_and_returns_none_embedding() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        seed_agreeing_nodes(&db).await;
+        // Manual sparse signatures that all overlap the canned query vector —
+        // no ONNX model needed: agreement comes from injected vectors.
+        let sv = SparseVec { indices: vec![10, 11, 12], values: vec![1.0, 1.0, 1.0] };
+        for i in 0..4 {
+            db.save_sparse_embedding(&format!("q{i}"), &sv).await.unwrap();
+        }
+
+        let (results, emb) = db
+            .search_recall_cascade_inner("quantumflux oscillator", Some(&overlapping_qsv()), 8, None, false)
+            .await
+            .unwrap();
+
+        assert!(emb.is_none(), "stage-1 hit must not return an embedding (dense was skipped)");
+        assert!(results.len() >= 3, "expected the agreeing nodes back, got {}", results.len());
+        for i in 0..4 {
+            assert!(results.iter().any(|(n, _)| n.id == format!("q{i}")), "q{i} missing from stage-1 results");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cascade_without_sparse_agreement_degrades_gracefully_without_dense_engine() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        seed_agreeing_nodes(&db).await;
+        // Disjoint sparse signature: FTS matches but sparse never agrees → gate fails.
+        let disjoint = SparseVec { indices: vec![777], values: vec![1.0] };
+        for i in 0..4 {
+            db.save_sparse_embedding(&format!("q{i}"), &disjoint).await.unwrap();
+        }
+
+        let (results, emb) = db
+            .search_recall_cascade_inner("quantumflux oscillator", Some(&overlapping_qsv()), 8, None, false)
+            .await
+            .unwrap();
+
+        assert!(emb.is_none());
+        assert!(!results.is_empty(), "degraded path still returns lexical (FTS-only) results");
+        assert!(results.iter().any(|(n, _)| n.id.starts_with("q")));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cascade_stage1_respects_quarantine_filter() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        seed_agreeing_nodes(&db).await;
+        let sv = SparseVec { indices: vec![10, 11, 12], values: vec![1.0, 1.0, 1.0] };
+        for i in 0..4 {
+            db.save_sparse_embedding(&format!("q{i}"), &sv).await.unwrap();
+        }
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET quarantined = 1 WHERE id = 'q0'", []).unwrap();
+        });
+
+        let (results, _) = db
+            .search_recall_cascade_inner("quantumflux oscillator", Some(&overlapping_qsv()), 8, None, false)
+            .await
+            .unwrap();
+
+        assert!(!results.iter().any(|(n, _)| n.id == "q0"), "quarantined node must not surface via cascade stage-1");
     }
 }

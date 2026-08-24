@@ -509,11 +509,19 @@ if let Some(ref mut s) = stmt {
     let cached_docs = cache.get(&effective_query, include_archived).cloned();
     drop(cache);
 
-    let query_embedding = server.matcher.engine().and_then(|e| {
-        server.silva.query_embed_cache
-            .get_or_embed(&effective_query, |q| e.embed(q))
-            .ok()
-    });
+    // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) —
+    // search_recall_cascade computes it only when lexical signals don't agree
+    // enough to answer alone. Legacy path keeps the eager embed.
+    let cascade = server.recall_cascade_enabled && mode != "dual";
+    let mut query_embedding = if cascade {
+        None
+    } else {
+        server.matcher.engine().and_then(|e| {
+            server.silva.query_embed_cache
+                .get_or_embed(&effective_query, |q| e.embed(q))
+                .ok()
+        })
+    };
 
     if let Some(cached) = cached_docs {
         let mut scored: Vec<(GraphNode, f32)> = cached;
@@ -656,16 +664,31 @@ if let Some(ref mut s) = stmt {
         // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
         let filter = if episodic { Some("episodic") } else { None };
-        candidates = server.silva.search_hybrid_for_recall(
+        if cascade {
+            // Two-stage cascade: lexical-first with agreement gate; stage 2
+            // embeds internally and hands the embedding back for the gate.
+            if let Ok((cands, emb)) = server.silva.search_recall_cascade(
                 &effective_query,
-                query_embedding.as_deref(),
                 candidate_pool,
                 filter,
-                false,
                 include_archived,
-            )
-            .await
-            .unwrap_or_default();
+            ).await {
+                candidates = cands;
+                query_embedding = emb;
+            }
+        }
+        if candidates.is_empty() {
+            candidates = server.silva.search_hybrid_for_recall(
+                    &effective_query,
+                    query_embedding.as_deref(),
+                    candidate_pool,
+                    filter,
+                    false,
+                    include_archived,
+                )
+                .await
+                .unwrap_or_default();
+        }
 
         if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
             for doc in hybrid {

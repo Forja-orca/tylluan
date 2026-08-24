@@ -68,6 +68,9 @@ pub struct TylluanServer {
     pub agent_memory: Option<Arc<crate::memory::agent_memory::AgentMemoryManager>>,
     /// Low memory mode: reduces guild timeouts by 50%.
     pub low_memory_mode: bool,
+    /// Opt-in two-stage recall cascade ([silva] cascade_enabled). Set from main
+    /// after construction; false keeps the legacy always-dense recall path.
+    pub recall_cascade_enabled: bool,
     pub recall_cache: Arc<tokio::sync::Mutex<RecallCache>>,
     pub hot_context: Arc<tokio::sync::Mutex<HotContext>>,
     pub coloquio: Option<Arc<ColoquioDb>>,
@@ -127,6 +130,7 @@ impl TylluanServer {
             reranker: None,
             agent_memory: None,
             low_memory_mode: false,
+            recall_cascade_enabled: false,
             recall_cache: Arc::new(tokio::sync::Mutex::new(RecallCache::new(20))),
             hot_context: Arc::new(tokio::sync::Mutex::new(HotContext::new(20))),
             coloquio: None,
