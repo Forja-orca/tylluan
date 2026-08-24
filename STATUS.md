@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-24 · HEAD `39aca04` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
+> Last updated: 2026-08-24 · HEAD `2986d4a` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,9 +33,9 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `39aca04` · **773 total** lib green (692 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
+**HEAD:** `2986d4a` · **779 total** lib green (698 kernel lib + 69 link lib + 12 fsrs). CI real: todos los jobs verdes.
 
-**Kernel vivo:** a fecha de este commit (`76147ea`) el kernel vivo está en `be69f11`, varios commits detrás -- y esta vez SÍ es drift funcional real (`check_live_kernel_drift.sh` lo confirma: 12 archivos de código del kernel cambiaron desde entonces, incluida la firma de `SilvaDB::apply_decay()`). Rebuild pendiente antes de confiar en cualquier medición en vivo:
+**Kernel vivo:** a fecha de este commit (`2986d4a`) el kernel vivo está en `be69f11`, 23 commits detrás -- drift funcional real (`check_live_kernel_drift.sh` lo confirma: 19 archivos de código del kernel cambiaron desde entonces, incluyendo LifecyclePhase, RRF, dead config cleanup, y vision_moondream exclusion). Rebuild pendiente antes de confiar en cualquier medición en vivo:
 ```
 taskkill /IM tylluan-nexus.exe /F
 cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
@@ -141,7 +141,7 @@ Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir 
 - Guild catalog auto-discovered from `guilds/` at startup — zero-config for new guilds. 34 `description_override()` entries preserve routing quality (M3)
 - `--features bundled-dashboard` embeds React build into binary at compile time via rust-embed; disk fallback preserved for dev (M7)
 - `build_contextual_text()` prepends `[source_file > heading_path]` before embedding — zero overhead when metadata absent (Contextual Retrieval)
-- Memory lifecycle decay: FSRS-based retrievability `2^(-elapsed_days/fsrs_stability)` mapped to weight `0.01..1.0`, replacing the old exponential half-life formula — `decay_half_life_hours` in `[silva]` tylluan.toml is no longer consulted by `apply_decay()` (`decay.rs:44`), kept only for backward config compatibility. Nodes move through `active → quiet → consolidated → archived` per ADR-012 instead of a binary decay-then-delete. (Corrected 2026-08-22 — this line described the pre-FSRS formula; found stale during the full-project audit, Coloquio T197.)
+- Memory lifecycle decay: FSRS-based retrievability `2^(-elapsed_days/fsrs_stability)` mapped to weight `0.01..1.0`, replacing the old exponential half-life formula — `decay_half_life_hours` in `[silva]` tylluan.toml is no longer consulted by `apply_decay()` (`decay.rs:44`), kept only for backward config compatibility. Nodes move through `active → quiet → consolidated → archived` per ADR-012 via `LifecyclePhase` (NightConsolidation, 2026-08-24 `2986d4a`): active→quiet (30d no access), quiet→consolidated (60d), consolidated→archived (90d). Archiving purges embeddings from `node_embeddings`, invalidates mmap/IVF/HNSW vector indexes, and marks `.fjv1` stale for rebuild on next startup. Ghost-vector protection in 3 layers. (Corrected 2026-08-22 — this line described the pre-FSRS formula; found stale during the full-project audit, Coloquio T197.)
 - Agent Core Memory: `AgentProfile` gains `persona: String` + `preferences: serde_json::Value`; kernel tools `agent_get_persona` / `agent_set_persona` (under `tylluan_recall`/`tylluan_remember` subtool routing) — CONTRACT-01 unchanged (P0-A)
 - Coloquio→SilvaDB episodic flywheel: background `tokio::spawn` every 60s ingests Coloquio turns into SilvaDB as `episodic` nodes; deterministic IDs `coloquio:{channel}:{turn}`; 100ms throttle; watermark-based dedup (P0-B)
 - ADR-011 Signal Loop + Coherence Gate: `recall_feedback` table (SilvaDB schema v18) logs which memories `tylluan_recall` returned per agent; `FeedbackSignalPhase` (NightConsolidation, 9th parallel phase) resolves them against `guild_audit_log` word-overlap into useful/not-useful. `security::coherence_gate::CoherenceGate` runs 3-layer defense (injection-pattern elimination, provenance penalty, query-content cosim penalty) on every `tylluan_recall` response — both the live-query path and the cache-hit path (the cache stored pre-gate candidates; fixed before merge). `router::light_reranker::LightReranker` (P1 scaffold, <10KB ONNX FFN) is built and tested but not wired into `search_hybrid` — no real model exists until `recall_feedback` accumulates ≥5,000 resolved rows per ADR-011 §3.3 (2026-07-25)
@@ -156,7 +156,7 @@ Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir 
 - M14-D Phase 1 — Capability Registry: `HardwareCaps { ram_mb, has_gpu, load_avg }` added to `GossipEntry`; `CapabilityRegistry` in `tylluan-link/src/capability.rs` with TTL-based peer store, `prune_expired()`, `ingest_from_engine()`; 6 unit tests (v0.11.0-dev)
 - M14-F Phase 2 — `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)`: Noise XK responder loop (`noise_accept` → decrypt → handler → encrypt write); `DispatchDecision::RemoteTcp { node_id, addr, tcp_port }` variant; `route()` picks best-scoring peer first, then checks `supports_p2p` (bug fix: early return bypassed score threshold — fixed); `crates/tylluan-link/tests/p2p_dst.rs` 3 tests: TCP loopback roundtrip, error response, RemoteTcp routing. (v0.13.0)
 - M14-F Phase 1 — `P2pSessionPool` (HashMap, LRU evict, TTL prune) + `execute_remote_tcp()` (Noise XK initiator, pool extract-before-use + reinsert-on-success-only bug fix); `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>`. (v0.13.0)
-- Moondream guild: `guilds/core/vision_moondream.py` — `analyze_image` + `caption_image` via `moondream` pip (0.5B local vision). (v0.13.0)
+- ~~Moondream guild: `guilds/core/vision_moondream.py`~~ — **EXCLUDED from routable catalog** (EXCLUDED_GUILDS in catalog.rs). File exists on disk but can never be routed to. vision.py supersedes it. (v0.13.0, excluded 2026-08-23)
 - M14-E — Mesh Integration Test Harness: `crates/tylluan-link/tests/mesh_simulation.rs` (full-mesh A↔B↔C, star topology B-hub, split-brain + heal LWW); `crates/tylluan-link/tests/dispatch_dst.rs` (GPU peer selection, capability filter, CB fallback, DispatchQueue FIFO/overflow/TTL); `DispatchQueue` moved from kernel to `tylluan-link/src/dispatch.rs`. **M14-D + M14-E both complete.** (v0.13.0)
 - M14-D Phase 4 — Fallback + Remote Dispatch: `DispatchQueue` (VecDeque + TTL 300s, max 1000); `HttpState` gains `dispatch_router` + `dispatch_queue`; `GET /api/v1/guilds/peers` returns CapabilityRegistry view; `POST /api/v1/guilds/dispatch/remote` routes via DispatchRouter (local or HTTP forward), fallback-enqueues on failure, wires record_success/record_failure. **M14-D milestone complete.** (v0.13.0)
 - M14-D Phase 3 — Guild Dispatch Protocol: `GuildDispatchRequest/Response` structs (Serde); `send/receive_dispatch_request/response` using Noise NK (`noise_encrypt/decrypt_payload` over `dyn MeshTransport`); `POST /api/v1/guilds/dispatch/execute` endpoint — receives request, calls `registry.call_tool()`, returns response with `executor_id` + `duration_ms`; CONTRACT-01 preserved (v0.13.0)

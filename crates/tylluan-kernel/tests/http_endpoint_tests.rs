@@ -1,11 +1,6 @@
 ﻿//! HTTP Endpoint Tests for TylluanNexus Kernel
 //! Verifies public endpoints, protected endpoints, and dashboard contracts.
 
-#[allow(unused_imports)]
-use axum::http::StatusCode;
-#[allow(unused_imports)]
-use serde_json::Value;
-
 // Helper note: these tests are simulated (verify route registration and expected
 // response structures) rather than live HTTP calls. In production, use `reqwest`
 // against a live kernel for true end-to-end coverage.
