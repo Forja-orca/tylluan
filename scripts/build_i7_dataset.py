@@ -151,7 +151,7 @@ CURATED_EXEMPLARS = [
     {"intent": "verifica que no haya secretos expuestos en los archivos de configuración", "target_guild": "audit", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "schedule a recurring backup cron job every day at 03:00 UTC", "target_guild": "cron_scheduler", "ambiguity_type": "clear_keyword"},
     {"intent": "cancela el cron job con ID backup-daily", "target_guild": "cron_scheduler", "ambiguity_type": "clear_keyword"},
-    {"intent": "check if there are any unread messages or notifications in channels", "target_guild": "whats_new", "ambiguity_type": "clear_keyword"},
+    {"intent": "check if there are any unread messages or notifications in channels", "target_guild": "coloquio", "ambiguity_type": "cross_guild_ambiguity"},
 
     # --- Memory & Knowledge (SilvaDB) ---
     {"intent": "save this key fact: 'Tylluan listens on port 4000 without proxy'", "target_guild": "memory", "ambiguity_type": "clear_keyword"},
@@ -168,7 +168,7 @@ CURATED_EXEMPLARS = [
     {"intent": "generate an executive summary digest of yesterday's debate in #general", "target_guild": "coloquio_digest", "ambiguity_type": "clear_keyword"},
     {"intent": "resume las decisiones tomadas en el canal mision-activa en los últimos 20 turnos", "target_guild": "coloquio_digest", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "break down this complex refactoring into 4 parallel tasks and assign to sub-agents", "target_guild": "coordinator", "ambiguity_type": "clear_keyword"},
-    {"intent": "convene a council debate between Claude and Deep to evaluate SQLite triggers vs app logic", "target_guild": "council", "ambiguity_type": "clear_keyword"},
+    {"intent": "convene a council debate between Claude and Deep to evaluate SQLite triggers vs app logic", "target_guild": "night_reasoner", "ambiguity_type": "cross_guild_ambiguity"},
     {"intent": "think step-by-step through the failure modes of the distributed gossip loop", "target_guild": "sequential_thinking", "ambiguity_type": "clear_keyword"},
     {"intent": "ejecuta una cadena de razonamiento secuencial para resolver este problema de concurrencia", "target_guild": "sequential_thinking", "ambiguity_type": "clear_keyword"},
     {"intent": "trigger the night consolidation cycle to cluster memories and resolve contradictions", "target_guild": "night_reasoner", "ambiguity_type": "clear_keyword"},

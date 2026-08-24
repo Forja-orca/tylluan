@@ -213,6 +213,17 @@ def run_evaluation():
     items = ds["items"]
     held_out = [d for d in items if d["split"] == "held_out"]
     train = [d for d in items if d["split"] == "train"]
+    
+    # Guilds that exist as catalog entries but are NOT registered MCP servers.
+    # They are tools INSIDE other guilds (council inside night_reasoner,
+    # whats_new inside coloquio), not routable dispatch targets.
+    # Evaluating against them inflates unknown/error rates artificially.
+    NON_ROUTABLE_GUILDS = {"council", "whats_new"}
+    skipped_items = [d for d in held_out if d["target_guild"] in NON_ROUTABLE_GUILDS]
+    held_out = [d for d in held_out if d["target_guild"] not in NON_ROUTABLE_GUILDS]
+    if skipped_items:
+        print(f"⚠️  Skipped {len(skipped_items)} items targeting non-routable guilds (tools inside other guilds): {sorted(set(d['target_guild'] for d in skipped_items))}")
+    
     total = len(held_out)
     
     print(f"\nEvaluating on Held-Out Test Split (N={total} intents across {len(set(d['target_guild'] for d in held_out))} guilds)")
