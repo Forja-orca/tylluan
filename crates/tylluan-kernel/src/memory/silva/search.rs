@@ -320,6 +320,61 @@ impl super::SilvaDB {
         Ok(results)
     }
 
+    /// Stage-1 body shared by the cascade and the diagnostic probe: fuse
+    /// FTS5 + learned-sparse lexically with per-source bits (1=fts, 2=sparse,
+    /// 3=both), sorted by fused score desc, truncated to 2×limit.
+    async fn lexical_stage1_fuse(
+        &self,
+        query: &str,
+        qsv: Option<&crate::router::embeddings::SparseVec>,
+        limit: usize,
+    ) -> Result<Vec<(GraphNode, f32, u8)>> {
+        const K: f32 = 60.0;
+        let mut fused: HashMap<String, (GraphNode, f32, u8)> = HashMap::new();
+
+        let text_results = self.search(query, limit * 2, None).await.unwrap_or_default();
+        for (rank, node) in text_results.into_iter().enumerate() {
+            let rrf = 1.0 / (K + rank as f32 + 1.0);
+            fused.entry(node.id.clone())
+                .and_modify(|e| { e.1 += rrf; })
+                .or_insert((node.clone(), rrf, 1));
+        }
+        if let Some(qsv) = qsv {
+            if let Ok(sparse_nodes) = self.search_sparse_candidates(qsv, limit * 2).await {
+                for (rank, node) in sparse_nodes.into_iter().enumerate() {
+                    let rrf = 1.0 / (K + rank as f32 + 1.0);
+                    fused.entry(node.id.clone())
+                        .and_modify(|e| {
+                            e.1 += rrf;
+                            e.2 |= 2;
+                        })
+                        .or_insert((node.clone(), rrf, 2));
+                }
+            }
+        }
+
+        let mut v: Vec<(String, (GraphNode, f32, u8))> = fused.into_iter().collect();
+        v.sort_by(|a, b| b.1 .1.partial_cmp(&a.1 .1).unwrap_or(std::cmp::Ordering::Equal));
+        v.truncate(limit * 2);
+        Ok(v.into_iter().map(|(_, t)| t).collect())
+    }
+
+    /// Diagnostic probe for benchmarks/ops: what would stage 1 see for this
+    /// query right now? Returns (agreement, lexical_total, fts_only,
+    /// sparse_only). Cheap (no dense embed).
+    pub async fn cascade_stage1_stats(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<(usize, usize, usize, usize)> {
+        let qsv = self.sparse_engine_ref().and_then(|e| e.embed(query).ok());
+        let lexical = self.lexical_stage1_fuse(query, qsv.as_ref(), limit).await?;
+        let agreement = lexical.iter().filter(|(_, _, s)| *s == 3).count();
+        let fts_only = lexical.iter().filter(|(_, _, s)| *s == 1).count();
+        let sparse_only = lexical.iter().filter(|(_, _, s)| *s == 2).count();
+        Ok((agreement, lexical.len(), fts_only, sparse_only))
+    }
+
     /// Two-stage retrieval cascade (arXiv:2404.13357 Two-Step SPLADE pattern),
     /// opt-in via `[silva] cascade_enabled`.
     ///
@@ -362,37 +417,7 @@ impl super::SilvaDB {
         include_archived: bool,
     ) -> Result<(Vec<(GraphNode, f32)>, Option<Vec<f32>>)> {
         // ── Stage 1: lexical-only fusion with per-source agreement tracking ──
-        // Source bits: 1 = FTS5, 2 = learned-sparse, 3 = both.
-        const K: f32 = 60.0;
-        let mut fused: HashMap<String, (GraphNode, f32, u8)> = HashMap::new();
-
-        let text_results = self.search(query, limit * 2, None).await.unwrap_or_default();
-        for (rank, node) in text_results.into_iter().enumerate() {
-            let rrf = 1.0 / (K + rank as f32 + 1.0);
-            fused.entry(node.id.clone())
-                .and_modify(|e| { e.1 += rrf; })
-                .or_insert((node.clone(), rrf, 1));
-        }
-        if let Some(qsv) = qsv {
-            if let Ok(sparse_nodes) = self.search_sparse_candidates(qsv, limit * 2).await {
-                for (rank, node) in sparse_nodes.into_iter().enumerate() {
-                    let rrf = 1.0 / (K + rank as f32 + 1.0);
-                    fused.entry(node.id.clone())
-                        .and_modify(|e| {
-                            e.1 += rrf;
-                            e.2 |= 2;
-                        })
-                        .or_insert((node.clone(), rrf, 2));
-                }
-            }
-        }
-
-        let lexical: Vec<(GraphNode, f32, u8)> = {
-            let mut v: Vec<(String, (GraphNode, f32, u8))> = fused.into_iter().collect();
-            v.sort_by(|a, b| b.1 .1.partial_cmp(&a.1 .1).unwrap_or(std::cmp::Ordering::Equal));
-            v.truncate(limit * 2);
-            v.into_iter().map(|(_, t)| t).collect()
-        };
+        let lexical = self.lexical_stage1_fuse(query, qsv, limit).await?;
 
         let agreement = lexical.iter().filter(|(_, _, src)| *src == 3).count();
         if cascade_gate(agreement, lexical.len(), limit) {

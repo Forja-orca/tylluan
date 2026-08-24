@@ -399,16 +399,30 @@ impl super::SilvaDB {
     }
 
     /// Get node IDs with missing or outdated embeddings.
+    ///
+    /// When the learned-sparse engine is installed, nodes without a
+    /// `node_sparse_embeddings` row also qualify: the periodic Agnostic
+    /// Reindexer heals them through `save_embedding`, which refreshes the
+    /// sparse signature at the same choke point. This is what makes
+    /// `[silva] hybrid_sparse_enabled` safe to enable on an existing DB —
+    /// signatures backfill automatically within one reindex tick.
     pub async fn get_stale_embeddings(&self, current_model: &str, current_hash: Option<&str>) -> Result<Vec<String>> {
+        let sparse_backfill = self.sparse_engine_ref().is_some();
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            let mut stmt = conn.prepare(
-                "SELECT n.id FROM nodes n
+            let extra_missing_sparse = if sparse_backfill {
+                " OR NOT EXISTS (SELECT 1 FROM node_sparse_embeddings s WHERE s.node_id = n.id)"
+            } else {
+                ""
+            };
+            let sql = format!(
+                "SELECT DISTINCT n.id FROM nodes n
                  LEFT JOIN node_embeddings e ON n.id = e.node_id
                  WHERE e.node_id IS NULL
                     OR e.model_name != ?1
-                    OR (e.model_hash IS NOT NULL AND ?2 IS NOT NULL AND e.model_hash != ?2)"
-            )?;
+                    OR (e.model_hash IS NOT NULL AND ?2 IS NOT NULL AND e.model_hash != ?2){extra_missing_sparse}"
+            );
+            let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(params![current_model, current_hash], |row| row.get(0))?;
             let mut results = Vec::new();
             for res in rows { results.push(res?); }
