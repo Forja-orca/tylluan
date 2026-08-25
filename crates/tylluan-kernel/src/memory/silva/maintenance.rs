@@ -353,6 +353,16 @@ impl super::SilvaDB {
             ).unwrap_or(0);
             let ivf_ready = n_centroids > 0;
 
+            // Dirección #5 (memoria explicable): frescura explícita por índice.
+            // Una respuesta puede decir "estos índices, esta antigüedad" en vez
+            // de fingir que la memoria no existe cuando un índice va retrasado.
+            let dense_count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM node_embeddings", [], |r| r.get(0)).unwrap_or(0);
+            let sparse_count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM node_sparse_embeddings", [], |r| r.get(0)).unwrap_or(0);
+            let fts_count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM nodes_fts", [], |r| r.get(0)).unwrap_or(0);
+
             // last_build: most recent centroid creation time (SQLite rowid as proxy, or created_at if available)
             let last_build: Option<i64> = conn.query_row(
                 "SELECT MAX(rowid) FROM cluster_centroids",
@@ -369,7 +379,12 @@ impl super::SilvaDB {
                 "by_type": by_type,
                 "ivf_ready": ivf_ready,
                 "n_centroids": n_centroids,
-                "last_build": last_build
+                "last_build": last_build,
+                "index_freshness": {
+                    "dense_rows": dense_count,
+                    "sparse_rows": sparse_count,
+                    "fts_rows": fts_count
+                }
             }))
 
         })

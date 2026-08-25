@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 25;
+            const SCHEMA_VERSION: i32 = 26;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -336,6 +336,16 @@ impl super::SilvaDB {
                     );"
                 )?;
                 tracing::info!("🌲 SilvaDB: added node_transitions + recall_misses (v25, memoria explicable)");
+            }
+            if schema_version < 26 {
+                // Dirección #2 (memoria explicable): separar "utilidad" de otras
+                // señales en recall_feedback — signal_kind permite registrar
+                // utility|reuse|action_success|human_feedback como señales distintas.
+                let _ = conn.execute(
+                    "ALTER TABLE recall_feedback ADD COLUMN signal_kind TEXT NOT NULL DEFAULT 'utility'",
+                    [],
+                );
+                tracing::info!("🌲 SilvaDB: added recall_feedback.signal_kind (v26, señales separadas)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

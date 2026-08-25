@@ -55,6 +55,19 @@ impl LightReranker {
             || models_dir.join("light_reranker.weights").exists()
     }
 
+    /// Dirección #3: restore last-good weights over the current ones. Returns
+    /// true if a backup existed and was promoted. Call when production recall
+    /// quality degrades after a night-training write.
+    pub fn restore_last_good(models_dir: &Path) -> bool {
+        let weights_path = models_dir.join("light_reranker.weights");
+        let backup = models_dir.join("light_reranker.weights.bak");
+        if backup.exists() {
+            std::fs::copy(&backup, &weights_path).is_ok()
+        } else {
+            false
+        }
+    }
+
     pub fn new(models_dir: &Path) -> Self {
         let path = models_dir.join("light_reranker.onnx");
         if path.exists() {
