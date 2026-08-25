@@ -1718,6 +1718,43 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_coloquio_post_intent_never_routes_to_coordinator() {
+        // Regression (2026-08-25): a long "publica en coloquio X: ..." scored
+        // >=0.6 on the Proactive Cascade (M20) and was routed to coordinator
+        // (required arg `task`), failing the post with "guild 'coordinator'
+        // requires argument(s): task". Deterministic coloquio prefixes must
+        // force the coloquio guild BEFORE any semantic/cascade routing.
+        let server = test_server().await;
+
+        let long_post = "publica en coloquio mision-activa: propuesta para el equipo con plan de implementacion y ejecucion paso a paso";
+        let (guild, trace) = resolve_guild_name(&server, long_post, None, None).await.unwrap();
+        assert_eq!(guild, "coloquio", "coloquio post must be forced to the coloquio guild, got '{guild}'");
+        assert!(
+            trace.iter().any(|t| t.contains("coloquio prefix")),
+            "trace should record the deterministic dispatch, got {trace:?}"
+        );
+
+        let read = "lee el coloquio mision-activa";
+        let (guild, _) = resolve_guild_name(&server, read, None, None).await.unwrap();
+        assert_eq!(guild, "coloquio", "coloquio read must be forced to the coloquio guild, got '{guild}'");
+
+        // An explicit guild hint still wins — the caller asked for it directly.
+        let (guild, _) = resolve_guild_name(&server, long_post, Some("coordinator".to_string()), None).await.unwrap();
+        assert_eq!(guild, "coordinator", "explicit guild hint must bypass the coloquio force");
+
+        // Unrelated intents are NOT forced — the matcher/cascade decides,
+        // even when that means NO_GUILD_MATCH (the force simply did not fire).
+        let bare = "post to the coordinator: execute the migration";
+        if let Ok((guild, trace)) = resolve_guild_name(&server, bare, None, None).await {
+            assert_ne!(guild, "coloquio", "unrelated intent must not be forced to coloquio");
+            assert!(
+                !trace.iter().any(|t| t.contains("coloquio prefix")),
+                "unrelated intents must not be force-routed to coloquio, got {trace:?}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_forget_shortcut_deletes_node() {
         let server = test_server().await;
         server.silva.upsert_node("forget:test:node", "concept", "temporary test node", "{}").await.unwrap();

@@ -1,3 +1,119 @@
+// ── Deterministic prefix lists for Coloquio intents ────────────────────────
+// Shared by `parse_coloquio_intent` (tool resolution once routed to the
+// coloquio guild) and `is_coloquio_dispatch_intent` (pre-routing gate that
+// forces these intents to the coloquio guild BEFORE semantic routing, so a
+// long "publica en coloquio X: ..." can never be swallowed by the Proactive
+// Cascade / matcher — observed live 2026-08-25: scored >=0.6 on complexity,
+// was sent to coordinator (required arg `task`) and the post failed).
+
+/// List channels — all unambiguous channel operations.
+const LIST_TRIGGERS: &[&str] = &[
+    "lista canales", "lista los canales", "lista de canales",
+    "list channels", "list canales",
+    "ver canales", "ver los canales",
+    "mostrar canales", "mostrar los canales", "muestra los canales",
+];
+
+/// Post patterns: <action phrase> <channel_id>: <content>.
+/// Channel_id is everything between the action phrase and the colon.
+const POST_PREFIXES: &[&str] = &[
+    "publica en coloquio", "post to coloquio", "post to",
+    "escribe en coloquio", "escribe en canal",
+    "send to coloquio", "send to", "send message to coloquio", "send message to",
+    "envia al canal", "envía al canal", "envia a canal",
+    "message coloquio", "message",
+    "responde en coloquio", "responde en",
+    "publicar en coloquio", "publicar en",
+];
+
+/// Create channel patterns.
+const CREATE_PREFIXES: &[&str] = &[
+    "crea canal", "create channel", "nuevo canal", "crea un canal",
+];
+
+/// Read patterns — specific (coloquio in prefix, must come before generic ones)
+/// then generic (no "coloquio" required — channel name follows directly).
+const READ_PREFIXES: &[&str] = &[
+    // Specific (coloquio in prefix — must come before generic ones)
+    "lee el coloquio", "lee el canal coloquio", "lee canal coloquio",
+    "leer coloquio", "leer canal coloquio",
+    "read coloquio channel", "read channel coloquio", "read coloquio",
+    "ver canal coloquio", "ver coloquio",
+    "mostrar coloquio", "mostrar canal coloquio",
+    "muestra el coloquio", "historial coloquio",
+    "canal coloquio",
+    // Generic (no "coloquio" required — channel name follows directly)
+    "leer canal ", "lee canal ", "leer el canal ", "lee el canal ",
+    "read channel ", "ver canal ", "ver el canal ", "mostrar canal ",
+];
+
+/// Generic _CHANNEL_STRIP fallback (mirrors coloquio.py).
+const STRIP_TRIGGERS: &[&str] = &[
+    "lee el canal coloquio ", "lee el coloquio ",
+    "leer canal coloquio ", "leer coloquio ",
+    "ver canal coloquio ", "ver coloquio ",
+    "read coloquio channel ", "read channel coloquio ", "read coloquio ",
+    "mostrar canal coloquio ", "mostrar coloquio ",
+    "muestra el coloquio ", "historial coloquio ",
+    "canal coloquio ",
+    // Generic (no "coloquio" in prefix)
+    "leer canal ", "lee canal ", "leer el canal ", "lee el canal ",
+    "read channel ", "ver canal ", "ver el canal ", "mostrar canal ",
+];
+
+/// True only for prefixes that unambiguously reference a Coloquio channel.
+/// Bare forms like "post to", "send to", "message" or "responde en" are too
+/// generic to force routing — those stay with semantic routing (status quo).
+fn mentions_channel_word(prefix: &str) -> bool {
+    prefix.contains("coloquio")
+        || prefix.contains("canal")
+        || prefix.contains("canale")
+        || prefix.contains("channel")
+        || prefix.contains("channels")
+}
+
+/// Deterministic Coloquio dispatch detector — used to force guild="coloquio"
+/// BEFORE semantic routing. Mirrors `parse_coloquio_intent`'s prefix lists but
+/// only for patterns that unambiguously mean a Coloquio channel operation:
+///
+/// - list/create triggers are channel operations by definition;
+/// - post/read prefixes must mention coloquio/canal/channel explicitly.
+///
+/// The word-based fallback inside `parse_coloquio_intent` (any "<word> <chan>:"
+/// heuristics) is deliberately NOT included: it can false-positive on unrelated
+/// sentences containing "canal"/"coloquio" plus a colon, so it must never force
+/// routing away from the semantic router.
+pub(super) fn is_coloquio_dispatch_intent(intent: &str) -> bool {
+    let lower = intent.trim().to_lowercase();
+
+    for t in LIST_TRIGGERS {
+        if lower.starts_with(t) || lower == *t {
+            return true;
+        }
+    }
+    for p in POST_PREFIXES {
+        if mentions_channel_word(p) && lower.starts_with(p) {
+            return true;
+        }
+    }
+    for p in CREATE_PREFIXES {
+        if lower.starts_with(p) {
+            return true;
+        }
+    }
+    for p in READ_PREFIXES {
+        if mentions_channel_word(p) && lower.starts_with(p) {
+            return true;
+        }
+    }
+    for t in STRIP_TRIGGERS {
+        if mentions_channel_word(t) && lower.starts_with(t) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Extract channel_id and optionally message content from a coloquio intent.
 /// Returns (channel_id, content_or_name, tool_hint).
 /// tool_hint is "read", "post", "list", or "create".
@@ -10,31 +126,13 @@ pub(super) fn parse_coloquio_intent(intent: &str) -> (Option<String>, Option<Str
     // "listando" / "listado" / "artista" anywhere in a long post body (e.g. a status
     // report that mentions "filesystem listando raiz"), silently rerouting a real
     // post_to_channel into list_channels and swallowing the message.
-    let list_triggers = [
-        "lista canales", "lista los canales", "lista de canales",
-        "list channels", "list canales",
-        "ver canales", "ver los canales",
-        "mostrar canales", "mostrar los canales", "muestra los canales",
-    ];
-    if list_triggers.iter().any(|t| lower.starts_with(t) || lower == *t) {
+    if LIST_TRIGGERS.iter().any(|t| lower.starts_with(t) || lower == *t) {
         return (None, None, "list");
     }
 
     // ── Post patterns: extract channel_id and content after colon ──
     // Pattern: <action phrase> <channel_id>: <content>
-    // Action phrases: publica en, post to, send to, escribe en, envia al canal, message, etc.
-    // Channel_id is everything between the action phrase and the colon.
-    let post_prefixes = [
-        "publica en coloquio", "post to coloquio", "post to",
-        "escribe en coloquio", "escribe en canal",
-        "send to coloquio", "send to", "send message to coloquio", "send message to",
-        "envia al canal", "envía al canal", "envia a canal",
-        "message coloquio", "message",
-        "responde en coloquio", "responde en",
-        "publicar en coloquio", "publicar en",
-    ];
-
-    for prefix in &post_prefixes {
+    for prefix in POST_PREFIXES {
         if lower.starts_with(prefix) {
             let after = trimmed[prefix.len()..].trim();
             if let Some(col_idx) = after.find(':') {
@@ -52,8 +150,7 @@ pub(super) fn parse_coloquio_intent(intent: &str) -> (Option<String>, Option<Str
     }
 
     // ── Create channel patterns ──
-    let create_prefixes = ["crea canal", "create channel", "nuevo canal", "crea un canal"];
-    for prefix in &create_prefixes {
+    for prefix in CREATE_PREFIXES {
         if lower.starts_with(prefix) {
             let after = trimmed[prefix.len()..].trim();
             if let Some(col_idx) = after.find(':') {
@@ -69,20 +166,7 @@ pub(super) fn parse_coloquio_intent(intent: &str) -> (Option<String>, Option<Str
     }
 
     // ── Read patterns: extract channel_id ──
-    let read_prefixes = [
-        // Specific (coloquio in prefix — must come before generic ones)
-        "lee el coloquio", "lee el canal coloquio", "lee canal coloquio",
-        "leer coloquio", "leer canal coloquio",
-        "read coloquio channel", "read channel coloquio", "read coloquio",
-        "ver canal coloquio", "ver coloquio",
-        "mostrar coloquio", "mostrar canal coloquio",
-        "muestra el coloquio", "historial coloquio",
-        "canal coloquio",
-        // Generic (no "coloquio" required — channel name follows directly)
-        "leer canal ", "lee canal ", "leer el canal ", "lee el canal ",
-        "read channel ", "ver canal ", "ver el canal ", "mostrar canal ",
-    ];
-    for prefix in &read_prefixes {
+    for prefix in READ_PREFIXES {
         if lower.starts_with(prefix) {
             let raw = trimmed[prefix.len()..].trim();
             if !raw.is_empty() {
@@ -108,19 +192,7 @@ pub(super) fn parse_coloquio_intent(intent: &str) -> (Option<String>, Option<Str
         }
 
     // ── Generic _CHANNEL_STRIP fallback (mirrors coloquio.py) ──
-    let strip_triggers = &[
-        "lee el canal coloquio ", "lee el coloquio ",
-        "leer canal coloquio ", "leer coloquio ",
-        "ver canal coloquio ", "ver coloquio ",
-        "read coloquio channel ", "read channel coloquio ", "read coloquio ",
-        "mostrar canal coloquio ", "mostrar coloquio ",
-        "muestra el coloquio ", "historial coloquio ",
-        "canal coloquio ",
-        // Generic (no "coloquio" in prefix)
-        "leer canal ", "lee canal ", "leer el canal ", "lee el canal ",
-        "read channel ", "ver canal ", "ver el canal ", "mostrar canal ",
-    ];
-    for trigger in strip_triggers {
+    for trigger in STRIP_TRIGGERS {
         if lower.starts_with(trigger) {
             let remainder = trimmed[trigger.len()..].trim();
             if !remainder.is_empty() {
@@ -220,5 +292,61 @@ mod tests {
         let (channel, _, tool) = parse_coloquio_intent(intent);
         assert_eq!(tool, "read");
         assert_eq!(channel.as_deref(), Some("equipo"));
+    }
+
+    // ── is_coloquio_dispatch_intent (pre-routing gate) ──────────────────────
+
+    #[test]
+    fn dispatch_force_recognizes_coloquio_post_intents() {
+        // The exact failure class fixed 2026-08-25: a long post that scored >=0.6
+        // on the Proactive Cascade and was routed to coordinator (required `task`).
+        for intent in [
+            "publica en coloquio mision-activa: propuesta larga de debate con plan y ejecucion",
+            "publica en coloquio equipo: resumen del cierre",
+            "post to coloquio general: hello world",
+            "escribe en coloquio coloquio: nota rapida",
+            "send message to coloquio equipo: aviso",
+            "publicar en coloquio general: resumen",
+            "envia al canal mision-activa: mensaje",
+            "message coloquio equipo: hola",
+        ] {
+            assert!(is_coloquio_dispatch_intent(intent), "'{intent}' must force coloquio routing");
+        }
+    }
+
+    #[test]
+    fn dispatch_force_recognizes_read_list_create() {
+        for intent in [
+            "lee el coloquio mision-activa",
+            "leer coloquio equipo",
+            "lee canal mision-activa",
+            "ver canal coloquio equipo",
+            "historial coloquio mision-activa",
+            "lista canales",
+            "ver canales",
+            "crea canal test-canal",
+            "create channel alpha",
+            "nuevo canal beta",
+        ] {
+            assert!(is_coloquio_dispatch_intent(intent), "'{intent}' must force coloquio routing");
+        }
+    }
+
+    #[test]
+    fn dispatch_force_ignores_bare_or_unrelated_intents() {
+        // Bare posting phrases without a channel word stay with semantic routing,
+        // and unrelated sentences containing "canal" + ':' (the heuristic fallback)
+        // must NOT be forced to coloquio.
+        for intent in [
+            "post to the coordinator: execute the migration",
+            "message the coordinator about the failed build",
+            "send to production: deploy",
+            "responde en la reunion: preparado",
+            "cuando el canal de error muestre: algo raro",
+            "investiga el fallo del canal de pago y resume: el problema",
+            "publica el informe en la wiki",
+        ] {
+            assert!(!is_coloquio_dispatch_intent(intent), "'{intent}' must NOT force coloquio routing");
+        }
     }
 }

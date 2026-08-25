@@ -30,6 +30,18 @@ pub(crate) async fn resolve_guild_name(
         trace.push(format!("guild_hint='{hint}' bypasses router"));
         Ok((hint, trace))
     } else {
+        // Deterministic Coloquio dispatch: post/read/list/create intents that
+        // unambiguously reference a Coloquio channel ("publica en coloquio X: ...",
+        // "lee el coloquio X", ...) must reach the coloquio guild NO MATTER WHAT
+        // the complexity scorers say. Without this, a long post scored >=0.6 on
+        // the Proactive Cascade (M20, below) and was routed to coordinator
+        // (required arg `task`), failing the post with "guild 'coordinator'
+        // requires argument(s): task" -- reproduced live 2026-08-25.
+        if super::coloquio_utils::is_coloquio_dispatch_intent(intent) {
+            trace.push("deterministic coloquio prefix → coloquio".to_string());
+            return Ok(("coloquio".to_string(), trace));
+        }
+
         let intent_for_matching = if intent.chars().count() > 120 {
             intent.chars().take(120).collect::<String>()
         } else {
