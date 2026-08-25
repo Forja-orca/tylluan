@@ -2268,6 +2268,34 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_correct_content_with_colon_keeps_node_id_intact() {
+        // Regression (Desván bug): the old rsplit_once(':') split at the LAST
+        // colon, so content with a literal ':' (e.g. an arXiv citation) was
+        // parsed as part of the node id. The node_id must now be the longest
+        // colon-delimited prefix that names an existing node.
+        let server = test_server().await;
+        server.silva.upsert_node("m36:colon:node", "concept", "original content", "{}").await.unwrap();
+
+        let result = handle_correct_prefix(&server, "@correct:m36:colon:node:see arXiv:2606.24322 for the fix").await;
+        assert!(result.is_some(), "correct should return Some");
+        let r = result.unwrap().unwrap();
+        if r.is_error == Some(true) {
+            let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+            panic!("correct returned error: {text}");
+        }
+
+        let text = r.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+        assert!(text.contains("m36:colon:node"), "node id must be parsed intact, got: {text}");
+
+        // Old node superseded, new node keeps the full content incl. its colon.
+        let old = server.silva.get_node("m36:colon:node").await.unwrap().unwrap();
+        assert!(old.valid_until.is_some(), "old node should have valid_until set");
+        let all = server.silva.get_all_nodes().await.unwrap();
+        let new_node = all.iter().find(|n| n.id.contains("corrected")).unwrap();
+        assert_eq!(new_node.content, "see arXiv:2606.24322 for the fix", "content must preserve the colon");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_correct_rejects_nonexistent_node() {
         let server = test_server().await;
         let result = handle_correct_prefix(&server, "@correct:nonexistent:node:some content").await;
