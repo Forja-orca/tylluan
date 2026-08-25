@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   RefreshCw, 
@@ -7,16 +7,11 @@ import {
   Shield, 
   Activity,
   User,
-  ExternalLink,
   Search
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
-import type { McpSession, NexusBridge } from '../lib/nexus-bridge';
+import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn, relativeTime } from '../lib/utils';
-
-interface SessionWithStatus extends McpSession {
-  status: 'active' | 'revoking';
-}
 
 export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; notify: (msg: string, type?: 'info' | 'error') => void }) {
   const { sessions: globalSessions, loading: globalLoading, refreshData } = useNexus();
