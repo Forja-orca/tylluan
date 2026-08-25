@@ -8,7 +8,7 @@ interface Props {
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
-export function ScopesPanel({ bridge, notify }: Props) {
+export function ScopesPanel({ bridge, notify: _notify }: Props) {
   const [prefix, setPrefix] = useState('');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [loading, setLoading] = useState(false);

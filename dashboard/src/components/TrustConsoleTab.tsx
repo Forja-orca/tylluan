@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Cpu, Activity, AlertTriangle, CheckCircle, RefreshCw, Terminal, Layers, FileCode } from 'lucide-react';
+import { Shield, Activity, CheckCircle, RefreshCw, Terminal, Layers, FileCode } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 

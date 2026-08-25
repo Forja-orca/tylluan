@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useState } from 'react';
 import { 
   AlertTriangle, 
   RefreshCw, 
@@ -28,7 +28,6 @@ export function VisionTab({ bridge, notify }: Props) {
   const { guilds, refreshData } = useNexus();
   const [imagePath, setImagePath] = useState('');
   const [prompt, setPrompt] = useState('Describe this image in detail.');
-  const promptId = useId();
   const [result, setResult] = useState('');
   const [parsedResult, setParsedResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
