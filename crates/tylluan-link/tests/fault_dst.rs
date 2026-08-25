@@ -134,8 +134,51 @@ async fn test_fault_dst_latency_injection() {
     );
 }
 
+/// One sync attempt over a fresh transport pair, with `mode` injected on the
+/// responder (A) side. The initiator (B) must complete the full pull and hold
+/// A's entry for the round to count.
+///
+/// Failure semantics kept identical to the original inline loop: A never
+/// answers (Pull dropped, PullResponse dropped) → B's 1000ms budget expires,
+/// while A's own 500ms responder budget absorbs its failed second receive.
+async fn attempt_sync_round(
+    mode: FaultMode,
+    engine_a: &mut GossipEngine,
+    engine_b: &mut GossipEngine,
+) -> bool {
+    let (t_a_raw, mut t_b_raw) = in_memory_pair();
+    let mut t_a = PartitionableTransport::new(t_a_raw);
+    t_a.set_mode(mode);
+
+    let sync = tokio::time::timeout(
+        Duration::from_millis(1000),
+        engine_b.perform_sync(&mut t_b_raw, "node-a"),
+    );
+    let handle = respond_to_sync_with_timeout(
+        engine_a, &mut t_a, "node-b", Duration::from_millis(500),
+    );
+
+    let (sync_result, _) = tokio::join!(sync, handle);
+
+    // sync_result is Ok(Ok(())) on success, Ok(Err(_)) or Err(timeout) on failure
+    matches!(sync_result, Ok(Ok(())))
+        && engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a")
+}
+
+/// Retry budget for the drop-rate test.
+///
+/// A round succeeds only if two independent 30%-drop gates on A's side pass:
+/// receive Pull (`0.7`) and send PullResponse (`0.7`) — B never waits for a
+/// Push ack, so P(round ok) = 0.49 and P(all 20 rounds fail) = 0.51^20
+/// ≈ 1.4e-6 (~1 in 700k test runs).
+///
+/// At the previous budget (10 rounds) the tail was 0.51^10 ≈ 1.19e-3 (~1 in
+/// 840 runs) and the test panicked on it — observed live as a 10.1s flake
+/// (10 rounds × 1s timeout) with the binary reporting "3 passed; 1 failed".
+const DROP_RETRY_ROUNDS: u32 = 20;
+
 /// Partial message loss — 30% drop rate on both directions.
-/// After up to 5 retry rounds, sync eventually converges.
+/// After the retry budget, sync must have converged.
 #[tokio::test]
 async fn test_fault_dst_drop_rate_eventual_convergence() {
     let mut engine_a = make_engine("node-a");
@@ -145,38 +188,41 @@ async fn test_fault_dst_drop_rate_eventual_convergence() {
     let entry = engine_a.local_entry("10.0.0.1:9000", vec!["drop".into()], default_hw());
     engine_a.store_entries(&[entry]);
 
-    // Fresh transports each round — drop randomness across rounds
+    // Fresh transports each round — drop randomness across rounds.
     let mut converged = false;
-    for round in 1..=10 {
-        let (t_a_raw, mut t_b_raw) = in_memory_pair();
-        let mut t_a = PartitionableTransport::new(t_a_raw);
-        t_a.set_mode(FaultMode::Drop(0.3));
-
-        // Both sides must time out: if responder's receive drops, initiator
-        // also hangs waiting for PullResponse.
-        let sync = tokio::time::timeout(
-            Duration::from_millis(1000),
-            engine_b.perform_sync(&mut t_b_raw, "node-a"),
-        );
-        let handle = respond_to_sync_with_timeout(
-            &mut engine_a, &mut t_a, "node-b", Duration::from_millis(500),
-        );
-
-        let (sync_result, _) = tokio::join!(sync, handle);
-
-        // sync_result is Ok(Ok(())) on success, Ok(Err(_)) or Err(timeout) on failure
-        if let Ok(Ok(())) = sync_result
-            && engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a") {
-                converged = true;
-                break;
-            }
-
-        if round == 10 {
-            panic!("drop rate test: no convergence after 10 rounds with 30% loss");
+    for _round in 1..=DROP_RETRY_ROUNDS {
+        if attempt_sync_round(FaultMode::Drop(0.3), &mut engine_a, &mut engine_b).await {
+            converged = true;
+            break;
         }
     }
 
-    assert!(converged, "B must eventually converge with A under 30% message loss");
+    assert!(
+        converged,
+        "drop rate test: no convergence after {DROP_RETRY_ROUNDS} rounds with 30% loss"
+    );
+}
+
+/// Loop contract regression: on a healthy link the retry round must succeed
+/// on its first attempt — the same convergence check the drop-rate test uses,
+/// exercised without randomness.
+#[tokio::test]
+async fn test_fault_dst_transparent_converges_on_first_round() {
+    let mut engine_a = make_engine("node-a");
+    let mut engine_b = make_engine("node-b");
+
+    engine_a.advance_clock();
+    let entry = engine_a.local_entry("10.0.0.1:9000", vec!["transparent".into()], default_hw());
+    engine_a.store_entries(&[entry]);
+
+    assert!(
+        attempt_sync_round(FaultMode::Transparent, &mut engine_a, &mut engine_b).await,
+        "healthy link must converge on the first round"
+    );
+    assert!(
+        engine_b.entries_since(0).iter().any(|e| e.node_id == "node-a"),
+        "B must store A's entry after the successful round"
+    );
 }
 
 /// Error mode — transport returns Protocol error on every operation.
