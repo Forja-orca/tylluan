@@ -58,40 +58,33 @@ export function TylluanLogo({
     { id: 11, type: 'chest', hx: 50, hy: 74, cx: 50, cy: 88, delay: 1320 },
   ];
 
-  // Edges connecting constellation nodes
-  const constellationEdges = [
-    [0, 3], [3, 8], [8, 10], [10, 9], [9, 7], [7, 4],
-    [0, 1], [1, 2], [2, 11], [11, 6], [6, 5], [5, 4],
-    [8, 9], [3, 7], [10, 11]
-  ];
-
   return (
     <div className={cn('flex items-center gap-3 select-none', className)}>
-      {/* Elegant Professional Motion System (Klarna / Modern Brand Identity 2026) */}
+      {/* Elegant Professional Motion System (Nocturnal Observatory Brand Identity) */}
       <style>{`
-        /* Gesto 1: Ambient Cyan Aura Breathe (Soft organic pulse) */
+        /* Gesto 1: Ambient Amber Aura Breathe (Soft organic pulse) */
         @keyframes sovereign-aura-breathe {
           0%, 100% {
-            box-shadow: 0 0 12px rgba(0, 245, 212, 0.25), inset 0 0 8px rgba(0, 245, 212, 0.15);
-            border-color: rgba(0, 245, 212, 0.3);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.25), inset 0 0 8px rgba(245, 158, 11, 0.15);
+            border-color: rgba(245, 158, 11, 0.3);
           }
           50% {
-            box-shadow: 0 0 24px rgba(0, 245, 212, 0.6), inset 0 0 14px rgba(0, 245, 212, 0.35);
-            border-color: rgba(0, 245, 212, 0.7);
+            box-shadow: 0 0 24px rgba(245, 158, 11, 0.5), inset 0 0 14px rgba(245, 158, 11, 0.3);
+            border-color: rgba(245, 158, 11, 0.6);
           }
         }
 
-        /* Gesto 2: Sequential Node Glow Pulse (Simple, Purposeful, Playful) */
+        /* Gesto 2: Sequential Node Glow Pulse */
         @keyframes node-pulse-glow {
           0%, 100% {
             transform: scale(1);
             opacity: 0.4;
-            filter: drop-shadow(0 0 2px rgba(0, 245, 212, 0.3));
+            filter: drop-shadow(0 0 2px rgba(245, 158, 11, 0.3));
           }
           50% {
             transform: scale(1.3);
             opacity: 1;
-            filter: drop-shadow(0 0 8px rgba(0, 245, 212, 0.9));
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.8));
           }
         }
 
