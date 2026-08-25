@@ -225,7 +225,6 @@ fn bench_cascade_gate_rate_latency_and_quality_overlap() {
     let baseline_engine = dense_arc.clone();
 
     struct Row {
-        query: String,
         stage1_hit: bool,
         cascade_ms: f64,
         baseline_ms: f64,
@@ -273,7 +272,7 @@ fn bench_cascade_gate_rate_latency_and_quality_overlap() {
         let inter = a.iter().filter(|id| b.contains(id)).count();
         let overlap10 = inter as f64 / a.len().max(1) as f64;
 
-        rows.push(Row { query: query.clone(), stage1_hit, cascade_ms, baseline_ms, overlap10 });
+        rows.push(Row { stage1_hit, cascade_ms, baseline_ms, overlap10 });
     }
 
     // ── Report ──────────────────────────────────────────────────────────
@@ -287,7 +286,7 @@ fn bench_cascade_gate_rate_latency_and_quality_overlap() {
 
     println!("\n========== CASCADE IMPACT REPORT ==========");
     println!("queries measured: {}", rows.len());
-    println!("cold dense embed (what the gate saves): {:.0}ms", cold_embed_ms);
+    println!("cold dense embed (what the gate saves): {cold_embed_ms:.0}ms");
     println!(
         "stage-1 hit rate: {}/{} ({:.0}%)",
         hits.len(),

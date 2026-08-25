@@ -857,7 +857,7 @@ mod asi06_tests {
 
 #[cfg(test)]
 mod cascade_tests {
-    use super::{super::SilvaDB, cascade_gate, CASCADE_MIN_AGREEMENT};
+    use super::{super::SilvaDB, cascade_gate};
     use crate::router::embeddings::SparseVec;
 
     #[test]

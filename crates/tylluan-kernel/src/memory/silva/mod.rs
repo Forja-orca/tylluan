@@ -23,6 +23,7 @@ pub mod decay;
 pub mod edges;
 pub mod graph;
 pub mod nodes;
+pub mod recall_contract;
 pub mod search;
 pub mod anchors;
 pub mod autolink;

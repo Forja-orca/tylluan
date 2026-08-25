@@ -74,6 +74,14 @@ impl Phase for LightRerankerTrainPhase {
         }
 
         let weights_path = models_dir.join("light_reranker.weights");
+        // Dirección #3 (memoria explicable): backup before overwrite — if a
+        // night training degrades production, the last-good weights are one
+        // copy away (LightReranker::restore_last_good). Atomic-ish: backup
+        // first, then write.
+        if weights_path.exists() {
+            let backup = models_dir.join("light_reranker.weights.bak");
+            let _ = std::fs::copy(&weights_path, &backup);
+        }
         match serde_json::to_string_pretty(&weights) {
             Ok(json) => match std::fs::write(&weights_path, &json) {
                 Ok(_) => PhaseReport {
