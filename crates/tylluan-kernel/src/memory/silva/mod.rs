@@ -189,6 +189,9 @@ pub struct SilvaDB {
     /// Late-bound from main so the recall cascade can embed queries itself
     /// (stage 2) instead of requiring callers to precompute embeddings.
     pub(crate) dense_engine: std::sync::Mutex<Option<std::sync::Arc<crate::router::embeddings::EmbeddingEngine>>>,
+    /// Honest-abstention floor for recall, scaled x1000 as i64 atomic
+    /// (0 = disabled/legacy). Set from [silva] recall_abstain_min_score.
+    pub(crate) abstain_floor_x1000: std::sync::atomic::AtomicI64,
 }
 
 impl SilvaDB {
@@ -221,8 +224,16 @@ impl SilvaDB {
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
             sparse_engine: std::sync::Mutex::new(None),
             dense_engine: std::sync::Mutex::new(None),
+            abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
         };
         Ok(db)
+    }
+
+    /// Set the honest-abstention floor (scaled x1000; 0 disables). Called
+    /// from main after config load.
+    pub fn set_abstain_floor_x1000(&self, v: i64) {
+        self.abstain_floor_x1000
+            .store(v, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Late-bind the learned-sparse retrieval engine (opt-in, config-gated).
@@ -311,6 +322,7 @@ impl SilvaDB {
             query_embed_cache: Arc::new(query_cache::QueryEmbeddingCache::new()),
             sparse_engine: std::sync::Mutex::new(None),
             dense_engine: std::sync::Mutex::new(None),
+            abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {
