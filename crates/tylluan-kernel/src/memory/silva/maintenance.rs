@@ -495,21 +495,52 @@ impl super::SilvaDB {
             // Effective age: last_agent_access when > 0, else created_at.
             let age_expr = "CASE WHEN last_agent_access > 0 THEN last_agent_access
                              ELSE CAST(strftime('%s', created_at) AS INTEGER) END";
-            let a2q = conn.execute(
+            // Memoria explicable: capture the ids BEFORE each bulk transition so
+            // every state change carries its own justification (kind=system,
+            // reason=age threshold). Bounded at 1000/tick — NightConsolidation
+            // converges over ticks; no unbounded write bursts on Pi4.
+            let log_transition = |from: &str, to: &str, cutoff: i64, reason: &str| -> Result<usize> {
+                let ids: Vec<String> = {
+                    let mut stmt = conn.prepare(&format!(
+                        "SELECT id FROM nodes WHERE lifecycle_state = '{from}' \
+                         AND protected = 0 AND type != 'identity' AND quarantined = 0 \
+                         AND ({age_expr}) < ?1 LIMIT 1000"
+                    ))?;
+                    let rows = stmt.query_map(params![cutoff], |r| r.get::<_, String>(0))?;
+                    rows.filter_map(|r| r.ok()).collect()
+                };
+                let n = ids.len();
+                if n > 0 {
+                    let now_ts = chrono::Utc::now().timestamp();
+                    for id in &ids {
+                        conn.execute(
+                            "INSERT INTO node_transitions (node_id, ts, kind, from_state, to_state, reason) \
+                             VALUES (?1, ?2, 'system', ?3, ?4, ?5)",
+                            params![id, now_ts, from, to, reason],
+                        )?;
+                    }
+                }
+                Ok(n)
+            };
+
+            let a2q = log_transition("active", "quiet", quiet_cutoff, "age>30d_since_agent_access")?;
+            conn.execute(
                 &format!("UPDATE nodes SET lifecycle_state = 'quiet'
                  WHERE lifecycle_state = 'active'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0
                    AND ({age_expr}) < ?1"),
                 params![quiet_cutoff],
             )?;
-            let q2c = conn.execute(
+            let q2c = log_transition("quiet", "consolidated", consolidated_cutoff, "age>60d_since_agent_access")?;
+            conn.execute(
                 &format!("UPDATE nodes SET lifecycle_state = 'consolidated'
                  WHERE lifecycle_state = 'quiet'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0
                    AND ({age_expr}) < ?1"),
                 params![consolidated_cutoff],
             )?;
-            let c2a = conn.execute(
+            let c2a = log_transition("consolidated", "archived", archived_cutoff, "age>90d_since_agent_access")?;
+            conn.execute(
                 &format!("UPDATE nodes SET lifecycle_state = 'archived'
                  WHERE lifecycle_state = 'consolidated'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0

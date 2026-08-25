@@ -317,6 +317,27 @@ impl super::SilvaDB {
             results.retain(|(node, _)| !archived_ids.contains(&node.id));
         }
         results.truncate(limit);
+        // Memoria negativa: record that this query found nothing. Hash only —
+        // raw queries may carry personal data (soberanía). This is the seed of
+        // "what was searched and not found" so learning isn't biased toward
+        // what survived the pipeline.
+        if results.is_empty() {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut h = DefaultHasher::new();
+            query.hash(&mut h);
+            let qhash = format!("{:016x}", h.finish());
+            let _ = tokio::task::block_in_place(|| {
+                let conn = self.conn.blocking_lock();
+                conn.execute(
+                    "INSERT INTO recall_misses (ts, query_hash, reason) VALUES (?1, ?2, 'empty')",
+                    params![std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64, qhash],
+                )
+            });
+        }
         Ok(results)
     }
 
