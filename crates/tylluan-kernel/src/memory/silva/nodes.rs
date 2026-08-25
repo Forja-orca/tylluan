@@ -1099,8 +1099,17 @@ impl super::SilvaDB {
     /// Quarantined nodes do not advance. Only archived rows increment the
     /// reactivation counter; ordinary accesses update the timestamp only.
     pub async fn record_agent_access(&self, node_id: &str, timestamp: i64) -> Result<()> {
-        tokio::task::block_in_place(|| {
+        let was_archived = tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
+            // Memoria explicable: capture prior state so the reactivation
+            // transition carries actor-class (agent) and reason.
+            let prior: String = conn
+                .query_row(
+                    "SELECT lifecycle_state FROM nodes WHERE id = ?1 AND quarantined = 0",
+                    params![node_id],
+                    |r| r.get(0),
+                )
+                .unwrap_or_default();
             conn.execute(
                 "UPDATE nodes
                  SET lifecycle_state = CASE
@@ -1118,8 +1127,19 @@ impl super::SilvaDB {
                  WHERE id = ?2 AND quarantined = 0",
                 params![timestamp, node_id],
             )?;
-            Ok(())
-        })
+            Ok::<bool, anyhow::Error>(prior == "archived")
+        })?;
+        if was_archived {
+            tokio::task::block_in_place(|| {
+                let conn = self.conn.blocking_lock();
+                conn.execute(
+                    "INSERT INTO node_transitions (node_id, ts, kind, from_state, to_state, reason) \
+                     VALUES (?1, ?2, 'agent', 'archived', 'active', 'reactivated-by-agent-recall')",
+                    params![node_id, timestamp],
+                )
+            })?;
+        }
+        Ok(())
     }
 
     /// Create or update agent identity node.

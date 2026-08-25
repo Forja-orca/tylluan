@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 24;
+            const SCHEMA_VERSION: i32 = 25;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -308,6 +308,34 @@ impl super::SilvaDB {
                     );"
                 )?;
                 tracing::info!("🌲 SilvaDB: added node_sparse_embeddings table (v24, hybrid sparse source)");
+            }
+            if schema_version < 25 {
+                // Memoria explicable (2026-08-25): transiciones con justificación +
+                // memoria negativa. Append-only, granularidad clasificada: aquí solo
+                // se registran eventos SEMÁNTICOS (lifecycle, reactivación); los
+                // micro-cambios de FSRS/decay quedan AGREGADOS por diseño — un log
+                // ingenuo de cada tick reventaría el ancla Pi4 (trade-off resuelto).
+                // recall_misses guarda HASH del query, nunca el texto (soberanía:
+                // las consultas pueden contener datos personales).
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS node_transitions (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        node_id    TEXT NOT NULL,
+                        ts         INTEGER NOT NULL,
+                        kind       TEXT NOT NULL,
+                        from_state TEXT,
+                        to_state   TEXT,
+                        reason     TEXT NOT NULL DEFAULT ''
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_node_transitions_node ON node_transitions(node_id);
+                    CREATE TABLE IF NOT EXISTS recall_misses (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ts         INTEGER NOT NULL,
+                        query_hash TEXT NOT NULL,
+                        reason     TEXT NOT NULL DEFAULT 'empty'
+                    );"
+                )?;
+                tracing::info!("🌲 SilvaDB: added node_transitions + recall_misses (v25, memoria explicable)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
