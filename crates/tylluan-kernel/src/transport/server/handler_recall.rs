@@ -838,8 +838,9 @@ if let Some(ref mut s) = stmt {
 
             // ADR-011 LightReranker: reorder by learned score when model available.
             // Additive, opt-in — if no trained model exists, scored is unchanged.
-            if let Some(ref reranker) = server.light_reranker {
-                if reranker.is_active() {
+            if let Some(ref reranker) = server.light_reranker
+                && reranker.is_active()
+            {
                     // Pre-compute agent affinity for each candidate.
                     // Only queries recall_feedback when reranker is active (model exists).
                     let mut affinity_map: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
@@ -878,7 +879,6 @@ if let Some(ref mut s) = stmt {
                         }).collect();
                         tracing::info!("🎯 LightReranker reordered {} candidates", scored.len());
                     }
-                }
             }
 
             // Always truncate to the requested limit at the very end
