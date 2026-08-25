@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check, User } from 'lucide-react';
+import { Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
 import { TylluanLogo } from './TylluanLogo';
@@ -17,7 +17,7 @@ export function WelcomeEmptyState({
   bridge,
   sysStatus,
   sessions,
-  memoryStats,
+  memoryStats: _memoryStats,
   notify,
   onRefresh
 }: WelcomeEmptyStateProps) {

@@ -24,7 +24,6 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { RefreshCw, Maximize2, Pause, Play } from 'lucide-react';
 import type { NexusBridge, GraphNode, NexusEvent } from '../../lib/nexus-bridge';
 import { nodeTypeColor, clusterRingColor, CORTEX_BACKGROUND } from './palette';
-import { cn } from '../../lib/utils';
 
 interface CortexNode extends GraphNode {
   cluster_id?: number;
