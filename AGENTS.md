@@ -59,9 +59,9 @@ cargo run -p tylluan-cli -- start
 
 ---
 
-## Estado actual — v0.16.0+ (unreleased, 34 commits desde el release)
+## Estado actual — v0.17.0 (tagged 2026-08-23; 166 commits desde v0.16.0 `5900e97`)
 
-**Tests:** 685 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 766 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
+**Tests:** 709 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 790 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:4000/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
 ### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14, sin tag de versión todavía): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md` sección `[Unreleased]` para el detalle completo.
