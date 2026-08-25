@@ -219,7 +219,7 @@ impl SparseVec {
     }
 
     pub fn from_bytes(indices_blob: &[u8], values_blob: &[u8]) -> Result<Self> {
-        if indices_blob.len() % 4 != 0 || values_blob.len() % 4 != 0 {
+        if !indices_blob.len().is_multiple_of(4) || !values_blob.len().is_multiple_of(4) {
             return Err(anyhow!("sparse blob length not multiple of 4"));
         }
         let indices: Vec<u32> = indices_blob

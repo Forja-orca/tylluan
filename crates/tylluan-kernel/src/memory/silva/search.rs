@@ -360,17 +360,17 @@ impl super::SilvaDB {
                 .and_modify(|e| { e.1 += rrf; })
                 .or_insert((node.clone(), rrf, 1));
         }
-        if let Some(qsv) = qsv {
-            if let Ok(sparse_nodes) = self.search_sparse_candidates(qsv, limit * 2).await {
-                for (rank, node) in sparse_nodes.into_iter().enumerate() {
-                    let rrf = 1.0 / (K + rank as f32 + 1.0);
-                    fused.entry(node.id.clone())
-                        .and_modify(|e| {
-                            e.1 += rrf;
-                            e.2 |= 2;
-                        })
-                        .or_insert((node.clone(), rrf, 2));
-                }
+        if let Some(qsv) = qsv
+            && let Ok(sparse_nodes) = self.search_sparse_candidates(qsv, limit * 2).await
+        {
+            for (rank, node) in sparse_nodes.into_iter().enumerate() {
+                let rrf = 1.0 / (K + rank as f32 + 1.0);
+                fused.entry(node.id.clone())
+                    .and_modify(|e| {
+                        e.1 += rrf;
+                        e.2 |= 2;
+                    })
+                    .or_insert((node.clone(), rrf, 2));
             }
         }
 
