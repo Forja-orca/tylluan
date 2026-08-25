@@ -11,7 +11,7 @@
 - **Dimensión de Vectores:** 1024 dimensiones reales (BGE-M3 en CPU ONNX).
 - **Artefactos crudos:** `benchmarks/benchmark_i7_j13_results.json` + `benchmarks/benchmark_i7_j13_raw_calls.json` (mismo commit, lag 0, desglose completo por categoría e item).
 
-> **Historial de ejecuciones:** la v1 de este benchmark se midió contra `18e70fa` (15+ commits desactualizado, Live Matcher 45.21%, categorías ambiguas 0%). Los datos siguientes corresponden a la ejecución contra el kernel al día (`e337836`) del 2026-08-23 (G5).
+> **Historial de ejecuciones:** la v1 de este benchmark se midió contra `18e70fa` (15+ commits desactualizado, Live Matcher 45.21%, categorías ambiguas 0%). La v2 se midió contra el kernel al día (`e337836`) el 2026-08-23 (G5). La v2a re-midió el Live Matcher tras el RRF en producción (`be69f11`, mismo día): 47.95% → 49.32% (+1.37pp), artefactos `benchmark_i7_j13_results_before_rrf.json` y `benchmark_i7_j13_results_after_rrf.json`. La tabla principal refleja la v2a (final); la sección 4 conserva el desglose por categoría de la v2 (pre-RRF), con el delta RRF anotado bajo la tabla.
 
 ---
 
@@ -24,7 +24,7 @@
 | **3. Pure Semantic BGE-M3 Router** | **49.32%** | 36 / 73 | Cero reglas de palabras clave; 100% similitud coseno sobre vectores de 1024d. |
 | **4. Blended Hybrid (55/45 sin Tiebreak)** | **61.64%** | 45 / 73 | 55% similitud coseno real + 45% keyword score normalizado. |
 | **5. Hybrid + J-13 Tiebreaker** | **64.38%** | **47 / 73** | Si $\Delta \le 0.15$ entre top-2 híbridos, desempata la similitud semántica. |
-| **6. Live Production Matcher (`matcher.rs`)** | **47.95%** | 35 / 73 | Kernel al día (`e337836`) vía `/api/v1/do` con `plan=true`. vs 45.21% en `18e70fa` (+2.74pp). |
+| **6. Live Production Matcher (`matcher.rs`)** | **49.32%** | 36 / 73 | Kernel con RRF en producción (`be69f11`) vía `/api/v1/do` con `plan=true`. vs 47.95% pre-RRF en `e337836` (+1.37pp) y vs 45.21% en `18e70fa` (+4.11pp). |
 
 ---
 
@@ -39,7 +39,7 @@
 
 ## 4. Desglose Crítico por Categoría de Ambigüedad
 
-| Categoría de Ambigüedad | Muestras ($N$) | Keyword | BGE-M3 Sem | Blended | **J-13 Hybrid** | **Live Matcher (`e337836`)** |
+| Categoría de Ambigüedad | Muestras ($N$) | Keyword | BGE-M3 Sem | Blended | **J-13 Hybrid** | **Live Matcher (`e337836`, pre-RRF)** |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`clear_keyword`** | 27 | 81.5% | 70.4% | 88.9% | **88.9%** | 33.3% |
 | **`cross_guild_ambiguity`** | 9 | 22.2% | 66.7% | 44.4% | **55.6%** | 11.1% |
@@ -47,6 +47,8 @@
 | **`historical_real`** | 31 | 41.9% | 29.0% | 41.9% | **45.2%** | **77.4%** |
 
 **Comparación vs kernel viejo (`18e70fa`):** historical_real 74.2% → 77.4% (+3.2pp) | cross_guild_ambiguity 0% → 11.1% (+11.1pp) | semantic_paraphrase 0% → 16.7% (+16.7pp) | clear_keyword 37.0% → 33.3% (-3.7pp). La mejora en categorías ambiguas demuestra que parte de la debilidad previa era del desfase del binario; el gap persistente vs la simulación es debilidad real del stack.
+
+**Delta RRF en producción (`be69f11`, artifactos antes/después):** total 47.95% → 49.32% (+1.37pp). Por categoría el único cambio es `semantic_paraphrase` 16.7% → 33.3% (1 → 2/6); `clear_keyword` 33.3%, `cross_guild_ambiguity` 11.1% y `historical_real` 77.4% sin cambios — cero regresiones confirmadas.
 
 ---
 
