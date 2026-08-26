@@ -320,7 +320,10 @@ impl super::SilvaDB {
         // Honest abstention (opt-in): if the floor is set and even the top
         // fused score is below it, return "no sufficiently relevant memory"
         // instead of forcing noise through as memory. Logged with its own
-        // reason so negative memory distinguishes empty from weak.
+        // reason so negative memory distinguishes empty from weak — guarded
+        // below so the generic 'empty' insert doesn't also fire and blur
+        // that distinction.
+        let mut abstained = false;
         if !results.is_empty() {
             let floor = self.abstain_floor_x1000.load(std::sync::atomic::Ordering::Relaxed);
             if floor > 0 {
@@ -344,14 +347,17 @@ impl super::SilvaDB {
                     tracing::info!(gen_ai.operation.name = "retrieval",
                         "recall: honest abstention — top fused score {top:.4} below floor {:.3}", floor as f64 / 1000.0);
                     results.clear();
+                    abstained = true;
                 }
             }
         }
         // Memoria negativa: record that this query found nothing. Hash only —
         // raw queries may carry personal data (soberanía). This is the seed of
         // "what was searched and not found" so learning isn't biased toward
-        // what survived the pipeline.
-        if results.is_empty() {
+        // what survived the pipeline. Skipped when abstention already logged
+        // its own more specific reason above, so one recall never writes two
+        // recall_misses rows with contradictory reasons.
+        if results.is_empty() && !abstained {
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
             let mut h = DefaultHasher::new();
