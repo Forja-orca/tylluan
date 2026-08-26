@@ -448,10 +448,11 @@ impl SilvaDB {
     /// query serves a ghost vector after node_embeddings rows are purged.
     ///
     /// Used by vector tiering (ADR-012 archived transition). The .fjv1 file is
-    /// NOT deleted here — `consolidate_ivf_index` at next startup treats a shrink
-    /// of more than 1/3 in embedding count as stale and rebuilds from SQLite, which
-    /// is the source of truth. The DB-persisted HNSW blob is likewise rebuilt
-    /// from the surviving rows by `rebuild_hnsw_if_needed`.
+    /// DELETED here so no ghost vector survives invalidation: the next startup's
+    /// `consolidate_ivf_index` sees the file missing and rebuilds from SQLite,
+    /// which is the source of truth (missing file = stale by definition). The
+    /// DB-persisted HNSW blob is likewise rebuilt from the surviving rows by
+    /// `rebuild_hnsw_if_needed`.
     pub(crate) async fn invalidate_vector_indexes(&self) {
         *self.mmap_store.write().unwrap() = None;
         *self.ivf_searcher.write().unwrap() = None;
@@ -463,6 +464,17 @@ impl SilvaDB {
             let conn = self.conn.blocking_lock();
             let _ = conn.execute("DELETE FROM hnsw_index WHERE id = 1", []);
         });
+        // #2 ghost vectors: purge the .fjv1 file NOW instead of waiting for the
+        // lazy >1/3-shrink rebuild — between invalidation and next startup the
+        // stale file could be reloaded and serve vectors for purged nodes.
+        if let Some(path) = &self.mmap_path {
+            if path.exists() {
+                match std::fs::remove_file(path) {
+                    Ok(_) => tracing::info!("🌲 Purged stale mmap store at {}", path.display()),
+                    Err(e) => tracing::warn!("🌲 Failed to purge mmap store {}: {e}", path.display()),
+                }
+            }
+        }
         tracing::info!("🌲 Vector indexes invalidated after embedding purge");
     }
 
