@@ -467,12 +467,12 @@ impl SilvaDB {
         // #2 ghost vectors: purge the .fjv1 file NOW instead of waiting for the
         // lazy >1/3-shrink rebuild — between invalidation and next startup the
         // stale file could be reloaded and serve vectors for purged nodes.
-        if let Some(path) = &self.mmap_path {
-            if path.exists() {
-                match std::fs::remove_file(path) {
-                    Ok(_) => tracing::info!("🌲 Purged stale mmap store at {}", path.display()),
-                    Err(e) => tracing::warn!("🌲 Failed to purge mmap store {}: {e}", path.display()),
-                }
+        if let Some(path) = &self.mmap_path
+            && path.exists()
+        {
+            match std::fs::remove_file(path) {
+                Ok(_) => tracing::info!("🌲 Purged stale mmap store at {}", path.display()),
+                Err(e) => tracing::warn!("🌲 Failed to purge mmap store {}: {e}", path.display()),
             }
         }
         tracing::info!("🌲 Vector indexes invalidated after embedding purge");
