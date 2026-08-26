@@ -55,14 +55,25 @@ ok()   { echo "✅ $1"; }
 # is not optional decoration.
 if [ "$RUN_RUST" = "1" ]; then
     echo "── Rust (toolchain: stable, same as CI) ──"
+    if command -v rustup >/dev/null 2>&1; then
+        RUST_CARGO="rustup run stable cargo"
+    elif command -v rustup.exe >/dev/null 2>&1; then
+        RUST_CARGO="rustup.exe run stable cargo"
+    elif command -v cargo >/dev/null 2>&1; then
+        RUST_CARGO="cargo"
+    elif command -v cargo.exe >/dev/null 2>&1; then
+        RUST_CARGO="cargo.exe"
+    else
+        RUST_CARGO="cargo"
+    fi
 
-    if rustup run stable cargo check -p tylluan-kernel; then
+    if $RUST_CARGO check -p tylluan-kernel; then
         ok "cargo check -p tylluan-kernel"
     else
         fail "cargo check -p tylluan-kernel"
     fi
 
-    if rustup run stable cargo test -p tylluan-kernel --lib; then
+    if $RUST_CARGO test -p tylluan-kernel --lib; then
         ok "cargo test -p tylluan-kernel --lib"
     else
         fail "cargo test -p tylluan-kernel --lib"
@@ -70,25 +81,25 @@ if [ "$RUN_RUST" = "1" ]; then
 
     # --all-targets is load-bearing: it lints tests/benches/examples too.
     # Every false "clippy limpio" today came from someone dropping this flag.
-    if rustup run stable cargo clippy -p tylluan-kernel --all-targets -- -D warnings; then
+    if $RUST_CARGO clippy -p tylluan-kernel --all-targets -- -D warnings; then
         ok "cargo clippy -p tylluan-kernel --all-targets -D warnings"
     else
         fail "cargo clippy -p tylluan-kernel --all-targets -D warnings"
     fi
 
-    if rustup run stable cargo test -p tylluan-link --lib --tests; then
+    if $RUST_CARGO test -p tylluan-link --lib --tests; then
         ok "cargo test -p tylluan-link --lib --tests"
     else
         fail "cargo test -p tylluan-link --lib --tests"
     fi
 
-    if rustup run stable cargo clippy -p tylluan-link --lib --tests -- -D warnings; then
+    if $RUST_CARGO clippy -p tylluan-link --lib --tests -- -D warnings; then
         ok "cargo clippy -p tylluan-link --lib --tests -D warnings"
     else
         fail "cargo clippy -p tylluan-link --lib --tests -D warnings"
     fi
 
-    if rustup run stable cargo test -p tylluan-fsrs; then
+    if $RUST_CARGO test -p tylluan-fsrs; then
         ok "cargo test -p tylluan-fsrs"
     else
         fail "cargo test -p tylluan-fsrs"
@@ -103,20 +114,29 @@ fi
 # unless this script reproduces it first. ──
 if [ "$RUN_DASHBOARD" = "1" ]; then
     echo "── Dashboard ──"
-    if command -v pnpm >/dev/null 2>&1; then
-        if (cd dashboard && pnpm install --frozen-lockfile); then
+    PNPM_CMD="pnpm"
+    if ! command -v pnpm >/dev/null 2>&1; then
+        if command -v pnpm.cmd >/dev/null 2>&1; then
+            PNPM_CMD="pnpm.cmd"
+        fi
+    elif [[ "${OSTYPE:-}" == "linux"* ]] && grep -qi microsoft /proc/version 2>/dev/null && command -v cmd.exe >/dev/null 2>&1; then
+        PNPM_CMD="cmd.exe /c pnpm"
+    fi
+
+    if command -v pnpm >/dev/null 2>&1 || command -v pnpm.cmd >/dev/null 2>&1; then
+        if (cd dashboard && $PNPM_CMD install --frozen-lockfile); then
             ok "pnpm install --frozen-lockfile (package.json matches pnpm-lock.yaml)"
         else
             fail "pnpm install --frozen-lockfile — package.json/pnpm-lock.yaml drifted, run 'pnpm install --no-frozen-lockfile' in dashboard/ and commit the lockfile"
         fi
 
-        if (cd dashboard && pnpm run lint); then
+        if (cd dashboard && $PNPM_CMD run lint); then
             ok "pnpm run lint"
         else
             fail "pnpm run lint"
         fi
 
-        if (cd dashboard && pnpm test); then
+        if (cd dashboard && $PNPM_CMD test); then
             ok "pnpm test"
         else
             fail "pnpm test"
