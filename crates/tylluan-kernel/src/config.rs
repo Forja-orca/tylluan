@@ -636,6 +636,8 @@ pub struct InferenceLlamaConfig {
     pub port: u16,
     #[serde(default = "default_ctx_size")]
     pub ctx_size: usize,
+    #[serde(default = "default_n_keep")]
+    pub n_keep: usize,
     #[serde(default = "default_n_gpu_layers")]
     pub n_gpu_layers: i32,
     #[serde(default = "default_threads")]
@@ -656,6 +658,7 @@ fn default_provider_name() -> String { "llama-server".to_string() }
 fn default_endpoint_url() -> String { "http://127.0.0.1:9000".to_string() }
 fn default_llama_port() -> u16 { 9000 }
 fn default_ctx_size() -> usize { 4096 }
+fn default_n_keep() -> usize { 0 }
 fn default_n_gpu_layers() -> i32 { 99 }
 fn default_threads() -> usize { 4 }
 fn default_batch_size() -> usize { 512 }
@@ -671,6 +674,7 @@ impl Default for InferenceLlamaConfig {
             endpoint: default_endpoint_url(),
             port: default_llama_port(),
             ctx_size: default_ctx_size(),
+            n_keep: default_n_keep(),
             n_gpu_layers: default_n_gpu_layers(),
             threads: default_threads(),
             batch_size: default_batch_size(),

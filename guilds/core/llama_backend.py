@@ -49,6 +49,7 @@ def _read_config():
         "port": llama_cfg.get("port", 9000),
         "n_gpu_layers": llama_cfg.get("n_gpu_layers", 0),
         "ctx_size": llama_cfg.get("ctx_size", 2048),
+        "n_keep": llama_cfg.get("n_keep", 0),  # tokens del prompt inicial conservados al desplazar contexto
         "threads": llama_cfg.get("threads", 0),  # 0 = auto (cpu_count)
         "batch_size": llama_cfg.get("batch_size", 512),
         "temperature": llama_cfg.get("temperature", 0.7),
@@ -565,9 +566,17 @@ async def _start_llama_server_locked():
         "--port", str(LLAMA_PORT),
         "--n-gpu-layers", str(_get_config()["n_gpu_layers"]),
         "--ctx-size", str(_get_config()["ctx_size"]),
+    ]
+    # --n-keep: llama.cpp keeps the first N prompt tokens cached across context
+    # shifts (multi-turn / long generations). Default 0 keeps nothing; a positive
+    # value preserves a stable prefix (e.g. system prompt) so it isn't recomputed.
+    if _get_config()["n_keep"] > 0:
+        cmd.append("--n-keep")
+        cmd.append(str(_get_config()["n_keep"]))
+    cmd.extend([
         "--threads", str(threads),
         "--batch-size", str(_get_config()["batch_size"]),
-    ]
+    ])
     # --mlock on ARM or low-RAM devices prevents model swap.
     # The doctor-in-Africa anchor (Raspberry Pi 4, 4-8GB RAM) benefits most.
     # On high-RAM systems the flag is cheap and harmless.
@@ -720,6 +729,7 @@ async def backend_health() -> str:
         "params": {
             "n_gpu_layers": _get_config()["n_gpu_layers"],
             "ctx_size": _get_config()["ctx_size"],
+            "n_keep": _get_config()["n_keep"],
             "threads": _get_config()["threads"],
             "batch_size": _get_config()["batch_size"],
         },
