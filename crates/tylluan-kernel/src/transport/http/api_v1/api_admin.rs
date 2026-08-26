@@ -1661,6 +1661,7 @@ pub struct InferenceLlamaConfigRequest {
     pub endpoint: Option<String>,
     pub port: Option<u16>,
     pub ctx_size: Option<usize>,
+    pub n_keep: Option<usize>,
     pub n_gpu_layers: Option<i32>,
     pub threads: Option<usize>,
     pub batch_size: Option<usize>,
@@ -1734,6 +1735,7 @@ pub async fn set_inference_llama_config_handler(
         if let Some(ref v) = req.endpoint     { llama.insert("endpoint".to_string(), toml::Value::String(v.clone())); }
         if let Some(v)     = req.port          { llama.insert("port".to_string(), toml::Value::Integer(v as i64)); }
         if let Some(v)     = req.ctx_size      { llama.insert("ctx_size".to_string(), toml::Value::Integer(v as i64)); }
+        if let Some(v)     = req.n_keep        { llama.insert("n_keep".to_string(), toml::Value::Integer(v as i64)); }
         if let Some(v)     = req.n_gpu_layers  { llama.insert("n_gpu_layers".to_string(), toml::Value::Integer(v as i64)); }
         if let Some(v)     = req.threads       { llama.insert("threads".to_string(), toml::Value::Integer(v as i64)); }
         if let Some(v)     = req.batch_size    { llama.insert("batch_size".to_string(), toml::Value::Integer(v as i64)); }
