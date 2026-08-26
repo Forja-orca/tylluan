@@ -171,17 +171,35 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ## Validación estándar
 
+**No copies comandos sueltos de memoria ni de este archivo — corre `scripts/verify.sh`.**
+
+Añadido 2026-08-26 tras un día en el que tres agentes distintos (incluido Claude)
+afirmaron "clippy limpio" o "tests en verde" y estaban equivocados, siempre por
+la misma causa: usaron un comando más estrecho o un toolchain distinto al que
+CI realmente ejecuta (`cargo clippy` sin `--all-targets`, toolchain local en vez
+de `stable`, `pnpm lint` sin `--frozen-lockfile`). El bloque de comandos que
+antes vivía aquí sufría exactamente esa deriva — decía "685+" cuando ya eran
+709+, y no incluía `--all-targets` en absoluto.
+
 ```bash
-cargo check -p tylluan-kernel
-cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 685+ kernel lib tests passing
-
-cargo test -p tylluan-link --all-targets 2>&1 | tail -3
-# Esperado: 69+ link tests passing
-
-cargo clippy -p tylluan-kernel -- -D warnings
-# CI corre clippy con -D warnings; cargo check NO lo hace
+bash scripts/verify.sh              # todo — kernel, tylluan-link, dashboard, docs
+bash scripts/verify.sh --rust       # solo Rust (kernel + tylluan-link)
+bash scripts/verify.sh --dashboard  # solo dashboard
+bash scripts/verify.sh --docs       # solo drift de STATUS.md/README.md (segundos)
 ```
+
+Instala también el hook de pre-push, una vez por checkout, para que esto se
+ejecute solo antes de cada `git push` (usa `git push --no-verify` para saltarlo
+deliberadamente, solo si sabes por qué):
+
+```bash
+bash scripts/install_hooks.sh
+```
+
+El script fija el toolchain a `stable` explícitamente (`rustup run stable`) —
+igual que `.github/workflows/ci.yml` — porque el toolchain local por defecto de
+esta máquina puede ir por delante o detrás del que usa CI, y esa diferencia ya
+ha producido falsos positivos reales más de una vez.
 
 ---
 

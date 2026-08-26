@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Tracked git hook (not .git/hooks/, which nobody commits or shares).
+# Installed via `scripts/install_hooks.sh` — see that file for why.
+#
+# Runs the exact same checks CI runs, locally, before the push leaves this
+# machine. Slower than not checking — that's the point. Everything this
+# hook catches is a bug that would otherwise land on `main` with CI red
+# and nobody noticing until someone runs `gh run view` by hand.
+#
+# Escape hatch for a deliberate WIP/emergency push: `git push --no-verify`.
+# Using it means YOU are now the verification — say so out loud when you do.
+
+echo "🌲 pre-push: running scripts/verify.sh (full, same as CI) — this can take a few minutes"
+echo "   (skip once with: git push --no-verify)"
+echo
+
+if ! bash scripts/verify.sh; then
+    echo
+    echo "❌ pre-push blocked: scripts/verify.sh failed. Fix it, or push with --no-verify if you understand why not."
+    exit 1
+fi
+
+exit 0
