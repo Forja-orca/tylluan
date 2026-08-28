@@ -1089,6 +1089,24 @@ pub struct SecurityConfig {
     /// Key resolved from: TYLLUAN_DB_KEY env var > OS keychain > file fallback.
     #[serde(default = "default_encrypt_at_rest")]
     pub encrypt_at_rest: bool,
+    /// Opt-in gate for CoherenceGate Layer 4 (hybrid_classify) actually
+    /// calling the llama_backend guild. Defaults to FALSE.
+    ///
+    /// Origin (Jose, 2026-08-28): hybrid_classify() is spawned from BOTH
+    /// call sites in handler_recall.rs -- i.e. from every tylluan_recall,
+    /// any agent, any time of day, not just Night Consolidation. When its
+    /// trigger zone activates it calls llama_backend, which auto-starts a
+    /// real llama-server subprocess if one isn't already running, with zero
+    /// user opt-in. This almost certainly contributed to a 4-day Unsloth
+    /// training run being killed -- a background inference process silently
+    /// competing for GPU/CPU resources during normal recall traffic, not
+    /// just at night. This class of guild (auto-spawns a heavy local
+    /// inference process as a side effect) must default to OFF; the human
+    /// turns it on when they actually want it, per Jose's standing rule
+    /// that Tylluan must never be invasive of other software or the OS by
+    /// default, "aunque demos 10000 opciones más".
+    #[serde(default = "default_coherence_gate_hybrid_enabled")]
+    pub coherence_gate_hybrid_enabled: bool,
 }
 
 fn default_encrypt_at_rest() -> bool {
@@ -1097,6 +1115,7 @@ fn default_encrypt_at_rest() -> bool {
 
 fn default_intent_filter() -> bool { true }
 fn default_capabilities_enforce() -> bool { false }
+fn default_coherence_gate_hybrid_enabled() -> bool { false }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
@@ -1106,6 +1125,7 @@ impl Default for SecurityConfig {
             sandbox: SandboxConfig::default(),
             acl: AclConfig::default(),
             encrypt_at_rest: default_encrypt_at_rest(),
+            coherence_gate_hybrid_enabled: default_coherence_gate_hybrid_enabled(),
         }
     }
 }

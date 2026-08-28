@@ -1024,6 +1024,7 @@ async fn main() -> anyhow::Result<()> {
     server.coloquio = Some(coloquio.clone());
     server.low_memory_mode = low_memory_mode;
     server.recall_cascade_enabled = config.silva.cascade_enabled;
+    server.coherence_gate_hybrid_enabled = config.security.coherence_gate_hybrid_enabled;
     // Honest abstention floor (opt-in): scaled x1000 for the atomic.
     silva.set_abstain_floor_x1000((config.silva.recall_abstain_min_score * 1000.0) as i64);
     // MLP scorer: optional ONNX model for learned complexity scoring
