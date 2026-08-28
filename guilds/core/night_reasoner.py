@@ -68,6 +68,34 @@ def _get_tokenizer():
         sys.stderr.write("[night_reasoner] tokenizers lib not installed\n")
     return None
 
+# ── Execution provider policy (shared invariant, not a per-module choice) ──
+#
+# TODO TYLLUAN (José, 2026-08-28): every inference path in the whole project
+# must honor [inference] device the same way, with the same default -- CPU
+# unless the human explicitly opted into GPU -- no matter how many options
+# get added later. This module used to auto-detect any available GPU
+# provider (commit 0543d172, 2026-07-27) "for better performance", ignoring
+# [inference] device entirely. That is exactly the class of bug that killed
+# a 4-day Unsloth training run: this guild's Night Consolidation reasoning
+# grabbed VRAM via DirectML/CUDA in the background while a real training
+# process already had the GPU near-saturated. Never again: GPU here is
+# opt-in, read from the same config key the Rust embeddings engine reads
+# (build_execution_providers in router/embeddings.rs), never auto-detected.
+def _inference_device():
+    """Read [inference] device from tylluan.toml. Defaults to 'cpu' if the
+    file, section, or key is missing -- CPU-only is the safe failure mode,
+    never GPU-by-default."""
+    import tomllib
+    root = Path(__file__).resolve().parent.parent.parent
+    config_path = root / "tylluan.toml"
+    try:
+        with open(config_path, "rb") as f:
+            cfg = tomllib.load(f)
+        return str(cfg.get("inference", {}).get("device", "cpu")).lower()
+    except Exception:
+        return "cpu"
+
+
 # ── SmolLM2 fallback path ───────────────────────────────────────────────────
 
 def _load_smol():
@@ -80,9 +108,22 @@ def _load_smol():
         raise RuntimeError("SmolLM2-135M ONNX model not found")
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 4
-    providers = ort.get_available_providers()
-    gpu = [p for p in providers if p not in ('CPUExecutionProvider', 'AzureExecutionProvider')]
-    _smol_session = ort.InferenceSession(path, opts, providers=gpu + ['CPUExecutionProvider'] if gpu else ['CPUExecutionProvider'])
+
+    device = _inference_device()
+    if device == "cpu":
+        providers = ["CPUExecutionProvider"]
+    else:
+        # Explicit opt-in only: request the matching provider if available,
+        # but always keep CPU as the fallback if it isn't.
+        wanted = {
+            "cuda": "CUDAExecutionProvider",
+            "directml": "DmlExecutionProvider",
+            "coreml": "CoreMLExecutionProvider",
+        }.get(device)
+        available = ort.get_available_providers()
+        providers = ([wanted] if wanted and wanted in available else []) + ["CPUExecutionProvider"]
+
+    _smol_session = ort.InferenceSession(path, opts, providers=providers)
     return _smol_session
 
 def _tokenize_smol(text, max_len=200):
