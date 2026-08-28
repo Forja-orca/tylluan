@@ -538,18 +538,25 @@ if let Some(ref mut s) = stmt {
 
         // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
         // Calls the LLM only for those that trigger any ambiguity zone (A/B/C/D).
-        // Observation mode — logs to friction_log, does not modify scores.
         // Supersedes the older observe_layer4()/reason_about_flagged() path (full
         // v3/v4 reasoning prompt, 15-20s latency) that used to run here too on the
         // same penalized-nodes subset — removed to stop double-calling the LLM on
         // every recall (found during the 2026-07-30 connection audit).
-        crate::security::coherence_gate::CoherenceGate::hybrid_classify(
-            &effective_query,
-            &scored,
-            server.silva.clone(),
-            query_embedding.map(|e| e.to_vec()),
-            &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
-        );
+        //
+        // Opt-in gate ([security] coherence_gate_hybrid_enabled, default false,
+        // 2026-08-28): this fires on every tylluan_recall, any agent, any time
+        // of day — when its trigger zone activates it calls llama_backend,
+        // which auto-starts a real llama-server subprocess with zero user
+        // opt-in. Contributed to a 4-day Unsloth training run being killed.
+        if server.coherence_gate_hybrid_enabled {
+            crate::security::coherence_gate::CoherenceGate::hybrid_classify(
+                &effective_query,
+                &scored,
+                server.silva.clone(),
+                query_embedding.map(|e| e.to_vec()),
+                &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
+            );
+        }
 
         if !include_archived {
             let archived_ids = server.silva.archived_lifecycle_ids_among(
@@ -763,13 +770,18 @@ if let Some(ref mut s) = stmt {
             // Supersedes the older observe_layer4() call that used to run here too
             // on the same penalized-nodes subset — removed to stop double-calling
             // the LLM on every recall (2026-07-30 connection audit).
-            crate::security::coherence_gate::CoherenceGate::hybrid_classify(
-                &effective_query,
-                &scored,
-                server.silva.clone(),
-                query_embedding.map(|e| e.to_vec()),
-                &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
-            );
+            //
+            // Opt-in gate ([security] coherence_gate_hybrid_enabled, default
+            // false, 2026-08-28) — see the sibling call site above for why.
+            if server.coherence_gate_hybrid_enabled {
+                crate::security::coherence_gate::CoherenceGate::hybrid_classify(
+                    &effective_query,
+                    &scored,
+                    server.silva.clone(),
+                    query_embedding.map(|e| e.to_vec()),
+                    &gate_stats.penalized_nodes.iter().map(|(n, _)| n.id.clone()).collect::<Vec<_>>(),
+                );
+            }
 
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
                 tracing::info!(

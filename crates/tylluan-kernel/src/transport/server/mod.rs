@@ -71,6 +71,14 @@ pub struct TylluanServer {
     /// Opt-in two-stage recall cascade ([silva] cascade_enabled). Set from main
     /// after construction; false keeps the legacy always-dense recall path.
     pub recall_cascade_enabled: bool,
+    /// Opt-in gate for CoherenceGate Layer 4 calling llama_backend from every
+    /// tylluan_recall ([security] coherence_gate_hybrid_enabled). Defaults to
+    /// false: hybrid_classify() used to fire unconditionally, silently
+    /// auto-starting a real llama-server subprocess on any recall whose
+    /// trigger zone activated -- not just at night, any time of day, any
+    /// agent. Contributed to a 4-day Unsloth training run being killed
+    /// (Jose, 2026-08-28).
+    pub coherence_gate_hybrid_enabled: bool,
     pub recall_cache: Arc<tokio::sync::Mutex<RecallCache>>,
     pub hot_context: Arc<tokio::sync::Mutex<HotContext>>,
     pub coloquio: Option<Arc<ColoquioDb>>,
@@ -135,6 +143,7 @@ impl TylluanServer {
             agent_memory: None,
             low_memory_mode: false,
             recall_cascade_enabled: false,
+            coherence_gate_hybrid_enabled: false,
             recall_cache: Arc::new(tokio::sync::Mutex::new(RecallCache::new(20))),
             hot_context: Arc::new(tokio::sync::Mutex::new(HotContext::new(20))),
             coloquio: None,
