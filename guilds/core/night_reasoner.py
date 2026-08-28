@@ -96,6 +96,29 @@ def _inference_device():
         return "cpu"
 
 
+def _background_llama_enabled():
+    """Third door closed 2026-08-28/29: `reason_about()` and
+    `analyze_feedback()` are MCP tools any agent can call via tylluan_do,
+    and both go through `_reason_with_llama()` -> llama_backend, which
+    auto-starts a real llama-server subprocess. Found by Deep's independent
+    verification of the CoherenceGate Layer 4 fix (handler_recall.rs) --
+    that fix gated the recall path, but this guild-tool path was a separate,
+    ungated door to the same subprocess. Reuses [security]
+    coherence_gate_hybrid_enabled (Rust's SecurityConfig field) as the same
+    "automated background call to llama_backend requires opt-in" policy --
+    default false. When disabled, callers fall back to SmolLM2 exactly as
+    if llama_backend were unavailable (same existing except-path)."""
+    import tomllib
+    root = Path(__file__).resolve().parent.parent.parent
+    config_path = root / "tylluan.toml"
+    try:
+        with open(config_path, "rb") as f:
+            cfg = tomllib.load(f)
+        return bool(cfg.get("security", {}).get("coherence_gate_hybrid_enabled", False))
+    except Exception:
+        return False
+
+
 # ── SmolLM2 fallback path ───────────────────────────────────────────────────
 
 def _load_smol():
@@ -181,7 +204,13 @@ def _generate_smol(prompt, max_tokens=None):
 # Falls back to SmolLM2-135M if llama_backend is unavailable.
 
 def _reason_with_llama(prompt, max_tokens=128):
-    """Call llama_backend guild for text generation. Falls back to SmolLM2."""
+    """Call llama_backend guild for text generation. Falls back to SmolLM2.
+
+    Gated behind [security] coherence_gate_hybrid_enabled (default false) --
+    see _background_llama_enabled() docstring. Disabled by default means
+    this behaves exactly as if llama_backend were unavailable."""
+    if not _background_llama_enabled():
+        return _generate_smol(prompt, max_tokens=min(max_tokens, 50))
     try:
         import urllib.request as _urllib
         data = json.dumps({
