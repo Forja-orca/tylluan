@@ -49,6 +49,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 4. **Puerto único:** `tylluan-nexus` escucha en `:4000` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **Degree penalty (no boost):** `local_query_graph` usa `pr_score / (1 + deg * 0.1)` — penaliza hubs genéricos. El boost (`*`) fue un bug corregido en v0.10.0.
+7. **`[inference] device` gobierna TODO módulo de inferencia local, sin excepción** (José, 2026-08-28): ningún componente decide su propio execution provider por auto-detección — CPU es el modo por defecto seguro aunque se añadan 10.000 opciones más. Origen: `night_reasoner.py` auto-seleccionaba GPU vía `ort.get_available_providers()` ignorando `device="cpu"` (commit `0543d172`, "mejor rendimiento"), y probablemente mató un entrenamiento de Unsloth de 4 días al competir por VRAM en Night Consolidation. Fijado en `router/embeddings.rs::build_execution_providers()` (Rust, ya correcto) y `night_reasoner.py::_inference_device()` (Python, corregido 2026-08-28). Cualquier módulo nuevo que use ONNX/GPU debe leer este mismo campo antes de tocar un `InferenceSession`/`ExecutionProvider` — nunca `get_available_providers()` como decisión, solo como diagnóstico.
 
 ---
 
