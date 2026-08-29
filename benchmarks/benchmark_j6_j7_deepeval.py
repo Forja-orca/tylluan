@@ -117,7 +117,7 @@ def run_pilot():
     if not traces:
         print("No recall_feedback traces found in SilvaDB.")
         print("STATUS: SKIPPED — insufficient data (need resolved recall_feedback rows)")
-        return
+        return {"status": "skipped", "reason": "insufficient_data", "trace_count": 0}
 
     print(f"Loaded {len(traces)} real production traces from data/silva.db")
 
@@ -126,7 +126,7 @@ def run_pilot():
         print(f"Judge: {local_judge.get_model_name()}")
     except Exception as e:
         print(f"STATUS: FAILED — cannot connect to llama_backend: {e}")
-        return
+        return {"status": "failed", "reason": "judge_unavailable", "error": str(e)}
 
     faithfulness_metric = FaithfulnessMetric(threshold=0.5, model=local_judge, async_mode=False)
     precision_metric = ContextualPrecisionMetric(threshold=0.5, model=local_judge, async_mode=False)
@@ -183,7 +183,18 @@ def run_pilot():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     print(f"Results saved: {output_path}")
+    return {
+        "status": "functional",
+        "trace_count": len(results),
+        "elapsed_s": round(t1 - t0, 2),
+        "avg_faithfulness": round(avg_f, 4),
+        "avg_contextual_precision": round(avg_p, 4),
+        "results_path": output_path,
+        "results": results,
+    }
 
 
 if __name__ == "__main__":
-    run_pilot()
+    result = run_pilot()
+    # Scheduler and other callers need a machine-readable completion status.
+    print("DEEPEVAL_RESULT_JSON=" + json.dumps(result, ensure_ascii=False))
