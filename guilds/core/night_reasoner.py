@@ -97,12 +97,15 @@ def _inference_device():
 
 
 def _background_llama_enabled():
-    """Third door closed 2026-08-28/29: `reason_about()` and
-    `analyze_feedback()` are MCP tools any agent can call via tylluan_do,
-    and both go through `_reason_with_llama()` -> llama_backend, which
-    auto-starts a real llama-server subprocess. Found by Deep's independent
-    verification of the CoherenceGate Layer 4 fix (handler_recall.rs) --
-    that fix gated the recall path, but this guild-tool path was a separate,
+    """Third door closed 2026-08-28/29: `reason_about()` is an MCP tool any
+    agent can call via tylluan_do, and goes through `_reason_with_llama()`
+    -> llama_backend, which auto-starts a real llama-server subprocess.
+    (`analyze_feedback()` does NOT go through this path -- it only ever
+    calls `_generate_smol()` directly, confirmed by Codex's independent
+    audit 2026-08-30; this docstring previously claimed otherwise.)
+    Found by Deep's independent verification of the CoherenceGate Layer 4
+    fix (handler_recall.rs) -- that fix gated the recall path, but this
+    guild-tool path was a separate,
     ungated door to the same subprocess. Reuses [security]
     coherence_gate_hybrid_enabled (Rust's SecurityConfig field) as the same
     "automated background call to llama_backend requires opt-in" policy --
