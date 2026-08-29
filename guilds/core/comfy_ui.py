@@ -37,10 +37,17 @@ _CLIENT_ID  = str(uuid.uuid4())[:8]
 
 # ── FFmpeg detection ──────────────────────────────────────────────────────────
 
-_FFMPEG_FALLBACK = (
-    r"C:\Users\USERNAME\AppData\Local\Microsoft\WinGet\Packages"
-    r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-    r"\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
+_FFMPEG_FALLBACK = os.path.join(
+    os.path.expanduser("~"),
+    "AppData",
+    "Local",
+    "Microsoft",
+    "WinGet",
+    "Packages",
+    "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe",
+    "ffmpeg-8.1-full_build",
+    "bin",
+    "ffmpeg.exe",
 )
 
 def _ffmpeg() -> str:
