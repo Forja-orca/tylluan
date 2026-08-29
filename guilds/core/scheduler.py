@@ -21,6 +21,8 @@ import urllib.request
 import urllib.error
 import uuid
 import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -44,6 +46,9 @@ def _resolve_kernel_base() -> str:
 
 KERNEL_BASE = _resolve_kernel_base()
 POLL_INTERVAL_SECS = int(os.environ.get("SCHEDULER_POLL_SECS", "30"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DEEPEVAL_SCRIPT = PROJECT_ROOT / "benchmarks" / "benchmark_j6_j7_deepeval.py"
+DEEPEVAL_HISTORY = PROJECT_ROOT / "data" / "j6_j7_deepeval_history.jsonl"
 
 
 
@@ -97,11 +102,23 @@ def _scheduler_loop() -> None:
             ).fetchall()
             for row in due:
                 sid, intent, agent_id, channel = row["id"], row["intent"], row["agent_id"], row["channel"]
-                msg = f"@{agent_id} ⏰ schedule `{sid}` fired: {intent}"
-                ok = _post_to_coloquio(channel, msg)
+                if intent == "__DEEPEVAL_J6_J7__":
+                    # Deliberately synchronous: this allowlisted daily evaluation can
+                    # block polling for up to DEEPEVAL_TIMEOUT_SECS (default 900s).
+                    # Keeping it here avoids concurrent benchmark runs and is acceptable
+                    # while the job remains infrequent; normal schedules wait meanwhile.
+                    result = _run_deepeval_once()
+                    ok = result["status"] in {"completed", "functional"}
+                    msg = (
+                        f"@deepeval ⏰ J-6/J-7 DeepEval: {result['status']} "
+                        f"(exit={result['exit_code']}); histórico: {DEEPEVAL_HISTORY}"
+                    )
+                else:
+                    msg = f"@{agent_id} ⏰ schedule `{sid}` fired: {intent}"
+                    ok = _post_to_coloquio(channel, msg)
                 conn.execute(
                     "UPDATE schedules SET fired = 1, error = ? WHERE id = ?",
-                    (None if ok else "post_failed", sid),
+                    (None if ok else "job_failed", sid),
                 )
             conn.commit()
         except sqlite3.Error:
@@ -128,6 +145,8 @@ def schedule(
         Schedule ID for tracking or cancellation.
     """
     schedule_id = str(uuid.uuid4())
+    if delay_minutes < 0:
+        return "error: delay_minutes must be non-negative"
     run_at = (datetime.utcnow() + timedelta(minutes=delay_minutes)).isoformat()
     conn = _get_conn()
     try:
@@ -141,6 +160,76 @@ def schedule(
         return f"error: {exc}"
     conn.close()
     return schedule_id
+
+
+def _run_deepeval_once() -> dict:
+    """Run the explicitly allowlisted J-6/J-7 benchmark once.
+
+    This is deliberately not a generic command runner: the scheduler can only
+    launch this fixed project benchmark, with the current Python interpreter.
+    """
+    started_at = datetime.utcnow().isoformat() + "Z"
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(DEEPEVAL_SCRIPT)],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=int(os.environ.get("DEEPEVAL_TIMEOUT_SECS", "900")),
+            check=False,
+        )
+        result = {
+            "started_at": started_at,
+            "finished_at": datetime.utcnow().isoformat() + "Z",
+            "exit_code": proc.returncode,
+            "status": "completed" if proc.returncode == 0 else "failed",
+            "stdout_tail": proc.stdout[-4000:],
+            "stderr_tail": proc.stderr[-4000:],
+        }
+    except subprocess.TimeoutExpired as exc:
+        result = {
+            "started_at": started_at,
+            "finished_at": datetime.utcnow().isoformat() + "Z",
+            "exit_code": None,
+            "status": "timeout",
+            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+        }
+    except OSError as exc:
+        result = {
+            "started_at": started_at,
+            "finished_at": datetime.utcnow().isoformat() + "Z",
+            "exit_code": None,
+            "status": "failed",
+            "error": str(exc),
+        }
+
+    DEEPEVAL_HISTORY.parent.mkdir(parents=True, exist_ok=True)
+    # Include the benchmark's structured result when the process emitted it.
+    marker = "DEEPEVAL_RESULT_JSON="
+    for line in result.get("stdout_tail", "").splitlines():
+        if line.startswith(marker):
+            try:
+                result["benchmark"] = json.loads(line[len(marker):])
+            except json.JSONDecodeError:
+                result["benchmark_parse_error"] = True
+            break
+    with DEEPEVAL_HISTORY.open("a", encoding="utf-8") as history:
+        history.write(json.dumps(result, ensure_ascii=False) + "\n")
+    return result
+
+
+@mcp.tool()
+def schedule_deepeval(
+    delay_minutes: int = 1440,
+    channel: str = "schedules",
+) -> str:
+    """Schedule the allowlisted J-6/J-7 DeepEval benchmark.
+
+    The existing scheduler loop fires the job by recognizing this explicit
+    intent; no arbitrary command or user-provided executable is accepted.
+    """
+    return schedule("__DEEPEVAL_J6_J7__", "deepeval", delay_minutes, channel)
 
 
 @mcp.tool()
