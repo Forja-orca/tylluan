@@ -101,3 +101,94 @@ jobs:
         with:
           files: tylluan-*.tar.gz
           generate_release_notes: true
+
+  # Boot-smoke every platform's ACTUAL release artifact -- not "does it
+  # compile" (the `build` job above already proved that), "does it start
+  # and answer /health". Wired as a job in THIS workflow, not a separate
+  # `release: published`-triggered one: GitHub does not fire that event for
+  # releases created by the default GITHUB_TOKEN (intentional, anti-loop
+  # behavior), which is why the old install-smoke.yml ran exactly once
+  # (v0.13.0, manually) and silently never again for v0.14 through v0.17 --
+  # found 2026-08-29 during the Tylluan portability design review. A `needs:`
+  # dependency inside one workflow file can't have that failure mode.
+  smoke-test:
+    name: "Boot smoke — ${{ matrix.target }}"
+    needs: [build]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+        # aarch64-unknown-linux-gnu (Raspberry Pi target) intentionally
+        # excluded: no ARM64 GitHub-hosted runner exists to boot-test it
+        # natively. `build`'s cross-compile check is all CI can verify for
+        # that target; a real boot test needs actual ARM hardware.
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: tylluan-${{ matrix.target }}
+          path: dist
+
+      - name: Boot the real released binary and verify /health (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -e
+          chmod +x dist/tylluan-nexus
+          mkdir -p /tmp/tylluan-smoke/data
+          cd /tmp/tylluan-smoke
+          cp "$GITHUB_WORKSPACE/dist/tylluan-nexus" .
+          ./tylluan-nexus > kernel.log 2>&1 &
+          KERNEL_PID=$!
+          READY=0
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4000/health >/dev/null 2>&1; then
+              echo "::notice::tylluan-nexus (${{ matrix.target }}) is UP"
+              curl -s http://127.0.0.1:4000/health
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          kill "$KERNEL_PID" 2>/dev/null || true
+          if [ "$READY" -ne 1 ]; then
+            echo "::error::Kernel did not answer /health within 30s"
+            cat kernel.log
+            exit 1
+          fi
+
+      - name: Boot the real released binary and verify /health (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $work = "$env:RUNNER_TEMP\tylluan-smoke"
+          New-Item -ItemType Directory -Force -Path "$work\data" | Out-Null
+          Copy-Item "dist\tylluan-nexus.exe" "$work\"
+          Push-Location $work
+          $proc = Start-Process -FilePath ".\tylluan-nexus.exe" -RedirectStandardOutput kernel.log -RedirectStandardError kernel.err.log -PassThru
+          $Ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:4000/health" -UseBasicParsing -ErrorAction Stop
+              if ($r.StatusCode -eq 200) {
+                Write-Host "::notice::tylluan-nexus (windows) is UP"
+                Write-Host $r.Content
+                $Ready = $true
+                break
+              }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          if (-not $Ready) {
+            Write-Host "::error::Kernel did not answer /health within 30s"
+            Get-Content kernel.log, kernel.err.log -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Pop-Location

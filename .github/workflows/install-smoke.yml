@@ -1,8 +1,15 @@
 name: Install Smoke Test
 
+# Manual only. `release: types: [published]` never fired here in ~4 releases
+# (v0.14-v0.17): GitHub does not deliver that event for releases created by
+# the default GITHUB_TOKEN (anti-loop behavior, confirmed 2026-08-29). The
+# real per-release boot-smoke now lives as a job inside release.yml, which
+# can't have that failure mode (same-workflow `needs:`, not a cross-workflow
+# event). This workflow still tests something that one doesn't: the actual
+# install.sh/install.ps1 user-facing script against whatever is currently
+# the latest published release. Run it by hand after a release if you want
+# that specific path re-checked.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
