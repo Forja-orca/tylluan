@@ -1,0 +1,140 @@
+name: Portability round-trip
+
+# Gate real: shutdown → copy → boot elsewhere → the memory must still be there.
+# This is the "USB a otra máquina" scenario reduced to its kernel+memory core
+# (Python guild environment portability is a later phase, not covered here).
+#
+# Node A: release binary + minimal tylluan.toml (BM25-only, no network guilds)
+#   → write a unique marker into memory via tylluan_remember
+#   → stop the kernel
+# Node B: byte-for-byte copy of A (real file copy, no symlinks/shared paths)
+#   → boot from B → tylluan_recall must return the exact marker or the job fails.
+#
+# Design note: the marker is written through the SAME REST surface a real agent
+# uses (/api/v1/do), and read back through the same surface — the test exercises
+# the memory pipeline, not a special CI-only write path.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/tylluan-kernel/src/memory/**'
+      - 'crates/tylluan-kernel/src/config.rs'
+      - '.github/workflows/portability-roundtrip.yml'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  portability-roundtrip:
+    name: Memory survives copy + restart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          toolchain: stable
+
+      - name: Build release binary
+        run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
+
+      - name: Round-trip A → copy → B
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$PWD/target/release/tylluan-nexus"
+          NODE_A="$(mktemp -d /tmp/tylluan-node-a.XXXXXX)"
+          NODE_B="$(mktemp -d /tmp/tylluan-node-b.XXXXXX)"
+          MARKER="portability-roundtrip-marker-$(cat /proc/sys/kernel/random/uuid)"
+          echo "::notice::NODE_A=$NODE_A"
+          echo "::notice::NODE_B=$NODE_B"
+          echo "::notice::MARKER=$MARKER"
+
+          cp "$BIN" "$NODE_A/"
+          cat > "$NODE_A/tylluan.toml" <<'EOF'
+          [nexus]
+          host = "127.0.0.1"
+          port = 4000
+          transport = ["http"]
+          dev_mode = true
+
+          [memory]
+          db_path = "data/tylluan.db"
+          embedding_model = "none"
+
+          [silva]
+          db_path = "data/silva.db"
+
+          [mesh.gossip]
+          enabled = false
+          EOF
+
+          boot_and_wait() {
+            # $1 = node dir label (for logs)
+            local label="$1"
+            local ready=0
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1:4000/health >/dev/null 2>&1; then
+                echo "::notice::kernel ($label) is UP"
+                curl -s http://127.0.0.1:4000/health || true
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ready" -ne 1 ]; then
+              echo "::error::kernel ($label) did not answer /health within 30s"
+              cat kernel.log || true
+              exit 1
+            fi
+          }
+
+          # ── Node A: boot, remember, stop ────────────────────────────────
+          mkdir -p "$NODE_A/data"
+          cd "$NODE_A"
+          ./tylluan-nexus > kernel.log 2>&1 &
+          KERNEL_PID=$!
+          boot_and_wait "A"
+
+          echo "::notice::writing marker into memory via /api/v1/do (tylluan_remember)"
+          curl -sf -X POST http://127.0.0.1:4000/api/v1/do \
+            -H 'Content-Type: application/json' \
+            -d "{\"tool\":\"tylluan_remember\",\"intent\":\"recuerda: $MARKER\",\"content\":\"$MARKER\",\"agent_id\":\"ci-portability-test\",\"guild\":\"memory\"}" \
+            > "$NODE_A/remember.json"
+          cat "$NODE_A/remember.json"
+
+          sleep 3
+          kill "$KERNEL_PID" 2>/dev/null || true
+          sleep 2
+
+          # ── The copy: real byte-for-byte files, whole directory ──────────
+          cp -r "$NODE_A/." "$NODE_B/"
+
+          # ── Node B: boot from the copy, recall must contain the marker ───
+          cd "$NODE_B"
+          ./tylluan-nexus > kernel.log 2>&1 &
+          KERNEL_PID=$!
+          boot_and_wait "B"
+
+          echo "::notice::recalling marker via /api/v1/do (tylluan_recall)"
+          curl -sf -X POST http://127.0.0.1:4000/api/v1/do \
+            -H 'Content-Type: application/json' \
+            -d "{\"tool\":\"tylluan_recall\",\"intent\":\"recuerda mi marcador portability-roundtrip\",\"query\":\"portability-roundtrip-marker\",\"agent_id\":\"ci-portability-test\",\"guild\":\"memory\"}" \
+            > "$NODE_B/recall.json"
+          cat "$NODE_B/recall.json"
+
+          kill "$KERNEL_PID" 2>/dev/null || true
+
+          if ! grep -q "$MARKER" "$NODE_B/recall.json"; then
+            echo "::error::marker $MARKER NOT FOUND in recall response — memory did not survive copy+restart"
+            echo "--- full recall response ---"
+            cat "$NODE_B/recall.json"
+            exit 1
+          fi
+
+          echo "::notice::round-trip verified: marker survived copy+restart ($MARKER)"
