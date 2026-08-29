@@ -46,11 +46,23 @@ TARGETS=(
     "tylluan.example.toml"
 )
 
-# Patterns: Windows drive-letter absolute paths, Unix home/root dirs, and
-# this project's own known checkout paths (would match on Jose's or any
-# contributor's machine equally -- the point isn't "not E:\tylluan
+# Patterns: Windows drive-letter absolute paths, Unix home/root/deployment
+# dirs, and this project's own known checkout paths (would match on Jose's
+# or any contributor's machine equally -- the point isn't "not E:\tylluan
 # specifically", it's "not ANY machine-specific absolute path").
-PATTERN='[A-Za-z]:[\\/](Users|tylluan)|/home/[A-Za-z0-9_.-]+|/Users/[A-Za-z0-9_.-]+|/root/[A-Za-z0-9_.-]+'
+#
+# Broadened 2026-08-30 after Codex's independent audit demonstrated 2 real
+# gaps with a throwaway probe file (created and removed by Codex, not left
+# in the tree): a drive-letter path with Users/tylluan NESTED rather than
+# immediately after the colon (e.g. C:\proyectos\tylluan\data -- the old
+# pattern only matched Users/tylluan as the FIRST segment) and a Unix path
+# under /opt/ (a common self-hosted deployment prefix the old pattern
+# didn't cover at all, only /home, /Users, /root).
+# [^/\\] right after the drive-letter separator excludes URI schemes like
+# "ui://tylluan/..." or "http://" -- a real false positive this exact
+# broadening introduced and caught by re-running against the codebase
+# before committing, not assumed clean.
+PATTERN='[A-Za-z]:[\\/][^/\\].*[\\/](Users|tylluan)[\\/]|/home/[A-Za-z0-9_.-]+|/Users/[A-Za-z0-9_.-]+|/root/[A-Za-z0-9_.-]+|/opt/[A-Za-z0-9_.-]+|/srv/[A-Za-z0-9_.-]+'
 
 # Lines allowlisted as false positives, triaged by a human/agent -- add
 # "file:line: reason" here when a real match is confirmed non-portable-risk
