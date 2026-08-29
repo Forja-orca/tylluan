@@ -1,0 +1,59 @@
+name: Guild Python portable (Linux x86_64)
+
+# Portability point 4 (2026-08-29, Regla 13): Antigravity prototyped
+# guilds-python/ manually via WSL with one-off throwaway scripts, deleted
+# after use per their own report -- proven once, by hand, not gated.
+# This wires the same proof into CI: build the portable Python environment
+# for real with the same script a developer would run locally, then verify
+# a real guild actually runs isolated inside it, not just "python -c
+# 'import mcp'". Windows/macOS portable builds are a later phase -- this
+# covers only what's been prototyped so far.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'guilds/requirements.txt'
+      - 'guilds/builders/plugins/filesystem.py'
+      - 'scripts/build_guilds_python.sh'
+      - 'scripts/verify_portable_guild.py'
+      - '.github/workflows/guild-python-portable.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    name: Build guilds-python + verify real guild isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build portable guilds-python (Linux x86_64)
+        # scripts/build_guilds_python.sh self-installs uv via
+        # https://astral.sh/uv/install.sh if it isn't already on PATH --
+        # no separate action needed, and avoids pinning a third SHA we'd
+        # have to keep in sync with the script's own bootstrap logic.
+        run: bash scripts/build_guilds_python.sh
+
+      - name: Locate the portable interpreter
+        id: python
+        run: |
+          # python3 under bin/ is a symlink (-> python3.X), not a regular
+          # file -- '-type f' alone silently finds nothing. Real bug caught
+          # by actually running this locally before committing it.
+          BIN="$(find guilds-python/linux-x86_64 -maxdepth 4 -path '*/bin/python3' \( -type f -o -type l \) | head -n 1)"
+          if [ -z "$BIN" ]; then
+            echo "::error::could not locate portable python3 binary after build"
+            exit 1
+          fi
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Verify real guild runs isolated under the portable interpreter
+        run: |
+          PYTHONNOUSERSITE=1 "${{ steps.python.outputs.bin }}" -s \
+            scripts/verify_portable_guild.py "${{ steps.python.outputs.bin }}"
+
+      - name: Report portable environment size
+        run: du -sh guilds-python/linux-x86_64
