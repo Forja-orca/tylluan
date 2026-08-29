@@ -1795,10 +1795,10 @@ mod tests {
     #[test]
     fn test_enforce_check_directory_argument() {
         let caps = serde_json::json!({"filesystem_scope": ["/data"]});
-        let params = make_params("filesystem_list", &[("directory", "/home/user")]);
+        let params = make_params("filesystem_list", &[("directory", "/home/user")]); // ALLOW-ABSOLUTE-PATH: arbitrary test fixture value, not a real path
         let result = enforce_capabilities("test", &caps, &params);
         assert!(result.is_some());
-        assert!(result.unwrap().contains("/home/user"));
+        assert!(result.unwrap().contains("/home/user")); // ALLOW-ABSOLUTE-PATH: asserts against the fixture value above, not a real path
 
         let params_allowed = make_params("filesystem_list", &[("directory", "/data/snapshots")]);
         assert!(enforce_capabilities("test", &caps, &params_allowed).is_none());
