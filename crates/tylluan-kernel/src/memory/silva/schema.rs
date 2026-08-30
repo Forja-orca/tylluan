@@ -386,6 +386,25 @@ impl super::SilvaDB {
                      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                  );
 
+                 -- Real bug found 2026-08-31 verifying a graph_rag.rs fix: this table
+                 -- only existed via migrations.rs's v2 (Clustering Table, declared
+                 -- cluster_id INTEGER PRIMARY KEY, never matching graph_rag.rs's real
+                 -- string ids like cluster:hub_id). A fresh SilvaDB (new install, or
+                 -- SilvaDB::in_memory() in tests) stamps _migrations up to the latest
+                 -- version WITHOUT running any migration SQL (see migrations.rs::run,
+                 -- the has_migrations branch) -- so cluster_summaries never existed at
+                 -- all on a brand-new database, only on Jose's real silva.db because it
+                 -- was created before v2 existed and actually ran the migration. GraphRAG
+                 -- summarization was silently broken from a first-run install. TEXT here
+                 -- (not the migration's INTEGER) to match cluster_centroids above and
+                 -- graph_rag.rs's actual string cluster_ids.
+                 CREATE TABLE IF NOT EXISTS cluster_summaries (
+                     cluster_id TEXT PRIMARY KEY,
+                     summary TEXT NOT NULL,
+                     members TEXT NOT NULL,
+                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                 );
+
                  CREATE TABLE IF NOT EXISTS node_traces (
                      id INTEGER PRIMARY KEY AUTOINCREMENT,
                      node_id TEXT NOT NULL,

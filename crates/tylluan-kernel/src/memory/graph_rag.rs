@@ -18,6 +18,23 @@ impl GraphRagManager {
         Self { silva }
     }
 
+    /// Check if a cluster already has an identical summary with the same members.
+    /// Used for idempotency: skip summarizing if nothing changed since last cycle.
+    fn has_identical_summary(&self, cluster_id: &str, member_ids: &[String]) -> bool {
+        let members_json = serde_json::to_string(member_ids).unwrap_or_default();
+        tokio::task::block_in_place(|| {
+            let conn = self.silva.conn.blocking_lock();
+            let mut stmt = conn.prepare(
+                "SELECT 1 FROM cluster_summaries WHERE cluster_id = ?1 AND members = ?2 LIMIT 1"
+            ).ok()?;
+            let exists: bool = stmt.query_row(
+                rusqlite::params![cluster_id, members_json],
+                |r| r.get(0),
+            ).unwrap_or(false);
+            Some(exists)
+        }).unwrap_or(false)
+    }
+
     /// Find connected components in the knowledge graph using BFS on existing edges.
     /// Returns clusters with at least `min_size` nodes.
     /// This replaces the Louvain-based approach which silently panicked on large graphs.
@@ -26,10 +43,13 @@ impl GraphRagManager {
         let (node_ids, adjacency) = tokio::task::block_in_place(|| {
             let conn = self.silva.conn.blocking_lock();
 
-            // Get all node IDs (only content-bearing types worth summarizing)
+            // Get all node IDs (only content-bearing types worth summarizing).
+            // Bug fix: exclude 'summary' type and 'graphrag_summary:*' ids to prevent
+            // re-summarizing previous cycle output (unbounded nesting).
             let mut stmt = conn.prepare(
                 "SELECT id FROM nodes WHERE type IN \
-                ('document','episode','lesson','concept','synthesis','agent_memory','memory','summary') \
+                ('document','episode','lesson','concept','synthesis','agent_memory','memory') \
+                AND id NOT LIKE 'graphrag_summary:%' \
                 LIMIT 3000"
             )?;
             let ids: Vec<String> = stmt.query_map([], |r| r.get(0))?
@@ -125,6 +145,19 @@ impl GraphRagManager {
     /// Save a generated summary to both the nodes table and the cluster_summaries table.
     /// Bug fix: previous version had wrong add_edge argument order.
     pub async fn save_summary(&self, cluster_id: &str, summary: &str, member_ids: Vec<String>) -> Result<String> {
+        // Guard: reject nested graphrag_summary: prefixes (prevents unbounded nesting).
+        if cluster_id.contains("graphrag_summary:") {
+            warn!("GraphRAG: refusing to save nested summary for cluster_id={cluster_id} (already contains graphrag_summary: prefix)");
+            anyhow::bail!("Cluster ID contains nested graphrag_summary: prefix — refusing to save.");
+        }
+
+        // Idempotency: skip if cluster already has an identical summary with same members.
+        if self.has_identical_summary(cluster_id, &member_ids) {
+            info!("GraphRAG: cluster {} already has identical summary with same members — skipping (idempotent)", cluster_id);
+            let existing_node_id = format!("graphrag_summary:{cluster_id}");
+            return Ok(existing_node_id);
+        }
+
         let node_id = format!("graphrag_summary:{cluster_id}");
         let metadata = serde_json::json!({
             "type": "cluster_summary",
@@ -219,4 +252,53 @@ impl GraphRagManager {
 pub struct ClusterSummaryTarget {
     pub cluster_id: String,
     pub nodes: Vec<crate::memory::silva::GraphNode>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::silva::SilvaDB;
+
+    // Regression test for the CPU runaway found live 2026-08-30 (measured:
+    // ~4257% CPU sustained 9.5h idle, 323 threads): a previous cycle's
+    // summary node became the "hub" of a new cluster
+    // (cluster_id = format!("cluster:{hub_id}")), producing
+    // cluster:graphrag_summary:cluster:X, then graphrag_summary: that ->
+    // unbounded nesting, confirmed 20+ levels deep in real kernel.log
+    // output. This locks in the save_summary() guard so the exact failure
+    // mode can't silently regress -- find_clusters() also excludes
+    // graphrag_summary:% from its candidate pool, but that path needs a
+    // populated graph fixture; this is the cheap, decisive lock on the
+    // defense-in-depth layer.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn save_summary_rejects_nested_graphrag_summary_prefix() {
+        let db = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let manager = GraphRagManager::new(db);
+
+        // Simulates a hub_id that was itself a previous cycle's summary node.
+        let nested_cluster_id = "graphrag_summary:cluster:some-hub-id";
+        let result = manager
+            .save_summary(nested_cluster_id, "a summary", vec!["member1".to_string()])
+            .await;
+
+        assert!(
+            result.is_err(),
+            "save_summary must reject a cluster_id that already contains \
+             'graphrag_summary:' -- accepting it is exactly the bug that \
+             produced 20+ levels of nesting in production"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn save_summary_accepts_clean_cluster_id() {
+        let db = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let manager = GraphRagManager::new(db);
+
+        let result = manager
+            .save_summary("cluster:some-hub-id", "a summary", vec!["member1".to_string()])
+            .await;
+
+        assert!(result.is_ok(), "a clean, non-nested cluster_id must still work: {:?}", result.err());
+        assert_eq!(result.unwrap(), "graphrag_summary:cluster:some-hub-id");
+    }
 }
