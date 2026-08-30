@@ -72,7 +72,12 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build]
+    # needs smoke-test too (not just build), per Codex's audit finding
+    # 2026-08-30: previously these ran in parallel, so a failed boot-smoke
+    # didn't stop the release from publishing -- defeating the whole point
+    # of point 1 tonight (a real per-release boot check). Now a failing
+    # smoke-test on ANY platform blocks the release job entirely.
+    needs: [build, smoke-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
