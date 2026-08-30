@@ -25,6 +25,16 @@ import os
 import sys
 from pathlib import Path
 
+# Self-heal the console encoding instead of requiring every caller to set
+# PYTHONIOENCODING=utf-8 first. Real gap found by Buffy 2026-08-30 building
+# the Windows portable prototype: this script's own checkmarks (U+2705)
+# crash with UnicodeEncodeError on Windows' default cp1252 console before a
+# single check even runs. reconfigure() is Python 3.7+; harmless no-op if
+# the stream doesn't support it (e.g. already redirected to a file as utf-8).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
