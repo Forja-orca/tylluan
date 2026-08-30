@@ -54,6 +54,14 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ---
 
+## ⚠️ CRÍTICO — GraphRAG consume ~76% CPU sostenido en reposo (sin arreglar, 2026-08-30)
+
+**NO asumas que el kernel "en reposo" es barato de tener arrancado.** Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% CPU (42 de 56 núcleos) sostenido de media durante 9.5 horas seguidas, 323 hilos, sin que nadie lo estuviera usando activamente. Causa raíz real, vista en `logs/kernel.log`: la fase de GraphRAG de Night Consolidation reenvuelve resúmenes de cluster que YA son resúmenes de cluster en cada ciclo — el prefijo `graphrag_summary:cluster:` aparece anidado 20+ veces sobre el mismo ID en el log real, creciendo sin límite y reprocesando el grafo entero cada vez más grande, cada ciclo. Combinado con el auto-sync de federación (`sync_interval_ms=5000`) disparándose cada 5-7s sin parar.
+
+**No arreglado todavía** — mitigación aplicada esa noche fue parar el kernel limpiamente. Antes de investigar cualquier otro problema de rendimiento/recursos de Tylluan, mira primero `memory/night/graphrag_phase.rs` (o el módulo de clustering asociado) para ver si ya detecta clusters ya resumidos antes de reenvolverlos — si no, ese es el arreglo real pendiente, no un misterio nuevo. Detalle completo en la biblia (Desván).
+
+---
+
 ## Estado actual — v0.16.0+ (unreleased)
 
 **Tests:** 685 kernel lib + 69 link lib + 12 fsrs = 766+ en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
