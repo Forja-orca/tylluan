@@ -433,7 +433,7 @@ export function ColoquioMessagesPanel({
       )}
       {Object.keys(typingStatuses).length > 0 && (
         <div className="px-5 py-1.5 text-[10px] text-slate-500 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
-          <span className="flex gap-0.5">{[0, 150, 300].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}</span>
+          <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
               <span key={agent} className="font-mono text-[9px]"><strong className="text-slate-400">@{agent}</strong>: <span className="italic text-slate-500">{val.status}</span></span>

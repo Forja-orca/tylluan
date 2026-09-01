@@ -1383,3 +1383,33 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
     let hnsw = db.hnsw.read().await;
     assert!(hnsw.is_none(), "HNSW index must be invalidated");
 }
+
+    // Smoke test for the cluster_summaries bug class (found 2026-08-31, commit
+    // 7648a7a): a fresh database must have cluster_summaries EXISTING after the
+    // full production init path -- migrations run first (stamped-but-skipped on
+    // fresh DBs), then init_schema() must actually create the table. Before the
+    // fix, a brand-new install had GraphRAG silently broken from first boot.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fresh_db_production_init_has_cluster_summaries_table() {
+        // Production path: open() creates the struct, init() runs migrations +
+        // init_schema + index loads. (in_memory() runs the same pair but in
+        // reverse order -- this test deliberately follows the production order.)
+        let db = std::sync::Arc::new(SilvaDB::open(":memory:").unwrap());
+        db.init().await.unwrap();
+
+        // The GraphRAG write path must work end-to-end on a fresh install.
+        let manager = crate::memory::graph_rag::GraphRagManager::new(db.clone());
+        let node_id = manager
+            .save_summary("cluster:smoke-hub", "smoke summary content", vec!["m1".to_string(), "m2".to_string()])
+            .await
+            .expect("save_summary must succeed on a fresh production-init DB -- failing here is the cluster_summaries bug class");
+        assert_eq!(node_id, "graphrag_summary:cluster:smoke-hub");
+
+        // And the row must actually be readable from cluster_summaries.
+        let count: i64 = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row("SELECT COUNT(*) FROM cluster_summaries WHERE cluster_id = 'cluster:smoke-hub'",
+                           [], |r| r.get(0)).unwrap()
+        });
+        assert_eq!(count, 1, "cluster_summaries row must exist after save_summary");
+    }

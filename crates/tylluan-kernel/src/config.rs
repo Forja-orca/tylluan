@@ -181,6 +181,19 @@ pub struct TylluanConfig {
 pub struct FederationConfig {
     #[serde(default = "default_auto_sync_mode")]
     pub auto_sync_mode: String,
+    /// Federation auto-sync interval in milliseconds. Moved here from
+    /// SilvaConfig (2026-08-31, auto-sync robustness fix): it configures
+    /// federation sync cadence, not Silva storage. Old tylluan.toml files
+    /// with `[silva] sync_interval_ms` keep working: SilvaConfig still
+    /// parses the deprecated field and the runtime falls back to it when
+    /// this value is unset (see effective_sync_interval_ms in api_federation).
+    /// Default is deliberately conservative (30s) for small meshes: the
+    /// 2026-08-30 GraphRAG CPU incident showed a 5s sync cycle firing
+    /// indefinitely over a saturated system, so the out-of-the-box cadence
+    /// must not amplify load. Tune down explicitly if you need faster
+    /// convergence on a beefy deployment.
+    #[serde(default = "default_sync_interval")]
+    pub sync_interval_ms: u64,
 }
 fn default_auto_sync_mode() -> String { "push".to_string() }
 
@@ -188,6 +201,7 @@ impl Default for FederationConfig {
     fn default() -> Self {
         Self {
             auto_sync_mode: "push".to_string(),
+            sync_interval_ms: default_sync_interval(),
         }
     }
 }
@@ -925,6 +939,15 @@ pub struct SilvaConfig {
     #[serde(default = "default_decay_half_life_hours")]
     pub decay_half_life_hours: u64,
 
+    /// DEPRECATED since v0.17.0: moved to FederationConfig.sync_interval_ms
+    /// (2026-08-31, auto-sync robustness fix) — it configures federation sync
+    /// cadence, not Silva storage. Kept so old tylluan.toml files keep
+    /// loading; the runtime prefers federation.sync_interval_ms and falls
+    /// back to this value only when the new location is unset (i.e. still at
+    /// default) and this one was customized. Default is deliberately
+    /// conservative (30s) for small meshes: the 2026-08-30 GraphRAG CPU
+    /// incident showed a 5s sync cycle firing indefinitely over a saturated
+    /// system, so the out-of-the-box cadence must not amplify load.
     #[serde(default = "default_sync_interval")]
     pub sync_interval_ms: u64,
 
@@ -1631,7 +1654,7 @@ fn default_handshake_secs() -> u64 { 120 }     // 2 mins default
 fn default_tool_call_secs() -> u64 { 3600 }   // 1 hour default (for slow models)
 fn default_bool_true() -> bool { true }
 fn default_silva_db_path() -> String { "./data/silva.db".into() }
-fn default_sync_interval() -> u64 { 5000 }
+fn default_sync_interval() -> u64 { 30_000 }
 fn default_decay_interval_hours() -> u64 { 6 }
 fn default_decay_prune_threshold() -> f64 { 0.15 }
 /// Public because main.rs compares against it to warn about the deprecated

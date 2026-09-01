@@ -90,7 +90,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           
           {/* Status badge */}
           <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-widest", statusBg, statusBorder, statusColor)}>
-            <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400 animate-pulse" : "bg-red-500 animate-ping")} />
+            <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400 animate-pulse-soft" : "bg-red-500 animate-beacon")} />
             {loading ? "Calculando..." : health?.status === "healthy" ? "Cortex Estable" : "Tensión del Sistema"}
           </div>
         </div>

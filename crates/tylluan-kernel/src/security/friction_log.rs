@@ -171,12 +171,32 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
 }
 
 /// If `table` does not already have `column`, add it with the given SQL type.
+///
+/// Table and column names are interpolated into SQL (PRAGMA/ALTER don't take
+/// bound parameters), so both are whitelisted against the known friction
+/// schema -- anything else is rejected before it can reach the connection.
+const KNOWN_TABLES: &[&str] = &["friction_sessions", "friction_workflows", "friction_events"];
+const KNOWN_COLUMNS: &[&str] = &[
+    "id", "agent_id", "started_at", "ended_at", "status", "task_goal",
+    "first_result_at", "ttfua_seconds", "workflow_id", "event_type",
+    "timestamp", "description", "resolved", "resolution",
+];
+
 fn ensure_column(
     conn: &rusqlite::Connection,
     table: &str,
     column: &str,
     sql_type: &str,
 ) -> Result<(), String> {
+    if !KNOWN_TABLES.contains(&table) {
+        return Err(format!("ensure_column: table '{table}' not in friction schema whitelist"));
+    }
+    if !KNOWN_COLUMNS.contains(&column) {
+        return Err(format!("ensure_column: column '{column}' not in friction schema whitelist"));
+    }
+    if !sql_type.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '(' || c == ')') {
+        return Err(format!("ensure_column: suspicious sql_type '{sql_type}'"));
+    }
     let exists: bool = conn
         .prepare(&format!("PRAGMA table_info({table})"))
         .map_err(|e| format!("friction ensure_column pragma: {e}"))?

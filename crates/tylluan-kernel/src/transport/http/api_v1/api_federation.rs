@@ -1023,11 +1023,19 @@ async fn pull_from_peer_internal(
 }
 
 pub fn spawn_auto_sync(state: Arc<HttpState>) {
+    // Overlap guard: only one auto-sync cycle may be in flight at a time.
+    // The 2026-08-30 GraphRAG CPU incident showed a 5s sync cycle firing
+    // indefinitely over a saturated system; this guard guarantees a slow
+    // cycle can never stack on top of a still-running one.
+    let cycle_in_flight = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     tokio::spawn(async move {
-        // Read configuration values initially
+        // Read configuration values initially. Prefer
+        // federation.sync_interval_ms (new home, 2026-08-31); fall back to the
+        // deprecated silva.sync_interval_ms only when federation left it at
+        // default while the deprecated silva value was customized.
         let mut interval_ms = {
             let config = state.config.read().await;
-            config.silva.sync_interval_ms
+            effective_sync_interval_ms(&config)
         };
 
         if interval_ms == 0 {
@@ -1040,6 +1048,14 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
 
+            // Overlap guard: skip this tick if the previous cycle is still
+            // running (a hung peer with per-request timeouts can still hold a
+            // cycle past the interval). swap(true) then restore at cycle end.
+            if cycle_in_flight.swap(true, std::sync::atomic::Ordering::AcqRel) {
+                tracing::warn!("🔄 Auto-sync: previous cycle still in flight — skipping this tick");
+                continue;
+            }
+
             // Re-read configuration values in case of runtime changes
             let (curr_interval, curr_mode) = {
                 let config = state.config.read().await;
@@ -1048,10 +1064,11 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                 } else {
                     config.federation.auto_sync_mode.clone()
                 };
-                (config.silva.sync_interval_ms, mode)
+                (effective_sync_interval_ms(&config), mode)
             };
 
             if curr_interval == 0 {
+                cycle_in_flight.store(false, std::sync::atomic::Ordering::Release);
                 tracing::info!("🔄 Federation auto-sync disabled dynamically");
                 break;
             }
@@ -1060,7 +1077,17 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
             tracing::info!("🔄 Starting scheduled auto-sync cycle (mode = '{curr_mode}')...");
 
             let peers = state.config.read().await.federation_peers.clone();
-            let client = reqwest::Client::new();
+            // Explicit per-request timeout: reqwest::Client::new() has NONE
+            // by default. Without this, the JoinSet below only stops one hung
+            // peer from blocking the others -- its task still never
+            // completes, join_next() never returns for it, and
+            // cycle_in_flight (above) stays stuck at true forever, silently
+            // killing auto-sync for every peer from then on. 15s matches the
+            // conservative 30s default cycle interval with headroom to spare.
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
 
             // Prepare local shareable nodes in case of "push" or "both"
             let plain_body = if curr_mode == "push" || curr_mode == "both" {
@@ -1087,30 +1114,56 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                 Vec::new()
             };
 
-            for peer in &peers {
-                if !peer.approved {
-                    continue;
-                }
-
-                if (curr_mode == "push" || curr_mode == "both")
-                    && !plain_body.is_empty() {
-                        match push_to_peer_internal(&state, peer, &client, &plain_body).await {
+            // Per-peer, concurrent: one hung peer can no longer stall the
+            // whole cycle (this was a sequential for-loop — every other peer
+            // waited behind a single dead endpoint).
+            let mut join_set = tokio::task::JoinSet::new();
+            for peer in peers.into_iter().filter(|p| p.approved) {
+                let state = state.clone();
+                let client = client.clone();
+                let plain_body = plain_body.clone();
+                let curr_mode = curr_mode.clone();
+                join_set.spawn(async move {
+                    if (curr_mode == "push" || curr_mode == "both") && !plain_body.is_empty() {
+                        match push_to_peer_internal(&state, &peer, &client, &plain_body).await {
                             Ok(_) => tracing::info!("🔄 Auto-sync: successfully pushed to '{}'", peer.name),
                             Err(e) => tracing::error!("🔄 Auto-sync: push to '{}' failed: {e}", peer.name),
                         }
                     }
 
-                if curr_mode == "pull" || curr_mode == "both" {
-                    match pull_from_peer_internal(&state, peer, &client).await {
-                        Ok(n) => tracing::info!("🔄 Auto-sync: successfully pulled {n} nodes from '{}'", peer.name),
-                        Err(e) => tracing::error!("🔄 Auto-sync: pull from '{}' failed: {e}", peer.name),
+                    if curr_mode == "pull" || curr_mode == "both" {
+                        match pull_from_peer_internal(&state, &peer, &client).await {
+                            Ok(n) => tracing::info!("🔄 Auto-sync: successfully pulled {n} nodes from '{}'", peer.name),
+                            Err(e) => tracing::error!("🔄 Auto-sync: pull from '{}' failed: {e}", peer.name),
+                        }
                     }
-                }
+                });
             }
+            while join_set.join_next().await.is_some() {}
+            cycle_in_flight.store(false, std::sync::atomic::Ordering::Release);
 
             reload_peers_cache(&state).await;
         }
     });
+}
+
+/// 30s conservative default for small meshes (see FederationConfig docs).
+const DEFAULT_SYNC_INTERVAL_MS: u64 = 30_000;
+
+/// Resolve the effective auto-sync interval. New home is
+/// federation.sync_interval_ms; the deprecated silva.sync_interval_ms is
+/// honored only when federation was left at default while silva was
+/// customized (legacy tylluan.toml migration path).
+fn effective_sync_interval_ms(config: &crate::config::TylluanConfig) -> u64 {
+    let fed = config.federation.sync_interval_ms;
+    let silva = config.silva.sync_interval_ms;
+    if fed != DEFAULT_SYNC_INTERVAL_MS {
+        fed
+    } else if silva != DEFAULT_SYNC_INTERVAL_MS {
+        silva
+    } else {
+        fed
+    }
 }
 
 pub async fn federation_identity(State(state): State<Arc<HttpState>>) -> impl IntoResponse {

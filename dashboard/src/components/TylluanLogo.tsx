@@ -29,110 +29,49 @@ export function TylluanLogo({
     md: 'p-1',
     lg: 'p-1.5',
     xl: 'p-2',
-    '2xl': 'p-3',
+    '2xl': 'p-2.5',
   };
 
   // Sovereign Color Tokens (Nocturnal Observatory Amber/Gold)
   const AMBER_GOLD = '#F59E0B';
 
-  // 12 Nodes Coordinates (Home vs Constellation Offsets)
-  const nodesData = [
-    // Left Wing (Nodes 0-3)
-    { id: 0, type: 'wing_left', hx: 18, hy: 30, cx: 4, cy: 15, delay: 0 },
-    { id: 1, type: 'wing_left', hx: 28, hy: 45, cx: 12, cy: 48, delay: 120 },
-    { id: 2, type: 'wing_left', hx: 32, hy: 65, cx: 16, cy: 78, delay: 240 },
-    { id: 3, type: 'wing_left', hx: 40, hy: 32, cx: 28, cy: 14, delay: 360 },
-
-    // Right Wing (Nodes 4-7)
-    { id: 4, type: 'wing_right', hx: 82, hy: 30, cx: 96, cy: 15, delay: 480 },
-    { id: 5, type: 'wing_right', hx: 72, hy: 45, cx: 88, cy: 48, delay: 600 },
-    { id: 6, type: 'wing_right', hx: 68, hy: 65, cx: 84, cy: 78, delay: 720 },
-    { id: 7, type: 'wing_right', hx: 60, hy: 32, cx: 72, cy: 14, delay: 840 },
-
-    // Eyes (Nodes 8-9, Magenta Memory Index)
-    { id: 8, type: 'eye', hx: 42, hy: 42, cx: 38, cy: 36, delay: 960, isEye: true },
-    { id: 9, type: 'eye', hx: 58, hy: 42, cx: 62, cy: 36, delay: 1080, isEye: true },
-
-    // Chest (Nodes 10-11)
-    { id: 10, type: 'chest', hx: 50, hy: 55, cx: 50, cy: 68, delay: 1200 },
-    { id: 11, type: 'chest', hx: 50, hy: 74, cx: 50, cy: 88, delay: 1320 },
-  ];
-
   return (
     <div className={cn('flex items-center gap-3 select-none', className)}>
-      {/* Elegant Professional Motion System (Nocturnal Observatory Brand Identity) */}
+      {/* High-End Motion Styling: Clean Ambient Breathing Aura */}
       <style>{`
-        /* Gesto 1: Ambient Amber Aura Breathe (Soft organic pulse) */
         @keyframes sovereign-aura-breathe {
           0%, 100% {
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.25), inset 0 0 8px rgba(245, 158, 11, 0.15);
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.18), inset 0 0 8px rgba(245, 158, 11, 0.1);
             border-color: rgba(245, 158, 11, 0.3);
           }
           50% {
-            box-shadow: 0 0 24px rgba(245, 158, 11, 0.5), inset 0 0 14px rgba(245, 158, 11, 0.3);
-            border-color: rgba(245, 158, 11, 0.6);
-          }
-        }
-
-        /* Gesto 2: Sequential Node Glow Pulse */
-        @keyframes node-pulse-glow {
-          0%, 100% {
-            transform: scale(1);
-            opacity: 0.4;
-            filter: drop-shadow(0 0 2px rgba(245, 158, 11, 0.3));
-          }
-          50% {
-            transform: scale(1.3);
-            opacity: 1;
-            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.8));
-          }
-        }
-
-        /* Gesto 3: Eye Retina Intelligent Pulse */
-        @keyframes eye-retina-pulse {
-          0%, 100% {
-            transform: scale(1);
-            opacity: 0.7;
-          }
-          50% {
-            transform: scale(1.25);
-            opacity: 1;
-            filter: drop-shadow(0 0 10px rgba(255, 46, 147, 0.9));
+            box-shadow: 0 0 26px rgba(245, 158, 11, 0.4), inset 0 0 14px rgba(245, 158, 11, 0.22);
+            border-color: rgba(245, 158, 11, 0.55);
           }
         }
 
         .animate-sovereign-aura {
-          animation: sovereign-aura-breathe 4s ease-in-out infinite;
-        }
-
-        .animate-retina-pulse {
-          animation: eye-retina-pulse 3s ease-in-out infinite;
-          transform-origin: center;
+          animation: sovereign-aura-breathe 4.5s ease-in-out infinite;
         }
       `}</style>
 
       {/* Cybernetic Owl Avatar Container */}
       <div className={cn('relative flex items-center justify-center group', containerSizes[size])}>
-        {/* Subtle Outer Amber HUD Ring */}
-        {animated && (
-          <div className="absolute -inset-1 rounded-2xl border border-dashed border-amber-500/30 pointer-events-none transition-all duration-500 group-hover:border-amber-500/60" />
-        )}
-
         {/* Sovereign Card Base */}
         <div
           className={cn(
-            'relative w-full h-full rounded-2xl bg-[#0B0F17] border border-amber-500/40 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300',
+            'relative w-full h-full rounded-2xl bg-[#0B0F17] border border-amber-500/30 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 group-hover:border-amber-500/60',
             animated && 'animate-sovereign-aura',
             ringPadding[size]
           )}
         >
-          {/* Base Layer: Official Owl Image ALWAYS 100% Visible & Legible */}
+          {/* Base Layer: Official Owl Image ALWAYS 100% Crisp, Visible & Unobstructed */}
           <div className="w-full h-full flex items-center justify-center relative z-10">
             {imgLoaded ? (
               <img
                 src="/tylluan-logo.jpg"
                 alt="Tylluan Owl Official Logo"
-                className="w-full h-full object-cover rounded-xl shadow-inner"
+                className="w-full h-full object-cover rounded-xl shadow-inner transition-transform duration-500 group-hover:scale-[1.02]"
                 onError={() => setImgLoaded(false)}
               />
             ) : (
@@ -150,52 +89,8 @@ export function TylluanLogo({
             )}
           </div>
 
-          {/* Layer 2: Subtle Vector Geometry Facets Overlay */}
-          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-15 pointer-events-none">
-            {/* Wing Feather Geometry */}
-            <path d="M18,30 Q28,20 40,32 Q32,48 18,30 Z" fill="none" stroke={AMBER_GOLD} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
-            <path d="M82,30 Q72,20 60,32 Q68,48 82,30 Z" fill="none" stroke={AMBER_GOLD} strokeWidth="0.6" opacity="0.4" strokeDasharray="3 2" />
-
-            {/* Precision Eye Retina Rings (Unified Amber Gold) */}
-            <g className={cn(animated && 'animate-retina-pulse')}>
-              <circle cx="42" cy="42" r="4.5" fill="none" stroke={AMBER_GOLD} strokeWidth="1.2" opacity="0.9" />
-              <circle cx="42" cy="42" r="1.5" fill={AMBER_GOLD} />
-
-              <circle cx="58" cy="42" r="4.5" fill="none" stroke={AMBER_GOLD} strokeWidth="1.2" opacity="0.9" />
-              <circle cx="58" cy="42" r="1.5" fill={AMBER_GOLD} />
-            </g>
-          </svg>
-
-          {/* Layer 3: 12 Sequential Pulse Nodes (Unified Amber Gold) */}
-          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full z-20 pointer-events-none">
-            {nodesData.map((node) => {
-              const pulseDelaySecs = (node.id * 0.25).toFixed(2);
-
-              return (
-                <g key={node.id}>
-                  <style>{`
-                    .node-pulse-${node.id} {
-                      animation: node-pulse-glow 3s ease-in-out infinite;
-                      animation-delay: ${pulseDelaySecs}s;
-                      transform-origin: ${node.hx}px ${node.hy}px;
-                    }
-                  `}</style>
-
-                  <g className={cn(animated && `node-pulse-${node.id}`)}>
-                    <circle
-                      cx={node.hx}
-                      cy={node.hy}
-                      r={node.isEye ? 3 : 2}
-                      fill={AMBER_GOLD}
-                    />
-                  </g>
-                </g>
-              );
-            })}
-          </svg>
-
-          {/* Vignette Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/20 pointer-events-none z-30" />
+          {/* Clean Subtle Vignette Overlay for Depth */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/20 pointer-events-none z-20" />
         </div>
       </div>
 
@@ -203,15 +98,15 @@ export function TylluanLogo({
       {showText && (
         <div className="font-mono leading-none">
           <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-100 text-sm">
-            <span className="text-amber-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]">
+            <span className="text-amber-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(245,158,11,0.35)]">
               TYLLUAN
             </span>
             <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-widest font-extrabold">
               o3
             </span>
           </div>
-          <div className="text-[10px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+          <div className="text-[10px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-beacon" />
             <span>Sovereign Substrate</span>
           </div>
         </div>
