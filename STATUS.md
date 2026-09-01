@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-27 · HEAD `8dda9be` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
+> Last updated: 2026-08-27 · HEAD `26f3952` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `8dda9be` · **794 total** lib green (713 kernel lib + 69 link lib + 12 fsrs). CI real 2026-08-26: `Dashboard — lint` falló en varios pushes por lockfile desalineado (`@types/three`, corregido en `194a033`) y `Rust — build + test` falló por deriva de clippy en 2 commits distintos (`6edaad2`, `6770c48`, ambos corregidos por separado, verificado localmente con el mismo toolchain `stable` que CI). **Confirmado real y verde** en los runs de `7fb1d34` y `26d0d2e` (`gh run list`, 2026-08-26/27) — desde entonces existe `scripts/verify.sh` + hook de pre-push (`.githooks/pre-push`) que corre exactamente estos mismos comandos localmente antes de cada push, para que esta clase de drift se detecte antes de llegar a `main`, no después.
+**HEAD:** `26f3952` · **794 total** lib green (713 kernel lib + 69 link lib + 12 fsrs). CI real 2026-08-26: `Dashboard — lint` falló en varios pushes por lockfile desalineado (`@types/three`, corregido en `194a033`) y `Rust — build + test` falló por deriva de clippy en 2 commits distintos (`6edaad2`, `6770c48`, ambos corregidos por separado, verificado localmente con el mismo toolchain `stable` que CI). **Confirmado real y verde** en los runs de `7fb1d34` y `26d0d2e` (`gh run list`, 2026-08-26/27) — desde entonces existe `scripts/verify.sh` + hook de pre-push (`.githooks/pre-push`) que corre exactamente estos mismos comandos localmente antes de cada push, para que esta clase de drift se detecte antes de llegar a `main`, no después.
 
 **Kernel vivo:** a fecha de este commit (`9956822`) el kernel vivo está en `6d605df`, 6 commits detrás -- drift funcional real (`check_live_kernel_drift.sh` lo confirma: 19 archivos de código del kernel cambiaron desde entonces, incluyendo LifecyclePhase, RRF, dead config cleanup, y vision_moondream exclusion). Rebuild pendiente antes de confiar en cualquier medición en vivo:
 ```
