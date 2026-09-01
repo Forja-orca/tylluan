@@ -13,6 +13,15 @@ no depende de ningún otro repositorio para funcionar, compilar, o pasar sus tes
 **Si portas un patrón de otro proyecto, adáptalo e impleméntalo limpio — nunca copies
 código ni referencies rutas de otros repositorios locales.**
 
+**Alcance real de pruebas por plataforma (2026-09-02):** el equipo solo puede
+verificar de primera mano **Windows y Linux** — ningún miembro tiene hardware
+Apple. El binario `aarch64-apple-darwin` se sigue compilando en CI (cross-compile,
+nunca ejecutado por nosotros) y se distribuye, pero **macOS es soporte
+"community-tested"**, no verificado por el equipo. No asignar tareas de
+verificación/portabilidad macOS a los agentes del equipo — si la comunidad
+reporta un problema específico de macOS, tratarlo como contribución externa,
+no como deuda propia.
+
 ---
 
 ## 🔴 Regla obligatoria — sincroniza ANTES de reportar nada

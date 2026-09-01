@@ -175,7 +175,7 @@ Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir 
 - Pre-compiled releases for 4 targets:
   - `x86_64-unknown-linux-gnu`
   - `aarch64-unknown-linux-gnu` (Raspberry Pi 4+ — new in v0.6.0)
-  - `aarch64-apple-darwin` (Apple Silicon)
+  - `aarch64-apple-darwin` (Apple Silicon) — **community-tested, no verificado por el equipo** (sin hardware Apple; solo cross-compile en CI)
   - `x86_64-pc-windows-msvc`
 - `install.sh` / `install.ps1` — curl-pipe and irm-pipe installers
 - Installs to `~/.tylluan/bin/`, adds to PATH, prints MCP config + token hint
