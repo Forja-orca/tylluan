@@ -364,10 +364,10 @@ export function OverviewTab({
           </div>
         </div>
         <div className="text-right relative z-10">
-          <div className={cn("text-xs font-semibold tracking-tight", getStatusColor(sloSummary?.status || 'healthy'))}>
-            {sloSummary?.status?.toUpperCase() || 'SYSTEM STABLE'}
+          <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-500")}>
+            {sloSummary?.status ? sloSummary.status.toUpperCase() : 'TELEMETRÍA EN REPOSO'}
           </div>
-          <div className="text-[10px] text-slate-600 mt-0.5">Availability: {sloSummary?.current_availability?.toFixed(3) || '99.999'}%</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Availability: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
         </div>
       </div>
 
@@ -393,8 +393,8 @@ export function OverviewTab({
         />
         <MetricCard
           icon={TrendingUp} label="SLO"
-          value={sloSummary?.slo_target || 99.9} unit="%"
-          sub={`${sloSummary?.error_budget_remaining_percent || 0}% budget left`}
+          value={sloSummary?.slo_target ?? 99.9} unit="%"
+          sub={sloSummary ? `${sloSummary.error_budget_remaining_percent ?? 0}% budget left` : 'Objetivo 99.9%'}
           valueClass="text-violet-400"
         />
       </div>
