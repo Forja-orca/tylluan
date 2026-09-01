@@ -1039,6 +1039,65 @@ impl super::SilvaDB {
         })
     }
 
+    /// Count nodes by type, EXCLUDING nodes superseded by a newer node
+    /// (metadata.superseded_by set). Used by the drift_guard canary: the
+    /// superseded summaries are already replaced by a newer one and nobody
+    /// recalls them, so counting them makes the synthetic/factual ratio look
+    /// far worse than reality (drift_ratio=4.56 incident, 2026-09).
+    pub async fn count_active_by_type(&self, node_type: &str) -> Result<usize> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM nodes \
+                 WHERE type = ?1 \
+                   AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NULL",
+                params![node_type],
+                |row| row.get(0),
+            )?;
+            Ok(count as usize)
+        })
+    }
+
+    /// Count superseded nodes of a type older than `min_age_days`, i.e. the
+    /// pruning candidates for the night consolidation (they were already
+    /// replaced by a newer node and nobody recalls them).
+    pub async fn count_prunable_superseded(&self, node_type: &str, min_age_days: u32) -> Result<usize> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM nodes \
+                 WHERE type = ?1 \
+                   AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NOT NULL \
+                   AND updated_at < datetime('now', ?2)",
+                params![node_type, format!("-{min_age_days} days")],
+                |row| row.get(0),
+            )?;
+            Ok(count as usize)
+        })
+    }
+
+    /// Delete superseded nodes of a type older than `min_age_days`.
+    /// ADR-012 note: this ONLY removes nodes that (a) are of a summary type,
+    /// (b) carry metadata.superseded_by (the system itself decided they were
+    /// replaced), and (c) aged past the grace period. It never touches
+    /// active summaries, factual memory, or identity nodes.
+    pub async fn prune_superseded(&self, node_type: &str, min_age_days: u32) -> Result<usize> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let deleted = conn.execute(
+                "DELETE FROM nodes \
+                 WHERE type = ?1 \
+                   AND json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NOT NULL \
+                   AND updated_at < datetime('now', ?2)",
+                params![node_type, format!("-{min_age_days} days")],
+            )?;
+            if deleted > 0 {
+                tracing::info!("🌲 SilvaDB: pruned {deleted} superseded '{node_type}' nodes older than {min_age_days} days");
+            }
+            Ok(deleted as usize)
+        })
+    }
+
     /// Fetch nodes matching any of the given types, ordered by weight DESC.
     pub async fn get_nodes_by_types(&self, types: &[&str], limit: usize) -> Result<Vec<GraphNode>> {
         let placeholders: String = types.iter().enumerate()
