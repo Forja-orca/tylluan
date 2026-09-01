@@ -1413,3 +1413,51 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         });
         assert_eq!(count, 1, "cluster_summaries row must exist after save_summary");
     }
+
+    // drift_guard (Option A): count_active_by_type must exclude superseded
+    // summaries, and prune_superseded must only remove superseded+old nodes.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn count_active_by_type_excludes_superseded_summaries() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let meta_current = "{\"agent_id\":\"agent-a\"}";
+        db.upsert_node_with_validity("summary:current", "agent_summary", "current summary", meta_current, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+        let meta_old = "{\"agent_id\":\"agent-a\",\"superseded_by\":\"summary:current\"}";
+        db.upsert_node_with_validity("summary:old", "agent_summary", "old summary", meta_old, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+
+        let total = db.count_by_type("agent_summary").await.unwrap();
+        assert_eq!(total, 2, "raw count must include both");
+        let active = db.count_active_by_type("agent_summary").await.unwrap();
+        assert_eq!(active, 1, "active count must exclude the superseded summary");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn prune_superseded_removes_only_old_superseded_nodes() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let meta = "{\"agent_id\":\"agent-a\"}";
+        db.upsert_node_with_validity("summary:current", "agent_summary", "current", meta, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+        let meta_old = "{\"agent_id\":\"agent-a\",\"superseded_by\":\"summary:current\"}";
+        db.upsert_node_with_validity("summary:old", "agent_summary", "old superseded", meta_old, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+        let meta_fresh = "{\"agent_id\":\"agent-b\",\"superseded_by\":\"summary:fresh-replacement\"}";
+        db.upsert_node_with_validity("summary:fresh", "agent_summary", "freshly superseded", meta_fresh, super::NodeWriteOptions::new("test").drift_allowed(true)).await.unwrap();
+
+        // Fresh superseded node: within the grace window, must NOT be pruned.
+        assert_eq!(db.count_prunable_superseded("agent_summary", 14).await.unwrap(), 0, "fresh superseded node must not be prunable yet");
+        assert_eq!(db.prune_superseded("agent_summary", 14).await.unwrap(), 0, "prune must not remove fresh superseded nodes");
+
+        // Age the old one past the grace window.
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute("UPDATE nodes SET updated_at = datetime('now', '-20 days') WHERE id = 'summary:old'", []).unwrap();
+        });
+
+        assert_eq!(db.count_prunable_superseded("agent_summary", 14).await.unwrap(), 1, "old superseded node must be prunable");
+        let deleted = db.prune_superseded("agent_summary", 14).await.unwrap();
+        assert_eq!(deleted, 1, "prune must remove exactly the old superseded node");
+
+        assert!(db.get_node("summary:old").await.unwrap().is_none(), "old superseded node must be gone");
+        assert!(db.get_node("summary:current").await.unwrap().is_some(), "active summary must never be pruned");
+        assert!(db.get_node("summary:fresh").await.unwrap().is_some(), "fresh superseded node must survive the grace window");
+
+        // Idempotent: a second run removes nothing.
+        assert_eq!(db.prune_superseded("agent_summary", 14).await.unwrap(), 0, "second prune run must be a no-op");
+    }
