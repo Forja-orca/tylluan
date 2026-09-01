@@ -510,11 +510,29 @@ impl super::SilvaDB {
             // Effective age: last_agent_access when > 0, else created_at.
             let age_expr = "CASE WHEN last_agent_access > 0 THEN last_agent_access
                              ELSE CAST(strftime('%s', created_at) AS INTEGER) END";
+            // SQL interpolation whitelist: lifecycle states are compiled-in
+            // constants, but they are interpolated into SQL strings (SQLite
+            // cannot parameterize values inside string literals here without
+            // losing index usage), so validate against the known set to keep
+            // this injection-proof even if callers change later.
+            const KNOWN_LIFECYCLE_STATES: &[&str] =
+                &["active", "quiet", "consolidated", "archived"];
+            // A plain `debug_assert!` here compiles to a no-op in release
+            // builds -- exactly the builds Tylluan actually ships -- so it
+            // would guard nothing in production. This must be a real
+            // runtime check.
+            fn assert_known_lifecycle_state(state: &str) -> Result<&str> {
+                if !KNOWN_LIFECYCLE_STATES.contains(&state) {
+                    anyhow::bail!("unknown lifecycle state interpolated into SQL: {state}");
+                }
+                Ok(state)
+            }
             // Memoria explicable: capture the ids BEFORE each bulk transition so
             // every state change carries its own justification (kind=system,
             // reason=age threshold). Bounded at 1000/tick — NightConsolidation
             // converges over ticks; no unbounded write bursts on Pi4.
             let log_transition = |from: &str, to: &str, cutoff: i64, reason: &str| -> Result<usize> {
+                let from = assert_known_lifecycle_state(from)?;
                 let ids: Vec<String> = {
                     let mut stmt = conn.prepare(&format!(
                         "SELECT id FROM nodes WHERE lifecycle_state = '{from}' \
@@ -540,26 +558,29 @@ impl super::SilvaDB {
 
             let a2q = log_transition("active", "quiet", quiet_cutoff, "age>30d_since_agent_access")?;
             conn.execute(
-                &format!("UPDATE nodes SET lifecycle_state = 'quiet'
+                "UPDATE nodes SET lifecycle_state = 'quiet'
                  WHERE lifecycle_state = 'active'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0
-                   AND ({age_expr}) < ?1"),
+                   AND (CASE WHEN last_agent_access > 0 THEN last_agent_access
+                             ELSE CAST(strftime('%s', created_at) AS INTEGER) END) < ?1",
                 params![quiet_cutoff],
             )?;
             let q2c = log_transition("quiet", "consolidated", consolidated_cutoff, "age>60d_since_agent_access")?;
             conn.execute(
-                &format!("UPDATE nodes SET lifecycle_state = 'consolidated'
+                "UPDATE nodes SET lifecycle_state = 'consolidated'
                  WHERE lifecycle_state = 'quiet'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0
-                   AND ({age_expr}) < ?1"),
+                   AND (CASE WHEN last_agent_access > 0 THEN last_agent_access
+                             ELSE CAST(strftime('%s', created_at) AS INTEGER) END) < ?1",
                 params![consolidated_cutoff],
             )?;
             let c2a = log_transition("consolidated", "archived", archived_cutoff, "age>90d_since_agent_access")?;
             conn.execute(
-                &format!("UPDATE nodes SET lifecycle_state = 'archived'
+                "UPDATE nodes SET lifecycle_state = 'archived'
                  WHERE lifecycle_state = 'consolidated'
                    AND protected = 0 AND type != 'identity' AND quarantined = 0
-                   AND ({age_expr}) < ?1"),
+                   AND (CASE WHEN last_agent_access > 0 THEN last_agent_access
+                             ELSE CAST(strftime('%s', created_at) AS INTEGER) END) < ?1",
                 params![archived_cutoff],
             )?;
             Ok::<_, anyhow::Error>((a2q, q2c, c2a))
