@@ -31,9 +31,37 @@ pub async fn dream_status_handler(State(state): State<Arc<HttpState>>) -> impl I
 
     let connected = edge_node_ids.len();
     let orphans = total_nodes.saturating_sub(connected);
-    let routing_anchors = nodes_by_type.get("routing_anchor").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
-    let knowledge_nodes = total_nodes.saturating_sub(routing_anchors);
-    let knowledge_orphans = orphans.saturating_sub(routing_anchors);
+    // Terminal node types: legitimately isolated by design, never expected to
+    // carry edges. Counting them as "orphans" made the canary fail with 36%
+    // while real drift was hidden underneath (evidence 2026-08-30, live DB:
+    // of 2284 knowledge orphans, 95.8% were code_entity 965 + coloquio_memory
+    // 650 + agent_summary 574).
+    //   - routing_anchor: structural routing entries (already excluded before)
+    //   - code_entity: symbol-catalog entries; they get a 'references' edge
+    //     only when some memory node actually references them — unreferenced
+    //     catalog entries are terminals, not drift
+    //   - coloquio_memory: archival chat-log records of team channels
+    //   - agent_summary: durable end-of-session summaries (same rationale as
+    //     DURABLE_SUMMARY_EXCLUSION for deletion)
+    // auto_link's retrolink_orphans already tries to connect everything else
+    // (500/run, sim 0.15); what remains orphaned AFTER this exclusion is the
+    // real signal the canary must track.
+    const TERMINAL_TYPES: [&str; 4] = ["routing_anchor", "code_entity", "coloquio_memory", "agent_summary"];
+    let terminal_total: usize = TERMINAL_TYPES.iter()
+        .map(|t| nodes_by_type.get(*t).and_then(|v| v.as_i64()).unwrap_or(0) as usize)
+        .sum();
+    let orphan_terminal: usize = tokio::task::block_in_place(|| {
+        let conn = state.silva.conn.blocking_lock();
+        conn.query_row(
+            "SELECT COUNT(*) FROM nodes n
+             WHERE n.type IN ('routing_anchor','code_entity','coloquio_memory','agent_summary')
+               AND NOT EXISTS(SELECT 1 FROM edges e WHERE e.source=n.id OR e.target=n.id)",
+            [],
+            |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    });
+    let knowledge_nodes = total_nodes.saturating_sub(terminal_total);
+    let knowledge_orphans = orphans.saturating_sub(orphan_terminal);
     let orphan_pct = (100 * knowledge_orphans).checked_div(knowledge_nodes).unwrap_or(0);
 
     let nodes_with_embedding = state.silva.count_nodes_with_embedding().await.unwrap_or(0);
@@ -70,6 +98,9 @@ pub async fn dream_status_handler(State(state): State<Arc<HttpState>>) -> impl I
             "edges": total_edges,
             "orphans": orphans,
             "orphan_pct": orphan_pct,
+            "orphans_terminal_excluded": orphan_terminal,
+            "orphans_knowledge": knowledge_orphans,
+            "knowledge_nodes": knowledge_nodes,
             "contradiction_pct": contradiction_pct,
             "embedding_coverage": embedding_coverage,
             "nodes_with_embedding": nodes_with_embedding,
