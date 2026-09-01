@@ -91,6 +91,8 @@ El fix 242a6db excluye agent_summary/session_digest/consolidated_summary de las 
 
 **Rationale:** Estos nodos representan el conocimiento estructural del agente — preferencias, patrones de sesion, resumenes consolidados. Su eliminacion accidental degrada la calidad de recall de forma que el usuario no puede diagnosticar facilmente.
 
+**Enmienda (2026-09-02, drift_guard canary, drift_ratio=4.56):** la inmunidad al pruning automatico protege el resumen *vigente* — la continuidad activa del agente. Un nodo que ya fue reemplazado (`metadata.superseded_by` set, via el mecanismo de la regla 2 de arriba) fue declarado obsoleto por el propio sistema en el momento de la supersesion, no por un cron externo. Podar esos nodos tras una ventana de gracia (`prune_superseded`, `LifecyclePhase`, 14 dias por defecto) no es "pruning automatico de memoria util" en el sentido que esta decision prohibe — es recoleccion de basura de lo que Tylluan ya marco como reemplazado. El resumen activo nunca se toca; solo se libera el historico ya superado, cuyo `superseded_by` sigue siendo recuperable via el nodo vigente si hiciera falta trazabilidad.
+
 ### Decision 4: Quarantine como Eje Orthogonal
 
 El campo quarantined (schema v21, schema.rs:237) responde a una pregunta diferente al lifecycle:
