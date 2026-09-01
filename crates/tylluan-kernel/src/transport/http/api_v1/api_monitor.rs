@@ -505,7 +505,7 @@ pub async fn canary_handler(State(state): State<Arc<HttpState>>) -> impl IntoRes
         total += 1;
         let summary_count = state.silva.count_by_type("summary").await.unwrap_or(0);
         let synthesis_count = state.silva.count_by_type("synthesis").await.unwrap_or(0);
-        let agent_summary_count = state.silva.count_by_type("agent_summary").await.unwrap_or(0);
+        let agent_summary_count = state.silva.count_active_by_type("agent_summary").await.unwrap_or(0);
         let episode_count = state.silva.count_by_type("episode").await.unwrap_or(0);
         let agent_memory_count = state.silva.count_by_type("agent_memory").await.unwrap_or(0);
         let doc_count = state.silva.count_by_type("document").await.unwrap_or(0);

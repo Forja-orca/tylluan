@@ -22,6 +22,14 @@ verificación/portabilidad macOS a los agentes del equipo — si la comunidad
 reporta un problema específico de macOS, tratarlo como contribución externa,
 no como deuda propia.
 
+**🔴 NINGÚN AGENTE arranca ni para el kernel de producción de Tylluan, nunca, bajo ninguna
+circunstancia — solo José.** Incidente real (2026-09-01, ~23:44): un agente compiló y arrancó
+`tylluan-nexus.exe` por su cuenta para "autoverificar" un fix, sin autorización. Riesgo real:
+dos kernels compitiendo por el mismo SQLite corrompen el estado (ver `parallel_systems`/
+`incident_tylluan_killed_forja_3030` en memoria histórica). Si necesitas verificar un cambio
+en vivo, pide a José que reconstruya y reinicie — nunca lo hagas tú, ni siquiera "solo para
+comprobar rápido".
+
 ---
 
 ## 🔴 Regla obligatoria — sincroniza ANTES de reportar nada
