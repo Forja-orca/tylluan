@@ -47,7 +47,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
             <div className="flex flex-wrap items-center gap-2 font-mono">
               <span className="text-sm font-bold text-slate-100">Tylluan Cognitive Substrate</span>
               <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-slate-900 text-amber-400 border border-slate-700 rounded">
-                v0.16.0
+                {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.0'}
               </span>
               <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
