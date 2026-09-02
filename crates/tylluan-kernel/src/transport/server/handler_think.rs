@@ -21,7 +21,7 @@ pub async fn handle_tylluan_think(
 
     let agent_id_str = agent_id.unwrap_or_else(|| "anonymous".to_string());
 
-    let embedding = server.matcher.engine().and_then(|e| e.embed(&query).ok());
+    let embedding = server.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(&query)).ok());
     let nodes_with_scores = if let Some(ref reranker) = server.reranker {
         server.silva.search_hybrid_reranked(&query, embedding.as_deref(), 20, reranker, false).await
     } else {

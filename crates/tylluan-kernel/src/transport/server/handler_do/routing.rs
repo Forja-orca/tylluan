@@ -52,7 +52,7 @@ pub(crate) async fn resolve_guild_name(
         let is_coordinator_worker = agent_id.is_some_and(|a| a.starts_with("coordinator"));
 
         let query_embedding = server.matcher.engine()
-            .and_then(|engine| engine.embed(&intent_for_matching).ok());
+            .and_then(|engine| tokio::task::block_in_place(|| engine.embed(&intent_for_matching)).ok());
         let c_score = crate::router::complexity::score_complexity(&intent_for_matching);
         let mlp_features = crate::router::complexity::extract_mlp_features(&intent_for_matching);
         let mlp_feats_f32: Vec<f32> = mlp_features.iter().map(|&v| v as f32).collect();

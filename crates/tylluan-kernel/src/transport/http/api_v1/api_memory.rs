@@ -41,7 +41,7 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
 pub async fn memory_search_handler(State(state): State<Arc<HttpState>>, Query(p): Query<MemorySearchQuery>) -> impl IntoResponse {
     let query = p.q.as_deref().unwrap_or("");
     let limit = p.limit.unwrap_or(20);
-    let query_embedding = state.matcher.engine().and_then(|e| e.embed(query).ok());
+    let query_embedding = state.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(query)).ok());
     Json(state.silva.search_hybrid(query, query_embedding.as_deref(), limit, None, false).await.unwrap_or_default())
 }
 
@@ -112,7 +112,7 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
         for node_id in &stale_nodes {
             if let Ok(Some(node)) = silva.get_node(node_id).await {
                 let contextual = build_contextual_text(&node.metadata, &node.content);
-                let _ = engine.embed(&contextual).map(|vector| {
+                let _ = tokio::task::block_in_place(|| engine.embed(&contextual)).map(|vector| {
                     let sid = silva.clone();
                     let nid = node_id.clone();
                     let mid = model_id.clone();

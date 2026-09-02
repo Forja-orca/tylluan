@@ -260,7 +260,7 @@ impl super::SilvaDB {
         let total = missing.len();
         let mut done = 0usize;
         for (id, content) in missing {
-            if let Ok(emb) = engine.embed(&content) {
+            if let Ok(emb) = tokio::task::block_in_place(|| engine.embed(&content)) {
                 self.save_embedding(&id, &emb, "bge-m3", None).await
                     .map_err(|e| warn!("🌲 Reembed save failed for '{}': {}", id, e)).ok();
                 done += 1;
