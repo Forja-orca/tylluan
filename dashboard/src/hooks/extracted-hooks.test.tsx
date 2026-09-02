@@ -92,9 +92,9 @@ describe('useColoquioMentions', () => {
     })
 
     expect(notify).toHaveBeenCalledWith(
-      'claude-code en #mision-activa: "Revisa el frontend"',
+      'claude-code in #mision-activa: "Revisa el frontend"',
       'info',
-      'Mención Recibida',
+      'Mention Received',
     )
     expect(useAppStore.getState().coloquioUnread).toBe(1)
     expect(useAppStore.getState().activeMentions[0]).toMatchObject({
@@ -136,15 +136,15 @@ describe('useSSEBridgeEvents', () => {
 
     expect(notify).toHaveBeenNthCalledWith(
       1,
-      'Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: 2, clústeres consolidados: 3, nodos decaídos: 4.',
+      'Cognitive consolidation cycle (NREM) completed. Merged duplicates: 2, consolidated clusters: 3, decayed nodes: 4.',
       'info',
-      'Consolidación NREM',
+      'NREM Consolidation',
     )
     expect(notify).toHaveBeenNthCalledWith(
       2,
-      'Sincronización de federación completada con node-b. Sincronizados 7 nodos de conocimiento.',
+      'Federation sync completed with node-b. Synchronized 7 knowledge nodes.',
       'info',
-      'Federación P2P',
+      'P2P Federation',
     )
 
     unmount()
@@ -203,7 +203,7 @@ describe('useHitlGrants', () => {
     ])
     expect(useAppStore.getState().pendingGrant).toBeNull()
     expect(notify).toHaveBeenCalledWith(
-      "Grant aprobado para 'bash' (this_session).",
+      "Grant approved for 'bash' (this_session).",
       'info',
       'HITL Authorization',
     )
@@ -230,7 +230,7 @@ describe('useHitlGrants', () => {
     expect(useAppStore.getState().pendingGrant).toBeNull()
     expect(localStorage.getItem('tylluan_sandbox_grants')).toBeNull()
     expect(notify).toHaveBeenCalledWith(
-      "Grant 'expired-grant' ya no está pendiente (expiró o fue resuelto).",
+      "Grant 'expired-grant' is no longer pending (expired or already resolved).",
       'error',
     )
   })

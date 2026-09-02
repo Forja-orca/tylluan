@@ -35,12 +35,12 @@ interface Props {
 
 const getProvenanceLabel = (prov?: string) => {
   switch (prov) {
-    case 'user_direct': return 'Fuente: Usuario directo';
-    case 'agent_generated': return 'Fuente: Generado por agente';
-    case 'federation_peer': return 'Fuente: Peer federado (sin verificar)';
-    case 'guild_output': return 'Fuente: Salida de guild';
-    case 'unverified': return 'Fuente: No verificado';
-    default: return prov || 'Desconocido';
+    case 'user_direct': return 'Source: Direct user';
+    case 'agent_generated': return 'Source: Agent generated';
+    case 'federation_peer': return 'Source: Federated peer (unverified)';
+    case 'guild_output': return 'Source: Guild output';
+    case 'unverified': return 'Source: Unverified';
+    default: return prov || 'Unknown';
   }
 };
 
@@ -266,7 +266,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <div className="flex-1 min-h-0 flex flex-col">
                 <Suspense fallback={
                   <div className="flex-1 min-h-0 rounded-xl bg-slate-900/60 flex items-center justify-center gap-2 text-xs text-slate-500">
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Cargando cortex 3D...
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Loading 3D cortex...
                   </div>
                 }>
                   <KnowledgeCortex3D bridge={bridge} events={events} />
@@ -316,7 +316,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   "p-2 rounded-lg transition-all",
                   showRecentSidebar ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-900 text-slate-500 hover:text-slate-50"
                 )}
-                title="Últimas 24h"
+                title="Past 24h"
               >
                 <Clock className="w-4 h-4" />
               </button>
@@ -325,7 +325,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 disabled={loading}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 text-xs font-medium text-blue-400 hover:bg-blue-500/20 transition-all"
               >
-                <Zap className="w-3.5 h-3.5" /> Detectar Comunidades
+                <Zap className="w-3.5 h-3.5" /> Detect Communities
               </button>
               <button
                 onClick={loadRecent}
@@ -398,7 +398,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               ? <RefreshCw className="w-5 h-5 text-emerald-400 animate-spin flex-shrink-0" />
               : <Save className="w-5 h-5 text-slate-600 flex-shrink-0" />}
             <div>
-              <p className="text-xs font-bold text-slate-400">{isDragging ? 'Suelta para ingestar' : 'Arrastra archivos aquí para ingestar en SilvaDB'}</p>
+              <p className="text-xs font-bold text-slate-400">{isDragging ? 'Drop to ingest' : 'Drag files here to ingest into SilvaDB'}</p>
               <p className="text-[10px] text-slate-600 mt-0.5">.md .txt .py .js .ts .rs .json .yaml .toml .pdf · .png .jpg .jpeg .webp</p>
             </div>
           </div>
@@ -717,7 +717,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-emerald-400" />
-                    <span className="text-[10px] font-medium text-slate-300">Últimas 24h</span>
+                    <span className="text-[10px] font-medium text-slate-300">Past 24h</span>
                   </div>
                   <button onClick={() => setShowRecentSidebar(false)} className="text-slate-500 hover:text-slate-50">
                     <X className="w-4 h-4" />
@@ -725,19 +725,19 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                 </div>
                 <div className="flex-1 overflow-y-auto p-2">
                   {!recentLoaded ? (
-                    <p className="text-xs text-slate-500 text-center py-4">Cargando...</p>
+                    <p className="text-xs text-slate-500 text-center py-4">Loading...</p>
                   ) : recentNodes.length === 0 ? (
-                    <p className="text-xs text-slate-500 text-center py-4">Sin datos recientes</p>
+                    <p className="text-xs text-slate-500 text-center py-4">No recent data</p>
                   ) : (
                     recentNodes.map((node, i) => {
                       const timeAgo = node.created_at 
                         ? (() => {
                             const diff = Date.now() - new Date(node.created_at).getTime();
                             const mins = Math.floor(diff / 60000);
-                            if (mins < 60) return `hace ${mins}m`;
+                            if (mins < 60) return `${mins}m ago`;
                             const hours = Math.floor(mins / 60);
-                            if (hours < 24) return `hace ${hours}h`;
-                            return `${Math.floor(hours / 24)}d`;
+                            if (hours < 24) return `${hours}h ago`;
+                            return `${Math.floor(hours / 24)}d ago`;
                           })()
                         : '';
                       return (

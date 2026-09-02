@@ -57,7 +57,7 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
     } catch (err: any) {
       console.error("Session summary fetch error:", err.message);
       setResult(null);
-      setError(`Error al consultar contexto de sesión (${agentId.trim()}): ${err.message}`);
+      setError(`Failed to retrieve session context (${agentId.trim()}): ${err.message}`);
     } finally {
       setLoading(false);
     }

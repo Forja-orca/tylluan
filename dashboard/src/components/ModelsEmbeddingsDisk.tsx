@@ -27,9 +27,9 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
         body: JSON.stringify({ embedding_model: embeddingModel })
       });
       if (res?.error) throw new Error(res.error);
-      alert('Configuración de embedding guardada. Reinicia el kernel y reindexa SilvaDB para aplicar.');
+      alert('Embedding configuration saved. Restart the kernel and reindex SilvaDB to apply.');
     } catch (e: any) {
-      alert(`Error guardando configuración: ${e.message || String(e)}`);
+      alert(`Error saving configuration: ${e.message || String(e)}`);
     }
     setSaving(false);
   };
@@ -76,14 +76,14 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
       <div className="rounded-lg bg-slate-900/50 p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-            <Database className="w-4 h-4 text-emerald-400" /> Inventario Real de Modelos en Disco
+            <Database className="w-4 h-4 text-emerald-400" /> Local Model Inventory on Disk
           </h3>
           <span className="text-xs font-mono text-slate-400">
-            {models?.detected_local_models?.length ?? 0} modelos detectados
+            {models?.detected_local_models?.length ?? 0} models detected
           </span>
         </div>
         <p className="text-xs text-slate-400 mb-4">
-          Archivos reales escaneados por el Kernel en la carpeta local <code className="text-slate-300 font-mono">models/</code>.
+          Files scanned by the kernel in the local <code className="text-slate-300 font-mono">models/</code> directory.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -98,7 +98,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
                         : m.model_type === 'vision' ? 'bg-blue-500/10 text-blue-400'
                         : 'bg-violet-500/10 text-violet-400'
                     }`}>
-                      {m.model_type === 'embedding' ? 'Embedding' : m.model_type === 'vision' ? 'Visión' : 'Generativo'}
+                      {m.model_type === 'embedding' ? 'Embedding' : m.model_type === 'vision' ? 'Vision' : 'Generative'}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 font-mono mt-1">{m.path}</p>
@@ -111,9 +111,9 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
           ) : (
             <div className="col-span-2 p-6 bg-slate-950/40 border border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center gap-2 text-center">
               <Database className="w-8 h-8 text-slate-600" />
-              <p className="text-sm font-mono text-slate-400 font-semibold">Sin modelos detectados en disco</p>
+              <p className="text-sm font-mono text-slate-400 font-semibold">No models detected on disk</p>
               <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                El kernel no encontró archivos en <code className="text-slate-400">models/</code>. Descarga un modelo GGUF y colócalo en esa carpeta, luego reinicia el kernel.
+                The kernel found no files in <code className="text-slate-400">models/</code>. Place a GGUF model in that folder and restart the kernel.
               </p>
             </div>
           )}
@@ -138,8 +138,8 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
           <div className="bg-amber-900/20 rounded-lg p-3 text-xs text-amber-300 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">⚠️ Cambiar el modelo requiere reiniciar el kernel y reindexar SilvaDB.</p>
-              <p className="mt-1 opacity-80">Esta operación puede tardar varios minutos dependiendo del tamaño de la base de datos.</p>
+              <p className="font-semibold">⚠️ Changing the model requires restarting the kernel and reindexing SilvaDB.</p>
+              <p className="mt-1 opacity-80">This operation may take several minutes depending on the database size.</p>
             </div>
           </div>
 

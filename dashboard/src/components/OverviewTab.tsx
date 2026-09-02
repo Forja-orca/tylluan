@@ -237,15 +237,15 @@ export function OverviewTab({
 
   let tylluanStatus: { text: string; subtext: string; color: string; pulse: boolean };
   if (isNightMode) {
-    tylluanStatus = { text: 'Consolidando memoria nocturna', subtext: 'Tylluan está reorganizando y consolidando conocimiento acumulado.', color: 'bg-violet-500/10 border-violet-500/30 text-violet-300', pulse: true };
+    tylluanStatus = { text: 'Consolidating night memory', subtext: 'Tylluan is reorganizing and consolidating accumulated knowledge.', color: 'bg-violet-500/10 border-violet-500/30 text-violet-300', pulse: true };
   } else if (activeAgentCount > 0 && recentToolCalls.length > 0) {
-    tylluanStatus = { text: `Trabajando con ${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''}`, subtext: `${recentToolCalls.length} llamadas a herramientas en los últimos 5 minutos.`, color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300', pulse: true };
+    tylluanStatus = { text: `Working with ${activeAgentCount} agent${activeAgentCount > 1 ? 's' : ''}`, subtext: `${recentToolCalls.length} tool calls in the last 5 minutes.`, color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300', pulse: true };
   } else if (recentMemoryOps.length > 0) {
-    tylluanStatus = { text: 'Procesando memoria', subtext: `${recentMemoryOps.length} operaciones de memoria recientes.`, color: 'bg-blue-500/10 border-blue-500/30 text-blue-300', pulse: true };
+    tylluanStatus = { text: 'Processing memory', subtext: `${recentMemoryOps.length} recent memory operations.`, color: 'bg-blue-500/10 border-blue-500/30 text-blue-300', pulse: true };
   } else if (activeAgentCount > 0) {
-    tylluanStatus = { text: `${activeAgentCount} agente${activeAgentCount > 1 ? 's' : ''} conectado${activeAgentCount > 1 ? 's' : ''}`, subtext: 'Esperando instrucciones.', color: 'bg-amber-500/10 border-amber-500/30 text-amber-300', pulse: false };
+    tylluanStatus = { text: `${activeAgentCount} agent${activeAgentCount > 1 ? 's' : ''} connected`, subtext: 'Waiting for instructions.', color: 'bg-amber-500/10 border-amber-500/30 text-amber-300', pulse: false };
   } else {
-    tylluanStatus = { text: 'Inactivo', subtext: 'Sin agentes conectados. Tylluan está en standby.', color: 'bg-slate-500/10 border-slate-500/30 text-slate-400', pulse: false };
+    tylluanStatus = { text: 'Idle', subtext: 'No agents connected. Tylluan is in standby.', color: 'bg-slate-500/10 border-slate-500/30 text-slate-400', pulse: false };
   }
 
   return (
@@ -255,7 +255,7 @@ export function OverviewTab({
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
           <div>
-            <h3 className="text-sm font-semibold">Tylluan está {tylluanStatus.text.toLowerCase()}</h3>
+            <h3 className="text-sm font-semibold">Tylluan is {tylluanStatus.text.toLowerCase()}</h3>
             <p className="text-[11px] opacity-70 mt-0.5">{tylluanStatus.subtext}</p>
           </div>
         </div>
@@ -269,8 +269,8 @@ export function OverviewTab({
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 animate-pulse">
           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
           <div className="flex-1">
-            <h4 className="text-sm font-bold text-amber-400">Rendimiento Degradado (Health: {healthDetailed.score}%)</h4>
-            <p className="text-xs text-amber-500/70">El kernel está experimentando latencia alta o falta de recursos (RAM/Embeddings).</p>
+            <h4 className="text-sm font-bold text-amber-400">Degraded Performance (Health: {healthDetailed.score}%)</h4>
+            <p className="text-xs text-amber-500/70">The kernel is experiencing high latency or resource constraints (RAM/Embeddings).</p>
           </div>
           <button 
             onClick={() => bridge?.fetchRaw('/api/v1/maintenance/vacuum', { method: 'POST' })}
@@ -312,12 +312,12 @@ export function OverviewTab({
       {liveMetrics && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[ 
-            { label: 'Llamadas totales', value: liveMetrics.totalCalls, icon: Wifi },
-            { label: 'Tasa de éxito', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
-            { label: 'Latencia media', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
-            { label: 'Agentes activos', value: liveMetrics.activeAgents, icon: Cpu },
+            { label: 'Total Calls', value: liveMetrics.totalCalls, icon: Wifi },
+            { label: 'Success Rate', value: `${(liveMetrics.successRate * 100).toFixed(0)}%`, icon: CheckCircle },
+            { label: 'Avg Latency', value: `${liveMetrics.avgLatency}ms`, icon: Activity },
+            { label: 'Active Agents', value: liveMetrics.activeAgents, icon: Cpu },
             { label: 'Broadcasts/h', value: liveMetrics.broadcastsLastHour, icon: Wifi },
-            { label: 'Nodos memoria', value: liveMetrics.graphNodes, icon: Database },
+            { label: 'Memory Nodes', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center hover:bg-slate-900/60 transition-colors group">
               <Icon className="w-3 h-3 text-slate-600 mx-auto mb-1 group-hover:text-amber-400 transition-colors" />
@@ -336,7 +336,7 @@ export function OverviewTab({
             Mailbox: {sysStatus.mailbox_healthy ? 'OK' : 'ERROR'}
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
-            Curriculum: {sysStatus.curriculum_entries} entradas
+            Curriculum: {sysStatus.curriculum_entries} entries
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
             Uptime: {Math.floor(sysStatus.uptime_secs / 60)}m
@@ -405,8 +405,8 @@ export function OverviewTab({
           {[
             { label: 'Homeostasis', value: interoceptionData.homeostasis, good: (v: number) => v > 0.7, warn: (v: number) => v > 0.4 },
             { label: 'Stress', value: interoceptionData.stress_level, good: (v: number) => v < 0.3, warn: (v: number) => v < 0.6, invert: true },
-            { label: 'Densidad Silva', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
-            { label: 'Activ. Feromonas', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
+            { label: 'Silva Density', value: interoceptionData.graph_density, good: (v: number) => v > 0.001, warn: (v: number) => v > 0.0001 },
+            { label: 'Pheromone Activity', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
           ].map(({ label, value, good, warn, invert }) => {
             const pct = Math.min(100, value * 100);
             const color = good(value) ? '#34d399' : warn(value) ? '#fbbf24' : '#ef4444';
@@ -428,7 +428,7 @@ export function OverviewTab({
         <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <History className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[11px] font-medium text-slate-400">Stream de Actividad Soberana</span>
+            <span className="text-[11px] font-medium text-slate-400">Sovereign Activity Stream</span>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1 text-[9px] text-slate-600 cursor-pointer select-none hover:text-slate-400 transition-colors">
@@ -438,7 +438,7 @@ export function OverviewTab({
                 onChange={e => setShowHeartbeats(e.target.checked)}
                 className="accent-emerald-500 w-2.5 h-2.5"
               />
-              Mostrar heartbeats
+              Show heartbeats
             </label>
             <span className="text-[9px] text-slate-500 font-mono">LIVE EVENTS</span>
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
@@ -450,7 +450,7 @@ export function OverviewTab({
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" />
                   <span className="text-[10px] text-slate-300">
-                    <span className="font-bold text-emerald-400">{silvaDelta} nuevos nodos</span> integrados en los últimos 30s
+                    <span className="font-bold text-emerald-400">{silvaDelta} new nodes</span> integrated in the last 30s
                   </span>
                 </div>
              </div>
@@ -675,7 +675,7 @@ export function OverviewTab({
       {/* Recent Sessions (Digests) */}
       <div className="rounded-xl bg-slate-900/50 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
-          <span className="text-[11px] font-medium text-slate-400">Sesiones Recientes</span>
+          <span className="text-[11px] font-medium text-slate-400">Recent Sessions</span>
           <Clock className="w-3.5 h-3.5 text-blue-400" />
         </div>
         <RecentSessions bridge={bridge} />
@@ -704,11 +704,11 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
   }, [bridge]);
 
   if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-600 animate-pulse">Analizando hipocampo...</div>;
+    return <div className="p-8 text-center text-xs text-slate-600 animate-pulse">Analyzing hippocampus...</div>;
   }
 
   if (digests.length === 0) {
-    return <div className="p-8 text-center text-xs text-slate-600 italic">No hay resúmenes de sesión disponibles.</div>;
+    return <div className="p-8 text-center text-xs text-slate-600 italic">No session digests available.</div>;
   }
 
   return (

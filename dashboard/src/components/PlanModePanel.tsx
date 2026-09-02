@@ -111,8 +111,8 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
       } else {
         // If the backend didn't return a plan even though we requested one,
         // it means the tool execution didn't yield a plan format.
-        setError('El backend no devolvió un plan válido para la intención solicitada.');
-        notify('No se recibió un plan del kernel', 'error');
+        setError('Backend did not return a valid plan for the requested intent.');
+        notify('No plan was received from the kernel', 'error');
       }
     } catch (err: any) {
       setError(`Failed to reach kernel: ${err.message}`);

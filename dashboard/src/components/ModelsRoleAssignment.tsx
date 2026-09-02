@@ -31,16 +31,16 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
 
     if (models?.detected_local_models?.length > 0) {
       const roleChecks = [
-        { role: 'Inferencia Principal', val: rolePrimary },
-        { role: 'Coordinador Nocturno', val: roleCoordinator },
-        { role: 'Enrutamiento e Intenciones', val: roleRouting },
-        { role: 'Análisis Visual', val: roleVision },
+        { role: 'Primary Inference', val: rolePrimary },
+        { role: 'Night Reasoner', val: roleCoordinator },
+        { role: 'Routing & Intent', val: roleRouting },
+        { role: 'Visual Analysis', val: roleVision },
       ];
       const unverified = roleChecks.filter(r => r.val && !isModelInstalled(r.val));
       if (unverified.length > 0) {
-        const warnMsg = `Atención: Los siguientes modelos no se detectaron en el inventario local de disco:\n\n` +
+        const warnMsg = `Warning: The following models were not detected in the local disk inventory:\n\n` +
           unverified.map(u => `• ${u.role}: "${u.val}"`).join('\n') +
-          `\n\n¿Deseas guardar esta asignación de todas formas?`;
+          `\n\nDo you want to save this assignment anyway?`;
         if (!window.confirm(warnMsg)) {
           return;
         }
@@ -60,9 +60,9 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
         })
       });
       if (res?.error) throw new Error(res.error);
-      alert('Asignación de modelos por rol guardada exitosamente en tylluan.toml.');
+      alert('Model role assignment saved successfully in tylluan.toml.');
     } catch (e: any) {
-      alert(`Error guardando asignación de modelos por rol: ${e.message || String(e)}`);
+      alert(`Error saving model role assignment: ${e.message || String(e)}`);
     }
     setSavingRoles(false);
   };
@@ -70,36 +70,36 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
   const roles = [
     {
       id: 'primary',
-      title: '1. Inferencia Principal (Primary Agent)',
-      desc: 'Responde a consultas de usuario y ejecuta herramientas (tylluan_do). Requiere buen seguimiento de instrucciones.',
-      rec: 'Recomendado: 1.5B – 3B (ej. Qwen2.5-1.5B)',
+      title: '1. Primary Inference (Primary Agent)',
+      desc: 'Answers user queries and executes tools (tylluan_do). Requires strong instruction following.',
+      rec: 'Recommended: 1.5B – 3B (e.g. Qwen2.5-1.5B)',
       value: rolePrimary,
       setter: setRolePrimary,
       color: 'border-emerald-500/30'
     },
     {
       id: 'coordinator',
-      title: '2. Coordinador Nocturno (Night Reasoner)',
-      desc: 'Consolidación de memoria episódica en background. Prioriza razonamiento profundo sobre velocidad.',
-      rec: 'Recomendado: 2B – 4B (ej. Gemma-2B / Qwen2.5-3B)',
+      title: '2. Night Reasoner (Coordinator)',
+      desc: 'Background episodic memory consolidation. Prioritizes deep reasoning over latency.',
+      rec: 'Recommended: 2B – 4B (e.g. Gemma-2B / Qwen2.5-3B)',
       value: roleCoordinator,
       setter: setRoleCoordinator,
       color: 'border-violet-500/30'
     },
     {
       id: 'routing',
-      title: '3. Enrutamiento e Intenciones (Routing & Intent)',
-      desc: 'Clasificación ultra-rápida de intenciones y filtrado. Requiere latencia <50ms en CPU.',
-      rec: 'Recomendado: <500M (ej. SmolLM2-135M / Qwen-0.5B)',
+      title: '3. Routing & Intent',
+      desc: 'Ultra-fast intent classification and filtering. Requires latency <50ms on CPU.',
+      rec: 'Recommended: <500M (e.g. SmolLM2-135M / Qwen-0.5B)',
       value: roleRouting,
       setter: setRoleRouting,
       color: 'border-blue-500/30'
     },
     {
       id: 'vision',
-      title: '4. Análisis Visual (Vision Model)',
-      desc: 'Extracción de texto (OCR) y descripción de imágenes para la guild de visión.',
-      rec: 'Recomendado: SmolVLM2-256M / Moondream',
+      title: '4. Visual Analysis (Vision Model)',
+      desc: 'Text extraction (OCR) and image description for the vision guild.',
+      rec: 'Recommended: SmolVLM2-256M / Moondream',
       value: roleVision,
       setter: setRoleVision,
       color: 'border-sky-500/30'
@@ -111,10 +111,10 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-400" /> Asignación de Modelos por Rol Cognitivo
+            <ShieldCheck className="w-4 h-4 text-amber-400" /> Cognitive Role Model Assignment
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            Cada módulo dentro de Tylluan requiere diferentes características de tamaño, velocidad y capacidad de razonamiento.
+            Each module inside Tylluan requires different tradeoffs of model size, latency, and reasoning capability.
           </p>
         </div>
         <button
@@ -123,7 +123,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
           className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold rounded-lg transition-all disabled:opacity-50 shrink-0 cursor-pointer"
         >
           <Save className={cn("w-3.5 h-3.5", savingRoles && "animate-spin")} />
-          {savingRoles ? 'Guardando...' : 'Guardar Asignación de Roles'}
+          {savingRoles ? 'Saving...' : 'Save Role Assignment'}
         </button>
       </div>
 
@@ -163,7 +163,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
                   value={role.value}
                   onChange={(e) => role.setter(e.target.value)}
                   className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-400"
-                  placeholder="Sin modelos en disco — introduce nombre"
+                  placeholder="No models on disk — enter name"
                 />
               )}
               {(() => {
@@ -180,7 +180,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                       )}>
-                        {match ? `✓ En disco (${match.size_mb} MB)` : '⚠️ No detectado'}
+                        {match ? `✓ On disk (${match.size_mb} MB)` : '⚠️ Not detected'}
                       </span>
                     )}
                   </div>

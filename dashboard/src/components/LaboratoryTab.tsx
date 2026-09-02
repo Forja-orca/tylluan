@@ -73,17 +73,17 @@ export function LaboratoryTab({ bridge, notify }: Props) {
   const handleSimulateMutation = async () => {
     if (!bridge) return;
     setLoading(true);
-    notify("Ejecutando mutación y benchmark local en SilvaDB...", "info");
+    notify("Executing local mutation and benchmark in SilvaDB...", "info");
     try {
       const res = await bridge.evaluateAutoResearch();
       if (res.experiment_run) {
-        notify("Ciclo de calibración real completado con éxito", "info");
+        notify("Calibration cycle completed successfully", "info");
         await fetchData();
       } else {
-        notify("Error ejecutando ciclo de calibración", "error");
+        notify("Error executing calibration cycle", "error");
       }
     } catch (err) {
-      notify("Error en calibración: " + (err as Error).message, "error");
+      notify("Calibration error: " + (err as Error).message, "error");
     } finally {
       setLoading(false);
     }
@@ -96,8 +96,8 @@ export function LaboratoryTab({ bridge, notify }: Props) {
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <Beaker className="w-12 h-12 text-slate-700" />
         <div className="text-center space-y-1">
-          <p className="text-sm font-bold text-slate-400">AutoResearch no disponible</p>
-          <p className="text-xs text-slate-500">El endpoint de AutoResearch no respondio o no esta habilitado en este kernel.</p>
+          <p className="text-sm font-bold text-slate-400">AutoResearch unavailable</p>
+          <p className="text-xs text-slate-500">The AutoResearch endpoint did not respond or is not enabled in this kernel.</p>
         </div>
       </div>
     );
@@ -127,7 +127,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              Utiliza los ciclos de inactividad de CPU/RAM locales para mutar parámetros de SilvaDB y autocalibrar el enlazador de huérfanos frente a la suite de tests de LongMemEval-S.
+              Uses local CPU/RAM idle cycles to mutate SilvaDB parameters and auto-calibrate the orphan linker against the LongMemEval-S benchmark suite.
             </p>
           </div>
         </div>
@@ -140,7 +140,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-500/10 transition-all"
             >
               <Play className="w-4 h-4 fill-current" />
-              Activar AutoResearch
+              Enable AutoResearch
             </button>
           ) : (
             <button
@@ -149,7 +149,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 border border-red-500/30 text-red-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
             >
               <Square className="w-4 h-4 fill-current" />
-              Detener Motor
+              Stop Engine
             </button>
           )}
           
@@ -159,7 +159,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
           >
             <Zap className="w-4 h-4" />
-            Mutar e Evaluar
+            Mutate & Evaluate
           </button>
         </div>
       </div>
@@ -172,13 +172,13 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-emerald-400" />
-              Métricas de Recuperación: Baseline vs Calibrado
+              Retrieval Metrics: Baseline vs Calibrated
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Recall@1 Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 1 (Precisión)</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 1 (Precision)</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_1 * 100).toFixed(1)}%
@@ -200,7 +200,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
               {/* Recall@5 Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 5 (Contexto)</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 5 (Context)</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_5 * 100).toFixed(1)}%
@@ -219,7 +219,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
               {/* Latency Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Latencia Recuperación</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Retrieval Latency</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {data.metrics.current.latency_ms} ms
@@ -248,7 +248,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
             <div className="p-6 bg-violet-500/10 border border-violet-500/20 rounded-2xl animate-pulse">
               <h3 className="text-sm font-bold font-sans text-violet-300 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-violet-400" />
-                Mutación en Progreso Activo
+                Active Mutation in Progress
               </h3>
               
               <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950/60 p-4 border border-violet-500/10 rounded-xl gap-4">
@@ -270,7 +270,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <GitBranch className="w-4 h-4 text-indigo-400" />
-              Historial de Calibración & Lineaje (Commit/Revert)
+              Calibration History & Lineage (Commit/Revert)
             </h3>
             
             <div className="relative border-l border-slate-800 ml-4 pl-6 space-y-4">
@@ -287,11 +287,11 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-300">Paso #{item.step}</span>
+                        <span className="font-bold text-slate-300">Step #{item.step}</span>
                         <span className="text-slate-500 font-mono">{item.target}</span>
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono mt-1">
-                        Valor Ensayo: <span className="text-slate-50">{item.val}</span> | Recall@1: <span className="text-slate-50 font-bold">{(item.recall_1 * 100).toFixed(1)}%</span>
+                        Trial Value: <span className="text-slate-50">{item.val}</span> | Recall@1: <span className="text-slate-50 font-bold">{(item.recall_1 * 100).toFixed(1)}%</span>
                       </div>
                     </div>
                     
@@ -309,7 +309,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
               
               {(!data.lineage || data.lineage.length === 0) && (
                 <div className="text-xs text-slate-500 font-mono py-2">
-                  No hay calibraciones registradas. Inicia el motor para comenzar la optimización autónoma.
+                  No calibrations recorded. Start the engine to begin autonomous optimization.
                 </div>
               )}
             </div>
@@ -321,7 +321,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Settings className="w-4 h-4 text-indigo-400" />
-              Parámetros Bajo Calibración
+              Parameters Under Calibration
             </h3>
             
             <div className="space-y-4">
@@ -334,7 +334,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Factor multiplicador de candidatos recuperados antes del filtro Reranker (10x - 40x).
+                  Candidate pool multiplier before Reranker filter (10x - 40x).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div 
@@ -353,7 +353,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Cantidad de candidatos enviados al motor de Re-ranking Jina Cross-Encoder (20 - 80).
+                  Number of candidates sent to the Jina Cross-Encoder Re-ranking engine (20 - 80).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div 
@@ -372,7 +372,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Peso de la búsqueda semántica vectorizada BGE-M3 (vs BM25 léxico) en fusión RRF.
+                  Weight of vectorized BGE-M3 semantic search (vs lexical BM25) in RRF fusion.
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div 
@@ -391,7 +391,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Umbral mínimo de similitud coseno para fusionar nuevos nodos en DreamCycle (0.80 - 0.98).
+                  Minimum cosine similarity threshold to merge new nodes in DreamCycle (0.80 - 0.98).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div 
@@ -406,12 +406,12 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
             <h3 className="text-sm font-bold font-sans text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Clock className="w-4 h-4 text-emerald-400" />
-              Gating de Homeostasia
+              Homeostasis Gating
             </h3>
             
             <div className="text-xs text-slate-400 leading-relaxed space-y-3">
               <p>
-                Para evitar degradar la interacción del usuario, el motor solo realiza evaluaciones cuando se cumplen los siguientes criterios:
+                To prevent degrading user interaction, the engine only evaluates when the following criteria are met:
               </p>
               
               <ul className="space-y-2 font-mono text-[10px] bg-slate-950 p-3 rounded-lg border border-slate-800">

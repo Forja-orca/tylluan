@@ -79,12 +79,12 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'healthy':
-        return 'SISTEMA SEGURO';
+        return 'SYSTEM SECURE';
       case 'degraded':
-        return 'DEGRADADO';
+        return 'DEGRADED';
       case 'critical':
       default:
-        return 'ALERTA CRÍTICA';
+        return 'CRITICAL ALERT';
     }
   };
 

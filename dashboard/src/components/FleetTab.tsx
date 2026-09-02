@@ -49,7 +49,7 @@ function fmtUptime(s: number) {
 
 function fmtAgo(ts: number) {
   const d = Math.floor(Date.now() / 1000 - ts);
-  if (d < 5) return 'ahora';
+  if (d < 5) return 'just now';
   if (d < 60) return `${d}s`;
   if (d < 3600) return `${Math.floor(d / 60)}m`;
   if (d < 86400) return `${Math.floor(d / 3600)}h`;
@@ -158,7 +158,7 @@ function KernelCard({ k }: { k: KernelHealth }) {
         {([
           ['Uptime',   fmtUptime(k.uptime), Clock],
           ['CPU',      `${k.cpu}%`,          Cpu],
-          ['Memoria',  `${k.memPct}%`,        Database],
+          ['Memory',   `${k.memPct}%`,        Database],
           ['Guilds',   `${k.guildsOnline}/${k.guildsTotal}`, Activity],
         ] as [string, string, React.ElementType][]).map(([label, value, Icon]) => (
           <div key={label} className="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2">
@@ -192,21 +192,21 @@ function AgentCard({ a }: { a: AgentActivity }) {
         <div className="flex items-baseline justify-between gap-1">
           <span className={cn('text-xs font-semibold truncate', s.color)}>{label}</span>
           <span className="text-[10px] text-slate-600 shrink-0">
-            {a.lastTs > 0 ? fmtAgo(a.lastTs) : 'sin actividad'}
+            {a.lastTs > 0 ? fmtAgo(a.lastTs) : 'no activity'}
           </span>
         </div>
         <div className="text-[10px] text-slate-500 mt-0.5 truncate">
           {a.lastTs > 0 ? (
-            <>T{a.lastTurn} en <span className="text-slate-400">#{a.lastChannel}</span></>
+            <>T{a.lastTurn} in <span className="text-slate-400">#{a.lastChannel}</span></>
           ) : (
-            <span className="italic">no ha participado</span>
+            <span className="italic">has not participated</span>
           )}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
-          <div className="text-[9px] text-slate-600">{a.totalTurns} turnos</div>
-          {status === 'online' && <StatusPill status="online" label="activo" />}
-          {status === 'idle'   && <StatusPill status="idle" label="inactivo" />}
-          {status === 'offline' && a.lastTs > 0 && <StatusPill status="offline" label="desconectado" />}
+          <div className="text-[9px] text-slate-600">{a.totalTurns} turns</div>
+          {status === 'online' && <StatusPill status="online" label="active" />}
+          {status === 'idle'   && <StatusPill status="idle" label="idle" />}
+          {status === 'offline' && a.lastTs > 0 && <StatusPill status="offline" label="offline" />}
         </div>
       </div>
     </div>
@@ -230,7 +230,7 @@ function GuildBar({ online, total }: { online: number; total: number }) {
       </div>
       <div className="grid grid-cols-3 gap-1.5 pt-1">
         {pct >= 80
-          ? <div className="col-span-3 flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle className="w-3 h-3" /> Flota operativa</div>
+          ? <div className="col-span-3 flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle className="w-3 h-3" /> Operational fleet</div>
           : <div className="col-span-3 flex items-center gap-1.5 text-[10px] text-amber-400"><AlertTriangle className="w-3 h-3" /> {total - online} guilds offline</div>
         }
       </div>
@@ -266,7 +266,7 @@ export function FleetTab() {
 
   if (loading) return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="text-slate-600 text-sm animate-pulse">Cargando estado de la flota...</div>
+      <div className="text-slate-600 text-sm animate-pulse">Loading fleet status...</div>
     </div>
   );
 
@@ -280,13 +280,13 @@ export function FleetTab() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-indigo-400" />
-          <h2 className="text-sm font-bold text-slate-200">Estado de la Flota</h2>
+          <h2 className="text-sm font-bold text-slate-200">Fleet Status</h2>
           <span className="text-[10px] bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded-full font-mono">
-            {onlineCount} activos
+            {onlineCount} active
           </span>
         </div>
         <button onClick={refresh} className="text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
-          actualizar · {lastRefresh > 0 ? fmtAgo(Math.floor(lastRefresh / 1000)) : '—'}
+          refresh · {lastRefresh > 0 ? fmtAgo(Math.floor(lastRefresh / 1000)) : '—'}
         </button>
       </div>
 
@@ -298,7 +298,7 @@ export function FleetTab() {
 
       {/* Agent grid */}
       <div>
-        <div className="text-[11px] font-medium text-slate-500 mb-2 px-0.5">Agentes</div>
+        <div className="text-[11px] font-medium text-slate-500 mb-2 px-0.5">Agents</div>
         <div className="grid grid-cols-1 gap-2">
           {data.agents.map(a => <AgentCard key={a.id} a={a} />)}
         </div>

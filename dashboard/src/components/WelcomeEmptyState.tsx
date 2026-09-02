@@ -106,7 +106,7 @@ export function WelcomeEmptyState({
         body: JSON.stringify({ query: firstQueryText.trim(), limit: 5 })
       });
       const hits = res?.results?.length ?? res?.nodes?.length ?? 0;
-      notify(hits > 0 ? `Query completado — ${hits} resultados en memoria` : 'Query completado — sin resultados en memoria', 'info');
+      notify(hits > 0 ? `Query completed — ${hits} results in memory` : 'Query completed — no results in memory', 'info');
       setFirstQueryDone(true);
       localStorage.setItem('tylluan_wizard_query', 'true');
       setFirstQueryText('');

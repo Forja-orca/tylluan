@@ -70,33 +70,33 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
 
   const narrativeLines: string[] = [];
   if (!interoception) {
-    narrativeLines.push('El bosque está dormido. Sin datos de interoception.');
+    narrativeLines.push('The forest is asleep. No interoception data.');
   } else {
     const { homeostasis, stress_level, knowledge_hunger, active_pheromones } = interoception;
     const nodes = silva?.node_count ?? 0;
     const edges = silva?.edge_count ?? 0;
 
-    if (homeostasis > 0.75) narrativeLines.push('El bosque florece — homeostasis alta, raíces profundas.');
-    else if (homeostasis > 0.45) narrativeLines.push('El bosque respira despacio — homeostasis moderada.');
-    else narrativeLines.push('El bosque está bajo tensión — homeostasis crítica.');
+    if (homeostasis > 0.75) narrativeLines.push('The forest is thriving — high homeostasis, deep roots.');
+    else if (homeostasis > 0.45) narrativeLines.push('The forest breathes steadily — moderate homeostasis.');
+    else narrativeLines.push('The forest is under strain — critical homeostasis.');
 
-    if (stress_level > 0.7) narrativeLines.push(`⚠️ Cortisol elevado (${(stress_level * 100).toFixed(0)}%). Varios intentos fallidos recientes.`);
-    else if (stress_level < 0.2) narrativeLines.push('Sin señales de estrés activas.');
+    if (stress_level > 0.7) narrativeLines.push(`⚠️ Elevated cortisol (${(stress_level * 100).toFixed(0)}%). Multiple recent failures.`);
+    else if (stress_level < 0.2) narrativeLines.push('No active stress signals.');
 
-    if (knowledge_hunger > 0.6) narrativeLines.push(`Hambre cognitiva activa (${(knowledge_hunger * 100).toFixed(0)}%) — el bosque busca nuevas conexiones.`);
+    if (knowledge_hunger > 0.6) narrativeLines.push(`Active cognitive hunger (${(knowledge_hunger * 100).toFixed(0)}%) — seeking new connections.`);
     
-    if ((interoception?.graph_density ?? 0) < 0.001) narrativeLines.push("El bosque necesita conexiones — usa tylluan_remember con intenciones variadas");
+    if ((interoception?.graph_density ?? 0) < 0.001) narrativeLines.push("The forest needs connections — use tylluan_remember with diverse intents");
 
-    if (active_pheromones > 3) narrativeLines.push(`${active_pheromones} feromonas activas — alta actividad hormonal.`);
+    if (active_pheromones > 3) narrativeLines.push(`${active_pheromones} active pheromones — high hormonal activity.`);
     
     // Git Guild Monitor
     const gitGuild = guilds?.find(g => g.name === 'git');
     if (gitGuild) {
-      if (!gitGuild.running) narrativeLines.push('⚠️ Guild git OFFLINE — comandos de control de versiones deshabilitados.');
-      else if ((gitGuild.restarts_5m ?? 0) > 0) narrativeLines.push(`🔄 Guild git inestable: ${gitGuild.restarts_5m} reinicios recientes.`);
+      if (!gitGuild.running) narrativeLines.push('⚠️ Git guild OFFLINE — version control commands disabled.');
+      else if ((gitGuild.restarts_5m ?? 0) > 0) narrativeLines.push(`🔄 Git guild unstable: ${gitGuild.restarts_5m} recent restarts.`);
     }
 
-    narrativeLines.push(`Red: ${nodes} nodos · ${edges} aristas · densidad ${(interoception?.graph_density ?? 0).toFixed(4)}`);
+    narrativeLines.push(`Network: ${nodes} nodes · ${edges} edges · density ${(interoception?.graph_density ?? 0).toFixed(4)}`);
   }
 
   const densityVal = interoception?.graph_density ?? 0;
@@ -107,7 +107,7 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-green-400 text-sm">🌳</span>
-          <span className="text-[11px] font-medium text-slate-400">Estado del Bosque Cognitivo</span>
+          <span className="text-[11px] font-medium text-slate-400">Cognitive Forest Status</span>
         </div>
         {edgeHistory.current.length >= 2 && (
           <Sparkline data={edgeHistory.current} color="#6ee7b7" />
@@ -121,7 +121,7 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
 
       <div className="mt-2 pt-2 border-t border-slate-800/50">
         <div className="flex justify-between text-[10px] text-slate-500 mb-1 font-medium">
-          <span>Densidad del Bosque</span>
+          <span>Forest Density</span>
           <span>{densityVal.toFixed(4)} / 0.0100</span>
         </div>
         <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -257,34 +257,34 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-violet-400 text-sm">🧬</span>
-              <span className="text-[11px] font-medium text-slate-400">Matriz Metabólica y Asignación de Agentes</span>
+              <span className="text-[11px] font-medium text-slate-400">Metabolic Matrix & Agent Allocation</span>
             </div>
-            <span className="text-[9px] text-slate-500">Eficiencia del Colectivo</span>
+            <span className="text-[9px] text-slate-500">Collective Efficiency</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {profiles.map((p) => {
               const aid = p.agent_id.toLowerCase();
-              let costTier = "Bajo Consumo (Local)";
+              let costTier = "Low Consumption (Local)";
               let costColor = "text-emerald-400";
-              let description = "Flash local / Inferencia rápida";
+              let description = "Local Flash / Fast Inference";
               
               if (aid.includes("claude-code") || aid.includes("sonnet")) {
-                costTier = "Alto Consumo (Cloud)";
+                costTier = "High Consumption (Cloud)";
                 costColor = "text-red-400";
-                description = "Sonnet · Arquitectura y lógica crítica";
+                description = "Sonnet · Architecture & Critical Logic";
               } else if (aid.includes("antigravity")) {
-                costTier = "Consumo Medio (Cloud)";
+                costTier = "Medium Consumption (Cloud)";
                 costColor = "text-amber-400";
-                description = "Gemini Flash · UX y Lienzo visual";
+                description = "Gemini Flash · UX & Visual Canvas";
               } else if (aid.includes("qwen")) {
-                costTier = "Bajo Consumo (Local/API)";
+                costTier = "Low Consumption (Local/API)";
                 costColor = "text-emerald-400";
-                description = "Qwen · Auditoría y búsqueda web";
+                description = "Qwen · Audit & Web Search";
               } else if (aid.includes("hermes")) {
-                costTier = "Inferencia Local (Background)";
+                costTier = "Local Inference (Background)";
                 costColor = "text-sky-400";
-                description = "Hermes · Autonomía nocturna";
+                description = "Hermes · Night Autonomy";
               }
 
               return (
@@ -300,13 +300,13 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
                   </div>
 
                   <div className="flex justify-between items-center text-[10px] text-slate-400">
-                    <span>Llamadas totales:</span>
+                    <span>Total calls:</span>
                     <span className="font-mono text-slate-200 font-medium">{p.total_calls}</span>
                   </div>
 
                   {Object.keys(p.competencies).length > 0 && (
                     <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
-                      <p className="text-[10px] text-slate-500 font-medium">Competencia por Dominio</p>
+                      <p className="text-[10px] text-slate-500 font-medium">Domain Competency</p>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                         {Object.entries(p.competencies).map(([guild, val]) => (
                           <div key={guild} className="space-y-0.5">
@@ -332,7 +332,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
       {/* Agent rhythms */}
       {interoception && Object.keys(interoception.agent_rhythms ?? {}).length > 0 && (
         <div className="rounded-xl bg-slate-900/50 p-4">
-          <div className="text-[11px] font-medium text-slate-400 mb-3">Ritmos de agentes</div>
+          <div className="text-[11px] font-medium text-slate-400 mb-3">Agent Rhythms</div>
           <div className="space-y-2">
             {Object.entries(interoception.agent_rhythms).map(([agentId, rhythm]) => (
               <div key={agentId} className="flex items-center gap-3 text-xs">

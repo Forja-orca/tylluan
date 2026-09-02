@@ -194,7 +194,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     
     if (isActivating) {
       const confirmed = window.confirm(
-        "¿Activar sharing federado? Solo hazlo si tienes tokens configurados con peers aprobados."
+        "Enable federation sharing? Only do this if you have tokens configured with approved peers."
       );
       if (!confirmed) return;
     }

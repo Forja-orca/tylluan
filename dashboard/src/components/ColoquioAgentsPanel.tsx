@@ -24,11 +24,11 @@ export function ColoquioAgentsPanel({
   return (
     <div className="w-44 shrink-0 border-l border-slate-700/60 bg-slate-900/50 flex flex-col overflow-hidden">
       <div className="px-3 py-2.5 border-b border-slate-800/80">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agentes</span>
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agents</span>
       </div>
       <div className="flex-1 overflow-y-auto py-2">
         {agentPresence.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[10px] text-slate-700 italic">Sin actividad</div>
+          <div className="px-4 py-6 text-center text-[10px] text-slate-700 italic">No activity</div>
         ) : (
           agentPresence.map(({ id, lastSeen, status }) => {
             const m = agentStyle(id);
@@ -56,8 +56,8 @@ export function ColoquioAgentsPanel({
       </div>
       {selectedChannel && (
         <div className="border-t border-slate-800/80 p-3 space-y-1.5">
-          <div className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Canal</div>
-          {([['Mensajes', selectedChannel.message_count], ['Último turno', `#${selectedChannel.last_turn}`], ['Participantes', agentPresence.length]] as [string, string | number][]).map(([k, v]) => (
+          <div className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Channel</div>
+          {([['Messages', selectedChannel.message_count], ['Last turn', `#${selectedChannel.last_turn}`], ['Participants', agentPresence.length]] as [string, string | number][]).map(([k, v]) => (
             <div key={k} className="flex justify-between text-[10px]">
               <span className="text-slate-600">{k}</span>
               <span className="text-slate-400 font-mono">{v}</span>

@@ -94,7 +94,7 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
             className="px-3 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
           >
             {loading ? <Layers className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Search className="w-3.5 h-3.5" />}
-            Buscar
+            Search
           </button>
         </div>
       </div>
@@ -103,13 +103,13 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
       <div className="flex-1 min-h-0 bg-slate-900/50 rounded-xl border border-slate-800 p-4 flex flex-col overflow-hidden">
         {loading ? (
           <div className="flex-grow flex items-center justify-center text-xs text-slate-500 font-mono gap-2">
-            <Layers className="w-4 h-4 animate-spin text-emerald-400" /> Cargando nodos por scope...
+            <Layers className="w-4 h-4 animate-spin text-emerald-400" /> Loading nodes by scope...
           </div>
         ) : nodes.length === 0 ? (
           <div className="flex-grow flex flex-col items-center justify-center text-slate-600 py-12">
             <Folder className="w-8 h-8 opacity-30 mb-2" />
-            <p className="text-xs font-medium">No se encontraron nodos para el scope "{prefix || 'root'}"</p>
-            <p className="text-[10px] opacity-60 mt-1">Prueba con "user:alice" o deja vacío para ver todos.</p>
+            <p className="text-xs font-medium">No nodes found for scope "{prefix || 'root'}"</p>
+            <p className="text-[10px] opacity-60 mt-1">Try "user:alice" or leave empty to view all.</p>
           </div>
         ) : (
           <div className="flex-grow overflow-y-auto">
@@ -146,7 +146,7 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
                           {renderScopeBreadcrumbs(node.owner_scope)}
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-400 max-w-xs truncate" title={node.content}>
-                          {node.content || <span className="italic text-slate-600">— sin contenido —</span>}
+                          {node.content || <span className="italic text-slate-600">— no content —</span>}
                         </td>
                       </tr>
                     );

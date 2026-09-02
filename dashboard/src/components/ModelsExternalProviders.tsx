@@ -106,7 +106,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
               <Globe className="w-4 h-4 text-amber-400" /> External Providers
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Proveedores de inferencia configurados en <code className="text-slate-300 font-mono text-[10px]">tylluan.toml</code> bajo <code className="text-slate-300 font-mono text-[10px]">[[external_providers]]</code>.
+              Inference providers configured in <code className="text-slate-300 font-mono text-[10px]">tylluan.toml</code> under <code className="text-slate-300 font-mono text-[10px]">[[external_providers]]</code>.
             </p>
           </div>
           <button
@@ -114,16 +114,16 @@ export function ModelsExternalProviders({ bridge }: Props) {
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-mono flex items-center gap-2 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Actualizar
+            Refresh
           </button>
         </div>
 
         {providers.length === 0 ? (
           <div className="p-8 bg-slate-950/40 border border-dashed border-slate-800 rounded-lg flex flex-col items-center justify-center gap-2 text-center">
             <Globe className="w-8 h-8 text-slate-600" />
-            <p className="text-sm font-mono text-slate-400 font-semibold">Sin external providers configurados</p>
+            <p className="text-sm font-mono text-slate-400 font-semibold">No external providers configured</p>
             <p className="text-xs text-slate-500 max-w-md leading-relaxed">
-              Añade un bloque <code className="text-slate-400">[[external_providers]]</code> en tu <code className="text-slate-400">tylluan.toml</code> con name, provider_type, base_url, api_key y models.
+              Add an <code className="text-slate-400">[[external_providers]]</code> block in your <code className="text-slate-400">tylluan.toml</code> with name, provider_type, base_url, api_key and models.
             </p>
           </div>
         ) : (
@@ -165,9 +165,9 @@ export function ModelsExternalProviders({ bridge }: Props) {
                           : "bg-slate-800 text-slate-500"
                       )}>
                         {provider.api_key_set ? (
-                          <><CheckCircle2 className="w-3 h-3" /> API key configurada</>
+                          <><CheckCircle2 className="w-3 h-3" /> API key configured</>
                         ) : (
-                          <><XCircle className="w-3 h-3" /> Sin API key</>
+                          <><XCircle className="w-3 h-3" /> No API key</>
                         )}
                       </span>
                     </div>
@@ -190,7 +190,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       </span>
                     ))}
                     {(!provider.models || provider.models.length === 0) && (
-                      <span className="text-[10px] text-slate-600 font-mono">Sin modelos listados</span>
+                      <span className="text-[10px] text-slate-600 font-mono">No models listed</span>
                     )}
                   </div>
 
@@ -203,7 +203,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                         : "bg-rose-950/20 text-rose-300"
                     )}>
                       {result.ok ? (
-                        <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Conexión exitosa{result.latency_ms !== undefined ? ` — ${result.latency_ms}ms` : ''}</>
+                        <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Connected successfully{result.latency_ms !== undefined ? ` — ${result.latency_ms}ms` : ''}</>
                       ) : (
                         <><XCircle className="w-3.5 h-3.5 text-rose-400" /> {result.error || 'Connection failed'}</>
                       )}
@@ -222,7 +222,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       ) : (
                         <Zap className="w-3.5 h-3.5 text-amber-400" />
                       )}
-                      {isTesting ? 'Probando...' : 'Test connection'}
+                      {isTesting ? 'Testing...' : 'Test connection'}
                     </button>
                   </div>
                 </div>

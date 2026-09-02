@@ -20,20 +20,20 @@ export function useSSEBridgeEvents({ notify }: UseSSEBridgeEventsOptions) {
     const handleDreamCycle = (e: Event) => {
       const data = (e as CustomEvent<DreamCycleDetail>).detail
       notify(
-        `Ciclo de consolidación cognitiva (NREM) finalizado. Duplicados fusionados: ${data?.duplicates_merged ?? 0}, clústeres consolidados: ${data?.clusters_consolidated ?? 0}, nodos decaídos: ${data?.nodes_decayed ?? 0}.`,
+        `Cognitive consolidation cycle (NREM) completed. Merged duplicates: ${data?.duplicates_merged ?? 0}, consolidated clusters: ${data?.clusters_consolidated ?? 0}, decayed nodes: ${data?.nodes_decayed ?? 0}.`,
         'info',
-        'Consolidación NREM'
+        'NREM Consolidation'
       )
     }
 
     const handleFederationSync = (e: Event) => {
       const data = (e as CustomEvent<FederationSyncDetail>).detail
-      const peer = data?.peer || 'un par'
+      const peer = data?.peer || 'peer'
       const count = data?.count || 0
       notify(
-        `Sincronización de federación completada con ${peer}. Sincronizados ${count} nodos de conocimiento.`,
+        `Federation sync completed with ${peer}. Synchronized ${count} knowledge nodes.`,
         'info',
-        'Federación P2P'
+        'P2P Federation'
       )
     }
 
