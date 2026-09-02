@@ -541,4 +541,40 @@ mod tests {
             assert!(executed.contains(name), "phase {name} must have executed");
         }
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lifecycle_phase_reports_prunable_superseded() {
+        let ctx = test_phase_context().await;
+        use crate::memory::silva::nodes::NodeWriteOptions;
+        // Insert a superseded agent_summary node aged 20 days (past 14-day grace)
+        let id = "summary_old_superseded";
+        ctx.silva.upsert_node_with_validity(
+            id,
+            "agent_summary",
+            "Old session summary",
+            r#"{"superseded_by":"summary_new"}"#,
+            NodeWriteOptions::new("test").drift_allowed(true),
+        ).await.unwrap();
+        // Manually age the node beyond 14 days in SQLite
+        {
+            let conn = ctx.silva.conn.lock().await;
+            conn.execute(
+                "UPDATE nodes SET updated_at = datetime('now', '-20 days') WHERE id = ?1",
+                rusqlite::params![id],
+            ).unwrap();
+        }
+
+        let report = LifecyclePhase.run(&ctx).await;
+        assert!(report.ok, "LifecyclePhase must succeed: {}", report.detail);
+        assert!(
+            report.detail.contains("prunable-superseded:1"),
+            "must report 1 prunable superseded node: {}",
+            report.detail
+        );
+        assert!(
+            report.detail.contains("pruned-superseded:1"),
+            "must report 1 pruned superseded node: {}",
+            report.detail
+        );
+    }
 }
