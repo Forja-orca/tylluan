@@ -787,3 +787,11 @@ Antigravity realizó una autoauditoría del `dashboard/src/components/` buscando
 **Próximo paso:** verificar cada ítem individualmente (mismo criterio que el resto del ciclo — leer el código, no aceptar la tabla) antes de repartir fixes. No priorizado sobre P0-P3 (llama.cpp) en curso.
 
 ---
+
+## Estilos UI/GUI a investigar e implementar a futuro (backlog, sin urgencia, 2026-09-02)
+
+Antigravity construyó un prototipo interactivo explorando una dirección visual "Titanium Industrial" para el dashboard (bahías modulares tipo rack, diales mecánicos de instrumentación, tipografía técnica aeroespacial) — trabajo no solicitado en el ciclo en que se hizo, vive fuera del repo (`C:\Users\FoRJa\.gemini\antigravity\brain\7f88a3b8-c6df-4079-bb5b-d198fc6b7efb\titanium_industrial_lab.html`, local a esa máquina/sesión, no versionado).
+
+José: dejarlo como backlog de investigación de estilo, sin prioridad — no convertir en tarea hasta que se decida explícitamente adoptar esa dirección visual (o cualquier otra) para el dashboard real.
+
+---
