@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-08-27 · HEAD `5a1ba58` · v0.17.0 (Cargo.toml, tagged 2026-08-23)
+> Last updated: 2026-09-02 · HEAD `5a1ba58` · v0.17.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,14 +33,14 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `5a1ba58` · **794 total** lib green (713 kernel lib + 69 link lib + 12 fsrs). CI real 2026-08-26: `Dashboard — lint` falló en varios pushes por lockfile desalineado (`@types/three`, corregido en `194a033`) y `Rust — build + test` falló por deriva de clippy en 2 commits distintos (`6edaad2`, `6770c48`, ambos corregidos por separado, verificado localmente con el mismo toolchain `stable` que CI). **Confirmado real y verde** en los runs de `7fb1d34` y `26d0d2e` (`gh run list`, 2026-08-26/27) — desde entonces existe `scripts/verify.sh` + hook de pre-push (`.githooks/pre-push`) que corre exactamente estos mismos comandos localmente antes de cada push, para que esta clase de drift se detecte antes de llegar a `main`, no después.
+**HEAD:** `5a1ba58` · **799 total** lib green (718 kernel lib + 69 link lib + 12 fsrs), verificado 2026-09-02 con `scripts/check_test_count.sh`. Historial de drift de CI (2026-08-26, `Dashboard — lint` por lockfile desalineado, `Rust — build + test` por deriva de clippy entre toolchain local y del runner) queda como referencia — desde entonces `scripts/verify.sh` + el hook de pre-push corren los mismos comandos localmente antes de cada push. Nota de proceso 2026-09-02: los gates de `Docs — STATUS.md HEAD citation` y `Docs — README test count` solo verifican que el HASH/número citado coincida con la realidad — no verifican que el CONTENIDO narrativo de este fichero esté al día. Encontrado real: esta sección describía un estado de mediados de agosto con el hash "arreglado" mecánicamente, dando una falsa sensación de frescura. Corregido en este pase; vigilar que no vuelva a pasar en próximos ciclos.
 
-**Kernel vivo:** a fecha de este commit (`9956822`) el kernel vivo está en `6d605df`, 6 commits detrás -- drift funcional real (`check_live_kernel_drift.sh` lo confirma: 19 archivos de código del kernel cambiaron desde entonces, incluyendo LifecyclePhase, RRF, dead config cleanup, y vision_moondream exclusion). Rebuild pendiente antes de confiar en cualquier medición en vivo:
+**Kernel vivo:** verificado en vivo 2026-09-02, `commit 24bb423` (post fix silva_db/drift_guard) confirmado sin mezcla de checkout tras una condición de carrera real (compilación concurrente con `git commit`/`push` en el mismo directorio, ver `incident_mixed_agent_commit_and_unauthorized_kernel_start` en memoria de ForjaMCPo3) — canary en 87.5% (7/8), `silva_db` pasa, `drift_guard` mejorando (1.36, bajando de 4.56) tras el fix de Buffy. Comando de rebuild de referencia:
 ```
 taskkill /IM tylluan-nexus.exe /F
 cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 ```
-Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir cualquier estado — el gap anterior de esta misma sesión (22 commits contra `e337836`) sí se cerró y fue puramente cosmético en su momento; este es distinto.
+**Regla añadida 2026-09-02 (CLAUDE.md):** ningún agente arranca/para el kernel de producción, solo José — incidente real de un agente haciéndolo unilateralmente para autoverificar un fix.
 
 ### Ciclo 2026-08-23 (tarde) — RRF en producción + Pilares 2/4 + limpieza de deuda real
 
@@ -109,7 +109,7 @@ Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir 
 
 ## Version
 
-**v0.16.0** (Cargo.toml) — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.17.0** (Cargo.toml, current) — federation auto-sync robustness (concurrent per-peer JoinSet + overlap guard + timeout), SQL interpolation whitelisting, drift_guard/silva_db canary fixes, unwrap() production audit (2026-09). **v0.16.0** — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 
@@ -168,7 +168,7 @@ Verificar siempre con `bash scripts/check_live_kernel_drift.sh` antes de asumir 
 - Retrieval baseline: `tylluan-evals` benchmark — Recall@5: 60%, Precision@5: 12%, p50: 1.3ms, p95: 1.9ms; persisted in `benchmarks/baseline_v0.9.0.json` (v0.9.0)
 - Semantic Coloquio Search (P4): `tylluan_recall` parses optional `"episodic": bool` argument and filters by `"episodic"` node type via `search_hybrid` (v0.9.0)
 - Security hardening (P-security): `sanitize_query()` redacts `token=`/`Authorization=` from `info!` logs; `extract_token()` fixes ACL role resolution for `?token=` query-string auth — no longer falls to `default_role` (v0.9.0)
-- **588 kernel lib tests passing** + 63 tylluan-link + 12 tylluan-fsrs = **663 total** (verificado 2026-07-30, ver bloque CI arriba — no confiar en esta cifra sin recorrer `scripts/check_test_count.sh`, cambia cada ciclo)
+- **588 kernel lib tests passing** + 63 tylluan-link + 12 tylluan-fsrs = **663 total** (cifra histórica de 2026-07-30, dejada como referencia del ritmo de crecimiento — la cifra real actual es 799, ver bloque CI arriba, verificada 2026-09-02. No confiar en esta línea sin recorrer `scripts/check_test_count.sh`, cambia cada ciclo)
 - Zero `openssl-sys` in dep tree — pure rustls-tls on all platforms, cross-compile clean
 
 ### Binary distribution (M13 + v0.6.0)
