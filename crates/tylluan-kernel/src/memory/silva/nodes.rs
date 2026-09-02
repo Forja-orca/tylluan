@@ -337,7 +337,7 @@ impl super::SilvaDB {
         // failure must never fail the dense write.
         if let Some(engine) = self.sparse_engine_ref()
             && let Some(Some(node)) = self.get_node(node_id).await.ok()
-            && let Ok(sv) = engine.embed(&node.content)
+            && let Ok(sv) = tokio::task::block_in_place(|| engine.embed(&node.content))
         {
             let _ = self.save_sparse_embedding(node_id, &sv).await;
         }

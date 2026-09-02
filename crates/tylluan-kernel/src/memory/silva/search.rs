@@ -235,7 +235,7 @@ impl super::SilvaDB {
         // the raw query. Nodes with no stored sparse vector are simply absent —
         // graceful degradation to the pre-existing 3-source fusion.
         if let Some(sparse_engine) = self.sparse_engine_ref()
-            && let Ok(qsv) = sparse_engine.embed(query)
+            && let Ok(qsv) = tokio::task::block_in_place(|| sparse_engine.embed(query))
             && let Ok(sparse_results) = self.search_sparse_candidates(&qsv, limit).await
         {
             for (rank, node) in sparse_results.into_iter().enumerate() {
@@ -458,7 +458,7 @@ impl super::SilvaDB {
     ) -> Result<(Vec<(GraphNode, f32)>, Option<Vec<f32>>)> {
         // Stage 1: sparse-embed the query when possible; FTS5 always available.
         let qsv = match self.sparse_engine_ref() {
-            Some(engine) => engine.embed(query).ok(),
+            Some(engine) => tokio::task::block_in_place(|| engine.embed(query)).ok(),
             None => None,
         };
         self.search_recall_cascade_inner(query, qsv.as_ref(), limit, type_filter, include_archived)

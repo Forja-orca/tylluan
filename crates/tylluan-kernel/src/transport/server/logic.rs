@@ -35,7 +35,7 @@ impl super::TylluanServer {
     pub async fn synthesize_context(&self, query: &str) -> String {
         let mut synthesis = String::from("SINTESIS DE CONCURRENCIA SOBERANA (v3.1)\n");
         synthesis.push_str("-------------------------------------------\n");
-        let embedding = self.matcher.engine().and_then(|engine| engine.embed(query).ok());
+        let embedding = self.matcher.engine().and_then(|engine| tokio::task::block_in_place(|| engine.embed(query)).ok());
 
         synthesis.push_str("\nESTATUTO SOBERANO:\n");
         if let Ok(nodes) = self.silva.get_identity_nodes().await {

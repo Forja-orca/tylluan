@@ -1150,7 +1150,7 @@ async fn post_process_outcome(
         let intent_anchor = intent.to_string();
         let guild_anchor = guild_name.to_string();
         tokio::spawn(async move {
-            let embedding = engine_anchor.as_ref().and_then(|e| e.embed(&intent_anchor).ok());
+            let embedding = engine_anchor.as_ref().and_then(|e| tokio::task::block_in_place(|| e.embed(&intent_anchor)).ok());
             let _ = silva_anchor.upsert_routing_anchor(
                 &guild_anchor, &intent_anchor, "learned",
                 embedding.as_deref(),
@@ -1280,7 +1280,7 @@ async fn persist_remember(
     };
     let meta = serde_json::json!({ "source": "tylluan_do", "guild": guild_name, "tool": tool_name, "agent_id": agent_id.as_deref().unwrap_or("anonymous") }).to_string();
     let embedding_target = distill_for_embedding(intent, &output_preview);
-    let embedding = server.matcher.engine().and_then(|e| e.embed(&embedding_target).ok());
+    let embedding = server.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(&embedding_target)).ok());
     if let Err(e) = server.memory.add_document(&trace, &meta, embedding.as_deref()).await {
         warn!("⚠️ tylluan_do remember: hybrid memory write failed: {}", e);
     }

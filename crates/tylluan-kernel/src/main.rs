@@ -752,7 +752,7 @@ async fn main() -> anyhow::Result<()> {
                                         let guard = GuardedTask::new("Proposal Embedding", Duration::from_secs(30));
                                         let _ = guard.run(async move {
                                             if let Some(engine) = m_hub.engine() {
-                                                match engine.embed(&text) {
+                                                match tokio::task::block_in_place(|| engine.embed(&text)) {
                                                     Ok(embedding) => {
                                                         let _ = silva_inner.save_embedding(
                                                             &node_id,

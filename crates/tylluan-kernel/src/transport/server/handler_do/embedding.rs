@@ -96,7 +96,7 @@ pub async fn re_embed_legacy_nodes(
             continue;
         }
         let target = distill_for_embedding(&intent, &preview);
-        let emb = match engine.embed(&target) {
+        let emb = match tokio::task::block_in_place(|| engine.embed(&target)) {
             Ok(e) => e,
             Err(_) => continue,
         };

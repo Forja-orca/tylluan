@@ -123,7 +123,7 @@ impl super::SilvaDB {
 
             let links = if let Some(eng) = engine {
                 // Aggressive hybrid: semantic + keyword via search_hybrid
-                let emb = eng.embed(&node.content).ok();
+                let emb = tokio::task::block_in_place(|| eng.embed(&node.content)).ok();
                 let candidates = self.search_hybrid(&node.content, emb.as_deref(), 10, None, false).await.unwrap_or_default();
                 let mut count = 0usize;
                 for (neighbor, score) in &candidates {

@@ -62,7 +62,7 @@ pub async fn harvest_failures_from_audit(
         // Group rows by (agent, tool) first, then semantically cluster within each group
         let mut by_agent_tool: AgentToolGroups = HashMap::new();
         for (agent, tool, intent) in rows {
-            let emb = engine.embed(&intent).ok();
+            let emb = tokio::task::block_in_place(|| engine.embed(&intent)).ok();
             by_agent_tool.entry((agent, tool)).or_default().push((intent, emb));
         }
 

@@ -212,7 +212,7 @@ impl IdleLab {
 
         for pair in oracle {
             let pool_size = (EVAL_LIMIT * params.candidate_pool_mult).max(50);
-            let embedding = engine.and_then(|e| e.embed(&pair.query).ok());
+            let embedding = engine.and_then(|e| tokio::task::block_in_place(|| e.embed(&pair.query)).ok());
 
             let results = match self.silva.search_hybrid(
                 &pair.query,

@@ -517,9 +517,11 @@ if let Some(ref mut s) = stmt {
         None
     } else {
         server.matcher.engine().and_then(|e| {
-            server.silva.query_embed_cache
-                .get_or_embed(&effective_query, |q| e.embed(q))
-                .ok()
+            tokio::task::block_in_place(|| {
+                server.silva.query_embed_cache
+                    .get_or_embed(&effective_query, |q| e.embed(q))
+            })
+            .ok()
         })
     };
 

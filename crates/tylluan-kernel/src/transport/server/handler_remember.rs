@@ -145,7 +145,7 @@ pub async fn handle_tylluan_remember(
     // On hit: reinforces the existing node and returns it instead of creating a duplicate.
     const DCR_THRESHOLD: f32 = 0.87;
     let early_embedding = server.matcher.engine()
-        .and_then(|e| e.embed(content.trim()).ok());
+        .and_then(|e| tokio::task::block_in_place(|| e.embed(content.trim())).ok());
     if let Some(ref emb) = early_embedding
         && let Ok(candidates) = server.silva.search_vector(emb, 3).await
             && let Some((existing_node, sim)) = candidates.into_iter().find(|(_, s)| *s >= DCR_THRESHOLD) {
@@ -345,7 +345,7 @@ pub async fn handle_tylluan_remember(
     }));
 
     // Reuse early_embedding computed for DCR check (avoids double embedding call)
-    let embedding = early_embedding.or_else(|| server.matcher.engine().and_then(|e| e.embed(&tagged_content).ok()));
+    let embedding = early_embedding.or_else(|| server.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(&tagged_content)).ok()));
     if let Some(emb) = embedding.as_deref() {
         let _ = server.silva.save_embedding(&node_id, emb, "nomic", None).await;
 
