@@ -173,7 +173,7 @@ impl ColoquioDb {
         let channel_id = channel_id.to_string();
         let name = name.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             conn.execute(
                 "INSERT OR IGNORE INTO coloquio_channels (channel_id, name) VALUES (?1, ?2)",
                 params![channel_id, name],
@@ -196,7 +196,7 @@ impl ColoquioDb {
     pub async fn get_last_turn(&self, channel_id: &str) -> Result<i64> {
         let channel_id = channel_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let last_turn: i64 = conn.query_row(
                 "SELECT COALESCE(MAX(turn), 0) FROM coloquio_messages WHERE channel_id = ?1",
                 params![channel_id],
@@ -208,7 +208,7 @@ impl ColoquioDb {
 
     pub async fn list_channels(&self) -> Result<Vec<ColoquioChannel>> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT c.channel_id, c.name, c.created_at,
                         COUNT(m.msg_id) AS message_count,
@@ -234,7 +234,7 @@ impl ColoquioDb {
     pub async fn get_thread(&self, channel_id: &str, limit: i64, offset: i64) -> Result<Vec<ColoquioMessage>> {
         let channel_id = channel_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
                  FROM coloquio_messages
@@ -262,7 +262,7 @@ impl ColoquioDb {
         let channel_id = channel_id.to_string();
         let pattern = format!("%{}%", keyword.to_lowercase());
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
                  FROM coloquio_messages
@@ -289,7 +289,7 @@ impl ColoquioDb {
     pub async fn get_turn(&self, channel_id: &str, turn: i64) -> Result<Option<ColoquioMessage>> {
         let channel_id = channel_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let result = conn.query_row(
                 "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
                  FROM coloquio_messages WHERE channel_id = ?1 AND turn = ?2",
@@ -329,7 +329,7 @@ impl ColoquioDb {
     pub async fn repair_msgids(&self) -> Result<usize> {
         use uuid::Uuid;
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT msg_id, turn, channel_id FROM coloquio_messages WHERE msg_id IS NULL OR length(msg_id) < 32"
             )?;
@@ -352,7 +352,7 @@ impl ColoquioDb {
     pub async fn delete_channel(&self, channel_id: &str) -> Result<usize> {
         let channel_id = channel_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let deleted = conn.execute(
                 "DELETE FROM coloquio_messages WHERE channel_id = ?1",
                 params![channel_id],
@@ -395,7 +395,7 @@ impl ColoquioDb {
         let msg_id = Uuid::new_v4().to_string();
         loop {
             let result: std::result::Result<ColoquioMessage, anyhow::Error> = tokio::task::block_in_place(|| {
-                let conn = self.conn.lock().expect("coloquio mutex poisoned");
+                let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 // Auto-create only slug-safe channel ids; posting to an existing
                 // channel (whatever its id) keeps working for backward compat.
                 let exists: bool = conn.query_row(
@@ -461,7 +461,7 @@ impl ColoquioDb {
         let channel_id = channel_id.to_string();
         let reader_id = reader_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             conn.execute(
                 "INSERT INTO coloquio_read_state (channel_id, reader_id, last_read_turn, updated_at)
                  VALUES (?1, ?2, ?3, unixepoch())
@@ -478,7 +478,7 @@ impl ColoquioDb {
     pub async fn unread_summary(&self, reader_id: &str) -> Result<Vec<UnreadSummary>> {
         let reader_id = reader_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT c.channel_id, c.name,
                         COALESCE(MAX(m.turn), 0) AS last_turn,
@@ -510,7 +510,7 @@ impl ColoquioDb {
         let channel_id = channel_id.to_string();
         let reader_id = reader_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT msg_id, channel_id, author_id, role, content, turn, created_at, metadata
                  FROM coloquio_messages
@@ -540,7 +540,7 @@ impl ColoquioDb {
 
     pub async fn list_documents(&self) -> Result<Vec<CollabDoc>> {
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT doc_id, title, content, created_by, updated_by, version, created_at, updated_at
                  FROM collab_docs ORDER BY updated_at DESC"
@@ -566,7 +566,7 @@ impl ColoquioDb {
         let title = title.to_string();
         let created_by = created_by.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             conn.execute(
                 "INSERT INTO collab_docs (doc_id, title, created_by, updated_by) VALUES (?1, ?2, ?3, ?3)",
                 params![doc_id, title, created_by],
@@ -598,7 +598,7 @@ impl ColoquioDb {
     pub async fn get_document(&self, doc_id: &str) -> Result<Option<CollabDoc>> {
         let doc_id = doc_id.to_string();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let result = conn.query_row(
                 "SELECT doc_id, title, content, created_by, updated_by, version, created_at, updated_at
                  FROM collab_docs WHERE doc_id = ?1",
@@ -628,7 +628,7 @@ impl ColoquioDb {
         let content = content.to_string();
         let updated_by = updated_by.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(exp_ver) = expected_version {
                 let current_ver: i64 = conn.query_row(
                     "SELECT version FROM collab_docs WHERE doc_id = ?1",
@@ -688,7 +688,7 @@ impl ColoquioDb {
         let section = section.to_string();
         let appended_by = appended_by.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             // Atomic: read current content, append, write back — all inside one connection lock
             let current: String = conn.query_row(
                 "SELECT content FROM collab_docs WHERE doc_id = ?1",
@@ -730,7 +730,7 @@ impl ColoquioDb {
     pub async fn list_document_snapshots(&self, doc_id: &str) -> Result<Vec<CollabDocSnapshot>> {
         let doc_id = doc_id.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut stmt = conn.prepare(
                 "SELECT doc_id, version, title, content, updated_by, updated_at
                  FROM collab_doc_snapshots WHERE doc_id = ?1 ORDER BY version DESC"
@@ -752,7 +752,7 @@ impl ColoquioDb {
     pub async fn get_document_snapshot(&self, doc_id: &str, version: i64) -> Result<Option<CollabDocSnapshot>> {
         let doc_id = doc_id.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let result = conn.query_row(
                 "SELECT doc_id, version, title, content, updated_by, updated_at
                  FROM collab_doc_snapshots WHERE doc_id = ?1 AND version = ?2",
@@ -777,7 +777,7 @@ impl ColoquioDb {
     pub async fn delete_document(&self, doc_id: &str) -> Result<bool> {
         let doc_id = doc_id.to_string();
         tokio::task::block_in_place(move || {
-            let conn = self.conn.lock().expect("coloquio mutex poisoned");
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             conn.execute("DELETE FROM collab_doc_snapshots WHERE doc_id = ?1", rusqlite::params![doc_id])?;
             let rows = conn.execute("DELETE FROM collab_docs WHERE doc_id = ?1", rusqlite::params![doc_id])?;
             Ok(rows > 0)
