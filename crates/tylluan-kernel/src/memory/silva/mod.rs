@@ -299,8 +299,8 @@ impl SilvaDB {
                             store.assignments(),
                             10,
                         );
-                        *self.mmap_store.write().unwrap() = Some(store);
-                        *self.ivf_searcher.write().unwrap() = Some(searcher);
+                        *self.mmap_store.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(store);
+                        *self.ivf_searcher.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(searcher);
                         tracing::info!("🌲 Loaded .fjv1 mmap embedding store from {}", path.display());
                     }
                     Err(e) => tracing::warn!("🌲 Failed to load .fjv1 mmap store (will rebuild on next consolidate): {}", e),
@@ -454,8 +454,8 @@ impl SilvaDB {
     /// DB-persisted HNSW blob is likewise rebuilt from the surviving rows by
     /// `rebuild_hnsw_if_needed`.
     pub(crate) async fn invalidate_vector_indexes(&self) {
-        *self.mmap_store.write().unwrap() = None;
-        *self.ivf_searcher.write().unwrap() = None;
+        *self.mmap_store.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *self.ivf_searcher.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
         *self.hnsw.write().await = None;
         // Drop the persisted HNSW blob too — otherwise it reloads stale on
         // next init (load_hnsw_from_db) and serves ghost vectors. rebuild_hnsw_if_needed
