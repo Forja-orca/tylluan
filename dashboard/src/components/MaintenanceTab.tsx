@@ -87,20 +87,20 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       if (action === 'clean-orphans') {
         const res = await bridge.fetchRaw('/api/v1/maintenance/clean-orphans', { method: 'POST' });
         if (res?.status === 'success') {
-          notify(`Limpieza completada: ${res.deleted_count} nodos eliminados`, 'info');
+          notify(`Cleanup completed: ${res.deleted_count} nodes deleted`, 'info');
         } else {
-          throw new Error('Limpieza falló');
+          throw new Error('Cleanup failed');
         }
       }
       if (action === 'purge') {
-        if (!confirm('¿ESTÁS SEGURO? Esta acción borrará TODO el conocimiento acumulado en SilvaDB. No se puede deshacer.')) return;
+        if (!confirm('ARE YOU SURE? This action will delete ALL knowledge in SilvaDB. Cannot be undone.')) return;
         await bridge.maintenance_purge();
       }
       setLastOp({ action: label, time: new Date().toLocaleTimeString() });
-      notify(`${label} completado`, 'info');
+      notify(`${label} completed`, 'info');
       await loadStatus();
     } catch {
-      notify(`${label} falló`, 'error');
+      notify(`${label} failed`, 'error');
     }
     setLoading(null);
   };
@@ -110,28 +110,28 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       icon: HardDrive,
       label: 'Brain Size',
       value: status?.brain_size_human ?? '—',
-      sub: status ? `${status.brain_size_bytes.toLocaleString()} bytes` : 'calculando...',
+      sub: status ? `${status.brain_size_bytes.toLocaleString()} bytes` : 'calculating...',
       color: 'text-emerald-400',
     },
     {
       icon: Database,
-      label: 'Nodos en grafo',
+      label: 'Graph Nodes',
       value: status ? String(status.node_count) : '—',
-      sub: `${status?.edge_count ?? 0} edges · ${status?.orphan_node_count ?? 0} huérfanos`,
+      sub: `${status?.edge_count ?? 0} edges · ${status?.orphan_node_count ?? 0} orphans`,
       color: 'text-blue-400',
     },
     {
       icon: Clock,
-      label: 'Último export',
+      label: 'Last Export',
       value: status?.last_export ?? '—',
       sub: status?.storage_mode ?? 'SQLite WAL',
       color: 'text-slate-300',
     },
     {
       icon: Activity,
-      label: 'Última operación',
-      value: lastOp?.action ?? 'Ninguna',
-      sub: lastOp?.time ?? 'en esta sesión',
+      label: 'Last Operation',
+      value: lastOp?.action ?? 'None',
+      sub: lastOp?.time ?? 'in this session',
       color: 'text-amber-400',
     },
   ];
@@ -142,7 +142,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'VACUUM',
       icon: Trash2,
       iconColor: 'text-red-400',
-      desc: 'Recupera espacio libre y desfragmenta los archivos de base de datos. Recomendado tras borrados masivos.',
+      desc: 'Reclaims free space and defragments database files. Recommended after bulk deletions.',
       btnClass: 'bg-red-500/10 hover:bg-red-500/20 text-red-400',
     },
     {
@@ -150,7 +150,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'CHECKPOINT',
       icon: Save,
       iconColor: 'text-blue-400',
-      desc: 'Vuelca el Write-Ahead Log (WAL) al archivo principal. Garantiza integridad de persistencia.',
+      desc: 'Flushes the Write-Ahead Log (WAL) to the main database file. Ensures persistence integrity.',
       btnClass: 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400',
     },
     {
@@ -158,7 +158,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'BIOLOGICAL DECAY',
       icon: Activity,
       iconColor: 'text-amber-400',
-      desc: 'Aplica reducción de peso biológico en SilvaDB. Reduce memorias obsoletas para mantener relevancia.',
+      desc: 'Applies biological weight reduction in SilvaDB. Decays stale memories to maintain relevance.',
       btnClass: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400',
     },
     {
@@ -166,7 +166,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'EXPORT BACKUP',
       icon: Download,
       iconColor: 'text-emerald-400',
-      desc: 'Exporta un snapshot del grafo de conocimiento a ./data/exports/. Útil antes de operaciones de riesgo.',
+      desc: 'Exports a knowledge graph snapshot to ./data/exports/. Recommended before high-risk operations.',
       btnClass: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400',
     },
     {
@@ -174,23 +174,23 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       label: 'DETECT COMMUNITIES',
       icon: Network,
       iconColor: 'text-indigo-400',
-      desc: 'Ejecuta el algoritmo Louvain sobre SilvaDB para agrupar nodos por comunidades semánticas. Útil para visualización.',
+      desc: 'Runs the Louvain community detection algorithm on SilvaDB to group nodes by semantic communities. Useful for visualization.',
       btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400',
     },
     {
       id: 'clean-orphans',
-      label: 'LIMPIAR HUÉRFANOS',
+      label: 'CLEAN ORPHANS',
       icon: Trash2,
       iconColor: 'text-indigo-400',
-      desc: 'Elimina de SilvaDB los nodos huérfanos (aislados, sin relaciones entrantes ni salientes) no protegidos.',
+      desc: 'Removes unprotected orphan nodes (isolated, zero incoming/outgoing relationships) from SilvaDB.',
       btnClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400',
     },
     {
       id: 'purge',
-      label: 'HARD RESET MEMORIA',
+      label: 'HARD RESET MEMORY',
       icon: Trash2,
       iconColor: 'text-rose-600',
-      desc: '⚠️ ADVERTENCIA: Borra TODOS los nodos y relaciones de SilvaDB. Útil para limpiar el contexto si hay alucinaciones.',
+      desc: '⚠️ WARNING: Deletes ALL nodes and edges from SilvaDB. Useful to clear context if experiencing hallucinations.',
       btnClass: 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-500 font-bold',
     },
   ];
@@ -200,15 +200,15 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-medium text-slate-100">Mantenimiento Soberano</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Operaciones sobre SilvaDB y HybridMemory</p>
+          <h2 className="text-sm font-medium text-slate-100">Sovereign Maintenance</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Operations across SilvaDB and HybridMemory</p>
         </div>
         <button
           type="button"
           onClick={loadStatus}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
         >
-          <RefreshCw className="w-3 h-3" /> Actualizar
+          <RefreshCw className="w-3 h-3" /> Refresh
         </button>
       </div>
 
@@ -218,7 +218,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           {probe ? <Network className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
         </div>
         <div>
-          <h3 className="text-sm font-bold text-slate-200">Diagnóstico de Conexión</h3>
+          <h3 className="text-sm font-bold text-slate-200">Connection Diagnostics</h3>
           <p className="text-xs text-slate-500 font-mono mt-0.5">
             {probe ? `Kernel v${probe.kernel_version} (Port ${probe.port}) · Dialect: ${probe.detected_dialect}` : 'Offline / No connection'}
           </p>
@@ -243,7 +243,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       <div className="rounded-2xl bg-slate-900/40 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-800/50 flex items-center gap-2">
           <Network className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-medium text-slate-400">Operaciones</span>
+          <span className="text-xs font-medium text-slate-400">Operations</span>
         </div>
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {operations.map(({ id, label, icon: Icon, iconColor, desc, btnClass }) => (
@@ -263,8 +263,8 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 )}
               >
                 {loading === id
-                  ? <><RefreshCw className="w-3 h-3 animate-spin" /> Ejecutando...</>
-                  : `Ejecutar ${label.split(' ')[0]}`
+                  ? <><RefreshCw className="w-3 h-3 animate-spin" /> Executing...</>
+                  : `Execute ${label.split(' ')[0]}`
                 }
               </button>
             </div>
@@ -321,7 +321,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
                 <div className="h-full bg-emerald-500/50 transition-all duration-1000" style={{ width: `${sysStatus?.system?.memory_percent ?? 0}%` }} />
               </div>
               <p className="text-[10px] text-slate-600 mt-2 font-mono text-center italic">
-                {sysStatus?.system?.used_memory_mb ?? 0} MB / {sysStatus?.system?.total_memory_mb ?? 0} MB RAM detectados
+                {sysStatus?.system?.used_memory_mb ?? 0} MB / {sysStatus?.system?.total_memory_mb ?? 0} MB RAM detected
               </p>
             </>
           )}
@@ -332,10 +332,10 @@ export function MaintenanceTab({ bridge, notify }: Props) {
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/30">
         <Database className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
         <p className="text-[11px] text-slate-600 leading-relaxed">
-          Las operaciones de mantenimiento actúan sobre <span className="text-slate-400">SilvaDB</span> (grafo de conocimiento)
-          y <span className="text-slate-400">HybridMemory</span> (búsqueda FTS5+vectorial).
-          VACUUM y CHECKPOINT son seguras en producción. DECAY es irreversible — reduce pesos de memorias antiguas.
-          Se recomienda hacer un CHECKPOINT antes de VACUUM para garantizar integridad.
+          Maintenance operations target <span className="text-slate-400">SilvaDB</span> (knowledge graph)
+          and <span className="text-slate-400">HybridMemory</span> (FTS5 + vector search).
+          VACUUM and CHECKPOINT are safe in production. DECAY is irreversible — reduces stale memory weights.
+          It is recommended to run CHECKPOINT before VACUUM to ensure consistency.
         </p>
       </div>
 
@@ -359,12 +359,12 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             }}
             className="flex-1 px-3 py-2 bg-slate-950 rounded-xl text-xs font-mono text-slate-300"
           />
-          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token actualizado', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
+          <button type="button" onClick={() => { const i = document.getElementById('nexus-token-input') as HTMLInputElement; if (i) { document.cookie = `nexus_token=${i.value}; path=/`; window.dispatchEvent(new CustomEvent('nexus_token_update', { detail: i.value })); notify('Token updated', 'info'); }}} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
             Save Token
           </button>
         </div>
         <div className="mt-3 text-[10px] text-slate-600">
-          Presiona Enter para guardar. Token usado para APIs protegidas del kernel.
+          Press Enter to save. Token used for protected kernel APIs.
         </div>
       </div>
     </div>

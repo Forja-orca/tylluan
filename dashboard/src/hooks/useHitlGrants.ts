@@ -60,7 +60,7 @@ export function useHitlGrants({ bridge, notify }: UseHitlGrantsOptions) {
         result?.is_error
       if (isError) {
         notify(
-          `Grant '${pendingGrant.requestId}' ya no está pendiente (expiró o fue resuelto).`,
+          `Grant '${pendingGrant.requestId}' is no longer pending (expired or already resolved).`,
           'error'
         )
         setPendingGrant(null)
@@ -68,7 +68,7 @@ export function useHitlGrants({ bridge, notify }: UseHitlGrantsOptions) {
       }
 
       notify(
-        `Grant aprobado para '${pendingGrant.guild}' (${grant_level}).`,
+        `Grant approved for '${pendingGrant.guild}' (${grant_level}).`,
         'info',
         'HITL Authorization'
       )
@@ -108,7 +108,7 @@ export function useHitlGrants({ bridge, notify }: UseHitlGrantsOptions) {
         guild: detail.guild || 'unknown',
         agentId: detail.agent_id || 'unknown',
         tool: detail.tool_name || 'unknown',
-        blockedReason: detail.reason || 'Requisito de seguridad del sandbox',
+        blockedReason: detail.reason || 'Sandbox security requirement',
         options: ['once', 'session', 'always'],
       })
     }

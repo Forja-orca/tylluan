@@ -28,7 +28,7 @@ function TrendBadge({ current, previous }: { current: number; previous: number |
   if (previous === null || (current === 0 && previous === 0)) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-500">
-        <Minus className="w-3 h-3" /> sin datos
+        <Minus className="w-3 h-3" /> no data
       </span>
     );
   }
@@ -122,7 +122,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
       setStats(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg.includes('not_found') ? 'Endpoint no disponible (kernel sin friction stats)' : msg);
+      setError(msg.includes('not_found') ? 'Endpoint not available (kernel without friction stats)' : msg);
     } finally {
       setLoading(false);
     }
@@ -184,7 +184,7 @@ export default function FrictionPanel({ bridge }: FrictionPanelProps) {
             {formatScore(stats?.total_friction_score ?? 0)}
           </div>
           <p className="text-[11px] text-slate-500 font-mono">
-            Compuesto: manual interventions, routing errors, timeouts, retries, ambiguous routes, guild errors, round-trips.
+            Composite: manual interventions, routing errors, timeouts, retries, ambiguous routes, guild errors, round-trips.
           </p>
         </div>
       </div>

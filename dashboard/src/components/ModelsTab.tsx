@@ -136,17 +136,17 @@ export function ModelsTab({ bridge }: Props) {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-amber-400">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-lg font-bold text-slate-200 font-mono">Reinicio Requerido</h3>
+              <h3 className="text-lg font-bold text-slate-200 font-mono">Restart Required</h3>
             </div>
             
             <p className="text-sm text-slate-300 leading-relaxed">
-              La aceleración por hardware se ha configurado a <span className="font-mono text-amber-400 font-semibold">{selectedDevice}</span>. Para cargar los Execution Providers adecuados y aplicar los cambios, el Kernel de TylluanNexus debe reiniciarse.
+              Hardware acceleration has been configured to <span className="font-mono text-amber-400 font-semibold">{selectedDevice}</span>. To load the appropriate Execution Providers and apply the changes, the Tylluan Nexus Kernel must be restarted.
             </p>
 
             <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-xs text-slate-400 font-mono">
-              <p className="text-slate-300 font-semibold text-[10px] mb-1">Instrucciones de reinicio:</p>
-              <p>1. Cierra el kernel actual en tu terminal (presiona <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Ctrl + C</kbd>).</p>
-              <p>2. Vuelve a iniciarlo ejecutando:</p>
+              <p className="text-slate-300 font-semibold text-[10px] mb-1">Restart instructions:</p>
+              <p>1. Stop the current kernel in your terminal (press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Ctrl + C</kbd>).</p>
+              <p>2. Start it again by running:</p>
               <div className="bg-slate-900 p-2 rounded border border-slate-800 text-slate-300">
                 .\tylluan-mcp.bat
               </div>
@@ -158,7 +158,7 @@ export function ModelsTab({ bridge }: Props) {
                 onClick={() => setShowRestartModal(false)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
               >
-                Entendido
+                Got it
               </button>
             </div>
           </div>

@@ -25,23 +25,23 @@ interface ProvenanceBadgeProps {
 //   slate-400 (#94A3B8) → 7.18:1 PASS (unverified/default)
 
 export function ProvenanceBadge({ provenance = 'unverified', className = '', showIcon = true }: ProvenanceBadgeProps) {
-  let label = 'Desconocido';
+  let label = 'Unknown';
   let colorClass = 'bg-slate-800/60 text-slate-400 border-slate-700/60';
   let Icon = HelpCircle;
 
   switch (provenance) {
     case 'user_direct':
-      label = 'Usuario Directo';
+      label = 'Direct User';
       colorClass = 'bg-sky-500/10 text-sky-400 border-sky-500/30';
       Icon = User;
       break;
     case 'agent_generated':
-      label = 'Agente IA';
+      label = 'AI Agent';
       colorClass = 'bg-violet-500/10 text-violet-400 border-violet-500/30';
       Icon = Cpu;
       break;
     case 'federation_peer':
-      label = 'Federación P2P';
+      label = 'P2P Federation';
       colorClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
       Icon = Network;
       break;
@@ -51,13 +51,13 @@ export function ProvenanceBadge({ provenance = 'unverified', className = '', sho
       Icon = Terminal;
       break;
     case 'unverified':
-      label = 'No Verificado';
+      label = 'Unverified';
       colorClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
       Icon = HelpCircle;
       break;
     default:
       if (provenance.startsWith('consolidated')) {
-        label = 'Consolidado';
+        label = 'Consolidated';
         colorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
         Icon = Sparkles;
       }

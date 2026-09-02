@@ -70,7 +70,7 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
         <Suspense fallback={
           <div className="flex items-center justify-center py-12 text-slate-500 text-xs font-mono gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            <span>Cargando panel de guilds...</span>
+            <span>Loading guilds panel...</span>
           </div>
         }>
           {subTab === 'guilds' && (

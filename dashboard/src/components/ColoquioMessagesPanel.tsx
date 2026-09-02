@@ -43,9 +43,9 @@ function VirtualMessageList({ messages, renderItem, scrollToBottom, onScrollToBo
 }
 
 const QUICK_TEMPLATES = [
-  { label: '\u{1F9F9} Grafo', text: 'Consolida el grafo de conocimiento SilvaDB' },
-  { label: '\u{1F4CA} Status', text: 'Dadme un reporte de estado de la flota' },
-  { label: '\u{1F9EC} Reindex', text: 'Reindexa SilvaDB y regenera embeddings' },
+  { label: '🧹 Graph', text: 'Consolidate SilvaDB knowledge graph' },
+  { label: '📊 Status', text: 'Provide fleet status report' },
+  { label: '🧬 Reindex', text: 'Reindex SilvaDB and regenerate embeddings' },
 ];
 
 function parseMarkdown(text: string): string {
@@ -292,7 +292,7 @@ export function ColoquioMessagesPanel({
                   <details className="group/details bg-slate-950/40 border border-indigo-950/30 rounded-xl p-2.5 my-2 text-[11px] text-slate-400 cursor-pointer" open>
                     <summary className="font-semibold text-indigo-400/80 hover:text-indigo-300 transition-colors list-none flex items-center gap-1.5 focus:outline-none">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                      🧠 Razonando
+                      🧠 Reasoning
                     </summary>
                     <div className="mt-2 pl-3 border-l border-indigo-500/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[10px] select-text cursor-text" dangerouslySetInnerHTML={{
                       __html: parseMarkdown(thoughtContent)
@@ -304,7 +304,7 @@ export function ColoquioMessagesPanel({
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
                     <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                      Plan pendiente de aprobación humana
+                      Plan awaiting human approval
                     </span>
                     <div className="flex gap-2">
                       <button
@@ -318,7 +318,7 @@ export function ColoquioMessagesPanel({
                         }}
                         className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-slate-50 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
-                        <Network className="w-3 h-3" /> Visualizar en Pizarra
+                        <Network className="w-3 h-3" /> Visualize on Whiteboard
                       </button>
                       <button
                         onClick={async () => {
@@ -326,7 +326,7 @@ export function ColoquioMessagesPanel({
                             await bridge.postColoquioMessage(selectedId!, {
                               author_id: authorId || 'jose',
                               role: 'human',
-                              content: `[APROBADO] #${planTurn}`,
+                              content: `[APPROVED] #${planTurn}`,
                               metadata: '{}'
                             });
                             fetchThread();
@@ -334,7 +334,7 @@ export function ColoquioMessagesPanel({
                         }}
                         className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
-                        <Check className="w-3 h-3 stroke-[3]" /> Aprobar e Iniciar
+                        <Check className="w-3 h-3 stroke-[3]" /> Approve & Start
                       </button>
                     </div>
                   </div>
@@ -425,7 +425,7 @@ export function ColoquioMessagesPanel({
       </div>
       {allMessages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-600">
-          <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Canal vacío</p>
+          <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Empty channel</p>
         </div>
       ) : (
         <VirtualMessageList messages={filteredMessages} renderItem={renderMessage}
@@ -443,11 +443,11 @@ export function ColoquioMessagesPanel({
       )}
       <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Como:</span>
+          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">As:</span>
           <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
           <button onClick={() => setShowTemplates(v => !v)} className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
-            <Sparkles className="w-3 h-3" />{showTemplates ? 'Ocultar' : 'Plantillas'}
+            <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
           </button>
         </div>
         {showTemplates && (
@@ -471,20 +471,20 @@ export function ColoquioMessagesPanel({
         )}
         <div className="flex gap-2 items-end">
           <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-xl text-slate-400 hover:text-slate-200 transition-all shrink-0" title="Adjuntar">
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-xl text-slate-400 hover:text-slate-200 transition-all shrink-0" title="Attach">
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
           </button>
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
             className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
               isDragging ? 'border-amber-500 bg-amber-950/20 ring-2 ring-amber-500/30' : 'border-slate-700/60')}
-            rows={3} placeholder="Escribe un mensaje... Shift+Enter para saltar linea" value={draft}
+            rows={3} placeholder="Write a message... Shift+Enter for new line" value={draft}
             onChange={e => {
               setDraft(e.target.value);
               const now = Date.now();
               if (now - lastTypingTimeRef.current > 2000 && selectedId && bridge) {
                 lastTypingTimeRef.current = now;
-                bridge.postColoquioTyping(selectedId, authorId || 'jose', 'escribiendo...');
+                bridge.postColoquioTyping(selectedId, authorId || 'jose', 'typing...');
               }
             }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postMessage(); } }}

@@ -176,7 +176,7 @@ export function VisionTab({ bridge, notify }: Props) {
         <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-xs text-blue-300">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4 flex-shrink-0" />
-            <span>Modelo SmolVLM2 cargado — análisis en modo degradado (fallback OCR disponible)</span>
+            <span>SmolVLM2 model loaded — running in degraded mode (fallback OCR available)</span>
           </div>
         </div>
       )}
@@ -206,8 +206,8 @@ export function VisionTab({ bridge, notify }: Props) {
               <img src={imagePreview} className="absolute inset-0 w-full h-full object-contain opacity-10 pointer-events-none" alt="" />
             )}
             <ImageIcon className={cn("w-8 h-8 mx-auto mb-2 relative z-10 transition-colors", isDragging ? "text-emerald-500" : "text-slate-600")} />
-            <p className="text-slate-400 text-sm relative z-10 font-medium">{isDragging ? 'Suelta la imagen aquí' : 'Arrastra una imagen aquí'}</p>
-            <p className="text-slate-600 text-xs mt-1 relative z-10">o escribe la ruta abajo</p>
+            <p className="text-slate-400 text-sm relative z-10 font-medium">{isDragging ? 'Drop image here' : 'Drag and drop an image here'}</p>
+            <p className="text-slate-600 text-xs mt-1 relative z-10">or enter path below</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -298,7 +298,7 @@ export function VisionTab({ bridge, notify }: Props) {
                 {/* SilvaDB node_id badge */}
                 {parsedResult.node_id && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Nodo SilvaDB: {parsedResult.node_id.slice(0, 12)}...
+                    SilvaDB Node: {parsedResult.node_id.slice(0, 12)}...
                   </span>
                 )}
                 {/* Triples count */}

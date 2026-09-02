@@ -300,13 +300,13 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
     <div ref={containerRef} className="relative flex-1 min-h-0 rounded-xl border border-slate-800/80 overflow-hidden" style={{ background: CORTEX_BACKGROUND }}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs text-slate-500 font-mono z-10">
-          <RefreshCw className="w-4 h-4 animate-spin" /> Consultando SilvaDB...
+          <RefreshCw className="w-4 h-4 animate-spin" /> Querying SilvaDB...
         </div>
       )}
 
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2 font-mono text-[10px] text-slate-400">
         <span className="px-2 py-1 rounded bg-background/40 backdrop-blur border border-slate-800/60">
-          {nodeCount} nodos · {linkCount} conexiones
+          {nodeCount} nodes · {linkCount} edges
         </span>
       </div>
 
@@ -314,7 +314,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
         <button
           type="button"
           onClick={() => setPaused((p) => !p)}
-          title={paused ? 'Reanudar vida ambiental' : 'Pausar vida ambiental'}
+          title={paused ? 'Resume ambient life' : 'Pause ambient life'}
           className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-amber-300 hover:border-amber-500/40 transition-colors cursor-pointer"
         >
           {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
@@ -322,7 +322,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
         <button
           type="button"
           onClick={() => fgRef.current?.zoomToFit?.(600, 40)}
-          title="Encuadrar todo"
+          title="Fit to view"
           className="p-1.5 rounded bg-background/40 backdrop-blur border border-slate-800/60 text-slate-400 hover:text-amber-300 hover:border-amber-500/40 transition-colors cursor-pointer"
         >
           <Maximize2 className="w-3.5 h-3.5" />
@@ -337,7 +337,7 @@ export function KnowledgeCortex3D({ bridge, events, onNodeClick }: Props) {
         backgroundColor={CORTEX_BACKGROUND}
         nodeThreeObject={nodeThreeObject}
         nodeThreeObjectExtend={false}
-        nodeLabel={(n: any) => `${n.node_type || n.type || 'nodo'} · ${(n.content || n.label || n.id || '').toString().slice(0, 80)}`}
+        nodeLabel={(n: any) => `${n.node_type || n.type || 'node'} · ${(n.content || n.label || n.id || '').toString().slice(0, 80)}`}
         linkColor={(link: any) => {
           const isConnected = isLinkConnectedToActiveNode(link);
           if (hoverNode || selectedNode) {

@@ -54,9 +54,9 @@ export default function A2aPanel({ notify }: Props) {
       const res = await bridge.getA2aTaskStatus(taskId.trim());
       setSearchedTask(res);
     } catch (e: any) {
-      console.error(`Error al consultar tarea A2A '${taskId}':`, e.message);
+      console.error(`Error querying A2A task '${taskId}':`, e.message);
       setSearchedTask(null);
-      setTaskError(`No se encontró la tarea A2A '${taskId.trim()}' o la consulta falló: ${e.message}`);
+      setTaskError(`A2A task '${taskId.trim()}' not found or query failed: ${e.message}`);
     } finally {
       setLoadingTask(false);
     }
@@ -67,10 +67,10 @@ export default function A2aPanel({ notify }: Props) {
     setActingApprovalId(id);
     try {
       await bridge.approveAction(id);
-      notify(`Acción aprobada correctamente`, 'info');
+      notify(`Action approved successfully`, 'info');
       await refreshData();
     } catch (e: any) {
-      notify(`Error al aprobar: ${e.message}`, 'error');
+      notify(`Approval error: ${e.message}`, 'error');
     } finally {
       setActingApprovalId(null);
     }
@@ -81,10 +81,10 @@ export default function A2aPanel({ notify }: Props) {
     setActingApprovalId(id);
     try {
       await bridge.rejectAction(id);
-      notify(`Acción rechazada correctamente`, 'info');
+      notify(`Action rejected successfully`, 'info');
       await refreshData();
     } catch (e: any) {
-      notify(`Error al rechazar: ${e.message}`, 'error');
+      notify(`Rejection error: ${e.message}`, 'error');
     } finally {
       setActingApprovalId(null);
     }
@@ -111,7 +111,7 @@ export default function A2aPanel({ notify }: Props) {
               onClick={fetchAgentCard}
               disabled={loadingCard}
               className="p-1 hover:bg-slate-800 rounded transition-colors text-slate-500 hover:text-slate-200 cursor-pointer disabled:opacity-50"
-              title="Recargar Agent Card"
+              title="Reload Agent Card"
             >
               <RefreshCw className={cn("w-3.5 h-3.5", loadingCard && "animate-spin")} />
             </button>
@@ -119,7 +119,7 @@ export default function A2aPanel({ notify }: Props) {
 
           {loadingCard ? (
             <div className="py-12 flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
-              <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" /> Cargando manifiesto...
+              <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" /> Loading manifest...
             </div>
           ) : card ? (
             <div className="space-y-4 text-xs">
@@ -168,7 +168,7 @@ export default function A2aPanel({ notify }: Props) {
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-600 italic">No se pudo cargar el manifiesto A2A</div>
+            <div className="py-8 text-center text-slate-600 italic">Could not load A2A manifest</div>
           )}
         </div>
 
@@ -213,7 +213,7 @@ export default function A2aPanel({ notify }: Props) {
 
           {loadingTask ? (
             <div className="py-12 flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" /> Consultando estado de tarea...
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" /> Querying task status...
             </div>
           ) : searchedTask ? (
             <div className="space-y-4 text-xs border-t border-slate-800/50 pt-4">
@@ -313,14 +313,14 @@ export default function A2aPanel({ notify }: Props) {
                     disabled={actingApprovalId !== null}
                     className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 text-red-400 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" /> Rechazar
+                    <X className="w-3.5 h-3.5" /> Reject
                   </button>
                   <button
                     onClick={() => handleApprove(app.id)}
                     disabled={actingApprovalId !== null}
                     className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 text-emerald-400 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                   >
-                    <Check className="w-3.5 h-3.5" /> Autorizar
+                    <Check className="w-3.5 h-3.5" /> Approve
                   </button>
                 </div>
               </div>

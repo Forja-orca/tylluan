@@ -19,15 +19,15 @@ export function useColoquioMentions({ notify }: UseColoquioMentionsOptions) {
     const handleMention = (e: Event) => {
       const rawDetail = (e as CustomEvent<unknown>).detail
       if (!rawDetail || typeof rawDetail !== 'object') return
-      const { agent_id, channel = 'coloquio', message = '', sender = 'alguien' } = rawDetail as MentionDetail
+      const { agent_id, channel = 'coloquio', message = '', sender = 'someone' } = rawDetail as MentionDetail
 
       if (
         agent_id === 'jose' ||
         agent_id === 'antigravity' ||
         agent_id === 'all'
       ) {
-        const fullMsg = `${sender} en #${channel}: "${message}"`
-        notify(fullMsg, 'info', 'Mención Recibida')
+        const fullMsg = `${sender} in #${channel}: "${message}"`
+        notify(fullMsg, 'info', 'Mention Received')
 
         addMention({ sender, channel, message })
         setColoquioUnread((prev) => prev + 1)

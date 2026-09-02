@@ -52,13 +52,13 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     try {
       const res = await bridge.repairDoctor(target, name);
       if (res && res.success) {
-        notify(res.message || `Reparación de ${name || target} completada exitosamente`, 'info');
+        notify(res.message || `Repair of ${name || target} completed successfully`, 'info');
         await loadReport();
       } else {
-        notify(res?.message || `Fallo en la reparación de ${name || target}`, 'error');
+        notify(res?.message || `Failed to repair ${name || target}`, 'error');
       }
     } catch (err: any) {
-      notify(`Error ejecutando reparación: ${err.message}`, 'error');
+      notify(`Error executing repair: ${err.message}`, 'error');
     } finally {
       setRepairing(false);
     }

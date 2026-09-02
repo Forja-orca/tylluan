@@ -65,10 +65,10 @@ export const TrustConsoleTab: React.FC = () => {
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-bold font-sans flex items-center gap-3 text-amber-400">
-            <Shield className="w-7 h-7" /> Trust Console — Capa de Confianza & Continuidad
+            <Shield className="w-7 h-7" /> Trust Console — Trust & Continuity Layer
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Monitor de runtime, detección de version drift (M40-P6) y contratos autodocumentados de guilds (M40-P1).
+            Runtime monitor, version drift detection (M40-P6) and guild self-documented contracts (M40-P1).
           </p>
         </div>
         <button
@@ -77,7 +77,7 @@ export const TrustConsoleTab: React.FC = () => {
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-300 transition"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {lastRefreshed ? `Actualizado ${lastRefreshed}` : 'Actualizar'}
+          {lastRefreshed ? `Updated ${lastRefreshed}` : 'Refresh'}
         </button>
       </div>
 
@@ -86,48 +86,48 @@ export const TrustConsoleTab: React.FC = () => {
         {/* Kernel Health */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado del Kernel</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kernel Status</span>
             <CheckCircle className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">{health?.status?.toUpperCase() || '—'}</div>
-          <div className="text-xs text-slate-400 mt-2">Versión: <span className="font-mono text-slate-200">{health?.version || '—'}</span></div>
+          <div className="text-xs text-slate-400 mt-2">Version: <span className="font-mono text-slate-200">{health?.version || '—'}</span></div>
         </div>
 
         {/* Commit Hash */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Commit Cargado (Runtime)</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Loaded Commit (Runtime)</span>
             <Terminal className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-xl font-mono text-amber-400 font-bold">{health?.commit?.slice(0, 12) || '—'}</div>
-          <div className="text-xs text-slate-400 mt-2">Commit cargado por el kernel en runtime</div>
+          <div className="text-xs text-slate-400 mt-2">Commit loaded by the runtime kernel</div>
         </div>
 
         {/* MCP Spec & Extensiones */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">MCP Spec & Extensiones</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">MCP Spec & Extensions</span>
             <Layers className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">SSE</div>
-          <div className="text-xs text-slate-400 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensiones: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
+          <div className="text-xs text-slate-400 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensions: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
         </div>
       </div>
 
       {/* Guild Self-Documented Contracts (M40-P1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
         <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-4">
-          <FileCode className="w-5 h-5 text-amber-400" /> Contratos Autodocumentados de Guilds (M40-P1)
+          <FileCode className="w-5 h-5 text-amber-400" /> Guild Self-Documented Contracts (M40-P1)
         </h2>
         {contracts.length === 0 ? (
-          <div className="text-sm text-slate-500 py-4">{loading ? 'Cargando contratos de guilds...' : 'Sin guilds registradas'}</div>
+          <div className="text-sm text-slate-500 py-4">{loading ? 'Loading guild contracts...' : 'No guilds registered'}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400">
                   <th className="py-2 px-3">Guild</th>
-                  <th className="py-2 px-3">Estado</th>
+                  <th className="py-2 px-3">Status</th>
                   <th className="py-2 px-3">Launcher</th>
                   <th className="py-2 px-3">Tools</th>
                   <th className="py-2 px-3">Agent Roles</th>
@@ -152,7 +152,7 @@ export const TrustConsoleTab: React.FC = () => {
                       {g.always_on && <span className="text-[9px] text-slate-500 ml-1">always_on</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
-                      {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600">todos</span>}
+                      {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600">all</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
                       {g.restarts_5m}
@@ -169,10 +169,10 @@ export const TrustConsoleTab: React.FC = () => {
       {/* Memory Status & Evidence Matrix (M40-P4) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
         <h2 className="text-lg font-semibold font-sans text-slate-200 flex items-center gap-2 mb-3">
-          <Activity className="w-5 h-5 text-emerald-400" /> Matriz de Estados de Memoria & Procedencia (M40-P4)
+          <Activity className="w-5 h-5 text-emerald-400" /> Memory Status & Evidence Matrix (M40-P4)
         </h2>
         <p className="text-xs text-slate-400 mb-4">
-          Estado explícito derivado dinámicamente sobre SilvaDB en cada llamada a <span className="font-mono text-amber-400">tylluan_recall</span>:
+          Explicit status dynamically derived on SilvaDB on each call to <span className="font-mono text-amber-400">tylluan_recall</span>:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
           <div className="p-3 bg-emerald-700/40 border border-emerald-700/60 rounded-lg">
@@ -180,7 +180,7 @@ export const TrustConsoleTab: React.FC = () => {
               <span className="font-bold text-emerald-400">status="confirmed"</span>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             </div>
-            <p className="text-[11px] text-slate-400 font-sans">Hecho verificado, alta confianza, sin conflicto activo.</p>
+            <p className="text-[11px] text-slate-400 font-sans">Verified fact, high confidence, no active conflict.</p>
           </div>
 
           <div className="p-3 bg-amber-600/40 border border-amber-700/60 rounded-lg">
@@ -188,7 +188,7 @@ export const TrustConsoleTab: React.FC = () => {
               <span className="font-bold text-amber-400">status="provisional"</span>
               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
             </div>
-            <p className="text-[11px] text-slate-400 font-sans">Registro reciente o bajo nivel de confianza inicial.</p>
+            <p className="text-[11px] text-slate-400 font-sans">Recent entry or initial low confidence level.</p>
           </div>
 
           <div className="p-3 bg-rose-700/40 border border-rose-700/60 rounded-lg">
@@ -196,7 +196,7 @@ export const TrustConsoleTab: React.FC = () => {
               <span className="font-bold text-rose-400">status="contradicted"</span>
               <span className="w-2 h-2 rounded-full bg-rose-400"></span>
             </div>
-            <p className="text-[11px] text-slate-400 font-sans">En conflicto explícito registrado en SilvaDB.</p>
+            <p className="text-[11px] text-slate-400 font-sans">Under explicit conflict registered in SilvaDB.</p>
           </div>
 
           <div className="p-3 bg-slate-800/40 border border-slate-700/60 rounded-lg">
@@ -204,7 +204,7 @@ export const TrustConsoleTab: React.FC = () => {
               <span className="font-bold text-slate-400">status="superseded"</span>
               <span className="w-2 h-2 rounded-full bg-slate-500"></span>
             </div>
-            <p className="text-[11px] text-slate-400 font-sans">Hecho histórico superado por una versión más reciente.</p>
+            <p className="text-[11px] text-slate-400 font-sans">Historical fact superseded by a more recent version.</p>
           </div>
         </div>
       </div>

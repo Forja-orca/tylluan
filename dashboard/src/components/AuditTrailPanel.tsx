@@ -63,7 +63,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       console.error("Audit Trail fetch error:", err.message);
       setEntries([]);
       setTotal(0);
-      setError(`Error consultando registros de auditoría: ${err.message}`);
+      setError(`Error querying audit trail records: ${err.message}`);
     } finally {
       setLoading(false);
     }

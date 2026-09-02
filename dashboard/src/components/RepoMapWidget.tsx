@@ -75,12 +75,12 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
       if (res && (res.top_level_dirs || res.total_files !== undefined)) {
         setData(res);
       } else {
-        throw new Error("Respuesta de mapa de código inválida del servidor");
+        throw new Error("Invalid repository map response from server");
       }
     } catch (err: any) {
       console.error("Repo Map API error:", err.message);
       setData(null);
-      setError(`Error obteniendo topología del proyecto (GET /api/v1/repo-map): ${err.message}`);
+      setError(`Failed to fetch project topology (GET /api/v1/repo-map): ${err.message}`);
     } finally {
       setLoading(false);
     }

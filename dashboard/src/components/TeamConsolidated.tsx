@@ -56,7 +56,7 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
         <Suspense fallback={
           <div className="flex-1 flex items-center justify-center py-12 text-slate-500 text-xs font-mono gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            <span>Cargando módulo de equipo...</span>
+            <span>Loading team module...</span>
           </div>
         }>
           {subTab === 'fleet' && (

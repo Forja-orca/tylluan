@@ -328,8 +328,8 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                   </div>
                 ) : (
                   <div className="text-xs text-slate-400">
-                    <p className="font-bold">Arrastra un archivo aquí</p>
-                    <p className="text-[10px] text-slate-600">o haz clic para seleccionar</p>
+                    <p className="font-bold">Drag and drop a file here</p>
+                    <p className="text-[10px] text-slate-600">or click to browse</p>
                   </div>
                 )}
               </div>

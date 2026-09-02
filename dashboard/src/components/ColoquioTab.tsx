@@ -341,22 +341,22 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         <div className="flex items-center gap-2.5">
           <MessageSquare className="w-4 h-4 text-indigo-400" />
           <span className="text-sm font-semibold text-slate-100">Coloquio</span>
-          <span className="text-[10px] text-slate-500 hidden sm:block">chat grupal de investigación frontera</span>
+          <span className="text-[10px] text-slate-500 hidden sm:block">frontier research group chat</span>
           {totalUnread > 0 && (
             <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold">
-              {totalUnread} nuevo{totalUnread !== 1 ? 's' : ''}
+              {totalUnread} unread
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           {totalUnread > 0 && (
             <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-all cursor-pointer">
-              Todo leído
+              Mark all read
             </button>
           )}
           <button onClick={() => setShowCanvas(v => !v)}
             className={cn('p-1.5 rounded-lg transition-all mr-1.5 cursor-pointer', showCanvas ? 'bg-violet-500/10 text-violet-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300')}
-            title="Lienzo Blackboard">
+            title="Blackboard Canvas">
             <Sparkles className="w-3.5 h-3.5" />
           </button>
           <button onClick={() => setShowAgentPanel(v => !v)}
@@ -440,14 +440,14 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
             <div
               onMouseDown={startResizing}
               className="w-1 bg-slate-800/85 hover:bg-indigo-500 transition-colors cursor-col-resize select-none shrink-0"
-              title="Arrastra para redimensionar"
+              title="Drag to resize"
             />
           )}
 
           {/* Canvas View */}
           {showCanvas && selectedId && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-500 text-xs">Cargando canvas...</div>}>
+              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-500 text-xs">Loading canvas...</div>}>
                 <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
               </Suspense>
             </div>

@@ -140,13 +140,13 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
   }, [selectedAgentId, bridge]);
 
   const handleDeleteMemories = async (agentId: string) => {
-    if (!bridge || !confirm(`¿Estás seguro de que deseas que el sistema olvide todo sobre ${agentId}? Esta acción es irreversible.`)) return;
+    if (!bridge || !confirm(`Are you sure you want the system to forget everything about ${agentId}? This action is irreversible.`)) return;
     try {
       await bridge.deleteAgentMemories(agentId);
-      notify(`Memoria de ${agentId} eliminada`, 'info');
+      notify(`Memory for ${agentId} deleted`, 'info');
       setSelectedAgentId(null);
     } catch (e) {
-      notify(`Error al borrar memoria: ${e}`, 'error');
+      notify(`Error deleting memory: ${e}`, 'error');
     }
   };
 
@@ -159,14 +159,14 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
         method: 'POST',
         body: JSON.stringify({ 
           tool: 'tylluan_think', 
-          query: 'quién soy', 
+          query: 'whoami', 
           agent_id: selectedAgentId 
         })
       });
       const text = res?.result || res?.response || (Array.isArray(res?.content) ? res.content[0]?.text : null) || JSON.stringify(res);
       setAskIdentityResponse(text);
     } catch (e) {
-      notify('Error al consultar identidad', 'error');
+      notify('Error querying identity', 'error');
     } finally {
       setAskingIdentity(false);
     }
@@ -365,17 +365,17 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               <section className="space-y-3">
                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                  <FileText className="w-3 h-3" /> Resumen Narrativo
+                  <FileText className="w-3 h-3" /> Narrative Summary
                 </h4>
                 <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 text-sm text-slate-300 italic leading-relaxed">
-                  {summary?.summary || "Sin resumen narrativo aún. El agente está en proceso de autodescubrimiento."}
+                  {summary?.summary || "No narrative summary yet. The agent is in the process of self-discovery."}
                 </div>
               </section>
 
               {profiles.find(p => p.agent_id === selectedAgentId) && (
                 <section className="space-y-3">
                   <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <Zap className="w-3 h-3 text-amber-400" /> Perfil de Competencias
+                    <Zap className="w-3 h-3 text-amber-400" /> Competencies Profile
                   </h4>
                   <div className="grid grid-cols-1 gap-2">
                     {Object.entries(profiles.find(p => p.agent_id === selectedAgentId)!.competencies).map(([guild, value]) => (
@@ -397,11 +397,11 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                 <section className="space-y-3 animate-in zoom-in duration-300">
                   <div className="p-4 rounded-xl bg-violet-950/20 border border-violet-500/40 shadow-xl shadow-violet-500/5">
                     <h4 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                      <Zap className="w-3 h-3" /> Respuesta del Cortex
+                      <Zap className="w-3 h-3" /> Cortex Response
                     </h4>
                     {askingIdentity ? (
                       <div className="flex items-center gap-3 py-2 text-slate-500 italic text-sm">
-                        <RefreshCw className="w-4 h-4 animate-spin" /> Analizando el pasado...
+                        <RefreshCw className="w-4 h-4 animate-spin" /> Analyzing past context...
                       </div>
                     ) : (
                       <div className="text-sm text-slate-100 leading-relaxed font-serif">
@@ -419,7 +419,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                 onClick={() => handleDeleteMemories(selectedAgentId)}
                 className="w-full py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-bold uppercase tracking-widest hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
               >
-                <Trash2 className="w-4 h-4" /> Olvidar Agente y Reiniciar Identidad
+                <Trash2 className="w-4 h-4" /> Forget Agent and Reset Identity
               </button>
             </div>
           </div>
@@ -469,10 +469,10 @@ export function CollectiveTab() {
       if (anySuccess) {
         setError(null);
       } else {
-        setError('No se puede conectar al kernel');
+        setError('Cannot connect to kernel');
       }
     } catch (e) {
-      setError('No se puede conectar al kernel');
+      setError('Cannot connect to kernel');
     }
   }, [bridge]);
 
@@ -499,26 +499,26 @@ export function CollectiveTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-emerald-400">{pulse?.active_count ?? '—'}</div>
-          <div className="text-xs text-slate-400 mt-1">Agentes activos</div>
+          <div className="text-xs text-slate-400 mt-1">Active Agents</div>
         </div>
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-blue-400">{pulse?.broadcasts_last_hour ?? '—'}</div>
-          <div className="text-xs text-slate-400 mt-1">Broadcasts última hora</div>
+          <div className="text-xs text-slate-400 mt-1">Broadcasts Last Hour</div>
         </div>
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-violet-400">{pulse?.graph.nodes ?? '—'}</div>
-          <div className="text-xs text-slate-400 mt-1">Nodos en grafo</div>
+          <div className="text-xs text-slate-400 mt-1">Graph Nodes</div>
         </div>
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
           <div className="text-2xl font-bold text-amber-400">{pulse?.graph.edges ?? '—'}</div>
-          <div className="text-xs text-slate-400 mt-1">Conexiones</div>
+          <div className="text-xs text-slate-400 mt-1">Connections</div>
         </div>
       </div>
 
       {/* Active agents badges */}
       {pulse && pulse.active_agents.length > 0 && (
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-          <div className="text-xs text-slate-400 mb-2 uppercase tracking-wide">Agentes en línea</div>
+          <div className="text-xs text-slate-400 mb-2 uppercase tracking-wide">Agents Online</div>
           <div className="flex flex-wrap gap-2">
             {pulse.active_agents.map(a => (
               <span key={a} className="px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1"
@@ -613,7 +613,7 @@ export function CollectiveTab() {
           </div>
           <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-800">
             {timeline.length === 0 && (
-              <div className="p-12 text-center text-slate-600 text-sm italic">Sin actividad reciente</div>
+              <div className="p-12 text-center text-slate-600 text-sm italic">No recent activity</div>
             )}
             {timeline.map((ev, i) => (
               <div key={ev.id + i} className="p-4 flex items-start gap-4 hover:bg-slate-800/50 transition-colors">

@@ -46,7 +46,7 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
   const isGpu = hasRealData && GPU_PROVIDERS.has(activeProvider!);
 
   const label = !hasRealData
-    ? 'No detectado'
+    ? 'Not detected'
     : isGpu
     ? `GPU (${shortProvider(activeProvider)})`
     : 'CPU';
@@ -54,8 +54,8 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
   const tooltip = !hasRealData
     ? visionEntry?.error
       ? `Guild vision: ${visionEntry.error}`
-      : 'Sin datos reales aún — endpoint no respondió o guild sin arrancar'
-    : `Provider activo: ${activeProvider}${status?.configured_device ? ` | Configurado: ${status.configured_device}` : ''}${visionEntry?.model_loaded === false ? ' (modelo aún no cargado, detección en frío)' : ''}`;
+      : 'No telemetry yet — endpoint did not respond or guild not running'
+    : `Active provider: ${activeProvider}${status?.configured_device ? ` | Configured: ${status.configured_device}` : ''}${visionEntry?.model_loaded === false ? ' (model not loaded yet, cold detection)' : ''}`;
 
   return (
     <div

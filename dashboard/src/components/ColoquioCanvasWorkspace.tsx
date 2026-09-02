@@ -242,7 +242,7 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
           <div className="flex flex-col max-h-32 overflow-y-auto px-2 pb-2 gap-1">
             {artifacts.length === 0 && (
               <p className="text-[11px] text-slate-500 px-1 py-2">
-                Sin bloques de código en el canal. Pega código en el chat y aparecerá aquí.
+                No code snippets in channel. Paste code in chat and it will appear here.
               </p>
             )}
             {artifacts.map(a => (
@@ -280,8 +280,8 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
           <div className="flex flex-col items-center justify-center h-full bg-slate-900/60 gap-3">
             <Monitor className="w-10 h-10 text-slate-700" />
             <p className="text-xs text-slate-500 text-center px-6">
-              Pega bloques de código HTML/JS/CSS en el chat.<br />
-              Aparecerán aquí para ejecutar en vivo.
+              Paste HTML/JS/CSS code blocks in chat.<br />
+              They will appear here to run live.
             </p>
           </div>
         )}
@@ -291,13 +291,13 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
       {selected && (
         <div className="shrink-0 border-t border-slate-700/60 bg-slate-900/80 px-3 py-1.5 flex items-center gap-2">
           <span className="text-[10px] text-slate-500 font-mono flex-1 truncate">
-            {selected.lang || 'text'} · {selected.code.split('\n').length} líneas
+            {selected.lang || 'text'} · {selected.code.split('\n').length} lines
           </span>
           <button
             onClick={() => navigator.clipboard.writeText(selected.code)}
             className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
           >
-            <Copy className="w-3 h-3" /> copiar
+            <Copy className="w-3 h-3" /> copy
           </button>
         </div>
       )}
@@ -379,7 +379,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   };
 
   const deleteDoc = async (id: string, title: string) => {
-    if (!confirm(`¿Borrar "${title}"? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`Delete "${title}"? This action cannot be undone.`)) return;
     if (!bridge) return;
     await bridge.fetchRaw(`${BASE}/${id}`, { method: 'DELETE' });
     setDocs(prev => prev.filter(d => d.doc_id !== id));
@@ -492,7 +492,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   const restoreVersion = async () => {
     if (selectedVersionIdx === null || !selectedDocId) return;
     const snap = versions[selectedVersionIdx];
-    if (!confirm(`¿Restaurar el documento al estado de la versión ${snap.version}?`)) return;
+    if (!confirm(`Restore document to state of version ${snap.version}?`)) return;
     await saveDoc(selectedDocId, snap.title, versionContent);
     await loadDocs();
     selectDoc(selectedDocId);
@@ -550,10 +550,10 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
     conflict: 'text-rose-400',
   };
   const STATUS_LABEL: Record<string, string> = {
-    saved: 'guardado',
-    saving: 'guardando...',
-    unsaved: 'sin guardar',
-    conflict: '⚠ conflicto',
+    saved: 'saved',
+    saving: 'saving...',
+    unsaved: 'unsaved',
+    conflict: '⚠ conflict',
   };
 
   if (showHistory && selectedDocId) {
@@ -565,12 +565,12 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
         {/* Sidebar Timeline */}
         <div className="w-40 shrink-0 border-r border-slate-700/60 bg-slate-900/60 flex flex-col">
           <div className="px-2.5 py-2 border-b border-slate-700/60 flex items-center justify-between">
-            <span className="text-[10px] font-medium text-slate-400">Historial</span>
+            <span className="text-[10px] font-medium text-slate-400">History</span>
             <button
               onClick={() => setShowHistory(false)}
               className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
             >
-              Cerrar
+              Close
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -592,7 +592,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
                     {new Date(v.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400 truncate">por {v.updated_by}</span>
+                <span className="text-[10px] text-slate-400 truncate">by {v.updated_by}</span>
               </button>
             ))}
           </div>
@@ -609,7 +609,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
                 onClick={restoreVersion}
                 className="bg-emerald-600 hover:bg-emerald-500 text-slate-50 text-[10px] font-semibold px-2 py-0.5 rounded-md cursor-pointer"
               >
-                Restaurar esta versión
+                Restore this version
               </button>
             </div>
           )}
@@ -638,9 +638,9 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
           {versions.length > 1 && (
             <div className="shrink-0 p-3 border-t border-slate-800 bg-slate-900/40 flex flex-col gap-1">
               <div className="flex justify-between text-[10px] font-mono text-slate-500">
-                <span>v{versions[versions.length - 1].version} (inicial)</span>
-                <span className="text-indigo-400 font-semibold">Línea de tiempo: v{versions[selectedVersionIdx ?? 0]?.version}</span>
-                <span>v{versions[0].version} (actual)</span>
+                <span>v{versions[versions.length - 1].version} (initial)</span>
+                <span className="text-indigo-400 font-semibold">Timeline: v{versions[selectedVersionIdx ?? 0]?.version}</span>
+                <span>v{versions[0].version} (current)</span>
               </div>
               <input
                 type="range"
@@ -667,14 +667,14 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
       {/* Doc list sidebar */}
       <div className="w-36 shrink-0 border-r border-slate-700/60 bg-slate-900/60 flex flex-col">
         <div className="px-2 py-2 border-b border-slate-700/60 flex items-center justify-between">
-          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Documentos</span>
-            <button onClick={() => setCreating(p => !p)} className="text-slate-500 hover:text-indigo-400 text-lg leading-none cursor-pointer" title="Nuevo doc">+</button>
+          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Documents</span>
+            <button onClick={() => setCreating(p => !p)} className="text-slate-500 hover:text-indigo-400 text-lg leading-none cursor-pointer" title="New doc">+</button>
         </div>
         {creating && (
           <div className="px-2 py-1.5 border-b border-slate-700/60 flex gap-1">
             <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createDoc()}
-              placeholder="Título..." className="flex-1 bg-slate-800 border border-indigo-500/40 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none min-w-0" />
+              placeholder="Title..." className="flex-1 bg-slate-800 border border-indigo-500/40 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none min-w-0" />
               <button onClick={createDoc} className="text-[10px] bg-indigo-600 text-slate-50 px-1.5 rounded-md cursor-pointer">✓</button>
           </div>
         )}
@@ -686,15 +686,15 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
               <button onClick={() => selectDoc(d.doc_id)}
                 className={cn('flex-1 text-left px-2 py-2 text-[10px] cursor-pointer truncate',
                   selectedDocId === d.doc_id ? 'text-indigo-300' : 'text-slate-400')}>
-                {d.title || 'Sin título'}
+                {d.title || 'Untitled'}
               </button>
               <button onClick={() => deleteDoc(d.doc_id, d.title)}
                 className="opacity-0 group-hover:opacity-100 pr-1.5 text-slate-600 hover:text-rose-400 cursor-pointer text-xs leading-none shrink-0 transition-opacity"
-                title="Borrar documento">×</button>
+                title="Delete document">×</button>
             </div>
           ))}
           {docs.length === 0 && !creating && (
-              <p className="text-[10px] text-slate-600 p-3 text-center">Sin documentos.<br />Pulsa + para crear uno.</p>
+              <p className="text-[10px] text-slate-600 p-3 text-center">No documents.<br />Click + to create one.</p>
           )}
         </div>
       </div>
@@ -706,13 +706,13 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
             <div className="shrink-0 px-3 py-1.5 border-b border-slate-700/60 bg-slate-900/80 flex items-center gap-2">
               <input value={title} onChange={e => onTitleChange(e.target.value)}
                 className="flex-1 bg-transparent text-xs font-bold text-slate-200 outline-none placeholder-slate-600 min-w-0"
-                placeholder="Título del documento..." />
+                placeholder="Document title..." />
               <span className={cn('text-[10px] font-mono shrink-0', STATUS_COLOR[saveStatus])}>{STATUS_LABEL[saveStatus]}</span>
               {lastEditor && saveStatus === 'saved' && (
-                <span className="text-[10px] text-slate-600 shrink-0">por {lastEditor}</span>
+                <span className="text-[10px] text-slate-600 shrink-0">by {lastEditor}</span>
               )}
               {saveStatus === 'conflict' && (
-                  <button onClick={() => loadDoc(selectedDocId, true)} className="text-[10px] text-rose-400 hover:text-rose-300 cursor-pointer shrink-0">recargar</button>
+                  <button onClick={() => loadDoc(selectedDocId, true)} className="text-[10px] text-rose-400 hover:text-rose-300 cursor-pointer shrink-0">reload</button>
               )}
               <button
                 onClick={() => {
@@ -1015,10 +1015,10 @@ function KnowledgeTab({ channelId, nodes, setNodes, edges, setEdges, wsStatus, s
                   <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 shrink-0">
                     <button onClick={e => { e.stopPropagation(); setConnectSourceId(conn ? null : node.id); }}
                       className={cn('text-[9px] px-1.5 py-0.5 rounded-md cursor-pointer', conn ? 'bg-indigo-950 border-indigo-500 text-indigo-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-400')}>
-                      {conn ? 'unir...' : 'conectar'}
+                      {conn ? 'joining...' : 'connect'}
                     </button>
                     {connectSourceId && connectSourceId !== node.id && (
-                      <button onClick={e => { e.stopPropagation(); createEdge(node.id); }} className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-950 border border-emerald-500 text-emerald-300 cursor-pointer">vincular</button>
+                      <button onClick={e => { e.stopPropagation(); createEdge(node.id); }} className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-950 border border-emerald-500 text-emerald-300 cursor-pointer">link</button>
                     )}
                   </div>
                 )}
@@ -1029,41 +1029,41 @@ function KnowledgeTab({ channelId, nodes, setNodes, edges, setEdges, wsStatus, s
         {/* Floating add-node panel */}
         <div className="absolute top-3 left-3 bg-slate-900/90 p-3 rounded-xl w-52 z-20 flex flex-col gap-2 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-slate-500">Añadir nodo</span>
+            <span className="text-[10px] font-medium text-slate-500">Add node</span>
             <button onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })} className="text-slate-500 hover:text-slate-200 cursor-pointer"><Maximize2 className="w-3 h-3" /></button>
           </div>
-          <input type="text" placeholder="Contenido o etiqueta..." value={newNodeLabel} onChange={e => setNewNodeLabel(e.target.value)}
+          <input type="text" placeholder="Content or label..." value={newNodeLabel} onChange={e => setNewNodeLabel(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addNode()}
             className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-full" />
           
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-medium text-slate-500">Tipo de elemento</span>
+            <span className="text-[10px] font-medium text-slate-500">Element type</span>
             <select
               value={newNodeType}
               onChange={e => setNewNodeType(e.target.value as any)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 w-full cursor-pointer"
             >
-              <optgroup label="Grafo">
-                <option value="concept">Concepto</option>
-                <option value="task">Tarea</option>
-                <option value="episode">Episodio</option>
-                <option value="agent">Agente</option>
+              <optgroup label="Graph">
+                <option value="concept">Concept</option>
+                <option value="task">Task</option>
+                <option value="episode">Episode</option>
+                <option value="agent">Agent</option>
               </optgroup>
-              <optgroup label="Notas Adhesivas">
-                <option value="sticky-yellow">Nota Amarilla</option>
-                <option value="sticky-green">Nota Verde</option>
-                <option value="sticky-pink">Nota Rosa</option>
-                <option value="sticky-blue">Nota Azul</option>
+              <optgroup label="Sticky Notes">
+                <option value="sticky-yellow">Yellow Note</option>
+                <option value="sticky-green">Green Note</option>
+                <option value="sticky-pink">Pink Note</option>
+                <option value="sticky-blue">Blue Note</option>
               </optgroup>
-              <optgroup label="Otros">
-                <option value="text-box">Caja de texto</option>
+              <optgroup label="Other">
+                <option value="text-box">Text Box</option>
               </optgroup>
             </select>
           </div>
 
           <button onClick={addNode} disabled={!newNodeLabel.trim()}
             className="py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 text-xs font-semibold rounded-lg cursor-pointer">
-            Añadir
+            Add
           </button>
         </div>
       </div>
@@ -1080,7 +1080,7 @@ interface ColoquioCanvasWorkspaceProps {
 const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: (msgs: ColoquioMessage[]) => number }[] = [
   { id: 'preview', label: 'Preview', icon: <Monitor className="w-3 h-3" />, badge: msgs => extractCodeBlocks(msgs).length },
   { id: 'docs', label: 'Docs', icon: <FileText className="w-3 h-3" /> },
-  { id: 'whiteboard', label: 'Pizarra', icon: <PenTool className="w-3 h-3" /> },
+  { id: 'whiteboard', label: 'Whiteboard', icon: <PenTool className="w-3 h-3" /> },
   { id: 'knowledge', label: 'Knowledge', icon: <Network className="w-3 h-3" /> },
 ];
 
