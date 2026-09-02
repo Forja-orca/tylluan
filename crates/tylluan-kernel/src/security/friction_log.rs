@@ -432,13 +432,17 @@ fn count_events(conn: &rusqlite::Connection, session_id: i64, event_type: &str) 
 }
 
 fn compute_median_ttfua(conn: &rusqlite::Connection, session_id: i64) -> f64 {
-    let values: Vec<f64> = conn
-        .prepare("SELECT ttfua_seconds FROM friction_workflows WHERE session_id = ?1 AND ttfua_seconds IS NOT NULL ORDER BY ttfua_seconds")
-        .unwrap()
-        .query_map(params![session_id], |r| r.get(0))
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    // Category (c): a missing/drifted audit schema is an operational error,
+    // not a reason to panic the request that is reading observability data.
+    let values: Vec<f64> = match conn.prepare(
+        "SELECT ttfua_seconds FROM friction_workflows WHERE session_id = ?1 AND ttfua_seconds IS NOT NULL ORDER BY ttfua_seconds",
+    ) {
+        Ok(mut stmt) => match stmt.query_map(params![session_id], |r| r.get(0)) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(_) => return 0.0,
+        },
+        Err(_) => return 0.0,
+    };
     if values.is_empty() { return 0.0; }
     let mid = values.len() / 2;
     if values.len().is_multiple_of(2) { (values[mid-1] + values[mid]) / 2.0 } else { values[mid] }
@@ -520,12 +524,15 @@ pub fn get_global_friction_stats() -> GlobalFrictionStats {
     ).unwrap_or(0.0);
 
     // Sum friction score across all sessions
-    let rows: Vec<i64> = conn.prepare("SELECT id FROM friction_sessions")
-        .unwrap()
-        .query_map([], |r| r.get(0))
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    // Category (c): statistics remain available with zero score if the
+    // optional audit schema cannot be queried, rather than panicking.
+    let rows: Vec<i64> = match conn.prepare("SELECT id FROM friction_sessions") {
+        Ok(mut stmt) => match stmt.query_map([], |r| r.get(0)) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(_) => Vec::new(),
+        },
+        Err(_) => Vec::new(),
+    };
 
     let total_score: f64 = rows.iter().map(|sid| compute_friction_score(conn, *sid)).sum();
 

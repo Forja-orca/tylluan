@@ -95,7 +95,7 @@ pub async fn mesh_refresh_handler(
 pub async fn guild_peers_handler(
     State(state): State<Arc<HttpState>>,
 ) -> impl IntoResponse {
-    let reg = state.capability_registry.lock().unwrap();
+    let reg = state.capability_registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let all: Vec<_> = reg.all_peers().collect();
     let peers: Vec<serde_json::Value> = all.into_iter().map(|(node_id, (rec, _))| {
         serde_json::json!({
@@ -135,7 +135,7 @@ pub async fn guild_dispatch_remote_handler(
     }
 
     let local_caps = {
-        let reg = state.capability_registry.lock().unwrap();
+        let reg = state.capability_registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let all: Vec<_> = reg.all_peers().collect();
         all.into_iter()
             .find(|(n, _)| n.as_str() == state.node_identity.node_id())
@@ -144,7 +144,7 @@ pub async fn guild_dispatch_remote_handler(
     };
 
     let decision = {
-        let router = state.dispatch_router.lock().unwrap();
+        let router = state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         router.route(&guild, &local_caps, 5.0)
     };
 
@@ -191,7 +191,7 @@ pub async fn guild_dispatch_remote_handler(
             let mut pool = state.p2p_pool.lock().await;
             match execute_remote_tcp(&mut pool, request, tcp_addr, node_id, &state.node_identity).await {
                 Ok(resp) => {
-                    state.dispatch_router.lock().unwrap().record_success(node_id);
+                    state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_success(node_id);
                     (StatusCode::OK, Json(serde_json::json!({
                         "success": resp.success,
                         "result": resp.result,
@@ -200,7 +200,7 @@ pub async fn guild_dispatch_remote_handler(
                     })))
                 }
                 Err(e) => {
-                    state.dispatch_router.lock().unwrap().record_failure(node_id);
+                    state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_failure(node_id);
                     let dispatch_body = serde_json::json!({
                         "guild": guild,
                         "tool": tool,
@@ -210,7 +210,7 @@ pub async fn guild_dispatch_remote_handler(
                         "timeout_secs": 60u64,
                     });
                     {
-                        let mut q = state.dispatch_queue.lock().unwrap();
+                        let mut q = state.dispatch_queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                         q.enqueue(dispatch_body);
                     }
                     (StatusCode::OK, Json(serde_json::json!({
@@ -243,10 +243,10 @@ pub async fn guild_dispatch_remote_handler(
                     match resp.json::<serde_json::Value>().await {
                         Ok(result) => {
                             {
-                                let mut q = state.dispatch_queue.lock().unwrap();
+                                let mut q = state.dispatch_queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                                 q.remove_timed_out(std::time::Duration::from_secs(300));
                             }
-                            state.dispatch_router.lock().unwrap().record_success(addr);
+                            state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_success(addr);
                             (StatusCode::OK, Json(serde_json::json!({
                                 "success": result.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
                                 "result": result,
@@ -255,10 +255,10 @@ pub async fn guild_dispatch_remote_handler(
                         }
                         Err(e) => {
                             {
-                                let mut q = state.dispatch_queue.lock().unwrap();
+                                let mut q = state.dispatch_queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                                 q.enqueue(dispatch_body);
                             }
-                            state.dispatch_router.lock().unwrap().record_failure(addr);
+                            state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_failure(addr);
                             (StatusCode::OK, Json(serde_json::json!({
                                 "success": false,
                                 "error": format!("peer response parse failed: {}", e),
@@ -270,10 +270,10 @@ pub async fn guild_dispatch_remote_handler(
                 }
                 Err(e) => {
                     {
-                        let mut q = state.dispatch_queue.lock().unwrap();
+                        let mut q = state.dispatch_queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                         q.enqueue(dispatch_body);
                     }
-                    state.dispatch_router.lock().unwrap().record_failure(addr);
+                    state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_failure(addr);
                     (StatusCode::OK, Json(serde_json::json!({
                         "success": false,
                         "error": format!("peer unreachable: {}", e),
