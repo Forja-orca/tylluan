@@ -15,7 +15,7 @@ use anyhow::{Result, Context, anyhow};
 use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch, SparseTextEmbedding, SparseInitOptions, SparseModel};
 use lru::LruCache;
 use std::num::NonZeroUsize;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use crate::config::InferenceDevice;
 
@@ -188,6 +188,39 @@ impl EmbeddingEngine {
         }
 
         Ok(embeddings)
+    }
+
+    /// Async-safe wrapper: runs the synchronous ONNX inference on the tokio
+    /// blocking pool instead of the async worker.
+    ///
+    /// WHY THIS EXISTS (2026-09-01, live incident): `embed_batch` is a
+    /// synchronous, CPU-bound ONNX call (2-8s per batch) that also holds the
+    /// engine's std Mutex for the whole inference. Called directly from an
+    /// async task, it blocks that tokio worker AND makes every other embed
+    /// caller (recall, routing, cascade) queue on the mutex inside async
+    /// context, burning one worker each — the Agnostic Reindexer could starve
+    /// the runtime until new HTTP requests (even DB-free /health) never got a
+    /// worker: TCP established, no response. The blocking pool has its own
+    /// threads, so neither the ONNX latency nor the mutex wait consumes async
+    /// workers. Every background/inference call site must use this (or
+    /// spawn_blocking) — never call `embed_batch` directly from async.
+    pub async fn embed_batch_async(
+        self: &Arc<Self>,
+        texts: Vec<String>,
+    ) -> Result<Vec<Vec<f32>>> {
+        let this = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+            this.embed_batch(&refs)
+        })
+        .await
+        .map_err(|e| anyhow!("embed_batch_async join failed: {e}"))?
+    }
+
+    /// Single-text async wrapper — same rationale as `embed_batch_async`.
+    pub async fn embed_async(self: &Arc<Self>, text: String) -> Result<Vec<f32>> {
+        let mut out = self.embed_batch_async(vec![text]).await?;
+        out.pop().context("No embedding returned")
     }
 
     /// Get a unique ID for the current embedding engine

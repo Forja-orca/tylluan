@@ -286,7 +286,12 @@ impl ConsensusEngine {
         embedding_engine: Option<&EmbeddingEngine>,
     ) -> Option<f32> {
         let engine = embedding_engine?;
-        let synth_emb = engine.embed(unified_content).ok()?;
+        // block_in_place: the sync embed() runs ONNX on this worker without
+        // starving the runtime (same starvation class as the reindexer, live
+        // incident 2026-09-01). The engine Arc isn't threaded here (public
+        // signature keeps Option<&EmbeddingEngine>), so embed_batch_async
+        // can't be used at this call site.
+        let synth_emb = tokio::task::block_in_place(|| engine.embed(unified_content)).ok()?;
 
         let mut source_embs = Vec::with_capacity(nodes.len());
         for node in nodes {
