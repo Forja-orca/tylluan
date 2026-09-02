@@ -823,7 +823,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             // Read engine first (async), then lock registry (sync) — avoids holding
             // MutexGuard across an await boundary.
             let engine_snapshot = gossip_state.gossip_engine.read().await;
-            let mut reg = gossip_state.capability_registry.lock().unwrap();
+            // Category (b): recover a poisoned registry lock so an isolated
+            // writer panic cannot permanently crash the gossip maintenance loop.
+            let mut reg = gossip_state.capability_registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             reg.ingest_from_engine_trusted(&engine_snapshot, &trusted_pubkeys);
             let pruned = reg.prune_expired();
             drop(reg);

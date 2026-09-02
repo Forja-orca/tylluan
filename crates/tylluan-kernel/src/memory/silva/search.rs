@@ -125,8 +125,10 @@ impl super::SilvaDB {
         // Fast path: use in-memory mmap store + IVF searcher
         // Scoped block ensures RwLockReadGuards are dropped before any .await
         let scored_opt: Option<Vec<(String, f32)>> = {
-            let ivf_searcher = self.ivf_searcher.read().unwrap();
-            let mmap_store = self.mmap_store.read().unwrap();
+            // Category (b): recover a poisoned read lock so one failed writer
+            // does not turn every subsequent recall into a process panic.
+            let ivf_searcher = self.ivf_searcher.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mmap_store = self.mmap_store.read().unwrap_or_else(|poisoned| poisoned.into_inner());
             match (&*ivf_searcher, &*mmap_store) {
                 (Some(searcher), Some(store)) => {
                     let nprobe = 20.min(store.centroids().len());
@@ -674,7 +676,9 @@ impl super::SilvaDB {
 
                 let mut stmt = conn.prepare(&sql)?;
                 let results = if has_types {
-                    let type_filter = types.unwrap();
+                    // `has_types` is derived from `types.is_some()` above; use
+                    // the checked branch directly instead of relying on unwrap.
+                    let Some(type_filter) = types else { return Ok(Vec::new()); };
                     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
                     param_values.push(Box::new(fts_query));
                     for t in type_filter {
