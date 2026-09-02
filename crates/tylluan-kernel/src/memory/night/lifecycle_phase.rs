@@ -14,6 +14,12 @@ impl Phase for LifecyclePhase {
     }
 
     async fn run(&self, ctx: &PhaseContext) -> PhaseReport {
+        // Count prunable superseded nodes before pruning, so the operator can see
+        // how many were eligible for pruning in this cycle.
+        let prunable = ctx.silva.count_prunable_superseded("agent_summary", SUPERSEDED_PRUNE_DAYS)
+            .await
+            .unwrap_or(0);
+
         // Prune superseded agent_summary nodes past the grace window, so the
         // canary's active count reflects the pruned state on this tick.
         let pruned = ctx.silva.prune_superseded("agent_summary", SUPERSEDED_PRUNE_DAYS)
@@ -22,6 +28,7 @@ impl Phase for LifecyclePhase {
         match ctx.silva.apply_lifecycle_transitions().await {
             Ok((a2q, q2c, c2a, emb_purged)) => {
                 let mut parts = Vec::new();
+                if prunable > 0 { parts.push(format!("prunable-superseded:{prunable}")); }
                 if pruned > 0 { parts.push(format!("pruned-superseded:{pruned}")); }
                 if a2q > 0 { parts.push(format!("active→quiet:{a2q}")); }
                 if q2c > 0 { parts.push(format!("quiet→consolidated:{q2c}")); }
