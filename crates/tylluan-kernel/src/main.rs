@@ -1545,8 +1545,12 @@ async fn main() -> anyhow::Result<()> {
                             if texts.is_empty() {
                                 continue;
                             }
-                            let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
-                            match engine.embed_batch(&text_refs) {
+                            // MUST use embed_batch_async (blocking pool), never
+                            // the sync embed_batch: the sync call runs 2-8s of
+                            // ONNX on the async worker while holding the engine
+                            // mutex, starving the runtime (live HTTP hang
+                            // 2026-09-01 — even /health stopped answering).
+                            match engine.embed_batch_async(texts.clone()).await {
                                 Ok(vectors) => {
                                     for (vector, (nid, mid, mhash_str)) in vectors.into_iter().zip(nodes.drain(..)) {
                                         let sid = silva_inner.clone();
