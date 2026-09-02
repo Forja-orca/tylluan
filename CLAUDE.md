@@ -30,6 +30,14 @@ dos kernels compitiendo por el mismo SQLite corrompen el estado (ver `parallel_s
 en vivo, pide a José que reconstruya y reinicie — nunca lo hagas tú, ni siquiera "solo para
 comprobar rápido".
 
+**🔴 No compiles (`cargo build`) mientras otro agente puede estar comiteando en el mismo
+checkout compartido `E:\tylluan`.** Incidente real (2026-09-02, 3 veces en 7 días): un build
+concurrente con `git commit`/`push` de otro agente en el mismo directorio produjo un binario
+con código más nuevo que su propia etiqueta de commit (`build.rs` capturó `git rev-parse HEAD`
+en un instante intermedio inconsistente) — al menos una verificación en vivo dio falso positivo
+por esto. Antes de lanzar un build de verificación, confirma en Coloquio que nadie más está
+compilando o comiteando en ese instante.
+
 ---
 
 ## 🔴 Regla obligatoria — sincroniza ANTES de reportar nada
