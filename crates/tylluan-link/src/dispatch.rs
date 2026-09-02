@@ -133,14 +133,14 @@ impl DispatchRouter {
 
     /// Record a latency measurement for a peer.
     pub fn record_latency(&self, node_id: &str, latency_ms: f32) {
-        let mut stats = self.peer_stats.lock().unwrap();
+        let mut stats = self.peer_stats.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = stats.entry(node_id.to_string()).or_default();
         entry.latency_ms = Some(latency_ms);
     }
 
     /// Record a failure for a peer to trigger the circuit breaker if consecutive failures >= threshold.
     pub fn record_failure(&self, node_id: &str) {
-        let mut stats = self.peer_stats.lock().unwrap();
+        let mut stats = self.peer_stats.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = stats.entry(node_id.to_string()).or_default();
         entry.consecutive_failures += 1;
         entry.last_failure = Some(Instant::now());
@@ -148,7 +148,7 @@ impl DispatchRouter {
 
     /// Record a success for a peer to reset consecutive failures.
     pub fn record_success(&self, node_id: &str) {
-        let mut stats = self.peer_stats.lock().unwrap();
+        let mut stats = self.peer_stats.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = stats.entry(node_id.to_string()).or_default();
         entry.consecutive_failures = 0;
         entry.last_failure = None;
@@ -170,8 +170,8 @@ impl DispatchRouter {
     ) -> DispatchDecision {
         let local_score = Self::calculate_score(local_caps, local_latency_ms);
 
-        let registry = self.registry.lock().unwrap();
-        let stats = self.peer_stats.lock().unwrap();
+        let registry = self.registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let stats = self.peer_stats.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = Instant::now();
 
         let mut best_peer: Option<(String, String, f32, bool, Option<u16>)> = None;
@@ -334,7 +334,7 @@ mod tests {
             tcp_port: None,
         };
         {
-            let mut reg = registry.lock().unwrap();
+            let mut reg = registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             reg.ingest(
                 "peer-gpu",
                 "10.0.0.5:9000",
@@ -377,7 +377,7 @@ mod tests {
             tcp_port: None,
         };
         {
-            let mut reg = registry.lock().unwrap();
+            let mut reg = registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             reg.ingest(
                 "peer-unknown",
                 "10.0.0.6:9000",
@@ -419,7 +419,7 @@ mod tests {
             tcp_port: None,
         };
         {
-            let mut reg = registry.lock().unwrap();
+            let mut reg = registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             reg.ingest(
                 "peer-fail",
                 "10.0.0.7:9000",

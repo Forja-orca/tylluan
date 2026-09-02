@@ -624,8 +624,8 @@ impl super::SilvaDB {
                             store.assignments(),
                             10,
                         );
-                        *self.mmap_store.write().unwrap() = Some(store);
-                        *self.ivf_searcher.write().unwrap() = Some(searcher);
+                        *self.mmap_store.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(store);
+                        *self.ivf_searcher.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(searcher);
                         info!("🔬 IVF mmap store written to {}", mmap_path.display());
                     }
                     Err(e) => warn!("🔬 Failed to create IVF mmap store: {}", e),

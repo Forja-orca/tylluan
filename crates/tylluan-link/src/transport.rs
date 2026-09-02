@@ -131,19 +131,19 @@ impl<T: MeshTransport> PartitionableTransport<T> {
     }
 
     pub fn set_mode(&self, mode: FaultMode) {
-        *self.mode.lock().unwrap() = mode;
+        *self.mode.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = mode;
     }
 
     #[allow(dead_code)]
     pub fn get_mode(&self) -> FaultMode {
-        *self.mode.lock().unwrap()
+        *self.mode.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
 #[async_trait]
 impl<T: MeshTransport + Send> MeshTransport for PartitionableTransport<T> {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError> {
-        let mode = *self.mode.lock().unwrap();
+        let mode = *self.mode.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         match mode {
             FaultMode::Transparent => self.inner.send(data).await,
             FaultMode::Drop(rate) => {
@@ -163,7 +163,7 @@ impl<T: MeshTransport + Send> MeshTransport for PartitionableTransport<T> {
     }
 
     async fn receive(&mut self) -> Result<Vec<u8>, TransportError> {
-        let mode = *self.mode.lock().unwrap();
+        let mode = *self.mode.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         match mode {
             FaultMode::Transparent => self.inner.receive().await,
             FaultMode::Drop(rate) => {
