@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-09-02 · HEAD `5a1ba58` · v0.17.0 (Cargo.toml)
+> Last updated: 2026-09-02 · HEAD `9078b9e` · v0.17.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `5a1ba58` · **799 total** lib green (718 kernel lib + 69 link lib + 12 fsrs), verificado 2026-09-02 con `scripts/check_test_count.sh`. Historial de drift de CI (2026-08-26, `Dashboard — lint` por lockfile desalineado, `Rust — build + test` por deriva de clippy entre toolchain local y del runner) queda como referencia — desde entonces `scripts/verify.sh` + el hook de pre-push corren los mismos comandos localmente antes de cada push. Nota de proceso 2026-09-02: los gates de `Docs — STATUS.md HEAD citation` y `Docs — README test count` solo verifican que el HASH/número citado coincida con la realidad — no verifican que el CONTENIDO narrativo de este fichero esté al día. Encontrado real: esta sección describía un estado de mediados de agosto con el hash "arreglado" mecánicamente, dando una falsa sensación de frescura. Corregido en este pase; vigilar que no vuelva a pasar en próximos ciclos.
+**HEAD:** `9078b9e` · **799 total** lib green (718 kernel lib + 69 link lib + 12 fsrs), verificado 2026-09-02 con `scripts/check_test_count.sh`. Historial de drift de CI (2026-08-26, `Dashboard — lint` por lockfile desalineado, `Rust — build + test` por deriva de clippy entre toolchain local y del runner) queda como referencia — desde entonces `scripts/verify.sh` + el hook de pre-push corren los mismos comandos localmente antes de cada push. Nota de proceso 2026-09-02: los gates de `Docs — STATUS.md HEAD citation` y `Docs — README test count` solo verifican que el HASH/número citado coincida con la realidad — no verifican que el CONTENIDO narrativo de este fichero esté al día. Encontrado real: esta sección describía un estado de mediados de agosto con el hash "arreglado" mecánicamente, dando una falsa sensación de frescura. Corregido en este pase; vigilar que no vuelva a pasar en próximos ciclos.
 
 **Kernel vivo:** verificado en vivo 2026-09-02, `commit 24bb423` (post fix silva_db/drift_guard) confirmado sin mezcla de checkout tras una condición de carrera real (compilación concurrente con `git commit`/`push` en el mismo directorio, ver `incident_mixed_agent_commit_and_unauthorized_kernel_start` en memoria de ForjaMCPo3) — canary en 87.5% (7/8), `silva_db` pasa, `drift_guard` mejorando (1.36, bajando de 4.56) tras el fix de Buffy. Comando de rebuild de referencia:
 ```
