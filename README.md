@@ -118,7 +118,10 @@ We evaluated on **LongMemEval-S** (50 human-authored questions covering episodic
 | Recall@5 | **82%** | BGE-M3 + BM25 + RRF |
 | Recall@10 | **90%** | BGE-M3 + BM25 + RRF |
 | Recall@1 | 46% | BGE-M3 + BM25 + RRF |
+| MRR / R-Precision | 0.46 | BGE-M3 + BM25 + RRF |
 | Latency p50 | 12.9 ms | CPU, no GPU |
+
+*Note: LongMemEval-S tests single-needle retrieval ($R=1$ ground-truth session per query), for which Recall@K and MRR / R-Precision are the standard IR metrics (unnormalized Precision@5 is mathematically bounded by $\frac{1}{5} = 20.0\%$, where 82% Recall yields an expected Precision@5 of 16.4%).*
 
 For comparison, a synthetic corpus of short descriptions only reaches 50% Recall@5 — real human queries actually do better, which tells us the pipeline degrades gracefully rather than overfitting to easy cases. Full results: [`benchmarks/longmemeval_v0.12.0.json`](benchmarks/longmemeval_v0.12.0.json).
 
