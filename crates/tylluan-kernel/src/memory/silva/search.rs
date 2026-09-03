@@ -550,7 +550,7 @@ impl super::SilvaDB {
         let candidates = self.search_hybrid(query, query_embedding, (limit * 4).min(20), None, skip_graph).await?;
         if candidates.is_empty() { return Ok(candidates); }
         let docs: Vec<&str> = candidates.iter().map(|(n, _)| n.content.as_str()).collect();
-        let ranked = reranker.rerank(query, &docs).unwrap_or_else(|_| {
+        let ranked = tokio::task::block_in_place(|| reranker.rerank(query, &docs)).unwrap_or_else(|_| {
             (0..candidates.len()).map(|i| (i, 0.0f32)).collect()
         });
         Ok(ranked.into_iter()

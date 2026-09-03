@@ -228,7 +228,7 @@ impl IdleLab {
             let reranked: Vec<(crate::memory::silva::GraphNode, f32)> = if let Some(r) = reranker {
                 let rerank_pool: Vec<_> = results.iter().take(params.rerank_window).collect();
                 let texts: Vec<&str> = rerank_pool.iter().map(|(n, _)| n.content.as_str()).collect();
-                if let Ok(ranked) = r.rerank(&pair.query, &texts) {
+                if let Ok(ranked) = tokio::task::block_in_place(|| r.rerank(&pair.query, &texts)) {
                     let mut reordered: Vec<_> = ranked.into_iter()
                         .filter_map(|(idx, logit)| {
                             let norm = 1.0f32 / (1.0 + (-logit).exp());

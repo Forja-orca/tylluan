@@ -1051,10 +1051,19 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
             // Overlap guard: skip this tick if the previous cycle is still
             // running (a hung peer with per-request timeouts can still hold a
             // cycle past the interval). swap(true) then restore at cycle end.
+            // RAII guard: a panic mid-cycle must ALSO release the flag —
+            // without it, one panic kills auto-sync silently forever.
             if cycle_in_flight.swap(true, std::sync::atomic::Ordering::AcqRel) {
                 tracing::warn!("🔄 Auto-sync: previous cycle still in flight — skipping this tick");
                 continue;
             }
+            struct CycleInFlightGuard<'a>(&'a std::sync::atomic::AtomicBool);
+            impl Drop for CycleInFlightGuard<'_> {
+                fn drop(&mut self) {
+                    self.0.store(false, std::sync::atomic::Ordering::Release);
+                }
+            }
+            let _cycle_guard = CycleInFlightGuard(&cycle_in_flight);
 
             // Re-read configuration values in case of runtime changes
             let (curr_interval, curr_mode) = {
@@ -1068,7 +1077,6 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
             };
 
             if curr_interval == 0 {
-                cycle_in_flight.store(false, std::sync::atomic::Ordering::Release);
                 tracing::info!("🔄 Federation auto-sync disabled dynamically");
                 break;
             }
@@ -1140,7 +1148,6 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                 });
             }
             while join_set.join_next().await.is_some() {}
-            cycle_in_flight.store(false, std::sync::atomic::Ordering::Release);
 
             reload_peers_cache(&state).await;
         }
