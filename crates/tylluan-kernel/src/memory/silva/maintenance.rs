@@ -345,6 +345,26 @@ impl super::SilvaDB {
                 }
             }
 
+            // by_type_active: excludes nodes with metadata.superseded_by set,
+            // so synthetic/factual ratios in dashboards reflect reality,
+            // not stale superseded nodes inflating the count (drift_guard fix).
+            let mut by_type_active = serde_json::Map::new();
+            {
+                let mut stmt = conn.prepare(
+                    "SELECT type, COUNT(*) as count FROM nodes \
+                     WHERE json_extract(COALESCE(metadata, '{}'), '$.superseded_by') IS NULL \
+                     GROUP BY type ORDER BY count DESC"
+                )?;
+                let rows = stmt.query_map([], |r| {
+                    let node_type: String = r.get(0)?;
+                    let count: i64 = r.get(1)?;
+                    Ok((node_type, count))
+                })?;
+                for (t, c) in rows.flatten() {
+                    by_type_active.insert(t, serde_json::json!(c));
+                }
+            }
+
             // IVF Index stats: count centroids and check readiness
             let n_centroids: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM cluster_centroids",
@@ -377,6 +397,7 @@ impl super::SilvaDB {
                 "conflicted_count": conflicted_count,
                 "identity_count": identity_count,
                 "by_type": by_type,
+                "by_type_active": by_type_active,
                 "ivf_ready": ivf_ready,
                 "n_centroids": n_centroids,
                 "last_build": last_build,
