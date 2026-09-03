@@ -732,7 +732,7 @@ if let Some(ref mut s) = stmt {
     let docs: Result<Vec<(GraphNode, f32)>, anyhow::Error> = if let Some(ref reranker) = server.reranker {
         let rerank_pool = candidates.iter().take(RERANK_WINDOW.load(Ordering::Relaxed)).collect::<Vec<_>>();
         let texts: Vec<&str> = rerank_pool.iter().map(|(n, _)| n.content.as_str()).collect();
-        let ranked = reranker.rerank(&effective_query, &texts).unwrap_or_else(|_| {
+        let ranked = tokio::task::block_in_place(|| reranker.rerank(&effective_query, &texts)).unwrap_or_else(|_| {
             (0..texts.len()).map(|i| (i, 0.0f32)).collect()
         });
         let reranked: Vec<(GraphNode, f32)> = ranked.into_iter()
@@ -886,7 +886,7 @@ if let Some(ref mut s) = stmt {
                             }, idx)
                         })
                         .collect();
-                    let order = reranker.rerank(candidates);
+                    let order = tokio::task::block_in_place(|| reranker.rerank(candidates));
                     if order.len() == scored.len() {
                         scored = order.into_iter().filter_map(|i| {
                             if i < scored.len() { Some(scored[i].clone()) } else { None }
