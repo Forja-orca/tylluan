@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-09-03 · HEAD `7112e1e` · v0.17.0 (Cargo.toml)
+> Last updated: 2026-09-03 · HEAD `94d8b5f` · v0.17.0 (Cargo.toml)
 
 ## Known Gaps (external audit, verified 2026-08-22)
 
@@ -33,7 +33,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `7112e1e` · **799 total** lib green (718 kernel lib + 69 link lib + 12 fsrs), verificado 2026-09-02 con `scripts/check_test_count.sh`. Historial de drift de CI (2026-08-26, `Dashboard — lint` por lockfile desalineado, `Rust — build + test` por deriva de clippy entre toolchain local y del runner) queda como referencia — desde entonces `scripts/verify.sh` + el hook de pre-push corren los mismos comandos localmente antes de cada push. Nota de proceso 2026-09-02: los gates de `Docs — STATUS.md HEAD citation` y `Docs — README test count` solo verifican que el HASH/número citado coincida con la realidad — no verifican que el CONTENIDO narrativo de este fichero esté al día. Encontrado real: esta sección describía un estado de mediados de agosto con el hash "arreglado" mecánicamente, dando una falsa sensación de frescura. Corregido en este pase; vigilar que no vuelva a pasar en próximos ciclos.
+**HEAD:** `94d8b5f` · **799 total** lib green (718 kernel lib + 69 link lib + 12 fsrs), verificado 2026-09-02 con `scripts/check_test_count.sh`. Historial de drift de CI (2026-08-26, `Dashboard — lint` por lockfile desalineado, `Rust — build + test` por deriva de clippy entre toolchain local y del runner) queda como referencia — desde entonces `scripts/verify.sh` + el hook de pre-push corren los mismos comandos localmente antes de cada push. Nota de proceso 2026-09-02: los gates de `Docs — STATUS.md HEAD citation` y `Docs — README test count` solo verifican que el HASH/número citado coincida con la realidad — no verifican que el CONTENIDO narrativo de este fichero esté al día. Encontrado real: esta sección describía un estado de mediados de agosto con el hash "arreglado" mecánicamente, dando una falsa sensación de frescura. Corregido en este pase; vigilar que no vuelva a pasar en próximos ciclos.
 
 **Kernel vivo:** verificado en vivo 2026-09-03, `commit 7112e1e` (confirmado en `/health`, ciclo 3 en ejecución con fixes de embed síncrono, lock-poison y normalización de dashboard) — canary en 87.5% (7/8), `silva_db` pasa, `drift_guard` en 1.22 tras los últimos fixes. Comando de rebuild de referencia:
 ```
