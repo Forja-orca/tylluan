@@ -1,8 +1,21 @@
 # Fase 0 — Sociedad interna de SLMs: diseño de evaluación (falsable)
 
-**Estado:** propuesto, pendiente de discusión en Coloquio antes de implementar.
-**Fecha:** 2026-09-03
+**Estado:** propuesto, BLOQUEADO hasta leer el precedente de la sección "Precedente real" — pendiente de discusión en Coloquio antes de implementar.
+**Fecha:** 2026-09-03 (actualizado 2026-09-07 con precedente de julio)
 **Origen:** discusión Claude Code ↔ José ↔ equipo (Antigravity, Deep), consenso alcanzado.
+
+## ⚠️ Precedente real — leer antes de discutir nada (añadido 2026-09-07)
+
+Este experimento ya se intentó, con datos duros, y falló de una forma específica que hay que entender antes de repetirlo:
+
+`ROADMAP_O3.md:649` (CoherenceGate, NO-GO 2026-07-29): **"Sociedad de 3 SLMs probada, converge a respuesta constante (0% varianza). El 75% original era el default seguro bajo grammar, no juicio real."** Con modelos <2B, 3 SLMs deliberando sobre el filtro de coherencia no debatieron de verdad — convergieron a la misma salida siempre, y el 75% de acierto que parecía validarlo era el valor por defecto forzado por la gramática de generación, no juicio del modelo.
+
+Más de fondo — `ROADMAP_O3.md:659-678`, corrección explícita de José (2026-07-28), tras el mismo ciclo de spikes: **lo que nunca pidió** es que Tylluan compita en razonamiento general con el cliente IDE ya conectado (Claude Code, Cursor, etc. — ese cliente ya piensa). **Lo que sí pidió**: modelos pequeños como "sinapsis" — puntos concretos de decisión interna (routing, filtrado, PII, compresión) — nunca un "cerebro central que delibera por Tylluan". La cifra de mejora que motiva todo esto (~40%) está atada a que esas sinapsis concretas estén bien construidas, no a que Tylluan delibere de forma genérica en su lugar.
+
+**Qué significa esto para el diseño de abajo, sin invalidarlo:**
+- El método de 3 brazos (A/B/C, falsación explícita) sigue siendo correcto — de hecho es exactamente lo que faltó en julio: aquel experimento no tuvo un baseline compute-matched (Self-MoA) para descartar que la convergencia a varianza-cero fuera del sampling, no de los roles.
+- Antes de correr Fase 0, el equipo debe explicar **por qué esta vez no convergería igual** — ¿temperatura distinta, prompts de rol menos rígidos, modelo diferente, tarea diferente (retrieval/abstención vs. juicio binario de coherencia)? Si la respuesta es "no lo sabemos", el diseño necesita un experimento previo, más barato, que mida específicamente varianza entre las 3 salidas (no solo accuracy) antes de invertir en el arnés completo.
+- Esto refuerza, no debilita, el encaje en "sinapsis": los 3 brazos deben medirse sobre una decisión concreta y acotada (p.ej. abstención en `recall_misses`), nunca sobre "razonar mejor" en general — coherente con la corrección de José de julio.
 
 ## Contexto
 
@@ -57,4 +70,4 @@ Si correr los 3 brazos en la primera ejecución resulta caro en CPU (SLM lento, 
 
 ## Siguiente paso
 
-Publicar este documento en Coloquio para discusión del equipo (Antigravity, Deep, Buffy) antes de cualquier línea de código. Regla 13 del proyecto: arnés y diseño de evaluación primero, implementación después.
+Publicar este documento en Coloquio para discusión del equipo (Antigravity, Deep, Buffy) antes de cualquier línea de código. Regla 13 del proyecto: arnés y diseño de evaluación primero, implementación después. **Bloqueante añadido 2026-09-07**: la discusión debe responder primero a la sección "Precedente real" — nadie implementa el arnés de 3 brazos hasta que quede explícito por qué esta vez la deliberación no convergería a varianza cero como en julio.
