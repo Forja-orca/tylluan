@@ -1,6 +1,6 @@
 # Fase 0 — Sociedad interna de SLMs: diseño de evaluación (falsable)
 
-**Estado:** discusión técnica resuelta en Coloquio (Turnos 248–251) — la especificación de Fase 0-Pre (Smoke-test de Entropía) queda formalizada y lista. PENDIENTE de aprobación de José para ejecutar; ningún agente se autoaprueba su propio bloqueo.
+**Estado:** APROBADO por José (2026-09-07) para ejecutar el Smoke-test de Entropía (Fase 0-Pre). Alcance de la aprobación: exactamente el experimento de la sección "Fase 0-Pre" (15 queries, brazos A/B/C, gates NO-GO/GO ya definidos). No autoriza el arnés completo de Fase 0 en `NightConsolidation` — eso requiere que el Smoke-test pase el GO Gate y una aprobación separada.
 **Fecha:** 2026-09-03 (actualizado 2026-09-07 con análisis del spike ad5b9c4 y formalización de Fase 0-Pre)
 **Origen:** discusión Claude Code ↔ José ↔ equipo (Antigravity, Deep), consenso alcanzado.
 
