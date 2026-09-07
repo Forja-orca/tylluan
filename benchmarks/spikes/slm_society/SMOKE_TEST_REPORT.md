@@ -16,21 +16,27 @@
 | **Arm C** | Asymmetric Dialectic (CoT, T=0.5) | **66.7%** (10/15) | YES | Proposer $\to$ Skeptical Critic $\to$ Synthesizer triad. Correctly rejected 3 negative cases (`real_2`, `real_3`, `real_8`). |
 
 *   **Average Proposer-Critic Jaccard Similarity:** **19.4%** (Hard Threshold: $<85.0\%$)
+*   **Critic Token Disagreement Rate:** **0.0%** (0/15 explicit token disagreements)
 *   **Arm C vs Arm B Accuracy Delta:** **+6.7%** (10/15 vs 9/15)
 
 ---
 
-## 2. Gate Evaluation
+## 2. Gate Evaluation & Critical Mechanistic Finding
 
 1.  **Anti-Capitulation Check (Proposer-Critic Jaccard < 85%):** **[PASS] (19.4%)**
-    *   The Proposer and Skeptical Critic generated distinct reasoning perspectives without semantic or lexical collapse.
+    *   The Proposer and Skeptical Critic generated distinct reasoning perspectives in text without lexical collapse.
 2.  **Non-Zero Output Variance Check:** **[PASS]**
     *   Arm C produced distinct binary verdicts (`KEEP` and `REJECT`) across different queries, unlike Arm A which suffered positive mode collapse.
 3.  **Hypothesis Test (Arm C > Arm B):** **[PASS] (66.7% vs 60.0%)**
     *   The asymmetric dialectic structure strictly outperformed compute-matched stochastic Self-MoA (+6.7% accuracy advantage).
-    *   *Key discriminator case (`real_8`)*: A conversational support message about GLiNER Guard was falsely classified as `KEEP` by both Arm A and Arm B, but correctly audited and rejected (`REJECT`) by Arm C's Skeptical Critic/Synthesizer.
 
-**Conclusion:** **Gate Passed**. The hypothesis that role asymmetry and deliberative tension provide genuine reasoning signal in 1.7B SLMs (and outperform naive stochastic compute scaling) is confirmed on the 15-case benchmark.
+### 🔍 Crucial Mechanistic Nuance: Textual Critique vs. Token Sycophancy
+A critical phenomenon was observed in the raw traces:
+*   **The Critic's Token Disagreement Rate was 0.0% (0/15):** In all 15 cases, the Critic's final token output was `VERDICT: KEEP`. Even when the Critic formulated strong counter-arguments in its text (e.g. in `real_2`, `real_3`, `real_8`), the small 1.7B model suffered from *token compliance bias/sycophancy* at the final verdict prompt line.
+*   **Where the Gain Actually Came From:** The Synthesizer did not perform a naive vote count (which would have yielded 100% `KEEP` and 0% gain). Instead, the Synthesizer read the qualitative text arguments of the Critic (e.g. noting that `real_8` was just conversational gratitude, not a core principle), extracted the negative signal, and **overrode the sycophantic verdict token to output `REJECT`**.
+*   **Architectural Implication:** Multi-agent SLM systems cannot rely on naive voting/consensus across discrete token verdicts. The reasoning power resides in **Prompt Chaining / Sequential Scratchpad Arbitration**, where downstream aggregator prompts synthesize qualitative text arguments.
+
+**Conclusion:** **Gate Passed with Qualification**. The asymmetric prompt pipeline produces measurable reasoning gains over compute-matched Self-MoA, operating via sequential scratchpad arbitration rather than peer voting.
 
 ---
 
