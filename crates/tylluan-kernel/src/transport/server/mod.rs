@@ -79,6 +79,15 @@ pub struct TylluanServer {
     /// agent. Contributed to a 4-day Unsloth training run being killed
     /// (Jose, 2026-08-28).
     pub coherence_gate_hybrid_enabled: bool,
+    /// Opt-in gate for the DeepEvalPhase night phase ([eval] deep_eval_enabled).
+    /// Defaults to false: the phase runs the J-6/J-7 DeepEval pilot as a
+    /// subprocess whose llama_backend judge can auto-start a real
+    /// llama-server — same class of side effect as coherence_gate_hybrid,
+    /// must stay off until the human opts in.
+    pub deep_eval_enabled: bool,
+    /// Minimum hours between DeepEval attempts ([eval] deep_eval_interval_hours,
+    /// default 24). Read by the phase each night cycle.
+    pub deep_eval_interval_hours: u64,
     pub recall_cache: Arc<tokio::sync::Mutex<RecallCache>>,
     pub hot_context: Arc<tokio::sync::Mutex<HotContext>>,
     pub coloquio: Option<Arc<ColoquioDb>>,
@@ -144,6 +153,8 @@ impl TylluanServer {
             low_memory_mode: false,
             recall_cascade_enabled: false,
             coherence_gate_hybrid_enabled: false,
+            deep_eval_enabled: false,
+            deep_eval_interval_hours: 24,
             recall_cache: Arc::new(tokio::sync::Mutex::new(RecallCache::new(20))),
             hot_context: Arc::new(tokio::sync::Mutex::new(HotContext::new(20))),
             coloquio: None,

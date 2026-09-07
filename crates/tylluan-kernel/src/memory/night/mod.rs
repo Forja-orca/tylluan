@@ -9,6 +9,7 @@ mod idlelab_phase;
 mod feedback_signal_phase;
 mod light_reranker_train_phase;
 mod lifecycle_phase;
+mod deep_eval_phase;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,6 +35,7 @@ pub use idlelab_phase::IdleLabPhase;
 pub use feedback_signal_phase::FeedbackSignalPhase;
 pub use light_reranker_train_phase::LightRerankerTrainPhase;
 pub use lifecycle_phase::LifecyclePhase;
+pub use deep_eval_phase::DeepEvalPhase;
 
 #[derive(Clone)]
 pub struct PhaseContext {
