@@ -175,7 +175,39 @@ pub struct TylluanConfig {
 
     #[serde(default)]
     pub nat: NatConfig,
+
+    /// J-14: evaluation settings. All opt-in by default — no phase that can
+    /// trigger real local inference is born enabled (CLAUDE.md standing rule,
+    /// same precedent as [security] coherence_gate_hybrid_enabled).
+    #[serde(default)]
+    pub eval: EvalConfig,
 }
+
+/// J-14 DeepEval (J-6 faithfulness / J-7 contextual precision) settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalConfig {
+    /// Opt-in gate for the DeepEvalPhase NightConsolidation phase, which
+    /// runs benchmarks/benchmark_j6_j7_deepeval.py (subprocess, llama_backend
+    /// judge — can auto-start a real llama-server). Defaults to FALSE.
+    #[serde(default)]
+    pub deep_eval_enabled: bool,
+    /// Minimum hours between DeepEval attempts (the pilot spawns real
+    /// inference per trace; it must not run on every 30-minute night slot).
+    /// Default 24. Marker file: <data_dir>/deep_eval_last_run.
+    #[serde(default = "default_deep_eval_interval_hours")]
+    pub deep_eval_interval_hours: u64,
+}
+
+impl Default for EvalConfig {
+    fn default() -> Self {
+        Self {
+            deep_eval_enabled: false,
+            deep_eval_interval_hours: default_deep_eval_interval_hours(),
+        }
+    }
+}
+
+fn default_deep_eval_interval_hours() -> u64 { 24 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationConfig {

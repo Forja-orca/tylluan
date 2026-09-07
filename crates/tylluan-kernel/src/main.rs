@@ -1025,6 +1025,8 @@ async fn main() -> anyhow::Result<()> {
     server.low_memory_mode = low_memory_mode;
     server.recall_cascade_enabled = config.silva.cascade_enabled;
     server.coherence_gate_hybrid_enabled = config.security.coherence_gate_hybrid_enabled;
+    server.deep_eval_enabled = config.eval.deep_eval_enabled;
+    server.deep_eval_interval_hours = config.eval.deep_eval_interval_hours;
     // Honest abstention floor (opt-in): scaled x1000 for the atomic.
     silva.set_abstain_floor_x1000((config.silva.recall_abstain_min_score * 1000.0) as i64);
     // MLP scorer: optional ONNX model for learned complexity scoring
@@ -1748,7 +1750,7 @@ async fn run_night_consolidation_loop(
         PhaseOrchestrator, PhaseContext,
         DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
         DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
-        LifecyclePhase,
+        LifecyclePhase, DeepEvalPhase,
     };
 
     let orchestrator = PhaseOrchestrator::new(vec![
@@ -1762,6 +1764,10 @@ async fn run_night_consolidation_loop(
         Box::new(IdleLabPhase),
         Box::new(FeedbackSignalPhase),
         Box::new(LifecyclePhase),
+        // J-14: opt-in (default OFF via [eval] deep_eval_enabled). The phase
+        // self-gates on the flag and a 24h marker, so registering it is safe
+        // even with eval disabled.
+        Box::new(DeepEvalPhase),
     ]);
 
     let ctx = PhaseContext {
