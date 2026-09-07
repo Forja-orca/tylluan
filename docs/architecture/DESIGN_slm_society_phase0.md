@@ -1,21 +1,47 @@
 # Fase 0 — Sociedad interna de SLMs: diseño de evaluación (falsable)
 
-**Estado:** propuesto, BLOQUEADO hasta leer el precedente de la sección "Precedente real" — pendiente de discusión en Coloquio antes de implementar.
-**Fecha:** 2026-09-03 (actualizado 2026-09-07 con precedente de julio)
+**Estado:** APROBADO para Fase 0-Pre (Smoke-test de Entropía). Discusión técnica resuelta en Coloquio (Turnos 248–251).
+**Fecha:** 2026-09-03 (actualizado 2026-09-07 con análisis del spike ad5b9c4 y formalización de Fase 0-Pre)
 **Origen:** discusión Claude Code ↔ José ↔ equipo (Antigravity, Deep), consenso alcanzado.
 
-## ⚠️ Precedente real — leer antes de discutir nada (añadido 2026-09-07)
+## ⚠️ Precedente real y lecciones del spike de julio (commit `ad5b9c4`)
 
-Este experimento ya se intentó, con datos duros, y falló de una forma específica que hay que entender antes de repetirlo:
+Este experimento cuenta con un precedente empírico directo en `benchmarks/spikes/slm_society/` (`experiment.py`, `experiment_v2.py`, `REPORT.md`, commit `ad5b9c4`, 29-jul-2026):
 
-`ROADMAP_O3.md:649` (CoherenceGate, NO-GO 2026-07-29): **"Sociedad de 3 SLMs probada, converge a respuesta constante (0% varianza). El 75% original era el default seguro bajo grammar, no juicio real."** Con modelos <2B, 3 SLMs deliberando sobre el filtro de coherencia no debatieron de verdad — convergieron a la misma salida siempre, y el 75% de acierto que parecía validarlo era el valor por defecto forzado por la gramática de generación, no juicio del modelo.
+`ROADMAP_O3.md:649` (CoherenceGate, NO-GO 2026-07-29): **"Sociedad de 3 SLMs probada, converge a respuesta constante (0% varianza). El 75% original era el default seguro bajo grammar, no juicio real."**
 
-Más de fondo — `ROADMAP_O3.md:659-678`, corrección explícita de José (2026-07-28), tras el mismo ciclo de spikes: **lo que nunca pidió** es que Tylluan compita en razonamiento general con el cliente IDE ya conectado (Claude Code, Cursor, etc. — ese cliente ya piensa). **Lo que sí pidió**: modelos pequeños como "sinapsis" — puntos concretos de decisión interna (routing, filtrado, PII, compresión) — nunca un "cerebro central que delibera por Tylluan". La cifra de mejora que motiva todo esto (~40%) está atada a que esas sinapsis concretas estén bien construidas, no a que Tylluan delibere de forma genérica en su lugar.
+### Análisis técnico de la causa raíz en `experiment_v2.py:27-81`:
+1. **Modelos evaluados en julio**: El spike no se limitó a sub-1B; evaluó explícitamente `SmolLM2-1.7B` (Proposer) y `Phi-3.5-mini` (~3.8B) / `Qwen2.5-0.5B` (Critic). El tamaño por sí solo no impidió el colapso.
+2. **Prompts evaluados en julio**: `experiment_v2.py` ya contaba con prompts asimétricos (`PROMPT` permisivo vs. `CRITIC_PROMPT` escéptico).
+3. **Mecanismo real de colapso**: La conjunción de **Muestreo Greedy (`temperature: 0`)** sobre una **Gramática GBNF de 1 token forzado** (`root ::= "KEEP" | "REJECT"`) sin permitir tokens de razonamiento intermedio (Chain-of-Thought / scratchpad). Al forzar a un SLM a emitir su veredicto en el token 0 bajo $T=0$, cualquier sesgo infinitesimal en los logits del pre-entrenamiento actúa como escalón determinista absoluto hacia la clase dominante (REJECT-ALL / KEEP constante).
 
-**Qué significa esto para el diseño de abajo, sin invalidarlo:**
-- El método de 3 brazos (A/B/C, falsación explícita) sigue siendo correcto — de hecho es exactamente lo que faltó en julio: aquel experimento no tuvo un baseline compute-matched (Self-MoA) para descartar que la convergencia a varianza-cero fuera del sampling, no de los roles.
-- Antes de correr Fase 0, el equipo debe explicar **por qué esta vez no convergería igual** — ¿temperatura distinta, prompts de rol menos rígidos, modelo diferente, tarea diferente (retrieval/abstención vs. juicio binario de coherencia)? Si la respuesta es "no lo sabemos", el diseño necesita un experimento previo, más barato, que mida específicamente varianza entre las 3 salidas (no solo accuracy) antes de invertir en el arnés completo.
-- Esto refuerza, no debilita, el encaje en "sinapsis": los 3 brazos deben medirse sobre una decisión concreta y acotada (p.ej. abstención en `recall_misses`), nunca sobre "razonar mejor" en general — coherente con la corrección de José de julio.
+### Corrección de intención de José (`ROADMAP_O3.md:659-678`):
+Tylluan **nunca** debe competir en razonamiento general con el cliente IDE conectado (Claude Code, Cursor). El rol exclusivo de los SLMs son **"sinapsis internas concretas"** — decisiones acotadas de infraestructura (enrutamiento, poda de memoria negativa en `recall_misses`, verificación de enlaces en SilvaDB) —, jamás un "cerebro deliberativo general".
+
+---
+
+## 🔬 Fase 0-Pre: Smoke-test de Entropía y Falsación Rápida
+
+Antes de construir el arnés completo en `NightConsolidation` (`crates/tylluan-kernel/src/memory/night/`), se ejecuta un test previo ultraligero y aislado sobre 15 queries reales:
+
+### Especificación del Smoke-test:
+- **Dataset**: 15 casos reales de `recall_misses` / `cases_real_50.json`.
+- **Condiciones de Inferencia**:
+  - Chain-of-Thought (CoT) habilitado: el modelo debe emitir 1-2 frases de análisis antes del veredicto.
+  - Temperatura $T \in [0.4, 0.6]$ (no greedy $T=0$).
+  - Sin gramática rígida de 1 token en el token 0.
+- **Matriz de 3 Brazos**:
+  - **Brazo A (Baseline)**: 1 pasada CoT directa ($T=0.2$).
+  - **Brazo B (Self-MoA)**: 3 pasadas independientes CoT ($T=0.6$) + síntesis/voting simple (la hipótesis rival de arXiv:2502.00674).
+  - **Brazo C (Roles Asimétricos)**: Proponente CoT $\to$ Escéptico CoT $\to$ Sintetizador CoT.
+- **Métricas de Entropía**:
+  1. *Similitud léxica/semántica (Jaccard / embedding cosine)* entre el razonamiento del Proponente y del Escéptico.
+  2. *Tasa de desacuerdos genuinos* ($>0\%$).
+  3. *Varianza inter-queries* en las decisiones finales (evitar REJECT-ALL o KEEP-ALL).
+
+### Compuertas de Decisión (Gates):
+- **🚫 HARD NO-GO GATE**: Si la similitud Proponente-Escéptico es $>85\%$ (el Escéptico capitula), si la varianza entre las 15 queries es 0, o si `Brazo B >= Brazo C` $\to$ **NO-GO definitivo** de la sociedad de SLMs en Tylluan. Se archiva la iniciativa sin escribir código en el kernel.
+- **✅ GO GATE**: Si el Brazo C supera al Brazo B de forma estadísticamente consistente con varianza real $\to$ se desbloquea la Fase 0 completa (arnés en `crates/tylluan-evals`).
 
 ## Contexto
 
@@ -70,4 +96,8 @@ Si correr los 3 brazos en la primera ejecución resulta caro en CPU (SLM lento, 
 
 ## Siguiente paso
 
-Publicar este documento en Coloquio para discusión del equipo (Antigravity, Deep, Buffy) antes de cualquier línea de código. Regla 13 del proyecto: arnés y diseño de evaluación primero, implementación después. **Bloqueante añadido 2026-09-07**: la discusión debe responder primero a la sección "Precedente real" — nadie implementa el arnés de 3 brazos hasta que quede explícito por qué esta vez la deliberación no convergería a varianza cero como en julio.
+1. **Ejecutar el Smoke-test de Entropía (Fase 0-Pre)**: Script ligero y aislado sobre 15 queries de `cases_real_50.json` / `recall_misses` comparando Brazo A, Brazo B y Brazo C con CoT y $T=0.6$.
+2. **Evaluar las Compuertas (Gates)**:
+   - Si se activa el Hard NO-GO Gate (Jaccard $>85\%$, varianza cero o Brazo B $\ge$ Brazo C), se archiva definitivamente la sociedad SLM.
+   - Si se supera el GO Gate (Brazo C $>$ Brazo B con varianza real), se procede a implementar el arnés completo de Fase 0 en `crates/tylluan-evals` para `NightConsolidation`.
+3. Ninguna línea de código en el kernel hasta que los resultados empíricos de Fase 0-Pre sean publicados y verificados en Coloquio.
