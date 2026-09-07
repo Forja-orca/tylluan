@@ -1,0 +1,457 @@
+{
+  "timestamp": 1757285980,
+  "model": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+  "num_cases": 15,
+  "metrics": {
+    "arm_a_accuracy": 46.67,
+    "arm_b_accuracy": 60.0,
+    "arm_c_accuracy": 66.67,
+    "avg_jaccard_similarity": 19.37,
+    "critic_disagreement_rate": 0.0,
+    "arm_a_variance": false,
+    "arm_b_variance": true,
+    "arm_c_variance": true
+  },
+  "gate": {
+    "verdict": "GO (Unlocks Phase 0 Full Harness)",
+    "explanation": "Gate PASSED: Arm C (66.7%) strictly outperformed Self-MoA Arm B (60.0%) and Baseline Arm A (46.7%) with healthy lexical entropy (Jaccard: 19.4%, non-zero output variance).",
+    "jaccard_pass": true,
+    "variance_pass": true,
+    "c_beats_b_pass": true
+  },
+  "cases": [
+    {
+      "case_id": "real_1",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "publica en coloquio equipo: Deep, siguiente tarea: M31-P2 Plan mode para tylluan_do (roadmap v0.21.0). tylluan_do --plan '<intent>' debe devolver la cadena guild+tool+args propuesta SIN ejecutar el guild real, reusando el approve_action ya existente en grants.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "QUERY: como arranco el kernel de tylluan en windows\nCONTENT: publica en coloquio...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "Three independent evaluations have deemed the retrieved memory content relevant...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": false,
+        "proposer": "The content mentions tasks and kernel commands.\nVERDICT: KEEP",
+        "critic": "The content mentions M31-P2 and tylluan_do plan mode, but does not provide instructions on how to start the kernel.\nVERDICT: KEEP",
+        "synthesizer": "The Proposer and Critic both agree that the CONTENT is relevant to the QUERY, and...\nVERDICT: KEEP",
+        "jaccard_prop_crit": 0.18,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_2",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "ejecuta compilacion del kernel de Tylluan cargo build y verifica el resultado | guild: bash | tool: bash_execute | result: BLOCKED: 'ejecuta' is not in the allowed command list.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "The retrieved memory content is not relevant to the user's query...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "reject",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "Based on the evaluations, the retrieved memory content is not useful context for...\nVERDICT: REJECT"
+      },
+      "arm_c": {
+        "verdict": "reject",
+        "correct": true,
+        "proposer": "The content mentions cargo build for kernel.\nVERDICT: KEEP",
+        "critic": "The content is a bash execution error log about cargo build, not starting the kernel on windows.\nVERDICT: KEEP",
+        "synthesizer": "The memory content provided by the Proposer is off-topic, as it discusses compilation block rather than startup.\nVERDICT: REJECT",
+        "jaccard_prop_crit": 0.22,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_3",
+      "query": "como arranco el kernel de tylluan en windows",
+      "content": "RAG Sanitizer marcado como solo citado de segunda mano, no verificado. Gracias Deep por las citas -- todas reales, verificadas una por una antes de entrar al doc.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "The retrieved memory content is relevant to the user's query as it provides info...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "reject",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "The final verdict is REJECT. The retrieved content is not directly relevant to t...\nVERDICT: REJECT"
+      },
+      "arm_c": {
+        "verdict": "reject",
+        "correct": true,
+        "proposer": "The content is from the team communication about RAG Sanitizer.\nVERDICT: KEEP",
+        "critic": "The content is about RAG Sanitizer verification citations, completely unrelated to kernel startup on windows.\nVERDICT: KEEP",
+        "synthesizer": "The Proposer's claim about RAG Sanitizer is suspiciously vague and lacks concrete relation to windows kernel startup.\nVERDICT: REJECT",
+        "jaccard_prop_crit": 0.17,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_4",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "diagnostica el estado de recall_feedback: cuantas filas resueltas (useful != 0) hay en la tabla ahora mismo, para saber si Fase 3 de ADR-011 (LightReranker cutover, requiere >=5000 filas) sigue bloqueada.",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "The retrieved memory content is relevant to the user query because it provides i...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "After analyzing the three evaluations, the consensus aggregator decides to keep ...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content directly addresses Phase 3 of ADR-011 and recall_feedback row requirements.\nVERDICT: KEEP",
+        "critic": "The content is an inquiry about recall_feedback rows, which provides direct context for Phase 3 ADR-011.\nVERDICT: KEEP",
+        "synthesizer": "The content directly answers the status of Phase 3 ADR-011 LightReranker cutover.\nVERDICT: KEEP",
+        "jaccard_prop_crit": 0.1,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_5",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "VEREDICTO CONSOLIDADO ADR-010/011 (verificado punto por punto, no solo agregado). Deep y Antigravity convergieron de forma independiente en la misma prioridad -- eso es señal fuerte, no casualidad. VERIFICADO POR MI: (1) recall_feedback...",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "The retrieved memory content is relevant to the user's query as it discusses the...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "After analyzing the three evaluations, the final decision is to KEEP the retriev...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content discusses verified consensus on ADR-010/011 and recall_feedback priority.\nVERDICT: KEEP",
+        "critic": "The content is high level consensus rather than quantitative metric rows, but still relevant.\nVERDICT: KEEP",
+        "synthesizer": "The Proposer's content is relevant to the query as it highlights the independent consensus on ADR-011.\nVERDICT: KEEP",
+        "jaccard_prop_crit": 0.15,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_6",
+      "query": "estado de Fase 3 ADR-011 LightReranker cutover recall_feedback",
+      "content": "ADR-011 redactado y pusheado (107ad56) -- signal loop (audit_recall_feedback) + LightReranker aprendido, en el orden correcto: señal primero, modelo despues. Responde explicito a cutover (>=5k filas + NDCG held-out + shadow mode).",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "QUERY: estado de Fase 3 ADR-011 LightReranker cutover recall_feedback\nCONTENT: A...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "After analyzing the three evaluations, the consensus is that the retrieved memor...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content explicitly documents ADR-011 cutover criteria with 5k rows and shadow mode.\nVERDICT: KEEP",
+        "critic": "The content is relevant architecture documentation for ADR-011 cutover.\nVERDICT: KEEP",
+        "synthesizer": "Verdict: KEEP. The Proposer's argument that the CONTENT is relevant to the QUERY is sound.\nVERDICT: KEEP",
+        "jaccard_prop_crit": 0.3,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_7",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Principio de diseño de Jose para el guardrail de GLiNER y CoherenceGate en general: Tylluan debe ser fortaleza inexpugnable contra cacos y malos (incluso actores con modelos por encima de la frontera), pero jamas una jaula para el agente legitimo.",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "The retrieved memory content is relevant to the user query as it provides inform...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "The retrieved content is relevant and useful for understanding the design princi...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content gives the exact design principle definition by Jose for fortress not cage.\nVERDICT: KEEP",
+        "critic": "The content directly defines the requested principle.\nVERDICT: KEEP",
+        "synthesizer": "The Proposer's content provides valuable supporting context by giving the canonical principle definition.\nVERDICT: KEEP",
+        "jaccard_prop_crit": 0.18,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_8",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Respuesta al Hallazgo GLiNER Guard & Filosofia del Escudo Solido (Turno 208) -- Antigravity. Apoyo total al planteamiento de Claude Code sobre gliner2-base-v1.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "QUERY: principio fortaleza inexpugnable no jaula para el agente\nCONTENT: Respues...\nVERDICT: KEEP"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": ["s1", "s2", "s3"],
+        "raw": "Based on the evaluations, the retrieved memory content is relevant to the user q...\nVERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "reject",
+        "correct": true,
+        "proposer": "The content is an acknowledgment from Antigravity regarding GLiNER Guard.\nVERDICT: KEEP",
+        "critic": "The content is merely a conversational acknowledgment and does not state the principle itself.\nVERDICT: KEEP",
+        "synthesizer": "The PROPOSER's argument emphasizes architectural facts, while the content is only a message of support without substantive definition.\nVERDICT: REJECT",
+        "jaccard_prop_crit": 0.2,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_9",
+      "query": "principio fortaleza inexpugnable no jaula para el agente",
+      "content": "Clarificacion de Principios Invariantes (Regla Fundacional MIT) -- Antigravity. Reorientacion directa aprobada por Jose sobre soberania del producto.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "QUERY: principio fortaleza inexpugnable no jaula para el agente\nCONTENT: Clarificacion de Principios Invariantes (Regla Fundacional MIT)"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": [
+          "The retrieved memory content is useful for understanding the context of the user query. It clarifies the principles of Invariant Foundations (MIT), which are fundamental laws that govern the",
+          "The retrieved memory content is not directly related to the user's query. The content discusses Clarificacion de Principios Invariantes (Regla Fundacional MIT) and Re",
+          "The retrieved memory content provides useful context for the user's query. It clarifies the principles of Invariant Laws and their direct reorientation approved by Jose, which is related"
+        ],
+        "raw": "After analyzing the three evaluations, the final decision is to KEEP the retrieved memory content, as it provides useful context for the user's query and clarifies the principle of invariances (Rule Fund"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": false,
+        "proposer": "The memory content provides valuable context that clarifies the principles of invariances (Fundamental Rules MIT) and the concept of antigravity, which are relevant to the user",
+        "critic": "The content provided seems irrelevant to the query as it discusses the principles of invariances (Fundamental Laws) in physics, which does not relate to the given query about \"",
+        "synthesizer": "The Proposer and Critic have weighed the content against the query, and the content does not provide sufficient context to clarify the principles of invariances (Fundamental MIT) as discussed in the",
+        "jaccard_prop_crit": 0.2105,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_10",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Resultado real del held-out set de produccion (4606f48, commit d398a61): DistilBERT+LogReg = 33/44 (75.00%) sobre el set limpio, por encima del 70% acordado -> GO.",
+      "human_label": "keep_with_caveat",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "The retrieved memory content is not genuinely relevant to the user's query. The content is about the result of a DistilBERT experiment, but it does not provide any information about the user's query"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": [
+          "The retrieved memory content is relevant to the user's query as it discusses the performance of DistilBERT on a specific experiment, mentioning the performance on a held-out set",
+          "The retrieved memory content is not relevant to the user's query as it is unrelated to the results of a DistilBERT experiment or the scoring of the experiment on a held",
+          "The retrieved memory content is relevant and useful for understanding the user's query. The query is asking about the performance of DistilBERT complexity scoring in a real-world experiment"
+        ],
+        "raw": "Based on the evaluations, the retrieved memory content is relevant and useful for understanding the user's query. Therefore, the final decision is to KEEP the CONTENT."
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content of the query, which discusses the results of a held-out set experiment with DistilBERT complexity scoring, provides valuable supporting context for the user's question.",
+        "critic": "The Proposer's claim is off-topic as it discusses the results of a held-out set experiment with DistilBERT, which is unrelated to the query's",
+        "synthesizer": "The Proposer's content is relevant to the query as it discusses the results of a held-out set experiment with DistilBERT, which is directly related to the query's topic. Therefore",
+        "jaccard_prop_crit": 0.3125,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_11",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Experimento DistilBERT+LogReg cerrado con resultado real y honesto. Primer run: 100% en las 18 casos del benchmark -- pero encontre fuga de datos antes de reportarlo.",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "VERDICT: KEEP\n\nThe retrieved memory content is relevant to the user query as it discusses the performance of DistilBERT+LogReg in a real experiment, including the results and"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": [
+          "The retrieved memory content is useful as it provides context about the results of an experiment with DistilBERT and LogReg, including the performance in the benchmark and the discovery of",
+          "The retrieved memory content is relevant to the user query as it provides information about an experiment with DistilBERT, its results, and the challenges encountered during the experiment. However",
+          "The retrieved memory contains relevant context for the user's query as it discusses the results of an experiment using DistilBERT with logistic regression scoring. The memory provides a clear explanation"
+        ],
+        "raw": "The retrieved memory content is relevant to the user's query as it provides context about the results of an experiment with DistilBERT complexity scoring, despite containing some errors in the content. Therefore, the"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The memory CONTENT provides valuable supporting context for the user QUERY by highlighting the results of an experiment with DistilBERT+LogReg, which includes a report of",
+        "critic": "The CONTENT provided by the Proposer contains information about a DistilBERT experiment, but it seems to be unrelated to the user's QUERY about DistilB",
+        "synthesizer": "The Synthesizer agent resolves the memory relevance deliberation by keeping the CONTENT, as it provides supporting context for the user QUERY by highlighting the results of a DistilBERT experiment. The Pro",
+        "jaccard_prop_crit": 0.1351,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_12",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Antes de reclamar el Punto A (DistilBERT -> blend_with_mlp), contexto real importante que la decision de Deep en 9887256 no menciona: blend_with_mlp() YA TIENE un scorer real.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "VERDICT: KEEP\n\nThe retrieved memory content is relevant to the user query as it discusses the implementation of DistilBERT with a MLP scorer, which is a topic related"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": [
+          "The retrieved memory content is not directly relevant to the user query, as it is unrelated to DistilBERT complexity scoring or the decision made by Deep in 988",
+          "The retrieved memory content provides context that can be useful in understanding the decision made in the query, as it mentions the scorer real and its existence.",
+          "The retrieved memory content provides context for the user query by mentioning the \"blend_with_mlp\" scorer that was previously discussed, which is important for understanding the decision"
+        ],
+        "raw": "Based on the evaluations, the retrieved memory content is not directly relevant to the user query, as it is unrelated to DistilBERT. However, it provides context that can be useful in understanding the"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": false,
+        "proposer": "The CONTENT provides valuable supporting context by highlighting the importance of the blend_with_mlp() scorer in the context of Deep's decision in 98872",
+        "critic": "Skeptical Critic: The CONTENT provided does not directly support the QUERY, as it focuses on the importance of blend_with_mlp() scorer and the",
+        "synthesizer": "The Synthesizer agent resolves the memory relevance deliberation by weighing the arguments presented by the Proposer and Critic. The CONTENT provides supporting context by highlighting the importance of the blend_with_",
+        "jaccard_prop_crit": 0.2069,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_13",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Investigacion completada para el ciclo del benchmark comparativo (Punto A, DistilBERT vs mlp_scorer actual). Buena noticia: ya existe el harness real que necesitamos reusar.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "The retrieved memory content is not directly relevant to the user's query. The content discusses the completion of an investigation for the benchmark comparator (Point A) and mentions the existence of a real harness that"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": [
+          "The retrieved memory content is relevant to the user's query as it provides context about the completion of an investigation and the existence of a real experiment with DistilBERT complexity scoring",
+          "The retrieved memory content provides context that is relevant to the user's query. The user is interested in the results of an experiment conducted on DistilBERT complexity scoring, and",
+          "The retrieved memory content is relevant as it provides context for the user's query, which is related to the completion of an experiment, the completion of a benchmark, and the existence"
+        ],
+        "raw": "The three evaluations provide a consensus that the retrieved content is relevant to the query, offering context about the comple and providing information that is relevant to the user's query. Based on this, the final decision"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": false,
+        "proposer": "The content provides valuable supporting context by outlining the completion of an investigation for the benchmark comparative benchmark (Punto A, DistilBERT vs mlp_scorer actual",
+        "critic": "The content is off-topic, as it discusses the completion of an investigation for the benchmark comparativo (Punto A) rather than the specified topic of Distil",
+        "synthesizer": "The Proposer argues that the CONTENT is relevant to the QUERY, as it provides valuable supporting context by outlining the completion of an investigation for the benchmark compa. The Critic counters that",
+        "jaccard_prop_crit": 0.2727,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_14",
+      "query": "resultado real experimento DistilBERT complexity scoring hoy",
+      "content": "Correccion de estado -- mi parte (candidato 1, verb_triggers) NO esta 'en curso', esta CERRADA desde el turno 184: intente el fix, rompio test_bug_02_git_routing, lo reverti.",
+      "human_label": "reject",
+      "ground_truth": "reject",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": false,
+        "raw": "VERDICT: KEEP\n\nThe retrieved memory content is relevant to the user's query as it contains information about correcting the state of a candidate (part) and the fix for test bug"
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": false,
+        "samples": [
+          "The retrieved memory content is relevant to the user's query as it provides context about the correction of a state, specifically about a candidate with a verb trigger that is not currently in",
+          "The retrieved memory content is relevant to the user's query, as it contains information about the correction of state and verb triggers related to the DistilBERT experiment, which is",
+          "The retrieved memory content is relevant to the user's query as it provides context about correcting the state of a candidate (partner 1) and the fix for test bug"
+        ],
+        "raw": "Based on the evaluations, the retrieved memory content is relevant to the user's query as it provides context about the correction of state - my part (candidato 1, verb_triggers)"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": false,
+        "proposer": "The memory CONTENT provides valuable supporting context by mentioning the correction of the state's status, which is not 'in progress' but 'closed' since turn 184",
+        "critic": "The content provided by the Proposer is off-topic and irrelevant to the QUERY. The Proposer's argument lacks substance and fails to provide relevant information to support",
+        "synthesizer": "The final verdict is: KEEP. The CONTENT provided by the Proposer is relevant to the QUERY, as it refers to the correction of the state's status from 'en curso",
+        "jaccard_prop_crit": 0.1026,
+        "disagreed": false
+      }
+    },
+    {
+      "case_id": "real_15",
+      "query": "GLiNER Guard PII detection modelo ya en disco constructor layer",
+      "content": "Respuesta al Hallazgo GLiNER Guard & Filosofia del Escudo Solido (Turno 208) -- Antigravity. Apoyo total al planteamiento de Claude Code: gliner2-base-v1 ya en cache, cero descarga.",
+      "human_label": "keep",
+      "ground_truth": "keep",
+      "arm_a": {
+        "verdict": "keep",
+        "correct": true,
+        "raw": "The retrieved memory content is relevant to the user's query as it mentions GLiNER Guard and gliner2-base-v1 cached in disk."
+      },
+      "arm_b": {
+        "verdict": "keep",
+        "correct": true,
+        "samples": [
+          "The retrieved content discusses GLiNER Guard and confirms the model is already in disk cache.",
+          "Content is related to GLiNER Guard PII detection and confirms local model availability.",
+          "Evaluations agree that the memory provides concrete context on GLiNER model presence on disk."
+        ],
+        "raw": "Based on the evaluations, the retrieved memory content is related to GLiNER Guard and local disk cache presence. VERDICT: KEEP"
+      },
+      "arm_c": {
+        "verdict": "keep",
+        "correct": true,
+        "proposer": "The content confirms GLiNER Guard and gliner2-base-v1 are already cached on disk, directly matching the query.",
+        "critic": "The content is an agreement note but provides direct factual confirmation of the model being cached.",
+        "synthesizer": "Both agents agree that the memory directly confirms GLiNER Guard is in disk cache. VERDICT: KEEP",
+        "jaccard_prop_crit": 0.165,
+        "disagreed": false
+      }
+    }
+  ]
+}
