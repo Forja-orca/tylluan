@@ -63,7 +63,7 @@ Lo que ya tenemos (verificado 2026-07-25):
 - BGE-M3 hybrid search: R@5 82% LongMemEval-S, R@10 90%, latency p50 12.9ms
 - M20 Complexity Cascade: score ≥0.6 → coordinator proactivo, ≥0.4 → fallback reactivo
 - M18 TRINITY Coordinator: Thinker/Worker/Verifier + synthesis fallback — **CERRADO**, re-benchmark +62.0%/+57.7% supera el umbral 30%
-- NightConsolidation: 10 fases corriendo en paralelo (semáforo dimensionado por `available_parallelism()`, no secuencial) — Dream, Ouroboros, AutoLink, GraphRAG, Decay, Agent, Curriculum, IdleLab, FeedbackSignal (ADR-011), LightRerankerTrain (ADR-011)
+- NightConsolidation: 10 fases corriendo en paralelo (semáforo dimensionado por `available_parallelism()`, no secuencial) — Dream, Ouroboros, AutoLink, GraphRAG, Decay, Agent, Curriculum, IdleLab, FeedbackSignal (ADR-011), Lifecycle (ADR-012). (Corregido 2026-09-07: esta lista incluía LightRerankerTrain, que está implementado y probado pero deliberadamente NO registrado en el orquestador de producción — ver línea LightReranker más abajo y `main.rs` registro real.)
 - ADR-011 Signal Loop: `recall_feedback` (schema v18) + Coherence Gate 3 capas en `tylluan_recall` (ambos caminos, incl. cache-hit) + LightReranker (ONNX y pesos nativos) — Fase 3-4 en scaffold, cutover real bloqueado por datos (≥5.000 filas resueltas), no por diseño
 - Node pruning: DreamCycle + decay `prune_by_salience(threshold)` operativo
 - Federation P2P completa: DHT Kademlia + Gossip + Noise XK + TCP dispatch — M14-F Phase 3 **cerrado** (test DST real)
