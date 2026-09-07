@@ -1,0 +1,463 @@
+{
+  "generated": "2026-09-07",
+  "kernel_commit": "667243f",
+  "device": "cpu",
+  "summary": {
+    "recall": {
+      "p50": 664.35,
+      "p95": 16033.65,
+      "p99": 20029.12,
+      "min": 74.11,
+      "max": 20029.12,
+      "mean": 5198.14,
+      "n": 36
+    },
+    "do": {
+      "p50": 501.76,
+      "p95": 30837.3,
+      "p99": 102848.71,
+      "min": 21.62,
+      "max": 102848.71,
+      "mean": 6314.86,
+      "n": 36
+    }
+  },
+  "raw": {
+    "recall": [
+      {
+        "run": 0,
+        "query": "sovereignty kernel memory architecture design principles",
+        "ms": 11964.12,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "que aprendimos sobre el router de desempate semantic",
+        "ms": 16033.65,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "SQLite schema migrations node_embeddings",
+        "ms": 15459.74,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "CoherenceGate hybrid classify opt-in flag",
+        "ms": 14506.48,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "portability roundtrip memory survives copy restart",
+        "ms": 275.12,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "HTTP hang under reindex load root cause",
+        "ms": 134.2,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "cycle_in_flight federation auto sync panic guard",
+        "ms": 439.17,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "I-7 curated routing dataset scrapling canonical",
+        "ms": 196.93,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "FSRS memory decay per node stability",
+        "ms": 307.08,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "lifecycle transitions active quiet consolidated archived",
+        "ms": 162.15,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "embed_batch_async blocking pool onnx inference",
+        "ms": 10470.55,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "query": "agent summary superseded pruning drift ratio",
+        "ms": 20029.12,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "sovereignty kernel memory architecture design principles",
+        "ms": 175.52,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "que aprendimos sobre el router de desempate semantic",
+        "ms": 226.5,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "SQLite schema migrations node_embeddings",
+        "ms": 685.91,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "CoherenceGate hybrid classify opt-in flag",
+        "ms": 74.11,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "portability roundtrip memory survives copy restart",
+        "ms": 11303.4,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "HTTP hang under reindex load root cause",
+        "ms": 13895.42,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "cycle_in_flight federation auto sync panic guard",
+        "ms": 14610.84,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "I-7 curated routing dataset scrapling canonical",
+        "ms": 14394.9,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "FSRS memory decay per node stability",
+        "ms": 14738.98,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "lifecycle transitions active quiet consolidated archived",
+        "ms": 12601.68,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "embed_batch_async blocking pool onnx inference",
+        "ms": 263.44,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "query": "agent summary superseded pruning drift ratio",
+        "ms": 198.53,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "sovereignty kernel memory architecture design principles",
+        "ms": 845.57,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "que aprendimos sobre el router de desempate semantic",
+        "ms": 251.63,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "SQLite schema migrations node_embeddings",
+        "ms": 664.35,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "CoherenceGate hybrid classify opt-in flag",
+        "ms": 218.83,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "portability roundtrip memory survives copy restart",
+        "ms": 3533.35,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "HTTP hang under reindex load root cause",
+        "ms": 5306.54,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "cycle_in_flight federation auto sync panic guard",
+        "ms": 298.42,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "I-7 curated routing dataset scrapling canonical",
+        "ms": 639.2,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "FSRS memory decay per node stability",
+        "ms": 434.58,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "lifecycle transitions active quiet consolidated archived",
+        "ms": 962.59,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "embed_batch_async blocking pool onnx inference",
+        "ms": 540.02,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "query": "agent summary superseded pruning drift ratio",
+        "ms": 290.48,
+        "status": "ok"
+      }
+    ],
+    "do": [
+      {
+        "run": 0,
+        "intent": "check if the configuration file tylluan.toml exists",
+        "ms": 166.61,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "list the .py files inside crates/tylluan-kernel/src",
+        "ms": 166.7,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "search indexed documentation for ADR-012 lifecycle",
+        "ms": 30837.3,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "find all graph triples connecting entity SilvaDB with PageRank",
+        "ms": 660.39,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "calculate the degree centrality of nodes in the knowledge graph",
+        "ms": 1237.06,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "read the latest 5 messages in the general coloquio channel",
+        "ms": 178.39,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "post a message to channel general saying benchmark running",
+        "ms": 66.07,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "what files are located inside the guilds/core directory",
+        "ms": 357.57,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "inspect the schema of the node_embeddings table in data/silva.db",
+        "ms": 14815.61,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "show the git log for the last 10 commits",
+        "ms": 13939.24,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "check current cpu temperature ram usage and disk space",
+        "ms": 7896.94,
+        "status": "ok"
+      },
+      {
+        "run": 0,
+        "intent": "run an explain query plan on select from nodes",
+        "ms": 44.23,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "check if the configuration file tylluan.toml exists",
+        "ms": 399.24,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "list the .py files inside crates/tylluan-kernel/src",
+        "ms": 168.03,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "search indexed documentation for ADR-012 lifecycle",
+        "ms": 13416.82,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "find all graph triples connecting entity SilvaDB with PageRank",
+        "ms": 656.62,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "calculate the degree centrality of nodes in the knowledge graph",
+        "ms": 151.27,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "read the latest 5 messages in the general coloquio channel",
+        "ms": 94.24,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "post a message to channel general saying benchmark running",
+        "ms": 47.45,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "what files are located inside the guilds/core directory",
+        "ms": 345.64,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "inspect the schema of the node_embeddings table in data/silva.db",
+        "ms": 687.65,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "show the git log for the last 10 commits",
+        "ms": 5923.1,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "check current cpu temperature ram usage and disk space",
+        "ms": 8407.72,
+        "status": "ok"
+      },
+      {
+        "run": 1,
+        "intent": "run an explain query plan on select from nodes",
+        "ms": 107.62,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "check if the configuration file tylluan.toml exists",
+        "ms": 469.01,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "list the .py files inside crates/tylluan-kernel/src",
+        "ms": 705.72,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "search indexed documentation for ADR-012 lifecycle",
+        "ms": 18074.22,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "find all graph triples connecting entity SilvaDB with PageRank",
+        "ms": 1645.74,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "calculate the degree centrality of nodes in the knowledge graph",
+        "ms": 1345.82,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "read the latest 5 messages in the general coloquio channel",
+        "ms": 84.07,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "post a message to channel general saying benchmark running",
+        "ms": 122.68,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "what files are located inside the guilds/core directory",
+        "ms": 501.76,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "inspect the schema of the node_embeddings table in data/silva.db",
+        "ms": 49.42,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "show the git log for the last 10 commits",
+        "ms": 694.71,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "check current cpu temperature ram usage and disk space",
+        "ms": 102848.71,
+        "status": "ok"
+      },
+      {
+        "run": 2,
+        "intent": "run an explain query plan on select from nodes",
+        "ms": 21.62,
+        "status": "ok"
+      }
+    ]
+  }
+}
