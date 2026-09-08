@@ -41,7 +41,12 @@ pub async fn memory_write_handler(State(state): State<Arc<HttpState>>, Json(req)
 pub async fn memory_search_handler(State(state): State<Arc<HttpState>>, Query(p): Query<MemorySearchQuery>) -> impl IntoResponse {
     let query = p.q.as_deref().unwrap_or("");
     let limit = p.limit.unwrap_or(20);
-    let query_embedding = state.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(query)).ok());
+    let query_embedding = state.matcher.engine().and_then(|e| {
+        tokio::task::block_in_place(|| {
+            state.silva.query_embed_cache.get_or_embed(query, |q| e.embed(q))
+        })
+        .ok()
+    });
     Json(state.silva.search_hybrid(query, query_embedding.as_deref(), limit, None, false).await.unwrap_or_default())
 }
 

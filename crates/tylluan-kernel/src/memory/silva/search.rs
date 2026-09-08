@@ -200,25 +200,11 @@ impl super::SilvaDB {
 
         let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
-            // KNOWN LIMITATION (2026-09-08): `emb` is already computed by the
-            // caller by the time we get here -- this cache can never skip the
-            // ONNX embed() cost that motivated it, it only stores a redundant
-            // copy. To actually save computation, callers of search_hybrid
-            // (api_memory.rs, handler_think.rs, autolink.rs, dual_retrieval)
-            // need to check query_embed_cache themselves BEFORE calling
-            // embed(), not rely on this post-hoc cache. Left as-is (harmless,
-            // does prime the cache for handler_recall's get_or_embed) pending
-            // that follow-up.
-            let cached = self.query_embed_cache.get(query);
-            let emb_vec: Vec<f32> = match cached {
-                Some(e) => e,
-                None => {
-                    let e = emb.to_vec();
-                    self.query_embed_cache.put(query, e.clone());
-                    e
-                }
-            };
-            vector_results = self.search_vector_ivf(&emb_vec, limit).await.unwrap_or_default();
+            // Embedding caching lives at the callers (api_memory, think,
+            // autolink...) via query_embed_cache.get_or_embed BEFORE embed() —
+            // a post-hoc cache here can't skip the ONNX cost (see ff205b1
+            // history). search_hybrid just consumes the passed embedding.
+            vector_results = self.search_vector_ivf(emb, limit).await.unwrap_or_default();
             for (rank, (node, _score)) in vector_results.iter().enumerate() {
                 let rrf = 1.0 / (K + rank as f32 + 1.0);
                 rrf_scores.entry(node.id.clone())
