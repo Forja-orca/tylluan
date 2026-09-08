@@ -200,7 +200,16 @@ impl super::SilvaDB {
 
         let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
-            vector_results = self.search_vector_ivf(emb, limit).await.unwrap_or_default();
+            let cached = self.query_embed_cache.get(query);
+            let emb_vec: Vec<f32> = match cached {
+                Some(e) => e,
+                None => {
+                    let e = emb.to_vec();
+                    self.query_embed_cache.put(query, e.clone());
+                    e
+                }
+            };
+            vector_results = self.search_vector_ivf(&emb_vec, limit).await.unwrap_or_default();
             for (rank, (node, _score)) in vector_results.iter().enumerate() {
                 let rrf = 1.0 / (K + rank as f32 + 1.0);
                 rrf_scores.entry(node.id.clone())

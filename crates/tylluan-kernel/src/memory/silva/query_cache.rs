@@ -93,6 +93,30 @@ impl QueryEmbeddingCache {
 
     /// Clear all cached embeddings.
     /// Called after `tylluan_remember` to ensure fresh embeddings on subsequent recalls.
+    /// Read a fresh cached embedding for `query`, if present (no computation).
+    /// Lets search_hybrid share one cache across all callers (api_memory,
+    /// think, autolink, dual_retrieval...) instead of re-embedding identical
+    /// queries on every path.
+    pub fn get(&self, query: &str) -> Option<Vec<f32>> {
+        let key = Self::normalize(query);
+        let cache = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = cache.get(&key)
+            && entry.inserted_at.elapsed() < CACHE_TTL {
+                return Some(entry.embedding.clone());
+            }
+        None
+    }
+
+    /// Store an already-computed embedding for `query` (LRU eviction at cap).
+    pub fn put(&self, query: &str, embedding: Vec<f32>) {
+        let key = Self::normalize(query);
+        let mut cache = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.len() >= MAX_ENTRIES {
+            Self::evict_lru(&mut cache);
+        }
+        cache.insert(key, Entry { embedding, inserted_at: Instant::now() });
+    }
+
     pub fn invalidate(&self) {
         if let Ok(mut cache) = self.inner.lock() {
             cache.clear();
