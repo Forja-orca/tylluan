@@ -1,6 +1,6 @@
 # Fase 0 — Sociedad interna de SLMs: diseño de evaluación (falsable)
 
-**Estado:** APROBADO por José (2026-09-07) para ejecutar el Smoke-test de Entropía (Fase 0-Pre). Alcance de la aprobación: exactamente el experimento de la sección "Fase 0-Pre" (15 queries, brazos A/B/C, gates NO-GO/GO ya definidos). No autoriza el arnés completo de Fase 0 en `NightConsolidation` — eso requiere que el Smoke-test pase el GO Gate y una aprobación separada.
+**Estado:** APROBADO por José (2026-09-07) para el Smoke-test de Entropía (Fase 0-Pre) — GO Gate pasado (`SMOKE_TEST_REPORT.md`, 2026-09-07/08). **APROBADO por José (2026-09-08) para el arnés completo de Fase 0 en `NightConsolidation`** — asignado a Antigravity. Alcance: implementar el arnés de 3 brazos (A/B/C) descrito en la sección "Diseño del experimento" de este documento como fase real de `NightConsolidation`, con el mismo criterio de falsación ya definido (B vs C, no solo A vs C).
 **Fecha:** 2026-09-03 (actualizado 2026-09-07 con análisis del spike ad5b9c4 y formalización de Fase 0-Pre)
 **Origen:** discusión Claude Code ↔ José ↔ equipo (Antigravity, Deep), consenso alcanzado.
 
