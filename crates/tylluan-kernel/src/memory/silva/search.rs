@@ -200,6 +200,15 @@ impl super::SilvaDB {
 
         let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
+            // KNOWN LIMITATION (2026-09-08): `emb` is already computed by the
+            // caller by the time we get here -- this cache can never skip the
+            // ONNX embed() cost that motivated it, it only stores a redundant
+            // copy. To actually save computation, callers of search_hybrid
+            // (api_memory.rs, handler_think.rs, autolink.rs, dual_retrieval)
+            // need to check query_embed_cache themselves BEFORE calling
+            // embed(), not rely on this post-hoc cache. Left as-is (harmless,
+            // does prime the cache for handler_recall's get_or_embed) pending
+            // that follow-up.
             let cached = self.query_embed_cache.get(query);
             let emb_vec: Vec<f32> = match cached {
                 Some(e) => e,
