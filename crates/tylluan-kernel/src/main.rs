@@ -1511,7 +1511,19 @@ async fn main() -> anyhow::Result<()> {
     let silva_reindex = silva.clone();
     let matcher_reindex = matcher.clone();
     tokio::spawn(async move {
-        let mut reindex_interval = tokio::time::interval(Duration::from_secs(600)); // 10 minutes for toaster-friendly
+        // tokio::time::interval fires its FIRST tick immediately by default --
+        // this reindexer would then compete for the shared embedding model
+        // (Mutex-protected ONNX session) with real recall traffic right at
+        // the moment a fresh kernel is most likely being tested. Measured
+        // live (2026-09-07 CPU-only latency baseline): recall p50 across the
+        // first ~24 calls after boot was >10s (reindex serializing against
+        // real embeds) vs 639ms once past that window. interval_at delays
+        // the first fire by the same 600s cadence, same pattern already used
+        // for Retrolink Orphans below (10s startup delay).
+        let mut reindex_interval = tokio::time::interval_at(
+            tokio::time::Instant::now() + Duration::from_secs(600),
+            Duration::from_secs(600),
+        ); // 10 minutes for toaster-friendly
         loop {
             reindex_interval.tick().await;
 
