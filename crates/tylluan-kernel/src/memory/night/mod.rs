@@ -10,6 +10,7 @@ mod feedback_signal_phase;
 mod light_reranker_train_phase;
 mod lifecycle_phase;
 mod deep_eval_phase;
+mod slm_society_phase;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,6 +37,7 @@ pub use feedback_signal_phase::FeedbackSignalPhase;
 pub use light_reranker_train_phase::LightRerankerTrainPhase;
 pub use lifecycle_phase::LifecyclePhase;
 pub use deep_eval_phase::DeepEvalPhase;
+pub use slm_society_phase::SlmSocietyPhase;
 
 #[derive(Clone)]
 pub struct PhaseContext {
@@ -576,6 +578,20 @@ mod tests {
         assert!(
             report.detail.contains("pruned-superseded:1"),
             "must report 1 pruned superseded node: {}",
+            report.detail
+        );
+    }
+
+    // ── SlmSocietyPhase ─────────────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn slm_society_phase_disabled_by_default() {
+        let ctx = test_phase_context().await;
+        let report = SlmSocietyPhase.run(&ctx).await;
+        assert!(report.ok, "SlmSocietyPhase should succeed when disabled: {}", report.detail);
+        assert!(
+            report.detail.contains("disabled"),
+            "SlmSocietyPhase must self-gate as disabled by default: {}",
             report.detail
         );
     }

@@ -1,4 +1,4 @@
-﻿pub mod types;
+pub mod types;
 pub mod tools;
 pub mod handlers;
 pub mod handler_do;
@@ -88,6 +88,12 @@ pub struct TylluanServer {
     /// Minimum hours between DeepEval attempts ([eval] deep_eval_interval_hours,
     /// default 24). Read by the phase each night cycle.
     pub deep_eval_interval_hours: u64,
+    /// Opt-in gate for the SlmSocietyPhase night phase ([eval] slm_society_eval_enabled).
+    /// Defaults to false: evaluates local SLM deliberation architectures (Arm A/B/C).
+    pub slm_society_eval_enabled: bool,
+    /// Minimum hours between SLM society evaluation runs ([eval] slm_society_eval_interval_hours,
+    /// default 24). Read by the phase each night cycle.
+    pub slm_society_eval_interval_hours: u64,
     pub recall_cache: Arc<tokio::sync::Mutex<RecallCache>>,
     pub hot_context: Arc<tokio::sync::Mutex<HotContext>>,
     pub coloquio: Option<Arc<ColoquioDb>>,
@@ -155,6 +161,8 @@ impl TylluanServer {
             coherence_gate_hybrid_enabled: false,
             deep_eval_enabled: false,
             deep_eval_interval_hours: 24,
+            slm_society_eval_enabled: false,
+            slm_society_eval_interval_hours: 24,
             recall_cache: Arc::new(tokio::sync::Mutex::new(RecallCache::new(20))),
             hot_context: Arc::new(tokio::sync::Mutex::new(HotContext::new(20))),
             coloquio: None,
