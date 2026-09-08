@@ -15,6 +15,10 @@ import urllib.error
 from pathlib import Path
 from collections import Counter
 
+# G6: Import canonical guild catalog (single source of truth)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tools.guild_catalog import GUILDS, ROUTABLE_DESCRIPTIONS, ROUTABLE_KEYWORDS
+
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
@@ -26,100 +30,13 @@ RAW_LOGS_FILE = Path("benchmarks/benchmark_i7_j13_raw_calls.json")
 
 KERNEL_URL = os.environ.get("KERNEL_BASE", "http://127.0.0.1:4000")
 
-# Guild catalog descriptions for semantic embedding cache
-GUILD_DESCRIPTIONS = {
-    "bash": "Execute shell commands, scripts, and system binaries",
-    "filesystem": "List files, find files, show directory contents, file operations",
-    "git": "Git version control, commits, branches, diffs, log",
-    "docker": "Docker container lifecycle, images, logs, compose",
-    "database": "SQL database queries, SQLite, Postgres, schema inspections",
-    "code": "Modify, generate, and edit source code files",
-    "formatter": "Format code files with Ruff, Prettier, Rustfmt",
-    "ast_surgeon": "AST parsing, node transformations, syntax tree refactoring",
-    "code_graph": "Dependency graphs, symbol call trees, module hierarchy",
-    "code_analysis": "Static code analysis, complexity metrics, dead code detection",
-    "code_reviewer": "Automated code review, security smell and bug detection",
-    "biome_warden": "Biome linter, fast JS/TS code checking and formatting",
-    "n8n_bridge": "Trigger and manage n8n automation workflows and webhooks",
-    "mcp_bridge": "Bridge to external Model Context Protocol tool servers",
-    "search": "Hybrid search across indexed codebase and documents",
-    "websearch": "Web search engine queries and internet search",
-    "browser": "Headless browser automation, click, type, scrape with CDP",
-    "scrapling": "Undetected web scraping and HTML content extraction",
-    "deep_web_research": "Multi-hop web search synthesis and paper extraction",
-    "deep_analysis": "In-depth document analysis, summarization and theme extraction",
-    "pdf": "Extract text, tables, and metadata from PDF files",
-    "data_tools": "Parse, transform, query JSON, YAML, CSV, Parquet data",
-    "knowledge": "Query and traverse SilvaDB knowledge graph and triples",
-    "ingest": "Ingest and chunk raw documents into SilvaDB",
-    "monitor": "Observe running processes, system health, and alerts",
-    "system_metrics": "Inspect CPU, RAM, disk, network utilization",
-    "audit": "Security audit, token leak detection, permission checks",
-    "cron_scheduler": "Schedule, list, and cancel recurring cron jobs",
-    "whats_new": "Check unread notifications, channel updates, and diffs",
-    "clipboard_tools": "Read from or write text into the system clipboard",
-    "screenshot_tools": "Capture screenshot of the screen or active window",
-    "vision": "General image analysis, OCR, visual question answering",
-    "comfy_ui": "Generate images via local ComfyUI Stable Diffusion workflow",
-    "audio_tools": "Process, convert, transcribe audio files and spectrograms",
-    "ffmpeg_tools": "Video and audio slicing, encoding, transcode via ffmpeg",
-    "memory": "Store, recall, and manage sovereign long-term memory",
-    "coloquio": "Send and read messages in multi-agent Coloquio channels",
-    "coloquio_digest": "Generate executive digests of Coloquio conversations",
-    "coordinator": "Decompose complex multi-step tasks and orchestrate sub-agents",
-    "council": "Multi-agent deliberative debate and consensus synthesis",
-    "sequential_thinking": "Structured chain-of-thought and step-by-step reasoning",
-    "night_reasoner": "Nightly memory consolidation, pattern abstraction, dream cycle",
-    "llama_backend": "Direct GGUF inference via local llama-server",
-    "local_llm_proxy": "Proxy requests to external Ollama, LM Studio, or vLLM"
-}
+# G6: Canonical guild descriptions — imported from tools/guild_catalog.py
+# This replaces the former hardcoded GUILD_DESCRIPTIONS. Only routable guilds
+# are included; council/whats_new (non-routable tools) are excluded by design.
+GUILD_DESCRIPTIONS = ROUTABLE_DESCRIPTIONS
 
-KEYWORD_RULES = {
-    "bash": ["run", "bash", "shell", "command", "execute", "exec", "./", "chmod", "apt", "npm", "pip", "cargo", "kill", "process"],
-    "filesystem": ["file", "dir", "directory", "folder", "list file", "list dir", "find file", "archivo", "directorio", "carpeta"],
-    "git": ["git", "commit", "branch", "diff", "checkout", "push", "pull", "merge", "repo", "repository", "stash", "log"],
-    "docker": ["docker", "container", "image", "dockerfile", "compose", "contenedor"],
-    "database": ["database", "sql", "sqlite", "postgres", "query", "schema", "table", "tabla", "base de datos"],
-    "code": ["code", "function", "implement", "refactor", "unit test", "fix bug", "código", "función"],
-    "formatter": ["format", "formatter", "prettier", "rustfmt", "ruff", "formatear", "estilo"],
-    "ast_surgeon": ["ast", "syntax tree", "node", "parse ast", "transform node", "arbol sintactico"],
-    "code_graph": ["dependency", "call tree", "hierarchy", "graph", "dependencias", "arbol de llamadas"],
-    "code_analysis": ["complexity", "dead code", "cyclomatic", "analisis de codigo", "metricas"],
-    "code_reviewer": ["review", "pr", "pull request", "smell", "race condition", "revisar codigo", "deadlock"],
-    "biome_warden": ["biome", "biome check", "lint ts", "lint react"],
-    "n8n_bridge": ["n8n", "webhook", "automation workflow", "flujo n8n"],
-    "mcp_bridge": ["mcp", "mcp tool", "mcp bridge", "protocol server"],
-    "search": ["search memory", "find in notes", "hybrid search", "buscar en memoria"],
-    "websearch": ["web search", "search web", "internet", "google", "noticias", "what is", "who is", "latest"],
-    "browser": ["browser", "chrome", "navigate", "click", "cdp", "puppeteer", "abrir pagina", "url"],
-    "scrapling": ["scrape", "scraping", "html extract", "crawler", "extraer web"],
-    "deep_web_research": ["deep research", "paper", "arxiv", "investiga a fondo", "scientific literature"],
-    "deep_analysis": ["thematic", "clustering", "deep analysis", "transcript", "analisis profundo", "resumen extenso"],
-    "pdf": ["pdf", "paper.pdf", "documento pdf", "extract text pdf"],
-    "data_tools": ["json", "csv", "yaml", "parquet", "parse json", "convert csv"],
-    "knowledge": ["silva", "silvadb", "knowledge graph", "triples", "pagerank", "centrality", "grafo de conocimiento"],
-    "ingest": ["ingest", "chunk docs", "index files", "ingestar"],
-    "monitor": ["monitor", "observe", "watch task", "daemon alert", "vigilar"],
-    "system_metrics": ["cpu", "ram", "memory usage", "disk space", "temperature", "metricas", "memoria ram"],
-    "audit": ["audit", "token leak", "credentials", "security check", "auditoria de seguridad", "secretos"],
-    "cron_scheduler": ["cron", "schedule", "recurring", "cron job", "programar tarea"],
-    "whats_new": ["whats new", "unread", "notifications", "mensajes no leidos"],
-    "clipboard_tools": ["clipboard", "copy to clipboard", "portapapeles"],
-    "screenshot_tools": ["screenshot", "screen capture", "captura de pantalla"],
-    "vision": ["image", "ocr", "visual", "mockup", "screenshot analysis", "imagen", "recibo"],
-    "comfy_ui": ["comfyui", "generate image", "stable diffusion", "sdxl", "dibujo"],
-    "audio_tools": ["audio", "mp3", "transcribe speech", "subtitles", "audio file"],
-    "ffmpeg_tools": ["ffmpeg", "video", "mp4", "webm", "trim video", "transcode", "cortar video"],
-    "memory": ["remember", "store memory", "recall memory", "save fact", "recordar", "guardar memoria"],
-    "coloquio": ["coloquio", "channel", "mision-activa", "post message", "publica en coloquio", "canal"],
-    "coloquio_digest": ["digest", "coloquio digest", "resumen coloquio", "executive summary channel"],
-    "coordinator": ["coordinate", "multi-step", "sub-agents", "break down task", "orquestar", "descomponer"],
-    "council": ["council", "debate", "deliberate", "consenso", "consejo"],
-    "sequential_thinking": ["sequential thinking", "step by step", "chain of thought", "razonamiento secuencial"],
-    "night_reasoner": ["night reasoner", "consolidation cycle", "nightly reasoning", "consolidacion nocturna"],
-    "llama_backend": ["llama", "gguf", "llama-server", "local model inference", "modelo local"],
-    "local_llm_proxy": ["ollama", "lm studio", "vllm", "proxy llm"]
-}
+# G6: Canonical keyword rules — imported from tools/guild_catalog.py
+KEYWORD_RULES = ROUTABLE_KEYWORDS
 
 def api_call(url, data_dict, timeout=30, retries=3):
     payload = json.dumps(data_dict).encode("utf-8")
@@ -214,11 +131,9 @@ def run_evaluation():
     held_out = [d for d in items if d["split"] == "held_out"]
     train = [d for d in items if d["split"] == "train"]
     
-    # Guilds that exist as catalog entries but are NOT registered MCP servers.
-    # They are tools INSIDE other guilds (council inside night_reasoner,
-    # whats_new inside coloquio), not routable dispatch targets.
-    # Evaluating against them inflates unknown/error rates artificially.
-    NON_ROUTABLE_GUILDS = {"council", "whats_new"}
+    # G6: Non-routable guilds derived from canonical catalog status.
+    # Council/whats_new are tools INSIDE other guilds, not dispatch targets.
+    NON_ROUTABLE_GUILDS = {gid for gid, g in GUILDS.items() if g.status != "routable"}
     skipped_items = [d for d in held_out if d["target_guild"] in NON_ROUTABLE_GUILDS]
     held_out = [d for d in held_out if d["target_guild"] not in NON_ROUTABLE_GUILDS]
     if skipped_items:

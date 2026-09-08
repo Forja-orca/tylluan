@@ -9,66 +9,24 @@ and semantic paraphrase test cases for rigorous J-13 (embedding tiebreaker) eval
 import json
 import sqlite3
 import random
+import sys
 from pathlib import Path
 from collections import Counter
+
+# G6: Import canonical guild catalog (single source of truth)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tools.guild_catalog import GUILDS, ROUTABLE_IDS
 
 OUTPUT_JSON = Path("benchmarks/dataset_i7_routing_curated.json")
 AUDIT_DB = Path("data/audit.db")
 
-# Complete catalogue of 45 guilds categorized
+# G6: Canonical catalog — derived from tools/guild_catalog.py (single source of truth).
+# This replaces the former hardcoded GUILD_CATALOG. All 44 routable guilds are
+# included; excluded/experimental guilds (vision_moondream, sandbox) are omitted.
 GUILD_CATALOG = {
-    # Builders
-    "bash": {"category": "builder", "desc": "Execute shell commands, scripts, system binaries"},
-    "filesystem": {"category": "builder", "desc": "List, read, write, copy, move, delete files and directories"},
-    "git": {"category": "builder", "desc": "Git version control, commits, branches, diffs, log"},
-    "docker": {"category": "builder", "desc": "Docker container lifecycle, images, logs, compose"},
-    "database": {"category": "builder", "desc": "SQL queries, SQLite, Postgres, schema inspections"},
-    "code": {"category": "builder", "desc": "Modify, generate, and edit source code files"},
-    "formatter": {"category": "builder", "desc": "Format code files with Ruff, Prettier, Rustfmt"},
-    "ast_surgeon": {"category": "builder", "desc": "AST parsing, node transformations, syntax tree refactoring"},
-    "code_graph": {"category": "builder", "desc": "Dependency graphs, symbol call trees, module hierarchy"},
-    "code_analysis": {"category": "builder", "desc": "Static code analysis, complexity metrics, dead code detection"},
-    "code_reviewer": {"category": "builder", "desc": "Automated code review, security smell and bug detection"},
-    "biome_warden": {"category": "builder", "desc": "Biome linter, fast JS/TS code checking and formatting"},
-    "n8n_bridge": {"category": "builder", "desc": "Trigger and manage n8n automation workflows and webhooks"},
-    "mcp_bridge": {"category": "builder", "desc": "Bridge to external Model Context Protocol tool servers"},
-
-    # Scholars
-    "search": {"category": "scholar", "desc": "Hybrid search across indexed codebase and documents"},
-    "websearch": {"category": "scholar", "desc": "Web search queries via Google/DuckDuckGo API"},
-    "browser": {"category": "scholar", "desc": "Headless browser automation, click, type, scrape with CDP"},
-    "scrapling": {"category": "scholar", "desc": "Undetected web scraping and HTML content extraction"},
-    "deep_web_research": {"category": "scholar", "desc": "Multi-hop web search synthesis and paper extraction"},
-    "deep_analysis": {"category": "scholar", "desc": "In-depth document analysis, summarization and theme extraction"},
-    "pdf": {"category": "scholar", "desc": "Extract text, tables, and metadata from PDF files"},
-    "data_tools": {"category": "scholar", "desc": "Parse, transform, query JSON, YAML, CSV, Parquet data"},
-    "knowledge": {"category": "scholar", "desc": "Query and traverse SilvaDB knowledge graph and triples"},
-    "ingest": {"category": "scholar", "desc": "Ingest and chunk raw documents into SilvaDB"},
-
-    # Watchers & Systems
-    "monitor": {"category": "watcher", "desc": "Observe running processes, system health, and alerts"},
-    "system_metrics": {"category": "watcher", "desc": "Inspect CPU, RAM, disk, network utilization"},
-    "audit": {"category": "watcher", "desc": "Security audit, token leak detection, permission checks"},
-    "cron_scheduler": {"category": "watcher", "desc": "Schedule, list, and cancel recurring cron jobs"},
-    "clipboard_tools": {"category": "watcher", "desc": "Read from or write text into the system clipboard"},
-    "screenshot_tools": {"category": "watcher", "desc": "Capture screenshot of the screen or active window"},
-    "scheduler": {"category": "watcher", "desc": "Create, list, and cancel scheduled tasks and reminders"},
-
-    # Multimedia & Perception
-    "vision": {"category": "scholar", "desc": "General image analysis, OCR, visual question answering"},
-    "comfy_ui": {"category": "builder", "desc": "Generate images via local ComfyUI Stable Diffusion workflow"},
-    "audio_tools": {"category": "scholar", "desc": "Process, convert, transcribe audio files and spectrograms"},
-    "ffmpeg_tools": {"category": "builder", "desc": "Video and audio slicing, encoding, transcode via ffmpeg"},
-
-    # Cognitive & Coordination (Core)
-    "memory": {"category": "core", "desc": "Store, recall, and manage sovereign long-term memory"},
-    "coloquio": {"category": "core", "desc": "Send and read messages in multi-agent Coloquio channels"},
-    "coloquio_digest": {"category": "core", "desc": "Generate executive digests of Coloquio conversations"},
-    "coordinator": {"category": "core", "desc": "Decompose complex multi-step tasks and orchestrate sub-agents"},
-    "sequential_thinking": {"category": "core", "desc": "Structured chain-of-thought and step-by-step reasoning"},
-    "night_reasoner": {"category": "core", "desc": "Nightly memory consolidation, pattern abstraction, dream cycle"},
-    "llama_backend": {"category": "core", "desc": "Direct GGUF inference via local llama-server"},
-    "local_llm_proxy": {"category": "core", "desc": "Proxy requests to external Ollama, LM Studio, or vLLM"}
+    gid: {"category": g.category, "desc": g.description}
+    for gid, g in GUILDS.items()
+    if g.status == "routable"
 }
 
 # Curated synthetic cases designed to test:
