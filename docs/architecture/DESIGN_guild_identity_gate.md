@@ -1,6 +1,6 @@
 # G6 — Gate de identidad de guilds: diseño de contrato canónico
 
-**Estado:** discusión técnica resuelta en Coloquio (T253) — la especificación queda formalizada y lista. PENDIENTE de aprobación de José para implementar; ningún agente se autoaprueba su propio bloqueo.
+**Estado:** APROBADO por José (2026-09-08) para implementación — corresponde directamente a la fase "Capability Contracts" del roadmap v1.0 (ver `EXTERNAL_AUDIT_2026-09-08_v1_roadmap.md`, fase P0 #2). Asignado a Buffy.
 **Fecha:** 2026-09-07
 **Origen:** auditoría G6 de Buffy (T298), verificación cruzada con código real.
 
