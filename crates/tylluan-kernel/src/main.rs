@@ -1127,6 +1127,11 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(eng) = bg_matcher.engine_arc() {
                         bg_silva.install_dense_engine(eng);
                     }
+                    // Cache correction: with the query-embedding cache wired at
+                    // the search_hybrid choke point (ff205b1), every recall path
+                    // now caches — a stale cache after model swap would serve
+                    // old-model vectors to ALL callers, not just handler_recall.
+                    bg_silva.query_embed_cache.invalidate();
                 }
                 Ok(Err(e)) => warn!("⚠️ [Background] Model '{}' failed to load: {}", bg_model, e),
                 Err(e) => warn!("⚠️ [Background] Spawn error for '{}': {}", bg_model, e),
