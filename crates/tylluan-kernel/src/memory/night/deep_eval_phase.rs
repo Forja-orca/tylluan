@@ -193,9 +193,11 @@ impl Phase for DeepEvalPhase {
                         .stderr(std::process::Stdio::null())
                         .status();
                     #[cfg(not(windows))]
-                    unsafe {
-                        libc::kill(pid as i32, libc::SIGKILL);
-                    }
+                    let _ = std::process::Command::new("kill")
+                        .args(["-9", &pid.to_string()])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
                 }
                 write_last_run(&ctx.data_dir, now);
                 return PhaseReport {
