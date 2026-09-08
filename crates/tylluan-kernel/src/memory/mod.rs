@@ -14,6 +14,7 @@
 pub mod backup;
 pub mod hybrid;
 pub mod silva;
+pub mod background_budget;
 pub mod consensus;
 pub mod mailbox;
 pub mod cosine;

@@ -1027,6 +1027,8 @@ async fn main() -> anyhow::Result<()> {
     server.coherence_gate_hybrid_enabled = config.security.coherence_gate_hybrid_enabled;
     server.deep_eval_enabled = config.eval.deep_eval_enabled;
     server.deep_eval_interval_hours = config.eval.deep_eval_interval_hours;
+    server.slm_society_eval_enabled = config.eval.slm_society_eval_enabled;
+    server.slm_society_eval_interval_hours = config.eval.slm_society_eval_interval_hours;
     // Honest abstention floor (opt-in): scaled x1000 for the atomic.
     silva.set_abstain_floor_x1000((config.silva.recall_abstain_min_score * 1000.0) as i64);
     // MLP scorer: optional ONNX model for learned complexity scoring
@@ -1507,9 +1509,21 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Shared budget for heavy background loops (reindexer, HNSW rebuild,
+    // memory consensus): max concurrency + bounded wait (latency budget).
+    // Prevents the 2026-08-30 GraphRAG failure class — unbounded background
+    // jobs stacking and saturating CPU system-wide.
+    let background_budget = std::sync::Arc::new(
+        tylluan_kernel::memory::background_budget::BackgroundBudget::new(
+            config.memory.background_concurrency,
+            config.memory.background_max_wait_secs,
+        )
+    );
+
     // Sovereign Agnostic Reindexer (detects model upgrades and re-indexes background)
     let silva_reindex = silva.clone();
     let matcher_reindex = matcher.clone();
+    let budget_reindex = background_budget.clone();
     tokio::spawn(async move {
         // tokio::time::interval fires its FIRST tick immediately by default --
         // this reindexer would then compete for the shared embedding model
@@ -1526,6 +1540,9 @@ async fn main() -> anyhow::Result<()> {
         ); // 10 minutes for toaster-friendly
         loop {
             reindex_interval.tick().await;
+            // Latency budget: skip this tick if the background budget is
+            // exhausted (another heavy job holding permits > wait budget).
+            let Some(_bg) = budget_reindex.acquire().await else { continue };
 
             let silva_inner = silva_reindex.clone();
             let matcher_inner = matcher_reindex.clone();
@@ -1592,10 +1609,12 @@ async fn main() -> anyhow::Result<()> {
 
     // HNSW index rebuild scheduler (runs every 10 minutes, only if >= threshold)
     let silva_hnsw = silva.clone();
+    let budget_hnsw = background_budget.clone();
     tokio::spawn(async move {
         let mut hnsw_interval = tokio::time::interval(Duration::from_secs(600));
         loop {
             hnsw_interval.tick().await;
+            let Some(_bg) = budget_hnsw.acquire().await else { continue };
             let silva_inner = silva_hnsw.clone();
             let guard = GuardedTask::new("HNSW Rebuild", Duration::from_secs(120));
             let _ = guard.run(async move {
@@ -1609,6 +1628,7 @@ async fn main() -> anyhow::Result<()> {
     // Optimized: Uses 60s tick instead of 1s to save CPU on toaster hardware
     let silva_consensus = silva.clone();
     let matcher_consensus = matcher.clone();
+    let budget_consensus = background_budget;
     tokio::spawn(async move {
         let mut consensus_interval = tokio::time::interval(Duration::from_secs(60));
         let mut secs_to_consensus: u64 = 3600;
@@ -1620,6 +1640,7 @@ async fn main() -> anyhow::Result<()> {
                 secs_to_consensus -= 60;
             } else {
                 secs_to_consensus = 3600;
+                let Some(_bg) = budget_consensus.acquire().await else { continue };
                 let silva_inner = silva_hub_consensus.clone();
                 let embedding_engine = matcher_consensus.engine();
                 let guard = GuardedTask::new("Memory Consensus", Duration::from_secs(120));
@@ -1767,7 +1788,7 @@ async fn run_night_consolidation_loop(
         PhaseOrchestrator, PhaseContext,
         DreamPhase, OuroborosPhase, AutoLinkPhase, GraphRagPhase,
         DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
-        LifecyclePhase, DeepEvalPhase,
+        LifecyclePhase, DeepEvalPhase, SlmSocietyPhase,
     };
 
     let orchestrator = PhaseOrchestrator::new(vec![
@@ -1785,6 +1806,9 @@ async fn run_night_consolidation_loop(
         // self-gates on the flag and a 24h marker, so registering it is safe
         // even with eval disabled.
         Box::new(DeepEvalPhase),
+        // Phase 0: opt-in (default OFF via [eval] slm_society_eval_enabled).
+        // Evaluates 3-arm SLM society benchmark (Arm A/B/C) on a 24h cadence.
+        Box::new(SlmSocietyPhase),
     ]);
 
     let ctx = PhaseContext {

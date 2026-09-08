@@ -196,6 +196,16 @@ pub struct EvalConfig {
     /// Default 24. Marker file: <data_dir>/deep_eval_last_run.
     #[serde(default = "default_deep_eval_interval_hours")]
     pub deep_eval_interval_hours: u64,
+    /// Opt-in gate for the SlmSocietyPhase NightConsolidation phase, which
+    /// runs benchmarks/spikes/slm_society/slm_society_harness.py (Phase 0
+    /// 3-arm SLM society benchmark — Arm A Baseline, Arm B Self-MoA, Arm C A-SSA).
+    /// Defaults to FALSE.
+    #[serde(default)]
+    pub slm_society_eval_enabled: bool,
+    /// Minimum hours between SLM society evaluation attempts (default 24).
+    /// Marker file: <data_dir>/slm_society_eval_last_run.
+    #[serde(default = "default_slm_society_eval_interval_hours")]
+    pub slm_society_eval_interval_hours: u64,
 }
 
 impl Default for EvalConfig {
@@ -203,11 +213,14 @@ impl Default for EvalConfig {
         Self {
             deep_eval_enabled: false,
             deep_eval_interval_hours: default_deep_eval_interval_hours(),
+            slm_society_eval_enabled: false,
+            slm_society_eval_interval_hours: default_slm_society_eval_interval_hours(),
         }
     }
 }
 
 fn default_deep_eval_interval_hours() -> u64 { 24 }
+fn default_slm_society_eval_interval_hours() -> u64 { 24 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationConfig {
@@ -502,6 +515,16 @@ pub struct MemoryConfig {
 
     #[serde(default = "default_dimensions")]
     pub vector_dimensions: u32,
+
+    /// Shared budget for heavy background loops (reindexer, HNSW rebuild,
+    /// memory consensus): max jobs running simultaneously + bounded wait to
+    /// enter (latency budget). Prevents the 2026-08-30 GraphRAG failure class
+    /// — unbounded background jobs stacking and saturating CPU. Default 2
+    /// concurrent heavy jobs, 60s wait budget (skip tick instead of queuing).
+    #[serde(default = "default_background_concurrency")]
+    pub background_concurrency: usize,
+    #[serde(default = "default_background_max_wait_secs")]
+    pub background_max_wait_secs: u64,
 }
 
 impl Default for MemoryConfig {
@@ -510,6 +533,8 @@ impl Default for MemoryConfig {
             db_path: default_db_path(),
             embedding_model: default_embedding_model(),
             vector_dimensions: default_dimensions(),
+            background_concurrency: default_background_concurrency(),
+            background_max_wait_secs: default_background_max_wait_secs(),
         }
     }
 }
@@ -1679,6 +1704,9 @@ fn default_embedding_model() -> String { "bge-m3".into() }
 fn default_dimensions() -> u32 {
     crate::router::embeddings::resolve_dimension(&default_embedding_model())
 }
+
+fn default_background_concurrency() -> usize { 2 }
+fn default_background_max_wait_secs() -> u64 { 60 }
 fn default_vision_model_path() -> String { "HuggingFaceTB/SmolVLM2-256M-Instruct".into() }
 fn default_always_on() -> Vec<String> { vec!["bash".into(), "memory".into(), "filesystem".into()] }
 fn default_lazy_timeout() -> u64 { 300 }
