@@ -47,10 +47,10 @@ fn should_run(last: Option<DateTime<Utc>>, interval_hours: u64, now: DateTime<Ut
 fn parse_society_result(stdout: &str) -> Option<serde_json::Value> {
     let mut last: Option<serde_json::Value> = None;
     for line in stdout.lines() {
-        if let Some(json_str) = line.strip_prefix("SLM_SOCIETY_RESULT_JSON=") {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
-                last = Some(v);
-            }
+        if let Some(json_str) = line.strip_prefix("SLM_SOCIETY_RESULT_JSON=")
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str)
+        {
+            last = Some(v);
         }
     }
     last
