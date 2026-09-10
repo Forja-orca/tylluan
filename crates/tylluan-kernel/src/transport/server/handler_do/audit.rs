@@ -8,6 +8,7 @@ pub(crate) fn routing_failure_id(intent: &str) -> String {
 /// Write an audit log entry to ./data/audit.db for every tylluan_do tool call.
 /// Uses SHA-256 hash chaining: each entry stores the hash of the previous entry,
 /// making tampering detectable. Called fire-and-forget — errors are non-fatal.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) -> Result<(), String> {
     let db_path = std::path::Path::new("./data/audit.db");
     if let Some(parent) = db_path.parent() {
@@ -116,10 +117,45 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
     Ok((ok, bad))
 }
 
+/// Opt-in safety filter for dangerous intents.
+/// Returns Some(reason) if the intent matches a dangerous pattern.
+pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
+    let lower = intent.to_lowercase();
+
+    static PATTERNS: &[(&str, &str)] = &[
+        ("rm -rf /", "recursive deletion of root filesystem"),
+        ("rm -rf ~", "recursive deletion of home directory"),
+        ("rm -rf .", "recursive deletion of current directory"),
+        ("mkfs", "filesystem formatting"),
+        ("format c:", "disk formatting"),
+        ("format d:", "disk formatting"),
+        (":(){:|:&};:", "fork bomb"),
+        ("dd if=/dev/zero", "disk overwrite"),
+        ("dd if=/dev/random", "disk overwrite"),
+        ("> /dev/sda", "raw disk write"),
+        ("chmod -r 777 /", "recursive permission change on root"),
+        ("drop table", "SQL table deletion"),
+        ("drop database", "SQL database deletion"),
+        ("truncate table", "SQL table truncation"),
+        ("delete from", "SQL mass deletion"),
+        ("shutdown /s", "system shutdown"),
+        ("shutdown -h now", "system shutdown"),
+        ("reboot", "system reboot"),
+        ("init 0", "system halt"),
+        (":(){ :|:& };:", "fork bomb"),
+    ];
+
+    for (pattern, reason) in PATTERNS {
+        if lower.contains(pattern) {
+            return Some(reason);
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn audit_log_new_columns_and_legacy_rows_coexist() {
         let db_path = std::env::temp_dir().join(format!("audit_test_{}.db", std::process::id()));
@@ -165,41 +201,4 @@ mod tests {
         assert_eq!(row2, ("bash".to_string(), 1234, 1));
         let _ = std::fs::remove_file(&db_path);
     }
-}
-
-/// Opt-in safety filter for dangerous intents.
-/// Returns Some(reason) if the intent matches a dangerous pattern.
-pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
-    let lower = intent.to_lowercase();
-
-    static PATTERNS: &[(&str, &str)] = &[
-        ("rm -rf /", "recursive deletion of root filesystem"),
-        ("rm -rf ~", "recursive deletion of home directory"),
-        ("rm -rf .", "recursive deletion of current directory"),
-        ("mkfs", "filesystem formatting"),
-        ("format c:", "disk formatting"),
-        ("format d:", "disk formatting"),
-        (":(){:|:&};:", "fork bomb"),
-        ("dd if=/dev/zero", "disk overwrite"),
-        ("dd if=/dev/random", "disk overwrite"),
-        ("> /dev/sda", "raw disk write"),
-        ("chmod -r 777 /", "recursive permission change on root"),
-        ("drop table", "SQL table deletion"),
-        ("drop database", "SQL database deletion"),
-        ("truncate table", "SQL table truncation"),
-        ("delete from", "SQL mass deletion"),
-        ("shutdown /s", "system shutdown"),
-        ("shutdown -h now", "system shutdown"),
-        ("reboot", "system reboot"),
-        ("init 0", "system halt"),
-        (":(){ :|:& };:", "fork bomb"),
-    ];
-
-    for (pattern, reason) in PATTERNS {
-        if lower.contains(pattern) {
-            return Some(reason);
-        }
-    }
-
-    None
 }
