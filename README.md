@@ -338,10 +338,10 @@ flowchart LR
 
   PEERS["Remote peers<br/>LAN/WAN"]
 
-  RGATE["[I-6] Retrieval Gate"]:::future
-  WAKE["[Roadmap] Wake-Up Scheduling"]:::future
-  SPARSE["[research] Sparse Vectors"]:::future
-  POSTCARD["[Roadmap] postcard migration"]:::future
+  RGATE["I-6 Retrieval Gate"]:::future
+  WAKE["Roadmap: Wake-Up Scheduling"]:::future
+  SPARSE["Research: Sparse Vectors"]:::future
+  POSTCARD["Roadmap: postcard migration"]:::future
 
   CLIENTS ==> TOOLS
   TOOLS ==> ROUTER
@@ -363,7 +363,7 @@ flowchart LR
   classDef inferStyle fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
   classDef meshStyle fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
   classDef extStyle fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
-  classDef future fill:#f59e0b12,stroke:#f59e0b88,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7cc;
+  classDef future fill:#78350f,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7;
 
   class CLIENTS,PEERS extStyle;
   class TOOLS,ROUTER sovStyle;
@@ -376,7 +376,7 @@ flowchart LR
   linkStyle 3,4 stroke:#60a5fa,stroke-width:2.5px;
   linkStyle 5 stroke:#c084fc,stroke-width:2.5px;
   linkStyle 6,7 stroke:#38bdf8,stroke-width:2.5px;
-  linkStyle 8,9,10,11 stroke:#f59e0baa,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 8,9,10,11 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
 
 ### Detailed Layered Topology & Circuits
