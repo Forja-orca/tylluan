@@ -314,3 +314,129 @@ Orden de prioridad que el auditor no cambiaría: Performance → Capability Cont
 "No lo seguiremos a pies juntillas, pero es importante mantener estos datos... nos da una hoja de ruta clara para no seguir a oscuras. Siempre generaremos nuestras mejoras sobre todo esto. Es un informe de una auditoría, pero nosotros lo vivimos, el equipo lo vive. No tenemos prisa."
 
 Además: instrucción explícita de convertir el vocabulario interno del equipo a vocabulario profesional a partir de ahora (ver `feedback_professional_vocabulary_adoption.md` en la memoria del proyecto).
+
+---
+
+## Parte 3 — Actualización del auditor (2026-09-10): Tylluan como "Agent Extension Service"
+
+**Estado:** apéndice fechado al mismo documento, íntegro, no vinculante — mismo tratamiento que la Parte 1/2. José: "guárdalo así" (2026-09-10), confirmando explícitamente que no sustituye al roadmap anterior, lo actualiza.
+
+**Contexto de esta actualización:** el auditor volvió a contrastar `main` tras los commits del 8-10 de septiembre (G6 implementado, cache de embeddings movido al punto real, presupuesto de background, arnés de Fase 0 conectado a NightConsolidation) y refinó su lectura. Verificado por Claude Code antes de aceptar: la reformulación central del auditor ("Tylluan no es el agente, es el servicio que extiende a agentes externos existentes") **no es una corrección nueva** — coincide punto por punto con la tesis fundacional ya documentada en el proyecto ("Tylluan es la mitad local, persistente, federada y soberana que falta a los modelos LLM para convertirse en agentes completos", ver memoria `project_tylluan_sovereign_thesis_definitive`). Es una segunda confirmación externa e independiente, no una idea original de esta ronda.
+
+### Reformulación central: Agent Extension Service, no runtime autónomo
+
+> "Tylluan no es el agente. Tylluan es el servicio cognitivo/operacional que extiende a agentes que ya existen."
+
+Consecuencia: agentes externos (OpenClaw, Hermes, Claude Code, Cursor, agentes A2A) son **consumidores** de Tylluan vía MCP/A2A; Tylluan provee memoria persistente, identidad, grafo de conocimiento, capacidades de ejecución, confianza, evidencia y continuidad — **sin poseer el loop `observe → think → act`** del agente consumidor, que sigue siendo del agente, no de Tylluan.
+
+```text
+                    AGENT ECOSYSTEM
+                          │
+     ┌─────────────────────┼─────────────────────┐
+     │                     │                     │
+  OpenClaw              Hermes            Claude Code
+     │                     │                     │
+     └─────────────────────┼─────────────────────┘
+                          │
+                     MCP / A2A
+                          │
+              ╔═══════════▼═══════════╗
+              ║      TYLLUAN          ║
+              ║      SERVICE          ║
+              ╠═══════════════════════╣
+              ║ API / Contracts       ║
+              ╠═══════════════════════╣
+              ║ Cognitive Scheduler   ║
+              ╠═══════════════════════╣
+              ║ Memory · Graph        ║
+              ║ Identity · Trust      ║
+              ║ Evidence              ║
+              ╠═══════════════════════╣
+              ║ Capability Registry   ║
+              ╠═══════════════════════╣
+              ║ Execution Fabric      ║
+              ║ Guilds / Workers      ║
+              ╠═══════════════════════╣
+              ║ Internal Services     ║
+              ║ Embedding / Rerank    ║
+              ║ Vision / Synapsis     ║
+              ╠═══════════════════════╣
+              ║ Federation            ║
+              ╚═══════════╤═══════════╝
+                          │
+                Tylluan-to-Tylluan (Mesh)
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+           NODE A      NODE B      NODE C
+```
+
+### Objetos nuevos que introduce esta ronda
+
+- **`Capability`** (no `Guild` ni `Agent`): unidad de razonamiento del scheduler. Una guild *implementa* capacidades (`document.extract`, `vision.describe`, `git.inspect`); una capacidad puede tener varios proveedores (guild local, guild remota en otro nodo, modelo interno). El agente externo pide `tylluan_do("extrae las tablas de este PDF")` sin saber ni necesitar saber qué proveedor concreto lo resolvió — **Service Abstraction**.
+- **`Capability Registry`**: generaliza G6 (que ya resuelve identidad canónica de guild) un nivel arriba — de "qué guild" a "qué capability, con qué proveedores disponibles (local/remoto/interno)".
+- **`Resource Governance`**: generaliza `background_budget` (que Deep ya construyó, hoy cubre 3 bucles pesados: Reindexer, HNSW Rebuild, Memory Consensus) a gobernar CPU/GPU/RAM/red/disco de *todos* los servicios internos (embeddings, reranking, LLM, mesh), no solo los tres bucles nocturnos.
+- **Internal Services** (no "el modelo de Tylluan"): cada modelo interno (`EmbeddingService`, `RerankService`, `VisionService`, `ReasoningService`) se trata como servicio con contrato propio (model/device/version/latency/memory/availability) — permite cambiar BGE-M3 por otro embedding model sin tocar el contrato de memoria que lo consume.
+- **`Synapse Service`** (aplicado a la idea de "sinapsis" ya establecida): en vez de enterrar razonamiento interno como "inteligencia misteriosa" dentro del kernel, exponerlo con contrato explícito (input/context/compute budget/model/objective/output/confidence/evidence) que el scheduler decide cuándo merece la pena invocar.
+
+### Métrica nueva y realmente ausente hoy: Extension Value / Tylluan Extension Benchmark (TEB)
+
+Pregunta que reemplaza a "¿puede Tylluan completar autónomamente una tarea?": **"¿cuánto aumenta Tylluan las capacidades de un agente externo sin obligarlo a cambiar de runtime?"** — es la versión madura de "Autonomous Success Rate"/"Cognitive ROI" que la Parte 1 de este documento ya señalaba como hueco, ahora con diseño de escenarios concreto:
+
+- **Escenario A (memoria)**: agente aprende 20 hechos día 1, pregunta por ellos día 7 — comparar baseline vs baseline+Tylluan.
+- **Escenario B (continuidad)**: agente termina sesión, nuevo proceso, Tylluan restaura contexto — medir información recuperada, tiempo, errores repetidos.
+- **Escenario C (herramientas)**: `tylluan_do` vs herramienta propia del agente — Tylluan debe demostrar que centralizar herramientas compensa el coste de indirección.
+- **Escenario D (multi-agente)**: Agente A vía Tylluan coordina con Agentes B/C — medir coordinación, duplicación, conflictos.
+- **Escenario E (fallo/recuperación)**: acción falla → Tylluan aporta evidence → rollback/recovery — ventaja diferencial seria si se demuestra con datos, no solo diseño.
+
+### Corrección explícita del propio roadmap anterior (Parte 1/2), verificada contra `main` real
+
+El auditor revisó los commits del 8-9 de septiembre y corrigió su propia priorización anterior:
+
+- **"Capability Contracts" ya no es P0 de identidad** — G6 (`61fb702`) ya resolvió la identidad canónica de guilds. El trabajo pendiente es construir *encima*: Capability Contract → Scheduler → Policy → Execution, no repetir la resolución de identidad.
+- **"Cache" ya no es P0 de rendimiento** — `09cd73d` (Deep) ya movió el cache al punto real de ahorro. El problema de rendimiento ahora es de orden superior: gobernanza de recursos integrada con el servicio completo (Resource Governance), no otro parche puntual de cache.
+- **Single-node y Federación no son dos productos separados** — un único principio: *"Federation is an optional extension of the service, never a prerequisite for the service."* El nodo local siempre funciona solo; la federación añade capacidad, nunca es requisito.
+
+### Prioridades P0 revisadas (reemplaza la tabla de prioridades de la Parte 1, no la invalida — actualiza el orden con el estado real de `main`)
+
+| Prioridad | Trabajo | Razón |
+|---|---|---|
+| 🔴 P0 | Service Contract v1 | Define formalmente qué garantiza Tylluan a cualquier agente (MCP/A2A contract, error model, timeouts, auth, idempotency, versioning) |
+| 🔴 P0 | Capability Registry | Desacopla capacidades de guilds concretas — generaliza G6 |
+| 🔴 P0 | Cognitive Scheduler | Decide proveedor: local/remoto/modelo interno, según capability+risk+trust+privacy+latency+recurso |
+| 🔴 P0 | Resource Governance | Generaliza `background_budget` a todos los servicios internos, no solo 3 bucles nocturnos |
+| 🔴 P0 | Extension Benchmark (TEB) | Sin esto no se sabe cuánto valor real aporta Tylluan — bloqueante real para v1.0 |
+| 🔴 P0 | Failure/Recovery Contract | Hace fiable el servicio ante fallo |
+| 🟠 P1 | Trust unification | Decisiones del scheduler basadas en confianza explícita |
+| 🟠 P1 | Evidence Graph | Explicabilidad/auditoría |
+| 🟠 P1 | Sleep Cycle | Aprendizaje **operacional** (estadísticas de proveedor/capability/recurso), matiz explícito del auditor: no llamarlo todavía "aprendizaje autónomo" — es infraestructura de evaluación/consolidación, la SlmSocietyPhase de Antigravity encaja aquí, no como cerebro autónomo |
+| 🟠 P1 | Multi-agent continuity | Memoria/evidencia compartida entre agentes de *distinto* runtime (Claude Code → Tylluan → OpenClaw), no "sociedad de un solo superagente" |
+| 🟠 P1 | Federación transparente | Provider puede ser LOCAL/REMOTE/PEER sin que el agente lo sepa, salvo que la política lo exija |
+| 🟡 P2 | SLM Society | Evaluación/consolidación avanzada — **NO-GO confirmado empíricamente el 2026-09-10** para la arquitectura actual sin fine-tuning de roles, ver resultado real más abajo |
+| 🟡 P2 | Federación 1k/10k nodos | Escalabilidad experimental, no antes de validar incremental |
+| 🟢 P3 | Nuevas guilds | Solo cuando falte una capability real, nunca por defecto |
+
+### Explícitamente descartado por esta ronda (refuerza, no contradice, lo ya descartado en la Parte 1)
+
+No convertir Tylluan en otro agente generalista; no loop autónomo obligatorio; no depender de un LLM generativo para funcionar; no obligar a agentes externos a adoptar un SDK propio; no exponer las guilds internas al cliente MCP; no ampliar las 5 tools soberanas salvo necesidad demostrada; no convertir la sociedad SLM en requisito de ejecución; no hacer de la federación un requisito.
+
+### Definición de v1.0 revisada
+
+> "Tylluan 1.0 es un servicio local-first y federable que puede conectarse a múltiples agentes externos mediante protocolos estándar y proporcionarles memoria persistente, conocimiento estructurado, capacidades de ejecución, identidad, confianza, evidencia y continuidad, utilizando modelos internos únicamente como infraestructura del servicio, sin asumir el control del loop autónomo del agente consumidor."
+
+### Resultado real verificado el mismo día, relevante para esta actualización: NO-GO de la Fase 0 de la sociedad SLM (n=52)
+
+Ejecutado por Antigravity (commit `8b6f91e`, 2026-09-10), verificado por Claude Code contra el JSON crudo antes de aceptar (no solo el resumen):
+
+| Criterio de puerta | Umbral | Medido (n=52) | Resultado |
+|---|---:|---:|:---:|
+| Precisión global Brazo C (A-SSA) | ≥70.0% | 48.1% (25/52) | FALLO |
+| Ventaja C sobre Self-MoA (Brazo B) | ≥+4.0pp | -1.92pp (48.1% vs 50.0%) | FALLO |
+| Anti-capitulación (Jaccard Proponente↔Auditor) | <85.0% | 18.35% | OK |
+| Varianza de salida no trivial | sí | sí | OK |
+
+**Veredicto: NO-GO.** El sesgo de complacencia (*sycophancy*) del modelo base (SmolLM2-1.7B-Instruct) domina sobre cualquier ganancia de deliberación — ni el debate de roles (Brazo C) ni el muestreo estocástico (Brazo B) lo superan por sí solos frente al baseline. Confirma empíricamente la literatura ya citada (SLMJury, arXiv:2606.07810). El arnés (`SlmSocietyPhase`, `slm_society_harness.py`) queda como infraestructura de evaluación reutilizable, deshabilitada por defecto (`slm_society_eval_enabled = false`). Próximo paso condicionado, no automático: fine-tuning (SFT/DPO) específico de los roles Auditor/Árbitro contra el dataset de Ground Truth de CoherenceGate, antes de reintentar cualquier despliegue de producción de la sociedad SLM.
+
+### Decisión de José sobre esta actualización (2026-09-10)
+
+"Sí, guárdalo así" — confirmando el mismo tratamiento que la Parte 1/2: apéndice íntegro, fechado, referencia viva no vinculante, hasta que deje de ser útil.
