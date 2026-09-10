@@ -440,3 +440,57 @@ Ejecutado por Antigravity (commit `8b6f91e`, 2026-09-10), verificado por Claude 
 ### Decisión de José sobre esta actualización (2026-09-10)
 
 "Sí, guárdalo así" — confirmando el mismo tratamiento que la Parte 1/2: apéndice íntegro, fechado, referencia viva no vinculante, hasta que deje de ser útil.
+
+---
+
+## Parte 4 — Apunte técnico adicional del auditor (2026-09-10, misma sesión)
+
+**Estado:** apunte, no roadmap completo — la mayor parte de esta ronda repite el marco "Agent Extension Service" de la Parte 3. Solo se guarda aquí lo que aporta contenido verificable nuevo, por instrucción explícita de José ("déjala como apunte si no encuentras nada útil"). Contenido repetido de la Parte 3 (diagrama de capas, Capability/Capability Registry, Resource Governance, Extension Benchmark, prioridades P0/P1/P2) se omite aquí — ver Parte 3.
+
+### Hallazgo técnico verificado por Claude Code antes de aceptarlo
+
+El auditor afirma que el diseño del Cognitive Scheduler (`DESIGN_cognitive_scheduler.md`, Antigravity) dice evaluar 5 dimensiones (complexity/risk/latency/compute/reversibility) pero su `TaskContext` (la entrada real que recibiría el Scheduler) no las contiene. **Confirmado exacto contra el código real** (`DESIGN_cognitive_scheduler.md:138-143`):
+
+```rust
+pub struct TaskContext {
+    pub intent: String,
+    pub caller_agent_id: String,
+    pub latency_class: LatencyClass,
+    pub allow_remote_mesh: bool,
+    pub requires_rollback: bool,
+}
+```
+
+`RiskTier` solo aparece en `SchedulingDecision` (la salida, `:146-151`) — se calcula internamente, no se recibe como señal de entrada. Faltan explícitamente en `TaskContext`: risk, privacy, trust, compute state, capability requirements, data locality, authorization scope, evidence requirements, idempotency, provider constraints. **Esto es una brecha real y verificable entre lo que el diseño afirma y lo que su propio contrato de datos permite** — no invalida el diseño, pero confirma que su contrato de entrada necesita revisión antes de implementar la Fase 1 (extracción de tipos), no solo el mapeo de riesgo que ya está en manos de Buffy.
+
+### Invariante nuevo propuesto, candidato a test de seguridad permanente
+
+> "Complejidad nunca puede reducir autoridad." Una tarea con `complexity=0.05, risk=destructive` debe tratarse como destructiva igual que una con `complexity=0.95` — el Scheduler ya expresa esta intención (precedencia del riesgo sobre la complejidad), el auditor propone convertirlo en test automático permanente, no solo principio de diseño.
+
+### Distinción nueva: ServiceIdentity vs AgentIdentity
+
+Tylluan tendría una `ServiceIdentity` propia y múltiples `AgentIdentity` (uno por agente consumidor: `agent:claude`, `agent:openclaw`, `agent:hermes`). Necesario para que memoria/trust/quotas/audit/permissions/provenance se atribuyan correctamente por agente, no de forma ambigua al servicio entero.
+
+### Trust multidimensional, no un solo score
+
+Propone `MemoryTrust { relevance, provenance, freshness, consistency, authority, confidence }` como campos separados en vez de comprimirlos en un único número — una memoria puede tener `relevance=alta, provenance=baja` o `relevance=alta, authority=obsoleta`, casos que un score único no puede distinguir. Una política decide cómo combinarlos según el uso, no se combinan de antemano.
+
+### Provider Scheduler — pipeline más detallado que la Parte 3
+
+```text
+intent → capability requirement → candidate providers → policy filter →
+trust filter → privacy filter → resource filter → latency filter →
+provider ranking → execution
+```
+
+### Quotas explícitas de recursos (extiende Resource Governance de la Parte 3)
+
+`AgentQuota{cpu,gpu,memory,concurrent_actions,network,heavy_inference}`, `ProviderQuota`, `NodeBudget` — necesario para que múltiples agentes consumidores (Claude Code + OpenClaw + Hermes simultáneos) coexistan sin que uno agote los recursos de los demás. Relacionado directamente con el incidente real de GraphRAG (~76%/4257% CPU) ya cerrado, pero generalizado a "cualquier agente, no solo procesos internos".
+
+### Checklist de criterios NO-GO para v1.0 (nuevo, formato distinto a la tabla de prioridades)
+
+Acción peligrosa que evita policy; provider remoto sin evaluación de privacidad; inferencia pesada que arranca implícitamente (ya cerrado una vez, ver `coherence_gate_hybrid_enabled=false`); operación sin trazabilidad causal; recovery ambiguo tras crash; scheduler que depende de un LLM generativo para decidir (ya es invariante del diseño actual: determinismo estricto); memory mutation sin provenance; dispatch federado sin identity/trust; recurso compartido sin budget; benchmark exclusivamente interno (sin el Extension Benchmark de la Parte 3).
+
+### Pregunta cerrada por el auditor, sin responder todavía
+
+"¿Diseño formal de Capability/Provider/Scheduler con structs Rust e invariantes, o protocolo de benchmark científico Agent vs Agent+Tylluan primero?" — queda anotada, no decidida en esta sesión.
