@@ -517,7 +517,7 @@ impl TylluanServer {
             let audit_agent = agent_id.to_string();
             let audit_success = result.as_ref().map(|r| !r.is_error.unwrap_or(false)).unwrap_or(false);
             tokio::spawn(async move {
-                let _ = handler_do::log_audit_entry("", "kernel", &audit_tool, &audit_agent, audit_success, "");
+                let _ = handler_do::log_audit_entry("", "kernel", &audit_tool, &audit_agent, audit_success, "", 0, false);
             });
         }
 
