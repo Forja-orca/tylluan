@@ -1139,8 +1139,14 @@ async fn post_process_outcome(
     let audit_agent = agent_id.clone().unwrap_or_default();
     let audit_success = is_success;
     let audit_preview = result_text.chars().take(200).collect::<String>();
+    // Autonomous Success Rate prerequisite: full intent->result cycle latency
+    // (t0 at fn start, latency_ms at :1029) + HITL flag. human_intervention is
+    // false on the direct path — the approve_action execution path does not yet
+    // carry an approval marker into this function (documented limitation).
+    let audit_latency_ms = latency_ms;
+    let audit_hitl = false;
     tokio::task::spawn_blocking(move || {
-        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview);
+        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, audit_latency_ms, audit_hitl);
         capture_friction_from_result(&audit_intent, &audit_guild, &audit_tool, &audit_preview);
     });
 

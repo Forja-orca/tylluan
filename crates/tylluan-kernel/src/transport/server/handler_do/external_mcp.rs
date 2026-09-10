@@ -176,7 +176,7 @@ async fn do_external_call(
     let audit_success = !is_error;
     let audit_preview = result_text.chars().take(200).collect::<String>();
     tokio::task::spawn_blocking(move || {
-        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview);
+        let _ = log_audit_entry(&audit_intent, &audit_guild, &audit_tool, &audit_agent, audit_success, &audit_preview, 0, false);
     });
 
     // Notify dashboard about external routing
