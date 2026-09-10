@@ -201,7 +201,7 @@ flowchart TD
 ```
 
 ### A. Conexión con `G6 (Capability Contracts)`
-El Scheduler lee directamente el manifiesto canónico `guild.toml` definido en G6. Si un guild declara `execution.risk = "destructive"` o carece de soporte para `rollback`, el Scheduler intercepta automáticamente la petición y escala el `RiskTier` a `CriticalDestructive`.
+El Scheduler lee `TOOL_METADATA` de `registry/tools.rs` como fuente de `RiskLevel` por tool (decisión verificada en T276). Si un tool tiene `RiskLevel::High`, el Scheduler escala el `RiskTier` a `CriticalDestructive` independientemente de la complejidad sintáctica. Ver sección 8 para la decisión completa de arquitectura de riesgo.
 
 ### B. Conexión con `tylluan_do` y Ejecución Transaccional
 En `crates/tylluan-kernel/src/transport/server/handler_do.rs`:
@@ -235,6 +235,47 @@ Si el `ComputeBudget` local está agotado (ej. CPU al 100% o contención de memo
 
 ---
 
-## 8. Conclusión
+## 8. Decisión de Arquitectura de Riesgo (Revisión G6, 2026-09-09)
+
+**Estado:** Decisión tomada tras revisión cruzada Buffy ↔ José (T276).
+
+### Problema
+El diseño original asumía que el riesgo se derivaba de `guild.toml` (un manifiesto por guild que no existe). La auditoría descubrió que **ya existe una fuente de riesgo en producción**: `TOOL_METADATA` en `registry/tools.rs` (25 tools con `RiskLevel::Low/Medium/High`), consumida por `check_tool_risk()` en `logic.rs` con una cadena de resolución de 3 niveles:
+
+```text
+1. kernel_tools() → risk field explícito
+2. TOOL_METADATA → risk_level por nombre de tool
+3. Descripción del tool → parsea "[RISK: HIGH]" o approval="always"
+4. Default → Medium
+```
+
+### Hallazgos de la revisión
+
+1. **`guild.toml` no existe** — G6 se implementó como `tools/guild_catalog.py` + `tylluan.toml`, no como ficheros `.toml` por guild.
+2. **G6 no tiene campo de riesgo** — `GuildEntry` tiene `category` pero no `risk`.
+3. **`TOOL_METADATA` ya cubre 25 tools de 9 guilds** — pero ~21 guilds sin ninguna entrada, cayendo a `Medium` por defecto.
+4. **El dashboard tiene `detectDestructiveKeywords`** en TypeScript (9 regex) — tercera fuente potencialmente contradictoria.
+5. **`complexity.rs` no sabe nada de riesgo** — solo scoring sintáctico.
+
+### Decisión
+
+**El riesgo es por tool, no por guild.** `TOOL_METADATA` ya lo demuestra: dentro del mismo guild `docker`, `docker_exec` es High, `docker_run`/`docker_stop` son Medium, y `docker_ps`/`docker_images`/`docker_status` son Low. Un RiskTier por guild sería demasiado grosero.
+
+**Acciones:**
+1. Completar `TOOL_METADATA` para los ~21 guilds sin cobertura (mecánico, mismo patrón).
+2. El Cognitive Scheduler debe leer `TOOL_METADATA` como fuente de `RiskLevel`, no inventar su propio mapping por guild.
+3. Unificar los 3 niveles actuales (Low/Medium/High) con los 4 tiers del Scheduler (SafeRead/IdempotentWrite/StateMutation/CriticalDestructive) — mapeo natural: Low→SafeRead, Medium→IdempotentWrite/StateMutation, High→CriticalDestructive.
+4. `detectDestructiveKeywords` del dashboard se mantiene como capa de presentación (detección por intent en el UI), no como fuente de verdad.
+
+### No-go
+- No crear RiskTier por guild como fuente de verdad (ya hay una fuente mejor: por tool).
+- No crear `guild.toml` por guild (G6 ya resolvió esto con `guild_catalog.py`).
+- No añadir una cuarta fuente de riesgo.
+
+---
+
+## 9. Conclusión
 
 El **Cognitive Scheduler** transforma a Tylluan de un enrutador sintáctico reactivo a un **sistema operativo cognitivo consciente de riesgo, presupuesto y hardware**, resolviendo la deuda de contención y sentando las bases deterministas para Tylluan v1.0.
+
+La fuente de riesgo es `TOOL_METADATA` (por tool, no por guild) — decisión documentada en la sección 8.
