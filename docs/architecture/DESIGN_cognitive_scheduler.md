@@ -84,7 +84,7 @@ Derivado del contrato del guild (`guild.toml` de G6) y de los verbos de intenci�
 
 ## 4. Estructuras de Datos Canónicas en Rust
 
-Ubicación proyectada: `crates/tylluan-kernel/src/router/scheduler/types.rs`
+**Fase 1 implementada (2026-09-11, Claude Code):** `crates/tylluan-kernel/src/router/scheduler/types.rs` — los tipos de esta sección existen como Rust real, con 4 tests unitarios (ordering de `RiskTier`, roundtrip JSON de `TaskContext`, default `None` de `tool_risk_hint`, serialización de variantes de `ExecutionClass`). Deliberadamente sin wiring al dispatch de `handler_do` todavía — eso es la Fase 2 (matriz de decisión de §5), tarea separada y posterior.
 
 ```rust
 use std::time::Duration;
