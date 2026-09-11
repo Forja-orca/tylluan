@@ -134,6 +134,13 @@ pub enum ExecutionClass {
 }
 
 /// Contexto integral de planificación recibido por el Scheduler
+///
+/// Corrección 2026-09-11 (hallazgo verificado del auditor externo, Parte 4):
+/// la versión original de este struct no llevaba ninguna señal de riesgo o
+/// de presupuesto de recursos como *entrada* -- `RiskTier` solo existía en
+/// `SchedulingDecision` (la salida), calculado de la nada. Estos dos campos
+/// se añaden apuntando a fuentes que ya existen en producción, no a
+/// abstracciones nuevas:
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskContext {
     pub intent: String,
@@ -141,6 +148,18 @@ pub struct TaskContext {
     pub latency_class: LatencyClass,
     pub allow_remote_mesh: bool,
     pub requires_rollback: bool,
+    /// Riesgo por herramienta ya resuelto por `check_tool_risk()` (logic.rs),
+    /// que a su vez consulta `TOOL_METADATA` (registry/tools.rs, 151 tools,
+    /// decisión de arquitectura en §8). El Scheduler NO debe recalcular esto
+    /// -- se limita a recibirlo y dejar que domine sobre `complexity_score`.
+    pub tool_risk_hint: Option<RiskTier>,
+    /// Snapshot del presupuesto de trabajo de fondo compartido
+    /// (`memory/background_budget.rs`, semáforo de 2 permits por defecto).
+    /// Permite al Scheduler preferir `OfflineNightBatch`/`RemoteMeshPeer`
+    /// sobre `DeliberativeCoordinator` cuando el presupuesto ya está agotado,
+    /// en vez de encolar más trabajo pesado sobre el mismo cuello de botella
+    /// que causó el incidente GraphRAG (~76% CPU sostenido).
+    pub background_budget_available: bool,
 }
 
 /// Veredicto completo emitido por el Cognitive Scheduler
@@ -184,7 +203,8 @@ flowchart TD
     ClientIntent[MCP / A2A / CLI Client Intent] --> Scheduler[Cognitive Scheduler Engine]
     
     subgraph Inputs [Metadatos y Estado del Sistema]
-        Contract[Guild Contracts: guild.toml G6] --> Scheduler
+        Contract[TOOL_METADATA / check_tool_risk: registry/tools.rs] --> Scheduler
+        Budget[background_budget snapshot: memory/background_budget.rs] --> Scheduler
         Complexity[Linguistic Scorer: complexity.rs] --> Scheduler
         Caps[Peer Capabilities & Hardware: tylluan-link] --> Scheduler
         Load[System Load & ONNX Locks: HttpState] --> Scheduler
