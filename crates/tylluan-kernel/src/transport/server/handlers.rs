@@ -200,6 +200,7 @@ impl TylluanServer {
                 if !resolved && approved
                     && let Some(plan) = crate::security::grants::get_plan(request_id).await
                 {
+                    let approval_t0 = std::time::Instant::now();
                     let call_params = rmcp::model::CallToolRequestParam {
                         name: plan.tool.clone().into(),
                         arguments: Some(plan.args.clone()),
@@ -212,10 +213,32 @@ impl TylluanServer {
                             None => error_result(&format!("Plan guild '{guild_name}' not found")),
                         }
                     };
+                    // Measures guild execution time only, not intent->approval wait (unbounded
+                    // human response time, not meaningful as a system-latency signal).
+                    let approval_latency_ms = approval_t0.elapsed().as_millis() as u64;
                     crate::security::grants::remove_plan(request_id).await;
                     if !plan.agent_id.is_empty() && plan.agent_id != "anonymous" {
                         let _ = self.journal.as_ref().map(|j| j.checkin(&plan.agent_id, "plan:executed"));
                     }
+                    // HITL audit: this execution passed through human approval.
+                    // log the same way as the direct path but with human_intervention=true
+                    // so ASR / Operational Friction metrics see it correctly.
+                    let is_success = result.is_error != Some(true)
+                        && !result.content.iter().filter_map(|c| c.as_text())
+                            .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
+                    let preview = result.content.iter().filter_map(|c| c.as_text())
+                        .map(|t| t.text.chars().take(200).collect::<String>())
+                        .next().unwrap_or_default();
+                    let audit_intent = plan.intent.clone();
+                    let audit_guild = plan.guild.clone();
+                    let audit_tool = plan.tool.clone();
+                    let audit_agent = plan.agent_id.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _ = handler_do::audit::log_audit_entry(
+                            &audit_intent, &audit_guild, &audit_tool, &audit_agent,
+                            is_success, &preview, approval_latency_ms, true,
+                        );
+                    });
                     return Ok(result);
                 }
                 if !resolved && !approved {

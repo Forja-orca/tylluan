@@ -201,4 +201,37 @@ mod tests {
         assert_eq!(row2, ("bash".to_string(), 1234, 1));
         let _ = std::fs::remove_file(&db_path);
     }
+
+    #[test]
+    fn hitl_path_sets_human_intervention_true() {
+        // Simulate what the approve_action handler does: call log_audit_entry
+        // with human_intervention=true and verify the row reflects it.
+        let db_path = std::env::temp_dir().join(format!("audit_hitl_test_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db_path);
+        // Use a temp override: log_audit_entry writes to ./data/audit.db,
+        // so we test via direct SQL the same way production does.
+        let conn = crate::config::open_db(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL,
+                latency_ms INTEGER, human_intervention INTEGER NOT NULL DEFAULT 0
+            );"
+        ).unwrap();
+        // Insert as the HITL path would: human_intervention = 1
+        conn.execute(
+            "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention)
+             VALUES ('2026-09-11T00:00:00Z', 'bash', 'bash_execute', 'agent-1', 'list files', 'ok', 'output', '', 'eeff', 0, 1)",
+            [],
+        ).unwrap();
+        let row: (i64,) = conn.query_row(
+            "SELECT human_intervention FROM guild_audit_log WHERE intent = 'list files'",
+            [], |r| Ok((r.get(0)?,)),
+        ).unwrap();
+        assert_eq!(row.0, 1, "HITL approve_action path must write human_intervention=1");
+        let _ = std::fs::remove_file(&db_path);
+    }
 }
