@@ -1,7 +1,7 @@
 # TEB-Pilot-50: Tylluan External-Agent Benchmark (Pilot Specification)
 
 ## 1. Executive Summary & Objective
-**TEB-Pilot-50** is the first operational milestone of the **TEB-1.0 (Tylluan External-Agent Benchmark)** protocol proposed in Coloquio (Turns 286, 294). Its purpose is not to claim premature superiority, but to **calibrate the measuring instrument** and establish an empirical, causal baseline evaluating:
+**TEB-Pilot-50** is the first operational milestone of the **TEB-1.0 (Tylluan External-Agent Benchmark)** protocol proposed in Coloquio (Turns 286, 294, 305). Its purpose is to **calibrate the measuring instrument** and establish an empirical, causal baseline evaluating:
 
 > **What does Tylluan add to an external agent compared to the exact same agent without Tylluan, and at what operational cost?**
 
@@ -23,7 +23,7 @@ C_1 &= \text{Agent}(\text{Model}, \text{System Prompt}, \text{Base Tools} + \tex
 
 ---
 
-## 3. Core Metrics
+## 3. Core Metrics & Operational Definitions
 
 ### Primary Endpoint
 - **Paired Task Success Rate ($TSR$):** Percentage of tasks where the agent meets the ground-truth acceptance criteria:
@@ -37,18 +37,21 @@ C_1 &= \text{Agent}(\text{Model}, \text{System Prompt}, \text{Base Tools} + \tex
 2. **Continuity Debt ($CD$):** Number of tool calls and tokens expended merely reconstructing past session state:
    $$CD = N_{\text{state\_reconstruction\_calls}}$$
 
-3. **System Economics & Cost:**
-   - $p50$, $p95$ End-to-End Latency
-   - Total Tool Calls & Invocations
-   - Resource Consumption (CPU / Memory overhead)
+3. **Memory Harm Rate ($MHR$):**
+   - **Operational Definition:** A retrieved memory injection is classified as **Harmful** if and only if it satisfies one of three causal conditions:
+     1. *Stale/Contradictory Overwrite:* The recalled node injects an obsolete architecture invariant or deprecated API that causes the agent to fail a task it would have otherwise solved ($C_0$ succeeds or remains neutral, but $C_1$ fails solely due to outdated memory).
+     2. *Hallucination / Entropy Amplification:* The recalled memory sends the agent down a non-existent execution path, increasing Operational Friction ($OF$) by $>2$ failed tool calls.
+     3. *Safety / Policy Breach:* The recalled context injects unauthorized tokens or commands that trigger security blocklists.
+   - **Formula:**
+     $$MHR = \frac{\sum_{i=1}^{N} \mathbb{I}(\text{Task}_i \text{ failed due to harmful/stale memory})}{\text{Total Tasks with Memory Recall Injected}} \times 100\%$$
 
-4. **Safety & Harm Rate:** Rate of incorrect/hallucinated state injection or boundary violations.
+4. **Real End-to-End Latency & Telemetry:**
+   - Sourced directly from `data/audit.db` (`guild_audit_log.latency_ms`) and `data/silva.db` (`recall_feedback`).
+   - Reports $p50$, $p90$, $p95$, and $p99$ end-to-end intent-to-result execution latencies.
 
 ---
 
 ## 4. Distribution of the 50 Pilot Tasks (8 Families)
-
-The pilot benchmark consists of **50 curated tasks** grounded in Tylluan's real operational history and dogfooding logs:
 
 | Family | ID Prefix | Tasks | Focus & Capability Tested |
 | :--- | :--- | :---: | :--- |
@@ -64,16 +67,9 @@ The pilot benchmark consists of **50 curated tasks** grounded in Tylluan's real 
 
 ---
 
-## 5. Verification & Scoring Modes
+## 5. Orchestrator & CLI Tooling
 
-Each task in `tasks_pilot_50.json` specifies an explicit verifier mode:
-1. **`deterministic_test`:** Automated regex, JSON schema, or code execution validation.
-2. **`exact_token_match`:** Specific factual tokens/constants required in the answer.
-3. **`state_audit`:** Verifies that the correct record/log exists in the database or filesystem.
-4. **`rubric_criteria`:** Multi-factor checklist of required assertions.
-
----
-
-## 6. Execution Roadmap
-1. **`TEB-Pilot-50` (Phase 1):** Validate the harness, evaluate $C_0$ vs $C_1$, inspect friction metrics, identify instrument flaws.
-2. **`TEB-1.0` (Phase 2, $N \approx 200-500$):** Scaled multi-model benchmark with held-out hidden evaluation set once the pilot instrument is proven stable.
+The benchmark includes `benchmarks/teb/teb_orchestrator.py` supporting automated multi-run execution:
+```bash
+python benchmarks/teb/teb_orchestrator.py --runs 3 --seed 42 --export-feedback --output-md PILOT_HARNESS_REPORT.md
+```
