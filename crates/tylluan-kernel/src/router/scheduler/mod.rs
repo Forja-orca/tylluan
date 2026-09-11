@@ -5,3 +5,4 @@
 //! decision matrix (§5) and dispatch wiring (§6) are later, separate work.
 
 pub mod types;
+pub mod decision;
