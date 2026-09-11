@@ -138,7 +138,9 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
     """Read messages from a Coloquio channel.
     Use for: lee el canal coloquio, leer coloquio, ver mensajes canal, read coloquio channel,
     mostrar hilo coloquio, get thread, ver conversacion grupal, historial coloquio,
-    lee el coloquio, muestra el coloquio, ver canal.
+    lee el coloquio, muestra el coloquio, ver canal, lee canal, leer canal, lee el canal,
+    read channel, lee mensajes del canal, leer mensajes del canal, lee los ultimos turnos,
+    leer los ultimos mensajes, lee los turnos, lee el hilo, ver mensajes del canal.
     Supports: limit N, offset N, 'ultimos N', 'last N'.
     By default each message body is truncated to 400 chars ('...[+Nc]' marker) to keep
     multi-message reads compact. Pass full=true (or say 'completo'/'full'/'sin truncar'
