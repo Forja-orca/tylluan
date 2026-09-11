@@ -50,7 +50,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 |------------|---------|
 | **Memory** | BM25 + FTS5 + BGE-M3 vector search, fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) — role assignment per `agent_id`, no manual wiring |
-| **Tools** | 49 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
+| **Tools** | 46 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
 | **Mesh** | Kademlia DHT + Gossip dissemination — encrypted with Noise NK once peers know each other's pubkey; a legacy no-discriminator wire path exists for backward compat with older peers and does carry plaintext, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
@@ -188,7 +188,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ### 1 — Install
 
-No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 49 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
+No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 46 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
 
 ```bash
 # Linux / macOS
@@ -274,7 +274,7 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
-| Python guilds (49 tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (46 tools) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles | `tylluan-cli install --profile=portable` |
@@ -325,7 +325,7 @@ flowchart LR
   end
 
   subgraph EXEC["Execution"]
-    GUILDS["49 Python guilds"]
+    GUILDS["46 Python guilds"]
     COLOQUIO["Coloquio channels"]
     CONTRACTS["Work Contracts"]
   end
