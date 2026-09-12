@@ -474,6 +474,25 @@ pub async fn handle_tylluan_do(
         Err(call_tool_result) => return Ok(call_tool_result),
     };
 
+    // Cognitive Scheduler — Phase 3, OBSERVATION ONLY (same pattern as
+    // CoherenceGate Layer 4 at first): build a TaskContext from the fully
+    // resolved Stage-1 data and log decide()'s verdict next to the routing
+    // trace. The verdict is deliberately DROPPED — nothing below reads it;
+    // guild_name and tool selection flow exactly as before this call existed.
+    // Any change to observable routing caused by this call is a bug.
+    crate::router::scheduler::observe::observe_scheduling(
+        server,
+        &crate::router::scheduler::observe::SchedulingObservation {
+            intent: &intent,
+            routing_intent,
+            agent_id: agent_id.as_deref(),
+            guild_name: &resolved.guild_name,
+            tool_name: &resolved.tool_name,
+            routing_trace: &resolved.routing_trace,
+            plan_mode,
+        },
+    ).await;
+
     // M31-P2: Plan mode — return resolved guild+tool+args for approval before executing
     if plan_mode {
         let plan_id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();

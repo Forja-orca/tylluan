@@ -103,6 +103,10 @@ pub struct TylluanServer {
     pub jobs: Option<Arc<crate::memory::jobs::JobQueue>>,
     pub mlp_scorer: Option<Arc<MlpScorer>>,
     pub mlp_replay: Option<Arc<std::sync::Mutex<ReplayBuffer>>>,
+    /// Read-only access to the shared background-work semaphore for
+    /// observers (scheduler observation): "does at least one permit exist
+    /// right now?". Acquiring remains exclusive to the background loops.
+    pub background_budget: Option<Arc<crate::memory::background_budget::BackgroundBudget>>,
     /// M40-P3: last reversible action per agent_id (see ReversibleAction).
     /// In-memory only by design — survives within a kernel session; the
     /// rollback contract itself is declared in GuildDescriptor, not here.
@@ -172,6 +176,7 @@ impl TylluanServer {
             jobs: None,
             mlp_scorer: None,
             mlp_replay: None,
+            background_budget: None,
             undo_log: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             models_dir: PathBuf::from("models"),
             light_reranker: None,
@@ -190,6 +195,14 @@ impl TylluanServer {
 
     pub fn set_jobs(&mut self, jobs: Arc<crate::memory::jobs::JobQueue>) {
         self.jobs = Some(jobs);
+    }
+
+    /// Read-only handle to the shared background-budget semaphore. Only
+    /// consumers that need a non-acquiring snapshot (the Scheduler's
+    /// observation path) should use it; heavy background loops receive their
+    /// own clone in main.rs as before.
+    pub fn set_background_budget(&mut self, budget: Arc<crate::memory::background_budget::BackgroundBudget>) {
+        self.background_budget = Some(budget);
     }
 
     pub async fn push_to_bridge(&self, guild: &str, tool: &str, output: &str) {
