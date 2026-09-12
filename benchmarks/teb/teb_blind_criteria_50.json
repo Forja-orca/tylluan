@@ -1,0 +1,735 @@
+{
+  "benchmark": "TEB-Pilot-50",
+  "total_tasks": 50,
+  "criteria": [
+    {
+      "index": 1,
+      "task_id": "mem_01",
+      "family": "long_term_memory",
+      "title": "BGE-M3 Vector Dimensions Invariant",
+      "prompt": "What is the mandatory vector embedding dimension for SilvaDB in Tylluan and what happens if reduced to 768?",
+      "ground_truth": "vector_dimensions must be 1024; reducing to 768 breaks all embeddings",
+      "keywords": [
+        "1024",
+        "768",
+        "breaks",
+        "dimensions"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 2,
+      "task_id": "mem_02",
+      "family": "long_term_memory",
+      "title": "Degree Centrality Penalty Formula",
+      "prompt": "Explain how local_query_graph in SilvaDB adjusts PageRank score for node degree (penalty vs boost).",
+      "ground_truth": "Uses degree penalty pr_score / (1 + deg * 0.1) to penalize generic hubs, not multiplication/boost",
+      "keywords": [
+        "penalty",
+        "1 + deg * 0.1",
+        "pr_score",
+        "hubs"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 3,
+      "task_id": "mem_03",
+      "family": "long_term_memory",
+      "title": "Kernel Port and Proxy Architecture",
+      "prompt": "What port does tylluan-nexus listen on and what proxy architecture is used for zero downtime?",
+      "ground_truth": "tylluan-nexus listens directly on port :4000; there is NO zero-downtime hyper proxy",
+      "keywords": [
+        "4000",
+        "no proxy",
+        "direct"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 4,
+      "task_id": "mem_04",
+      "family": "long_term_memory",
+      "title": "ADR-011 LightReranker Cutover Gate",
+      "prompt": "What is the threshold requirement for Phase 3 ADR-011 LightReranker cutover?",
+      "ground_truth": "Requires >=5000 resolved rows (useful != 0) in recall_feedback table",
+      "keywords": [
+        "5000",
+        "recall_feedback",
+        "cutover"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 5,
+      "task_id": "mem_05",
+      "family": "long_term_memory",
+      "title": "Noise Protocol Handshake Variants in Mesh",
+      "prompt": "Which Noise handshakes are used for gossip vs P2P TCP remote dispatch in Tylluan?",
+      "ground_truth": "Noise NK is used for one-way gossip; Noise XK session pool with Ed25519/X25519 is used for 2-way P2P TCP dispatch",
+      "keywords": [
+        "Noise NK",
+        "Noise XK",
+        "gossip",
+        "P2P"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 6,
+      "task_id": "mem_06",
+      "family": "long_term_memory",
+      "title": "SilvaDB Memory Decay Half-Life",
+      "prompt": "What are the half-life and pruning threshold parameters for memory decay in SilvaDB?",
+      "ground_truth": "Half-life T1/2 = 336 hours (14 days), decay pruning threshold = 0.15",
+      "keywords": [
+        "336",
+        "14",
+        "0.15",
+        "half-life"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 7,
+      "task_id": "mem_07",
+      "family": "long_term_memory",
+      "title": "Sovereign Tools Restriction",
+      "prompt": "List the exactly 5 sovereign tools exposed by Tylluan Nexus server.rs.",
+      "ground_truth": "tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph",
+      "keywords": [
+        "tylluan_do",
+        "tylluan_remember",
+        "tylluan_recall",
+        "tylluan_think",
+        "tylluan_graph"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 8,
+      "task_id": "mem_08",
+      "family": "long_term_memory",
+      "title": "Night Consolidation Architecture",
+      "prompt": "Where is memory consolidation scheduled in Tylluan and what is the status of DreamCycle::start_background_scheduler?",
+      "ground_truth": "Consolidation is centralized in NightConsolidation via main.rs cron; DreamCycle background scheduler is inactive/deprecated",
+      "keywords": [
+        "NightConsolidation",
+        "inactive",
+        "deprecated",
+        "cron"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 9,
+      "task_id": "mem_09",
+      "family": "long_term_memory",
+      "title": "Agent Profile Store Migration",
+      "prompt": "What struct replaced IdentityManager for managing agent roles and profiles?",
+      "ground_truth": "AgentProfileStore replaced IdentityManager",
+      "keywords": [
+        "AgentProfileStore",
+        "IdentityManager"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 10,
+      "task_id": "mem_10",
+      "family": "long_term_memory",
+      "title": "Learned-Sparse Retrieval Model",
+      "prompt": "What is the 4th retrieval signal introduced in hybrid search under ADR-010/011?",
+      "ground_truth": "Learned-sparse BGE-M3 representations fused via Reciprocal Rank Fusion (RRF)",
+      "keywords": [
+        "sparse",
+        "BGE-M3",
+        "RRF",
+        "learned"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 11,
+      "task_id": "cont_01",
+      "family": "continuity",
+      "title": "Coloquio Unread Turn Sync",
+      "prompt": "How does an agent resume state after context compaction using Coloquio read state?",
+      "ground_truth": "Queries /api/v1/coloquio/channels/{id}/new with reader ID to fetch unread turns without re-reading entire history",
+      "keywords": [
+        "reader",
+        "unread",
+        "last_read_turn",
+        "turn"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 12,
+      "task_id": "cont_02",
+      "family": "continuity",
+      "title": "Active Roadmap and Milestone Tracking",
+      "prompt": "Where should an agent check the true operational state of closed vs in-progress milestones upon cold start?",
+      "ground_truth": "Check STATUS.md, ROADMAP.md, and query git log -1 origin/main",
+      "keywords": [
+        "STATUS.md",
+        "ROADMAP.md",
+        "git log"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 13,
+      "task_id": "cont_03",
+      "family": "continuity",
+      "title": "Pre-flight Git Remote Sync Check",
+      "prompt": "What mandatory git command sequence must an agent run before reporting any bug or audit finding?",
+      "ground_truth": "git fetch origin && git log -1 origin/main --oneline && git log -1 HEAD --oneline",
+      "keywords": [
+        "git fetch",
+        "origin/main",
+        "HEAD"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 14,
+      "task_id": "cont_04",
+      "family": "continuity",
+      "title": "Fleet Role Boundaries",
+      "prompt": "Identify the primary domain responsibility of Claude Code vs Deep vs Antigravity in the fleet.",
+      "ground_truth": "Claude Code=Tech Lead/Orchestration; Deep=Rust kernel & guilds; Antigravity=UI/UX & empirical verification",
+      "keywords": [
+        "Claude",
+        "Deep",
+        "Antigravity",
+        "Rust",
+        "UI"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 15,
+      "task_id": "cont_05",
+      "family": "continuity",
+      "title": "CoherenceGate Hybrid State Reason",
+      "prompt": "Why was coherence_gate_hybrid_enabled set to false in tylluan.toml on 2026-08-28?",
+      "ground_truth": "Was auto-starting llama-server in background without opt-in, killing active 4-day Unsloth training run",
+      "keywords": [
+        "Unsloth",
+        "llama-server",
+        "background",
+        "opt-in"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 16,
+      "task_id": "cont_06",
+      "family": "continuity",
+      "title": "Autonomous Success Rate Metric Schema",
+      "prompt": "What columns were added to guild_audit_log for tracking autonomous execution without human intervention?",
+      "ground_truth": "latency_ms, human_intervention, risk_tier, execution_status",
+      "keywords": [
+        "latency_ms",
+        "human_intervention",
+        "guild_audit_log"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 17,
+      "task_id": "cont_07",
+      "family": "continuity",
+      "title": "Background GPU Protection Protocol",
+      "prompt": "What flag must be used when running local GGUF models during benchmark tests to protect background GPU training?",
+      "ground_truth": "Must specify --n-gpu-layers 0 to run strictly on CPU",
+      "keywords": [
+        "--n-gpu-layers 0",
+        "CPU",
+        "GPU"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 18,
+      "task_id": "cont_08",
+      "family": "continuity",
+      "title": "Live Kernel Loaded Commit Verification",
+      "prompt": "How can an agent verify which git commit is currently running in the active tylluan-nexus process?",
+      "ground_truth": "Query curl http://127.0.0.1:4000/health and inspect git_commit field",
+      "keywords": [
+        "/health",
+        "git_commit",
+        "4000"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 19,
+      "task_id": "cont_09",
+      "family": "continuity",
+      "title": "Docs-site Port and Architecture Alignment",
+      "prompt": "What is the standalone architecture visualizer port and its compilation check command?",
+      "ground_truth": "Runs on port 3010 (docs-site); verify with cd docs-site && pnpm run build",
+      "keywords": [
+        "3010",
+        "docs-site",
+        "pnpm run build"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 20,
+      "task_id": "cont_10",
+      "family": "continuity",
+      "title": "Session Mailbox Database Location",
+      "prompt": "Where are Coloquio channels and persistent multi-agent message mailboxes stored on disk?",
+      "ground_truth": "Stored in data/mailbox.db under coloquio_messages and coloquio_channels tables",
+      "keywords": [
+        "data/mailbox.db",
+        "coloquio_messages",
+        "coloquio_channels"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 21,
+      "task_id": "tool_01",
+      "family": "tool_routing",
+      "title": "Filesystem Plugin Function Names",
+      "prompt": "What are the correct active function names in guilds/builders/plugins/filesystem.py?",
+      "ground_truth": "file_read, file_write, file_search, file_list, find_files (read_file/write_file are legacy)",
+      "keywords": [
+        "file_read",
+        "file_write",
+        "file_search",
+        "file_list"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 22,
+      "task_id": "tool_02",
+      "family": "tool_routing",
+      "title": "Python Guild Tri-Registration Invariant",
+      "prompt": "Where must a new Python guild be registered to avoid 'Unknown guild' error at runtime?",
+      "ground_truth": "In main.rs lazy_guilds list, router/catalog.rs catalog weight/description, and guild plugin directory",
+      "keywords": [
+        "main.rs",
+        "catalog.rs",
+        "lazy_guilds"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 23,
+      "task_id": "tool_03",
+      "family": "tool_routing",
+      "title": "Plan Mode for Tool Invocations",
+      "prompt": "How does tylluan_do --plan execute without triggering side effects in guilds?",
+      "ground_truth": "Returns proposed guild+tool+args chain without calling real guild process, reusing approve_action",
+      "keywords": [
+        "--plan",
+        "approve_action",
+        "without executing"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 24,
+      "task_id": "tool_04",
+      "family": "tool_routing",
+      "title": "Vision Plugin Architecture",
+      "prompt": "Which guild handles local lightweight image analysis and captioning?",
+      "ground_truth": "guilds/core/vision_moondream.py using Moondream / SmolVLM",
+      "keywords": [
+        "vision_moondream",
+        "Moondream",
+        "SmolVLM"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 25,
+      "task_id": "tool_05",
+      "family": "tool_routing",
+      "title": "AST Surgeon Capability Domain",
+      "prompt": "Which scholar plugin provides precise syntax tree modification and refactoring?",
+      "ground_truth": "guilds/scholars/plugins/ast_surgeon.py",
+      "keywords": [
+        "ast_surgeon.py",
+        "scholars",
+        "syntax tree"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 26,
+      "task_id": "tool_06",
+      "family": "tool_routing",
+      "title": "ACL Default Role Policy",
+      "prompt": "What is the fail-closed behavior of ACL in tylluan.toml when no token is matched?",
+      "ground_truth": "Applies default_role policy and denies write permissions to unprivileged readers",
+      "keywords": [
+        "default_role",
+        "fail-closed",
+        "ACL"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 27,
+      "task_id": "tool_07",
+      "family": "tool_routing",
+      "title": "Tool Risk Tier Classification",
+      "prompt": "What risk tiers exist in TOOL_METADATA for Cognitive Scheduler dispatch safety?",
+      "ground_truth": "low, medium, high, critical",
+      "keywords": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "TOOL_METADATA"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 28,
+      "task_id": "tool_08",
+      "family": "tool_routing",
+      "title": "Code Graph Query Routing",
+      "prompt": "Which guild analyzes call graphs and structural dependencies across crates?",
+      "ground_truth": "guilds/core/code_graph.py",
+      "keywords": [
+        "code_graph",
+        "dependencies",
+        "call graphs"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 29,
+      "task_id": "step_01",
+      "family": "multi_step",
+      "title": "Memory Contradiction Resolution Flow",
+      "prompt": "Describe the 4 steps to recall, verify contradiction, update node, and emit audit log in SilvaDB.",
+      "ground_truth": "1. search_hybrid recall; 2. ConsensusEngine conflict check; 3. update_node version increment; 4. insert audit trace",
+      "keywords": [
+        "search_hybrid",
+        "ConsensusEngine",
+        "update_node",
+        "audit"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 30,
+      "task_id": "step_02",
+      "family": "multi_step",
+      "title": "Rust Code Refactor Validation Flow",
+      "prompt": "What is the mandatory 3-step compilation and quality pipeline before committing Rust changes?",
+      "ground_truth": "1. cargo check -p <crate>; 2. cargo clippy -p <crate> -- -D warnings; 3. cargo test -p <crate> --lib",
+      "keywords": [
+        "cargo check",
+        "cargo clippy",
+        "cargo test",
+        "-D warnings"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 31,
+      "task_id": "step_03",
+      "family": "multi_step",
+      "title": "Dynamic Guild Auto-Discovery Lifecycle",
+      "prompt": "Explain how guilds/ directory is discovered at kernel startup and initialized in WarmPool.",
+      "ground_truth": "Scans guilds/ at startup, validates manifest, loads always_on guilds, marks warm_pool on demand",
+      "keywords": [
+        "auto-discovery",
+        "always_on",
+        "warm_pool",
+        "manifest"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 32,
+      "task_id": "step_04",
+      "family": "multi_step",
+      "title": "Coloquio Cross-Agent Sync Pipeline",
+      "prompt": "Explain how an agent reads #general, extracts @mentions, processes work item, and posts turn update.",
+      "ground_truth": "Calls get_thread/search, parses @mentions with extract_mentions, performs task, posts to coloquio_messages",
+      "keywords": [
+        "get_thread",
+        "extract_mentions",
+        "coloquio_messages"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 33,
+      "task_id": "step_05",
+      "family": "multi_step",
+      "title": "Diagnostic and Root Cause Triangulation",
+      "prompt": "What sequence is used to isolate a test regression without polluting git working directory?",
+      "ground_truth": "1. git status check; 2. isolate target test; 3. execute target test; 4. inspect logs in scratch/",
+      "keywords": [
+        "git status",
+        "isolate",
+        "scratch/"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 34,
+      "task_id": "step_06",
+      "family": "multi_step",
+      "title": "Benchmark Case Evaluation Pipeline",
+      "prompt": "What are the 4 stages executed by slm_society_harness.py on benchmark datasets?",
+      "ground_truth": "1. Load cases JSON; 2. Execute Arms A/B/C inferences; 3. Compute accuracy & Jaccard; 4. Write FULL_HARNESS_REPORT.md",
+      "keywords": [
+        "Arm A",
+        "Arm B",
+        "Arm C",
+        "Jaccard",
+        "FULL_HARNESS_REPORT.md"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 35,
+      "task_id": "step_07",
+      "family": "multi_step",
+      "title": "SQLite Schema Migration Flow",
+      "prompt": "How does Tylluan ensure idempotent SQLite migrations on startup in SilvaDB and Mailbox?",
+      "ground_truth": "Uses _migrations table with PRAGMA user_version / version hashes and ALTER TABLE IF NOT EXISTS",
+      "keywords": [
+        "_migrations",
+        "idempotent",
+        "ALTER TABLE"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 36,
+      "task_id": "rec_01",
+      "family": "recovery",
+      "title": "Llama Server 503 Cold Start Recovery",
+      "prompt": "How should an evaluation harness poll llama-server during startup to avoid connection drops?",
+      "ground_truth": "Poll http://127.0.0.1:{port}/health waiting for HTTP 200 and status ok rather than raw TCP socket connect",
+      "keywords": [
+        "/health",
+        "200",
+        "status ok",
+        "503"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 37,
+      "task_id": "rec_02",
+      "family": "recovery",
+      "title": "Socket Timeout Resilience in Multi-Agent Calls",
+      "prompt": "How does call_server protect against socket timeouts on long synthesis prompts?",
+      "ground_truth": "Sets Connection: close, expands timeout to 180s, and wraps in 3-attempt exponential backoff retry loop",
+      "keywords": [
+        "Connection: close",
+        "180",
+        "retry",
+        "backoff"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 38,
+      "task_id": "rec_03",
+      "family": "recovery",
+      "title": "Database WAL Recovery and msg_id Repair",
+      "prompt": "What method fixes NULL or shortened msg_id values in Coloquio after an unclean system shutdown?",
+      "ground_truth": "repair_msgids() in ColoquioDb assigns fresh UUIDv4 to orphaned rows",
+      "keywords": [
+        "repair_msgids",
+        "UUIDv4",
+        "ColoquioDb"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 39,
+      "task_id": "rec_04",
+      "family": "recovery",
+      "title": "Sparse Engine Non-Fatal Fallback",
+      "prompt": "What happens in SilvaDB initialization if the 1GB learned-sparse ONNX model fails to load?",
+      "ground_truth": "Failure is non-fatal: logs warning and search_hybrid continues running with 3-source RRF fusion",
+      "keywords": [
+        "non-fatal",
+        "fallback",
+        "3-source",
+        "RRF"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 40,
+      "task_id": "rec_05",
+      "family": "recovery",
+      "title": "Circuit Breaker on Remote Peer Dispatch",
+      "prompt": "How does DispatchRouter handle a remote peer that times out or fails 3 consecutive requests?",
+      "ground_truth": "Trips circuit breaker to Open state, falling back to local guild execution for subsequent requests",
+      "keywords": [
+        "circuit breaker",
+        "fallback",
+        "local execution"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 41,
+      "task_id": "collab_01",
+      "family": "collaboration",
+      "title": "Anti-Collision Work Handoff Protocol",
+      "prompt": "What rule prevents two agents from editing overlapping files like complexity.rs or matcher.rs simultaneously?",
+      "ground_truth": "Check Coloquio active assignments; mark work in progress; do not touch files assigned to other agents",
+      "keywords": [
+        "Coloquio",
+        "assignments",
+        "overlapping",
+        "in progress"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 42,
+      "task_id": "collab_02",
+      "family": "collaboration",
+      "title": "Single Committer Release Rule",
+      "prompt": "Who is authorized to push commits to origin/main in the fleet to prevent desynchronization?",
+      "ground_truth": "Only Claude Code (Tech Lead) commits and pushes to origin/main; other agents commit locally",
+      "keywords": [
+        "Claude Code",
+        "origin/main",
+        "Tech Lead",
+        "push"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 43,
+      "task_id": "collab_03",
+      "family": "collaboration",
+      "title": "Cross-Agent Schema Pre-Agreement Rule",
+      "prompt": "What must two agents do before writing complementary code (e.g. backend endpoint + dashboard UI)?",
+      "ground_truth": "Agree on exact field names, schemas, and ports in Coloquio before writing code",
+      "keywords": [
+        "agree",
+        "Coloquio",
+        "schema",
+        "fields"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 44,
+      "task_id": "collab_04",
+      "family": "collaboration",
+      "title": "Independent PR and Diff Verification",
+      "prompt": "What is required before announcing a milestone as closed in Coloquio?",
+      "ground_truth": "Cross-agent independent verification of real diffs, test suite execution, and documentation synchronization",
+      "keywords": [
+        "independent verification",
+        "diff",
+        "documentation",
+        "STATUS.md"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 45,
+      "task_id": "fed_01",
+      "family": "federation",
+      "title": "Hardware Capabilities in Gossip Messages",
+      "prompt": "What hardware attributes are advertised in GossipEntry across peer nodes?",
+      "ground_truth": "vram_mb, cpu_cores, supports_p2p, tcp_port, gpu_model",
+      "keywords": [
+        "vram_mb",
+        "cpu_cores",
+        "supports_p2p",
+        "tcp_port"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 46,
+      "task_id": "fed_02",
+      "family": "federation",
+      "title": "Partitionable Transport Simulation Modes",
+      "prompt": "What fault scenarios does PartitionableTransport simulate in link tests?",
+      "ground_truth": "Normal, Partitioned, HighLatency, PacketLoss, SplitBrain",
+      "keywords": [
+        "Partitioned",
+        "HighLatency",
+        "PacketLoss",
+        "SplitBrain"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 47,
+      "task_id": "fed_03",
+      "family": "federation",
+      "title": "Transparent P2P Dispatch Decision",
+      "prompt": "How does DispatchDecision route when a remote peer has specialized GPU capability and lower load?",
+      "ground_truth": "Routes as RemoteTcp via P2pSessionPool with Noise XK encryption",
+      "keywords": [
+        "RemoteTcp",
+        "P2pSessionPool",
+        "Noise XK"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 48,
+      "task_id": "safe_01",
+      "family": "safety",
+      "title": "LAN RCE Invariant Prevention",
+      "prompt": "What configuration combination in tylluan.toml is strictly forbidden to prevent LAN RCE?",
+      "ground_truth": "host = '0.0.0.0' combined with dev_mode = true",
+      "keywords": [
+        "0.0.0.0",
+        "dev_mode = true",
+        "LAN RCE"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 49,
+      "task_id": "safe_02",
+      "family": "safety",
+      "title": "Protected Author Impersonation Guard",
+      "prompt": "Which author IDs cannot be impersonated in Coloquio via automated tools?",
+      "ground_truth": "jose, admin, system (automatically mapped to agent-as-<author> if role != human)",
+      "keywords": [
+        "jose",
+        "admin",
+        "system",
+        "impersonation"
+      ],
+      "verifier_mode": "exact_token_match"
+    },
+    {
+      "index": 50,
+      "task_id": "safe_03",
+      "family": "safety",
+      "title": "Untracked Secret Token Security",
+      "prompt": "Where must bearer security tokens be stored to prevent accidental git leakage?",
+      "ground_truth": "Only in .tylluan-token (gitignored), never in tracked repository files",
+      "keywords": [
+        ".tylluan-token",
+        "gitignored",
+        "tracked"
+      ],
+      "verifier_mode": "exact_token_match"
+    }
+  ]
+}
