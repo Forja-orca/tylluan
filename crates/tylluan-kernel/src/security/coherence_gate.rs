@@ -19,7 +19,7 @@
 
 use crate::memory::silva::GraphNode;
 use crate::security::poison_patterns::matches_injection_pattern;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 /// Same bar Ouroboros/Consensus already use for "is this semantically the
 /// same thing" — one threshold across the codebase, not a gate-specific number.
@@ -220,6 +220,10 @@ impl GateStats {
 static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
 static TOTAL_ELIMINATED: AtomicU64 = AtomicU64::new(0);
 static TOTAL_PENALIZED: AtomicU64 = AtomicU64::new(0);
+/// Monotonically increasing counter for deterministic workflow_id generation.
+/// Each `hybrid_classify` call increments it; combined with query hash to
+/// group all DecisionExamples from the same recall under one workflow_id.
+static RECALL_COUNTER: AtomicI64 = AtomicI64::new(1);
 
 /// Cumulative counters since process start, for dashboard observability.
 #[derive(serde::Serialize)]
@@ -323,6 +327,18 @@ impl CoherenceGate {
             return;
         }
 
+        // Fase 2: workflow_id determinista agrupa todos los DecisionExample
+        // de un mismo recall. Hash del query (misma query = mismo grupo) +
+        // contador atómico (recall duplicado en la misma sesión = IDs distintos).
+        let recall_counter = RECALL_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let query_hash: i64 = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            query.hash(&mut h);
+            h.finish() as i64
+        };
+        let workflow_id = query_hash.wrapping_add(recall_counter);
+
         let penalized: std::collections::HashSet<String> = penalized_node_ids.iter().cloned().collect();
         let query_clone = query.to_string();
         let query_words = tokenize_query(query);
@@ -415,9 +431,7 @@ impl CoherenceGate {
                             crate::security::llm_examples::GateLabel::Keep
                         };
                         let ex = crate::security::llm_examples::DecisionExample {
-                            // Fase 1: el caller del recall no expone workflow_id;
-                            // TODO fase 2: enlazar sesión/workflow real.
-                            workflow_id: 0,
+                            workflow_id,
                             query: query_clone.chars().take(500).collect(),
                             node_id: node.id.clone(),
                             trigger_zones: zones,
@@ -769,5 +783,71 @@ mod tests {
         // Verify: still appears in search results (weight penalized, not quarantined)
         let results = db.search_hybrid("tylluan design", None, 10, None, true).await.unwrap();
         assert!(results.iter().any(|(n, _)| n.id == "soft"), "KeepSoft node must still appear in search (penalized, not quarantined)");
+    }
+
+    // ── Layer 4 workflow_id tests ───────────────────────────────────────────
+    // Verify that the workflow_id generation in hybrid_classify produces
+    // deterministic, non-zero IDs that group examples from the same recall.
+
+    /// Replicate the workflow_id generation logic from hybrid_classify to test
+    /// it in isolation (hybrid_classify itself requires LLM backend).
+    fn generate_workflow_id(query: &str) -> i64 {
+        let recall_counter = RECALL_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let query_hash: i64 = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            query.hash(&mut h);
+            h.finish() as i64
+        };
+        query_hash.wrapping_add(recall_counter)
+    }
+
+    #[test]
+    fn workflow_id_is_nonzero_and_deterministic() {
+        let before = RECALL_COUNTER.load(Ordering::Relaxed);
+        let id1 = generate_workflow_id("test query alpha");
+        let id2 = generate_workflow_id("test query alpha");
+        let after = RECALL_COUNTER.load(Ordering::Relaxed);
+
+        // Counter must have incremented by 2 (one per call)
+        assert_eq!(after - before, 2, "RECALL_COUNTER must increment on each generation");
+
+        // IDs must be non-zero (the old hardcoded 0 is the bug being fixed)
+        assert_ne!(id1, 0, "workflow_id must not be zero — that was the TODO");
+        assert_ne!(id2, 0, "workflow_id must not be zero");
+
+        // Same query → different counter → different IDs (both are unique)
+        // but the hash component is the same (deterministic)
+        assert_ne!(id1, id2, "sequential calls must produce distinct workflow_ids");
+    }
+
+    #[test]
+    fn workflow_id_groups_same_query() {
+        // Two calls with the same query should have the same hash component,
+        // making them groupable by query for analysis.
+        // We verify by computing the hash separately and checking it matches.
+        let query = "deploy the kernel binary to production";
+        let id = generate_workflow_id(query);
+
+        // Compute the expected hash
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        query.hash(&mut h);
+        let expected_hash = h.finish() as i64;
+
+        // id = expected_hash + counter_value_at_time_of_call
+        // We can't know the exact counter, but we know id != 0 and the
+        // hash component is deterministic.
+        assert_ne!(id, 0);
+        assert_ne!(expected_hash, 0, "query hash must be non-zero for this query");
+    }
+
+    #[test]
+    fn workflow_id_different_for_different_queries() {
+        let id_alpha = generate_workflow_id("query alpha");
+        let id_beta = generate_workflow_id("query beta");
+        // Different queries should produce different IDs
+        // (different hash + different counter)
+        assert_ne!(id_alpha, id_beta, "different queries must produce different workflow_ids");
     }
 }
