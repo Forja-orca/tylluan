@@ -19,7 +19,7 @@
         │             │            │             │             │
         ▼             ▼            ▼             ▼             ▼
 ┌───────────────────────────────────────────────────────────────────┐
-│                    tylluan-nexus :4000   (direct binding, no proxy)                               │
+│                    tylluan-nexus :47004   (direct binding, no proxy)                               │
 │              Kernel — Rust · tokio · axum                         │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │  GET /sse ──► SSE transport                                 │  │
@@ -105,7 +105,7 @@
 ## 3. MCP Protocol Flow
 
 ```
-CLIENT                    PROXY :4000              KERNEL :303X
+CLIENT                    PROXY :47004              KERNEL :303X
   │                          │                         │
   │──GET /sse───────────────▶│                         │
   │◀─── SSE stream ─────────│──GET /sse──────────────▶│
@@ -313,7 +313,7 @@ CLIENT                    PROXY :4000              KERNEL :303X
 
 ```
   ┌──────────────────────┐         ┌──────────────────────┐
-  │  PRIMARY :4000       │         │  SECONDARY :3040      │
+  │  PRIMARY :47004       │         │  SECONDARY :3040      │
   │  (Windows native)    │         │  (Docker)             │
   │                      │  sync   │                      │
   │  SilvaDB ◀══════════════════▶ SilvaDB              │
@@ -327,7 +327,7 @@ CLIENT                    PROXY :4000              KERNEL :303X
   │                      │         │                      │
   │  tylluan.toml:         │         │  tylluan.docker.toml:  │
   │  [federation]        │         │  [federation]        │
-  │  peers = [":3040"]   │         │  peers = [":4000"]   │
+  │  peers = [":3040"]   │         │  peers = [":47004"]   │
   └──────────────────────┘         └──────────────────────┘
 ```
 
@@ -373,7 +373,7 @@ CLIENT                    PROXY :4000              KERNEL :303X
   ├── useNexus.tsx (REST polling)
   ├── useNexusSSE.ts (SSE real-time)
   └── useLoadingState.ts
-  Bridge: nexus-bridge.ts → 127.0.0.1:4000
+  Bridge: nexus-bridge.ts → 127.0.0.1:47004
   Worker: graphLayout.worker.ts (Web Worker)
 ```
 

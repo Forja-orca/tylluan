@@ -1,4 +1,4 @@
-# Tylluan v0.16.0+ — Claude Code Instructions
+﻿# Tylluan v0.16.0+ — Claude Code Instructions
 
 > **Last sync: 2026-08-14.** This file is the human-readable context for Claude Code.
 > For machine-readable contracts, see `.tylluan/agents.toml` (ADR-009).
@@ -61,7 +61,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 **Kernel (instalado):** `tylluan-cli start`
 **Kernel (desde source):** `cargo run -p tylluan-cli -- start`
-**Health check:** `curl http://127.0.0.1:4000/health`
+**Health check:** `curl http://127.0.0.1:47004/health`
 **Dashboard:** `cd dashboard && pnpm dev` → `http://localhost:5173`
 
 ---
@@ -71,7 +71,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
 2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
-4. **Puerto único:** `tylluan-nexus` escucha en `:4000` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
+4. **Puerto único:** `tylluan-nexus` escucha en `:47004` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
 6. **Degree penalty (no boost):** `local_query_graph` usa `pr_score / (1 + deg * 0.1)` — penaliza hubs genéricos. El boost (`*`) fue un bug corregido en v0.10.0.
 7. **`[inference] device` gobierna TODO módulo de inferencia local, sin excepción** (José, 2026-08-28): ningún componente decide su propio execution provider por auto-detección — CPU es el modo por defecto seguro aunque se añadan 10.000 opciones más. Origen: `night_reasoner.py` auto-seleccionaba GPU vía `ort.get_available_providers()` ignorando `device="cpu"` (commit `0543d172`, "mejor rendimiento"). Fijado en `router/embeddings.rs::build_execution_providers()` (Rust, ya correcto) y `night_reasoner.py::_inference_device()` (Python, corregido 2026-08-28). Cualquier módulo nuevo que use ONNX/GPU debe leer este mismo campo antes de tocar un `InferenceSession`/`ExecutionProvider` — nunca `get_available_providers()` como decisión, solo como diagnóstico.

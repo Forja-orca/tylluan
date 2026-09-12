@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Compares the commit embedded in a LIVE, running kernel against the real
 # current repo HEAD -- catches exactly the 2026-08-22 incident where the
-# running :4000 process was 16 commits behind main and nobody noticed until
+# running :47004 process was 16 commits behind main and nobody noticed until
 # an explicit question forced the check.
 #
 # Why this is a separate, local-only script and NOT a CI job (unlike
@@ -16,12 +16,12 @@
 # memory, so checking it requires actually asking the live process.
 #
 # This script is the formalization of what got done by hand, repeatedly,
-# during the 2026-08-22 session (`curl :4000/health` vs `git log -1`) --
+# during the 2026-08-22 session (`curl :47004/health` vs `git log -1`) --
 # meant to be run by any agent/human at the START of a work session, the
 # same way you'd check `git status` first.
 #
 # Usage: scripts/check_live_kernel_drift.sh [kernel_url]
-# Default kernel_url: http://127.0.0.1:4000
+# Default kernel_url: http://127.0.0.1:47004
 # Exit 0 if the kernel is unreachable (not an error -- it may legitimately
 #   not be running right now) or if it's within MAX_LAG commits of HEAD.
 # Exit 1 if it's reachable AND meaningfully behind -- prints the exact gap
@@ -30,7 +30,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-KERNEL_URL="${1:-http://127.0.0.1:4000}"
+KERNEL_URL="${1:-http://127.0.0.1:47004}"
 MAX_LAG=2
 
 real_head=$(git rev-parse --short=7 HEAD)

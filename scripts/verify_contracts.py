@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Pilar 2 - Executable Contract Verification Script
 
@@ -80,7 +80,7 @@ def main():
     
     # 1. Test /health against schema
     try:
-        with urllib.request.urlopen("http://127.0.0.1:4000/health", timeout=5) as r:
+        with urllib.request.urlopen("http://127.0.0.1:47004/health", timeout=5) as r:
             health_data = json.loads(r.read())
             validate_object(health_data, health_schema)
             print(f"✅ GET /health payload complies with schemas/health_response.json: {health_data}")
@@ -92,7 +92,7 @@ def main():
     try:
         req_body = json.dumps({"text": "contract verification text"}).encode("utf-8")
         req = urllib.request.Request(
-            "http://127.0.0.1:4000/api/v1/embed",
+            "http://127.0.0.1:47004/api/v1/embed",
             data=req_body,
             headers={"Content-Type": "application/json"}
         )

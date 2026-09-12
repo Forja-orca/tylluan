@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="assets/branding/logo.jpg" alt="Tylluan" width="160">
 </p>
 
@@ -82,7 +82,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 Tylluan ships with a React dashboard for watching the kernel work.
 
-- **Production (single binary):** served automatically at [http://127.0.0.1:4000/](http://127.0.0.1:4000/) once the kernel is running.
+- **Production (single binary):** served automatically at [http://127.0.0.1:47004/](http://127.0.0.1:47004/) once the kernel is running.
 - **Development:** `cd dashboard && pnpm dev` for the hot-reloading dev server at [http://localhost:5173/](http://localhost:5173/).
 
 <p align="center">
@@ -169,7 +169,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-839 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+845 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -210,13 +210,13 @@ On the very first run, BGE-M3 downloads with a progress bar (5–15 minutes depe
 
 ```
 Downloading BGE-M3 embedding model... [##########] 1.2 GB
-✅ Tylluan v0.17.0 running at http://127.0.0.1:4000
+✅ Tylluan v0.17.0 running at http://127.0.0.1:47004
 ```
 
 Check it's actually up:
 
 ```bash
-curl -s http://127.0.0.1:4000/health
+curl -s http://127.0.0.1:47004/health
 ```
 
 > [!TIP]
@@ -229,12 +229,12 @@ curl -s http://127.0.0.1:4000/health
 ### 3 — Connect your agent
 
 ```json
-{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:4000/sse" } } }
+{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:47004/sse" } } }
 ```
 
 | Client | Where |
 |--------|-------|
-| **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:4000/sse` |
+| **Claude Code** | `claude mcp add --transport sse tylluan http://127.0.0.1:47004/sse` |
 | **Claude Desktop** | `claude_desktop_config.json` |
 | **Cursor** | `~/.cursor/mcp.json` |
 | **VS Code** | `.vscode/mcp.json` in your workspace |
@@ -247,13 +247,13 @@ curl -s http://127.0.0.1:4000/health
 export TYLLUAN_TOKEN=$(cat .tylluan-token)
 
 # Store a memory
-curl -X POST http://127.0.0.1:4000/api/v1/memory/write \
+curl -X POST http://127.0.0.1:47004/api/v1/memory/write \
   -H "Authorization: Bearer $TYLLUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content": "Tylluan is running local graph RAG."}'
 
 # Retrieve it
-curl "http://127.0.0.1:4000/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
+curl "http://127.0.0.1:47004/api/v1/memory/search?q=How+does+Tylluan+query+graphs" \
   -H "Authorization: Bearer $TYLLUAN_TOKEN"
 ```
 
@@ -435,18 +435,18 @@ sync_interval_ms = 3600000      # the key the auto-sync loop actually reads; 0 =
 
 ```bash
 # Add a peer
-curl -X POST http://127.0.0.1:4000/api/v1/federation/peers \
+curl -X POST http://127.0.0.1:47004/api/v1/federation/peers \
   -H "Content-Type: application/json" \
-  -d '{"name":"node-b","url":"http://192.168.1.10:4000","auth_token":"...","shared_secret":"..."}'
+  -d '{"name":"node-b","url":"http://192.168.1.10:47004","auth_token":"...","shared_secret":"..."}'
 
 # Push local knowledge to all approved peers
-curl -X POST http://127.0.0.1:4000/api/v1/federation/sync
+curl -X POST http://127.0.0.1:47004/api/v1/federation/sync
 
 # Pull from a specific peer
-curl -X POST "http://127.0.0.1:4000/api/v1/federation/sync/pull?peer=node-b"
+curl -X POST "http://127.0.0.1:47004/api/v1/federation/sync/pull?peer=node-b"
 
 # See where a given node's knowledge came from
-curl "http://127.0.0.1:4000/api/v1/federation/nodes?source=node-b"
+curl "http://127.0.0.1:47004/api/v1/federation/nodes?source=node-b"
 ```
 
 A few invariants that hold regardless of configuration: unapproved peers are never synced, protected nodes are never exported, and anything received from a peer is tagged with `federation_source` and excluded from further outbound sync by default — so knowledge can't loop endlessly between instances.
@@ -483,7 +483,7 @@ python examples/multi_model_coloquio/run.py
 python examples/bounded_work_contract/run.py
 ```
 
-> Examples resolve the active kernel port automatically from `data/active_port.json` or `TYLLUAN_PORT` (defaults to `4000`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
+> Examples resolve the active kernel port automatically from `data/active_port.json` or `TYLLUAN_PORT` (defaults to `47004`). Override with `--port <PORT>` or `--kernel http://127.0.0.1:<PORT>`.
 
 Full source in [examples/](examples/).
 

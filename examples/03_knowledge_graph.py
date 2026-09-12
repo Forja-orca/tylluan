@@ -1,4 +1,4 @@
-"""
+﻿"""
 Example 3: Knowledge Graph Exploration
 
 Demonstrates Tylluan's graph capabilities via the sovereign REST API:
@@ -11,7 +11,7 @@ Prerequisites:
 
 Usage:
   python examples/03_knowledge_graph.py
-  python examples/03_knowledge_graph.py --host 127.0.0.1 --port 4000
+  python examples/03_knowledge_graph.py --host 127.0.0.1 --port 47004
 """
 
 import argparse

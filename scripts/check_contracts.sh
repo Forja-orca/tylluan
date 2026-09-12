@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Verifies that formal JSON Schemas (schemas/) are valid and tests live endpoints
 # against them if the kernel is running.
 #
@@ -34,11 +34,11 @@ done
 
 # 2. Execute verify_contracts.py against the live kernel, if one is reachable
 # (won't be in a fresh CI runner -- degrades gracefully to static-only).
-if curl -s -m 2 http://127.0.0.1:4000/health >/dev/null 2>&1; then
-    echo "Live kernel detected on :4000 — running live contract verification..."
+if curl -s -m 2 http://127.0.0.1:47004/health >/dev/null 2>&1; then
+    echo "Live kernel detected on :47004 — running live contract verification..."
     "$PY_BIN" scripts/verify_contracts.py
 else
-    echo "No live kernel on :4000 — schemas validated statically (Rust integration tests cover struct contracts)."
+    echo "No live kernel on :47004 — schemas validated statically (Rust integration tests cover struct contracts)."
 fi
 
 echo "🎯 Contract gate passed successfully."

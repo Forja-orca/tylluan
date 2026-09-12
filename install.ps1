@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # Tylluan Windows Installer
 # Usage: irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
@@ -86,7 +86,7 @@ $Ready = $false
 $ErrorCount = 0
 for ($i = 0; $i -lt 30; $i++) {
     try {
-        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:4000/health" -UseBasicParsing -ErrorAction Stop
+        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:47004/health" -UseBasicParsing -ErrorAction Stop
         if ($Response.StatusCode -eq 200) {
             $Ready = $true
             break
@@ -105,7 +105,7 @@ if (-not $Ready) {
 # Verify the binary responds
 $Status = & "$BinDir\tylluan-cli" status 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-OK "Tylluan v$Version is running at http://127.0.0.1:4000"
+    Write-OK "Tylluan v$Version is running at http://127.0.0.1:47004"
     Write-Host ""
     Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
     Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
@@ -123,18 +123,18 @@ Write-Host "  Claude Desktop (~/.claude/claude_desktop_config.json):" -Foregroun
 Write-Host '  {'
 Write-Host '    "mcpServers": {'
 Write-Host '      "tylluan": { "type": "sse",'
-Write-Host '        "url": "http://127.0.0.1:4000/sse" }'
+Write-Host '        "url": "http://127.0.0.1:47004/sse" }'
 Write-Host '    }'
 Write-Host '  }'
 Write-Host ""
 Write-Host "  Claude Code:" -ForegroundColor White
-Write-Host '    /mcp add tylluan sse http://127.0.0.1:4000/sse'
+Write-Host '    /mcp add tylluan sse http://127.0.0.1:47004/sse'
 Write-Host ""
 Write-Host "  Cursor:" -ForegroundColor White
-Write-Host "    Add MCP server: http://127.0.0.1:4000/sse"
+Write-Host "    Add MCP server: http://127.0.0.1:47004/sse"
 Write-Host ""
 Write-Host "  curl (verify):" -ForegroundColor White
-Write-Host "    curl http://127.0.0.1:4000/health"
+Write-Host "    curl http://127.0.0.1:47004/health"
 Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Example 1: Memory Basics — Remember, Recall, Think
 
 Demonstrates Tylluan's core memory loop using the sovereign REST API:
@@ -11,7 +11,7 @@ Prerequisites:
 
 Usage:
   python examples/01_memory_basics.py
-  python examples/01_memory_basics.py --host 127.0.0.1 --port 4000
+  python examples/01_memory_basics.py --host 127.0.0.1 --port 47004
 """
 
 import argparse

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Verifies that STATUS.md cites exactly one HEAD value and that it matches
 # the real current commit.
 #
@@ -13,7 +13,7 @@
 # This is a repo-only check (git log + a doc grep) -- it does NOT reach out
 # to a live kernel, so it's safe to run in CI. For checking a *running*
 # kernel against this repo's HEAD, see the separate, local-only workflow
-# documented in STATUS.md's "Known Gaps" section (curl :4000/health).
+# documented in STATUS.md's "Known Gaps" section (curl :47004/health).
 #
 # Usage: scripts/check_head_sync.sh [--fix]
 # Exit 0 if STATUS.md has exactly one HEAD citation and it matches git HEAD.

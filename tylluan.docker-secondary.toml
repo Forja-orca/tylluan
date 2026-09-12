@@ -1,6 +1,6 @@
-# Tylluan — Docker runtime config, SECONDARY instance (federation testing)
+﻿# Tylluan — Docker runtime config, SECONDARY instance (federation testing)
 # Mirrors tylluan.docker.toml but with its own federation peer pre-approved
-# pointing back at the native primary instance (host.docker.internal:4000).
+# pointing back at the native primary instance (host.docker.internal:47004).
 # host = "0.0.0.0" is intentional here (Docker port mapping).
 # dev_mode = false so auth is enforced. Never combine 0.0.0.0 + dev_mode=true.
 
@@ -36,6 +36,6 @@ enabled = true
 
 [[federation_peers]]
 name     = "native-primary"
-url      = "http://host.docker.internal:4000"
+url      = "http://host.docker.internal:47004"
 auth_token = "dev-mode-no-auth"
 approved = true

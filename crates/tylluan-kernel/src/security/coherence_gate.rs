@@ -1,4 +1,4 @@
-//! ADR-011 Coherence Gate — defense for the "second hop" of memory poisoning:
+﻿//! ADR-011 Coherence Gate — defense for the "second hop" of memory poisoning:
 //! `tylluan_recall` already returns poisoned content as inert text (verified
 //! by `adv_memory_poisoning_recall_returns_inert`), but nothing today stops
 //! that content from being fed, unfiltered, into a future generative SLM's
@@ -116,7 +116,7 @@ fn resolve_self_auth_token() -> Option<String> {
 /// function 2026-08-12.
 pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:4000".to_string());
+        .unwrap_or_else(|_| "http://127.0.0.1:47004".to_string());
 
     let body = serde_json::json!({
         "intent": "query_model",

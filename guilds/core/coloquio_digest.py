@@ -1,4 +1,4 @@
-"""Coloquio Digest guild — on-demand and scheduled pipeline: coloquio → SilvaDB.
+﻿"""Coloquio Digest guild — on-demand and scheduled pipeline: coloquio → SilvaDB.
 
 Exposes MCP tools so any agent can trigger digestion via tylluan_do guild=coloquio_digest.
 For the periodic background runner use scripts/coloquio_summarizer.py instead.
@@ -34,10 +34,10 @@ def _resolve_kernel_base() -> str:
     port_file = _REPO_ROOT / "data" / "active_port.json"
     try:
         data = json.loads(port_file.read_text())
-        port = data.get("port", 4000)
+        port = data.get("port", 47004)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:4000"
+        return "http://127.0.0.1:47004"
 
 
 KERNEL_BASE = _resolve_kernel_base()

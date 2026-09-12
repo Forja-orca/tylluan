@@ -1,4 +1,4 @@
-# Adding a Guild to Tylluan
+﻿# Adding a Guild to Tylluan
 
 Guilds are Tylluan's extension point: each guild is a small Python FastMCP server that the Rust kernel starts on demand or keeps always on. This guide uses a minimal word-count guild so every step can be copied and adapted.
 
@@ -90,12 +90,12 @@ python -m py_compile guilds/builders/plugins/word_count.py
 
 ## 4. Invoke it through `tylluan_do`
 
-Start Tylluan first. The default local endpoint is `http://127.0.0.1:4000`; use the bearer token when authentication is enabled.
+Start Tylluan first. The default local endpoint is `http://127.0.0.1:47004`; use the bearer token when authentication is enabled.
 
 The REST intent endpoint can force the guild while keeping the public `tylluan_do` contract:
 
 ```bash
-curl -X POST http://127.0.0.1:4000/api/v1/do \
+curl -X POST http://127.0.0.1:47004/api/v1/do \
   -H "Content-Type: application/json" \
   -d '{"intent":"count the words in this text","guild":"word_count","agent_id":"guild-tutorial","arguments":{"text":"one two three"}}'
 ```
@@ -103,7 +103,7 @@ curl -X POST http://127.0.0.1:4000/api/v1/do \
 You can also invoke the same public tool through MCP Streamable HTTP:
 
 ```bash
-curl -X POST http://127.0.0.1:4000/messages \
+curl -X POST http://127.0.0.1:47004/messages \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"tylluan_do","arguments":{"intent":"count the words in this text","guild":"word_count","agent_id":"guild-tutorial","text":"one two three"}}}'
@@ -118,8 +118,8 @@ count the words in this text using the word_count guild
 Check the result and the runtime registry if routing fails:
 
 ```bash
-curl http://127.0.0.1:4000/health
-curl http://127.0.0.1:4000/api/v1/guilds
+curl http://127.0.0.1:47004/health
+curl http://127.0.0.1:47004/api/v1/guilds
 ```
 
 If the catalog contains the guild but `tylluan_do` reports `Unknown guild`, the usual cause is a missing `LAZY_GUILDS`/always-on registration entry, not a missing `GuildDescriptor`.
