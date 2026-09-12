@@ -523,7 +523,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                     e.stopPropagation();
                                     setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                   }}
-                                  className="text-emerald-400 hover:text-emerald-300 mt-1 font-bold text-[10px] underline cursor-pointer"
+                                  className="text-amber-400 hover:text-amber-300 mt-1 font-semibold text-[10px] underline cursor-pointer"
                                 >
                                   [Ver completo: {node.id.split(':').pop()?.slice(0, 8)}]
                                 </button>
@@ -590,7 +590,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                       e.stopPropagation();
                                       setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                     }}
-                                    className="text-emerald-400 hover:text-emerald-300 mt-1 font-medium text-[10px] underline cursor-pointer"
+                                    className="text-amber-400 hover:text-amber-300 mt-1 font-medium text-[10px] underline cursor-pointer"
                                   >
                                     [Ver menos]
                                   </button>
@@ -604,7 +604,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                         <div className="flex items-center gap-3">
                           <div className="flex flex-col">
                             <span className="text-[8px] text-slate-600 uppercase">Weight</span>
-                            <span className="text-[10px] font-bold text-emerald-500">{(node.weight || 0).toFixed(2)}</span>
+                            <span className="text-[10px] font-mono font-semibold text-amber-400">{(node.weight || 0).toFixed(2)}</span>
                           </div>
                           {node.provenance && (
                             <div className="flex flex-col border-l border-slate-700/50 pl-3">
@@ -675,7 +675,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           e.stopPropagation();
                                           setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                         }}
-                                         className="text-emerald-400 hover:text-emerald-300 font-medium text-[10px] underline whitespace-nowrap cursor-pointer"
+                                         className="text-amber-400 hover:text-amber-300 font-medium text-[10px] underline whitespace-nowrap cursor-pointer"
                                       >
                                         [Ver completo]
                                       </button>
@@ -692,7 +692,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                             e.stopPropagation();
                                             setExpandedNodeIds(prev => ({ ...prev, [node.id]: false }));
                                           }}
-                                          className="text-emerald-400 hover:text-emerald-300 ml-1.5 font-bold text-[10px] underline whitespace-nowrap cursor-pointer"
+                                          className="text-amber-400 hover:text-amber-300 ml-1.5 font-semibold text-[10px] underline whitespace-nowrap cursor-pointer"
                                         >
                                           [Ver menos]
                                         </button>
@@ -702,7 +702,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                               }
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-right text-[10px] font-medium text-emerald-400">{(node.weight || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-[10px] font-mono font-medium text-amber-400">{(node.weight || 0).toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -777,7 +777,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <div className="py-20 text-center flex flex-col items-center">
                 <Database className="w-12 h-12 text-slate-800 mb-4" />
                 <p className="text-slate-600 font-medium">No neural patterns match your scan</p>
-                <button type="button" onClick={loadRecent} className="mt-4 text-xs text-emerald-500 hover:underline">Reset Scan</button>
+                <button type="button" onClick={loadRecent} className="mt-4 text-xs text-amber-400 hover:text-amber-300 hover:underline cursor-pointer">Reset Scan</button>
               </div>
             )}
 
@@ -785,7 +785,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <div className="py-16 text-center flex flex-col items-center">
                 <Database className="w-10 h-10 text-slate-800 mb-3" />
                 <p className="text-slate-500 text-xs font-medium">No hay nodos en estado <span className="font-mono font-bold text-slate-400 uppercase">"{lifecycleFilter}"</span></p>
-                <button type="button" onClick={() => setLifecycleFilter('all')} className="mt-3 text-xs text-emerald-400 hover:underline">Ver todos los nodos ({results.length})</button>
+                <button type="button" onClick={() => setLifecycleFilter('all')} className="mt-3 text-xs text-amber-400 hover:text-amber-300 hover:underline cursor-pointer">Ver todos los nodos ({results.length})</button>
               </div>
             )}
           </div>
