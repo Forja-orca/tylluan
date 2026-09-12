@@ -87,7 +87,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 
 ---
 
-## Estado actual — v0.16.0+ (unreleased)
+## Estado actual — v0.17.0 (tagged 2026-08-23; 166 commits desde v0.16.0 `5900e97`)
 
 **Tests:** 685 kernel lib + 69 link lib + 12 fsrs = 766+ en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
 **Cargo.toml:** `version = "0.16.0"`, Rust edition 2024, toolchain 1.88.
