@@ -262,8 +262,8 @@ export function ColoquioMessagesPanel({
                 <button onClick={() => scrollToTurn(msg.turn)} className="text-[9px] text-slate-600 font-mono hover:text-amber-400 transition-colors">#{msg.turn}</button>
                 <span className="text-[9px] text-slate-600">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
-                  <span className="text-[9px] text-violet-400 bg-violet-950/40 border border-violet-800/40 px-1 py-0.25 rounded flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-pulse" />
+                  <span className="text-[9px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
+                    <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
                     escribiendo...
                   </span>
                 )}
@@ -273,7 +273,7 @@ export function ColoquioMessagesPanel({
               <div className={cn(
                 'rounded-2xl shadow-sm leading-relaxed relative',
                 compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
-                isHuman ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-50 rounded-tr-sm'
+                isHuman ? 'bg-amber-950/30 border border-amber-700/40 text-amber-100 rounded-tr-sm'
                         : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
                 highlight ? 'ring-2 ring-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.4)]' : ''
               )}>
@@ -285,7 +285,7 @@ export function ColoquioMessagesPanel({
 
                 {/* Show cursor indicator if streaming */}
                 {isStreaming && (
-                  <span className="inline-block w-1.5 h-3.5 bg-violet-400 ml-1 animate-pulse align-middle" />
+                  <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-1 animate-pulse align-middle" />
                 )}
 
                 {thoughtContent && (

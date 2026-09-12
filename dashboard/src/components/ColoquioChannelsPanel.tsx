@@ -80,10 +80,10 @@ export function ColoquioChannelsPanel({
     return (
       <div key={ch.channel_id} onClick={() => selectChannel(ch.channel_id)}
         className={cn('group/ch relative flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-md mx-1 transition-all',
-          active ? 'bg-slate-700/60 text-slate-100' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50')}>
+          active ? 'bg-amber-950/30 text-amber-200 border-l-2 border-amber-500 font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50')}>
         <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
         <span className="flex-1 text-[12px] truncate font-medium">{ch.name}</span>
-        {u > 0 && <span className="px-1.5 py-0.5 rounded-full bg-indigo-500 text-slate-50 text-[9px] font-bold leading-none">{u}</span>}
+        {u > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold leading-none shadow-sm">{u}</span>}
         <button onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
           className="opacity-0 group/ch:opacity-100 p-0.5 text-slate-600 hover:text-rose-400 transition-all rounded cursor-pointer">
           <Trash2 className="w-3.5 h-3.5" />
