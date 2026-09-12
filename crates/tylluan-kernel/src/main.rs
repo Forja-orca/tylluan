@@ -1047,6 +1047,11 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Cognitive Scheduler observation: give the server a read-only handle to
+    // the shared background-budget semaphore (never acquires; the heavy
+    // background loops keep their own clones below).
+    server.set_background_budget(background_budget.clone());
+
     // M31-P6: Wire JobQueue into TylluanServer and spawn background worker
     server.set_jobs(jobs.clone());
     if let Some(state) = crate::transport::server::background_jobs::BackgroundWorkerState::from_server(&server) {

@@ -40,6 +40,14 @@ impl BackgroundBudget {
         }
     }
 
+    /// Non-blocking, read-only snapshot: is at least one permit free right
+    /// now? Never acquires — an observer must not consume background budget
+    /// or stall dispatch behind `max_wait` just by looking. Used by the
+    /// Cognitive Scheduler's observation path (router::scheduler::observe).
+    pub fn available(&self) -> bool {
+        self.sem.available_permits() > 0
+    }
+
     /// Try to enter the background budget within the latency budget.
     /// Returns None (skip this tick) if the permits are still busy after
     /// `max_wait` — the caller should skip its cycle rather than pile on.
