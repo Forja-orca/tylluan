@@ -1047,9 +1047,18 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Cognitive Scheduler observation: give the server a read-only handle to
-    // the shared background-budget semaphore (never acquires; the heavy
-    // background loops keep their own clones below).
+    // Shared budget for heavy background loops (reindexer, HNSW rebuild,
+    // memory consensus): max concurrency + bounded wait (latency budget).
+    // Prevents the 2026-08-30 GraphRAG failure class — unbounded background
+    // jobs stacking and saturating CPU system-wide.
+    // Created BEFORE the server is wired: the server gets a read-only handle
+    // for the Scheduler's observation path, the loops below clone the same Arc.
+    let background_budget = std::sync::Arc::new(
+        tylluan_kernel::memory::background_budget::BackgroundBudget::new(
+            config.memory.background_concurrency,
+            config.memory.background_max_wait_secs,
+        )
+    );
     server.set_background_budget(background_budget.clone());
 
     // M31-P6: Wire JobQueue into TylluanServer and spawn background worker
@@ -1513,17 +1522,6 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
-
-    // Shared budget for heavy background loops (reindexer, HNSW rebuild,
-    // memory consensus): max concurrency + bounded wait (latency budget).
-    // Prevents the 2026-08-30 GraphRAG failure class — unbounded background
-    // jobs stacking and saturating CPU system-wide.
-    let background_budget = std::sync::Arc::new(
-        tylluan_kernel::memory::background_budget::BackgroundBudget::new(
-            config.memory.background_concurrency,
-            config.memory.background_max_wait_secs,
-        )
-    );
 
     // Sovereign Agnostic Reindexer (detects model upgrades and re-indexes background)
     let silva_reindex = silva.clone();
