@@ -1,4 +1,4 @@
-# Tylluan Client Integration & Auto-Discovery Guide
+﻿# Tylluan Client Integration & Auto-Discovery Guide
 
 Tylluan acts as a **Sovereign MCP Hub**. This document describes how external AI client agents (such as VS Code Cline/Roo Code, Cursor, Claude Desktop, Qwen Desktop, Codex, or custom Python/shell scripts) connect to Tylluan and dynamically discover available guilds and capabilities.
 
@@ -28,7 +28,7 @@ Tylluan's kernel speaks HTTP (Streamable JSON-RPC at `/messages`, classic SSE at
 
 ## 2. Client Configurations
 
-All configs below assume Tylluan is running locally at `http://127.0.0.1:4000` (the real port — see `CLAUDE.md`, never `localhost`, always `127.0.0.1`). In `dev_mode = true` (the default until Tylluan's final hardening pass), no bearer token is required; the `--header` line is only needed once auth is enforced.
+All configs below assume Tylluan is running locally at `http://127.0.0.1:47004` (the real port — see `CLAUDE.md`, never `localhost`, always `127.0.0.1`). In `dev_mode = true` (the default until Tylluan's final hardening pass), no bearer token is required; the `--header` line is only needed once auth is enforced.
 
 ### Claude Desktop
 Edit your configuration file:
@@ -40,7 +40,7 @@ Edit your configuration file:
   "mcpServers": {
     "tylluan": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "http://127.0.0.1:4000/messages", "--allow-http"]
+      "args": ["mcp-remote@latest", "http://127.0.0.1:47004/messages", "--allow-http"]
     }
   }
 }
@@ -59,7 +59,7 @@ Qwen Desktop also expects a stdio-launched MCP server. Same bridge, same shape:
   "mcpServers": {
     "tylluan": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "http://127.0.0.1:4000/messages", "--allow-http"]
+      "args": ["mcp-remote@latest", "http://127.0.0.1:47004/messages", "--allow-http"]
     }
   }
 }
@@ -75,7 +75,7 @@ Cline/Roo Code supports custom stdio MCP servers. Open your `mcp_settings.json` 
   "mcpServers": {
     "tylluan": {
       "command": "npx",
-      "args": ["mcp-remote@latest", "http://127.0.0.1:4000/messages", "--allow-http"],
+      "args": ["mcp-remote@latest", "http://127.0.0.1:47004/messages", "--allow-http"],
       "disabled": false,
       "alwaysOn": true
     }
@@ -89,7 +89,7 @@ Cline/Roo Code supports custom stdio MCP servers. Open your `mcp_settings.json` 
 3. Configure the following:
    - **Name**: `tylluan`
    - **Type**: `command`
-   - **Command**: `npx mcp-remote@latest http://127.0.0.1:4000/messages --allow-http`
+   - **Command**: `npx mcp-remote@latest http://127.0.0.1:47004/messages --allow-http`
 
 ### Claude Code / Antigravity (native HTTP support, no bridge needed)
 Claude Code (`type: "sse"`) and Antigravity (`serverUrl`, HTTP Streamable) both speak Tylluan's HTTP endpoints directly — no `mcp-remote` bridge required. See `CLAUDE.md` for their exact config blocks.
@@ -110,19 +110,19 @@ Authorization: Bearer TU_TOKEN_AQUI
 
 #### 1. Health check (`GET /health`)
 ```bash
-curl http://127.0.0.1:4000/health
+curl http://127.0.0.1:47004/health
 ```
 
 #### 2. List available guilds with full contracts (`POST /messages`, `list_available_guilds`)
 ```bash
-curl -X POST http://127.0.0.1:4000/messages \
+curl -X POST http://127.0.0.1:47004/messages \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_available_guilds","arguments":{}}}'
 ```
 
 #### 3. Execute Intent (`POST /messages`, `tylluan_do`)
 ```bash
-curl -X POST http://127.0.0.1:4000/messages \
+curl -X POST http://127.0.0.1:47004/messages \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tylluan_do","arguments":{"intent":"list all folders in the current directory","agent_id":"rest-script-client"}}}'
 ```

@@ -56,7 +56,7 @@ Follow the complete [Adding a Guild guide](docs/guides/ADDING_A_GUILD.md) for a 
 ## Reporting issues
 
 - Include: what you did, what you expected, what happened
-- Include kernel version (`curl http://127.0.0.1:4000/health`)
+- Include kernel version (`curl http://127.0.0.1:47004/health`)
 - If possible, include the routing trace from `tylluan_do`
 
 ## License

@@ -1,4 +1,4 @@
-# Tylluan Advanced Setup Guide
+﻿# Tylluan Advanced Setup Guide
 
 **Prerequisites:** Rust 1.88+, Python 3.12+, Git, 4GB RAM
 **Alternative to:** The 3-step binary install in [README.md](../../README.md)
@@ -44,7 +44,7 @@ Minimal working config:
 ```toml
 [nexus]
 host = "127.0.0.1"
-port = 4000
+port = 47004
 dev_mode = false
 
 [federation]
@@ -88,7 +88,7 @@ On first boot, a bearer token is written to `.tylluan-token` in the working dire
 Pass the token as `?token=...` on the SSE URL or as `Authorization: Bearer ...` header.
 
 ```json
-{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:4000/sse?token=YOUR_TOKEN" } } }
+{ "mcpServers": { "tylluan": { "type": "sse", "url": "http://127.0.0.1:47004/sse?token=YOUR_TOKEN" } } }
 ```
 
 ---
@@ -119,7 +119,7 @@ Then restart with `tylluan-cli start` (or `cargo run -p tylluan-cli -- start` fr
 tylluan-cli
   start         Launch the kernel (handles PATH, port, flags)
   stop          Kill the running kernel
-  status        Health check on port 4000
+  status        Health check on port 47004
   logs          View kernel logs (--follow for tail)
   connect       Handshake with a remote Tylluan instance
   download-models  Pre-download BGE-M3 before first boot
@@ -131,8 +131,8 @@ tylluan-cli
 
 ### "Connection refused" on Step 3
 
-1. Is the kernel running? `curl http://127.0.0.1:4000/health`
-2. Is the port correct? Default is 4000. Check `tylluan.toml` if you changed it.
+1. Is the kernel running? `curl http://127.0.0.1:47004/health`
+2. Is the port correct? Default is 47004. Check `tylluan.toml` if you changed it.
 3. Is the URL correct? SSE clients need `/sse`, HTTP Streamable needs `/messages`.
 
 ### "Unauthorized"
@@ -164,8 +164,8 @@ tylluan-cli
 
 | Command | Purpose |
 |---------|---------|
-| `curl http://127.0.0.1:4000/health` | Health check |
-| `curl http://127.0.0.1:4000/api/v1/silva/stats` | Memory graph stats |
+| `curl http://127.0.0.1:47004/health` | Health check |
+| `curl http://127.0.0.1:47004/api/v1/silva/stats` | Memory graph stats |
 | `tylluan-cli logs --follow` | Live kernel logs |
 | `sqlite3 data/audit.db "SELECT * FROM audit LIMIT 10"` | Recent audit entries |
 | `cargo test -p tylluan-kernel --lib` | Run unit tests |

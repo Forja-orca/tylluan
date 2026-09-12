@@ -3,7 +3,7 @@
 
 [nexus]
 host = "127.0.0.1"
-port = 4000
+port = 47004
 transport = ["stdio", "http"]
 
 # Security timeouts for tool execution and handshakes

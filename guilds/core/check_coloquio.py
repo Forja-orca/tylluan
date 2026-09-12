@@ -1,4 +1,4 @@
-"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
+﻿"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
 
 Level B polling from coloquio_wake_scheduling.md. Run at start of each
 session cycle. Does NOT commit, push, or modify repo state — reads only,
@@ -46,12 +46,12 @@ def resolve_kernel():
     if port_file.exists():
         try:
             data = json.loads(port_file.read_text())
-            return f"http://127.0.0.1:{data.get('port', 4000)}"
+            return f"http://127.0.0.1:{data.get('port', 47004)}"
         except Exception:
             pass
     if "KERNEL_BASE" in os.environ:
         return os.environ["KERNEL_BASE"]
-    return "http://127.0.0.1:4000"
+    return "http://127.0.0.1:47004"
 
 
 def api_get(path, params=None):

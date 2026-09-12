@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Generates the pixel-perfect static vector SVG for Tylluan architecture.
 Eliminates all Mermaid layout glitches on GitHub while providing glowing circuits,
@@ -100,14 +100,14 @@ def generate_svg():
   </g>
 
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
-  <!-- MAIN CONTAINER: TYLLUAN NEXUS KERNEL (:4000) -->
+  <!-- MAIN CONTAINER: TYLLUAN NEXUS KERNEL (:47004) -->
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <g id="nexus-container" filter="url(#shadow)">
     <!-- Kernel Outer Border with Glow -->
     <rect x="40" y="170" width="1200" height="700" rx="16" fill="url(#nexus-grad)" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.6"/>
     <rect x="40" y="170" width="1200" height="700" rx="16" fill="none" stroke="#34d399" stroke-width="1" stroke-opacity="0.3"/>
     
-    <text x="65" y="200" fill="#38bdf8" font-size="16" font-weight="800" letter-spacing="1">tylluan-nexus (:4000)</text>
+    <text x="65" y="200" fill="#38bdf8" font-size="16" font-weight="800" letter-spacing="1">tylluan-nexus (:47004)</text>
     <text x="245" y="200" fill="#64748b" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
     <rect x="1100" y="183" width="120" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
     <text x="1115" y="199" fill="#34d399" font-size="11" font-weight="700">MIT SOBERANO</text>

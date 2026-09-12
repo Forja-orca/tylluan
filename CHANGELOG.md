@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Tylluan are documented here.
 
@@ -245,7 +245,7 @@ not by test coverage.
 - **Deterministic federation freshness resolution** (`consensus.rs`) — 5-rule cascade (identical hash / protected / peer priority / timestamp / lexicographic tiebreak), 9 tests, wired into all 4 federation sync paths.
 - **ConsensusEngine test coverage** — a 237-line conflict-resolution engine that runs hourly in production (`NightConsolidation`) had zero tests before today. 7 tests added covering clear-winner, synthesis, ambiguous, protected-node, and human-override paths.
 - **Event Bridge (P0)** — `dream_cycle_complete` and `federation_sync` (push/receive/pull/both) now broadcast over the existing SSE `/api/v1/events` stream, alongside the pre-existing `coloquio:*`/`tool_call`/`memory_added` events.
-- **Federation verified for real between two live instances** — native (`:4000`) and a Docker-secondary instance (`:4040`), confirmed via a real completed sync (`last_sync` timestamp, nodes present with correct `federation_source` tagging on both sides), not just unit tests against a single process. Two open findings from this test, not yet fixed: auto-sync (`sync_interval_ms` exists in config but nothing consumes it), and an auth-middleware/field-name mismatch between `sync/receive` and the general bearer-auth layer.
+- **Federation verified for real between two live instances** — native (`:47004`) and a Docker-secondary instance (`:4040`), confirmed via a real completed sync (`last_sync` timestamp, nodes present with correct `federation_source` tagging on both sides), not just unit tests against a single process. Two open findings from this test, not yet fixed: auto-sync (`sync_interval_ms` exists in config but nothing consumes it), and an auth-middleware/field-name mismatch between `sync/receive` and the general bearer-auth layer.
 - **M26 Canvas Sprint — real-time reactive whiteboard** — tldraw-based collaborative canvas wired to the Event Bridge for live updates, replacing the earlier graph-viewer direction (explicitly rejected as "Knowledge Graph disfrazado" — the canvas needed to be a real collaborative surface, not another way to look at the same graph).
 - **SPEC.md: Sovereignty properties + comparative taxonomy** — 7 sovereign-AI properties mapped to Tylluan's actual primitives, plus a comparison table against Mem0/Letta.
 - **docs-site synced to real implementation state** — roadmap statuses (Freshness, Dashboard, DreamCycle, Mem0 benchmark) corrected from "proposed"/"future" to "active" with checkable justification (test counts, wiring locations, closed milestones) after independent verification; tool name references corrected (`tylluan_remember`, not `tylluan_store`); test count corrected to 383 (310 kernel + 61 tylluan-link + 12 tylluan-fsrs).

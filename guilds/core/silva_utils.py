@@ -1,4 +1,4 @@
-"""
+﻿"""
 SilvaDB utilities for Python guilds — direct node insertion.
 M17-4 Drift Guard: summary/synthesis/agent_summary cannot be created through guilds.
 """
@@ -23,7 +23,7 @@ DRIFT_SENSITIVE_TYPES = frozenset(["summary", "synthesis", "agent_summary"])
 def _resolve_kernel_base() -> str:
     """Same pattern as guilds/core/coloquio.py's _resolve_kernel_base().
     KERNEL_URL used to be hardcoded to "http://127.0.0.1:3030" -- that's
-    ForjaMCPo3's port, not Tylluan's (:4000 by default, dynamic otherwise).
+    ForjaMCPo3's port, not Tylluan's (:47004 by default, dynamic otherwise).
     Every write_edge()/add_node() IPC call silently failed with a connection
     error until this was found (2026-07-30), confirmed live: a real
     vision_analyze call produced a correct description but node_id stayed
@@ -34,10 +34,10 @@ def _resolve_kernel_base() -> str:
     port_file = Path(__file__).resolve().parent.parent.parent / "data" / "active_port.json"
     try:
         data = json.loads(port_file.read_text())
-        port = data.get("port", 4000)
+        port = data.get("port", 47004)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:4000"
+        return "http://127.0.0.1:47004"
 
 
 KERNEL_URL = _resolve_kernel_base()

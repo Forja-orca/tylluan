@@ -1,4 +1,4 @@
-"""Seed guild: Tier 1 cold-start seed export/import for SilvaDB.
+﻿"""Seed guild: Tier 1 cold-start seed export/import for SilvaDB.
 
 Tier 1 = own domain, low risk (technical documentation, project knowledge).
 Tier 2 = sensitive domains (medical, legal) requires external verification
@@ -17,7 +17,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("seed_tools")
 
 DATA_DIR = Path("data")
-KERNEL_URL = "http://127.0.0.1:4000"
+KERNEL_URL = "http://127.0.0.1:47004"
 
 
 def _resolve_kernel_base():
@@ -26,10 +26,10 @@ def _resolve_kernel_base():
     port_file = Path(__file__).resolve().parent.parent.parent / "data" / "active_port.json"
     try:
         data = json.loads(port_file.read_text())
-        port = data.get("port", 4000)
+        port = data.get("port", 47004)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:4000"
+        return "http://127.0.0.1:47004"
 
 
 KERNEL_URL = _resolve_kernel_base()

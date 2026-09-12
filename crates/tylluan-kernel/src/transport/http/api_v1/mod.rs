@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     Json,
     extract::{State, Query, Path},
     http::{StatusCode, HeaderMap},
@@ -1883,9 +1883,9 @@ mod protocol_negotiation_tests {
         let json = serde_json::json!({
             "mcp_clients": {
                 "claude_desktop": { "location": "~/.claude/claude_desktop_config.json" },
-                "claude_code": { "command": "/mcp add tylluan sse http://127.0.0.1:4000/sse" },
-                "cursor": { "command": "Add MCP server: http://127.0.0.1:4000/sse" },
-                "codex": { "command": "npx -y mcp-remote http://127.0.0.1:4000/sse" },
+                "claude_code": { "command": "/mcp add tylluan sse http://127.0.0.1:47004/sse" },
+                "cursor": { "command": "Add MCP server: http://127.0.0.1:47004/sse" },
+                "codex": { "command": "npx -y mcp-remote http://127.0.0.1:47004/sse" },
                 "qwen_desktop": { "location": "~/.qwen/qwen_desktop_config.json" }
             }
         });

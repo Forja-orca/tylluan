@@ -1,4 +1,4 @@
-# Tylluan Desktop
+﻿# Tylluan Desktop
 
 **Status: real integration in progress, not just a spike anymore.** Confirmed working: native
 window opens the actual Tylluan dashboard, native chrome (minimize/maximize/resize/close), a
@@ -7,7 +7,7 @@ Reload menu item (Cmd/Ctrl+R). This is the direction going forward for a native 
 ## What this is
 
 A Tauri v2 shell that opens a native window pointing at Tylluan's existing web dashboard
-(`http://127.0.0.1:4000`, the same one served by `tylluan-nexus`). No dashboard UI was rewritten
+(`http://127.0.0.1:47004`, the same one served by `tylluan-nexus`). No dashboard UI was rewritten
 — Tauri only provides the native chrome (window, title bar, menu, native dialogs) around what
 already exists.
 
@@ -37,7 +37,7 @@ runtime to maintain. See `docs/roadmap/ROADMAP_O3.md` (Tylluan Desktop section) 
 ## Try it
 
 1. Make sure the Tylluan kernel is running (`tylluan-cli start` or `cargo run -p tylluan-cli --
-   start` from the repo root) and reachable at `http://127.0.0.1:4000`.
+   start` from the repo root) and reachable at `http://127.0.0.1:47004`.
 2. From this directory:
    ```bash
    cd src-tauri

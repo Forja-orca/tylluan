@@ -1,4 +1,4 @@
-//! Integration Tests for Tylluan Federation (M11)
+﻿//! Integration Tests for Tylluan Federation (M11)
 //! Tests the PeerDb, Pull/Push endpoints, Auto-Sync loop setup, and Provenance tagging
 
 use tylluan_kernel::federation::{FederationPeer, PeerDb};
@@ -113,7 +113,7 @@ async fn test_peer_db_roundtrip() {
     let peer_db = PeerDb::open(":memory:").unwrap();
     let peer = FederationPeer {
         name: "test-peer".to_string(),
-        url: "http://127.0.0.1:4000".to_string(),
+        url: "http://127.0.0.1:47004".to_string(),
         auth_token: "auth123".to_string(),
         shared_secret: "secret123".to_string(),
         last_sync: None,

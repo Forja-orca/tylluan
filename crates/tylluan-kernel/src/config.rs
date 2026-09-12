@@ -1970,10 +1970,10 @@ mod tests {
     fn test_parse_minimal_toml() {
         let toml_str = r#"
 [nexus]
-port = 4000
+port = 47004
 "#;
         let config: TylluanConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.nexus.port, 4000);
+        assert_eq!(config.nexus.port, 47004);
         // Defaults should still work
         assert_eq!(config.memory.embedding_model, "bge-m3");
     }

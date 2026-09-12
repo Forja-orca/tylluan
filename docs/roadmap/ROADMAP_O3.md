@@ -8,7 +8,7 @@
 
 ## Estado actual — v0.16.0 lanzado, 34 commits sin tag desde entonces ✅
 
-M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), M32, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue con §2-5 abierto (decisión de inserción pendiente, no de benchmark). 665 tests (588 kernel lib + 65 link + 12 fsrs) en esa fecha; **actualizado 2026-08-22: 771 tests (690 kernel lib + 69 link + 12 fsrs)** tras el cierre de ADR-012 (ver STATUS.md), clippy limpio, CI verde. Puerto real: `:4000` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000 — ese es el estado real y actual.)
+M15-M19, M22, M23-P1, M25, M26-P1/P2, M27, M28, M29, M30, M31 (P0-P7 completo), M32, M34-M38 cerrados. M14-F Phase 3 cerrado. M18 cerrado (re-benchmark +62.0%/+57.7%, umbral 30% superado). ADR-011 (Signal Loop + Coherence Gate + LightReranker scaffold) implementado, con tests y verificado end-to-end contra el kernel real (migración de schema v17→v18 en vivo, `recall_feedback` poblándose de verdad). ADR-010 (SLM embebido T5 vs SmolLM2) sigue con §2-5 abierto (decisión de inserción pendiente, no de benchmark). 665 tests (588 kernel lib + 65 link + 12 fsrs) en esa fecha; **actualizado 2026-08-22: 771 tests (690 kernel lib + 69 link + 12 fsrs)** tras el cierre de ADR-012 (ver STATUS.md), clippy limpio, CI verde. Puerto real: `:47004` (`tylluan.toml` línea 6, verificado en vivo). (Nota histórica: el commit `f475462`, línea de abajo, migró de 4000→3030 en un momento anterior; un incidente posterior de colisión de puertos con otro servicio interno llevó a fijar Tylluan de vuelta en 4000; la migración 2026-09-12 a :47004 (decisión de José, evitar colisiones con puertos dev comunes) fijó el estado real y actual — verifique siempre tylluan.toml.)
 
 **Trabajo genuinamente abierto ahora mismo (verificado, no aspiracional):**
 - CoherenceGate híbrido: en producción solo en modo observación, sin enforcement — graduarlo es el siguiente paso real, no un "sin implementar" como decía este documento hasta hoy.
@@ -146,7 +146,7 @@ HEAD `09ac1f0`. Rama A completa: docs OpenClaw + Hermes, E2E MCP PASS, CONTRACT-
 
 **Verificado por commits reales** (no hay tabla de fases detallada reconstruida — ver `git log --grep=m22`):
 - `68d1bc0` — cierre de todos los hallazgos BLOQUEA de instalación reportados en pruebas reales de onboarding.
-- `f475462` — unificación de puerto 4000→3030, Rust toolchain 1.85→1.88 en docs, limpieza de docs del dashboard.
+- `f475462` — unificación de puerto 47004→3030, Rust toolchain 1.85→1.88 en docs, limpieza de docs del dashboard.
 - `504339d` — limpieza de estructura raíz del repositorio.
 
 **Nota de numeración:** este M22 (onboarding) colisionó con un M22 distinto (hardening de seguridad: SQLCipher/rate-limit/capabilities) que ya existía en versiones previas de este documento. La colisión se resolvió (`e0b408a`) renombrando el de seguridad a **M27** — ver esa sección más abajo. Este M22 es exclusivamente onboarding.

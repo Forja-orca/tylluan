@@ -1,4 +1,4 @@
-"""
+﻿"""
 Example 2: Multi-Agent Communication via Coloquio
 
 Demonstrates how multiple agents communicate through Tylluan's
@@ -14,7 +14,7 @@ Prerequisites:
 
 Usage:
   python examples/02_multi_agent_coloquio.py
-  python examples/02_multi_agent_coloquio.py --host 127.0.0.1 --port 4000
+  python examples/02_multi_agent_coloquio.py --host 127.0.0.1 --port 47004
 """
 
 import argparse

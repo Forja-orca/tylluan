@@ -75,7 +75,7 @@ Si no funciona:
 ```toml
 [nexus]
 host = "127.0.0.1"
-port = 3031          # Puerto diferente al producción (4000)
+port = 3031          # Puerto diferente al producción (47004)
 dev_mode = true
 
 [silva]

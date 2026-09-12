@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Verifies that every file path and port number cited in the docs actually
 # matches reality, and that AGENTS.md/CLAUDE.md don't contradict each other
 # on the current version.
@@ -6,7 +6,7 @@
 # Why this exists: real doc-drift incidents in the 2026-09-11 cycle -- the
 # README's architecture Mermaid diagram broke on GitHub, README/STATUS
 # claimed "49 guilds" when the real catalog had 46, the OpenClaw/Hermes
-# template cited port 3030 while the real kernel port is 4000 (fixed in
+# template cited port 3030 while the real kernel port was 4000, now 47004 (fixed in
 # d72f93d), and AGENTS.md:62 cited "v0.17.0 (tagged 2026-08-23)" while
 # CLAUDE.md:90 cited "v0.16.0+ (unreleased)" -- the universal agent file and
 # the Claude Code file contradicting each other on the current milestone.
@@ -19,7 +19,7 @@
 #      CLAUDE.md and docs/**/*.md that looks like a repo path (contains '/'
 #      or a known source extension) must exist on disk.
 #   2. Every port cited as :NNNN in those docs must equal the real kernel
-#      port from tylluan.toml [nexus] (line ~201: port = 4000). EXCEPTION:
+#      port from tylluan.toml [nexus] (line ~201: port = 47004). EXCEPTION:
 #      lines that are clearly historical context ("antes", "histórico",
 #      "migró", "previously", "commit <hash> migro") are not errors -- the
 #      port was different at an earlier point. If we can't tell confidently,
@@ -42,7 +42,7 @@ while IFS= read -r d; do
     DOCS+=("$d")
 done < <(find docs -name '*.md' -type f 2>/dev/null | sort || true)
 
-# The kernel's real port lives in the [nexus] section (line ~201: port = 4000);
+# The kernel's real port lives in the [nexus] section (line ~201: port = 47004);
 # tylluan.toml also has OTHER services' ports (llama 9000, etc.).
 real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{gsub(/[^0-9]/,"",$0); print; exit}' tylluan.toml | head -1)
 echo "Real port (tylluan.toml [nexus]): ${real_port:-<none>}"

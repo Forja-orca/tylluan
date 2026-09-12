@@ -1,4 +1,4 @@
-# Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
+﻿# Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
 
 > Creado 2026-07-11 durante el ciclo de reflexión: se detectó que este setup de
 > prueba de dos instancias reales (nativo + `docker-compose.secondary.yml`)
@@ -12,7 +12,7 @@
 ```
   Windows (nativo)              Docker Desktop
   ─────────────────             ─────────────────
-  tylluan-nexus  :4000  ←──────→  tylluan-nexus  :4040
+  tylluan-nexus  :47004  ←──────→  tylluan-nexus  :4040
   dev_mode=true (sin auth)         (via docker-compose.secondary.yml)
   data/tylluan.db                data-docker-secondary/tylluan.db
   tylluan.toml                    tylluan.docker-secondary.toml
@@ -41,7 +41,7 @@ docker compose -f docker-compose.secondary.yml up -d
 ### Paso 3 — Verificar health de ambos nodos
 
 ```powershell
-curl http://127.0.0.1:4000/health   # nativo
+curl http://127.0.0.1:47004/health   # nativo
 curl http://127.0.0.1:4040/health   # docker secundario
 ```
 
@@ -53,7 +53,7 @@ El secundario ya trae pre-configurado al nativo como peer (`tylluan.docker-secon
 Falta registrar el sentido inverso, vía API del nativo (dev_mode=true, sin auth requerida):
 
 ```powershell
-curl -X POST http://127.0.0.1:4000/api/v1/federation/peers `
+curl -X POST http://127.0.0.1:47004/api/v1/federation/peers `
   -H "Content-Type: application/json" `
   -d '{\"name\":\"docker-secondary\",\"url\":\"http://127.0.0.1:4040\",\"auth_token\":\"secondary-dev-token-change-me\"}'
 ```
@@ -62,12 +62,12 @@ curl -X POST http://127.0.0.1:4000/api/v1/federation/peers `
 
 ```powershell
 # 1. Crear un nodo de prueba en el nativo y marcarlo shareable
-curl -X POST http://127.0.0.1:4000/api/v1/memory/remember -H "Content-Type: application/json" `
+curl -X POST http://127.0.0.1:47004/api/v1/memory/remember -H "Content-Type: application/json" `
   -d '{\"content\":\"federation smoke test node\",\"type\":\"fact\",\"metadata\":{\"shareable\":true}}'
 
 # 2. Habilitar sharing y empujar
-curl -X POST http://127.0.0.1:4000/api/v1/federation/sharing/enable
-curl -X POST http://127.0.0.1:4000/api/v1/federation/sync -H "Content-Type: application/json" -d '{\"peer\":\"docker-secondary\"}'
+curl -X POST http://127.0.0.1:47004/api/v1/federation/sharing/enable
+curl -X POST http://127.0.0.1:47004/api/v1/federation/sync -H "Content-Type: application/json" -d '{\"peer\":\"docker-secondary\"}'
 
 # 3. Verificar en el secundario que el nodo llegó
 curl http://127.0.0.1:4040/api/v1/memory/recall -H "Content-Type: application/json" -d '{\"query\":\"federation smoke test\"}'

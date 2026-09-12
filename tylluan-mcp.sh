@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Tylluan — Start kernel (single binary)
 # Usage: ./tylluan-mcp.sh
 
@@ -29,10 +29,10 @@ fi
 echo "======================================================================"
 echo " TYLLUAN NEXUS KERNEL IS STARTING (M40-P8 Zero-Config Invisible Onboarding)"
 echo " ----------------------------------------------------------------------"
-echo " Server Address:    http://127.0.0.1:4000 (SSE: /sse)"
-echo " Claude Code Quick: /mcp add tylluan sse http://127.0.0.1:4000/sse"
-echo " Codex Quick:       npx -y mcp-remote http://127.0.0.1:4000/sse"
-echo " Health Check:      curl http://127.0.0.1:4000/health"
+echo " Server Address:    http://127.0.0.1:47004 (SSE: /sse)"
+echo " Claude Code Quick: /mcp add tylluan sse http://127.0.0.1:47004/sse"
+echo " Codex Quick:       npx -y mcp-remote http://127.0.0.1:47004/sse"
+echo " Health Check:      curl http://127.0.0.1:47004/health"
 echo "======================================================================"
 cd crates/tylluan-kernel
 ../../$KERNEL

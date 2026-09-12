@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Task I-7: Curated Routing Dataset Generator and Validator.
 Constructs a comprehensive, grounded dataset of intents across all 45+ guilds,
@@ -39,7 +39,7 @@ CURATED_EXEMPLARS = [
     # --- Bash vs Filesystem vs Git vs Code ---
     {"intent": "execute `cargo check --lib` and show warnings", "target_guild": "bash", "ambiguity_type": "clear_keyword"},
     {"intent": "spawn a background process to tail the server logs", "target_guild": "bash", "ambiguity_type": "semantic_paraphrase"},
-    {"intent": "haz un kill -9 al proceso que está ocupando el puerto 4000", "target_guild": "bash", "ambiguity_type": "semantic_paraphrase"},
+    {"intent": "haz un kill -9 al proceso que está ocupando el puerto 47004", "target_guild": "bash", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "what files are located inside the crates/tylluan-kernel/src directory", "target_guild": "filesystem", "ambiguity_type": "clear_keyword"},
     {"intent": "dime cuántos archivos .rs hay en este proyecto", "target_guild": "filesystem", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "check if the configuration file tylluan.toml exists on disk", "target_guild": "filesystem", "ambiguity_type": "cross_guild_ambiguity"},
@@ -111,7 +111,7 @@ CURATED_EXEMPLARS = [
     {"intent": "check if there are any unread messages or notifications in channels", "target_guild": "coloquio", "ambiguity_type": "cross_guild_ambiguity"},
 
     # --- Memory & Knowledge (SilvaDB) ---
-    {"intent": "save this key fact: 'Tylluan listens on port 4000 without proxy'", "target_guild": "memory", "ambiguity_type": "clear_keyword"},
+    {"intent": "save this key fact: 'Tylluan listens on port 47004 without proxy'", "target_guild": "memory", "ambiguity_type": "clear_keyword"},
     {"intent": "recuerda que José prefiere commits pequeños y verificados con tests", "target_guild": "memory", "ambiguity_type": "semantic_paraphrase"},
     {"intent": "retrieve all stored memories regarding SQLite schema migrations", "target_guild": "memory", "ambiguity_type": "clear_keyword"},
     {"intent": "¿qué aprendimos la semana pasada sobre el bug de desempate en el router?", "target_guild": "memory", "ambiguity_type": "semantic_paraphrase"},

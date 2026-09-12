@@ -1,4 +1,4 @@
-╔══════════════════════════════════════════════════════════════╗
+﻿╔══════════════════════════════════════════════════════════════╗
 ║  Tylluan — PROJECT MAP v1                                   ║
 ║  Public product built on Forja patterns. MIT license.       ║
 ║  Read once → situate. Read twice → navigate. Read thrice → own. ║
@@ -16,7 +16,7 @@
 │            dev machine's local tylluan.toml only, for        │
 │            convenience — never the product default (same    │
 │            local-override-vs-shipped-default mistake         │
-│            corrected for port :4000 earlier this session,    │
+│            corrected for port :47004 earlier this session,    │
 │            fixed here 2026-07-12)                            │
 │ Data:      data/*.db (sqlite) + data/silva.db (vectors)     │
 │ License:   MIT (public product)                             │
