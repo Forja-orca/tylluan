@@ -236,3 +236,7 @@ docker-research/
 
 # Team local notes & error protocol
 /team/
+
+# TEB Blind Judge secret mapping -- must never reach a tracked file while
+# this experiment exists; the judge (Claude Code) has repo read access.
+benchmarks/teb/judge_blind_mapping.json
