@@ -59,7 +59,7 @@ jobs:
           cat > "$NODE_A/tylluan.toml" <<'EOF'
           [nexus]
           host = "127.0.0.1"
-          port = 4000
+          port = 47004
           transport = ["http"]
           dev_mode = true
 
@@ -79,9 +79,9 @@ jobs:
             local label="$1"
             local ready=0
             for i in $(seq 1 30); do
-              if curl -sf http://127.0.0.1:4000/health >/dev/null 2>&1; then
+              if curl -sf http://127.0.0.1:47004/health >/dev/null 2>&1; then
                 echo "::notice::kernel ($label) is UP"
-                curl -s http://127.0.0.1:4000/health || true
+                curl -s http://127.0.0.1:47004/health || true
                 ready=1
                 break
               fi
@@ -102,7 +102,7 @@ jobs:
           boot_and_wait "A"
 
           echo "::notice::writing marker into memory via /api/v1/do (tylluan_remember)"
-          curl -sf -X POST http://127.0.0.1:4000/api/v1/do \
+          curl -sf -X POST http://127.0.0.1:47004/api/v1/do \
             -H 'Content-Type: application/json' \
             -d "{\"tool\":\"tylluan_remember\",\"intent\":\"recuerda: $MARKER\",\"content\":\"$MARKER\",\"agent_id\":\"ci-portability-test\",\"guild\":\"memory\"}" \
             > "$NODE_A/remember.json"
@@ -122,7 +122,7 @@ jobs:
           boot_and_wait "B"
 
           echo "::notice::recalling marker via /api/v1/do (tylluan_recall)"
-          curl -sf -X POST http://127.0.0.1:4000/api/v1/do \
+          curl -sf -X POST http://127.0.0.1:47004/api/v1/do \
             -H 'Content-Type: application/json' \
             -d "{\"tool\":\"tylluan_recall\",\"intent\":\"recuerda mi marcador portability-roundtrip\",\"query\":\"portability-roundtrip-marker\",\"agent_id\":\"ci-portability-test\",\"guild\":\"memory\"}" \
             > "$NODE_B/recall.json"
