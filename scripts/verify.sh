@@ -165,12 +165,16 @@ if [ "$RUN_DOCS" = "1" ]; then
 
     # ADR-013 4th gate (non-predation). NOTE: this check EXCEEDS what CI runs
     # today -- it is wired here, local-only, pending Tech Lead validation of
-    # ADR-013 before it goes into the CI workflow. Report-only: exit 1 means
-    # findings to resolve, never a mechanical block.
+    # ADR-013 before it goes into the CI workflow. Report-only per ADR-013 §2
+    # and the gate's own header ("the gate REPORTS, it never edits, reverts
+    # or blocks mechanically") -- deliberately does NOT call fail()/set
+    # FAILED, unlike every other check in this section: this one must never
+    # turn into a pre-push block. Its own output (findings + exit code) is
+    # printed either way for human/agent triage.
     if bash scripts/check_no_predation.sh; then
         ok "non-predation gate (ADR-013)"
     else
-        fail "non-predation gate (ADR-013) — resolve findings or add '## Impact' via 'git commit --amend'"
+        echo "⚠️  non-predation gate (ADR-013) found something — see above. Report-only, does not block this push."
     fi
     echo
 fi
