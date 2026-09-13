@@ -223,9 +223,9 @@ mod tests {
         let item = FsrsItem::new(now());
         assert!((item.retrievability(0.0) - 1.0).abs() < 1e-6);
         let r_14d = item.retrievability(14.0);
-        assert!((r_14d - 0.5).abs() < 0.05, "R(14d) = {}", r_14d);
+        assert!((r_14d - 0.5).abs() < 0.05, "R(14d) = {r_14d}");
         let r_28d = item.retrievability(28.0);
-        assert!((r_28d - 0.25).abs() < 0.05, "R(28d) = {}", r_28d);
+        assert!((r_28d - 0.25).abs() < 0.05, "R(28d) = {r_28d}");
     }
 
     #[test]
@@ -275,7 +275,7 @@ mod tests {
     fn test_next_interval_for_desired_retention() {
         let item = FsrsItem::new(now());
         let interval = item.next_interval(0.9);
-        assert!((interval - 2.13).abs() < 0.1, "next_interval = {}", interval);
+        assert!((interval - 2.13).abs() < 0.1, "next_interval = {interval}");
     }
 
     #[test]
