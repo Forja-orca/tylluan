@@ -214,7 +214,7 @@ jobs:
           cat > /tmp/tylluan-smoke.toml <<'EOF'
           [nexus]
           host = "127.0.0.1"
-          port = 4000
+          port = 47004
           transport = ["http"]
           dev_mode = true
 
@@ -236,7 +236,7 @@ jobs:
           echo "Kernel PID: $KERNEL_PID"
           echo "KERNEL_PID=$KERNEL_PID" >> $GITHUB_ENV
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 3 http://127.0.0.1:4000/health > /tmp/tylluan-smoke-health.json 2>/dev/null; then
+            if curl -fsS --max-time 3 http://127.0.0.1:47004/health > /tmp/tylluan-smoke-health.json 2>/dev/null; then
               echo "✅ Kernel healthy after ${i}s"
               cat /tmp/tylluan-smoke-health.json
               exit 0
