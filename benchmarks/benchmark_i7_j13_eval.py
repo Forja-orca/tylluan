@@ -28,7 +28,7 @@ RESULTS_JSON = Path("benchmarks/benchmark_i7_j13_results.json")
 RESULTS_MD = Path("benchmarks/BENCHMARK_I7_J13.md")
 RAW_LOGS_FILE = Path("benchmarks/benchmark_i7_j13_raw_calls.json")
 
-KERNEL_URL = os.environ.get("KERNEL_BASE", "http://127.0.0.1:4000")
+KERNEL_URL = os.environ.get("KERNEL_BASE", "http://127.0.0.1:47004")
 
 # G6: Canonical guild descriptions — imported from tools/guild_catalog.py
 # This replaces the former hardcoded GUILD_DESCRIPTIONS. Only routable guilds
