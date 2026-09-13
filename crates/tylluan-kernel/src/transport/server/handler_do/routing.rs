@@ -67,10 +67,31 @@ pub(crate) async fn resolve_guild_name(
             }
 
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
-        if !is_coordinator_worker && blended >= 0.6 && registry_has_coordinator {
+        // WS2 delegation gate (2026-09-13 audit — coordinator hijack):
+        // complexity ≥0.6 alone no longer routes to coordinator. The intent
+        // must explicitly request delegation/orchestration, or the caller
+        // must be coordinator itself. has_explicit_hint is `false` here by
+        // construction: an explicit guild hint early-returned at the top of
+        // this function, so this site is only reachable hint-less — coordinator
+        // requests by name bypass the gate entirely, which is the intended
+        // semantics (a user asking for coordinator by name is a decision,
+        // not a heuristic).
+        let cascade_eligible = crate::router::complexity::coordinator_eligible(
+            blended,
+            &intent_for_matching,
+            false,
+            is_coordinator_worker,
+        );
+        if registry_has_coordinator && cascade_eligible && blended >= 0.6 {
             info!("⚡ Proactive Cascade (score={:.2}, mlp={:?}): '{}' → coordinator", blended, mlp_score, intent_for_matching);
             trace.push(format!("proactive_cascade=coordinator score={blended:.2}"));
             return Ok(("coordinator".to_string(), trace));
+        }
+        if !cascade_eligible && blended >= 0.6 && registry_has_coordinator {
+            // Observability for the gate: this intent WOULD have been hijacked
+            // under the pre-WS2 rule. Keep visible until the Scheduler cutover.
+            info!("🚧 Delegation gate: complex intent (score={blended:.2}) without delegation signal → matcher, not coordinator");
+            trace.push(format!("delegation_gate=blocked score={blended:.2}"));
         }
 
         // Build agent context from role identifier if present

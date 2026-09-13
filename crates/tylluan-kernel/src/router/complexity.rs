@@ -17,6 +17,17 @@
 //! ## Prerequisito (Observation 1)
 //! Before any cascade dispatch to `coordinator`, the caller MUST verify
 //! `registry.has_guild("coordinator")`. Degradación elegante si no existe.
+//!
+//! ## Delegation gate (WS2, 2026-09-13 external audit — coordinator hijack)
+//! Complexity ≠ delegation permission. A high complexity score may *suggest*
+//! coordination, but it does not confer authority to delegate: the J-13
+//! benchmark's manual triage caught a complex non-delegation intent being
+//! swallowed by the cascade and dying on coordinator's required `task` arg.
+//! Since 2026-09-13 every cascade dispatch to coordinator additionally
+//! requires `wants_delegation(&intent)` — an explicit delegation/orchestration
+//! signal in the intent itself (or a coordinator worker calling its own
+//! subtasks, checked separately by the caller). `coordinator_eligible()`
+//! bundles both conditions so call sites cannot legally bypass the gate.
 
 fn count_numbered_prefixes(text: &str) -> usize {
     let mut count = 0;
@@ -190,6 +201,63 @@ pub fn score_complexity(intent: &str) -> f64 {
     score.clamp(0.0, 1.0)
 }
 
+/// Explicit delegation/orchestration signals. An intent that matches any of
+/// these is *asking* for orchestration (or is a coordinator worker dispatching
+/// its own subtasks, which the caller detects separately). Multilingual EN/ES,
+/// same convention as every other signal list in this file.
+const DELEGATION_SIGNALS: &[&str] = &[
+    // EN
+    "coordinate ", "coordinator ", "delegate ", "delegate to",
+    "orchestrate ", "orchestration", "fan out", "fan-out",
+    "dispatch to coordinator", "via coordinator", "through coordinator",
+    "break this down", "break down this", "split this into subtasks",
+    "split into subtasks", "multi-agent", "spawn agents", "spawn subtasks",
+    "run in parallel with agents", "work as a team", "team of agents",
+    // ES
+    "coordina ", "coordinador ", "delega ", "delegar en",
+    "orquesta ", "orquestación", "orquestacion", "reparte entre agentes",
+    "divide en subtareas", "divide la tarea", "descompón la tarea",
+    "descompon la tarea", "equipo de agentes", "agentes en paralelo",
+];
+
+/// True when the intent itself requests delegation/orchestration.
+///
+/// This is the WS2 delegation gate: the proactive and reactive cascades must
+/// not route to coordinator on complexity alone. Deliberately a substring
+/// check on the trimmed-lowercase intent — pure, no I/O, no ML, cheap enough
+/// to run on every dispatch. False negatives degrade gracefully (the intent
+/// routes to its best guild, which is the pre-cascade behavior); false
+/// positives only widen coordinator access for intents that literally asked
+/// for coordination.
+pub fn wants_delegation(intent: &str) -> bool {
+    let lower = intent.trim().to_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    DELEGATION_SIGNALS.iter().any(|s| lower.contains(s))
+}
+
+/// Single decision point for cascade eligibility (proactive AND reactive).
+/// Bundles complexity, the delegation gate and the explicit-hint override so
+/// call sites cannot reassemble the pieces differently.
+///
+/// - `has_explicit_hint`: the caller asked for coordinator by name (guild
+///   hint). Explicit requests always win — that is a user decision, not a
+///   heuristic.
+/// - `is_coordinator_worker`: the caller IS coordinator dispatching subtasks.
+///   Its internal fan-out must never be gated by its own heuristics.
+pub fn coordinator_eligible(
+    blended_score: f64,
+    intent: &str,
+    has_explicit_hint: bool,
+    is_coordinator_worker: bool,
+) -> bool {
+    if has_explicit_hint || is_coordinator_worker {
+        return true;
+    }
+    blended_score >= 0.4 && wants_delegation(intent)
+}
+
 /// Return the cascade action for a given complexity score.
 pub fn cascade_action(score: f64) -> CascadeAction {
     if score >= 0.6 {
@@ -353,5 +421,93 @@ mod tests {
         assert!(near_proactive >= 0.6, "blend near proactive boundary should cross it: {near_proactive}");
         let near_direct = blend_with_mlp(0.35, Some(0.0));
         assert!(near_direct < 0.4, "blend near direct boundary should stay under: {near_direct}");
+    }
+
+    // ── WS2 delegation gate (coordinator hijack fix) ─────────────────────
+
+    #[test]
+    fn test_wants_delegation_positive_signals() {
+        for intent in [
+            "delegate this research to the coordinator",
+            "coordinate the migration across the team",
+            "orchestrate the deployment with a team of agents",
+            "break this down into subtasks and run them",
+            "coordina la revision del PR con el equipo",
+            "delega en el coordinador la busqueda",
+            "divide en subtareas y ejecuta en paralelo",
+        ] {
+            assert!(wants_delegation(intent), "'{intent}' must signal delegation");
+        }
+    }
+
+    #[test]
+    fn test_wants_delegation_negative_complex_but_not_delegation() {
+        // Complex intents that never asked to be coordinated — the exact
+        // J-13 hijack class. High score, no delegation signal.
+        for intent in [
+            "research Rust async patterns, then implement a proof of concept, then write tests, and finally document the results",
+            "1. clone the repo 2. build the kernel 3. run the full test suite",
+            "summarize the incident report, extract lessons, and update the runbook",
+        ] {
+            assert!(!wants_delegation(intent), "'{intent}' is complex but must NOT signal delegation");
+            let score = score_complexity(intent);
+            assert!(score >= 0.3, "sanity: '{intent}' should still be complex, got {score}");
+        }
+    }
+
+    #[test]
+    fn test_wants_delegation_edge_cases() {
+        assert!(!wants_delegation(""), "empty intent never delegates");
+        assert!(!wants_delegation("   "), "whitespace-only never delegates");
+        assert!(wants_delegation("  COORDINATE THE RELEASE  "), "case/whitespace insensitive");
+    }
+
+    #[test]
+    fn test_coordinator_eligible_truth_table() {
+        let complex_delegation = "delegate this to the coordinator: research, plan, execute";
+        let complex_plain = "research Rust async patterns, then implement a proof of concept, then write tests, and finally document the results";
+
+        // Complex + explicit delegation signal → eligible.
+        assert!(coordinator_eligible(0.7, complex_delegation, false, false));
+        // Complex WITHOUT delegation signal → NOT eligible (the hijack fix).
+        assert!(!coordinator_eligible(0.7, complex_plain, false, false));
+        // Delegation signal but sub-threshold complexity → NOT eligible.
+        assert!(!coordinator_eligible(0.3, complex_delegation, false, false));
+        // Explicit coordinator hint overrides everything.
+        assert!(coordinator_eligible(0.0, complex_plain, true, false));
+        // Coordinator worker fan-out overrides everything.
+        assert!(coordinator_eligible(0.0, complex_plain, false, true));
+        // Exactly at the reactive threshold with signal → eligible.
+        assert!(coordinator_eligible(0.4, complex_delegation, false, false));
+        // Live hijack regressions (J-13 audit 2026-09-13): these intents were
+        // routed to coordinator by the pre-WS2 complexity≥0.6 rule and failed
+        // with "requires argument(s): task". The gate must keep them out.
+        assert!(!coordinator_eligible(
+            0.7,
+            "create a new branch called feature/vector-tiering",
+            false,
+            false
+        ));
+        assert!(!coordinator_eligible(
+            0.7,
+            "audit docker container configuration for insecure settings",
+            false,
+            false
+        ));
+        // Same intents with an explicit delegation ask → eligible.
+        assert!(coordinator_eligible(
+            0.7,
+            "delegate to the coordinator: create a new branch called feature/vector-tiering",
+            false,
+            false
+        ));
+    }
+
+    #[test]
+    fn test_existing_cascade_scores_unchanged() {
+        // The gate changes WHO reaches coordinator, not the scores themselves:
+        // existing complexity tests keep passing untouched.
+        let s = score_complexity("research Rust async patterns, then implement a proof of concept, then write tests, and finally document the results");
+        assert!(s >= 0.6, "scoring behavior must be unchanged by WS2: {s}");
     }
 }
