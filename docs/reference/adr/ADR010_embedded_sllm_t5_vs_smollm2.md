@@ -1,6 +1,6 @@
 # ADR-010: Evaluación de SLLMs Embebidos — T5-Small vs. SmolLM2
 
-- **Estado:** 🟢 **§2-5 (puntos de inserción y modelos) DECIDIDO** (ver §7, 2026-07-27) — implementación Punto A cerrada con null result de spike (ver §7.6, 2026-08-21: precisión confirmada +9.09 pts, latencia 38.22ms bloquea), Puntos B/C sin modelo en disco todavía — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
+- **Estado:** 🔴 **§2-5 (puntos de inserción y modelos) DECIDIDO — los 3 puntos cerrados con NO-GO real, medidos en vivo** (A: spike §7.6, 2026-08-21 — precisión de routing +9.09 pts confirmada pero latencia 38.22ms bloquea; B: `benchmarks/spikes/qwen3_consensus/SPIKE_REPORT.md`, 2026-09-13, Qwen2.5-0.5B-Instruct real — precisión +40pp PASA pero p50 ~39-49s excede el presupuesto de 200ms por >100x; C: `benchmarks/spikes/qwen3_digest/SPIKE_REPORT.md`, 2026-09-13, SmolLM2-1.7B-Instruct real — falla ambos criterios, cobertura -44pp y p50 21.4s excede el presupuesto de 2s por >10x) — 🔴 **§6 (sep-CMA-ES/TRINITY) CERRADO, null result** (ver §6.5.10)
 - **Fecha:** 2026-07-25 (revisado 2026-07-26: spike §6 ejecutado y cerrado con HTTP real, ver §6.5.9-6.5.10)
 - **Autores:** Flota de Agentes Soberanos (Antigravity, Claude Code, Deep, Qwen)
 - **Ámbito:** Kernel Rust (`crates/tylluan-kernel`), ONNX Runtime (`ort 2.0.0-rc.10`), Sociedad de Micro-Agentes Internos.
