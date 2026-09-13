@@ -1,153 +1,128 @@
 {
-  "timestamp": "2026-08-23 19:42:05",
+  "timestamp": "2026-09-13 21:40:25",
   "live_kernel": {
-    "url": "http://127.0.0.1:4000",
-    "commit": "be69f11",
-    "git_head": "be69f115030aca56da2f19cff275cbcd3931d1e1",
-    "commit_lag": "0"
+    "url": "http://127.0.0.1:47004",
+    "commit": "56b98b3",
+    "git_head": "c7abb0084c7be3de27f40c8349369f93cc5727a6",
+    "commit_lag": "8"
   },
-  "held_out_count": 73,
+  "held_out_count": 77,
   "metrics": {
-    "majority_class_accuracy": 0.0274,
-    "pure_keyword_accuracy": 0.5342,
-    "pure_semantic_bge_m3_accuracy": 0.4932,
-    "blended_hybrid_accuracy": 0.6164,
-    "j13_hybrid_accuracy": 0.6438,
-    "live_matcher_accuracy": 0.4932,
-    "isolated_j13_delta": 0.0274,
-    "positive_flips": 3,
+    "majority_class_accuracy": 0.013,
+    "pure_keyword_accuracy": 0.3896,
+    "pure_semantic_bge_m3_accuracy": 0.5195,
+    "blended_hybrid_accuracy": 0.5195,
+    "j13_hybrid_accuracy": 0.6104,
+    "live_matcher_accuracy": 0.3636,
+    "isolated_j13_delta": 0.0909,
+    "positive_flips": 8,
     "negative_flips": 1,
-    "net_gain": 2
+    "net_gain": 7
   },
   "ambiguity_stats": {
     "clear_keyword": {
-      "total": 27,
-      "kw": 22,
+      "total": 26,
+      "kw": 20,
       "sem": 19,
-      "blend": 24,
-      "j13": 24,
-      "live_matcher": 9
+      "blend": 23,
+      "j13": 23,
+      "live_matcher": 8
     },
     "cross_guild_ambiguity": {
-      "total": 9,
+      "total": 11,
       "kw": 2,
       "sem": 6,
       "blend": 4,
       "j13": 5,
-      "live_matcher": 1
+      "live_matcher": 0
     },
     "historical_real": {
-      "total": 31,
-      "kw": 13,
-      "sem": 9,
-      "blend": 13,
-      "j13": 14,
-      "live_matcher": 24
+      "total": 35,
+      "kw": 7,
+      "sem": 13,
+      "blend": 10,
+      "j13": 15,
+      "live_matcher": 19
     },
     "semantic_paraphrase": {
-      "total": 6,
-      "kw": 2,
+      "total": 5,
+      "kw": 1,
       "sem": 2,
-      "blend": 4,
+      "blend": 3,
       "j13": 4,
-      "live_matcher": 2
+      "live_matcher": 1
     }
   },
   "sample_raw_calls": [
     {
       "type": "embed_guild",
-      "guild": "bash",
-      "input": "bash: Execute shell commands, scripts, and system binaries",
+      "guild": "audio_tools",
+      "input": "audio_tools: Process, convert, transcribe audio files and spectrograms",
       "response_keys": [
-        "dimension",
         "embedding",
+        "dimension",
         "model"
       ],
       "model": "bge-m3",
       "dimension": 1024,
       "vector_sample_first5": [
-        -0.017543990164995193,
-        -0.0009946977952495217,
-        -0.036116838455200195,
-        0.027872540056705475,
-        -0.019944388419389725
+        -0.015095331,
+        0.016312726,
+        -0.054135706,
+        0.003950866,
+        -0.02582489
       ]
     },
     {
       "type": "embed_guild",
-      "guild": "filesystem",
-      "input": "filesystem: List files, find files, show directory contents, file operations",
+      "guild": "bash",
+      "input": "bash: Execute shell commands, scripts, and system binaries",
       "response_keys": [
-        "dimension",
         "embedding",
+        "dimension",
         "model"
       ],
       "model": "bge-m3",
       "dimension": 1024,
       "vector_sample_first5": [
-        -0.014647286385297775,
-        -0.03842472285032272,
-        -0.060358982533216476,
-        0.029767101630568504,
-        -0.02299639768898487
+        -0.01754399,
+        -0.0009946978,
+        -0.03611684,
+        0.02787254,
+        -0.019944388
       ]
     },
     {
       "type": "embed_intent",
-      "intent": "perform deep research across multiple scientific sources on synaptic decay",
+      "intent": "create a new branch called feature/vector-tiering",
       "response_keys": [
-        "dimension",
         "embedding",
+        "dimension",
         "model"
       ],
       "model": "bge-m3",
       "dimension": 1024,
       "vector_sample_first5": [
-        -0.015082811936736107,
-        -0.005721900146454573,
-        -0.029567833989858627,
-        0.012492132373154163,
-        -0.016542989760637283
+        -0.028047066,
+        -0.045557182,
+        -0.025752634,
+        0.04456851,
+        0.0016649215
       ]
     },
     {
       "type": "do_plan_matcher",
-      "intent": "perform deep research across multiple scientific sources on synaptic decay",
+      "intent": "create a new branch called feature/vector-tiering",
       "full_response": {
         "content": [
-          "{\n  \"arguments\": {\n    \"agent_id\": \"tylluan-cli\",\n    \"command\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"content\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"depth\": 2,\n    \"input\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"language\": \"\",\n    \"max_results\": 50,\n    \"message\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"prompt\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"query\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"server_url\": \"\",\n    \"text\": \"perform deep research across multiple scientific sources on synaptic decay\",\n    \"timeout_secs\": 30,\n    \"url\": \"\"\n  },\n  \"guild\": \"deep_web_research\",\n  \"intent\": \"perform deep research across multiple scientific sources on synaptic decay\",\n  \"message\": \"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).\",\n  \"plan_id\": \"edd1b5565c76\",\n  \"risk_level\": \"Medium\",\n  \"status\": \"plan\",\n  \"tool\": \"research_topic\"\n}"
+          "❌ Error: Error: guild 'coordinator' requires argument(s): task. Provide them explicitly: tylluan_do(intent='...', task<value>). Check guild documentation for required fields."
         ],
-        "is_error": false,
-        "response": "[Annotated { raw: Text(RawTextContent { text: \"{\\n  \\\"arguments\\\": {\\n    \\\"agent_id\\\": \\\"tylluan-cli\\\",\\n    \\\"command\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"content\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"depth\\\": 2,\\n    \\\"input\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"language\\\": \\\"\\\",\\n    \\\"max_results\\\": 50,\\n    \\\"message\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"prompt\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"query\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"server_url\\\": \\\"\\\",\\n    \\\"text\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n    \\\"timeout_secs\\\": 30,\\n    \\\"url\\\": \\\"\\\"\\n  },\\n  \\\"guild\\\": \\\"deep_web_research\\\",\\n  \\\"intent\\\": \\\"perform deep research across multiple scientific sources on synaptic decay\\\",\\n  \\\"message\\\": \\\"Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).\\\",\\n  \\\"plan_id\\\": \\\"edd1b5565c76\\\",\\n  \\\"risk_level\\\": \\\"Medium\\\",\\n  \\\"status\\\": \\\"plan\\\",\\n  \\\"tool\\\": \\\"research_topic\\\"\\n}\" }), annotations: None }]",
-        "result": {
-          "arguments": {
-            "agent_id": "tylluan-cli",
-            "command": "perform deep research across multiple scientific sources on synaptic decay",
-            "content": "perform deep research across multiple scientific sources on synaptic decay",
-            "depth": 2,
-            "input": "perform deep research across multiple scientific sources on synaptic decay",
-            "intent": "perform deep research across multiple scientific sources on synaptic decay",
-            "language": "",
-            "max_results": 50,
-            "message": "perform deep research across multiple scientific sources on synaptic decay",
-            "prompt": "perform deep research across multiple scientific sources on synaptic decay",
-            "query": "perform deep research across multiple scientific sources on synaptic decay",
-            "server_url": "",
-            "text": "perform deep research across multiple scientific sources on synaptic decay",
-            "timeout_secs": 30,
-            "url": ""
-          },
-          "guild": "deep_web_research",
-          "intent": "perform deep research across multiple scientific sources on synaptic decay",
-          "message": "Plan mode: would execute 'perform deep research across multiple scientific sources on synaptic decay' via guild 'deep_web_research' tool 'research_topic' (risk: Medium). To approve, call: tylluan_do(intent='approve action for plan edd1b5565c76') or approve_action(requestId='edd1b5565c76', approved=true).",
-          "plan_id": "edd1b5565c76",
-          "risk_level": "Medium",
-          "status": "plan",
-          "tool": "research_topic"
-        },
+        "is_error": true,
+        "response": "[Annotated { raw: Text(RawTextContent { text: \"❌ Error: Error: guild 'coordinator' requires argument(s): task. Provide them explicitly: tylluan_do(intent='...', task<value>). Check guild documentation for required fields.\" }), annotations: None }]",
+        "result": null,
         "status": "ok"
       },
-      "extracted_guild": "deep_web_research"
+      "extracted_guild": "unknown"
     }
   ]
 }

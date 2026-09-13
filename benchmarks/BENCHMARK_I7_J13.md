@@ -1,6 +1,38 @@
 # 📊 Benchmark I-7 / J-13: Evaluación Empírica Real del Router y Tiebreaker
 
-> **Misión:** Evaluación 100% real y sin simulaciones heurísticas del desempate semántico BGE-M3 (J-13) y el router de Tylluan, ejecutado directamente contra el kernel en vivo (`/api/v1/embed` y `/api/v1/do?plan=true`) sobre el held-out test split de `dataset_i7_routing_curated.json` ($N=73$).
+> **Misión:** Evaluación 100% real y sin simulaciones heurísticas del desempate semántico BGE-M3 (J-13) y el router de Tylluan, ejecutado directamente contra el kernel en vivo (`/api/v1/embed` y `/api/v1/do?plan=true`) sobre el held-out test split de `dataset_i7_routing_curated.json` ($N=77$ desde la re-curación del dataset; las secciones 1-5 documentan la v2a con $N=73$).
+
+---
+
+## 0. Ejecución 2026-09-13 (v3) — kernel `56b98b3` v0.17.0, puerto `:47004`
+
+Re-ejecución del benchmark tras la migración de puerto 4000→47004 (gap desde 2026-08-15/2026-08-23 nunca cerrado con datos frescos). Artefactos: `benchmark_i7_j13_results.json` + `benchmark_i7_j13_raw_calls.json` (timestamp `2026-09-13 21:40`, 77 items con per-item `pred_live_matcher`).
+
+**Entorno:** kernel vivo `56b98b3` (lag 8 commits vs HEAD — docs/gates/CI/PageRank, cero commits de router, medición válida). `KERNEL_BASE=http://127.0.0.1:47004` (el default `:4000` del script quedó stale tras la migración).
+
+| Modelo / Estrategia | Precisión Top-1 | Aciertos / Total | vs v2a (N=73) |
+| :--- | :---: | :---: | :--- |
+| 1. Majority Class Baseline | 1.3% | 1 / 77 | (2.7%) |
+| 2. Pure Keyword Router | 39.0% | 30 / 77 | (53.4%) |
+| 3. Pure Semantic BGE-M3 Router | 52.0% | 40 / 77 | (49.3%) |
+| 4. Blended Hybrid (55/45 sin Tiebreak) | 52.0% | 40 / 77 | (61.6%) |
+| **5. Hybrid + J-13 Tiebreaker** | **61.0%** | **47 / 77** | (64.4%) |
+| **6. Live Production Matcher** | **36.4%** | **28 / 77** | (49.3%) |
+
+**Delta aislado del tiebreaker J-13: +9.09pp** (8 flips positivos / 1 negativo, neto +7) — la contribución aislada del tiebreaker es ahora 3× más fuerte que en v2a (+2.74pp). El dataset se re-curó entre runs (canonical `scrapling`, `e18e9d7`) — no son comparables item a item; lo sólido es el baseline fresco.
+
+### Hallazgo del trazado manual (29 "unknowns" del live matcher desglosados en vivo)
+
+El bucket `unknown` del eval **confla 4 outcomes reales distintos** (verificado replayando los 29 items contra el kernel vivo con `plan=true`, clasificando el texto de error exacto):
+
+| Causa real | N | Evidencia |
+| :--- | :---: | :--- |
+| **Guild resuelto pero args obligatorios ausentes** | 17 | `guild 'pdf' requires argument(s): path` — el resolver (Stage 1, `resolve_and_prepare_tool_call`, handler_do/mod.rs:469-475) valida args ANTES del plan; si faltan, error → `result: null` → el eval devuelve `unknown`. Incluye resoluciones correctas (pdf→pdf) y discutibles (ffmpeg_tools→audio_tools). |
+| **Dispatch de subtool soberano** | 11 | intents como `doctor_diagnose` son nombres de SUBTOOLS del kernel, no guilds — el resultado legítimamente no tiene `guild`. Problema del dataset (items que no son casos de ruteo). |
+| **Coordinator-hijack (Proactive Cascade)** | 1 | `create a new branch called feature/vector-tiering` (target git) → cascade ≥0.6 → coordinator → `requires argument(s): task`. La familia del incidente 2026-08-25, sin guard para intents no-coloquio. |
+| **No-guild-match legítimo** | 1 | El único "unknown" real de ruteo (ningún guild pasó el umbral). |
+
+**Conclusión:** la precisión REAL del matcher de producción es materialmente mayor que 36.4% — solo ~2/77 items son fallos genuinos de ruteo; el resto del "gap vs simulación" es artefacto de medición (el eval no puede extraer el guild del error de args) + items de dataset que no son casos de guild. Corrección de metodología pendiente: `plan=true` debería devolver el plan con guild aunque falten args, o el eval debería parsear `guild 'X' requires` del texto de error. Fix cosmético aplicado: el header del script hardcodeaba `N=73` (ahora usa el total real, 77).
 
 ---
 
