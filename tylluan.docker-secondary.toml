@@ -1,4 +1,4 @@
-﻿# Tylluan — Docker runtime config, SECONDARY instance (federation testing)
+# Tylluan — Docker runtime config, SECONDARY instance (federation testing)
 # Mirrors tylluan.docker.toml but with its own federation peer pre-approved
 # pointing back at the native primary instance (host.docker.internal:47004).
 # host = "0.0.0.0" is intentional here (Docker port mapping).
