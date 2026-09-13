@@ -192,6 +192,14 @@ pub struct SilvaDB {
     /// Honest-abstention floor for recall, scaled x1000 as i64 atomic
     /// (0 = disabled/legacy). Set from [silva] recall_abstain_min_score.
     pub(crate) abstain_floor_x1000: std::sync::atomic::AtomicI64,
+    /// Warm-start cache for calculate_pagerank_internal: the score snapshot of
+    /// the last full PageRank run, reused as the initial vector on the next run
+    /// so the on-demand analyze_graph_deep converges in fewer iterations when
+    /// the graph changed little (I-5). In-memory by design: the cache is a full
+    /// V-sized snapshot only useful within this process lifetime, and a cold
+    /// first call after restart behaves exactly like pre-cache Tylluan — no
+    /// schema/DB cost for an optimization of medium priority.
+    pub(crate) pagerank_cache: std::sync::Mutex<Option<std::collections::HashMap<String, f64>>>,
 }
 
 impl SilvaDB {
@@ -225,6 +233,7 @@ impl SilvaDB {
             sparse_engine: std::sync::Mutex::new(None),
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
+            pagerank_cache: std::sync::Mutex::new(None),
         };
         Ok(db)
     }
@@ -323,6 +332,7 @@ impl SilvaDB {
             sparse_engine: std::sync::Mutex::new(None),
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
+            pagerank_cache: std::sync::Mutex::new(None),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {

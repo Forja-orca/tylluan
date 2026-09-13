@@ -154,8 +154,13 @@ impl super::SilvaDB {
         }
         let communities = graph.find_communities();
 
-        // 2. Hubs (Local PageRank)
-        let pr = self.calculate_pagerank_internal(&node_ids, &edges, 15, 0.85);
+        // 2. Hubs (Local PageRank). Warm-start optimization (I-5): when a
+        // cached score snapshot exists, the initial vector is already close to
+        // the fixed point, so fewer iterations converge. Cold runs (no cache:
+        // first call or after restart) keep the full 15 iterations.
+        let warm = self.pagerank_cache.lock().map(|c| c.is_some()).unwrap_or(false);
+        let iterations = if warm { 5 } else { 15 };
+        let pr = self.calculate_pagerank_internal(&node_ids, &edges, iterations, 0.85);
         let mut hub_list: Vec<_> = pr.into_iter().collect();
         hub_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let hubs: Vec<_> = hub_list.into_iter().take(10).map(|(id, score)| {
@@ -370,9 +375,31 @@ impl super::SilvaDB {
         damping: f64,
     ) -> HashMap<String, f64> {
         let n = node_ids.len();
-        if n == 0 { return HashMap::new(); }
+        if n == 0 {
+            // Graph is empty: nothing to rank. Drop any stale snapshot so the
+            // next (non-empty) run starts cold instead of warming from a graph
+            // that no longer exists.
+            if let Ok(mut cache) = self.pagerank_cache.lock() {
+                *cache = None;
+            }
+            return HashMap::new();
+        }
 
-        let mut pr: HashMap<String, f64> = node_ids.iter().map(|id| (id.clone(), 1.0 / n as f64)).collect();
+        // Warm-start: reuse the previous run's scores for nodes that still
+        // exist, uniform 1/n only for brand-new nodes. When the graph changed
+        // little, the initial vector is already close to the fixed point, so
+        // fewer iterations suffice (caller picks max_iterations accordingly).
+        let cached = self.pagerank_cache.lock().ok().and_then(|c| c.clone());
+        let mut pr: HashMap<String, f64> = match cached {
+            Some(prev) => node_ids
+                .iter()
+                .map(|id| (id.clone(), prev.get(id).copied().unwrap_or(1.0 / n as f64)))
+                .collect(),
+            None => node_ids
+                .iter()
+                .map(|id| (id.clone(), 1.0 / n as f64))
+                .collect(),
+        };
         let mut out_degree: HashMap<String, usize> = HashMap::new();
         let mut adj: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -406,6 +433,11 @@ impl super::SilvaDB {
             }
 
             pr = next_pr;
+        }
+
+        // Persist the snapshot for the next warm-started run.
+        if let Ok(mut cache) = self.pagerank_cache.lock() {
+            *cache = Some(pr.clone());
         }
 
         pr
@@ -946,6 +978,146 @@ mod tests {
             scores["leaf"] > scores["hub"],
             "CONTRACT-01: leaf ({}) should outrank hub ({}) due to degree penalty",
             scores["leaf"], scores["hub"]
+        );
+    }
+
+    // --- PageRank warm-start (I-5) ---
+
+    use std::collections::HashMap;
+
+    /// Deterministic pseudo-random synthetic graph: `n` nodes, 3 edges each
+    /// (ring-ish), no RNG dependency.
+    fn synthetic_graph(n: usize, seed: u64) -> (Vec<String>, Vec<(String, String)>) {
+        let mut rng_state = seed;
+        let mut next_u64 = move || {
+            rng_state ^= rng_state << 13;
+            rng_state ^= rng_state >> 7;
+            rng_state ^= rng_state << 17;
+            rng_state
+        };
+        let node_ids: Vec<String> = (0..n).map(|i| format!("n{i:03}")).collect();
+        let mut edges = Vec::new();
+        for i in 0..n {
+            for _ in 0..3 {
+                let j = (next_u64() as usize) % n;
+                edges.push((node_ids[i].clone(), node_ids[j].clone()));
+            }
+        }
+        (node_ids, edges)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pagerank_warm_start_converges_to_full_recompute() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let (mut node_ids, mut edges) = synthetic_graph(40, 42);
+        // Cold run: fills the cache, behaves exactly like pre-cache Tylluan.
+        let _ = db.calculate_pagerank_internal(&node_ids, &edges, 60, 0.85);
+
+        // Small mutation: 1 new node + 2 edges.
+        node_ids.push("n_new".to_string());
+        edges.push(("n_new".to_string(), "n000".to_string()));
+        edges.push(("n001".to_string(), "n_new".to_string()));
+
+        // Warm run: 60 iterations from the cached snapshot (same total as the
+        // reference below).
+        let warm = db.calculate_pagerank_internal(&node_ids, &edges, 60, 0.85);
+
+        // Reference: full recomputation from scratch on the mutated graph.
+        {
+            let mut cache = db.pagerank_cache.lock().unwrap();
+            *cache = None;
+        }
+        let cold_ref = db.calculate_pagerank_internal(&node_ids, &edges, 60, 0.85);
+
+        assert_eq!(warm.len(), node_ids.len());
+        for id in &node_ids {
+            let d = (warm[id] - cold_ref[id]).abs();
+            assert!(d < 1e-4, "warm vs cold diverge for {id}: {d}");
+        }
+        // Sanity: the warm run actually moved scores for the new node (it must
+        // NOT just replay the pre-mutation snapshot).
+        assert!(
+            warm["n_new"] > 1e-9,
+            "new node must receive score after warm recalc"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pagerank_first_call_matches_uniform_initialization() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let (node_ids, edges) = synthetic_graph(30, 7);
+        let n = node_ids.len();
+
+        // Hand-rolled reference: exact pre-warm-start algorithm (uniform 1/n
+        // init, full iteration scheme). The real fn with an empty cache must
+        // produce bit-identical math to this.
+        let mut ref_pr: HashMap<String, f64> =
+            node_ids.iter().map(|id| (id.clone(), 1.0 / n as f64)).collect();
+        let mut out_degree: HashMap<String, usize> = HashMap::new();
+        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+        for (s, t) in &edges {
+            adj.entry(s.clone()).or_default().push(t.clone());
+            *out_degree.entry(s.clone()).or_insert(0) += 1;
+        }
+        for _ in 0..60 {
+            let mut next_pr: HashMap<String, f64> =
+                node_ids.iter().map(|id| (id.clone(), 0.15 / n as f64)).collect();
+            let mut dangling_sum = 0.0;
+            for id in &node_ids {
+                if *out_degree.get(id).unwrap_or(&0) == 0 {
+                    dangling_sum += ref_pr[id];
+                } else if let Some(neighbors) = adj.get(id) {
+                    for nb in neighbors {
+                        if let Some(s) = next_pr.get_mut(nb) {
+                            *s += 0.85 * ref_pr[id] / out_degree[id] as f64;
+                        }
+                    }
+                }
+            }
+            for id in &node_ids {
+                if let Some(s) = next_pr.get_mut(id) {
+                    *s += 0.85 * dangling_sum / n as f64;
+                }
+            }
+            ref_pr = next_pr;
+        }
+
+        let actual = db.calculate_pagerank_internal(&node_ids, &edges, 60, 0.85);
+        for id in &node_ids {
+            assert!(
+                (actual[id] - ref_pr[id]).abs() < 1e-12,
+                "cold call must match uniform-init reference for {id}: {} vs {}",
+                actual[id],
+                ref_pr[id]
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "manual benchmark: prints warm-start vs cold timings"]
+    async fn pagerank_warm_start_benchmark() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let (node_ids, edges) = synthetic_graph(500, 99); // 500 nodes / 1500 edges
+
+        let start = Instant::now();
+        let _ = db.calculate_pagerank_internal(&node_ids, &edges, 15, 0.85);
+        let cold_ms = start.elapsed().as_millis();
+
+        // 5% mutation: 25 new nodes + 50 new edges.
+        let mut n2 = node_ids.clone();
+        let mut e2 = edges.clone();
+        for i in 0..25usize {
+            let id = format!("new{i:03}");
+            n2.push(id.clone());
+            e2.push((id.clone(), format!("n{:03}", i % 500)));
+            e2.push((format!("n{:03}", (i * 7) % 500), id));
+        }
+        let start = Instant::now();
+        let _ = db.calculate_pagerank_internal(&n2, &e2, 5, 0.85);
+        let warm_ms = start.elapsed().as_millis();
+
+        println!(
+            "[bench] pagerank cold 15it: {cold_ms}ms | warm 5it after 5% mutation: {warm_ms}ms"
         );
     }
 }
