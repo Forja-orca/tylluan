@@ -162,6 +162,16 @@ if [ "$RUN_DOCS" = "1" ]; then
     else
         fail "README.md test count — run 'scripts/check_test_count.sh --fix'"
     fi
+
+    # ADR-013 4th gate (non-predation). NOTE: this check EXCEEDS what CI runs
+    # today -- it is wired here, local-only, pending Tech Lead validation of
+    # ADR-013 before it goes into the CI workflow. Report-only: exit 1 means
+    # findings to resolve, never a mechanical block.
+    if bash scripts/check_no_predation.sh; then
+        ok "non-predation gate (ADR-013)"
+    else
+        fail "non-predation gate (ADR-013) — resolve findings or add '## Impact' via 'git commit --amend'"
+    fi
     echo
 fi
 

@@ -203,6 +203,7 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 4. Si dos agentes tocan piezas complementarias (un endpoint + quien lo consume), acordar el esquema EXACTO (nombres de tabla/campo, puertos) en Coloquio antes de escribir código — pasó 2 veces el mismo día no hacerlo y hubo que arreglar el desajuste después.
 5. Nunca dejar trabajo sin commitear acumulándose — commits pequeños y verificados, no todo junto al final.
 6. Nunca atribuir una decisión a José que no diera — si actúas por iniciativa propia, dilo así.
+7. Todo commit lleva la pregunta de no-depredación respondida (ADR-013): corre `scripts/check_no_predation.sh` tras commitear y antes de reportar el cambio como verificado; tocar `transport/`, `guilds/`, `integrations/` o `tylluan*.toml` exige sección `## Impact` en el mensaje del commit.
 
 **Perfiles declarativos (M19-P5):** ver [ADR-009](docs/reference/adr/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
 
