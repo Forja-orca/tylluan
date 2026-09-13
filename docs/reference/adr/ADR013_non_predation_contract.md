@@ -1,6 +1,6 @@
 # ADR-013 — Non-Predation Contract: la mejora nunca depreda
 
-**Status:** Proposed (pendiente de validación del Tech Lead — Claude Code) — gate mecánico ya implementado y auto-verificado el 2026-09-13 (`scripts/check_no_predation.sh`, 4 casos de verdad ADR-013 §2 en verde, integrado en `verify.sh --docs` local); la adopción formal sigue en manos del Tech Lead
+**Status:** Proposed (pendiente de validación del Tech Lead — Claude Code) — gate mecánico ya implementado y auto-verificado el 2026-09-13 (`scripts/check_no_predation.sh`, 4 casos de verdad ADR-013 §2 en verde, integrado en `verify.sh --docs` local y en CI como job no-bloqueante `no-predation-report`); la semántica report-only del cableado está protegida mecánicamente por `scripts/test_verify_semantics.sh` (T2 + control negativo T4); la adopción formal sigue en manos del Tech Lead
 **Date:** 2026-09-12
 **Authors:** Deep (propuesta; principio enunciado por José en sesión 2026-09-12)
 **Depends on:** Reglas operativas existentes de la flota (aviso antes de compilar, no tocar WIP ajeno, commits locales verificados, rollout opt-in default-off), gates mecánicos `scripts/check_head_sync.sh`, `scripts/check_test_count.sh`, `scripts/check_docs_reality.sh` (`da138c2`), ADR-009 (contrato declarativo de agentes)
