@@ -307,7 +307,7 @@ def run_evaluation():
     delta_j13 = acc_j13 - acc_blend
     
     print("\n" + "=" * 75)
-    print("HELD-OUT EVALUATION RESULTS (N=73) — STRICT REAL MEASUREMENTS:")
+    print(f"HELD-OUT EVALUATION RESULTS (N={total}) — STRICT REAL MEASUREMENTS:")
     print("=" * 75)
     print(f"  1. Majority Class Baseline:        {acc_maj*100:6.2f}% ({correct_majority}/{total})")
     print(f"  2. Pure Keyword Router:            {acc_kw*100:6.2f}% ({correct_kw}/{total})")
