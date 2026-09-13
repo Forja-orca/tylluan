@@ -32,7 +32,11 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
     // Autonomous Success Rate prerequisite: latency_ms (full intent->result
     // cycle) + human_intervention (HITL approval involved). Old rows keep
     // NULL — queries must tolerate that (they select explicit columns).
-    for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0"] {
+    // WS5: system_snapshot stamps the boot SystemSnapshot JSON so every audit
+    // row is self-identifying (commit/config/catalog of the system that
+    // produced it). NOT part of the chain hash — legacy rows (NULL) must stay
+    // verifiable and the chain covers tamper-evidence, not identity.
+    for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0", "system_snapshot TEXT"] {
         let _ = conn.execute_batch(&format!("ALTER TABLE guild_audit_log ADD COLUMN {col}"));
     }
 
@@ -51,10 +55,13 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
     use sha2::Digest;
     let hash = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
 
+    let snapshot_json = crate::router::system_snapshot::global()
+        .and_then(|s| serde_json::to_string(s).ok());
+
     conn.execute(
-        "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }],
+        "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, result_preview, prev_hash, hash, latency_ms, human_intervention, system_snapshot)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        rusqlite::params![now, guild, tool, agent_id, intent, status, preview, prev_hash, hash, latency_ms as i64, if human_intervention { 1 } else { 0 }, snapshot_json],
     ).map_err(|e| format!("audit insert: {e}"))?;
     Ok(())
 }
@@ -170,8 +177,8 @@ mod tests {
                 prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL
             );"
         ).unwrap();
-        // Same ALTER migration as production (adds latency_ms/human_intervention).
-        for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0"] {
+        // Same ALTER migration as production (adds latency_ms/human_intervention/system_snapshot).
+        for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0", "system_snapshot TEXT"] {
             let _ = conn.execute_batch(&format!("ALTER TABLE guild_audit_log ADD COLUMN {col}"));
         }
         // Legacy row: no latency_ms / human_intervention columns in INSERT.
@@ -232,6 +239,97 @@ mod tests {
             [], |r| Ok((r.get(0)?,)),
         ).unwrap();
         assert_eq!(row.0, 1, "HITL approve_action path must write human_intervention=1");
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn audit_snapshot_column_stamps_and_legacy_rows_coexist() {
+        // WS5: every new audit row carries the boot SystemSnapshot JSON; legacy
+        // rows keep NULL; the chain hash EXCLUDES the snapshot column, so a
+        // mixed chain must still verify byte-identically to the pre-WS5 math.
+        let db_path = std::env::temp_dir().join(format!("audit_snap_test_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db_path);
+        let conn = crate::config::open_db(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL, guild TEXT NOT NULL, tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '', intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok', result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL
+            );"
+        ).unwrap();
+        for col in ["latency_ms INTEGER", "human_intervention INTEGER NOT NULL DEFAULT 0", "system_snapshot TEXT"] {
+            let _ = conn.execute_batch(&format!("ALTER TABLE guild_audit_log ADD COLUMN {col}"));
+        }
+
+        // Chain hash helper — identical formula to verify_audit_chain.
+        let chain_hash = |prev: &str, ts: &str, guild: &str, tool: &str, agent: &str, status: &str| {
+            use sha2::Digest;
+            let input = format!("{prev}|{ts}|{guild}|{tool}|{agent}|{status}");
+            format!("{:x}", sha2::Sha256::digest(input.as_bytes()))
+        };
+
+        // Legacy row: no snapshot column in the INSERT (pre-WS5 writer shape).
+        // Hash is REAL (derived by the chain formula) so verification advances.
+        let h1 = chain_hash("", "2026-09-01T00:00:00Z", "git", "commit", "agent-x", "ok");
+        conn.execute(
+            "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, prev_hash, hash)
+             VALUES ('2026-09-01T00:00:00Z', 'git', 'commit', 'agent-x', 'legacy intent', 'ok', '', ?1)",
+            rusqlite::params![h1],
+        ).unwrap();
+
+        // New row, stamped exactly as the writer does: snapshot JSON in its own
+        // column, chain hash computed WITHOUT it.
+        let snap = crate::router::system_snapshot::SystemSnapshot::compute(
+            &crate::config::TylluanConfig::default(), None, None,
+        );
+        let snap_json = serde_json::to_string(&snap).unwrap();
+        let h2 = chain_hash(&h1, "2026-09-13T00:00:00Z", "bash", "run", "buffy", "ok");
+        conn.execute(
+            "INSERT INTO guild_audit_log (timestamp, guild, tool_name, agent_id, intent, status, prev_hash, hash, system_snapshot)
+             VALUES (?1, 'bash', 'run', 'buffy', 'snap intent', 'ok', ?2, ?3, ?4)",
+            rusqlite::params!["2026-09-13T00:00:00Z", h1, h2, snap_json],
+        ).unwrap();
+
+        // Stamped row: snapshot present, well-formed, carrying the real commit.
+        let (stored_snap,): (String,) = conn.query_row(
+            "SELECT system_snapshot FROM guild_audit_log WHERE intent = 'snap intent'",
+            [], |r| Ok((r.get(0)?,)),
+        ).unwrap();
+        assert!(stored_snap.contains("\"commit\""), "snapshot JSON must carry commit: {stored_snap}");
+        assert!(stored_snap.contains(&format!("\"commit\":\"{}\"", env!("TYLLUAN_GIT_COMMIT"))),
+            "snapshot commit must be the compile-time commit of this binary: {stored_snap}");
+        assert!(stored_snap.contains("\"config_hash\""), "snapshot JSON must carry config_hash");
+
+        // Legacy row: NULL tolerated by the same query shape production uses.
+        let (legacy_snap,): (Option<String>,) = conn.query_row(
+            "SELECT system_snapshot FROM guild_audit_log WHERE intent = 'legacy intent'",
+            [], |r| Ok((r.get(0)?,)),
+        ).unwrap();
+        assert!(legacy_snap.is_none(), "legacy rows keep system_snapshot NULL");
+
+        // Chain verification math (same as verify_audit_chain) over the mixed
+        // chain: legacy row (NULL snapshot) must verify, proving the column is
+        // genuinely outside the hash.
+        let mut stmt = conn.prepare(
+            "SELECT timestamp, guild, tool_name, agent_id, status, prev_hash, hash FROM guild_audit_log ORDER BY id ASC"
+        ).unwrap();
+        let rows: Vec<(String, String, String, String, String, String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))
+            .unwrap().collect::<Result<_, _>>().unwrap();
+        let mut prev = String::new();
+        let mut ok = 0usize;
+        let mut bad = 0usize;
+        for (ts, guild, tool_name, agent_id, status, stored_prev, stored_hash) in rows {
+            if stored_prev != prev { bad += 1; continue; }
+            let chain_input = format!("{stored_prev}|{ts}|{guild}|{tool_name}|{agent_id}|{status}");
+            use sha2::Digest;
+            let computed = format!("{:x}", sha2::Sha256::digest(chain_input.as_bytes()));
+            if computed == stored_hash { ok += 1; } else { bad += 1; }
+            prev = stored_hash;
+        }
+        assert_eq!((ok, bad), (2, 0), "mixed legacy+stamped chain must verify fully");
         let _ = std::fs::remove_file(&db_path);
     }
 }

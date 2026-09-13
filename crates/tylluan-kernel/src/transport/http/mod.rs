@@ -1262,7 +1262,10 @@ async fn health_handler(
                 "silva":      { "ok": node_count > 0, "nodes": node_count, "edges": edge_count },
                 "guilds":     { "ok": active_guilds > 0, "active": active_guilds, "total": total_guilds },
                 "mesh":       { "ok": p2p_sessions > 0 || dht_peers > 0,
-                                "p2p_sessions": p2p_sessions, "dht_peers": dht_peers }
+                                "p2p_sessions": p2p_sessions, "dht_peers": dht_peers },
+                // WS5: canonical identity of this running system — every
+                // benchmark/audit result can cite this instead of prose.
+                "system_snapshot": crate::router::system_snapshot::global_json()
             }
         }))).into_response();
     }

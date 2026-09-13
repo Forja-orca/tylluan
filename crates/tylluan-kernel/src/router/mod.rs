@@ -13,3 +13,4 @@ pub mod complexity;
 pub mod embeddings;
 pub mod light_reranker;
 pub mod scheduler;
+pub mod system_snapshot;

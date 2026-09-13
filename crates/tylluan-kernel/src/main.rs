@@ -905,6 +905,29 @@ async fn main() -> anyhow::Result<()> {
         warn!("⚠️ Guild discovery failed during startup: {}", e);
     }
 
+    // WS5 — System State Snapshot: one canonical, hash-addressed identity of
+    // the running system, computed from LIVE surfaces (loaded config + post-
+    // discovery registry + Silva schema version) before anything can observe
+    // the process. Exposed in /health (verbose) and stamped into every
+    // guild_audit_log row — benchmark/audit ambiguity about "what system
+    // produced this result" resolves by citing snapshot ID, not memory.
+    let silva_schema_version = std::path::Path::new(&config.memory.db_path)
+        .exists()
+        .then(|| tylluan_kernel::config::open_db(std::path::Path::new(&config.memory.db_path)).ok())
+        .flatten()
+        .and_then(|conn| conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0)).ok());
+    tylluan_kernel::router::system_snapshot::set_global(
+        tylluan_kernel::router::system_snapshot::SystemSnapshot::compute(
+            &config,
+            Some(&registry_raw),
+            silva_schema_version,
+        ),
+    );
+    if let Some(snap) = tylluan_kernel::router::system_snapshot::global() {
+        info!("📸 System snapshot {} (schema {:?}, {} guilds in capability surface)",
+            snap.id(), snap.schema_version, registry_raw.guilds.len());
+    }
+
     // Start Registry Actor
     // Wrap registry in Arc<RwLock<>> so it can be SHARED between the actor
     // (which serializes mutations via messages) and TylluanServer (which still
