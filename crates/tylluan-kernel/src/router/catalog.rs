@@ -135,7 +135,7 @@ fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> 
     m.insert("llama_backend", (GuildWeight::Heavy, vec!["prompt"]));
     m.insert("seed_tools", (GuildWeight::Light, vec![]));
     m.insert("biome_warden", (GuildWeight::Medium, vec!["query"]));
-    m.insert("coordinator", (GuildWeight::Heavy, vec!["task"]));
+    m.insert("coordinator", (GuildWeight::Heavy, vec!["intent"]));
     m.insert("audit", (GuildWeight::Heavy, vec!["path"]));
     m.insert("cron_scheduler", (GuildWeight::Light, vec!["command"]));
     m.insert("sequential_thinking", (GuildWeight::Medium, vec!["prompt"]));
