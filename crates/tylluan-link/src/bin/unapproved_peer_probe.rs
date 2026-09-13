@@ -53,12 +53,12 @@ async fn main() {
     // Throwaway identity: freshly generated every run, never registered in
     // the target kernel's peers.db, so it can never be in the approved set.
     let identity_path: PathBuf = std::env::temp_dir()
-        .join(format!("tylluan_unapproved_probe_{}.key", std::process::id()));
+        .join(format!("tylluan_unapproved_probe_{id}.key", id = std::process::id()));
     let _ = std::fs::remove_file(&identity_path);
     let identity = match NodeIdentity::load_or_create(&identity_path) {
         Ok(id) => Arc::new(id),
         Err(e) => {
-            eprintln!("failed to create throwaway identity: {}", e);
+            eprintln!("failed to create throwaway identity: {e}");
             std::process::exit(2);
         }
     };
@@ -80,13 +80,13 @@ async fn main() {
 
     match result {
         Ok(resp) if resp.success => {
-            println!("ACCEPTED: unapproved peer's dispatch executed: {:?}", resp);
+            println!("ACCEPTED: unapproved peer's dispatch executed: {resp:?}");
             std::process::exit(1);
         }
         Ok(resp) if resp.error.as_deref() == Some(REAL_REJECTION_MESSAGE) => {
+            let error = &resp.error;
             println!(
-                "REJECTED: kernel returned the real auth-rejection path (error={:?})",
-                resp.error
+                "REJECTED: kernel returned the real auth-rejection path (error={error:?})",
             );
             std::process::exit(0);
         }
@@ -102,9 +102,8 @@ async fn main() {
         Err(e) => {
             println!(
                 "INCONCLUSIVE: connection/protocol failed before any auth decision could be \
-                 observed ({}) -- this does NOT prove the peer was rejected by the approval \
+                 observed ({e}) -- this does NOT prove the peer was rejected by the approval \
                  check; a broken listener would look identical",
-                e
             );
             std::process::exit(2);
         }
