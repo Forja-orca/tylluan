@@ -745,7 +745,7 @@ async fn resolve_and_prepare_tool_call(
     let path_hint = extract_path_from_intent(intent);
     let url_hint = extract_url_from_intent(intent).unwrap_or_default();
     let mut tool_args = serde_json::json!({
-        "command": intent, "intent": intent,
+        "command": intent, "intent": intent, "task": intent,
         "query": intent, "text": intent, "content": intent,
         "prompt": intent, "message": intent, "input": intent,
         "server_url": url_hint, "url": url_hint,
@@ -1084,7 +1084,17 @@ async fn post_process_outcome(
     if !is_success && guild_name != "coordinator" {
         let c_score = crate::router::complexity::score_complexity(intent);
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
-        if c_score >= 0.4 && registry_has_coordinator {
+        // WS2 delegation gate: same rule as the Proactive Cascade — a failed
+        // complex intent only escalates to coordinator if it actually asked
+        // for delegation/orchestration (or the caller is a coordinator worker).
+        let is_coordinator_worker = agent_id.as_deref().is_some_and(|a| a.starts_with("coordinator"));
+        let cascade_eligible = crate::router::complexity::coordinator_eligible(
+            c_score,
+            intent,
+            false,
+            is_coordinator_worker,
+        );
+        if cascade_eligible && registry_has_coordinator {
             info!("🔄 Reactive Cascade (score={:.2}): '{}' failed on '{}' → fallback to coordinator", c_score, intent, guild_name);
             let mut new_args = serde_json::Map::new();
             new_args.insert("intent".to_string(), serde_json::Value::String(intent.to_string()));
@@ -1777,6 +1787,55 @@ mod tests {
                 "unrelated intents must not be force-routed to coloquio, got {trace:?}"
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delegation_gate_blocks_coordinator_hijack() {
+        // WS2 regression (2026-09-13 external audit — J-13 triage): a complex
+        // intent that never requested delegation was swallowed by the Proactive
+        // Cascade and died on coordinator's required `task` arg. With
+        // coordinator registered, the gate must hold for live routing.
+        let server = test_server().await;
+        {
+            let mut reg = server.registry.write().await;
+            reg.guilds.insert(
+                "coordinator".to_string(),
+                crate::registry::guild_process::GuildProcess::new(
+                    "coordinator",
+                    crate::registry::guild_process::GuildLauncher::Python { module_path: "core/coordinator.py".to_string() },
+                    true,
+                    None,
+                    3,
+                ),
+            );
+        }
+
+        // Complex, multi-step, NO delegation signal — the exact hijack class.
+        let hijack = "research Rust async patterns, then implement a proof of concept, then write tests, and finally document the results";
+        match resolve_guild_name(&server, hijack, None, None).await {
+            Ok((guild, trace)) => {
+                assert_ne!(guild, "coordinator", "complex non-delegation intent must not reach coordinator, got '{guild}'");
+                assert!(
+                    trace.iter().any(|t| t.contains("delegation_gate=blocked")),
+                    "gate must record the blocked hijack in the trace, got {trace:?}"
+                );
+            }
+            Err(res) => {
+                // Matcher fallback (NO_GUILD_MATCH as an error result) is also
+                // acceptable — anything but a coordinator route.
+                let text = res.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>();
+                assert!(!text.contains("coordinator"), "even as an error, the hijack must not surface coordinator: {text}");
+            }
+        }
+
+        // The same complexity WITH an explicit delegation request still escalates.
+        let delegated = "delegate to coordinator: research the topic and then implement the fix and then write tests and then document";
+        let (guild, trace) = resolve_guild_name(&server, delegated, None, None).await.unwrap();
+        assert_eq!(guild, "coordinator", "explicit delegation must still reach coordinator, got '{guild}'");
+        assert!(
+            trace.iter().any(|t| t.contains("proactive_cascade=coordinator")),
+            "trace must show the proactive cascade fired, got {trace:?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
