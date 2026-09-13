@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Verifies that STATUS.md cites exactly one HEAD value and that it matches
 # the real current commit.
 #
