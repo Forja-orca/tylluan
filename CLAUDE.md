@@ -201,6 +201,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 - NUNCA reducir timeouts para guilds de inferencia (BGE-M3 en CPU tarda 2-8s/embedding)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
 - Dashboard: `pnpm`, nunca `npm` (dos lockfiles divergentes rompieron dependencias en producción)
+- Todo commit responde la pregunta de no-depredación (ADR-013): `scripts/check_no_predation.sh` tras commitear; tocar `transport/`, `guilds/`, `integrations/` o `tylluan*.toml` exige `## Impact` en el mensaje
 
 ---
 
