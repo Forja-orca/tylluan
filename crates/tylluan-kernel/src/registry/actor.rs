@@ -59,6 +59,13 @@ pub struct RegistryActor {
     registry: Arc<RwLock<GuildRegistry>>,
 }
 
+/// A transport-level failure (child process died / stdio closed) vs a business
+/// error returned by the guild's tool. Only transport failures warrant killing
+/// the dead proxy and respawning — the process is gone either way.
+fn is_transport_failure(call_str: &str) -> bool {
+    call_str.contains("Transport") || call_str.contains("disconnected")
+}
+
 impl RegistryActor {
     /// Create the actor + handle pair. The Arc<RwLock<GuildRegistry>> is shared:
     /// the actor serializes mutations through messages, but the same Arc can
@@ -222,7 +229,29 @@ impl RegistryActor {
                             }
 
                             if !is_timeout {
-                                // Crash / transport error — return immediately, no retry.
+                                if is_transport_failure(&call_str) {
+                                    // The child process died behind the kernel's back (external
+                                    // kill, OOM, stdio closed): the proxy slot stays Some(dead),
+                                    // is_running() keeps reporting true, and ensure_guild_running
+                                    // fast-paths forever — every call hits "Transport disconnected".
+                                    // The supervisor only respawns always_on guilds (supervisor.rs),
+                                    // so for LAZY guilds this cleanup + retry is the only recovery
+                                    // path. kill() also resets the T13 backoff since the death was
+                                    // not a spawn crash. Lifecycle bug observed live 2026-09-13.
+                                    tracing::warn!(
+                                        "🛑 [Actor] Guild '{}' transport failure — killing dead proxy so the next attempt respawns it fresh",
+                                        guild_name
+                                    );
+                                    {
+                                        let mut reg = registry.write().await;
+                                        if let Some(guild) = reg.guilds.get_mut(&guild_name) {
+                                            let _ = guild.kill().await;
+                                        }
+                                    }
+                                    attempt += 1;
+                                    continue;
+                                }
+                                // Crash / business error — return immediately, no retry.
                                 tracing::warn!(
                                     "⚠️ [Actor] Guild '{}' tool call returned error on attempt {} — not retrying crash: {:?}",
                                     guild_name, attempt + 1, call_result
@@ -453,5 +482,26 @@ impl RegistryHandle {
             }).collect(),
             Err(_) => std::collections::HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_transport_failure;
+
+    #[test]
+    fn transport_failure_detection() {
+        // Real error shape from the live 2026-09-13 incident: the proxy of a
+        // guild killed externally, dispatch hits "Transport disconnected".
+        assert!(is_transport_failure(
+            "GUILD_ERROR|coloquio|Transport(Custom { kind: Other, error: \"disconnected\" })"
+        ));
+        assert!(is_transport_failure("GUILD_ERROR|bash|Transport disconnected"));
+        // Business errors from the guild's tool must NOT trigger respawn.
+        assert!(!is_transport_failure(
+            "GUILD_ERROR|coordinator|requires argument(s): task"
+        ));
+        // Timeouts are handled by a different branch.
+        assert!(!is_transport_failure("GUILD_TIMEOUT|coloquio|30s"));
     }
 }

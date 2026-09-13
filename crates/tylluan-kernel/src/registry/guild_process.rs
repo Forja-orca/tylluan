@@ -782,6 +782,14 @@ GuildLauncher::Python { module_path } => {
             }
             self.tools.clear();
         }
+        // An intentional kill (unload_guild, retry-respawn, shutdown) is NOT a
+        // crash: reset the T13 exponential backoff so the next
+        // ensure_guild_running respawns immediately instead of waiting 2^N
+        // (up to 300s). Without this, a manually unloaded guild with prior
+        // crashes stays blocked in backoff for no reason — lifecycle bug
+        // observed live 2026-09-13.
+        self.crash_count = 0;
+        self.last_crash_at = None;
         Ok(())
     }
 
@@ -1587,6 +1595,23 @@ mod tests {
         assert!(guild.idle_seconds() < 2);
         guild.touch();
         assert!(guild.idle_seconds() < 2);
+    }
+
+#[tokio::test]
+    async fn test_kill_resets_crash_backoff() {
+        // An intentional kill (unload_guild, retry-respawn) must NOT inherit the
+        // T13 crash backoff: ensure_guild_running would otherwise wait 2^N
+        // (up to 300s) before respawning a manually unloaded guild with prior
+        // crashes - lifecycle bug observed live 2026-09-13.
+        let launcher = GuildLauncher::Python { module_path: "test.module".to_string() };
+        let mut guild = GuildProcess::new("test", launcher, false, None, 3);
+        guild.crash_count = 3;
+        guild.last_crash_at = Some(std::time::Instant::now());
+        assert!(!guild.is_running());
+        let _ = guild.kill().await;
+        assert_eq!(guild.crash_count, 0);
+        assert!(guild.last_crash_at.is_none());
+        assert!(!guild.is_running());
     }
 
     #[test]

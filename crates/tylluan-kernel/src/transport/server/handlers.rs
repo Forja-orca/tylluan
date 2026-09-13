@@ -143,12 +143,22 @@ impl TylluanServer {
             "unload_guild" => {
                 let name = arguments.as_ref().and_then(|a| a.get("guildName")).and_then(|v| v.as_str()).unwrap_or("");
                 if name.is_empty() { return Ok(error_result("guildName required.")); }
-                if let Some(guild) = self.registry.write().await.guilds.get_mut(name) {
-                    if guild.always_on { return Ok(error_result("Always-on guild cannot be unloaded.")); }
-                    guild.kill().await.ok();
-                    self.notify("notifications/tool/list_changed", serde_json::Value::Null);
-                    Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{name}' unloaded."))], is_error: Some(false) })
-                } else { Ok(error_result("Unknown guild.")) }
+                {
+                    let mut reg = self.registry.write().await;
+                    match reg.guilds.get_mut(name) {
+                        None => return Ok(error_result("Unknown guild.")),
+                        Some(guild) => {
+                            if guild.always_on { return Ok(error_result("Always-on guild cannot be unloaded.")); }
+                            guild.kill().await.ok();
+                        }
+                    }
+                }
+                // Leave the registry consistent: kill() cleared the guild's
+                // tools, so drop the stale entries from the shared tool index.
+                // ensure_guild_running rebuilds it again on the next respawn.
+                self.registry.write().await.rebuild_tool_index();
+                self.notify("notifications/tool/list_changed", serde_json::Value::Null);
+                Ok(CallToolResult { content: vec![Content::text(format!("✅ Guild '{name}' unloaded."))], is_error: Some(false) })
             }
             "doctor_diagnose" => {
                 let diag = self.doctor.diagnose().await;
