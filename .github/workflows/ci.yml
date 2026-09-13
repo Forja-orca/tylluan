@@ -182,6 +182,38 @@ jobs:
       - name: Verify STATUS.md cites exactly one HEAD and it's the real one
         run: bash scripts/check_head_sync.sh
 
+  no-predation-report:
+    name: Docs — non-predation gate report (non-blocking, ADR-013)
+    runs-on: ubuntu-latest
+    continue-on-error: true # report-only by contract (ADR-013 §2): findings
+                             # are triage input for humans/agents, never a
+                             # mechanical block. verify.sh's local wiring is
+                             # semantics-tested for exactly this property.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the gate inspects the HEAD commit and the working
+                         # tree it left behind; full history keeps it robust
+                         # if it ever needs ancestry (cheap, already the
+                         # pattern docs-head-sync-check needs anyway)
+      - name: Run ADR-013 non-predation gate (report-only)
+        run: bash scripts/check_no_predation.sh
+
+  verify-semantics-test:
+    name: Docs — verify.sh gate semantics (report-only stays report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # T5 runs the REAL check_head_sync.sh, which needs
+                         # full history (same reason as docs-head-sync-check)
+      # Locks the 2026-09-13 lesson (49950c2): a report-only gate wired
+      # through fail() silently became a pre-push blocker. This meta-test
+      # proves the wiring still honors the contract in BOTH directions:
+      # failing report-only gates don't block, real drift still does.
+      - name: Run verify.sh semantics meta-test
+        run: bash scripts/test_verify_semantics.sh
+
   dead-config-report:
     name: Docs — dead config field report (non-blocking)
     runs-on: ubuntu-latest
