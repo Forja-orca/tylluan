@@ -5,16 +5,25 @@ pub(crate) fn routing_failure_id(intent: &str) -> String {
     format!("lesson:routing_failure:{hash:x}")
 }
 
-/// Write an audit log entry to ./data/audit.db for every tylluan_do tool call.
+/// Resolve the audit store path — THE single owner of path resolution for
+/// `./data/audit.db`. The writer (`log_audit_entry`), the chain verifier
+/// (`verify_audit_chain`), and the MD-7 read endpoint (`/api/v1/audit/latency`,
+/// via handler_do re-export) all call THIS; `TYLLUAN_AUDIT_DB` is checked in
+/// exactly one place. Unset env → byte-identical behavior to the historical
+/// hardcoded `"./data/audit.db"`; set → writer and reader land on the same
+/// file (test seam: pattern of `TYLLUAN_CONFUSION_DB`).
+pub fn audit_db_path() -> std::path::PathBuf {
+    std::env::var("TYLLUAN_AUDIT_DB")
+        .unwrap_or_else(|_| "./data/audit.db".to_string())
+        .into()
+}
+
+/// Write an audit log entry for every tylluan_do tool call.
 /// Uses SHA-256 hash chaining: each entry stores the hash of the previous entry,
 /// making tampering detectable. Called fire-and-forget — errors are non-fatal.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &str, success: bool, preview: &str, latency_ms: u64, human_intervention: bool) -> Result<(), String> {
-    let db_path = std::path::Path::new("./data/audit.db");
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("audit mkdir: {e}"))?;
-    }
-    let conn = crate::config::open_db(db_path).map_err(|e| format!("audit open: {e}"))?;
+    let conn = crate::config::open_db(&audit_db_path()).map_err(|e| format!("audit open: {e}"))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS guild_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,8 +78,7 @@ pub(crate) fn log_audit_entry(intent: &str, guild: &str, tool: &str, agent_id: &
 /// Verify the integrity of the audit chain from oldest to newest.
 /// Returns (ok_count, bad_count) — bad > 0 means tampering detected.
 pub fn verify_audit_chain() -> Result<(usize, usize), String> {
-    let db_path = std::path::Path::new("./data/audit.db");
-    let conn = match crate::config::open_db(db_path) {
+    let conn = match crate::config::open_db(&audit_db_path()) {
         Ok(c) => c,
         Err(_) => return Ok((0, 0)),
     };
@@ -344,5 +352,51 @@ mod tests {
         }
         assert_eq!((ok, bad), (2, 0), "mixed legacy+stamped chain must verify fully");
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// Audit-store seam contract, pinned in BOTH directions (seam-unification
+    /// pass): write through the env seam and read through it — same rows must
+    /// appear, proving writer and reader resolve to the same file. Also pins
+    /// the unset default so the migration is byte-identical when no env var
+    /// is present.
+    /// SAFETY (set_var): edition-2024 unsafe op. Lib-test binaries run tests
+    /// on many threads, and no other test in this binary touches
+    /// TYLLUAN_AUDIT_DB, but env is process-global — guard a static AtomicBool
+    /// so any future second user of this seam in the same binary panics in
+    /// development instead of racing silently.
+    #[test]
+    fn audit_store_seam_write_and_read_land_on_same_file() {
+        use super::{audit_db_path, log_audit_entry};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEAM_TEST_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+        assert!(
+            !SEAM_TEST_IN_FLIGHT.swap(true, Ordering::SeqCst),
+            "a second test in this binary is using TYLLUAN_AUDIT_DB concurrently — env is process-global"
+        );
+
+        let db = std::env::temp_dir().join(format!("audit_seam_rt_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        // SAFETY: guarded single-user section; restored below.
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", &db) };
+
+        // 1) Default when unset is the historical path (byte-identical).
+        unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
+        assert_eq!(audit_db_path(), std::path::PathBuf::from("./data/audit.db"));
+        // 2) Writer resolves through the seam...
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", &db) };
+        log_audit_entry("seam intent", "guild_x", "tool_y", "agent-z", true, "p", 42, false)
+            .expect("write through seam must succeed");
+        // 3) ...and the reader (the MD-7 read path's resolver) sees the SAME file.
+        let rows = crate::transport::http::api_v1::api_audit::latency_rows_from(
+            &audit_db_path(),
+            "",
+        )
+        .expect("read through seam must succeed");
+        assert_eq!(rows.len(), 1, "exactly the row just written: {rows:?}");
+        assert_eq!(rows[0], (Some(42), "ok".to_string()));
+
+        unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
+        let _ = std::fs::remove_file(&db);
+        SEAM_TEST_IN_FLIGHT.store(false, Ordering::SeqCst);
     }
 }

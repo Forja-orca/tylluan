@@ -41,7 +41,8 @@ pub async fn audit_verify() -> impl axum::response::IntoResponse {
 //
 // `TYLLUAN_AUDIT_DB` relocates the store: primarily a test seam (same
 // pattern as `TYLLUAN_CONFUSION_DB` in the WS3 collector), also lets an
-// operator place the audit DB elsewhere.
+// operator place the audit DB elsewhere. Resolved in ONE place:
+// `handler_do::audit_db_path`.
 
 /// Nearest-rank percentile over `values` (does not need to be pre-sorted;
 /// `values` is sorted in place). Returns 0 for an empty slice.
@@ -109,6 +110,10 @@ pub(crate) fn cutoff_clause(window_minutes: Option<i64>) -> String {
     }
 }
 
+// Path resolution lives in `handler_do::audit_db_path` (single owner — the
+// writer and the verifier resolve through the same function; this module
+// does NOT check TYLLUAN_AUDIT_DB itself anymore).
+
 /// Read-only single-pass reader over the audit DB (strictly SELECT).
 /// Path-injected so tests exercise THIS code against a temp file.
 pub(crate) fn latency_rows_from(
@@ -145,12 +150,11 @@ pub struct AuditLatencyParams {
 pub async fn audit_latency_stats_handler(
     axum::extract::Query(params): axum::extract::Query<AuditLatencyParams>,
 ) -> impl axum::response::IntoResponse {
-    let db_path = std::env::var("TYLLUAN_AUDIT_DB")
-        .unwrap_or_else(|_| "./data/audit.db".to_string());
+    let db_path = handler_do::audit_db_path();
     let cutoff = cutoff_clause(params.window_minutes);
 
     let rows = match tokio::task::spawn_blocking(move || {
-        latency_rows_from(std::path::Path::new(&db_path), &cutoff)
+        latency_rows_from(&db_path, &cutoff)
     })
     .await
     {
