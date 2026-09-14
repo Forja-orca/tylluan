@@ -477,10 +477,12 @@ pub async fn handle_tylluan_do(
     // Cognitive Scheduler — Phase 3, OBSERVATION ONLY (same pattern as
     // CoherenceGate Layer 4 at first): build a TaskContext from the fully
     // resolved Stage-1 data and log decide()'s verdict next to the routing
-    // trace. The verdict is deliberately DROPPED — nothing below reads it;
-    // guild_name and tool selection flow exactly as before this call existed.
-    // Any change to observable routing caused by this call is a bug.
-    crate::router::scheduler::observe::observe_scheduling(
+    // trace. Dispatch still never READS the verdict — guild_name and tool
+    // selection flow exactly as before this call existed. WS3: the verdict is
+    // now also CARRIED (not consumed) to Stage 3, where the outcome half of
+    // the pair is known and the confusion collector persists it. Plan mode
+    // drops it here: plans never execute, so there is no outcome to pair.
+    let scheduler_decision = crate::router::scheduler::observe::observe_scheduling(
         server,
         &crate::router::scheduler::observe::SchedulingObservation {
             intent: &intent,
@@ -492,6 +494,7 @@ pub async fn handle_tylluan_do(
             plan_mode,
         },
     ).await;
+    let scheduler_decision = (!plan_mode).then_some(scheduler_decision);
 
     // M31-P2: Plan mode — return resolved guild+tool+args for approval before executing
     if plan_mode {
@@ -532,7 +535,7 @@ pub async fn handle_tylluan_do(
     // Stage 3: Post-process — reactive cascade, agent profiles, audit, anchor learning, lesson drain, etc.
     let (mut result, _) = post_process_outcome(
         server, &intent, &resolved.guild_name, &resolved.tool_name,
-        &agent_id, remember, result, latency_ms,
+        &agent_id, remember, scheduler_decision, result, latency_ms,
     ).await;
 
     // Stage 4: Persist to memory and SilvaDB if remember flag or agent_id is set
@@ -1074,6 +1077,10 @@ async fn post_process_outcome(
     tool_name: &str,
     agent_id: &Option<String>,
     remember: bool,
+    // WS3: the Scheduler's verdict carried unused from Stage 1 (`None` on
+    // the plan path — plans never execute, nothing to pair). Consumed only
+    // by the observation-only confusion collector below; never by dispatch.
+    scheduler_decision: Option<crate::router::scheduler::types::SchedulingDecision>,
     mut result: CallToolResult,
     latency_ms: u64,
 ) -> (CallToolResult, bool) {
@@ -1081,6 +1088,7 @@ async fn post_process_outcome(
         && !result.content.iter().filter_map(|c| c.as_text())
             .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
 
+    let mut cascade_fired = false;
     if !is_success && guild_name != "coordinator" {
         let c_score = crate::router::complexity::score_complexity(intent);
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
@@ -1108,6 +1116,7 @@ async fn post_process_outcome(
                 Ok(cascade_res) => {
                     info!("🔄 Reactive Cascade successful for '{}'", intent);
                     result = cascade_res;
+                    cascade_fired = true;
                     is_success = result.is_error != Some(true)
                         && !result.content.iter().filter_map(|c| c.as_text())
                             .any(|t| t.text.contains("Exit code:") && !t.text.contains("Exit code: 0"));
@@ -1116,6 +1125,31 @@ async fn post_process_outcome(
                     warn!("🔄 Reactive Cascade failed to execute for '{}': {:?}", intent, e);
                 }
             }
+        }
+    }
+
+    // WS3 confusion collector — OBSERVATION ONLY. Pairs the Scheduler's
+    // verdict (carried unused from Stage 1; None on the plan path and on
+    // cascade re-entry, where the inner dispatch records its own row) with
+    // what actually happened here: routed guild/tool, final guild after any
+    // reactive cascade, cascade flag, success. One complete row per
+    // completed dispatch, fire-and-forget; failures are logged and never
+    // propagate. NOTHING reads the store back into dispatch — cutover is a
+    // separate Tech Lead decision on accumulated tallies, not this code.
+    if let Some(decision) = scheduler_decision {
+        let final_guild_str: &str = if cascade_fired { "coordinator" } else { guild_name };
+        let rec = crate::router::scheduler::confusion::ConfusionRecord {
+            intent,
+            agent_id: agent_id.as_deref(),
+            decision: &decision,
+            routed_guild: guild_name,
+            routed_tool: tool_name,
+            final_guild: final_guild_str,
+            cascade_fired,
+            success: is_success,
+        };
+        if let Err(e) = crate::router::scheduler::confusion::record_dispatch_pair(&rec) {
+            warn!("scheduler confusion record failed (non-fatal): {e}");
         }
     }
 
