@@ -272,4 +272,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // Fase 1 circuito LLM examples (CoherenceGate → dataset): exporta los
         // ejemplos estructurados a NDJSON con split train/heldout por node_id.
         .route("/api/v1/llm-examples/export", get(llm_examples_export_handler))
+        // MD-7 closure: read-only per-request latency percentiles aggregated
+        // from guild_audit_log (one row = one completed tylluan_do dispatch).
+        .route("/api/v1/audit/latency", get(api_audit::audit_latency_stats_handler))
 }

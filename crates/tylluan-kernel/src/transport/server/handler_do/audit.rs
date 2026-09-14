@@ -124,6 +124,19 @@ pub fn verify_audit_chain() -> Result<(usize, usize), String> {
     Ok((ok, bad))
 }
 
+/// Open ./data/audit.db strictly for reading (SQLITE_OPEN_READ_ONLY).
+/// Guarantees the caller cannot mutate the audit store — read-only endpoints
+/// use this instead of `open_db` so an accidental write would fail at the
+/// driver level, not just by convention. Never creates the file.
+pub fn audit_open_readonly(
+    path: &std::path::Path,
+) -> Result<rusqlite::Connection, String> {
+    let flags =
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    rusqlite::Connection::open_with_flags(path, flags)
+        .map_err(|e| format!("audit open readonly: {e}"))
+}
+
 /// Opt-in safety filter for dangerous intents.
 /// Returns Some(reason) if the intent matches a dangerous pattern.
 pub fn check_dangerous_intent(intent: &str) -> Option<&'static str> {
