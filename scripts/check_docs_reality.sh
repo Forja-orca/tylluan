@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Verifies that every file path and port number cited in the docs actually
 # matches reality, and that AGENTS.md/CLAUDE.md don't contradict each other
 # on the current version.
@@ -94,10 +94,16 @@ for doc in "${DOCS[@]}"; do
         case "$tok" in
             arXiv:*) continue ;; # arXiv IDs (:2602.01848) are NOT ports
         esac
-        if echo "$tok" | grep -qE "$hist_regex"; then
+        # Check if the full line contains historical keywords
+        full_line=$(sed -n "${lineno}p" "$doc")
+        if echo "$full_line" | grep -qE "$hist_regex"; then
             continue
         fi
         p="${tok#:}"
+        # Skip known non-kernel ports (Vite dev server, STUN server, etc.)
+        case "$p" in
+            5173|19302) continue ;;
+        esac
         if [ "$p" != "$real_port" ]; then
             # ADRs record decisions at a point in time -- old ports there are
             # inherently historical context, report as low-confidence, never
