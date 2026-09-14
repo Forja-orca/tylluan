@@ -23,6 +23,17 @@ pub struct DockerStatusResponse {
     pub version: Option<String>,
 }
 
+/// GET /api/v1/scheduler/confusion — WS3 observation tallies for the
+/// eventual cutover decision. Read-only aggregate over the confusion
+/// store; the store itself is never read by dispatch (observation-only
+/// contract). Errors surface as 500 with the reason — triage endpoint.
+pub async fn scheduler_confusion_handler() -> impl IntoResponse {
+    match crate::router::scheduler::confusion::tallies() {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
 pub async fn bash_execute_handler(State(state): State<Arc<HttpState>>, Json(req): Json<BashExecuteRequest>) -> Response {
     // Redirigir al gremio bash de forma segura a travÃ©s de tylluan_do
     let server_arc = require_server!(state);
