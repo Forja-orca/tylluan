@@ -18,7 +18,7 @@ from deepeval.test_case import LLMTestCase
 from deepeval.metrics import FaithfulnessMetric, ContextualPrecisionMetric
 from deepeval.models.base_model import DeepEvalBaseLLM
 
-KERNEL_URL = "http://127.0.0.1:4000"
+KERNEL_URL = "http://127.0.0.1:47004"
 
 
 def _call_llama_backend(prompt, max_tokens=64, timeout=180):

@@ -3,7 +3,7 @@
 3 runs x (12 recall + 12 do) = 72 HTTP calls. Saves raw per-call latencies."""
 import json, time, urllib.request, statistics, datetime, pathlib
 
-BASE = "http://127.0.0.1:4000/api/v1/do"
+BASE = "http://127.0.0.1:47004/api/v1/do"
 OUT = pathlib.Path("benchmarks/results/latency_baseline_%s.json" % datetime.date.today().strftime("%Y%m%d"))
 
 RECALL = [

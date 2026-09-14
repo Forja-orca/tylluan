@@ -12,7 +12,7 @@ Usage: python benchmarks/spikes/coherence_gate_reasoning/spike_hybrid_classifica
 import json, sys, time, urllib.request
 from pathlib import Path
 
-KERNEL = "http://127.0.0.1:4000"
+KERNEL = "http://127.0.0.1:47004"
 CASES_FILE = Path(__file__).parent / "zone_a_cases.json"
 GRAMMAR = 'root ::= decision\ndecision ::= "IRRELEVANT" | "AMBIGUOUS" | "RELEVANT"'
 
