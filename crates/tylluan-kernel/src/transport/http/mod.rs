@@ -1017,7 +1017,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-fn build_router(state: Arc<HttpState>) -> Router {
+/// Build the FULL production router (public routes + bearer-auth-protected
+/// API v1/MCP/SSE + fallback). `pub` so integration tests (WS7 adversarial
+/// battery) can drive the real middleware stack — handlers-only tests on
+/// `api_v1_routes()` bypass auth entirely by construction.
+pub fn build_router(state: Arc<HttpState>) -> Router {
     // CORS: Only known localhost origins (dashboard dev:5173, prod:3030, kernel:3030)
     let cors = CorsLayer::new()
         .allow_origin([
