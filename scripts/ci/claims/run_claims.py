@@ -51,8 +51,22 @@ def _test_block_line_numbers(file_text: str) -> set[int]:
     # occurrence happens to be the last two lines of its file. Fixed by
     # capping the "look for an opening brace" phase: if we hit a bare
     # statement terminator (`;`) before ever seeing `{`, the item has no
-    # block -- stop there. Also hard-capped at 5 lookahead lines regardless,
-    # so no single malformed/unusual attribute can blind the rest of a file.
+    # block -- stop there. Also hard-capped at 5 lookahead lines for THIS
+    # phase only, so no single malformed/unusual attribute can blind the
+    # rest of a file while still looking for where the block even starts.
+    #
+    # I4 re-review fix (2026-09-14): the lookahead cap was wrongly applied
+    # to the WHOLE brace-matching scan, not just the "find the opening
+    # brace" phase -- so any `#[cfg(test)] mod tests { ... }` block longer
+    # than 5 lines (i.e. almost all of them) stopped being excluded partway
+    # through, and every real test line past that point counted as a live
+    # match again. This is exactly the false-positive class the 2026-08-18
+    # fix above was meant to close, reintroduced by capping the wrong phase
+    # (caught live: encrypt-at-rest-single-choke-point failing CI on a test
+    # fixture, api_audit.rs). Fixed by decoupling the two phases: find the
+    # opening `{` within MAX_LOOKAHEAD_LINES_FOR_BRACE lines (unchanged),
+    # then track depth to the matching close with no line cap -- a test
+    # module can be arbitrarily long.
     MAX_LOOKAHEAD_LINES_FOR_BRACE = 5
     excluded: set[int] = set()
     lines = file_text.splitlines()
@@ -63,6 +77,7 @@ def _test_block_line_numbers(file_text: str) -> set[int]:
             j = i
             depth = 0
             opened = False
+            # Phase 1: find the opening brace, capped lookahead.
             while j < n and (j - i) < MAX_LOOKAHEAD_LINES_FOR_BRACE:
                 line = lines[j]
                 for ch in line:
@@ -78,6 +93,24 @@ def _test_block_line_numbers(file_text: str) -> set[int]:
                     # Braceless item (e.g. `mod tests;`) -- nothing more to exclude.
                     break
                 j += 1
+            else:
+                j -= 1  # loop exhausted the cap without opening or closing
+            # Phase 2: if a block opened but hasn't closed yet, track depth
+            # to its match with no line limit -- the block itself can be
+            # any length.
+            if opened and depth > 0:
+                j += 1
+                while j < n:
+                    line = lines[j]
+                    for ch in line:
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                    excluded.add(j + 1)  # 1-indexed
+                    if depth <= 0:
+                        break
+                    j += 1
             i = j + 1
             continue
         i += 1
