@@ -138,6 +138,17 @@ pub async fn coloquio_post_message(
     if req.content.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "content cannot be empty" }))).into_response();
     }
+    // WS7 battery guard: reject nonexistent non-slug channel ids BEFORE the
+    // DB layer with a 400 whose message contains no client input (the old
+    // path surfaced them as a 500 echoing the raw id). Existing channels of
+    // any id keep working (backward compat preserved).
+    if !state.coloquio.channel_exists(&id).await
+        && !crate::memory::coloquio::is_valid_channel_slug(&id)
+    {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "channel does not exist and channel id is not a valid slug (alphanumeric/-/_, max 64 chars)"
+        }))).into_response();
+    }
     let mut role = req.role.clone();
     if (headers.contains_key("X-Agent-Id") || headers.contains_key("x-agent-id"))
         && role == "human" {

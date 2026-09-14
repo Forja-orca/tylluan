@@ -65,6 +65,23 @@ pub fn is_valid_channel_slug(id: &str) -> bool {
         && id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
 }
 
+impl ColoquioDb {
+    /// Whether a channel already exists. Exists-check without the
+    /// auto-create side effects of `post_message`: lets HTTP handlers
+    /// validate ids up front (WS7 battery guard — posting to an existing
+    /// channel of ANY id stays backward-compatible; only nonexistent
+    /// non-slug ids are rejectable client-side).
+    pub async fn channel_exists(&self, channel_id: &str) -> bool {
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM coloquio_channels WHERE channel_id = ?1)",
+            params![channel_id],
+            |row| row.get::<_, bool>(0),
+        )
+        .unwrap_or(false)
+    }
+}
+
 fn get_flexible_created_at(row: &rusqlite::Row, index: usize) -> rusqlite::Result<i64> {
     let value: rusqlite::types::Value = row.get(index)?;
     match value {
@@ -405,8 +422,12 @@ impl ColoquioDb {
                 )?;
                 if !exists {
                     if !is_valid_channel_slug(&channel_id) {
+                        // Do NOT interpolate the channel id into the error:
+                        // it is unvalidated client input and HTTP handlers
+                        // surface error strings to callers (WS7 battery).
+                        tracing::debug!("coloquio: rejected non-slug channel id (len {})", channel_id.len());
                         anyhow::bail!(
-                            "channel '{channel_id}' does not exist and is not a valid slug (alphanumeric/-/_, max 64 chars). Create it first or use 'publica en coloquio <canal>: <mensaje>'"
+                            "channel id does not exist and is not a valid slug (alphanumeric/-/_, max 64 chars). Create it first or use 'publica en coloquio <canal>: <mensaje>'"
                         );
                     }
                     conn.execute(
