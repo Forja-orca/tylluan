@@ -37,7 +37,7 @@ Fuente verificada en disco 2026-09-14: `api_ops.rs:101-137` (ruteado en
 | Saturación | `saturation.node_count/edge_count` | **Real** — Silva | — |
 | Uptime | `uptime_seconds` | **Real** — `state.start_time` | — |
 | SLO | `slo_target: 99.9` | **Decorativa** — constante sin medición de disponibilidad detrás | MD-4/MD-5 |
-| Latencia por request | — | **No expuesta** — `metrics_ring` la recolecta en proceso pero ninguna ruta la lee | MD-7 |
+| Latencia por request | `GET /api/v1/audit/latency` | **Real** — percentiles nearest-rank sobre `guild_audit_log.latency_ms` (un dispatch = una fila), commit `900816a`. El ring 5s-sampled ya tenía ruta (`/api/v1/metrics/history` — corrije la premisa original del MD-7) pero es media-de-medias, inútil para percentiles | MD-7 (cerrado) |
 
 **Lectura clave:** las señales de *tráfico y saturación* son reales; las de
 *errores y disponibilidad* no miden lo que dicen (MD-4). No hay ninguna
@@ -71,7 +71,7 @@ mayormente 74-700ms) pero el `summary` no separa condiciones — ver MD-5.
 | `do` | warm | p95 | sin separación en summary | < 5.0s | MEDIBLE-MANUAL |
 | `do` | loaded / multi-agent | p99 | sin datos | < 30s | **ASPIRACIONAL** (MD-5: harness sin tags de condición) |
 | `do` remote | mesh | p95 | sin datos | < 60s | **ASPIRACIONAL** (sin harness de dispatch remoto) |
-| `recall`/`do` | continuo en producción | p50/p95/p99 | `metrics_ring` lo recolecta, nadie lo lee | exposición + dashboard | **ASPIRACIONAL** (MD-7: endpoint read-only) |
+| `recall`/`do` | continuo en producción | p50/p95/p99 | `GET /api/v1/audit/latency` (ventana opcional `window_minutes`) | p95 warm < 5s / p99 < 30s | MEDIBLE-HOY (commit `900816a`; ver MD-7 corregido) |
 
 **Cierre de la brecha:** extender `benchmarks/latency_baseline.py` con
 columnas de condición (cold/warm, idle/loaded) y separar el summary — el
@@ -91,7 +91,7 @@ harness ya existe y está comiteado, es la pieza más barata de cerrar.
 
 | Señal | Fuente hoy | Objetivo propuesto | Estado |
 |-------|-----------|--------------------|--------|
-| Tasa de error real | **ninguna** (`errors.rate_percent` es constante por estado, MD-4) | < 1% de dispatches con outcome fallido | **ASPIRACIONAL** (fuente natural: agregación de outcome en `guild_audit_log`) |
+| Tasa de error real | `GET /api/v1/audit/latency` → `error_rate` (status-aware sobre `guild_audit_log`, commit `900816a`); el bloque `errors` de golden-signals sigue sintético (MD-4) | < 1% de dispatches con outcome fallido | MEDIBLE-HOY (percent sobre todas las filas de la ventana; golden-signals pendiente de reconectar a esta fuente) |
 | Disponibilidad | **ninguna** (`slo_target: 99.9` decorativo) | 99.9% mensual medido por probe | **ASPIRACIONAL** (requiere probe externo + contador real) |
 | Guilds caídas | `registry.status_all()` vía golden-signals | 0 caídas no-intencionales (distinguir FAILURE de INTENTIONAL_STOP — Deep/WS4) | MEDIBLE-HOY (parcial: cuenta caídas, no las clasifica) |
 
@@ -108,8 +108,10 @@ harness ya existe y está comiteado, es la pieza más barata de cerrar.
 
 ## 3. Qué cerraría la matriz completa
 
-1. **MD-7 (barato):** endpoint read-only sobre `metrics_ring` → convierte
-   las filas de latencia continua de ASPIRACIONAL a MEDIBLE-HOY.
+1. ~~**MD-7 (barato):** endpoint read-only sobre `metrics_ring`~~ →
+   **HECHO 2026-09-14** (`900816a`): `GET /api/v1/audit/latency` convierte
+   las filas de latencia continua y la tasa de error real en MEDIBLE-HOY
+   (y corrige la premisa del MD-7 — ver registro).
 2. **MD-4 (medio):** contadores reales de error (agregación de
    `guild_audit_log`) + probe de disponibilidad → convierte §2.3.
 3. **MD-5 (medio):** tags de condición en `latency_baseline.py` → separa

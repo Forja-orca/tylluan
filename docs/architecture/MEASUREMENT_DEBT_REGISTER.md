@@ -176,16 +176,49 @@ tests.
 
 ---
 
-## MD-7 · `metrics_ring` se muestrea pero no se expone — `ABIERTO`
+## MD-7 · Telemetría de latencia por-request sin fuente consultable — `CERRADO` (2026-09-14, commit `900816a`)
 
-**Qué pasa:** el kernel recolecta telemetría en proceso
-(`metrics_ring::MetricsRingBuffer`, creado y muestreado en
-`transport/http/mod.rs:430` y `:840` — verificado 2026-09-14) pero
-**ninguna ruta HTTP la lee** (no aparece en `api_v1/routes.rs`). Es el caso
-opuesto al MD-4: medición real, invisible. Para la matriz SLO es la fuente
-natural de percentiles por-request sin instrumentación nueva — falta
-exponerla (endpoint read-only trivial, fuera del alcance docs-only de este
-ciclo).
+**Qué decía el ítem:** `metrics_ring` se muestrea en proceso pero ninguna
+ruta HTTP la lee.
+
+**Corrección del registro (2026-09-14, al re-verificar para cerrar):** la
+premisa era falsa. `GET /api/v1/metrics/history` existe y lee el ring
+(`metrics_history_handler` en `api_monitor.rs`, ruta en `routes.rs:174`)
+desde la era v0.1.0 — presente en el split `8008c50` del 2026-08-13 y antes
+en el `api_v1.rs` monolítico. La verificación original falló porque el grep
+se ancló en el nombre del módulo (`metrics_ring`), y ni la cadena de ruta
+(`metrics/history`) ni la del handler (`metrics_history_handler`) lo
+contienen. Lección registrada: verificar por handler/ruta, no por nombre de
+módulo.
+
+**El gap real, que sí existía:** ni el ring (muestreo de 5s, latencia media
+de medias por guild — inútil para percentiles) ni ningún otro endpoint
+agregaba la latencia **por request** que `guild_audit_log.latency_ms` ya
+registraba en cada dispatch de `tylluan_do`.
+
+**Cierre:** `GET /api/v1/audit/latency` (commit `900816a`) — agregación
+read-only sobre `guild_audit_log` con conexión estrictamente
+SQLITE_OPEN_READ_ONLY (helper `audit_open_readonly`: una escritura
+accidental fallaría a nivel de driver, no por convención).
+
+**Campos:** `latency_ms.{p50,p95,p99,max,sampled,zero_latency_excluded}`
+(percentil nearest-rank), `error_rate.{total,errors,percent}` (status-aware
+sobre TODAS las filas de la ventana), `available`, `window_minutes`,
+`source`, `note`, `generated`. Parámetro opcional `window_minutes`; sin
+él, historial completo.
+
+**Qué es una fila:** un dispatch completado de `tylluan_do`. Las filas del
+do-path principal llevan la duración real del ciclo intent→resultado; los
+caminos secundarios escriben 0 y se excluyen de los percentiles
+reportándose aparte (`zero_latency_excluded`) — ni inventados ni
+descartados en silencio. DB ausente → `available:false` con 200, nunca
+500 (convención non-fatal de golden-signals). `TYLLUAN_AUDIT_DB` reubica
+el store (seam de test, patrón `TYLLUAN_CONFUSION_DB`).
+
+**Verificación:** 796/796 lib (786 + 10 nuevos), test de integración a
+través del router real con matemática exacta de percentiles
+(`tests/audit_latency_endpoint_test.rs`), clippy --all-targets -D warnings
+limpio.
 
 ---
 
@@ -214,5 +247,5 @@ correcta adoptada, no borrado del número.
 | MD-4 | Golden-signals errors sintético | ABIERTO | sin asignar |
 | MD-5 | Claims globales de latencia vs cola condicionada | ABIERTO | matriz SLO + harness de latencia |
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
-| MD-7 | metrics_ring invisible | ABIERTO | sin asignar (endpoint read-only) |
+| MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
