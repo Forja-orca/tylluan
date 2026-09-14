@@ -19,9 +19,12 @@
 //! reads the store back into dispatch. Cutover needs Tech Lead sign-off
 //! (ADR + separate cycle); this module only accumulates the evidence.
 //!
-//! Storage: SQLite at `./data/scheduler_confusion.db` (same pattern as the
-//! audit log: `config::open_db`, idempotent CREATE TABLE, fire-and-forget
-//! via `spawn_blocking`, errors non-fatal). One row per completed dispatch,
+//! Storage: SQLite at `./data/scheduler_confusion.db` by default, resolved
+//! by `confusion_db_path()` — the single owner of path resolution (both the
+//! write path and the `/scheduler/confusion` read path go through it;
+//! `TYLLUAN_CONFUSION_DB` is checked in exactly one place). Same pattern as
+//! the audit log: `config::open_db`, idempotent CREATE TABLE, fire-and-forget
+//! via `spawn_blocking`, errors non-fatal. One row per completed dispatch,
 //! inserted at Stage 3 when both halves of the pair are known — no
 //! pending-row correlation keys, no partial rows. Plan-mode dispatches never
 //! reach Stage 3 and are excluded by construction (nothing executed, so
@@ -49,6 +52,19 @@
 //! ```
 
 use serde_json::json;
+
+/// Resolve the confusion store path — THE single owner of path resolution
+/// for `./data/scheduler_confusion.db`. The writer (`record_dispatch_pair`)
+/// and the reader behind `/api/v1/scheduler/confusion` (`tallies`) both call
+/// THIS; `TYLLUAN_CONFUSION_DB` is checked in exactly one place. Unset env →
+/// byte-identical to the historical hardcoded path; set → writer and reader
+/// land on the same file (audit store got the same treatment for
+/// `TYLLUAN_AUDIT_DB` in the seam-unification pass).
+pub fn confusion_db_path() -> std::path::PathBuf {
+    std::env::var("TYLLUAN_CONFUSION_DB")
+        .unwrap_or_else(|_| "./data/scheduler_confusion.db".to_string())
+        .into()
+}
 
 /// Scheduler verdict short name for storage. `StandardGuild` carries empty
 /// ids in the current matrix (§5) — stored bare; `FastLane` keeps its
@@ -123,9 +139,7 @@ pub struct ConfusionRecord<'a> {
 /// writing test rows into the developer's live tallies, but also lets an
 /// operator place the store elsewhere.
 pub fn record_dispatch_pair(rec: &ConfusionRecord<'_>) -> Result<(), String> {
-    let path = std::env::var("TYLLUAN_CONFUSION_DB")
-        .unwrap_or_else(|_| "./data/scheduler_confusion.db".to_string());
-    record_into(std::path::Path::new(&path), rec)
+    record_into(&confusion_db_path(), rec)
 }
 
 /// Real insert logic, path-injected so tests exercise THIS code (not a
@@ -193,14 +207,14 @@ pub(crate) fn record_into(db_path: &std::path::Path, rec: &ConfusionRecord<'_>) 
 /// overall and per guild, plus the cascade-fires that a scheduler verdict of
 /// DeliberativeCoordinator would have owned.
 pub fn tallies() -> Result<serde_json::Value, String> {
-    tallies_from(std::path::Path::new("./data/scheduler_confusion.db"))
+    tallies_from(&confusion_db_path())
 }
 
 /// Real aggregation logic, path-injected for tests.
 pub(crate) fn tallies_from(db_path: &std::path::Path) -> Result<serde_json::Value, String> {
     let conn = match crate::config::open_db(db_path) {
         Ok(c) => c,
-        Err(_) => return Ok(json!({ "total": 0, "agrees": 0, "differ": 0, "by_guild": {}, "note": "store not created yet" })),
+        Err(_) => return Ok(json!({ "total": 0, "agrees": 0, "differ": 0, "differ_with_cascade_fired": 0, "by_guild": {}, "note": "store not created yet" })),
     };
     let _ = conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS scheduler_confusion (
@@ -388,7 +402,7 @@ mod tests {
 
     #[test]
     fn tallies_on_missing_store_reports_zeroed_shape_not_error() {
-        // A fresh kernel that has never recorded a row gets an honest empty
+        // A fresh kernel that has no recorded rows gets an honest empty
         // aggregate — but tallies_from CREATES the file via open_db when the
         // parent exists, so use a path whose parent does not exist to hit the
         // not-created-yet branch deterministically.
@@ -397,6 +411,74 @@ mod tests {
         assert_eq!(t["total"].as_i64(), Some(0));
         assert_eq!(t["agrees"].as_i64(), Some(0));
         assert_eq!(t["differ"].as_i64(), Some(0));
-        assert!(t["by_guild"].as_object().unwrap().is_empty());
+        assert_eq!(t["differ_with_cascade_fired"].as_i64(), Some(0));
+        assert!(t["by_guild"].as_object().is_some_and(|g| g.is_empty()));
+    }
+
+    /// Seam-unification round trip through the path-injected pair (no env):
+    /// the two-directional contract — same rows appear through writer and
+    /// reader when both resolve the SAME temp path.
+    #[test]
+    fn seam_round_trip_write_and_read_same_path() {
+        let db_path = std::env::temp_dir().join(format!("confusion_seam_rt_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db_path);
+        let rec = ConfusionRecord {
+            intent: "seam round-trip",
+            agent_id: Some("buffy"),
+            decision: Box::leak(Box::new(decision(ExecutionClass::StandardGuild { guild_id: String::new(), tool_name: String::new() }))),
+            routed_guild: "bash",
+            routed_tool: "bash_execute",
+            final_guild: "bash",
+            cascade_fired: false,
+            success: true,
+        };
+        record_into(&db_path, &rec).expect("write must succeed");
+        let t = tallies_from(&db_path).expect("read must succeed");
+        assert_eq!(t["total"].as_i64(), Some(1), "writer and reader resolve to the same file");
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// Seam-unification contract for the ENV RESOLUTION itself, pinned in
+    /// both directions: the writer (`record_dispatch_pair`) and the reader
+    /// (`tallies`) must land on the same file when `TYLLUAN_CONFUSION_DB` is
+    /// set, and the resolver's unset default is byte-identical to the
+    /// historical hardcoded path. Env is process-global — a static guard
+    /// panics in development if a second test in this binary ever races it.
+    /// SAFETY (set_var): edition-2024 unsafe op, guarded single-user section.
+    #[test]
+    fn confusion_seam_write_and_read_land_on_same_file() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEAM_TEST_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+        assert!(
+            !SEAM_TEST_IN_FLIGHT.swap(true, Ordering::SeqCst),
+            "a second test in this binary is using TYLLUAN_CONFUSION_DB concurrently — env is process-global"
+        );
+
+        let db = std::env::temp_dir().join(format!("confusion_env_rt_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        // 1) Unset default is byte-identical to the historical hardcoded path.
+        unsafe { std::env::remove_var("TYLLUAN_CONFUSION_DB") };
+        assert_eq!(confusion_db_path(), std::path::PathBuf::from("./data/scheduler_confusion.db"));
+        // 2) Writer through the env seam...
+        unsafe { std::env::set_var("TYLLUAN_CONFUSION_DB", &db) };
+        let d = decision(ExecutionClass::StandardGuild { guild_id: String::new(), tool_name: String::new() });
+        let rec = ConfusionRecord {
+            intent: "seam env round-trip",
+            agent_id: Some("buffy"),
+            decision: Box::leak(Box::new(d)),
+            routed_guild: "bash",
+            routed_tool: "bash_execute",
+            final_guild: "bash",
+            cascade_fired: false,
+            success: true,
+        };
+        record_dispatch_pair(&rec).expect("write through env seam must succeed");
+        // 3) ...and the reader (the /scheduler/confusion read path) sees the SAME file.
+        let t = tallies().expect("read through env seam must succeed");
+        assert_eq!(t["total"].as_i64(), Some(1), "env-set writer and reader must land on the same file: {t}");
+
+        unsafe { std::env::remove_var("TYLLUAN_CONFUSION_DB") };
+        let _ = std::fs::remove_file(&db);
+        SEAM_TEST_IN_FLIGHT.store(false, Ordering::SeqCst);
     }
 }
