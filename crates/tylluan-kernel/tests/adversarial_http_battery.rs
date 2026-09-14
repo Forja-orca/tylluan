@@ -14,15 +14,15 @@
 //!      hostile input must 4xx or degrade to a documented shape).
 //!   3. No sensitive file content leaks through traversal-shaped paths.
 //!
-//! Store isolation: the only store-backed endpoint exercised is
-//! `/api/v1/audit/latency`, pointed at a deliberately corrupted file via
-//! the `TYLLUAN_AUDIT_DB` seam (cycle-4 lesson: ONE sequential test —
-//! env vars are process-global). Write endpoints that would touch real
-//! stores without a seam are exercised only where the harness's in-memory
-//! stores isolate them (`/api/v1/coloquio/*` uses `ColoquioDb::new(":memory:")`
-//! in `support::test_state`). Skipped for lack of a read seam:
-//! `/api/v1/scheduler/confusion` (see the WS3 lib tests for its
-//! path-injected coverage).
+//! Store isolation: the store-backed endpoints exercised are
+//! `/api/v1/audit/latency` and `/api/v1/scheduler/confusion`, each pointed
+//! at deliberately hostile files via the `TYLLUAN_AUDIT_DB` /
+//! `TYLLUAN_CONFUSION_DB` seams (cycle-4 lesson: ONE sequential test — env
+//! vars are process-global; both seams are set/reset within this single
+//! test body). Write endpoints that would touch real stores without a seam
+//! are exercised only where the harness's in-memory stores isolate them
+//! (`/api/v1/coloquio/*` uses `ColoquioDb::new(":memory:")` in
+//! `support::test_state`).
 
 mod support;
 
@@ -234,6 +234,58 @@ async fn adversarial_http_battery() {
     assert_not_server_fault(st, "I2 traversal-shaped channel id", &body);
     assert_no_leak(&body, &["[package]"], "I2");
 
+    // ── J. Hostile confusion store (unblocks the case skipped in cycle 5:  
+    // the seam unification 15077c0 gave tallies() the TYLLUAN_CONFUSION_DB
+    // read seam, so this case is now isolatable). Mirror of the audit
+    // endpoint's hostile-DB treatment: two store shapes — binary garbage
+    // (not a SQLite file at all) and a real SQLite DB with a WRONG schema
+    // (right table name, wrong columns, hostile payloads in values) — both
+    // through the real router. The honest contract, whatever it is: the
+    // endpoint must degrade — no 500, no panic, no internal path/sqlite
+    // error echoed into the body.
+    let hostile_conf = std::env::temp_dir().join(format!(
+        "tylluan_adv_hostile_confusion_{}.db",
+        std::process::id()
+    ));
+
+    // J1: binary garbage — same corruption class as the audit endpoint's case.
+    std::fs::write(&hostile_conf, b"\xDE\xAD\xBE\xEF not a sqlite file \x00\x01\x02").unwrap();
+    // SAFETY (set_var): edition-2024 unsafe op; still inside the one
+    // sequential test body, after TYLLUAN_AUDIT_DB's phases are done.
+    unsafe { std::env::set_var("TYLLUAN_CONFUSION_DB", &hostile_conf) };
+    let (st, body) = send(app.clone(), Request::builder().method("GET").uri("/api/v1/scheduler/confusion").body(Body::empty()).unwrap()).await;
+    assert_not_server_fault(st, "J1 garbage confusion store", &body);
+    assert_no_leak(&body, &["sqlite", "SQLite", "database disk image", ".db", ".toml"], "J1");
+
+    // J2: wrong schema — a REAL SQLite DB whose scheduler_confusion table
+    // has the wrong columns; the values are themselves hostile payloads,
+    // so any reflection of stored data would be caught too. Fresh file:
+    // the J1 garbage file cannot be opened as SQLite at all.
+    let hostile_conf_schema = std::env::temp_dir().join(format!(
+        "tylluan_adv_confusion_wrong_schema_{}.db",
+        std::process::id()
+    ));
+    {
+        let conn = rusqlite::Connection::open(&hostile_conf_schema).unwrap();
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS scheduler_confusion;
+             CREATE TABLE scheduler_confusion (oops TEXT);",
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO scheduler_confusion (oops) VALUES ('x''; DROP TABLE coloquio_messages; --')",
+            [],
+        ).unwrap();
+    }
+    // J2 drive: point the seam at the wrong-schema DB.
+    unsafe { std::env::set_var("TYLLUAN_CONFUSION_DB", &hostile_conf_schema) };
+    let (st, body) = send(app.clone(), Request::builder().method("GET").uri("/api/v1/scheduler/confusion").body(Body::empty()).unwrap()).await;
+    assert_not_server_fault(st, "J2 wrong-schema confusion store", &body);
+    assert_no_leak(&body, &["sqlite", "SQLite", "no such column", "DROP TABLE", ".db", ".toml"], "J2");
+
+    // Reset the seam before the battery's cleanup (env is process-global).
+    unsafe { std::env::remove_var("TYLLUAN_CONFUSION_DB") };
+    let _ = std::fs::remove_file(&hostile_conf);
+    let _ = std::fs::remove_file(&hostile_conf_schema);
     let _ = std::fs::remove_file(&hostile_db);
 }
 

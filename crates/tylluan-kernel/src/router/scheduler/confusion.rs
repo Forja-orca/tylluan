@@ -211,6 +211,13 @@ pub fn tallies() -> Result<serde_json::Value, String> {
 }
 
 /// Real aggregation logic, path-injected for tests.
+///
+/// Unreadable-store contract (WS7 battery J-block, seam unified in
+/// `15077c0`): a store that exists but cannot be read — binary garbage,
+/// wrong schema — degrades to zeroed tallies with a constant note naming
+/// the store unreadable, never an `Err` (the handler would 500 and echo
+/// the sqlite error). The note is distinguishable from healthy-empty
+/// ("observation-only tallies...") and from not-created-yet.
 pub(crate) fn tallies_from(db_path: &std::path::Path) -> Result<serde_json::Value, String> {
     let conn = match crate::config::open_db(db_path) {
         Ok(c) => c,
@@ -228,7 +235,10 @@ pub(crate) fn tallies_from(db_path: &std::path::Path) -> Result<serde_json::Valu
         );"
     );
 
-    let (total, agrees, differs): (i64, i64, i64) = conn.query_row(
+    // Main tally doubles as the readability probe: if the store is corrupt
+    // or its schema is wrong, degrade instead of erroring (see fn doc).
+    // Downstream queries only run once this proves the table readable.
+    let (total, agrees, differs): (i64, i64, i64) = match conn.query_row(
         "SELECT COUNT(*),
                 SUM(CASE WHEN classification = 'Agrees' THEN 1 ELSE 0 END),
                 SUM(CASE WHEN classification = 'Differ' THEN 1 ELSE 0 END)
@@ -237,7 +247,14 @@ pub(crate) fn tallies_from(db_path: &std::path::Path) -> Result<serde_json::Valu
         // SUM over zero rows yields NULL — unwrap_or(0) BEFORE the outer Ok,
         // never a stray `?` on a plain value.
         |r| Ok((r.get(0)?, r.get(1).unwrap_or(0), r.get(2).unwrap_or(0))),
-    ).map_err(|e| format!("confusion tally: {e}"))?;
+    ) {
+        Ok(t) => t,
+        Err(_) => return Ok(json!({
+            "total": 0, "agrees": 0, "differ": 0, "differ_with_cascade_fired": 0,
+            "by_guild": {},
+            "note": "store unreadable (corrupt or wrong schema); tallies unavailable",
+        })),
+    };
 
     let mut stmt = conn.prepare(
         "SELECT routed_guild, classification, COUNT(*) FROM scheduler_confusion GROUP BY routed_guild, classification"
