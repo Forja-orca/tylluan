@@ -12,7 +12,7 @@ Saves raw recall data + trigger analysis to working tree.
 import json, os, time, urllib.request
 from pathlib import Path
 
-KERNEL = "http://127.0.0.1:4000"
+KERNEL = "http://127.0.0.1:47004"
 
 # Load benchmark data
 cases = json.load(open("benchmarks/spikes/coherence_gate_reasoning/cases_real_50.json", encoding="utf-8"))["cases"]

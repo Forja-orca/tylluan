@@ -24,7 +24,7 @@ to be masking the real parallelism win.
 
 Usage:
     python benchmarks/coordinator_bench.py
-    python benchmarks/coordinator_bench.py --kernel http://127.0.0.1:4000 --repeats 5
+    python benchmarks/coordinator_bench.py --kernel http://127.0.0.1:47004 --repeats 5
     python benchmarks/coordinator_bench.py --out results/coordinator_latencies.json
 """
 
@@ -94,7 +94,7 @@ def run_coordinator(kernel: str, token, sub_tasks: list) -> tuple:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kernel", default="http://127.0.0.1:4000")
+    ap.add_argument("--kernel", default="http://127.0.0.1:47004")
     ap.add_argument("--token", default=None)
     ap.add_argument("--repeats", type=int, default=3,
                     help="repeats per query, per strategy (default 3)")

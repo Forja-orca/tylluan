@@ -24,7 +24,7 @@ try:
 except ImportError:
     PRODUCTION_MODEL_LABEL = "unknown (could not import llama_backend.DEFAULT_MODEL)"
 
-KERNEL_URL = "http://127.0.0.1:4000"
+KERNEL_URL = "http://127.0.0.1:47004"
 CASES_FILE = Path(__file__).parent / "cases_real_50.json"
 
 # Same v3 prompt wired into coherence_gate.rs REASONING_PROMPT_V3

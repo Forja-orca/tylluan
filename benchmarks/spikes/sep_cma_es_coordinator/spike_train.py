@@ -179,7 +179,7 @@ def _resolve_kernel_url() -> str:
         port = data.get("port", 4000)
         return f"http://127.0.0.1:{port}"
     except Exception:
-        return "http://127.0.0.1:4000"
+        return "http://127.0.0.1:47004"
 
 KERNEL_URL = _resolve_kernel_url()
 
@@ -401,7 +401,7 @@ def evaluate(weights, scenarios, dry_run=False, label="eval"):
 # --- Main ---
 def main():
     parser = argparse.ArgumentParser(description="sep-CMA-ES Coordinator Spike")
-    parser.add_argument("--kernel", default="http://127.0.0.1:4000", help="Kernel URL (Tylluan default: 4000)")
+    parser.add_argument("--kernel", default="http://127.0.0.1:47004", help="Kernel URL (Tylluan default: 4000)")
     parser.add_argument("--max-gens", type=int, default=MAX_GENS)
     parser.add_argument("--eval-only", action="store_true", help="Skip training, evaluate last model")
     parser.add_argument("--dry-run", action="store_true", help="Simulate without kernel calls")
