@@ -1,4 +1,4 @@
-﻿# Plan de Pruebas End-to-End: TylluanNexus o3
+# Plan de Pruebas End-to-End: TylluanNexus o3
 
 > **Versión**: 1.0  
 > **Estado**: Proyecto Malamadre v2.0 Soberano  

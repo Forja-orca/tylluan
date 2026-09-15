@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Tylluan are documented here.
 

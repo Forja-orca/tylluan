@@ -1,4 +1,4 @@
-﻿# Tylluan Client Integration & Auto-Discovery Guide
+# Tylluan Client Integration & Auto-Discovery Guide
 
 Tylluan acts as a **Sovereign MCP Hub**. This document describes how external AI client agents (such as VS Code Cline/Roo Code, Cursor, Claude Desktop, Qwen Desktop, Codex, or custom Python/shell scripts) connect to Tylluan and dynamically discover available guilds and capabilities.
 

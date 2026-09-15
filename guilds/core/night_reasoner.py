@@ -1,4 +1,4 @@
-﻿"""NightReasoner guild: Small model reasoning and analysis.
+"""NightReasoner guild: Small model reasoning and analysis.
 
 Uses three models in a cascade, each for what it's built for:
 1. BGE-M3 embeddings (already in kernel, 1024d) — intent routing via cosine

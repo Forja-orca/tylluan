@@ -1,4 +1,4 @@
-﻿"""Scheduler guild — async timer service for agent wake-up calls.
+"""Scheduler guild — async timer service for agent wake-up calls.
 
 Architecture:
   SQLite persistence + background polling thread + coloquio callback.

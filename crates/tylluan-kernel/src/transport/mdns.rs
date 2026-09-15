@@ -1,4 +1,4 @@
-﻿//! # mDNS ZeroConf Discovery
+//! # mDNS ZeroConf Discovery
 //!
 //! Advertises the TylluanNexus Universal Gateway on the local network.
 //! Allows IDEs to discover the gateway as `tylluan-nexus-o3.local`.

@@ -1,4 +1,4 @@
-﻿# Tylluan — Architecture Blueprints
+# Tylluan — Architecture Blueprints
 
 > Technical schematics only. No prose. Updated 2026-07-02.
 

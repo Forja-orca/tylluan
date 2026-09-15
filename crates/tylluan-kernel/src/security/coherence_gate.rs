@@ -1,4 +1,4 @@
-﻿//! ADR-011 Coherence Gate — defense for the "second hop" of memory poisoning:
+//! ADR-011 Coherence Gate — defense for the "second hop" of memory poisoning:
 //! `tylluan_recall` already returns poisoned content as inert text (verified
 //! by `adv_memory_poisoning_recall_returns_inert`), but nothing today stops
 //! that content from being fed, unfiltered, into a future generative SLM's

@@ -1,4 +1,4 @@
-﻿"""
+"""
 coloquio_summarizer.py — Periodic Coloquio -> SilvaDB memory pipeline.
 
 Pulls new messages from all Coloquio channels, batches them, and stores

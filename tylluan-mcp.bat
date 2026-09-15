@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 REM Tylluan - Start kernel
 REM Usage: .\tylluan-mcp.bat
 

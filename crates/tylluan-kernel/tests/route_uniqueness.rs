@@ -1,4 +1,4 @@
-﻿//! Verifies that `api_v1_routes()` does not panic on construction.
+//! Verifies that `api_v1_routes()` does not panic on construction.
 //!
 //! If Axum encounters a duplicate route at build time it panics,
 //! which would crash the kernel at startup. This test catches that

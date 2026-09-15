@@ -1,4 +1,4 @@
-﻿//! # Guild Process Manager
+//! # Guild Process Manager
 //!
 //! Spawns Python FastMCP guilds as child processes, manages their lifecycle,
 //! and provides tool discovery + call forwarding via McpProxy.

@@ -1,4 +1,4 @@
-﻿//! # Maintenance Subsystem
+//! # Maintenance Subsystem
 //!
 //! Handles export, import, and model download of the TylluanNexus sovereign state.
 //! Enables the "60-second USB portability" killer feature and auto-download of AI weights.

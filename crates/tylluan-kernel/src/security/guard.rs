@@ -1,4 +1,4 @@
-﻿//! ExecutionGuard — Channel-aware tool access gating.
+//! ExecutionGuard — Channel-aware tool access gating.
 //!
 //! Security policy:
 //! - Trusted channels (stdio, sse, cli, local): full access to all tools

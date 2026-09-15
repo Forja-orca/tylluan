@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Represents one agent declaration in .tylluan/agents.toml.

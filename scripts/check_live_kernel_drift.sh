@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Compares the commit embedded in a LIVE, running kernel against the real
 # current repo HEAD -- catches exactly the 2026-08-22 incident where the
 # running :47004 process was 16 commits behind main and nobody noticed until

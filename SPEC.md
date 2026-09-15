@@ -1,4 +1,4 @@
-﻿# Tylluan — Spec
+# Tylluan — Spec
 
 ## Qué es
 

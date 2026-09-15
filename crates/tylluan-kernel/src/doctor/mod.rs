@@ -1,4 +1,4 @@
-﻿//! # Kernel Doctor Subsystem
+//! # Kernel Doctor Subsystem
 //!
 //! Autonomous diagnostic and repair engine for TylluanNexus.
 //! Operates at the kernel level with access to all core subsystems.

@@ -1,4 +1,4 @@
-﻿# Adding a Guild to Tylluan
+# Adding a Guild to Tylluan
 
 Guilds are Tylluan's extension point: each guild is a small Python FastMCP server that the Rust kernel starts on demand or keeps always on. This guide uses a minimal word-count guild so every step can be copied and adapted.
 

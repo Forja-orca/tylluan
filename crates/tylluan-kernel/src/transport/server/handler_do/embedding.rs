@@ -1,4 +1,4 @@
-﻿/// Deterministic content distillation for write-path embedding.
+/// Deterministic content distillation for write-path embedding.
 ///
 /// Extracts the semantically densest fragment from `output_preview` to use as the
 /// embedding target, instead of embedding the full operational trace wrapper.

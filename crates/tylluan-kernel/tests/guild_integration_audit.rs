@@ -1,4 +1,4 @@
-﻿use tylluan_kernel::memory::silva::SilvaDB;
+use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::consensus::ConsensusEngine;
 use std::sync::Arc;

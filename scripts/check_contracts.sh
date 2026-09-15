@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Verifies that formal JSON Schemas (schemas/) are valid and tests live endpoints
 # against them if the kernel is running.
 #

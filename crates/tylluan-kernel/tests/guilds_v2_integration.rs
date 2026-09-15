@@ -1,4 +1,4 @@
-﻿//! Integration tests for Guild Architecture V2
+//! Integration tests for Guild Architecture V2
 //!
 //! Validates:
 //! 1. Guild catalog structure: all 21 guilds present, correct categories

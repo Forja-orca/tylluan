@@ -1,4 +1,4 @@
-﻿# Docker Install — Lecciones aprendidas
+# Docker Install — Lecciones aprendidas
 
 Problemas encontrados al construir y desplegar la imagen Docker por primera vez,
 y cómo están resueltos en el `Dockerfile` actual para que no ocurran de nuevo.

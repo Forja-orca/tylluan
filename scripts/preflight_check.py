@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pre-flight check para agentes IA y desarrolladores.
 Ejecutar ANTES de modificar archivos marcados con @CONTRACT.
 

@@ -1,4 +1,4 @@
-﻿# 🔬 Sub-Agente: Especialista Rust
+# 🔬 Sub-Agente: Especialista Rust
 Guild: `builders` | Parent: `backend-dev`  
 Version: 1.0.0  
 Tipo: **Sub-agente Especializado**

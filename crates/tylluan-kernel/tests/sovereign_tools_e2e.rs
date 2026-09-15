@@ -1,4 +1,4 @@
-﻿//! End-to-end tests for sovereign tools invariant.
+//! End-to-end tests for sovereign tools invariant.
 
 use tylluan_kernel::config::TimeoutsConfig;
 use tylluan_kernel::doctor::Doctor;

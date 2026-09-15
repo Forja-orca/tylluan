@@ -1,4 +1,4 @@
-﻿"""Seed guild: Tier 1 cold-start seed export/import for SilvaDB.
+"""Seed guild: Tier 1 cold-start seed export/import for SilvaDB.
 
 Tier 1 = own domain, low risk (technical documentation, project knowledge).
 Tier 2 = sensitive domains (medical, legal) requires external verification

@@ -1,4 +1,4 @@
-﻿//! Integration test: mailbox broadcast protocol.
+//! Integration test: mailbox broadcast protocol.
 
 use tylluan_kernel::memory::mailbox::Mailbox;
 use std::sync::Arc;

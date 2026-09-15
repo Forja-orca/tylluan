@@ -1,4 +1,4 @@
-﻿/// BEAM-style scale stress test for TylluanNexus.
+/// BEAM-style scale stress test for TylluanNexus.
 ///
 /// Simulates BEAM (Broad Evaluation of Agent Memory) by expanding
 /// LongMemEval-S haystacks to 100K / 500K / 1M token tiers and

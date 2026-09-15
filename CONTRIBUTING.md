@@ -1,4 +1,4 @@
-﻿# Contributing to Tylluan
+# Contributing to Tylluan
 
 Thank you for your interest in contributing. Tylluan is built by humans and AI agents working together — contributions from both are welcome.
 

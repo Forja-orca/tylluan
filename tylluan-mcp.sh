@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Tylluan — Start kernel (single binary)
 # Usage: ./tylluan-mcp.sh
 

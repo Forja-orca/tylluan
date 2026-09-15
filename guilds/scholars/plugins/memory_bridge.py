@@ -1,4 +1,4 @@
-﻿"""
+"""
 TylluanNexus Memory Bridge — Unified Memory IPC Client.
 
 This module provides a bridge for Python guilds to access the kernel's

@@ -1,4 +1,4 @@
-﻿# 🛡️ Workflow: Auditoría de Salud Completa
+# 🛡️ Workflow: Auditoría de Salud Completa
 Guild: `wardens`  
 Version: 1.0.0
 

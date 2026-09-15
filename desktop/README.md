@@ -1,4 +1,4 @@
-﻿# Tylluan Desktop
+# Tylluan Desktop
 
 **Status: real integration in progress, not just a spike anymore.** Confirmed working: native
 window opens the actual Tylluan dashboard, native chrome (minimize/maximize/resize/close), a

@@ -1,4 +1,4 @@
-﻿//! # Agent Mailbox
+//! # Agent Mailbox
 //!
 //! Asynchronous messaging between agents via SQLite.
 //! Ported from `TylluanMCP/src/brain/SilvaDB.ts` (agent_mail table).

@@ -1,4 +1,4 @@
-﻿//! Consensus Stress & Resilience Test for TylluanNexus o3
+//! Consensus Stress & Resilience Test for TylluanNexus o3
 //! 
 //! Verifies:
 //! 1. High-volume semantic clustering (500+ nodes)

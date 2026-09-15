@@ -1,4 +1,4 @@
-﻿"""Benchmark: embedding router vs majority class vs keyword router.
+"""Benchmark: embedding router vs majority class vs keyword router.
 
 Baseline discipline:
 1. Majority class (trivial baseline): always predict the most common guild

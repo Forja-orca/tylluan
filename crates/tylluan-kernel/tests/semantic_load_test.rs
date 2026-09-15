@@ -1,4 +1,4 @@
-﻿//! Real Semantic Load Test for TylluanNexus o3
+//! Real Semantic Load Test for TylluanNexus o3
 //! 
 //! Verifies:
 //! 1. End-to-end flow: Mailbox -> Embedding -> Clustering -> Consensus

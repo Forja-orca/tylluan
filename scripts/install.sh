@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # 🛡️ TylluanNexus o3 — Sovereign Linux Installer
 # "The AI hub that stays local."
 

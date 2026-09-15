@@ -1,4 +1,4 @@
-﻿//! # Memory Module
+//! # Memory Module
 //!
 //! Persistent memory layer for TylluanNexus:
 //! - **HybridMemory**: FTS5 keyword + vector cosine hybrid search (RRF fusion)

@@ -1,4 +1,4 @@
-﻿use thiserror::Error;
+use thiserror::Error;
 
 /// Unified error type for the TylluanNexus kernel.
 #[derive(Error, Debug)]

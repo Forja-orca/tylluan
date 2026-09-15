@@ -1,4 +1,4 @@
-﻿"""
+"""
 Example 3: Knowledge Graph Exploration
 
 Demonstrates Tylluan's graph capabilities via the sovereign REST API:

@@ -1,4 +1,4 @@
-﻿//! Adversarial security integration tests for TylluanNexus
+//! Adversarial security integration tests for TylluanNexus
 
 use crate::memory::silva::SilvaDB;
 use crate::security::guard::ExecutionGuard;
