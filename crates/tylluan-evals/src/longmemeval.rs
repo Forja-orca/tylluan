@@ -1,4 +1,4 @@
-﻿use anyhow::{Result, Context};
+use anyhow::{Result, Context};
 use serde::Deserialize;
 use std::path::Path;
 use std::time::Instant;

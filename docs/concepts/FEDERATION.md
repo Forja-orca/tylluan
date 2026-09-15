@@ -1,4 +1,4 @@
-﻿# Federación Tylluan — Dos instancias locales
+# Federación Tylluan — Dos instancias locales
 
 ## Arquitectura
 

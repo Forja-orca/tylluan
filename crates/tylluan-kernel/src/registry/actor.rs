@@ -1,4 +1,4 @@
-﻿use crate::registry::guild_process::{GuildRegistry, GuildStatus, GuildCallStats};
+use crate::registry::guild_process::{GuildRegistry, GuildStatus, GuildCallStats};
 use anyhow::Result;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;

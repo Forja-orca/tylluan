@@ -1,4 +1,4 @@
-﻿//! Network tunnel manager.
+//! Network tunnel manager.
 //!
 //! On Windows: auto-configures netsh portproxy so WSL2 clients can reach
 //! the kernel at wsl_bridge_port → kernel_port.

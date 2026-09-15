@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 
 pub fn find_workspace_root() -> PathBuf {
     let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

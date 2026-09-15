@@ -1,4 +1,4 @@
-﻿use tylluan_kernel::memory::mailbox::{Mailbox, BlackboardMessage};
+use tylluan_kernel::memory::mailbox::{Mailbox, BlackboardMessage};
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::sleep;

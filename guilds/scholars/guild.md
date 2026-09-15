@@ -1,4 +1,4 @@
-﻿# 🎓 Gremio de Eruditos (Scholars Guild)
+# 🎓 Gremio de Eruditos (Scholars Guild)
 Version: 1.0.0  
 Oficio Real: **Investigación, Análisis y Gestión del Conocimiento**
 

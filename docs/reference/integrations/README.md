@@ -1,4 +1,4 @@
-﻿# Tylluan — Integrations
+# Tylluan — Integrations
 
 Tylluan speaks standard MCP and connects to any MCP-compatible client. Below is the index of documented integrations.
 

@@ -1,4 +1,4 @@
-﻿"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
+"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
 
 Level B polling from coloquio_wake_scheduling.md. Run at start of each
 session cycle. Does NOT commit, push, or modify repo state — reads only,

@@ -1,4 +1,4 @@
-﻿//! Agent Node Router — peer-to-peer messaging entre agentes via TylluanNexus.
+//! Agent Node Router — peer-to-peer messaging entre agentes via TylluanNexus.
 //!
 //! Cada agente conectado via MCP puede registrar un "nodo" (proceso ligero en el kernel).
 //! Los nodos tienen inbox, pueden enviarse mensajes directos o broadcasts, y pueden

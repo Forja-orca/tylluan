@@ -1,4 +1,4 @@
-﻿use axum::{
+use axum::{
     Json,
     extract::{State, Path as AxumPath},
     http::StatusCode,

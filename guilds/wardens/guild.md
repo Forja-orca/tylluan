@@ -1,4 +1,4 @@
-﻿# 🛡️ Gremio de Guardianes (Wardens Guild)
+# 🛡️ Gremio de Guardianes (Wardens Guild)
 Version: 1.0.0  
 Oficio Real: **Integridad, Seguridad y Observabilidad del Sistema**
 

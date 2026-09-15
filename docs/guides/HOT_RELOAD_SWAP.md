@@ -1,4 +1,4 @@
-﻿# Zero-Downtime Hot-Reload Swap — ARCHIVED DESIGN
+# Zero-Downtime Hot-Reload Swap — ARCHIVED DESIGN
 
 > **⚠️ ARCHIVED — NOT IMPLEMENTED.** This document describes a proxy-based zero-downtime restart design that was considered but not built. Tylluan does **not** have a `tylluan-proxy` binary or `active_port.json`. The kernel (`tylluan-nexus`) binds directly to `:47004`. Clients reconnect via SSE retry on restart. This file is kept for historical context only.
 

@@ -1,4 +1,4 @@
-﻿"""TRINITY Coordinator Guild — Thinker/Worker/Verifier for multi-step tasks.
+"""TRINITY Coordinator Guild — Thinker/Worker/Verifier for multi-step tasks.
 
 Execution model:
   - Tasks that don't reference prior context run in parallel (ThreadPoolExecutor).

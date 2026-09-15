@@ -1,4 +1,4 @@
-﻿//! # HybridMemory: FTS5 + Vector Search + RRF Fusion
+//! # HybridMemory: FTS5 + Vector Search + RRF Fusion
 //!
 //! Ported from `TylluanMCP/src/memory/HybridMemory.ts`.
 //!

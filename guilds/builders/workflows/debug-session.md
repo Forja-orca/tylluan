@@ -1,4 +1,4 @@
-﻿# 🐛 Workflow: Sesión de Debugging Estructurado
+# 🐛 Workflow: Sesión de Debugging Estructurado
 Guild: `builders`  
 Version: 1.0.0
 

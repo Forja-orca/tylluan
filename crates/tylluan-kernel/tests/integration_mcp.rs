@@ -1,4 +1,4 @@
-﻿//! End-to-end MCP protocol integration tests.
+//! End-to-end MCP protocol integration tests.
 //!
 //! Verifies the full MCP tool lifecycle without real guilds or Python:
 //!  1. TylluanServer boots in test mode (SilvaDB in-memory)

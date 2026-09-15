@@ -1,4 +1,4 @@
-﻿//! # Consensus Engine for SilvaDB
+//! # Consensus Engine for SilvaDB
 //! 
 //! Implements the Sovereing Consensus algorithm:
 //! `score = (weight * trust) + (evidence_bonus * 2.0)`

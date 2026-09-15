@@ -1,4 +1,4 @@
-﻿# 📋 Workflow: Nueva Feature Completa
+# 📋 Workflow: Nueva Feature Completa
 Guild: `builders`  
 Version: 1.0.0
 

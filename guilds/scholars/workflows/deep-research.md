@@ -1,4 +1,4 @@
-﻿# 🔍 Workflow: Investigación Profunda
+# 🔍 Workflow: Investigación Profunda
 Guild: `scholars`  
 Version: 1.0.0
 

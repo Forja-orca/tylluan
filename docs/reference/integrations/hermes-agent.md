@@ -1,4 +1,4 @@
-﻿# Tylluan + Hermes Agent (NousResearch)
+# Tylluan + Hermes Agent (NousResearch)
 
 > This document is for external users of
 > [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)

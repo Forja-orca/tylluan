@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Generates the pixel-perfect static vector SVG for Tylluan architecture.
 Eliminates all Mermaid layout glitches on GitHub while providing glowing circuits,

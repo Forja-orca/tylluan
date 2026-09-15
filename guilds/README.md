@@ -1,4 +1,4 @@
-﻿# TylluanNexus — Sistema de Gremios (Guild System)
+# TylluanNexus — Sistema de Gremios (Guild System)
 Version: 2.0.0
 
 ---

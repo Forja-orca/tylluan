@@ -1,4 +1,4 @@
-﻿# 🔬 Sandbox Lab — Gremio de Constructores
+# 🔬 Sandbox Lab — Gremio de Constructores
 Guild: `builders`  
 Version: 1.0.0
 

@@ -1,4 +1,4 @@
-﻿use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use rmcp::model::*;
 use crate::registry::tools::RiskLevel;
 use axum::response::sse::Event;

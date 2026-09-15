@@ -1,4 +1,4 @@
-﻿# Architecture — Tylluan
+# Architecture — Tylluan
 
 ## Overview
 

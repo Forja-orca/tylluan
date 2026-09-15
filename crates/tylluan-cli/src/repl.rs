@@ -1,4 +1,4 @@
-﻿use rustyline::error::ReadlineError;
+use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use colored::*;
 use serde_json::json;

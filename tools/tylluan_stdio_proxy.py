@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 tylluan_stdio_proxy.py — Stdio MCP bridge for TylluanNexus kernel.
 

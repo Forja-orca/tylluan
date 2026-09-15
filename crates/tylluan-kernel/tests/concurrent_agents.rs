@@ -1,4 +1,4 @@
-﻿//! Concurrent agent write safety tests.
+//! Concurrent agent write safety tests.
 //! Validates that 20 simultaneous agents writing to SilvaDB produce no
 //! duplicates, preserve max weight, and leave the graph consistent.
 

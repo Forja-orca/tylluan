@@ -1,4 +1,4 @@
-﻿//! # Enriched Tool Registry
+//! # Enriched Tool Registry
 //!
 //! Provides metadata enrichment for MCP tools, including risk levels,
 //! categories, and agent-optimized descriptions.

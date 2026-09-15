@@ -163,6 +163,15 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "README.md test count — run 'scripts/check_test_count.sh --fix'"
     fi
 
+    # BOM gate (blocking): the UTF-8-BOM bug class broke CI/builds four
+    # separate times (a0a614a, 8c7d0bf, ad96253, 336ed13). check_bom.sh
+    # detects it in ~5s; --fix strips exactly 3 bytes per offender.
+    if bash scripts/check_bom.sh; then
+        ok "no UTF-8 BOM in tracked files"
+    else
+        fail "UTF-8 BOM detected — run 'scripts/check_bom.sh --fix', review the diff, commit"
+    fi
+
     # ADR-013 4th gate (non-predation). Runs in CI too, as the non-blocking
     # job 'no-predation-report' (continue-on-error, same pattern as
     # dead-config-report). Report-only per ADR-013 §2 and the gate's own

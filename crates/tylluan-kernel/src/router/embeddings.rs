@@ -1,4 +1,4 @@
-﻿//! # Embedding Engine
+//! # Embedding Engine
 //!
 //! Provides text-to-vector embeddings for semantic search using FastEmbed (ONNX).
 //!

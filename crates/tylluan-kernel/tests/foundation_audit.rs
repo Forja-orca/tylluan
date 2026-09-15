@@ -1,4 +1,4 @@
-﻿//! Foundation Audit for TylluanNexus o3
+//! Foundation Audit for TylluanNexus o3
 //! 
 //! Verifies:
 //! 1. Master Token Tunnel (Security)

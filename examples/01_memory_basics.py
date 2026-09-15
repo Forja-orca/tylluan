@@ -1,4 +1,4 @@
-﻿"""
+"""
 Example 1: Memory Basics — Remember, Recall, Think
 
 Demonstrates Tylluan's core memory loop using the sovereign REST API:

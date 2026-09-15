@@ -1,4 +1,4 @@
-﻿//! # Security Module
+//! # Security Module
 //!
 //! Implements the three security primitives from TylluanMCP v2, rewritten in Rust:
 //! 1. **ExecutionGuard** — Channel-based tool access gating

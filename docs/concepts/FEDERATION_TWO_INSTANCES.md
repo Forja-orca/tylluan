@@ -1,4 +1,4 @@
-﻿# Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
+# Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
 
 > Creado 2026-07-11 durante el ciclo de reflexión: se detectó que este setup de
 > prueba de dos instancias reales (nativo + `docker-compose.secondary.yml`)

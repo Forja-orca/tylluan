@@ -1,4 +1,4 @@
-﻿use std::sync::Arc;
+use std::sync::Arc;
 use std::collections::HashMap;
 use tracing::{info, warn};
 use crate::memory::cosine::cosine_similarity;

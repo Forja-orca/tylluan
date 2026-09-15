@@ -1,4 +1,4 @@
-﻿# RUNBOOK — Drill de Restore de Memoria (M23/CLAUDE-5)
+# RUNBOOK — Drill de Restore de Memoria (M23/CLAUDE-5)
 
 > **Por qué existe:** 12+ meses de memoria colectiva (silva.db + tylluan.db + mailbox.db) viven
 > en un solo disco de una sola máquina. Un backup que nunca se ha restaurado NO es un backup.

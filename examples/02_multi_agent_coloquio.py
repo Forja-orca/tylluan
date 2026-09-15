@@ -1,4 +1,4 @@
-﻿"""
+"""
 Example 2: Multi-Agent Communication via Coloquio
 
 Demonstrates how multiple agents communicate through Tylluan's

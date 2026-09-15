@@ -1,4 +1,4 @@
-﻿//! Integration test for the knowledge guild.
+//! Integration test for the knowledge guild.
 //! Requires: .venv and guilds/core/knowledge.py
 
 #[cfg(feature = "guild_knowledge_test")]

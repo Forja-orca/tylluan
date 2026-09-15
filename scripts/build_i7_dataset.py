@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Task I-7: Curated Routing Dataset Generator and Validator.
 Constructs a comprehensive, grounded dataset of intents across all 45+ guilds,

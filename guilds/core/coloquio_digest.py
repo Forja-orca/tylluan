@@ -1,4 +1,4 @@
-﻿"""Coloquio Digest guild — on-demand and scheduled pipeline: coloquio → SilvaDB.
+"""Coloquio Digest guild — on-demand and scheduled pipeline: coloquio → SilvaDB.
 
 Exposes MCP tools so any agent can trigger digestion via tylluan_do guild=coloquio_digest.
 For the periodic background runner use scripts/coloquio_summarizer.py instead.

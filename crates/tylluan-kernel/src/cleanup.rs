@@ -1,4 +1,4 @@
-﻿
+
 
 /// Kill orphan Python guild processes from a previous kernel session that crashed.
 /// Uses `sysinfo` to find Python processes whose command line contains "guilds.core."

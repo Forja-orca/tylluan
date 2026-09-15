@@ -1,4 +1,4 @@
-﻿# Tylluan v0.16.0+ — Claude Code Instructions
+# Tylluan v0.16.0+ — Claude Code Instructions
 
 > **Last sync: 2026-08-14.** This file is the human-readable context for Claude Code.
 > For machine-readable contracts, see `.tylluan/agents.toml` (ADR-009).

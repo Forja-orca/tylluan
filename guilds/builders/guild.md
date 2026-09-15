@@ -1,4 +1,4 @@
-﻿# 🔨 Gremio de Constructores (Builders Guild)
+# 🔨 Gremio de Constructores (Builders Guild)
 Version: 1.0.0  
 Oficio Real: **Ingeniería de Software Soberana**
 

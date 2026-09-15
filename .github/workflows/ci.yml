@@ -166,6 +166,19 @@ jobs:
       - name: Verify README.md's claimed test count against a live run
         run: bash scripts/check_test_count.sh
 
+  bom-check:
+    name: Docs — no UTF-8 BOM in tracked files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # The BOM bug class broke CI/builds four times (a0a614a, 8c7d0bf,
+      # ad96253, 336ed13) before check_bom.sh made it mechanically
+      # impossible: a shebang script with a BOM dies with 'bad
+      # interpreter', byte-0 doc gates misread, Tauri/TOML parsers
+      # choke. Blocking gate, same tier as the other docs checks.
+      - name: Verify no tracked file starts with a UTF-8 BOM
+        run: bash scripts/check_bom.sh
+
   docs-head-sync-check:
     name: Docs — STATUS.md HEAD citation matches reality
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-﻿//! # Benchmarks Module
+//! # Benchmarks Module
 //!
 //! Simple benchmarks for critical TylluanNexus operations.
 //! Run with: `cargo run --example bench`

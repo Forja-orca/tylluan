@@ -1,4 +1,4 @@
-﻿# Tylluan v0.16.0+ (unreleased) — Agent Instructions (Codex / OpenCode)
+# Tylluan v0.16.0+ (unreleased) — Agent Instructions (Codex / OpenCode)
 
 > Este archivo es leído automáticamente por agentes OpenCode/Codex al conectar (Deep,
 > Mimo, cualquier futuro agente en ese runtime). Si está desactualizado, TODO agente

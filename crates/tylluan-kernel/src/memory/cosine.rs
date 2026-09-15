@@ -1,4 +1,4 @@
-﻿//! # Cosine Similarity
+//! # Cosine Similarity
 //!
 //! Single source of truth for vector similarity, used by HybridMemory and SilvaDB.
 //! Ported from `TylluanMCP/src/utils/cosine.ts`.

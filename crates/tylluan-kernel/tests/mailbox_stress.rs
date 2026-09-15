@@ -1,4 +1,4 @@
-﻿//! Mailbox Stress Test for TylluanNexus o3
+//! Mailbox Stress Test for TylluanNexus o3
 //! 
 //! Verifies:
 //! 1. Atomic delivery under high concurrency

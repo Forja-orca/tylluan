@@ -1,4 +1,4 @@
-﻿# Configuration for OpenClaw / Hermes Agent
+# Configuration for OpenClaw / Hermes Agent
 # TylluanNexus must be running: .\tylluan-mcp.bat
 # NEVER use --host 0.0.0.0 with dev_mode=true (LAN RCE risk)
 

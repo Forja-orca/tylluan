@@ -1,4 +1,4 @@
-﻿//! Deterministic extraction of semantic triples from text without LLM.
+//! Deterministic extraction of semantic triples from text without LLM.
 
 use std::collections::HashSet;
 

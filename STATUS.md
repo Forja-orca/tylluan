@@ -1,4 +1,4 @@
-﻿# Tylluan — Status
+# Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
 > Last updated: 2026-09-03 · HEAD `747139f` · v0.17.0 (Cargo.toml)

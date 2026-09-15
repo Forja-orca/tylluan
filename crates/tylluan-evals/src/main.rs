@@ -1,4 +1,4 @@
-﻿mod corpus;
+mod corpus;
 mod longmemeval;
 mod metrics;
 mod runner;

@@ -1,4 +1,4 @@
-﻿//! HTTP Endpoint Tests for TylluanNexus Kernel
+//! HTTP Endpoint Tests for TylluanNexus Kernel
 //! Verifies public endpoints, protected endpoints, and dashboard contracts.
 
 // Helper note: these tests are simulated (verify route registration and expected
