@@ -9,6 +9,7 @@ use super::TylluanServer;
 pub(crate) mod routing;
 mod embedding;
 mod coloquio_utils;
+mod coloquio_wait;
 mod timeout;
 mod external_mcp;
 pub(crate) mod audit;
@@ -446,6 +447,14 @@ pub async fn handle_tylluan_do(
     // M31-P6: @job:<id> — check status of a background job
     if let Some(result) = crate::transport::server::background_jobs::handle_job_status(server, &intent).await {
         return result;
+    }
+
+    // Coloquio long-poll wait (turn 498/500 design): blocks this MCP call
+    // until a new message arrives in the channel or the timeout expires.
+    // ZERO new tools (CONTRACT-01) — rides the intent parser like the other
+    // prefixes. Graceful timeout returns structured JSON, never an error.
+    if let Some(result) = coloquio_wait::handle_coloquio_wait_prefix(server, &intent, &agent_id).await {
+        return Ok(result);
     }
 
     use crate::transport::server::intent_enhancer;

@@ -114,6 +114,97 @@ pub(super) fn is_coloquio_dispatch_intent(intent: &str) -> bool {
     false
 }
 
+/// Long-poll wait triggers (turn 498/500 design): the agent blocks on a
+/// single tylluan_do call until a new message arrives in the channel or the
+/// timeout expires. ZERO new tools (CONTRACT-01) — rides the intent parser.
+const WAIT_TRIGGERS: &[&str] = &[
+    "@coloquio:wait:",
+    "espera actividad en coloquio", "espera actividad en el coloquio",
+    "espera en coloquio", "wait for activity in coloquio",
+    "wait for coloquio", "wait on coloquio", "bloquea hasta nuevo mensaje en coloquio",
+];
+
+/// Parse a coloquio wait intent into (channel, timeout_secs, since_turn,
+/// mentions_only). Returns None for non-wait intents.
+///
+/// Canonical form: `@coloquio:wait:<channel> timeout=<secs> since=<turn> mentions=only`
+/// Natural language: `espera actividad en coloquio <channel> durante <n> segundos`
+pub(super) fn parse_coloquio_wait(intent: &str) -> Option<(String, Option<u64>, Option<i64>, bool)> {
+    let lower = intent.trim().to_lowercase();
+    let (channel, rest) = if let Some(stripped) = lower.strip_prefix("@coloquio:wait:") {
+        let mut parts = stripped.splitn(2, char::is_whitespace);
+        let chan = parts.next()?.trim();
+        if chan.is_empty() || chan.contains('=') { return None; }
+        (chan.to_string(), parts.next().unwrap_or(""))
+    } else {
+        let trigger = WAIT_TRIGGERS.iter().find(|t| lower.starts_with(*t))?;
+        let after = lower.trim_start_matches(trigger).trim_start();
+        let chan = after.split_whitespace().next()?;
+        if chan.is_empty() || chan.starts_with("durante") || chan.starts_with("timeout") { return None; }
+        (chan.to_string(), after)
+    };
+
+    let mut timeout: Option<u64> = None;
+    let mut since: Option<i64> = None;
+    let mut mentions_only = false;
+
+    // token scan for timeout=/since=/mentions= and "durante N (segundos|s)"
+    let tokens: Vec<&str> = rest.split_whitespace().collect();
+    let mut i = 0;
+    while i < tokens.len() {
+        let tok = tokens[i];
+        if let Some(v) = tok.strip_prefix("timeout=") {
+            timeout = v.parse::<u64>().ok();
+        } else if let Some(v) = tok.strip_prefix("since=") {
+            since = v.parse::<i64>().ok();
+        } else if tok == "mentions=only" {
+            mentions_only = true;
+        } else if (tok == "durante" || tok == "for") && i + 1 < tokens.len() {
+            timeout = tokens[i + 1].parse::<u64>().ok();
+            i += 1;
+        }
+        i += 1;
+    }
+
+    Some((channel, timeout, since, mentions_only))
+}
+
+#[cfg(test)]
+mod wait_parse_tests {
+    use super::parse_coloquio_wait;
+
+    #[test]
+    fn parses_canonical_form() {
+        let (c, t, s, m) = parse_coloquio_wait("@coloquio:wait:general timeout=120 since=498").unwrap();
+        assert_eq!(c, "general");
+        assert_eq!(t, Some(120));
+        assert_eq!(s, Some(498));
+        assert!(!m);
+    }
+
+    #[test]
+    fn parses_natural_language() {
+        let (c, t, s, m) = parse_coloquio_wait("espera actividad en coloquio mision-activa durante 90 segundos").unwrap();
+        assert_eq!(c, "mision-activa");
+        assert_eq!(t, Some(90));
+        assert!(s.is_none());
+        assert!(!m);
+    }
+
+    #[test]
+    fn parses_mentions_only() {
+        let (c, _, _, m) = parse_coloquio_wait("@coloquio:wait:general mentions=only").unwrap();
+        assert_eq!(c, "general");
+        assert!(m);
+    }
+
+    #[test]
+    fn rejects_non_wait_intents() {
+        assert!(parse_coloquio_wait("publica en coloquio general: hola").is_none());
+        assert!(parse_coloquio_wait("recuerda la tarea pendiente").is_none());
+    }
+}
+
 /// Extract channel_id and optionally message content from a coloquio intent.
 /// Returns (channel_id, content_or_name, tool_hint).
 /// tool_hint is "read", "post", "list", or "create".

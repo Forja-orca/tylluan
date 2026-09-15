@@ -275,6 +275,42 @@ impl ColoquioDb {
         })
     }
 
+    /// Messages strictly newer than `since_turn` in a channel, ascending.
+    /// Used by the coloquio long-poll fast path (turn 498/500 design): the
+    /// anti-race cursor check that answers immediately when messages already
+    /// exist, and the Lagged-recovery re-query.
+    pub async fn get_messages_since(
+        &self,
+        channel_id: &str,
+        since_turn: i64,
+        limit: usize,
+    ) -> Result<Vec<ColoquioMessage>> {
+        let channel_id = channel_id.to_string();
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut stmt = conn.prepare(
+                "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
+                 FROM coloquio_messages
+                 WHERE channel_id = ?1 AND turn > ?2
+                 ORDER BY turn ASC
+                 LIMIT ?3",
+            )?;
+            let rows = stmt.query_map(params![channel_id, since_turn, limit as i64], |row| {
+                Ok(ColoquioMessage {
+                    msg_id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    author_id: row.get(2)?,
+                    role: row.get(3)?,
+                    content: row.get(4)?,
+                    turn: row.get(5)?,
+                    created_at: get_flexible_created_at(row, 6)?,
+                    metadata: row.get(7)?,
+                })
+            })?;
+            Ok(rows.flatten().collect())
+        })
+    }
+
     pub async fn search_messages(&self, channel_id: &str, keyword: &str, limit: i64) -> Result<Vec<ColoquioMessage>> {
         let channel_id = channel_id.to_string();
         let pattern = format!("%{}%", keyword.to_lowercase());
