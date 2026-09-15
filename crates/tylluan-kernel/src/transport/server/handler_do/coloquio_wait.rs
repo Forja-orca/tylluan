@@ -1,4 +1,4 @@
-﻿//! # Coloquio Long-Poll Wait (turn 498/500 design)
+//! # Coloquio Long-Poll Wait (turn 498/500 design)
 //!
 //! Any MCP-connected agent can block on a single `tylluan_do` call until a
 //! new message arrives in a Coloquio channel or the timeout expires. ZERO
