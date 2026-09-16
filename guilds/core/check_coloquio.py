@@ -1,7 +1,7 @@
-"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
+﻿"""Coloquio polling agent for Deep â€” checks unread messages and reads new turns.
 
 Level B polling from coloquio_wake_scheduling.md. Run at start of each
-session cycle. Does NOT commit, push, or modify repo state — reads only,
+session cycle. Does NOT commit, push, or modify repo state â€” reads only,
 per turn 367 rule.
 
 Defaults to 'equipo' channel (team coordination). Other channels on request.
@@ -19,20 +19,46 @@ import time
 import urllib.request
 from pathlib import Path
 
-READER_ID = "deep"
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def resolve_reader_id(argv=None) -> str:
+    """Agent identity used for unread/mention queries.
+
+    Explicit ``--agent-id <id>`` wins, then ``TYLLUAN_AGENT_ID``. There is no
+    silent default: an unread poll for the wrong agent silently returns empty,
+    so a missing identity is a hard error (contract bwc-b0523fcc, turn 523 â€”
+    the old hardcoded ``deep`` was removed).
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    for i, a in enumerate(argv):
+        if a == "--agent-id" and i + 1 < len(argv):
+            return argv[i + 1]
+    env = os.environ.get("TYLLUAN_AGENT_ID", "").strip()
+    if env:
+        return env
+    raise SystemExit(
+        "[check_coloquio] ERROR: no reader identity. Pass --agent-id <id> "
+        "or set TYLLUAN_AGENT_ID. (The old silent default 'deep' was removed "
+        "so a poll never reads the wrong agent's inbox.)"
+    )
+
+
 CHECK_INTERVAL = 120  # seconds between checks in watch mode
 
 # Only show these channels by default (team coordination).
 # Use --all or pass channel names to override.
 DEFAULT_CHANNELS = ["equipo"]
 
-# Messages matching these patterns are noise — don't show.
+# Messages matching these patterns are noise â€” don't show.
 NOISE_PATTERNS = [
-    "🔄 Starting scheduled auto-sync",
+    "ðŸ”„ Starting scheduled auto-sync",
     "Auto-sync: push to",
     "failed: error sending request",
-    "🧹 Running periodic SQLite maintenance",
-    "🩺 System diagnostic started",
+    "ðŸ§¹ Running periodic SQLite maintenance",
+    "ðŸ©º System diagnostic started",
     "kernel restarted",
     "shutdown_initiated",
 ]
@@ -138,7 +164,7 @@ def check_unread(channels_to_check, show_all=False):
                 new_turns += 1
                 max_turn = max(max_turn, turn)
 
-                mention = "deep" in content.lower()
+                mention = READER_ID in content.lower()
                 prefix = "[>>>]" if mention else "     "
                 preview = content[:150].replace("\n", " ")
                 print(f"{prefix} T{turn} {agent}: {preview}...")
@@ -168,15 +194,32 @@ def watch(channels_to_check):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    argv = sys.argv[1:]
+    # Resolve the reader identity from the ORIGINAL argv (so --agent-id works
+    # in every mode), then rebuild the positional args without the
+    # --agent-id <value> pair â€” otherwise the value would be mistaken for a
+    # channel name by the positional filter below.
+    READER_ID = resolve_reader_id(argv)
+    cleaned = []
+    skip_next = False
+    for a in argv:
+        if a == "--agent-id":
+            skip_next = True
+            continue
+        if skip_next:
+            skip_next = False
+            continue
+        cleaned.append(a)
 
-    if "--watch" in sys.argv or "-w" in sys.argv:
+    args = [a for a in cleaned if not a.startswith("-")]
+
+    if "--watch" in cleaned or "-w" in cleaned:
         channels = args if args else DEFAULT_CHANNELS
         try:
             watch(channels)
         except KeyboardInterrupt:
             print("\n[check_coloquio] Stopped.")
-    elif "--all" in sys.argv or "-a" in sys.argv:
+    elif "--all" in cleaned or "-a" in cleaned:
         check_unread([], show_all=True)
     else:
         channels = args if args else DEFAULT_CHANNELS
