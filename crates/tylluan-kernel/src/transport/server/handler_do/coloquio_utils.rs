@@ -203,6 +203,17 @@ mod wait_parse_tests {
         assert!(parse_coloquio_wait("publica en coloquio general: hola").is_none());
         assert!(parse_coloquio_wait("recuerda la tarea pendiente").is_none());
     }
+
+    #[test]
+    fn dispatch_gate_survives_kv_bodies() {
+        // Regression (2026-09-16): a post whose body contains `palabra=valor`
+        // (e.g. "timeout=6") must still be forced to coloquio. The gate only
+        // inspects the prefix, so the body must not influence it.
+        assert!(super::is_coloquio_dispatch_intent("publica en coloquio general: timeout=6"));
+        assert!(super::is_coloquio_dispatch_intent("publica en coloquio mision-activa: retry after timeout=6 seconds"));
+        assert!(super::is_coloquio_dispatch_intent("lee el coloquio equipo desde since=439"));
+        assert!(!super::is_coloquio_dispatch_intent("corre timeout=6 en la terminal"));
+    }
 }
 
 /// Extract channel_id and optionally message content from a coloquio intent.
