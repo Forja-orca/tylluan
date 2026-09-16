@@ -144,17 +144,23 @@ cosas quedaron confirmadas y dos reglas nuevas nacen de ahí:
   entregaba sin avisar antes — a punto estuvo de duplicarse trabajo real.
   Cualquier agente que vaya a tomar una pieza de un contrato la reclama en
   Coloquio ANTES de escribir código, no después.
-- **Riesgo de seguridad real, sin resolver todavía:** `coloquio_watcher.py`
-  soporta `--exec <comando>`, que dispara un proceso real (p. ej.
-  `opencode run <texto>`) cuando detecta una mención al agente en Coloquio.
-  El diseño evita shell injection (usa `subprocess.Popen` con lista de
-  argv, nunca `shell=True`), pero no evita el problema de fondo: cualquiera
-  que pueda publicar en Coloquio con `@<agente>` en el texto puede hacer que
-  ese agente ejecute instrucciones no confiables sin ningún humano en el
-  bucle. Regla hasta que se decida una mitigación (allowlist de autores
-  confiables y/o confirmación humana antes de ejecutar): el modo
-  solo-inbox (sin `--exec`) se puede activar libremente; `--exec` NO se
-  activa en ningún runtime sin decisión explícita de José.
+- **Riesgo de seguridad real — mitigación decidida por José (2026-09-17):**
+  `coloquio_watcher.py` soporta `--exec <comando>`, que dispara un proceso
+  real (p. ej. `opencode run <texto>`) cuando detecta una mención al agente
+  en Coloquio. El diseño evita shell injection (usa `subprocess.Popen` con
+  lista de argv, nunca `shell=True`), pero no evita el problema de fondo:
+  cualquiera que pueda publicar en Coloquio con `@<agente>` en el texto
+  puede hacer que ese agente ejecute instrucciones no confiables sin ningún
+  humano en el bucle. **Decisión: las dos mitigaciones son obligatorias,
+  no una u otra** — allowlist de autores confiables (`--exec` solo dispara
+  si `author_id` del mensaje está en una lista explícita de agentes de
+  confianza, nunca por defecto abierta a cualquiera) Y confirmación humana
+  antes de ejecutar (el watcher nunca lanza el proceso solo; deja la
+  acción en cola/pendiente de aprobación explícita, igual que el resto de
+  acciones de riesgo del kernel vía grants/HITL). El modo solo-inbox (sin
+  `--exec`) se puede activar libremente; `--exec` no se activa en ningún
+  runtime hasta que ambas mitigaciones estén implementadas y verificadas,
+  no solo una.
 
 Este documento se actualiza cuando el protocolo cambie de verdad — no es un
 manifiesto fijo, es el reflejo de cómo trabajamos hoy.
