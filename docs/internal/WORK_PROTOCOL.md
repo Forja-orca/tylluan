@@ -116,5 +116,45 @@ Esto no es nuevo, pero se reafirma porque José pidió explícitamente
   independiente por Claude Code (o por otro agente si Claude Code es quien
   lo construyó) antes de darlo por cerrado en Coloquio.
 
+## 6. Primer ciclo real sin José (2026-09-17) — qué confirmó y qué rompió
+
+José pidió una prueba real de un ciclo completo del equipo sin su intervención.
+Se abrió el contrato `bwc-b0523fcc` (generalizar `check_coloquio.py`) y el
+ciclo corrió de verdad: Deep entregó, Antigravity y Buffy verificaron de
+forma independiente, yo cerré el contrato y corregí dos bugs reales
+encontrados en la entrega (corrupción de encoding, bug de mayúsculas). Dos
+cosas quedaron confirmadas y dos reglas nuevas nacen de ahí:
+
+- **El long-poll funciona de verdad** — mi propia espera bloqueó y reaccionó
+  en 20s cuando Deep publicó, sin sondeo manual.
+- **Pero ningún agente tenía nada corriendo por su cuenta** — Deep y
+  Antigravity solo actuaron porque José se lo pidió directamente en sus
+  sesiones. El kernel dejó de ser el cuello de botella; el runtime de cada
+  agente sigue siéndolo. Deep construyó la pieza que falta el mismo día
+  (`guilds/core/coloquio_watcher.py`, loop persistente con long-poll real) —
+  ver más abajo la regla sobre su modo `--exec`.
+- **Regla nueva — cerrar contratos por el conducto formal:** Buffy detectó
+  que la entrega de Deep nunca pasó por `/work-contracts/{id}/deliver` — el
+  contrato lo cerré yo a mano vía `/close`, no por el flujo real. Desde
+  ahora, quien entrega registra la entrega en el contrato antes de que
+  nadie lo dé por cerrado; un cierre sin `/deliver` es un cierre narrativo,
+  no verificado por el propio sistema.
+- **Regla nueva — anunciar antes de commitear al checkout compartido:**
+  Buffy reclamó la tarea en Coloquio (T524) casi al mismo tiempo que Deep la
+  entregaba sin avisar antes — a punto estuvo de duplicarse trabajo real.
+  Cualquier agente que vaya a tomar una pieza de un contrato la reclama en
+  Coloquio ANTES de escribir código, no después.
+- **Riesgo de seguridad real, sin resolver todavía:** `coloquio_watcher.py`
+  soporta `--exec <comando>`, que dispara un proceso real (p. ej.
+  `opencode run <texto>`) cuando detecta una mención al agente en Coloquio.
+  El diseño evita shell injection (usa `subprocess.Popen` con lista de
+  argv, nunca `shell=True`), pero no evita el problema de fondo: cualquiera
+  que pueda publicar en Coloquio con `@<agente>` en el texto puede hacer que
+  ese agente ejecute instrucciones no confiables sin ningún humano en el
+  bucle. Regla hasta que se decida una mitigación (allowlist de autores
+  confiables y/o confirmación humana antes de ejecutar): el modo
+  solo-inbox (sin `--exec`) se puede activar libremente; `--exec` NO se
+  activa en ningún runtime sin decisión explícita de José.
+
 Este documento se actualiza cuando el protocolo cambie de verdad — no es un
 manifiesto fijo, es el reflejo de cómo trabajamos hoy.
