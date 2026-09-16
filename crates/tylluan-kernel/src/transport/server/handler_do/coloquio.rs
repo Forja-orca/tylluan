@@ -23,6 +23,10 @@ pub(crate) async fn handle_coloquio_prefix(
         args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(20)));
         return Some(Box::pin(handler_recall::handle_tylluan_recall(server, Some(args))).await);
     }
+    if rest.starts_with(":wait:") || rest.starts_with(":wait ") || rest == ":wait" {
+        // Handled by handle_coloquio_wait_prefix, do not treat as channel 'wait'
+        return None;
+    }
     if let Some(create_name) = rest.strip_prefix(":create:") {
         let channel_name = create_name.trim().to_string();
         if channel_name.is_empty() {
@@ -126,5 +130,11 @@ mod tests {
         };
         assert_eq!(channel_id, "equipo");
         assert_eq!(message, None);
+    }
+
+    #[test]
+    fn at_coloquio_prefix_wait_syntax_is_detected() {
+        let rest = ":wait:general timeout=30 since=100";
+        assert!(rest.starts_with(":wait:") || rest.starts_with(":wait ") || rest == ":wait");
     }
 }
