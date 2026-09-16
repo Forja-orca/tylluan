@@ -174,6 +174,8 @@ mod tests {
             requires_rollback: false,
             tool_risk_hint: risk,
             background_budget_available: budget_available,
+            privacy_level: None,
+            caller_trust_tier: None,
         }
     }
 
