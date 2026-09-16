@@ -1,7 +1,7 @@
-﻿"""Coloquio polling agent for Deep â€” checks unread messages and reads new turns.
+"""Coloquio polling agent for Deep — checks unread messages and reads new turns.
 
 Level B polling from coloquio_wake_scheduling.md. Run at start of each
-session cycle. Does NOT commit, push, or modify repo state â€” reads only,
+session cycle. Does NOT commit, push, or modify repo state — reads only,
 per turn 367 rule.
 
 Defaults to 'equipo' channel (team coordination). Other channels on request.
@@ -29,7 +29,7 @@ def resolve_reader_id(argv=None) -> str:
 
     Explicit ``--agent-id <id>`` wins, then ``TYLLUAN_AGENT_ID``. There is no
     silent default: an unread poll for the wrong agent silently returns empty,
-    so a missing identity is a hard error (contract bwc-b0523fcc, turn 523 â€”
+    so a missing identity is a hard error (contract bwc-b0523fcc, turn 523 —
     the old hardcoded ``deep`` was removed).
     """
     argv = sys.argv[1:] if argv is None else argv
@@ -52,13 +52,13 @@ CHECK_INTERVAL = 120  # seconds between checks in watch mode
 # Use --all or pass channel names to override.
 DEFAULT_CHANNELS = ["equipo"]
 
-# Messages matching these patterns are noise â€” don't show.
+# Messages matching these patterns are noise — don't show.
 NOISE_PATTERNS = [
-    "ðŸ”„ Starting scheduled auto-sync",
+    "🔄 Starting scheduled auto-sync",
     "Auto-sync: push to",
     "failed: error sending request",
-    "ðŸ§¹ Running periodic SQLite maintenance",
-    "ðŸ©º System diagnostic started",
+    "🧹 Running periodic SQLite maintenance",
+    "🩺 System diagnostic started",
     "kernel restarted",
     "shutdown_initiated",
 ]
@@ -164,7 +164,7 @@ def check_unread(channels_to_check, show_all=False):
                 new_turns += 1
                 max_turn = max(max_turn, turn)
 
-                mention = READER_ID in content.lower()
+                mention = READER_ID.lower() in content.lower()
                 prefix = "[>>>]" if mention else "     "
                 preview = content[:150].replace("\n", " ")
                 print(f"{prefix} T{turn} {agent}: {preview}...")
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     # Resolve the reader identity from the ORIGINAL argv (so --agent-id works
     # in every mode), then rebuild the positional args without the
-    # --agent-id <value> pair â€” otherwise the value would be mistaken for a
+    # --agent-id <value> pair — otherwise the value would be mistaken for a
     # channel name by the positional filter below.
     READER_ID = resolve_reader_id(argv)
     cleaned = []
