@@ -219,6 +219,13 @@ pub async fn handle_tylluan_do(
         });
     }
 
+    // Coloquio long-poll wait (turn 498/500 design): blocks this MCP call
+    // until a new message arrives in the channel or the timeout expires.
+    // Must run BEFORE handle_coloquio_prefix so @coloquio:wait is not treated as a channel named 'wait'.
+    if let Some(result) = coloquio_wait::handle_coloquio_wait_prefix(server, &intent, &agent_id).await {
+        return Ok(result);
+    }
+
     // Deterministic @coloquio: prefix — bypass semantic router entirely
     if let Some(result) = handle_coloquio_prefix(server, &intent, &agent_id).await {
         return result;
@@ -449,13 +456,7 @@ pub async fn handle_tylluan_do(
         return result;
     }
 
-    // Coloquio long-poll wait (turn 498/500 design): blocks this MCP call
-    // until a new message arrives in the channel or the timeout expires.
-    // ZERO new tools (CONTRACT-01) — rides the intent parser like the other
-    // prefixes. Graceful timeout returns structured JSON, never an error.
-    if let Some(result) = coloquio_wait::handle_coloquio_wait_prefix(server, &intent, &agent_id).await {
-        return Ok(result);
-    }
+
 
     use crate::transport::server::intent_enhancer;
 
