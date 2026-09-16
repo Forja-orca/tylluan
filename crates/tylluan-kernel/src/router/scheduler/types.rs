@@ -62,6 +62,36 @@ pub enum ExecutionClass {
     OfflineNightBatch { job_type: String },
 }
 
+/// Nivel de privacidad o confidencialidad de los datos/contexto de la tarea.
+///
+/// Mapea directamente a las fuentes de datos reales del kernel:
+/// - `Public`: Conocimiento general no restringido por scope.
+/// - `Internal`: Conocimiento del workspace / repositorio interno.
+/// - `Confidential`: Datos acotados a scope/sesión de agente (`owner_scope` en `silva/schema.rs`).
+/// - `Restricted`: Secretos, credenciales o datos no delegables a la malla P2P.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum PrivacyLevel {
+    Public,
+    Internal,
+    Confidential,
+    Restricted,
+}
+
+/// Nivel de confianza / autorización del agente emisor de la tarea.
+///
+/// Mapea a las identidades y perfiles reales del kernel:
+/// - `Anonymous`: Agente sin identificar o sin perfil en `AgentProfileStore` / `.tylluan/agents.toml`.
+/// - `Standard`: Agente colaborador estándar con rol generalista.
+/// - `Trusted`: Agente verificado con rol especializado (ej. Claude Code, Deep, roles de mantenedor).
+/// - `SystemOperator`: Operador soberano / humano local.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum CallerTrustTier {
+    Anonymous,
+    Standard,
+    Trusted,
+    SystemOperator,
+}
+
 /// Contexto integral de planificación recibido por el Scheduler.
 ///
 /// Corrección 2026-09-11 (hallazgo verificado del auditor externo, Parte 4):
@@ -90,6 +120,10 @@ pub struct TaskContext {
     /// vez de encolar más trabajo pesado sobre el mismo cuello de botella
     /// que causó el incidente GraphRAG (~76% CPU sostenido).
     pub background_budget_available: bool,
+    /// Nivel de privacidad del contexto de la tarea (resuelto vía `owner_scope` en SilvaDB).
+    pub privacy_level: Option<PrivacyLevel>,
+    /// Nivel de confianza del emisor (resuelto vía `AgentProfileStore` / `.tylluan/agents.toml`).
+    pub caller_trust_tier: Option<CallerTrustTier>,
 }
 
 /// Veredicto completo emitido por el Cognitive Scheduler.
@@ -124,6 +158,17 @@ mod tests {
     }
 
     #[test]
+    fn privacy_and_trust_ordering_and_defaults() {
+        assert!(PrivacyLevel::Public < PrivacyLevel::Internal);
+        assert!(PrivacyLevel::Internal < PrivacyLevel::Confidential);
+        assert!(PrivacyLevel::Confidential < PrivacyLevel::Restricted);
+
+        assert!(CallerTrustTier::Anonymous < CallerTrustTier::Standard);
+        assert!(CallerTrustTier::Standard < CallerTrustTier::Trusted);
+        assert!(CallerTrustTier::Trusted < CallerTrustTier::SystemOperator);
+    }
+
+    #[test]
     fn task_context_round_trips_through_json() {
         let ctx = TaskContext {
             intent: "lee el archivo README.md".to_string(),
@@ -133,12 +178,16 @@ mod tests {
             requires_rollback: false,
             tool_risk_hint: Some(RiskTier::SafeRead),
             background_budget_available: true,
+            privacy_level: Some(PrivacyLevel::Internal),
+            caller_trust_tier: Some(CallerTrustTier::Trusted),
         };
         let json = serde_json::to_string(&ctx).expect("serialize TaskContext");
         let restored: TaskContext = serde_json::from_str(&json).expect("deserialize TaskContext");
         assert_eq!(restored.caller_agent_id, "claude-code");
         assert_eq!(restored.tool_risk_hint, Some(RiskTier::SafeRead));
         assert!(restored.background_budget_available);
+        assert_eq!(restored.privacy_level, Some(PrivacyLevel::Internal));
+        assert_eq!(restored.caller_trust_tier, Some(CallerTrustTier::Trusted));
     }
 
     #[test]
@@ -154,8 +203,12 @@ mod tests {
             requires_rollback: false,
             tool_risk_hint: None,
             background_budget_available: false,
+            privacy_level: None,
+            caller_trust_tier: None,
         };
         assert_eq!(ctx.tool_risk_hint, None);
+        assert_eq!(ctx.privacy_level, None);
+        assert_eq!(ctx.caller_trust_tier, None);
     }
 
     #[test]
@@ -173,5 +226,39 @@ mod tests {
         let json = serde_json::to_string(&decision).expect("serialize SchedulingDecision");
         assert!(json.contains("HumanAuthorizationRequired"));
         assert!(json.contains("CriticalDestructive"));
+    }
+
+    #[test]
+    fn invariant_spec_p2p_no_leak_and_anonymous_guard() {
+        // Contract documentation test (turn 496):
+        // 1. P2P No-Leak: If privacy_level is Confidential or Restricted, remote mesh delegation
+        //    must not happen even if allow_remote_mesh is set to true.
+        let p2p_safe = |ctx: &TaskContext| -> bool {
+            ctx.allow_remote_mesh && ctx.privacy_level.map(|p| p < PrivacyLevel::Confidential).unwrap_or(true)
+        };
+        let mut c = TaskContext {
+            intent: "query confidential database".to_string(),
+            caller_agent_id: "deep".to_string(),
+            latency_class: LatencyClass::Standard,
+            allow_remote_mesh: true,
+            requires_rollback: false,
+            tool_risk_hint: Some(RiskTier::SafeRead),
+            background_budget_available: true,
+            privacy_level: Some(PrivacyLevel::Confidential),
+            caller_trust_tier: Some(CallerTrustTier::Standard),
+        };
+        assert!(!p2p_safe(&c), "Confidential privacy level must block remote P2P delegation");
+
+        c.privacy_level = Some(PrivacyLevel::Public);
+        assert!(p2p_safe(&c), "Public privacy level allows remote P2P delegation when permitted");
+
+        // 2. Anonymous Guard: Anonymous callers attempting mutating actions must require HITL.
+        let requires_hitl = |ctx: &TaskContext| -> bool {
+            ctx.tool_risk_hint.map(|r| r >= RiskTier::StateMutation).unwrap_or(false)
+                && ctx.caller_trust_tier.map(|t| t == CallerTrustTier::Anonymous).unwrap_or(false)
+        };
+        c.caller_trust_tier = Some(CallerTrustTier::Anonymous);
+        c.tool_risk_hint = Some(RiskTier::StateMutation);
+        assert!(requires_hitl(&c), "Anonymous mutating action must require human authorization");
     }
 }

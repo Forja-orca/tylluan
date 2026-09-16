@@ -95,6 +95,8 @@ pub async fn build_task_context(
             .as_ref()
             .map(|b| b.available())
             .unwrap_or(true),
+        privacy_level: None,
+        caller_trust_tier: None,
     }
 }
 
