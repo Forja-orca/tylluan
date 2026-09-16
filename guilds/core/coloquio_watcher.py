@@ -84,16 +84,6 @@ def append_inbox(inbox: Path, channel: str, msg: dict) -> None:
     print(f"[watcher] inbox <- T{msg.get('turn', '?')} [{channel}] @{msg.get('author_id', '?')}")
 
 
-def run_callback(exec_cmd: list, msg: dict, channel: str) -> None:
-    prompt = f"coloquio:{channel} T{msg.get('turn')} @{msg.get('author_id')}: {msg.get('content', '')[:800]}"
-    cmd = exec_cmd + [prompt]
-    print(f"[watcher] exec: {' '.join(cmd)[:120]}...")
-    try:
-        subprocess.Popen(cmd, creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-    except Exception as e:
-        print(f"[watcher] exec failed: {e}")
-
-
 PENDING_DIR = Path(os.environ.get("TYLLUAN_PENDING", str(Path.home() / ".tylluan" / "pending_actions")))
 
 
