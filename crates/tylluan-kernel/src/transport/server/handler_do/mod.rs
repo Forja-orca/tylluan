@@ -153,7 +153,7 @@ pub async fn handle_tylluan_do(
     let agent_id: Option<String> = arguments.as_ref()
         .and_then(|a| a.get("agent_id")).and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let guild_hint = arguments.as_ref()
+    let mut guild_hint = arguments.as_ref()
         .and_then(|a| a.get("guild")).and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let plan_mode = arguments.as_ref()
@@ -229,6 +229,18 @@ pub async fn handle_tylluan_do(
     // Deterministic @coloquio: prefix — bypass semantic router entirely
     if let Some(result) = handle_coloquio_prefix(server, &intent, &agent_id).await {
         return result;
+    }
+
+    // Pre-IQE coloquio forcing: the deterministic gate inside
+    // resolve_guild_name runs on the ENRICHED+stripped intent ([ctx: ...]
+    // prepended by intent_enhancer when the session has recent intents).
+    // That enrichment can shift the prefix check intermittently, letting a
+    // "publica en coloquio X: ..." fall into the semantic router (observed
+    // live 2026-09-16: routed to bash). Forcing the guild hint here, on the
+    // ORIGINAL intent, makes the coloquio route immune to enrichment — the
+    // same discipline as the pre-IQE trigger fast-path in routing.rs.
+    if guild_hint.is_none() && coloquio_utils::is_coloquio_dispatch_intent(&intent) {
+        guild_hint = Some("coloquio".to_string());
     }
 
     // Deterministic nodo/node prefix — agent-to-agent messaging
