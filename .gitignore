@@ -240,3 +240,8 @@ docker-research/
 # TEB Blind Judge secret mapping -- must never reach a tracked file while
 # this experiment exists; the judge (Claude Code) has repo read access.
 benchmarks/teb/judge_blind_mapping.json
+
+# Anonymized SilvaDB reference snapshot (turn 496/509, Antigravity) -- 95MB
+# binary, needs Git LFS or external hosting before it can be tracked. The
+# generator script and its README are tracked; the .db itself is not.
+benchmarks/datasets/*.db
