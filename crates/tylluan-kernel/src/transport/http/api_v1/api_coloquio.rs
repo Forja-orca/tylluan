@@ -29,6 +29,94 @@ pub struct ColoquioPostRequest {
 pub fn default_agent_role() -> String { "agent".to_string() }
 pub fn default_metadata_str() -> String { "{}".to_string() }
 
+/// Splits raw `@mentions` extracted from a message body into (valid, unknown)
+/// against the known-agents set (already lowercased). Pure so it's testable
+/// without standing up an `HttpState`.
+///
+/// - Self-mentions are dropped silently (never notify an author of their
+///   own post), matching the pre-existing behavior.
+/// - Fails OPEN (treats every mention as valid) when `known_agents` is
+///   empty, mirroring the ACL empty-contract fallback elsewhere in the
+///   kernel — an unconfigured install must not start dropping mentions.
+/// - Comparison is case-insensitive: real agents post under inconsistent
+///   casing in production (confirmed live 2026-09-17, turn 551 —
+///   `Antigravity` vs `antigravity`, `Buffy` vs `buffy`); an exact-match
+///   gate would split each into two separate identities.
+pub(crate) fn filter_known_mentions(
+    mentions: &[String],
+    author_id: &str,
+    known_agents: &std::collections::HashSet<String>,
+) -> (Vec<String>, Vec<String>) {
+    let gate_active = !known_agents.is_empty();
+    let mut valid = Vec::new();
+    let mut unknown = Vec::new();
+    for mention in mentions {
+        if mention.eq_ignore_ascii_case(author_id) {
+            continue;
+        }
+        if gate_active && !known_agents.contains(&mention.to_lowercase()) {
+            unknown.push(mention.clone());
+        } else {
+            valid.push(mention.clone());
+        }
+    }
+    (valid, unknown)
+}
+
+#[cfg(test)]
+mod mention_gate_tests {
+    use super::filter_known_mentions;
+    use std::collections::HashSet;
+
+    fn known(agents: &[&str]) -> HashSet<String> {
+        agents.iter().map(|a| a.to_lowercase()).collect()
+    }
+
+    #[test]
+    fn phantom_mention_rejected_when_gate_active() {
+        let (valid, unknown) = filter_known_mentions(
+            &["mentions".to_string(), "deep".to_string()],
+            "buffy",
+            &known(&["deep", "buffy"]),
+        );
+        assert_eq!(valid, vec!["deep".to_string()]);
+        assert_eq!(unknown, vec!["mentions".to_string()]);
+    }
+
+    #[test]
+    fn case_insensitive_match_does_not_split_identity() {
+        let (valid, unknown) = filter_known_mentions(
+            &["Antigravity".to_string()],
+            "deep",
+            &known(&["antigravity"]),
+        );
+        assert_eq!(valid, vec!["Antigravity".to_string()]);
+        assert!(unknown.is_empty());
+    }
+
+    #[test]
+    fn self_mention_always_dropped_even_when_gate_inactive() {
+        let (valid, unknown) = filter_known_mentions(
+            &["buffy".to_string()],
+            "buffy",
+            &HashSet::new(),
+        );
+        assert!(valid.is_empty());
+        assert!(unknown.is_empty());
+    }
+
+    #[test]
+    fn empty_registry_fails_open_delivers_everything() {
+        let (valid, unknown) = filter_known_mentions(
+            &["anyone".to_string(), "whoever".to_string()],
+            "deep",
+            &HashSet::new(),
+        );
+        assert_eq!(valid, vec!["anyone".to_string(), "whoever".to_string()]);
+        assert!(unknown.is_empty());
+    }
+}
+
 #[derive(Deserialize)]
 pub struct ColoquioThreadQuery {
     pub limit: Option<i64>,
@@ -183,11 +271,18 @@ pub async fn coloquio_post_message(
 
             // @mention bridge: deliver a mailbox notification to each mentioned
             // agent so it appears in their `tylluan_recall @inbox` without having
-            // to read the whole channel.
+            // to read the whole channel. Validated against AgentsContract
+            // (.tylluan/agents.toml) via filter_known_mentions() -- see its
+            // doc comment for the phantom-mailbox bug this closes (Buffy,
+            // turns 545/546/551).
             let mentions = crate::memory::coloquio::extract_mentions(&msg.content);
+            let known_agents: std::collections::HashSet<String> = state.agents_contract
+                .agent_ids()
+                .map(|a| a.to_lowercase())
+                .collect();
+            let (valid_mentions, unknown_mentions) = filter_known_mentions(&mentions, &msg.author_id, &known_agents);
             let mut notified: Vec<String> = Vec::new();
-            for mention in &mentions {
-                if mention.eq_ignore_ascii_case(&msg.author_id) { continue; }
+            for mention in &valid_mentions {
                 let preview: String = msg.content.chars().take(500).collect();
                 let bm = BlackboardMessage {
                     msg_type: "mention".to_string(),
@@ -207,6 +302,7 @@ pub async fn coloquio_post_message(
                 "turn": msg.turn,
                 "channel_id": id,
                 "mentions_notified": notified,
+                "unknown_mentions": unknown_mentions,
             }))).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
