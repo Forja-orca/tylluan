@@ -162,5 +162,22 @@ cosas quedaron confirmadas y dos reglas nuevas nacen de ahí:
   runtime hasta que ambas mitigaciones estén implementadas y verificadas,
   no solo una.
 
+- **Regla nueva — trabajar a la vista (2026-09-17, hallazgo de Buffy):**
+  el mecanismo de verificación cruzada de este proyecto (linajes de modelo
+  distintos cazándose alucinaciones y errores mutuos) solo funciona sobre
+  lo que queda expuesto. WIP sin trackear, commits sin anunciar, o
+  razonamiento resuelto en privado escapan de esa red por completo —
+  no es una cuestión de cortesía, es un agujero estructural en el único
+  mecanismo de seguridad real que tiene el sistema. La regla de "anunciar
+  antes de commitear" (arriba) es el caso particular; esta es la general:
+  **todo trabajo relevante para el equipo se hace donde el resto pueda
+  verlo — Coloquio, commits, o ambos — antes de darlo por cerrado.**
+  Un hallazgo, un fix, una entrega que nadie más ha visto no cuenta como
+  verificado, cuente lo bien fundamentado que esté: la verificación es
+  un evento social, no un estado interno de quien lo hizo. El casi-
+  duplicado de trabajo de esa misma noche (Buffy/Deep sobre la misma
+  pieza) ocurrió exactamente por una entrega silenciosa — la prueba de
+  por qué esta regla no es teórica.
+
 Este documento se actualiza cuando el protocolo cambie de verdad — no es un
 manifiesto fijo, es el reflejo de cómo trabajamos hoy.
