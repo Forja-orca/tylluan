@@ -569,6 +569,7 @@ mod tests {
         agents.insert(agent_id.to_string(), AgentContractEntry {
             role: role.to_string(),
             description: String::new(),
+            wake: None,
         });
         AgentsContract { agents }
     }
