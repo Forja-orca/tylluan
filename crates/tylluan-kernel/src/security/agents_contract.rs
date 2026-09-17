@@ -7,6 +7,63 @@ pub struct AgentContractEntry {
     pub role: String,
     #[serde(default)]
     pub description: String,
+    /// Optional push-dispatch policy for this agent (turn 550 design split:
+    /// this table is the POLICY half — who may trigger this agent and how;
+    /// the EXISTENCE half — is this agent id real right now — lives in
+    /// SilvaDB identity, not here). Absent entirely for an agent that
+    /// hasn't opted into push wake-up.
+    #[serde(default)]
+    pub wake: Option<WakeConfig>,
+}
+
+/// Push-dispatch policy for one agent (`.tylluan/agents.toml`,
+/// `[agents.<id>.wake]`). NOT wired to actually spawn anything yet — this
+/// is data + validation only, prototype for the design discussed in
+/// docs/architecture/coloquio_push_dispatch_research.md and
+/// event_driven_agent_triggers_research.md (2026-09-17). The kernel-side
+/// dispatcher that reads this and invokes `command` is a separate,
+/// not-yet-built piece — deliberately, per José's decision that both
+/// mitigations (allowlist + human confirmation) must exist before anything
+/// executes automatically.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WakeConfig {
+    /// Master switch. Defaults to false — an agent must opt in explicitly;
+    /// declaring a `[wake]` table with no `enabled = true` is inert.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Author allowlist (case-insensitive at use site — mirrors the
+    /// @mention bridge fix in api_coloquio.rs). Empty means no author is
+    /// trusted, NOT "everyone" — this is the opposite of the @mention
+    /// bridge's empty-contract fallback, because here the cost of getting
+    /// it wrong is unattended command execution, not a dropped
+    /// notification. Fail-closed, always.
+    #[serde(default)]
+    pub trusted_authors: Vec<String>,
+    /// Fixed argv the dispatcher would invoke (e.g. `["opencode", "run"]`).
+    /// The triggering message's content is never used to build this list —
+    /// only ever appended as a single trailing argument by whatever
+    /// dispatcher eventually consumes this config, exactly like
+    /// coloquio_watcher.py's existing `subprocess.Popen` pattern (no
+    /// `shell=True`, so message content can't inject additional argv).
+    #[serde(default)]
+    pub command: Vec<String>,
+}
+
+impl WakeConfig {
+    /// True only when the config is meaningfully turned on: `enabled` AND
+    /// has both a non-empty allowlist and a non-empty command. A config
+    /// with `enabled = true` but no trusted authors or no command is
+    /// treated as inert, not as "trust everyone" or "run nothing" — this
+    /// is the fail-closed validation the future dispatcher must call
+    /// before doing anything with this entry.
+    pub fn is_active(&self) -> bool {
+        self.enabled && !self.trusted_authors.is_empty() && !self.command.is_empty()
+    }
+
+    /// Case-insensitive membership check against `trusted_authors`.
+    pub fn trusts(&self, author_id: &str) -> bool {
+        self.trusted_authors.iter().any(|a| a.eq_ignore_ascii_case(author_id))
+    }
 }
 
 /// Declarative agent contract loaded from `.tylluan/agents.toml`.
@@ -93,6 +150,17 @@ impl AgentsContract {
     pub fn is_empty(&self) -> bool {
         self.agents.is_empty()
     }
+
+    /// Returns the agent's wake policy, if declared and meaningfully
+    /// active (see `WakeConfig::is_active`). Returns `None` for an
+    /// undeclared agent, a declared agent with no `[wake]` table, or a
+    /// `[wake]` table that's inert (missing `enabled`, authors, or
+    /// command).
+    pub fn active_wake_config(&self, agent_id: &str) -> Option<&WakeConfig> {
+        self.agents.get(agent_id)
+            .and_then(|e| e.wake.as_ref())
+            .filter(|w| w.is_active())
+    }
 }
 
 #[cfg(test)]
@@ -112,11 +180,11 @@ mod tests {
         let mut agents = HashMap::new();
         agents.insert("deepseek".to_string(), AgentContractEntry {
             role: "contributor".to_string(),
-            description: "Rust implementation".to_string(),
+            description: "Rust implementation".to_string(), wake: None,
         });
         agents.insert("claude".to_string(), AgentContractEntry {
             role: "admin".to_string(),
-            description: "Tech lead".to_string(),
+            description: "Tech lead".to_string(), wake: None,
         });
         let c = AgentsContract { agents };
 
@@ -174,11 +242,11 @@ description = "Rust/CLI implementation"
         let mut agents = HashMap::new();
         agents.insert("alice".to_string(), AgentContractEntry {
             role: "admin".to_string(),
-            description: "".to_string(),
+            description: "".to_string(), wake: None,
         });
         agents.insert("bob".to_string(), AgentContractEntry {
             role: "contributor".to_string(),
-            description: "".to_string(),
+            description: "".to_string(), wake: None,
         });
         let c = AgentsContract { agents };
         let ids: Vec<&String> = c.agent_ids().collect();
@@ -217,5 +285,143 @@ description = "Rust implementation"
             let _ = std::env::set_current_dir(&cwd);
         }
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── WakeConfig / [agents.<id>.wake] (push-dispatch prototype, 2026-09-17) ──
+
+    #[test]
+    fn wake_config_inactive_by_default() {
+        let w = WakeConfig::default();
+        assert!(!w.is_active(), "a bare WakeConfig::default() must never be active");
+    }
+
+    #[test]
+    fn wake_config_requires_all_three_fields_to_be_active() {
+        let enabled_no_authors = WakeConfig {
+            enabled: true,
+            trusted_authors: vec![],
+            command: vec!["opencode".to_string(), "run".to_string()],
+        };
+        assert!(!enabled_no_authors.is_active(), "enabled with no trusted authors must stay inert");
+
+        let enabled_no_command = WakeConfig {
+            enabled: true,
+            trusted_authors: vec!["claude-code".to_string()],
+            command: vec![],
+        };
+        assert!(!enabled_no_command.is_active(), "enabled with no command must stay inert");
+
+        let disabled_but_configured = WakeConfig {
+            enabled: false,
+            trusted_authors: vec!["claude-code".to_string()],
+            command: vec!["opencode".to_string(), "run".to_string()],
+        };
+        assert!(!disabled_but_configured.is_active(), "enabled=false must stay inert regardless of the rest");
+
+        let fully_active = WakeConfig {
+            enabled: true,
+            trusted_authors: vec!["claude-code".to_string()],
+            command: vec!["opencode".to_string(), "run".to_string()],
+        };
+        assert!(fully_active.is_active());
+    }
+
+    #[test]
+    fn wake_config_trusts_is_case_insensitive() {
+        let w = WakeConfig {
+            enabled: true,
+            trusted_authors: vec!["Claude-Code".to_string(), "jose".to_string()],
+            command: vec!["opencode".to_string(), "run".to_string()],
+        };
+        assert!(w.trusts("claude-code"));
+        assert!(w.trusts("CLAUDE-CODE"));
+        assert!(w.trusts("Jose"));
+        assert!(!w.trusts("deep"));
+    }
+
+    #[test]
+    fn active_wake_config_none_for_undeclared_agent() {
+        let c = AgentsContract::empty();
+        assert!(c.active_wake_config("deep").is_none());
+    }
+
+    #[test]
+    fn active_wake_config_none_when_wake_table_absent() {
+        let mut agents = HashMap::new();
+        agents.insert("deep".to_string(), AgentContractEntry {
+            role: "writer".to_string(),
+            description: "".to_string(),
+            wake: None,
+        });
+        let c = AgentsContract { agents };
+        assert!(c.active_wake_config("deep").is_none());
+    }
+
+    #[test]
+    fn active_wake_config_none_when_inert() {
+        let mut agents = HashMap::new();
+        agents.insert("deep".to_string(), AgentContractEntry {
+            role: "writer".to_string(),
+            description: "".to_string(),
+            wake: Some(WakeConfig { enabled: false, trusted_authors: vec!["jose".to_string()], command: vec!["opencode".to_string()] }),
+        });
+        let c = AgentsContract { agents };
+        assert!(c.active_wake_config("deep").is_none(), "enabled=false must not surface as an active config");
+    }
+
+    #[test]
+    fn active_wake_config_some_when_fully_configured() {
+        let mut agents = HashMap::new();
+        agents.insert("deep".to_string(), AgentContractEntry {
+            role: "writer".to_string(),
+            description: "".to_string(),
+            wake: Some(WakeConfig {
+                enabled: true,
+                trusted_authors: vec!["claude-code".to_string()],
+                command: vec!["opencode".to_string(), "run".to_string()],
+            }),
+        });
+        let c = AgentsContract { agents };
+        let wake = c.active_wake_config("deep").expect("must be Some for a fully-configured active entry");
+        assert!(wake.trusts("claude-code"));
+        assert_eq!(wake.command, vec!["opencode".to_string(), "run".to_string()]);
+    }
+
+    #[test]
+    fn wake_table_parses_from_toml() {
+        let tmp = std::env::temp_dir().join("test_agents_contract_wake_toml");
+        let _ = std::fs::create_dir_all(tmp.join(".tylluan"));
+        let toml_content = r#"
+[agents.deep]
+role = "writer"
+description = "Backend"
+
+[agents.deep.wake]
+enabled = true
+trusted_authors = ["claude-code", "jose"]
+command = ["opencode", "run"]
+"#;
+        std::fs::write(tmp.join(".tylluan").join("agents.toml"), toml_content).unwrap();
+        let c = AgentsContract::load(&tmp);
+        let wake = c.active_wake_config("deep").expect("wake table must parse and be active");
+        assert!(wake.trusts("jose"));
+        assert_eq!(wake.command, vec!["opencode".to_string(), "run".to_string()]);
+        let _ = std::fs::remove_dir_all(tmp.join(".tylluan"));
+    }
+
+    #[test]
+    fn agent_without_wake_table_still_parses_fine() {
+        let tmp = std::env::temp_dir().join("test_agents_contract_no_wake_toml");
+        let _ = std::fs::create_dir_all(tmp.join(".tylluan"));
+        let toml_content = r#"
+[agents.qwen]
+role = "reader"
+description = "Research"
+"#;
+        std::fs::write(tmp.join(".tylluan").join("agents.toml"), toml_content).unwrap();
+        let c = AgentsContract::load(&tmp);
+        assert_eq!(c.len(), 1);
+        assert!(c.active_wake_config("qwen").is_none());
+        let _ = std::fs::remove_dir_all(tmp.join(".tylluan"));
     }
 }
