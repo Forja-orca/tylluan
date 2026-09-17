@@ -241,7 +241,7 @@ export function ArchitectureMap() {
               Replaced fixed half-life (T½=14d) with per-memory stability model.
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  383 tests passing (310+61+12)
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  905 tests passing (824+69+12)
             </text>
           </g>
 

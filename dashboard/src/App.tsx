@@ -142,6 +142,7 @@ function App() {
     if (cleanId.includes('claude')) return 'bg-orange-500';
     if (cleanId.includes('qwen')) return 'bg-blue-400';
     if (cleanId.includes('antigravity')) return 'bg-purple-500';
+    if (cleanId.includes('buffy')) return 'bg-rose-500';
     if (cleanId.includes('opencode') || cleanId.includes('deepseek')) return 'bg-cyan-500';
     if (cleanId.includes('jose') || cleanId.includes('human')) return 'bg-amber-500';
     let hash = 0;
