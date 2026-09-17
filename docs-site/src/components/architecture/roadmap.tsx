@@ -230,7 +230,7 @@ export function Roadmap() {
           <p>• <strong className="text-emerald-400">5 activos</strong>: FSRS · Freshness · Dashboard M26 · DreamCycle · Mem0 Benchmark — todos implementados y verificados.</p>
           <p>• <strong className="text-amber-400">2 propuestos</strong>: Local Tool-Calling (26M-1B) · HippoRAG-PPR — requieren desarrollo nuevo.</p>
           <p>• <strong className="text-slate-400">1 futuro</strong>: KNEXA-FL LinUCB — requiere madurez del mesh multi-peer.</p>
-          <p>• <strong className="text-slate-300">383 tests</strong> · 310 kernel + 61 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
+          <p>• <strong className="text-slate-300">905 tests</strong> · 824 kernel + 69 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
         </div>
       </div>
 

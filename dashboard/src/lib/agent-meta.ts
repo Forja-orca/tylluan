@@ -21,6 +21,7 @@ const AGENTS: Record<string, AgentStyle> = {
   deep:        { color: 'text-cyan-300',    bg: 'bg-cyan-950/50',    ring: 'ring-cyan-500/40',    border: 'border-cyan-500/30',    label: 'Deep',         initial: 'D' },
   opencode:    { color: 'text-amber-300',   bg: 'bg-amber-950/50',   ring: 'ring-amber-500/40',   border: 'border-amber-500/30',   label: 'OpenCode',     initial: 'O' },
   antigravity: { color: 'text-violet-300',  bg: 'bg-violet-950/50',  ring: 'ring-violet-500/40',  border: 'border-violet-500/30',  label: 'Antigravity',  initial: 'A' },
+  buffy:       { color: 'text-rose-300',    bg: 'bg-rose-950/50',    ring: 'ring-rose-500/40',    border: 'border-rose-500/30',    label: 'Buffy',        initial: 'B' },
   qwen:        { color: 'text-orange-300',  bg: 'bg-orange-950/50',  ring: 'ring-orange-500/40',  border: 'border-orange-500/30',  label: 'Qwen',         initial: 'Q' },
   kernel:      { color: 'text-slate-300',   bg: 'bg-slate-800/50',   ring: 'ring-slate-500/30',   border: 'border-slate-600/30',   label: 'Kernel',       initial: 'K' },
 };
