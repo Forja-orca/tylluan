@@ -33,3 +33,7 @@ description = "Dashboard/UI — browser-based, MCP client, bounded tasks only"
 [agents.qwen]
 role = "reader"
 description = "Web research + deep research — SSE MCP, no disk access"
+
+[agents.buffy]
+role = "writer"
+description = "Repo hygiene/refactor + independent verification — bounded, cross-checked tasks (added 2026-09-17, was missing: caused the @mention bridge to silently skip her real mentions)"
