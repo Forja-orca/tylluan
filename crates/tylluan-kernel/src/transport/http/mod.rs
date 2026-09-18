@@ -481,6 +481,9 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     let agents_contract = Arc::new(
         crate::security::agents_contract::AgentsContract::load(&workspace_root)
     );
+    // Clone kept for the BWC-3 subscriber: the Arc below is moved into
+    // HttpState, but the subscriber (spawned after server init) needs it too.
+    let dispatch_contract = Arc::clone(&agents_contract);
 
     let state = Arc::new(HttpState {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -844,6 +847,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         s.write().await.set_notifier(broadcast_tx.clone());
     }
     crate::security::grants::set_notifier(broadcast_tx.clone());
+
+    // BWC-3: internal dispatch subscriber (dry-run). The kernel is the
+    // always-on system — when a Coloquio message mentions an agent with an
+    // active [wake] policy from a trusted author, the kernel notices here
+    // and only LOGS what it would queue. No execution (BWC-4 pending).
+    crate::security::dispatch_subscriber::spawn_dispatch_subscriber(
+        broadcast_tx.clone(),
+        dispatch_contract,
+    );
 
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
     let (decay_enabled, decay_interval_secs) = {
