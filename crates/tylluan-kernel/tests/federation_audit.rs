@@ -1,4 +1,4 @@
-﻿//! Integration Tests for Tylluan Federation (M11)
+//! Integration Tests for Tylluan Federation (M11)
 //! Tests the PeerDb, Pull/Push endpoints, Auto-Sync loop setup, and Provenance tagging
 
 use tylluan_kernel::federation::{FederationPeer, PeerDb};

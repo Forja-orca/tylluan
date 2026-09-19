@@ -1,4 +1,4 @@
-﻿use tylluan_kernel::transport::http::api_v1::api_v1_routes;
+use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::auth;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tylluan_kernel::transport::http::HttpState;

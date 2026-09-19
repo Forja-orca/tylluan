@@ -1,4 +1,4 @@
-﻿//! Integration Test: A2A HITL (Human-In-The-Loop) Grant Flow
+//! Integration Test: A2A HITL (Human-In-The-Loop) Grant Flow
 //!
 //! Tests the grant flow end-to-end through the actual grants module:
 //!   1. register â†’ list_pending â†’ resolve â†’ task completes
