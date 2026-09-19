@@ -127,6 +127,7 @@ pub struct HttpState {
     pub agent_registry: crate::transport::http::api_v1::api_agents::AgentRegistry,
     pub contract_registry: crate::transport::http::api_v1::api_contracts::ContractRegistry,
     pub contract_db: Arc<crate::transport::http::api_v1::api_contracts::ContractDb>,
+    pub task_context: Arc<crate::memory::task_context::TaskContextStore>,
     pub peer_db: Arc<crate::federation::PeerDb>,
     pub health_ready: Arc<AtomicBool>,
     pub node_identity: Arc<tylluan_link::identity::NodeIdentity>,
@@ -531,6 +532,11 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         contract_db: Arc::new(
             crate::transport::http::api_v1::api_contracts::ContractDb::open("./data/contracts.db")
                 .expect("contracts.db init failed")
+        ),
+        task_context: Arc::new(
+            crate::memory::task_context::TaskContextStore::open(
+                &crate::memory::task_context::task_context_db_path().to_string_lossy()
+            ).expect("task_context.db init failed")
         ),
         peer_db: Arc::new(
             crate::federation::PeerDb::open("./data/peers.db")

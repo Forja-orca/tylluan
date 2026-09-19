@@ -257,6 +257,10 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/work-contracts/{id}/deliver", post(contract_deliver_handler))
         .route("/api/v1/work-contracts/{id}/vote", post(contract_vote_handler))
         .route("/api/v1/work-contracts/{id}/close", post(contract_close_handler))
+        // Task Context Capsule (TCC-2)
+        .route("/api/v1/work-contracts/{id}/context", get(contract_context_get_handler))
+        .route("/api/v1/work-contracts/{id}/context/decision", post(contract_context_add_decision_handler))
+        .route("/api/v1/work-contracts/{id}/context/pointer", post(contract_context_add_pointer_handler))
         // M14-A: Mesh DHT peer discovery
         .route("/api/v1/mesh/peers", get(mesh_peers_handler))
         .route("/api/v1/mesh/refresh", post(mesh_refresh_handler))

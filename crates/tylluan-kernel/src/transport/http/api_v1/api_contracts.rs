@@ -199,6 +199,19 @@ pub struct CloseRequest {
     pub summary: String,
 }
 
+#[derive(Deserialize)]
+pub struct AddDecisionRequest {
+    pub agent_id: String,
+    pub what: String,
+}
+
+#[derive(Deserialize)]
+pub struct AddPointerRequest {
+    pub agent_id: String,
+    pub kind: crate::memory::task_context::PointerKind,
+    pub reference: String,
+}
+
 // --- In-memory registry (DashMap cache over SQLite) -------------------------
 
 #[derive(Clone)]
@@ -512,6 +525,73 @@ pub async fn contract_active_handler(
     }
 }
 
+pub async fn contract_context_get_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.task_context.get(&id) {
+        Ok(Some(capsule)) => (StatusCode::OK, Json(serde_json::to_value(capsule).unwrap_or_default())).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": format!("no task context found for contract '{id}'")
+        }))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))).into_response(),
+    }
+}
+
+pub async fn contract_context_add_decision_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(id): Path<String>,
+    Json(req): Json<AddDecisionRequest>,
+) -> impl IntoResponse {
+    if req.agent_id.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "agent_id cannot be empty"
+        }))).into_response();
+    }
+    if req.what.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "what cannot be empty"
+        }))).into_response();
+    }
+    match state.task_context.add_decision(&id, req.agent_id.trim(), req.what.trim()) {
+        Ok(capsule) => (StatusCode::OK, Json(serde_json::to_value(capsule).unwrap_or_default())).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))).into_response(),
+    }
+}
+
+pub async fn contract_context_add_pointer_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(id): Path<String>,
+    Json(req): Json<AddPointerRequest>,
+) -> impl IntoResponse {
+    if req.agent_id.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "agent_id cannot be empty"
+        }))).into_response();
+    }
+    if req.reference.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "reference cannot be empty"
+        }))).into_response();
+    }
+    let pointer = crate::memory::task_context::CapsulePointer {
+        kind: req.kind,
+        reference: req.reference.trim().to_string(),
+        added_by: req.agent_id.trim().to_string(),
+        at: 0,
+    };
+    match state.task_context.add_pointer(&id, pointer) {
+        Ok(capsule) => (StatusCode::OK, Json(serde_json::to_value(capsule).unwrap_or_default())).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))).into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -795,5 +875,51 @@ mod tests {
         db.persist(&c).expect("persist active");
         let loaded2 = db.load_active().expect("load_active 2");
         assert_eq!(loaded2.len(), 1);
+    }
+
+    #[test]
+    fn test_task_context_handlers_logic_and_additive_store() {
+        let store = crate::memory::task_context::TaskContextStore::in_memory().expect("in-memory task_context store");
+        let contract_id = "bwc-tcc-test-01";
+
+        // 1. Initial get is None
+        let initial = store.get(contract_id).expect("get");
+        assert!(initial.is_none());
+
+        // 2. Add first decision
+        let c1 = store.add_decision(contract_id, "antigravity", "Decidido esquema DPC").expect("add_decision 1");
+        assert_eq!(c1.contract_id, contract_id);
+        assert_eq!(c1.decisions.len(), 1);
+        assert_eq!(c1.decisions[0].by, "antigravity");
+        assert_eq!(c1.decisions[0].what, "Decidido esquema DPC");
+        assert_eq!(c1.pointers.len(), 0);
+
+        // 3. Add pointer
+        let p = crate::memory::task_context::CapsulePointer {
+            kind: crate::memory::task_context::PointerKind::Doc,
+            reference: "docs/architecture/spec.md".to_string(),
+            added_by: "antigravity".to_string(),
+            at: 0,
+        };
+        let c2 = store.add_pointer(contract_id, p).expect("add_pointer");
+        assert_eq!(c2.decisions.len(), 1);
+        assert_eq!(c2.pointers.len(), 1);
+        assert_eq!(c2.pointers[0].kind, crate::memory::task_context::PointerKind::Doc);
+        assert_eq!(c2.pointers[0].reference, "docs/architecture/spec.md");
+        assert_eq!(c2.pointers[0].added_by, "antigravity");
+
+        // 4. Add second decision by another agent (additive invariant)
+        let c3 = store.add_decision(contract_id, "deep", "Implementado coalescer en kernel").expect("add_decision 2");
+        assert_eq!(c3.decisions.len(), 2);
+        assert_eq!(c3.decisions[0].what, "Decidido esquema DPC");
+        assert_eq!(c3.decisions[1].what, "Implementado coalescer en kernel");
+        assert_eq!(c3.decisions[1].by, "deep");
+        assert_eq!(c3.pointers.len(), 1);
+
+        // 5. Get returns complete capsule
+        let loaded = store.get(contract_id).expect("get final").expect("capsule exists");
+        assert_eq!(loaded.decisions.len(), 2);
+        assert_eq!(loaded.pointers.len(), 1);
+        assert_eq!(loaded.updated_by, "deep");
     }
 }
