@@ -1,4 +1,4 @@
-//! Configuration system for TylluanNexus.
+﻿//! Configuration system for TylluanNexus.
 //!
 //! Reads from `tylluan.toml` in the current directory or the default config path.
 //! Auto-generates a random auth token on first run if none is set.
@@ -67,10 +67,10 @@ pub fn load_guild_config(config: &TylluanConfig) -> Vec<GremioDiscovery> {
             };
 
             if guild_md_exists {
-                info!("📦 [V2] Discovered gremio '{}' at {} with {} plugins, {} agents",
+                info!("ðŸ“¦ [V2] Discovered gremio '{}' at {} with {} plugins, {} agents",
                       gremio.name, gremio.path, plugins.len(), agents.len());
             } else {
-                warn!("⚠️ [V2] Gremio '{}' missing guild.md at {}", gremio.name, guild_md_path.display());
+                warn!("âš ï¸ [V2] Gremio '{}' missing guild.md at {}", gremio.name, guild_md_path.display());
             }
 
             discoveries.push(GremioDiscovery {
@@ -92,10 +92,10 @@ pub fn load_guild_config(config: &TylluanConfig) -> Vec<GremioDiscovery> {
                     .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
                     .collect();
                 legacy_plugins.sort();
-                info!("📦 [V2] Legacy fallback: {} guilds from {}", legacy_plugins.len(), legacy_path);
+                info!("ðŸ“¦ [V2] Legacy fallback: {} guilds from {}", legacy_plugins.len(), legacy_path);
             }
         } else {
-            warn!("⚠️ [V2] Legacy fallback path not found: {}", legacy_path);
+            warn!("âš ï¸ [V2] Legacy fallback path not found: {}", legacy_path);
         }
     }
 
@@ -176,7 +176,7 @@ pub struct TylluanConfig {
     #[serde(default)]
     pub nat: NatConfig,
 
-    /// J-14: evaluation settings. All opt-in by default — no phase that can
+    /// J-14: evaluation settings. All opt-in by default â€” no phase that can
     /// trigger real local inference is born enabled (CLAUDE.md standing rule,
     /// same precedent as [security] coherence_gate_hybrid_enabled).
     #[serde(default)]
@@ -188,7 +188,7 @@ pub struct TylluanConfig {
 pub struct EvalConfig {
     /// Opt-in gate for the DeepEvalPhase NightConsolidation phase, which
     /// runs benchmarks/benchmark_j6_j7_deepeval.py (subprocess, llama_backend
-    /// judge — can auto-start a real llama-server). Defaults to FALSE.
+    /// judge â€” can auto-start a real llama-server). Defaults to FALSE.
     #[serde(default)]
     pub deep_eval_enabled: bool,
     /// Minimum hours between DeepEval attempts (the pilot spawns real
@@ -198,7 +198,7 @@ pub struct EvalConfig {
     pub deep_eval_interval_hours: u64,
     /// Opt-in gate for the SlmSocietyPhase NightConsolidation phase, which
     /// runs benchmarks/spikes/slm_society/slm_society_harness.py (Phase 0
-    /// 3-arm SLM society benchmark — Arm A Baseline, Arm B Self-MoA, Arm C A-SSA).
+    /// 3-arm SLM society benchmark â€” Arm A Baseline, Arm B Self-MoA, Arm C A-SSA).
     /// Defaults to FALSE.
     #[serde(default)]
     pub slm_society_eval_enabled: bool,
@@ -254,7 +254,7 @@ impl Default for FederationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatConfig {
     /// OPT-IN (default false): STUN discovery is an outbound UDP call to
-    /// third-party servers (stun.l.google.com:19302) — it must NOT run on
+    /// third-party servers (stun.l.google.com:19302) â€” it must NOT run on
     /// air-gapped / portable / BM25-only installs without explicit consent.
     /// Audited 2026-08-22 (T206): previously ran on EVERY boot unconditionally.
     #[serde(default)]
@@ -356,12 +356,12 @@ impl Default for GossipConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MdnsConfig {
     /// Advertise this instance on the LAN as `tylluan-nexus-o3.local`.
-    /// Disabled by default — enable only in trusted LAN environments.
+    /// Disabled by default â€” enable only in trusted LAN environments.
     #[serde(default)]
     pub advertise: bool,
     /// Scan the LAN for other TylluanNexus instances and auto-register them
     /// as federation peers (requires human approval before any sync).
-    /// Disabled by default — enable only in trusted LAN environments.
+    /// Disabled by default â€” enable only in trusted LAN environments.
     #[serde(default)]
     pub discover: bool,
 }
@@ -450,8 +450,8 @@ pub struct NexusConfig {
     // with a `[nexus]` table that doesn't explicitly list `transport = [...]`
     // -- exactly what this project's own CI test configs do -- silently
     // booted a kernel serving NO transport at all: no stdio, no http, no
-    // sse. It printed "✅ TylluanNexus Kernel operational" and "[OK] Kernel
-    // operational — http://127.0.0.1:0" (using the *configured* port 0
+    // sse. It printed "âœ… TylluanNexus Kernel operational" and "[OK] Kernel
+    // operational â€” http://127.0.0.1:0" (using the *configured* port 0
     // literally, since the HTTP block that would resolve the real bound
     // port never ran) and kept running background jobs (guilds, IdleLab)
     // forever, with no error and no crash -- a completely silent footgun
@@ -519,7 +519,7 @@ pub struct MemoryConfig {
     /// Shared budget for heavy background loops (reindexer, HNSW rebuild,
     /// memory consensus): max jobs running simultaneously + bounded wait to
     /// enter (latency budget). Prevents the 2026-08-30 GraphRAG failure class
-    /// — unbounded background jobs stacking and saturating CPU. Default 2
+    /// â€” unbounded background jobs stacking and saturating CPU. Default 2
     /// concurrent heavy jobs, 60s wait budget (skip tick instead of queuing).
     #[serde(default = "default_background_concurrency")]
     pub background_concurrency: usize,
@@ -762,18 +762,18 @@ impl Default for InferenceLlamaConfig {
 /// falling back to CPU when unavailable.
 pub fn auto_select_device() -> InferenceDevice {
     if cfg!(target_os = "macos") {
-        tracing::info!("🍎 Detected macOS — auto-selecting CoreML inference device");
+        tracing::info!("ðŸŽ Detected macOS â€” auto-selecting CoreML inference device");
         return InferenceDevice::Coreml;
     }
     if cfg!(feature = "cuda") {
-        tracing::info!("🚀 CUDA feature enabled — auto-selecting CUDA inference device");
+        tracing::info!("ðŸš€ CUDA feature enabled â€” auto-selecting CUDA inference device");
         return InferenceDevice::Cuda;
     }
     if cfg!(target_os = "windows") {
-        tracing::info!("🚀 Detected Windows — auto-selecting DirectML inference device");
+        tracing::info!("ðŸš€ Detected Windows â€” auto-selecting DirectML inference device");
         return InferenceDevice::Directml;
     }
-    tracing::info!("🧠 No GPU execution provider available — falling back to CPU");
+    tracing::info!("ðŸ§  No GPU execution provider available â€” falling back to CPU");
     InferenceDevice::Cpu
 }
 
@@ -793,7 +793,7 @@ pub struct InferenceProvider {
     pub name: String,
     pub mcp_server: String, // Name of the MCP server that provides this model
     pub model_id: String,
-    // NOTE: `capability` field removed 2026-08-24 — was declared, serialized, and
+    // NOTE: `capability` field removed 2026-08-24 â€” was declared, serialized, and
     // defaulted, but never read anywhere in src/ outside config.rs (grep = 0 hits).
     // If capability-based routing is needed in the future, re-add with actual consumers.
 }
@@ -834,7 +834,7 @@ pub enum ExternalProviderRisk {
 ///
 /// ## URL rules (SSRF)
 /// - **Deny**: cloud metadata IPs (`169.254.169.254`), wildcard `0.0.0.0`,
-///   private RFC-1918 ranges (`10.x`, `172.16-31.x`, `192.168.x`) — these
+///   private RFC-1918 ranges (`10.x`, `172.16-31.x`, `192.168.x`) â€” these
 ///   are never valid inference endpoints.
 /// - **Allow**: `localhost`, `127.0.0.1`, `[::1]` on any port.
 /// - **Allow**: any public / well-known hostname (e.g. `api.openai.com`).
@@ -847,9 +847,9 @@ pub enum ExternalProviderRisk {
 ///   `PASS`, `CREDENTIAL` (case-insensitive), OR names in the known-good
 ///   list (`OPENAI_BASE_URL`, `LITELLM_API_BASE`, `OLLAMA_HOST`).
 /// - **Warn** (still allow): names that match neither pattern, so we don't
-///   break legit custom names — but the warning is visible at startup.
+///   break legit custom names â€” but the warning is visible at startup.
 pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderRisk {
-    // ── URL validation ──────────────────────────────────────────────
+    // â”€â”€ URL validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let url_ok = (|| -> Result<(), String> {
         let base = provider.base_url.trim();
         if !base.starts_with("http://") && !base.starts_with("https://") {
@@ -889,12 +889,12 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
 
     if let Err(ref reason) = url_ok {
         return ExternalProviderRisk::DangerousUrl(format!(
-            "base_url '{}' — {reason}",
+            "base_url '{}' â€” {reason}",
             provider.base_url
         ));
     }
 
-    // ── api_key_env validation ──────────────────────────────────────
+    // â”€â”€ api_key_env validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let env_name = provider.api_key_env.trim();
     if env_name.is_empty() {
         return ExternalProviderRisk::MissingKeyEnv;
@@ -916,7 +916,7 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
     let upper = env_name.to_uppercase();
     if NEVER_CREDENTIALS.contains(&upper.as_str()) {
         return ExternalProviderRisk::SuspiciousKeyEnv(format!(
-            "api_key_env '{}' is a system environment variable, not an API key — blocked",
+            "api_key_env '{}' is a system environment variable, not an API key â€” blocked",
             provider.api_key_env
         ));
     }
@@ -937,7 +937,7 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
     let suffix_valid = upper.ends_with("_API_KEY") || upper.ends_with("_TOKEN");
     if !suffix_valid {
         return ExternalProviderRisk::SuspiciousKeyEnv(format!(
-            "api_key_env '{}' does not follow the naming convention (must end with _API_KEY or _TOKEN) — rename it, e.g. {}_API_KEY",
+            "api_key_env '{}' does not follow the naming convention (must end with _API_KEY or _TOKEN) â€” rename it, e.g. {}_API_KEY",
             provider.api_key_env, upper
         ));
     }
@@ -953,7 +953,7 @@ impl ExternalProvider {
             ExternalProviderRisk::Safe => Ok(()),
             ExternalProviderRisk::DangerousUrl(msg) => Err(msg),
             ExternalProviderRisk::MissingKeyEnv => Err(
-                format!("External provider '{}': api_key_env is empty — set it to the env var name that holds the API key", self.name)
+                format!("External provider '{}': api_key_env is empty â€” set it to the env var name that holds the API key", self.name)
             ),
             ExternalProviderRisk::SuspiciousKeyEnv(msg) => Err(msg),
         }
@@ -990,14 +990,14 @@ pub struct SilvaConfig {
 
     /// DEPRECATED since v0.13.0: memory decay is FSRS-5 driven (per-node
     /// stability, see docs/concepts/FSRS_DESIGN.md). `apply_decay()` receives
-    /// this value but discards it (decay.rs). Kept for config compatibility —
+    /// this value but discards it (decay.rs). Kept for config compatibility â€”
     /// startup warns if a non-default value is set. Removal is a separate
     /// decision (wired through 7 call sites, see Coloquio T199).
     #[serde(default = "default_decay_half_life_hours")]
     pub decay_half_life_hours: u64,
 
     /// DEPRECATED since v0.17.0: moved to FederationConfig.sync_interval_ms
-    /// (2026-08-31, auto-sync robustness fix) — it configures federation sync
+    /// (2026-08-31, auto-sync robustness fix) â€” it configures federation sync
     /// cadence, not Silva storage. Kept so old tylluan.toml files keep
     /// loading; the runtime prefers federation.sync_interval_ms and falls
     /// back to this value only when the new location is unset (i.e. still at
@@ -1017,7 +1017,7 @@ pub struct SilvaConfig {
     pub hybrid_sparse_enabled: bool,
 
     /// Opt-in two-stage retrieval cascade (arXiv:2404.13357 Two-Step SPLADE pattern).
-    /// Stage 1 fuses FTS5+learned-sparse lexically; if ≥3 results are backed by BOTH
+    /// Stage 1 fuses FTS5+learned-sparse lexically; if â‰¥3 results are backed by BOTH
     /// signals (independent-agreement proxy), returns without paying the dense query
     /// embed (2-8s CPU). Otherwise stage 2 runs the full fusion. Requires
     /// hybrid_sparse_enabled for stage 1 to ever pass the agreement gate.
@@ -1032,6 +1032,13 @@ pub struct SilvaConfig {
     /// rank-based (typical range 0.01-0.07 with 4 sources).
     #[serde(default = "default_recall_abstain_min_score")]
     pub recall_abstain_min_score: f64,
+
+    /// Embed-batching contract (T582): route ALL dense-embed call sites
+    /// through the coalescing batcher (one ONNX batch per concurrent window
+    /// instead of one mutex-acquisition per call). Default OFF â€” the direct
+    /// per-call path stays untouched when disabled.
+    #[serde(default)]
+    pub embed_batching_enabled: bool,
 }
 
 impl Default for SilvaConfig {
@@ -1045,6 +1052,7 @@ impl Default for SilvaConfig {
             sync_interval_ms: default_sync_interval(),
             hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
             cascade_enabled: default_cascade_enabled(),
+            embed_batching_enabled: false,
             recall_abstain_min_score: default_recall_abstain_min_score(),
         }
     }
@@ -1134,7 +1142,7 @@ fn default_max_requests_per_agent() -> u32 { 60 }
 
 fn default_model() -> String { "local-v3".into() }
 
-// ─── Security Configuration (Sandbox + ACL) ─────────────────────────
+// â”€â”€â”€ Security Configuration (Sandbox + ACL) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
@@ -1152,7 +1160,7 @@ pub struct SecurityConfig {
     /// Opt-in runtime enforcement for guild capability declarations.
     /// When true, guilds with declared CAPABILITIES are blocked from
     /// performing operations outside their declared scope (process_execution
-    /// and filesystem_scope only — network_hosts is advisory-only).
+    /// and filesystem_scope only â€” network_hosts is advisory-only).
     /// Defaults to false: maintaining existing advisory-only behavior.
     /// Guilds without capabilities (null) are never affected.
     #[serde(default = "default_capabilities_enforce")]
@@ -1162,7 +1170,7 @@ pub struct SecurityConfig {
     #[serde(default)]
     pub acl: AclConfig,
     /// Enable SQLCipher encryption at rest. Defaults to true ONLY when the binary
-    /// was compiled with the `encryption` feature — that feature is not in the
+    /// was compiled with the `encryption` feature â€” that feature is not in the
     /// default feature set (bundles SQLCipher+OpenSSL from source, unsupported on
     /// Windows native). Defaulting this to true unconditionally would silently
     /// report "encrypted" on standard builds that cannot actually encrypt.
@@ -1184,7 +1192,7 @@ pub struct SecurityConfig {
     /// inference process as a side effect) must default to OFF; the human
     /// turns it on when they actually want it, per Jose's standing rule
     /// that Tylluan must never be invasive of other software or the OS by
-    /// default, "aunque demos 10000 opciones más".
+    /// default, "aunque demos 10000 opciones mÃ¡s".
     #[serde(default = "default_coherence_gate_hybrid_enabled")]
     pub coherence_gate_hybrid_enabled: bool,
 }
@@ -1217,7 +1225,7 @@ impl Default for SecurityConfig {
 /// Encryption requires the `encryption` Cargo feature:
 ///   cargo build --features encryption
 ///
-/// Security note: uses PRAGMA hexkey (not PRAGMA key) — hexkey only accepts
+/// Security note: uses PRAGMA hexkey (not PRAGMA key) â€” hexkey only accepts
 /// [0-9a-f] so string interpolation cannot produce SQL injection.
 /// The key is applied BEFORE any other PRAGMA to avoid reading an encrypted
 /// DB with WAL mode before it is unlocked.
@@ -1242,7 +1250,7 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
                              database was not encrypted with SQLCipher",
                             path.display()
                         ))?;
-                    tracing::info!("🔐 SQLCipher encryption active: {}", path.display());
+                    tracing::info!("ðŸ” SQLCipher encryption active: {}", path.display());
                 }
                 #[cfg(not(feature = "encryption"))]
                 {
@@ -1273,14 +1281,14 @@ pub fn open_db(path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
 }
 
 // Resolve the DB encryption key with priority:
-// 1. `TYLLUAN_DB_KEY` env var (64-char hex) — explicit operator override, e.g. injected
+// 1. `TYLLUAN_DB_KEY` env var (64-char hex) â€” explicit operator override, e.g. injected
 //    from a vault/secrets manager in server/Docker deployments.
 // 2. OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service).
-//    The key never touches the data directory — it is tied to the OS user account,
+//    The key never touches the data directory â€” it is tied to the OS user account,
 //    so copying the DB file or the data directory alone does not leak the key.
-// 3. File-based fallback (`.tylluan-db-key`, derived with Argon2id) — ONLY used when
+// 3. File-based fallback (`.tylluan-db-key`, derived with Argon2id) â€” ONLY used when
 //    no keychain backend is available (e.g. headless Linux/Docker without a Secret
-//    Service daemon). This mode does NOT protect against filesystem/disk access —
+//    Service daemon). This mode does NOT protect against filesystem/disk access â€”
 //    the seed lives next to the encrypted DB. Operators on server/Docker profiles
 //    should set `TYLLUAN_DB_KEY` explicitly for real at-rest protection.
 
@@ -1320,7 +1328,7 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
     // inside keyring::get_password() when no DBus daemon is running
     // (common in Docker / headless CI environments).
     if cfg!(target_os = "linux") && !dbus_is_available() {
-        tracing::warn!("No DBus detected on Linux — skipping OS keychain. \
+        tracing::warn!("No DBus detected on Linux â€” skipping OS keychain. \
              File-based key fallback does NOT protect against filesystem access. \
              Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
         return file_based_key_fallback(data_dir);
@@ -1330,11 +1338,11 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
     match keyring::Entry::new("tylluan-nexus-db", &account) {
         Ok(entry) => match entry.get_password() {
             Ok(key_hex) if key_hex.chars().all(|c| c.is_ascii_hexdigit()) && key_hex.len() == 64 => {
-                tracing::info!("🔐 DB encryption key loaded from OS keychain");
+                tracing::info!("ðŸ” DB encryption key loaded from OS keychain");
                 return Ok(key_hex);
             }
             Ok(_) => {
-                tracing::warn!("OS keychain entry for tylluan-nexus-db is corrupt — regenerating");
+                tracing::warn!("OS keychain entry for tylluan-nexus-db is corrupt â€” regenerating");
             }
             Err(keyring::Error::NoEntry) => {
                 let mut raw = [0u8; 32];
@@ -1342,24 +1350,24 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
                 let key_hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
                 match entry.set_password(&key_hex) {
                     Ok(()) => {
-                        tracing::info!("🔑 Generated DB encryption key, stored in OS keychain (never written to disk)");
+                        tracing::info!("ðŸ”‘ Generated DB encryption key, stored in OS keychain (never written to disk)");
                         return Ok(key_hex);
                     }
                     Err(e) => {
-                        tracing::warn!("Could not store key in OS keychain ({e}) — falling back to file-based key. \
+                        tracing::warn!("Could not store key in OS keychain ({e}) â€” falling back to file-based key. \
                              This does NOT protect against filesystem/disk access. \
                              Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
                     }
                 }
             }
             Err(e) => {
-                tracing::warn!("OS keychain unavailable ({e}) — falling back to file-based key. \
+                tracing::warn!("OS keychain unavailable ({e}) â€” falling back to file-based key. \
                      This does NOT protect against filesystem/disk access. \
                      Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
             }
         },
         Err(e) => {
-            tracing::warn!("OS keychain unavailable ({e}) — falling back to file-based key. \
+            tracing::warn!("OS keychain unavailable ({e}) â€” falling back to file-based key. \
                  This does NOT protect against filesystem/disk access. \
                  Set TYLLUAN_DB_KEY explicitly for real at-rest protection.");
         }
@@ -1370,7 +1378,7 @@ fn ensure_db_key(data_dir: &Path) -> anyhow::Result<String> {
 
 /// Last-resort key storage for environments without an OS keychain (headless
 /// Linux/Docker without Secret Service). The seed sits next to the encrypted
-/// DB, so this does NOT protect against an attacker with filesystem access —
+/// DB, so this does NOT protect against an attacker with filesystem access â€”
 /// it only guards against e.g. accidentally syncing just the `.db` file
 /// without its sibling key file.
 fn file_based_key_fallback(data_dir: &Path) -> anyhow::Result<String> {
@@ -1393,7 +1401,7 @@ fn file_based_key_fallback(data_dir: &Path) -> anyhow::Result<String> {
     OsRng.fill_bytes(&mut seed);
     fs::write(&key_path, seed)
         .map_err(|e| anyhow::anyhow!("Cannot write {}: {}", key_path.display(), e))?;
-    tracing::info!("🔑 Generated file-based DB encryption key at {} (no keychain available)", key_path.display());
+    tracing::info!("ðŸ”‘ Generated file-based DB encryption key at {} (no keychain available)", key_path.display());
 
     derive_key_argon2(&seed, data_dir)
 }
@@ -1427,7 +1435,7 @@ pub enum SandboxProfile {
     Strict,
     /// Moderate isolation: Docker for bash/code only, enforcement per
     /// declared capabilities, network/filesystem per guild declaration.
-    /// This is the DEFAULT — backward compatible with pre-M30-P1 behavior.
+    /// This is the DEFAULT â€” backward compatible with pre-M30-P1 behavior.
     #[default]
     Balanced,
     /// No isolation: no Docker, process_execution allowed, full network
@@ -1545,10 +1553,10 @@ pub fn load_sandbox_profile() -> SandboxProfile {
     SandboxProfile::Balanced
 }
 
-// ─── M30-P2: Hierarchical profile override (session > guild > global) ───
+// â”€â”€â”€ M30-P2: Hierarchical profile override (session > guild > global) â”€â”€â”€
 
 /// In-memory session-level profile overrides, keyed by agent_id.
-/// NOT persisted — lives only while the kernel runs.
+/// NOT persisted â€” lives only while the kernel runs.
 static SESSION_OVERRIDES: OnceLock<RwLock<HashMap<String, SandboxProfile>>> = OnceLock::new();
 
 fn session_overrides() -> &'static RwLock<HashMap<String, SandboxProfile>> {
@@ -1586,7 +1594,7 @@ fn load_guild_override(guild_name: &str) -> Option<SandboxProfile> {
 ///
 /// ## Asymmetry (documented):
 /// Session-level overrides only affect enforcement (check_capabilities)
-/// and dry-run classification. They do NOT affect Docker spawn decisions —
+/// and dry-run classification. They do NOT affect Docker spawn decisions â€”
 /// a guild is launched once per kernel start, not per-agent, so the guild
 /// and global levels are the only ones that can decide Docker isolation.
 pub async fn resolve_effective_profile(guild_name: &str, agent_id: &str) -> (SandboxProfile, &'static str) {
@@ -1609,7 +1617,7 @@ pub async fn resolve_effective_profile(guild_name: &str, agent_id: &str) -> (San
 }
 
 /// Load the effective Docker-scope profile for a guild.
-/// Session overrides are intentionally excluded — Docker isolation is a
+/// Session overrides are intentionally excluded â€” Docker isolation is a
 /// per-guild concern, not per-agent. See `resolve_effective_profile` docs.
 pub async fn resolve_docker_profile(guild_name: &str) -> (SandboxProfile, &'static str) {
     // 1. Guild override
@@ -1718,8 +1726,8 @@ fn default_sync_interval() -> u64 { 30_000 }
 fn default_decay_interval_hours() -> u64 { 6 }
 fn default_decay_prune_threshold() -> f64 { 0.15 }
 /// Public because main.rs compares against it to warn about the deprecated
-/// key (decay is FSRS-driven since v0.13.0 — this value has no effect).
-pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 días
+/// key (decay is FSRS-driven since v0.13.0 â€” this value has no effect).
+pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 dÃ­as
 
 pub fn default_hybrid_sparse_enabled() -> bool { false }
 
@@ -1755,7 +1763,7 @@ impl GuildWeight {
     }
 }
 
-// ─── Config Caching + Watcher ─────────────────────────────────────────
+// â”€â”€â”€ Config Caching + Watcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 static CONFIG_CACHE: std::sync::OnceLock<Arc<RwLock<TylluanConfig>>> = std::sync::OnceLock::new();
 static CONFIG_PATH_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
@@ -1783,7 +1791,7 @@ impl TylluanConfig {
         let shared = Arc::new(RwLock::new(config));
         CONFIG_CACHE.set(shared.clone()).ok();
         
-        info!("📁 Config loaded and cached");
+        info!("ðŸ“ Config loaded and cached");
         Ok(shared)
     }
 
@@ -1793,13 +1801,13 @@ impl TylluanConfig {
             let new_config = Self::load()?;
             let mut guard = cached.write().await;
             *guard = new_config;
-            info!("🔄 Config reloaded manually");
+            info!("ðŸ”„ Config reloaded manually");
         }
         Ok(())
     }
 }
 
-// ─── Config Loading ─────────────────────────────────────────────────
+// â”€â”€â”€ Config Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 impl TylluanConfig {
     /// Load configuration from `tylluan.toml` in the current directory,
@@ -1808,11 +1816,11 @@ impl TylluanConfig {
         let config_path = Self::find_config_file();
 
         let mut config = if let Some(path) = &config_path {
-            info!("📄 Loading config from: {}", path.display());
+            info!("ðŸ“„ Loading config from: {}", path.display());
             let content = std::fs::read_to_string(path)?;
             toml::from_str(&content)?
         } else {
-            info!("📄 No tylluan.toml found, using defaults.");
+            info!("ðŸ“„ No tylluan.toml found, using defaults.");
             Self::default()
         };
 
@@ -1877,7 +1885,7 @@ impl TylluanConfig {
     pub fn ensure_auth_token(&self) -> anyhow::Result<Option<String>> {
         // 0. Dev mode bypass
         if self.nexus.dev_mode {
-            info!("🔓 Dev mode enabled: authentication disabled");
+            info!("ðŸ”“ Dev mode enabled: authentication disabled");
             return Ok(None);
         }
 
@@ -1885,7 +1893,7 @@ impl TylluanConfig {
         if let Ok(token) = std::env::var("TYLLUAN_TOKEN") {
             let trimmed = token.trim();
             if !trimmed.is_empty() {
-                info!("🔐 Auth: Using token from TYLLUAN_TOKEN environment variable");
+                info!("ðŸ” Auth: Using token from TYLLUAN_TOKEN environment variable");
                 return Ok(Some(trimmed.to_string()));
             }
         }
@@ -1896,14 +1904,14 @@ impl TylluanConfig {
             let content = std::fs::read_to_string(token_path)?;
             let trimmed = content.trim();
             if !trimmed.is_empty() {
-                info!("🔐 Auth: Using token from .tylluan-token file");
+                info!("ðŸ” Auth: Using token from .tylluan-token file");
                 return Ok(Some(trimmed.to_string()));
             }
         }
 
         // 3. Generate random token if missing (Sovereign Auto-Security)
-        warn!("⚠️ No authentication token found (TYLLUAN_TOKEN or .tylluan-token).");
-        info!("🔐 Generating a new secure Master Token...");
+        warn!("âš ï¸ No authentication token found (TYLLUAN_TOKEN or .tylluan-token).");
+        info!("ðŸ” Generating a new secure Master Token...");
         
         use rand::{Rng, distributions::Alphanumeric};
         let new_token: String = rand::thread_rng()
@@ -1913,11 +1921,11 @@ impl TylluanConfig {
             .collect();
 
         if let Err(e) = std::fs::write(token_path, &new_token) {
-            error!("❌ Failed to write .tylluan-token: {}. Security compromised.", e);
+            error!("âŒ Failed to write .tylluan-token: {}. Security compromised.", e);
             anyhow::bail!("Security violation: cannot persist auth token");
         }
 
-        info!("✅ New Master Token saved to {}.", token_path.display());
+        info!("âœ… New Master Token saved to {}.", token_path.display());
 
         Ok(Some(new_token))
     }
@@ -2066,7 +2074,7 @@ profile = "permissive"
         assert!(SandboxProfile::Permissive.is_permissive());
     }
 
-    // ─── M30-P2: Hierarchical cascade tests ─────────────────────────
+    // â”€â”€â”€ M30-P2: Hierarchical cascade tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[test]
     fn test_guild_overrides_deserialize_from_toml() {
@@ -2146,7 +2154,7 @@ code = "permissive"
         assert_eq!(origin, "global");
     }
 
-    // ─── External provider SSRF + env-var exfiltration tests ────────
+    // â”€â”€â”€ External provider SSRF + env-var exfiltration tests â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[test]
     fn test_external_provider_accepts_https_public_url() {

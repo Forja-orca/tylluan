@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     Json,
     extract::{State, Path, Query},
     http::StatusCode,
@@ -43,7 +43,7 @@ pub async fn memory_search_handler(State(state): State<Arc<HttpState>>, Query(p)
     let limit = p.limit.unwrap_or(20);
     let query_embedding = state.matcher.engine().and_then(|e| {
         tokio::task::block_in_place(|| {
-            state.silva.query_embed_cache.get_or_embed(query, |q| e.embed(q))
+            state.silva.query_embed_cache.get_or_embed(query, |q| e.embed_batch_coalesced(q))
         })
         .ok()
     });
@@ -117,7 +117,7 @@ pub async fn reindex_handler(State(state): State<Arc<HttpState>>) -> impl IntoRe
         for node_id in &stale_nodes {
             if let Ok(Some(node)) = silva.get_node(node_id).await {
                 let contextual = build_contextual_text(&node.metadata, &node.content);
-                let _ = tokio::task::block_in_place(|| engine.embed(&contextual)).map(|vector| {
+                let _ = tokio::task::block_in_place(|| engine.embed_batch_coalesced(&contextual)).map(|vector| {
                     let sid = silva.clone();
                     let nid = node_id.clone();
                     let mid = model_id.clone();
