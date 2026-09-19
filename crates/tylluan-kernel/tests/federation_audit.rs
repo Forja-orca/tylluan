@@ -1,4 +1,4 @@
-//! Integration Tests for Tylluan Federation (M11)
+﻿//! Integration Tests for Tylluan Federation (M11)
 //! Tests the PeerDb, Pull/Push endpoints, Auto-Sync loop setup, and Provenance tagging
 
 use tylluan_kernel::federation::{FederationPeer, PeerDb};
@@ -53,6 +53,7 @@ async fn test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),

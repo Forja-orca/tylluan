@@ -1,4 +1,4 @@
-//! Integration Tests for Tylluan Mesh Identity (M12-A)
+﻿//! Integration Tests for Tylluan Mesh Identity (M12-A)
 //! Tests Ed25519 keypair generation, persistence, signature verification,
 //! and the /api/v1/federation/identity endpoint.
 
@@ -13,7 +13,7 @@ fn tmp_identity_path(tag: &str) -> PathBuf {
     std::env::temp_dir().join(format!("tylluan_mesh_{tag}_{id}.key"))
 }
 
-// ─── Unit-level identity tests ───────────────────────────────────────────────
+// â”€â”€â”€ Unit-level identity tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn test_identity_generate_and_load_roundtrip() {
@@ -25,7 +25,7 @@ fn test_identity_generate_and_load_roundtrip() {
     assert!(id1.public_key_hex().chars().all(|c| c.is_ascii_hexdigit()));
     assert_eq!(id1.node_id().len(), 32);
 
-    // Second call must load — not regenerate
+    // Second call must load â€” not regenerate
     let id2 = NodeIdentity::load_or_create(&path).expect("should load on second call");
     assert_eq!(id1.public_key_hex(), id2.public_key_hex(), "public key must be stable across loads");
     assert_eq!(id1.node_id(), id2.node_id(), "node_id must be stable across loads");
@@ -92,7 +92,7 @@ fn test_corrupted_identity_file_returns_error() {
     std::fs::write(&path, b"not a tylluan identity file").unwrap();
 
     let result = NodeIdentity::load_or_create(&path);
-    assert!(result.is_err(), "corrupted identity.key must return Err — never silently regenerate");
+    assert!(result.is_err(), "corrupted identity.key must return Err â€” never silently regenerate");
 
     let _ = std::fs::remove_file(&path);
 }
@@ -111,7 +111,7 @@ fn test_wrong_magic_header_returns_error() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ─── HTTP endpoint test ───────────────────────────────────────────────────────
+// â”€â”€â”€ HTTP endpoint test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 use tylluan_kernel::transport::http::HttpState;
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
@@ -165,6 +165,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),
@@ -218,7 +219,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
     })
 }
 
-// ─── mDNS Discovery test ─────────────────────────────────────────────────────
+// â”€â”€â”€ mDNS Discovery test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn test_mdns_discovery_startup_does_not_panic() {
@@ -227,7 +228,7 @@ fn test_mdns_discovery_startup_does_not_panic() {
     let config_arc = Arc::new(RwLock::new(config));
 
     // start_mdns_discovery spawns a thread; if the mDNS daemon fails to bind
-    // (UDP multicast unavailable in CI/test), it logs an error and returns —
+    // (UDP multicast unavailable in CI/test), it logs an error and returns â€”
     // it never panics.
     tylluan_kernel::transport::mdns::start_mdns_discovery(0, config_arc, None);
 
@@ -236,7 +237,7 @@ fn test_mdns_discovery_startup_does_not_panic() {
     // If we reach here without panic, the test passes.
 }
 
-// ─── NatConfig accessibility test ─────────────────────────────────────────────
+// â”€â”€â”€ NatConfig accessibility test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn test_nat_config_is_accessible_from_tylluan_config() {
@@ -247,7 +248,7 @@ fn test_nat_config_is_accessible_from_tylluan_config() {
     let _ = config.nat.stun_retries;
 }
 
-// ─── HTTP endpoint test ───────────────────────────────────────────────────────
+// â”€â”€â”€ HTTP endpoint test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_federation_identity_endpoint() {
@@ -307,7 +308,7 @@ async fn test_nat_external_address_http_endpoint() {
     assert_eq!(json["cached"], true);
 }
 
-// ─── M21-P4: P2P kernel-level DST test ─────────────────────────────────────
+// â”€â”€â”€ M21-P4: P2P kernel-level DST test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // tylluan-link/tests/p2p_dst.rs already proves the Noise XK protocol works
 // between two real listeners with a stub handler. What was still untested:
@@ -355,6 +356,7 @@ async fn dst_test_state(
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),

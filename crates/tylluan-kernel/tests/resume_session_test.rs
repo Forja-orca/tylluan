@@ -1,4 +1,4 @@
-use tylluan_kernel::transport::http::api_v1::api_v1_routes;
+﻿use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::auth;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tylluan_kernel::transport::http::HttpState;
@@ -25,7 +25,7 @@ use std::time::Instant;
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 async fn test_state() -> Arc<HttpState> {
-    // Production calls this at startup (main.rs:888); tests must too —
+    // Production calls this at startup (main.rs:888); tests must too â€”
     // grants::list_pending() is fail-closed with a panic otherwise.
     // init() is idempotent (OnceLock set().ok()).
     tylluan_kernel::security::grants::init();
@@ -63,6 +63,7 @@ async fn test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),

@@ -1,5 +1,5 @@
-//! Pipeline Integration Tests — cross-tool flows and invariant checks
-//! Tests the full HTTP → MCP → handler chain in-memory
+﻿//! Pipeline Integration Tests â€” cross-tool flows and invariant checks
+//! Tests the full HTTP â†’ MCP â†’ handler chain in-memory
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::api_v1::mcp_handler;
@@ -71,6 +71,7 @@ async fn test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),
@@ -250,7 +251,7 @@ async fn test_remember_then_recall_finds_node() {
         json!({"query": "Rust lifetime"})).await;
     let text = extract_text(&res2);
     assert!(text.contains("Rust") || text.contains("lifetime"),
-        "recall no encontró el nodo: {text}");
+        "recall no encontrÃ³ el nodo: {text}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -279,8 +280,8 @@ async fn test_think_finds_remembered_nodes() {
     let res = mcp_call(app, "tools/call", "tylluan_think",
         json!({"query": "Python generators"})).await;
     let text = extract_text(&res);
-    assert!(!text.contains("No encontré conocimiento previo"),
-        "BUG-01 REGRESION: tylluan_think no encontró nodos existentes. text={text}");
+    assert!(!text.contains("No encontrÃ© conocimiento previo"),
+        "BUG-01 REGRESION: tylluan_think no encontrÃ³ nodos existentes. text={text}");
     assert!(text.contains("Python") || text.contains("generator") || text.contains("lazy"),
         "tylluan_think no usa el contenido correcto: {text}");
 }

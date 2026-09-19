@@ -86,6 +86,7 @@ pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
 
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),

@@ -163,6 +163,14 @@ impl TaskContextStore {
         })
     }
 
+    /// Release the capsule row (TCC-3): called by the /close hook after the
+    /// synthesis has been persisted to memory. Returns true if a row existed.
+    pub fn delete(&self, contract_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let affected = conn.execute("DELETE FROM task_context WHERE contract_id = ?1", rusqlite::params![contract_id])?;
+        Ok(affected > 0)
+    }
+
     /// The only mutation path: read → append in memory → write back, all
     /// under the single connection mutex (additive invariant).
     fn append(
