@@ -269,3 +269,31 @@ async fn test_blackboard_api_endpoint() {
         assert!(!json.is_null(), "blackboard endpoint returned non-JSON");
     }
 }
+
+// Regression test for Buffy's live finding (T604 against the 60c20c5 kernel):
+// contract_context_add_decision_handler/add_pointer_handler used to create a
+// task_context row for ANY id, including one that matched no real work
+// contract -- an orphan the TCC-3 close hook can never resolve, since it only
+// releases capsules belonging to contracts it actually closes. Both handlers
+// now 404 for an unregistered contract_id before touching the store.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_context_endpoints_404_for_nonexistent_contract() {
+    let state = test_state().await;
+    let app = build_test_app(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/work-contracts/bwc-noexiste-0000/context/decision")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&json!({
+            "agent_id": "buffy",
+            "what": "esto no deberia crear una capsula huerfana"
+        })).unwrap()))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status().as_u16(),
+        404,
+        "add_decision on a nonexistent contract must 404, not silently create an orphan capsule"
+    );
+}
