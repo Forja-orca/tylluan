@@ -1,4 +1,4 @@
-﻿//! blackboard_e2e.rs â€” Integration tests for Blackboard Protocol
+//! blackboard_e2e.rs â€” Integration tests for Blackboard Protocol
 //! Validates @pending / @context / @completed prefix workflows end-to-end.
 //! Uses same test_state() / build_test_app() pattern as pipeline_tests.rs.
 

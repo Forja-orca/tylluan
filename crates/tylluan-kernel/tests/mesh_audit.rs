@@ -1,4 +1,4 @@
-﻿//! Integration Tests for Tylluan Mesh Identity (M12-A)
+//! Integration Tests for Tylluan Mesh Identity (M12-A)
 //! Tests Ed25519 keypair generation, persistence, signature verification,
 //! and the /api/v1/federation/identity endpoint.
 

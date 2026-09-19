@@ -1,4 +1,4 @@
-﻿//! Pipeline Integration Tests â€” cross-tool flows and invariant checks
+//! Pipeline Integration Tests â€” cross-tool flows and invariant checks
 //! Tests the full HTTP â†’ MCP â†’ handler chain in-memory
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;

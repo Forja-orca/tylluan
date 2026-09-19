@@ -1,4 +1,4 @@
-﻿//! M40-P7: real concurrency suite â€” N parallel agents exercising the full
+//! M40-P7: real concurrency suite â€” N parallel agents exercising the full
 //! kernel stack (HTTP router -> fractal gate -> deterministic routing ->
 //! kernel subtool -> journal -> sessions) simultaneously, NOT isolated DB
 //! writes like concurrent_agents.rs. Each agent uses a unique agent_id and

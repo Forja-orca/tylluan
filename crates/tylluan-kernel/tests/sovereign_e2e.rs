@@ -1,4 +1,4 @@
-﻿//! E2E Sovereign Tool Tests â€” tylluan_do, tylluan_remember, tylluan_recall
+//! E2E Sovereign Tool Tests â€” tylluan_do, tylluan_remember, tylluan_recall
 //! Tests the full HTTP â†’ MCP â†’ handler chain in-memory
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
