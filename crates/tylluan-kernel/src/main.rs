@@ -149,8 +149,23 @@ async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
 ///
 /// Also runs P4 garbage collection of residual data from previous sessions/stress tests.
 fn anti_orphan_protection_and_gc() {
-    let pid_file = PathBuf::from("./data/tylluan-nexus.pid");
-    let _ = std::fs::create_dir_all("./data");
+    // Real incident (2026-09-19): a José-approved isolated test instance
+    // (different --port, different TYLLUAN_DATA_DIR) killed the live
+    // production kernel dead, because this function ran BEFORE the
+    // TYLLUAN_DATA_DIR override is applied later in main() (config.memory /
+    // config.silva paths, line ~423) and hardcoded "./data/" regardless of
+    // env. Two instances launched from the same CWD shared the exact same
+    // PID file, so the second one saw the first as "the previous crash" and
+    // killed it on purpose (cleanup_orphan_guilds does exactly that when the
+    // PID still belongs to a live tylluan-nexus process). Read the same env
+    // var directly here, before any config is loaded, so an isolated test
+    // instance gets its own PID file and never mistakes a sibling for a
+    // stale crash.
+    let data_dir = std::env::var("TYLLUAN_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("./data"));
+    let pid_file = data_dir.join("tylluan-nexus.pid");
+    let _ = std::fs::create_dir_all(&data_dir);
 
     // Check for stale PID file (previous crash)
     if pid_file.exists()
@@ -1794,8 +1809,13 @@ async fn main() -> anyhow::Result<()> {
     // 2. Shut down auxiliary services 
     service_manager.shutdown_all().await;
 
-    // 3. Clean up PID file (anti-orphan)
-    let pid_file = PathBuf::from("./data/tylluan-nexus.pid");
+    // 3. Clean up PID file (anti-orphan) — same TYLLUAN_DATA_DIR resolution
+    // as anti_orphan_protection_and_gc() at boot, so an isolated test
+    // instance removes its own PID file, never the default one.
+    let pid_file = std::env::var("TYLLUAN_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("./data"))
+        .join("tylluan-nexus.pid");
     let _ = std::fs::remove_file(&pid_file);
 
     info!("👋 TylluanNexus stopped. No orphan processes left.");
