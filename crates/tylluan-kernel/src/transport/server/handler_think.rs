@@ -1,4 +1,4 @@
-﻿use rmcp::{Error as McpError, model::*};
+use rmcp::{Error as McpError, model::*};
 use serde_json;
 use chrono;
 use std::collections::{HashMap, HashSet};
@@ -316,7 +316,7 @@ pub async fn handle_tylluan_think(
 
     if !nodes.is_empty() {
         let think_intent = format!(
-            "Analiza estos {} conocimientos sobre '{}' y genera una sÃ­ntesis coherente: {}",
+            "Analiza estos {} conocimientos sobre '{}' y genera una sintesis coherente: {}",
             nodes.len(),
             query,
             nodes.iter().take(5)
@@ -355,7 +355,7 @@ pub async fn handle_tylluan_think(
                         .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
                         .collect::<String>();
                     if !synth_text.is_empty() {
-                        synthesis.push_str("\n\n## SÃ­ntesis\n");
+                        synthesis.push_str("\n\n## Sintesis\n");
                         synthesis.push_str(&synth_text);
                     }
                 }
