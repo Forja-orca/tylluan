@@ -848,14 +848,37 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     }
     crate::security::grants::set_notifier(broadcast_tx.clone());
 
-    // BWC-3: internal dispatch subscriber (dry-run). The kernel is the
-    // always-on system — when a Coloquio message mentions an agent with an
-    // active [wake] policy from a trusted author, the kernel notices here
-    // and only LOGS what it would queue. No execution (BWC-4 pending).
-    crate::security::dispatch_subscriber::spawn_dispatch_subscriber(
-        broadcast_tx.clone(),
-        dispatch_contract,
-    );
+    // BWC-4: the dispatcher loop goes live. The kernel is the always-on
+    // system: qualifying Coloquio mentions (fail-closed `[wake]` config +
+    // trusted-author allowlist) are enqueued exactly-once as PendingDispatch
+    // rows; a human approves each one hash-bound (BWC-2 endpoints); the
+    // executor polls, claims CAS-style and spawns the fixed argv. Still
+    // inert by default: `agents.toml` ships no [wake] policy — zero
+    // dispatches exist until the operator writes one. One queue open here
+    // (via dispatch_db_path, the single owner of the path) is shared by
+    // both consumers; if the store cannot open, the dispatcher degrades to
+    // disabled (fail-closed) and the kernel keeps running.
+    let dispatch_queue = match crate::security::dispatch_queue::DispatchQueue::open(
+        crate::security::dispatch_queue::dispatch_db_path()
+            .to_str()
+            .unwrap_or("./data/pending_dispatches.db"),
+    ) {
+        Ok(q) => Some(std::sync::Arc::new(q)),
+        Err(e) => {
+            tracing::error!(
+                "[dispatch] cannot open dispatch queue ({e:#}) — dispatcher disabled (fail-closed)"
+            );
+            None
+        }
+    };
+    if let Some(dq) = dispatch_queue {
+        crate::security::dispatch_subscriber::spawn_dispatch_subscriber(
+            broadcast_tx.clone(),
+            dispatch_contract,
+            std::sync::Arc::clone(&dq),
+        );
+        crate::security::dispatch_executor::spawn_dispatch_executor(dq);
+    }
 
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
     let (decay_enabled, decay_interval_secs) = {
