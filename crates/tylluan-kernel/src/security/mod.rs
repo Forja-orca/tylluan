@@ -15,6 +15,7 @@ pub mod poison_patterns;
 pub mod agents_contract;
 pub mod dispatch_subscriber;
 pub mod dispatch_queue;
+pub mod dispatch_executor;
 pub mod friction_log;
 pub mod llm_examples;
 pub mod write_gate;

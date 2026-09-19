@@ -24,7 +24,14 @@
 //!    queue must never launder garbage into plausible behavior.
 //!
 //! No HTTP endpoints here (BWC-2); no broadcast subscriber (BWC-3); no
-//! process spawning (BWC-4). Only the type, the persistence and the CAS.
+//! process spawning here either — the executor is `dispatch_executor.rs`
+//! (BWC-4), which claims through [`DispatchQueue::claim_approved`]. This
+//! file owns the type, the persistence, and every state transition,
+//! including the executor's `Approved → Executed` CAS claim.
+//!
+//! BWC-4 additions: `DispatchState::Executed`, the executor's claim CAS,
+//! `list_approved` (the executor's work queue) and `enqueue_once`
+//! (exactly-once enqueue per Coloquio message, broadcast-replay-proof).
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -44,13 +51,16 @@ pub fn dispatch_db_path() -> std::path::PathBuf {
         .into()
 }
 
-/// Lifecycle of a queued dispatch. Only `Pending` may transition.
+/// Lifecycle of a queued dispatch. Transitions: `Pending →
+/// Approved/Rejected/Expired` (human decision, BWC-2) and `Approved →
+/// Executed` (executor claim, BWC-4). Nothing else transitions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DispatchState {
     Pending,
     Approved,
     Rejected,
     Expired,
+    Executed,
 }
 
 impl DispatchState {
@@ -60,6 +70,7 @@ impl DispatchState {
             DispatchState::Approved => "Approved",
             DispatchState::Rejected => "Rejected",
             DispatchState::Expired => "Expired",
+            DispatchState::Executed => "Executed",
         }
     }
 
@@ -69,13 +80,14 @@ impl DispatchState {
             "Approved" => Some(DispatchState::Approved),
             "Rejected" => Some(DispatchState::Rejected),
             "Expired" => Some(DispatchState::Expired),
+            "Executed" => Some(DispatchState::Executed),
             _ => None,
         }
     }
 }
 
 /// A queued agent wake-up, awaiting human approval.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingDispatch {
     pub id: String,
     pub agent_id: String,
@@ -110,14 +122,24 @@ pub enum ApprovalOutcome {
     NotFound,
 }
 
+/// Outcome of the executor's claim on an `Approved` dispatch (BWC-4):
+/// either this caller got the row (exactly-once, CAS), the dispatch is in
+/// some other state, or the id never existed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClaimOutcome {
+    Claimed(PendingDispatch),
+    AlreadyResolved(DispatchState),
+    NotFound,
+}
+
 /// The dispatch queue: SQLite-backed, CAS on every transition.
 ///
 /// INVARIANT (single writer): every state transition flows through
-/// [`approve`](Self::approve), [`reject`](Self::reject) or
-/// [`expire`](Self::expire) — all serialized by the one `Mutex<Connection>`,
-/// and each uses `UPDATE ... WHERE state='Pending'` as its CAS. Nothing else
-/// in this module writes `state`; keep it that way as BWC-2/3 grow read-only
-/// consumers around this queue.
+/// [`approve`](Self::approve), [`reject`](Self::reject), [`expire`](Self::expire)
+/// or [`claim_approved`](Self::claim_approved) — all serialized by the one
+/// `Mutex<Connection>`, and each uses `UPDATE ... WHERE state=...` as its
+/// CAS. Nothing else in this module writes `state`; keep it that way as
+/// BWC-2/3 grow read-only consumers around this queue.
 pub struct DispatchQueue {
     conn: Mutex<Connection>,
 }
@@ -144,7 +166,11 @@ impl DispatchQueue {
                 queued_at       INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_pending_state ON pending_dispatches(state);
-            CREATE INDEX IF NOT EXISTS idx_pending_agent ON pending_dispatches(agent_id);",
+            CREATE INDEX IF NOT EXISTS idx_pending_agent ON pending_dispatches(agent_id);
+            -- Exactly-once enqueue per Coloquio message (BWC-4): a broadcast
+            -- replay can never double-queue the same (message, agent) pair.
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_unique_msg
+                ON pending_dispatches(channel, turn, agent_id);",
         )?;
         Ok(Self { conn: Mutex::new(conn) })
     }
@@ -210,17 +236,50 @@ impl DispatchQueue {
         Ok(dispatch)
     }
 
+    /// Enqueue with exactly-once semantics per Coloquio message: idempotent
+    /// on `(channel, turn, agent_id)` via a UNIQUE index, so a broadcast
+    /// replay can never double-queue a wake-up. Returns `Ok(true)` when THIS
+    /// call inserted the row, `Ok(false)` when an identical dispatch was
+    /// already queued (or — practically impossible with uuid ids — the
+    /// primary key collided; both cases are a no-op).
+    pub fn enqueue_once(
+        &self,
+        agent_id: &str,
+        author_id: &str,
+        channel: &str,
+        turn: i64,
+        content_snapshot: &str,
+        command: Vec<String>,
+    ) -> Result<bool> {
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let content_hash = Self::hash_of(content_snapshot);
+        let command_json = serde_json::to_string(&command)?;
+        let queued_at = chrono::Utc::now().timestamp();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let inserted = conn.execute(
+            "INSERT OR IGNORE INTO pending_dispatches
+             (id, agent_id, author_id, channel, turn, content_snapshot, content_hash, command_json, state, queued_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                agent_id,
+                author_id,
+                channel,
+                turn,
+                content_snapshot,
+                content_hash,
+                command_json,
+                DispatchState::Pending.as_str(),
+                queued_at,
+            ],
+        )?;
+        Ok(inserted == 1)
+    }
+
     /// Fetch a dispatch by id (any state).
     pub fn get(&self, id: &str) -> Result<Option<PendingDispatch>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
-        let mut stmt = conn.prepare(
-            "SELECT id, agent_id, author_id, channel, turn, content_snapshot, content_hash,
-                    command_json, state, queued_at
-             FROM pending_dispatches WHERE id = ?1",
-        )?;
-        let mut rows = stmt.query(params![id])?;
-        let row = rows.next()?;
-        Ok(row.map(dispatch_from_row).transpose()?)
+        read_one(&conn, id)
     }
 
     /// All dispatches in `Pending` state.
@@ -242,6 +301,21 @@ impl DispatchQueue {
         let rows = stmt.query_map([], dispatch_from_row)?;
         // Collect through the Result: a corrupt row must surface as an error,
         // not be silently skipped (review finding 3).
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// All dispatches in `Approved` state — the executor's work queue.
+    /// Same SQL-side filter caveat as [`list_pending`](Self::list_pending):
+    /// a corrupt-state row is invisible here and fails loudly via
+    /// [`get`](Self::get).
+    pub fn list_approved(&self) -> Result<Vec<PendingDispatch>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, author_id, channel, turn, content_snapshot, content_hash,
+                    command_json, state, queued_at
+             FROM pending_dispatches WHERE state = 'Approved' ORDER BY queued_at ASC",
+        )?;
+        let rows = stmt.query_map([], dispatch_from_row)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -326,6 +400,58 @@ impl DispatchQueue {
             None => ApprovalOutcome::NotFound,
         })
     }
+
+    /// CAS claim for the executor (BWC-4): `Approved → Executed`, returning
+    /// the dispatch row to the single winner. The transition lands BEFORE
+    /// the process spawns: a spawn failure is logged loudly by the executor
+    /// and the row stays `Executed` — retry is a human decision, not an
+    /// automatic loop hammering the store every poll interval.
+    pub fn claim_approved(&self, id: &str) -> Result<ClaimOutcome> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let current: Option<String> = conn
+            .query_row(
+                "SELECT state FROM pending_dispatches WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(current_state) = current else {
+            return Ok(ClaimOutcome::NotFound);
+        };
+        let current = DispatchState::from_str(&current_state)
+            .ok_or_else(|| anyhow!("corrupt state '{current_state}' for dispatch {id}"))?;
+        if current != DispatchState::Approved {
+            return Ok(ClaimOutcome::AlreadyResolved(current));
+        }
+        let affected = conn.execute(
+            "UPDATE pending_dispatches SET state = 'Executed' WHERE id = ?1 AND state = 'Approved'",
+            params![id],
+        )?;
+        if affected == 1 {
+            return Ok(ClaimOutcome::Claimed(
+                read_one(&conn, id)?.ok_or_else(|| anyhow!("dispatch {id} vanished mid-claim"))?,
+            ));
+        }
+        let now: String = conn.query_row(
+            "SELECT state FROM pending_dispatches WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        Ok(ClaimOutcome::AlreadyResolved(
+            DispatchState::from_str(&now)
+                .ok_or_else(|| anyhow!("corrupt state '{now}' for dispatch {id}"))?,
+        ))
+    }
+}
+
+fn read_one(conn: &Connection, id: &str) -> Result<Option<PendingDispatch>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, agent_id, author_id, channel, turn, content_snapshot, content_hash,
+                command_json, state, queued_at
+         FROM pending_dispatches WHERE id = ?1",
+    )?;
+    let mut rows = stmt.query(params![id])?;
+    Ok(rows.next()?.map(dispatch_from_row).transpose()?)
 }
 
 fn dispatch_from_row(row: &rusqlite::Row) -> rusqlite::Result<PendingDispatch> {
@@ -496,6 +622,84 @@ mod tests {
         let q = DispatchQueue::open(path.to_str().unwrap()).unwrap();
         assert_eq!(q.list_pending().unwrap().len(), 1);
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn enqueue_once_dedups_identical_message() {
+        // BWC-4: a broadcast replay must never double-queue a wake-up.
+        let q = queue();
+        assert!(q.enqueue_once("deep", "claude-code", "general", 10, "snap", vec!["cmd".into()]).unwrap());
+        assert!(!q.enqueue_once("deep", "claude-code", "general", 10, "snap", vec!["cmd".into()]).unwrap());
+        // A different agent on the same message is a distinct dispatch.
+        assert!(q.enqueue_once("buffy", "claude-code", "general", 10, "snap", vec!["cmd".into()]).unwrap());
+        // Same agent on a different message is a distinct dispatch.
+        assert!(q.enqueue_once("deep", "jose", "general", 11, "snap2", vec!["cmd".into()]).unwrap());
+        assert_eq!(q.list_pending().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn claim_approved_runs_exactly_once() {
+        // BWC-4 acceptance test: two concurrent executor claims on the same
+        // dispatch must yield exactly ONE Claimed — the process spawns once.
+        let q = queue();
+        let d = q.enqueue("deep", "claude-code", "general", 12, "snap", vec!["opencode".into(), "run".into()]).unwrap();
+        q.approve(&d.id, &d.content_hash).unwrap();
+        let q1 = Arc::clone(&q);
+        let q2 = Arc::clone(&q);
+        let id1 = d.id.clone();
+        let id2 = d.id.clone();
+
+        let t1 = std::thread::spawn(move || q1.claim_approved(&id1).unwrap());
+        let t2 = std::thread::spawn(move || q2.claim_approved(&id2).unwrap());
+        let r1 = t1.join().unwrap();
+        let r2 = t2.join().unwrap();
+
+        let claims = [&r1, &r2]
+            .iter()
+            .filter(|o| matches!(o, ClaimOutcome::Claimed(_)))
+            .count();
+        assert_eq!(claims, 1, "exactly one executor must win the claim CAS: {r1:?} {r2:?}");
+        let winner = match (r1, r2) {
+            (ClaimOutcome::Claimed(d), _) | (_, ClaimOutcome::Claimed(d)) => d,
+            other => panic!("no Claimed outcome: {other:?}"),
+        };
+        assert_eq!(winner.command, vec!["opencode".to_string(), "run".to_string()]);
+        assert_eq!(q.get(&d.id).unwrap().unwrap().state, DispatchState::Executed);
+    }
+
+    #[test]
+    fn claim_only_from_approved() {
+        let q = queue();
+        // Pending: not claimable.
+        let p = q.enqueue("deep", "claude-code", "general", 13, "s", vec!["c".into()]).unwrap();
+        assert_eq!(q.claim_approved(&p.id).unwrap(), ClaimOutcome::AlreadyResolved(DispatchState::Pending));
+        // Rejected: not claimable.
+        let r = q.enqueue("deep", "claude-code", "general", 14, "s", vec!["c".into()]).unwrap();
+        q.reject(&r.id).unwrap();
+        assert_eq!(q.claim_approved(&r.id).unwrap(), ClaimOutcome::AlreadyResolved(DispatchState::Rejected));
+        // Already executed: second claim is a no-op.
+        assert_eq!(q.claim_approved(&r.id).unwrap(), ClaimOutcome::AlreadyResolved(DispatchState::Rejected));
+        // Nonexistent.
+        assert_eq!(q.claim_approved("no-such-id").unwrap(), ClaimOutcome::NotFound);
+    }
+
+    #[test]
+    fn full_lifecycle_enqueue_to_executed() {
+        // The complete BWC-4 state machine: enqueue → approve (human, hash)
+        // → claim (executor CAS) → Executed. Also verifies list_approved
+        // shrinks after the claim.
+        let q = queue();
+        let d = q.enqueue("deep", "claude-code", "general", 15, "full cycle", vec!["cmd".into()]).unwrap();
+        assert_eq!(q.list_approved().unwrap().len(), 0);
+        q.approve(&d.id, &d.content_hash).unwrap();
+        assert_eq!(q.list_approved().unwrap().len(), 1);
+        let claimed = match q.claim_approved(&d.id).unwrap() {
+            ClaimOutcome::Claimed(d) => d,
+            other => panic!("expected Claimed, got {other:?}"),
+        };
+        assert_eq!(claimed.id, d.id);
+        assert_eq!(q.list_approved().unwrap().len(), 0);
+        assert_eq!(q.get(&d.id).unwrap().unwrap().state, DispatchState::Executed);
     }
 
     #[test]

@@ -1,14 +1,20 @@
-//! # Dispatch subscriber — internal dry-run (BWC-3, coloquio_dispatcher_spec.md)
+//! # Dispatch subscriber — kernel-side enqueue (BWC-3 + BWC-4, coloquio_dispatcher_spec.md)
 //!
 //! The kernel is the always-on system: when a Coloquio message mentions an
 //! agent with an ACTIVE `[wake]` policy from a trusted author, the kernel
 //! itself must notice — not a client-side loop that dies with a terminal
 //! (the pull-design lesson, T541-T558).
 //!
-//! BWC-3 delivers the subscriber WITHOUT execution: it consumes the existing
-//! `coloquio:new_turn` broadcast (api_coloquio.rs:173), runs the full filter
-//! chain and only LOGS what it would queue. Zero tools (CONTRACT-01), zero
-//! process spawning (BWC-4), no queue writes (BWC-1).
+//! BWC-3 delivered the subscriber consuming the existing `coloquio:new_turn`
+//! broadcast (api_coloquio.rs:173) with the full filter chain — that chain
+//! (`evaluate_event`) is unchanged and still owns the fail-closed gating:
+//! type → mentions → self-exclusion → wake policy → trusted author.
+//!
+//! BWC-4 activates the real enqueue: every dispatch that passes the chain is
+//! inserted EXACTLY-ONCE into the BWC-1 queue (`enqueue_once`) as `Pending`.
+//! Nothing executes here — execution requires a human approval bound to the
+//! content hash (BWC-2) plus the executor's CAS claim (`dispatch_executor.rs`).
+//! Zero tools (CONTRACT-01), zero process spawning in this module.
 //!
 //! Existence note: `active_wake_config` returns `Some` only for agents listed
 //! in the contract, so contract membership IS the existence gate — the
@@ -16,6 +22,7 @@
 //! table is invisible either way = "solo buzon" behavior).
 
 use crate::security::agents_contract::AgentsContract;
+use crate::security::dispatch_queue::DispatchQueue;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -83,28 +90,57 @@ pub fn evaluate_event(event: &Value, contract: &AgentsContract) -> Vec<DryRunDis
     out
 }
 
-/// Background task: subscribe to the kernel's broadcast and dry-run the
-/// dispatch filter. Deliberately NOT wired with process execution (BWC-4).
+/// Per-event action, shared by the spawn task and tests: enqueue every
+/// dispatch that passes the filter chain, exactly-once per message. Returns
+/// the number of rows THIS call inserted (a replay or duplicate suppresses
+/// to 0 without error).
+pub fn queue_event(
+    queue: &DispatchQueue,
+    event: &Value,
+    contract: &AgentsContract,
+) -> anyhow::Result<usize> {
+    let content = event.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let mut queued = 0;
+    for d in evaluate_event(event, contract) {
+        if queue.enqueue_once(&d.agent_id, &d.author_id, &d.channel, d.turn, content, d.command.clone())? {
+            queued += 1;
+            info!(
+                "[dispatch-queue] QUEUED agent={} author={} channel={} turn={} hash={} — awaiting human approval (hash-bound)",
+                d.agent_id, d.author_id, d.channel, d.turn, &d.content_hash[..8]
+            );
+        } else {
+            info!(
+                "[dispatch-queue] duplicate suppressed agent={} author={} channel={} turn={} (exactly-once per message)",
+                d.agent_id, d.author_id, d.channel, d.turn
+            );
+        }
+    }
+    Ok(queued)
+}
+
+/// Background task: subscribe to the kernel's broadcast and enqueue real
+/// PendingDispatch rows for qualifying events. The queue is injected by the
+/// boot wiring (opened once there via `dispatch_db_path` — one owner of the
+/// path, shared with the executor). Execution NEVER happens here: it
+/// requires human approval via BWC-2 and the executor's claim (BWC-4).
 pub fn spawn_dispatch_subscriber(
     notifier: broadcast::Sender<Value>,
     contract: Arc<AgentsContract>,
+    queue: Arc<DispatchQueue>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut rx = notifier.subscribe();
-        info!("[dispatch-dry-run] subscriber active (BWC-3, dry-run only)");
+        info!("[dispatch-queue] subscriber active (BWC-4: real enqueue; execution = human approval + executor claim)");
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    for d in evaluate_event(&event, &contract) {
-                        info!(
-                            "[dispatch-dry-run] WOULD queue agent={} author={} channel={} turn={} hash={} command={:?}",
-                            d.agent_id, d.author_id, d.channel, d.turn, &d.content_hash[..8], d.command
-                        );
+                    if let Err(e) = queue_event(&queue, &event, &contract) {
+                        tracing::error!("[dispatch-queue] queue_event failed: {e:#}");
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(broadcast::error::RecvError::Closed) => {
-                    info!("[dispatch-dry-run] broadcast closed, subscriber exiting");
+                    info!("[dispatch-queue] broadcast closed, subscriber exiting");
                     return;
                 }
             }
@@ -185,5 +221,44 @@ mod tests {
     fn agent_without_wake_policy_is_invisible() {
         let c = AgentsContract { agents: HashMap::new() };
         assert!(evaluate_event(&event("general", "claude-code", "haz algo @deep", 9), &c).is_empty());
+    }
+
+    #[test]
+    fn queue_event_enqueues_passing_dispatch_exactly_once() {
+        // BWC-4: the real enqueue — a passing mention becomes a Pending row
+        // bound to the message hash, and a broadcast replay is deduped.
+        let c = contract_with_wake("deep", true, vec!["claude-code".into()], vec!["opencode".into(), "run".into()]);
+        let q = DispatchQueue::in_memory().unwrap();
+        let e = event("general", "claude-code", "revisa esto @deep", 20);
+
+        assert_eq!(queue_event(&q, &e, &c).unwrap(), 1);
+        let pending = q.list_pending().unwrap();
+        assert_eq!(pending.len(), 1);
+        let d = &pending[0];
+        assert_eq!(d.agent_id, "deep");
+        assert_eq!(d.author_id, "claude-code");
+        assert_eq!(d.channel, "general");
+        assert_eq!(d.turn, 20);
+        assert_eq!(d.content_snapshot, "revisa esto @deep");
+        assert_eq!(d.content_hash, sha256_hex("revisa esto @deep"));
+        assert_eq!(d.command, vec!["opencode".to_string(), "run".to_string()]);
+
+        // Replay of the same message: suppressed, nothing inserted.
+        assert_eq!(queue_event(&q, &e, &c).unwrap(), 0);
+        assert_eq!(q.list_pending().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn queue_event_skips_non_qualifying_events() {
+        let c = contract_with_wake("deep", true, vec!["claude-code".into()], vec!["opencode".into()]);
+        let q = DispatchQueue::in_memory().unwrap();
+        // Untrusted author.
+        assert_eq!(queue_event(&q, &event("general", "antigravity", "haz algo @deep", 21), &c).unwrap(), 0);
+        // Self-mention.
+        assert_eq!(queue_event(&q, &event("general", "deep", "mira @deep", 22), &c).unwrap(), 0);
+        // Non-coloquio event.
+        let other = serde_json::json!({ "type": "session_updated" });
+        assert_eq!(queue_event(&q, &other, &c).unwrap(), 0);
+        assert!(q.list_pending().unwrap().is_empty());
     }
 }
