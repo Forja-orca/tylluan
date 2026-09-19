@@ -487,6 +487,55 @@ pub async fn contract_close_handler(
     }));
 
     let _ = state.contract_db.persist(&entry);
+
+    // TCC-3 (bwc-58310353): close hook — if a task-context capsule exists,
+    // synthesize it into SilvaDB memory (structured node, not a raw JSON
+    // dump) and RELEASE the row. Invariant from the spec: closing a contract
+    // always resolves its capsule — never an orphan.
+    if let Ok(Some(capsule)) = state.task_context.get(&id) {
+        let mut synthesis = format!(
+            "Contrato {id} cerrado (estado: {}). Resumen del consolidador: {}\n",
+            entry.status, req.summary
+        );
+        if capsule.decisions.is_empty() {
+            synthesis.push_str("Decisiones: ninguna registrada.\n");
+        } else {
+            synthesis.push_str("Decisiones:\n");
+            for d in &capsule.decisions {
+                synthesis.push_str(&format!("- {}: {}\n", d.by, d.what));
+            }
+        }
+        if capsule.pointers.is_empty() {
+            synthesis.push_str("Punteros: ninguno registrado.\n");
+        } else {
+            synthesis.push_str("Punteros:\n");
+            for p in &capsule.pointers {
+                synthesis.push_str(&format!("- {:?}: {}\n", p.kind, p.reference));
+            }
+        }
+        let pointers_json: Vec<serde_json::Value> = capsule
+            .pointers
+            .iter()
+            .map(|p| serde_json::json!({"kind": format!("{:?}", p.kind), "reference": p.reference}))
+            .collect();
+        let meta = serde_json::json!({
+            "contract_id": id,
+            "pointers": pointers_json,
+            "team": entry.team,
+            "closed_by": req.agent_id,
+        });
+        let _ = state.silva
+            .upsert_node(&format!("task_synthesis:{id}"), "task_synthesis", &synthesis, &meta.to_string())
+            .await;
+        let released = state.task_context.delete(&id).unwrap_or(false);
+        let _ = state.broadcast_tx.send(serde_json::json!({
+            "type": "work-contract:synthesized",
+            "contract_id": id,
+            "released": released,
+            "ts": now_unix()
+        }));
+    }
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -921,5 +970,19 @@ mod tests {
         assert_eq!(loaded.decisions.len(), 2);
         assert_eq!(loaded.pointers.len(), 1);
         assert_eq!(loaded.updated_by, "deep");
+    }
+
+    #[test]
+    fn test_task_context_delete_releases_row() {
+        // TCC-3 invariant: the /close hook releases the capsule row after
+        // synthesis — a deleted capsule must be gone, and deleting a
+        // non-existent one must be a no-op (not an error).
+        let store = crate::memory::task_context::TaskContextStore::in_memory().expect("in-memory store");
+        let id = "bwc-tcc-close-01";
+        store.add_decision(id, "deep", "gancho de cierre").expect("add_decision");
+        assert!(store.get(id).expect("get").is_some());
+        assert!(store.delete(id).expect("delete").eq(&true), "row must be reported as released");
+        assert!(store.get(id).expect("get after delete").is_none(), "capsule must be gone after release");
+        assert!(store.delete(id).expect("delete again").eq(&false), "second delete is a no-op");
     }
 }

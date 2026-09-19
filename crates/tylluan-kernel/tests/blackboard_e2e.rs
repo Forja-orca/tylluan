@@ -1,4 +1,4 @@
-//! blackboard_e2e.rs — Integration tests for Blackboard Protocol
+﻿//! blackboard_e2e.rs â€” Integration tests for Blackboard Protocol
 //! Validates @pending / @context / @completed prefix workflows end-to-end.
 //! Uses same test_state() / build_test_app() pattern as pipeline_tests.rs.
 
@@ -64,6 +64,7 @@ async fn test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),
@@ -158,7 +159,7 @@ async fn test_blackboard_post_task_creates_pending_node() {
     let app = build_test_app(state.clone());
 
     let res = mcp_call(app, "tylluan_remember", json!({
-        "content": "@pending:task_001 — analyze auth module",
+        "content": "@pending:task_001 â€” analyze auth module",
         "importance": 0.9
     })).await;
     assert!(res["error"].is_null(), "remember failed: {res:?}");
@@ -173,10 +174,10 @@ async fn test_blackboard_recall_inbox_finds_pending() {
     let app = build_test_app(state);
 
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@pending:task_alpha — first pending task", "importance": 0.8
+        "content": "@pending:task_alpha â€” first pending task", "importance": 0.8
     })).await;
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@pending:task_beta — second pending task", "importance": 0.8
+        "content": "@pending:task_beta â€” second pending task", "importance": 0.8
     })).await;
 
     let res = mcp_call(app, "tylluan_recall", json!({"query": "@pending"})).await;
@@ -191,7 +192,7 @@ async fn test_blackboard_context_prefix_accessible() {
     let app = build_test_app(state);
 
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@context:sprint-o — objetivo: blackboard protocol",
+        "content": "@context:sprint-o â€” objetivo: blackboard protocol",
         "importance": 0.7
     })).await;
 
@@ -206,7 +207,7 @@ async fn test_blackboard_completed_marks_task() {
     let app = build_test_app(state.clone());
 
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@completed:task_001 — resultado: done, 3 archivos modificados",
+        "content": "@completed:task_001 â€” resultado: done, 3 archivos modificados",
         "importance": 0.9
     })).await;
 
@@ -223,18 +224,18 @@ async fn test_blackboard_full_workflow() {
 
     // Step 1: post task
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@pending:task_analyze — analiza server.rs", "importance": 0.9
+        "content": "@pending:task_analyze â€” analiza server.rs", "importance": 0.9
     })).await;
 
     // Step 2: add context
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@context:task_analyze — server.rs tiene 800 líneas, handler_do es el más complejo",
+        "content": "@context:task_analyze â€” server.rs tiene 800 lÃneas, handler_do es el mÃ¡s complejo",
         "importance": 0.8
     })).await;
 
     // Step 3: complete
     mcp_call(app.clone(), "tylluan_remember", json!({
-        "content": "@completed:task_analyze — encontré 3 handlers, refactor propuesto",
+        "content": "@completed:task_analyze â€” encontrÃ© 3 handlers, refactor propuesto",
         "importance": 0.95
     })).await;
 
@@ -258,7 +259,7 @@ async fn test_blackboard_api_endpoint() {
         .body(Body::empty()).unwrap();
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status().as_u16();
-    // 200 if endpoint exists, 404 if not yet implemented — both are non-crash
+    // 200 if endpoint exists, 404 if not yet implemented â€” both are non-crash
     assert!(status == 200 || status == 404,
         "Unexpected status {status}: endpoint should either work or 404, not 500");
 

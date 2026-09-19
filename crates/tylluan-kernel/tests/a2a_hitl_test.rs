@@ -1,8 +1,8 @@
-//! Integration Test: A2A HITL (Human-In-The-Loop) Grant Flow
+﻿//! Integration Test: A2A HITL (Human-In-The-Loop) Grant Flow
 //!
 //! Tests the grant flow end-to-end through the actual grants module:
-//!   1. register → list_pending → resolve → task completes
-//!   2. register → list_pending → remove → task fails
+//!   1. register â†’ list_pending â†’ resolve â†’ task completes
+//!   2. register â†’ list_pending â†’ remove â†’ task fails
 //!   3. JSON-RPC protocol: unknown method returns -32601
 //!
 //! Also verifies collision-safe UUIDs in grant IDs.
@@ -29,7 +29,7 @@ use tylluan_kernel::security::grants;
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-// ── Unit tests for the grant system itself ─────────────────────────────
+// â”€â”€ Unit tests for the grant system itself â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_grant_approval_flow() {
@@ -59,7 +59,7 @@ async fn test_grant_approval_flow() {
     });
     assert!(found, "Grant should appear in list_pending: {pending:?}");
 
-    // Resolve the grant — ThisTime allows one execution
+    // Resolve the grant â€” ThisTime allows one execution
     let resolved = grants::resolve(&grant_id, grants::GrantLevel::ThisTime).await;
     assert!(resolved, "resolve() should return true");
 
@@ -99,7 +99,7 @@ async fn test_grant_rejection_flow() {
     let pending = grants::list_pending().await;
     assert!(pending.iter().any(|g| g.get("id").and_then(|v| v.as_str()) == Some(&grant_id)));
 
-    // Remove the grant (simulates rejection — drops the oneshot sender)
+    // Remove the grant (simulates rejection â€” drops the oneshot sender)
     let removed = grants::remove(&grant_id).await;
     assert!(removed, "remove() should return true");
 
@@ -116,7 +116,7 @@ async fn test_grant_rejection_flow() {
     assert!(!double, "Removing unknown grant should return false");
 }
 
-// ── A2A Protocol Tests ─────────────────────────────────────────────────
+// â”€â”€ A2A Protocol Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_a2a_unknown_method_returns_minus_32601() {
@@ -261,6 +261,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
     let a2a_task_manager = Arc::new(a2a::A2aTaskManager::new(silva.clone()));
 
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),

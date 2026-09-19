@@ -1,4 +1,4 @@
-//! M40-P7: real concurrency suite — N parallel agents exercising the full
+﻿//! M40-P7: real concurrency suite â€” N parallel agents exercising the full
 //! kernel stack (HTTP router -> fractal gate -> deterministic routing ->
 //! kernel subtool -> journal -> sessions) simultaneously, NOT isolated DB
 //! writes like concurrent_agents.rs. Each agent uses a unique agent_id and
@@ -35,7 +35,7 @@ use std::time::Instant;
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 async fn test_state() -> Arc<HttpState> {
-    // Replicate real kernel startup (main.rs:869) — build_agent_bootstrap
+    // Replicate real kernel startup (main.rs:869) â€” build_agent_bootstrap
     // (bootstrap.rs:36) calls grants::list_pending() which panics with
     // "GrantRegistry not initialized" unless grants::init() ran first.
     tylluan_kernel::security::grants::init();
@@ -78,6 +78,7 @@ async fn test_state() -> Arc<HttpState> {
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
 
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),
@@ -182,7 +183,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
             let mut last_statuses = Vec::new();
 
             for iter in 0..ITERATIONS {
-                // 1) tylluan_do — deterministic kernel subtool (identity)
+                // 1) tylluan_do â€” deterministic kernel subtool (identity)
                 let (status, body) = post_json(&app, "/api/v1/do", serde_json::json!({
                     "intent": "whoami",
                     "agent_id": agent_id,
@@ -193,7 +194,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
                 assert_ne!(body.get("status").and_then(|v| v.as_str()), Some("ambiguous"),
                     "agent {agent_id} whoami should route deterministically, got ambiguous: {body}");
 
-                // 2) tylluan_remember — real memory write (silva + hybrid)
+                // 2) tylluan_remember â€” real memory write (silva + hybrid)
                 let (status, body) = post_json(&app, "/api/v1/do", serde_json::json!({
                     "tool": "tylluan_remember",
                     "content": format!("[load-agent-{i}] iteration {iter} finding: concurrent memory write is safe"),
@@ -207,7 +208,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
                 assert!(text.contains("Stored node"),
                     "agent {agent_id} remember should store a node: {body}");
 
-                // 3) tylluan_recall — hybrid search under load
+                // 3) tylluan_recall â€” hybrid search under load
                 let (status, body) = post_json(&app, "/api/v1/do", serde_json::json!({
                     "tool": "tylluan_recall",
                     "query": format!("concurrent memory write agent {i}"),
@@ -218,7 +219,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
                 last_statuses.push((format!("do-recall-{iter}"), status, body.clone()));
                 assert_eq!(status, StatusCode::OK, "agent {agent_id} recall: {body}");
 
-                // 4) explicit journal checkin (real endpoint, api_v1.rs:622) —
+                // 4) explicit journal checkin (real endpoint, api_v1.rs:622) â€”
                 //    last writer wins, so the resume below must see THIS task
                 let (status, body) = post_json(&app, &format!("/api/v1/journal/{agent_id}/checkin"), serde_json::json!({
                     "task": format!("[load-agent-{i}] completed iteration {iter}"),
@@ -226,7 +227,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
                 last_statuses.push((format!("checkin-{iter}"), status, body.clone()));
                 assert_eq!(status, StatusCode::OK, "agent {agent_id} checkin: {body}");
 
-                // 5) cross-client resume — each agent must see ITS OWN last task
+                // 5) cross-client resume â€” each agent must see ITS OWN last task
                 let (status, body) = get_json(&app, &format!("/api/v1/sessions/resume?agent_id={agent_id}")).await;
                 last_statuses.push((format!("resume-{iter}"), status, body.clone()));
                 assert_eq!(status, StatusCode::OK, "agent {agent_id} resume: {body}");
@@ -234,7 +235,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
                     last_intents.push(intent.to_string());
                 }
 
-                // 6) POST resume — sessions RwLock under contention
+                // 6) POST resume â€” sessions RwLock under contention
                 let (status, body) = post_json(&app, "/api/v1/sessions/resume", serde_json::json!({
                     "session_id": agent_id,
                     "agent_id": agent_id,
@@ -260,7 +261,7 @@ async fn test_n_parallel_agents_full_stack_no_races() {
             }
         }
         // Cross-agent isolation: each agent's resume must return ITS OWN last
-        // checkin task (journal is keyed per agent_id — no cross-talk allowed)
+        // checkin task (journal is keyed per agent_id â€” no cross-talk allowed)
         for intent in &last_intents {
             assert!(intent.starts_with("[load-agent-"),
                 "agent {agent_id} saw another agent's or empty last_task: {intent:?}");
@@ -308,7 +309,7 @@ async fn test_parallel_resume_isolation_per_agent() {
         assert_eq!(status, StatusCode::OK, "{agent_id}: {body}");
         assert!(seen_agents.insert(agent_id.clone()), "duplicate agent in results");
         let task = body.get("last_task").and_then(|t| t.get("task")).and_then(|v| v.as_str()).unwrap_or("");
-        // journal keeps the last checkin per agent_id — must be this agent's own
+        // journal keeps the last checkin per agent_id â€” must be this agent's own
         assert!(task.starts_with("[iso-agent-"),
             "{agent_id} resume leaked another agent's or empty task: {body}");
         assert!(task.contains(&agent_id),

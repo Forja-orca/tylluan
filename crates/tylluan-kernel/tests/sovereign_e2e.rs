@@ -1,5 +1,5 @@
-//! E2E Sovereign Tool Tests — tylluan_do, tylluan_remember, tylluan_recall
-//! Tests the full HTTP → MCP → handler chain in-memory
+﻿//! E2E Sovereign Tool Tests â€” tylluan_do, tylluan_remember, tylluan_recall
+//! Tests the full HTTP â†’ MCP â†’ handler chain in-memory
 
 use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::transport::http::api_v1::mcp_handler;
@@ -73,6 +73,7 @@ async fn test_state() -> Arc<HttpState> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
     Arc::new(HttpState {
+        task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().expect("test task_context store")),
         version: "test".to_string(),
         auth_token: None,
         dev_mode: Some(true),
