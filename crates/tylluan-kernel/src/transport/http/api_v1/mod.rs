@@ -35,6 +35,7 @@ pub mod api_contracts;
 pub mod api_a2a_agents;
 pub mod api_mesh;
 pub mod api_repo_map;
+pub mod api_dispatches;
 pub mod mcp;
 pub mod routes;
 
@@ -56,6 +57,7 @@ pub use api_contracts::*;
 pub use api_a2a_agents::*;
 pub use api_mesh::*;
 pub use api_repo_map::*;
+pub use api_dispatches::*;
 pub use mcp::*;
 pub use routes::*;
 

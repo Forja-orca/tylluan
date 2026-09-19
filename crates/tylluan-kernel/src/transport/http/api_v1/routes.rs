@@ -275,4 +275,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // MD-7 closure: read-only per-request latency percentiles aggregated
         // from guild_audit_log (one row = one completed tylluan_do dispatch).
         .route("/api/v1/audit/latency", get(api_audit::audit_latency_stats_handler))
+        // Coloquio Push Dispatcher (BWC-2)
+        .route("/api/v1/dispatches", get(dispatches_list_handler))
+        .route("/api/v1/dispatches/{id}", get(dispatch_get_handler))
+        .route("/api/v1/dispatches/{id}/approve", post(dispatch_approve_handler))
+        .route("/api/v1/dispatches/{id}/reject", post(dispatch_reject_handler))
 }
