@@ -1,4 +1,4 @@
-use rmcp::{Error as McpError, model::*};
+﻿use rmcp::{Error as McpError, model::*};
 use serde_json;
 use chrono;
 use std::collections::{HashMap, HashSet};
@@ -23,7 +23,7 @@ pub async fn handle_tylluan_think(
 
     let embedding = server.matcher.engine().and_then(|e| {
         tokio::task::block_in_place(|| {
-            server.silva.query_embed_cache.get_or_embed(&query, |q| e.embed(q))
+            server.silva.query_embed_cache.get_or_embed(&query, |q| e.embed_batch_coalesced(q))
         })
         .ok()
     });
@@ -35,7 +35,7 @@ pub async fn handle_tylluan_think(
     
     let mut nodes: Vec<GraphNode> = nodes_with_scores.iter().map(|(n, _)| n.clone()).collect();
 
-    // M20-D: exclude machinery nodes — same filter as handler_recall to prevent routing_anchor
+    // M20-D: exclude machinery nodes â€” same filter as handler_recall to prevent routing_anchor
     // and session_digest from appearing in think synthesis
     nodes.retain(|n| n.node_type != "routing_anchor" && n.node_type != "session_digest" && n.node_type != "experience");
 
@@ -75,7 +75,7 @@ pub async fn handle_tylluan_think(
 
     let mut synthesis = format!("## Pensamiento sobre: {query}\n\n");
 
-    // Ouroboros Loop — retrieve half. Before reasoning about what to do, surface
+    // Ouroboros Loop â€” retrieve half. Before reasoning about what to do, surface
     // THIS agent's own past experiences relevant to the query (Reflexion):
     // "have I done something like this before, and how did it go?". Failures,
     // weighted higher, appear first. Skipped for anonymous (no per-agent history).
@@ -165,7 +165,7 @@ pub async fn handle_tylluan_think(
                         if neighbor.id != node.id
                             && neighbor.node_type != "routing_anchor"
                             && neighbor.node_type != "session_digest" {
-                            connections_text.push_str(&format!("  - {} ↔ {}\n", node.id, neighbor.id));
+                            connections_text.push_str(&format!("  - {} â†” {}\n", node.id, neighbor.id));
                             connections_found += 1;
                             if connections_found > 5 { break; }
                         }
@@ -232,18 +232,18 @@ pub async fn handle_tylluan_think(
         }
 
         // Gap Analysis: only surface when gaps are a majority (>50%) of retrieved nodes.
-        // Sparse connectivity is normal for this graph — flagging every node with <3 edges
+        // Sparse connectivity is normal for this graph â€” flagging every node with <3 edges
         // produces false "knowledge fragmented" warnings even when 8 meaningful nodes were found.
         let gaps: Vec<&GraphNode> = nodes.iter()
             .filter(|n| node_edge_counts.get(&n.id).copied().unwrap_or(0) < 3)
             .collect();
         if !gaps.is_empty() && (nodes.is_empty() || gaps.len() * 2 > nodes.len()) {
             synthesis.push_str("\n### Brechas de Conocimiento\n");
-            synthesis.push_str("Los siguientes conceptos tienen pocas conexiones — son áreas donde el conocimiento está fragmentado:\n");
+            synthesis.push_str("Los siguientes conceptos tienen pocas conexiones â€” son Ã¡reas donde el conocimiento estÃ¡ fragmentado:\n");
             for gap in gaps.iter().take(5) {
                 let edge_n = node_edge_counts.get(&gap.id).copied().unwrap_or(0);
                 synthesis.push_str(&format!(
-                    "- **{}** ({} conexión{}): {}\n",
+                    "- **{}** ({} conexiÃ³n{}): {}\n",
                     gap.id,
                     edge_n,
                     if edge_n == 1 { "" } else { "es" },
@@ -252,7 +252,7 @@ pub async fn handle_tylluan_think(
             }
         }
 
-        // Graph structure analysis — deterministic, no LLM needed
+        // Graph structure analysis â€” deterministic, no LLM needed
         let node_ids: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
         let graph_analysis = server.silva.analyze_subgraph(&node_ids, &query).await
             .unwrap_or_default();
@@ -266,13 +266,13 @@ pub async fn handle_tylluan_think(
                     .unwrap_or_else(|| hub_id.clone());
                 let display_name: String = hub_content.chars().take(55).collect();
                 let display_name = if hub_content.len() > 55 {
-                    format!("{display_name}…")
+                    format!("{display_name}â€¦")
                 } else {
                     display_name
                 };
                 let short_id = &hub_id[..hub_id.len().min(20)];
                 graph_insights.push_str(&format!(
-                    "\n\n### Nodo Hub (más conectado)\n**{display_name}** ({degree} conexiones)\n*ref: {short_id}*"
+                    "\n\n### Nodo Hub (mÃ¡s conectado)\n**{display_name}** ({degree} conexiones)\n*ref: {short_id}*"
                 ));
             }
         
@@ -285,16 +285,16 @@ pub async fn handle_tylluan_think(
         
         if graph_insights.is_empty() && graph_analysis.node_count > 0 {
             graph_insights = format!(
-                "\n\n### Estructura del grafo\n{} nodos analizados — sin conexiones directas entre ellos. Los conceptos son independientes en el grafo actual.",
+                "\n\n### Estructura del grafo\n{} nodos analizados â€” sin conexiones directas entre ellos. Los conceptos son independientes en el grafo actual.",
                 graph_analysis.node_count
             );
         }
         synthesis.push_str(&graph_insights);
 
-        synthesis.push_str("\n\n### Conclusión e Insights\n");
+        synthesis.push_str("\n\n### ConclusiÃ³n e Insights\n");
         synthesis.push_str("- El sistema posee trazas de este concepto en su memoria a largo plazo.\n");
         if nodes.iter().any(|n| n.weight > 5.0) {
-            synthesis.push_str("- Existe un alto grado de consolidación en este dominio.\n");
+            synthesis.push_str("- Existe un alto grado de consolidaciÃ³n en este dominio.\n");
         }
         if !related_mail.is_empty() {
             synthesis.push_str("- Hay actividad operativa reciente relacionada con esta consulta.\n");
@@ -316,7 +316,7 @@ pub async fn handle_tylluan_think(
 
     if !nodes.is_empty() {
         let think_intent = format!(
-            "Analiza estos {} conocimientos sobre '{}' y genera una síntesis coherente: {}",
+            "Analiza estos {} conocimientos sobre '{}' y genera una sÃ­ntesis coherente: {}",
             nodes.len(),
             query,
             nodes.iter().take(5)
@@ -355,7 +355,7 @@ pub async fn handle_tylluan_think(
                         .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
                         .collect::<String>();
                     if !synth_text.is_empty() {
-                        synthesis.push_str("\n\n## Síntesis\n");
+                        synthesis.push_str("\n\n## SÃ­ntesis\n");
                         synthesis.push_str(&synth_text);
                     }
                 }
@@ -552,7 +552,7 @@ mod tests {
         let server = test_server().await;
         let mut args = serde_json::Map::new();
         args.insert("query".to_string(), serde_json::Value::String("test".to_string()));
-        // chain not set — should default to false
+        // chain not set â€” should default to false
         let result = handle_tylluan_think(&server, Some(args)).await.unwrap();
         assert!(!result.is_error.unwrap_or(false));
     }

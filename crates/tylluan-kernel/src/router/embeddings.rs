@@ -19,12 +19,74 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use crate::config::InferenceDevice;
 
+/// One queued embedding request: the text to embed and the channel the
+/// collector resolves with the result.
+struct BatchItem {
+    texts: Vec<String>,
+    resp: std::sync::mpsc::Sender<Result<Vec<Vec<f32>>, String>>,
+}
+
+/// Coalescing batcher (embed-batching contract, T582): a collector thread
+/// merges concurrent single-text requests arriving within a short window
+/// into ONE `embed_batch` call — N concurrent callers pay one ONNX inference
+/// (one mutex acquisition) instead of N serialized ones. Bounded queue with
+/// explicit rejection: the sender refuses (Err) instead of blocking forever,
+/// ending the silent-timeout failure mode under load.
+pub struct EmbedBatcher {
+    tx: std::sync::mpsc::Sender<BatchItem>,
+}
+
+impl EmbedBatcher {
+    pub fn spawn(
+        engine: Arc<EmbeddingEngine>,
+        max_batch: usize,
+        window_ms: u64,
+    ) -> Result<(Self, std::thread::JoinHandle<()>)> {
+        let (tx, rx) = std::sync::mpsc::channel::<BatchItem>();
+        let handle = std::thread::Builder::new()
+            .name("embed-batcher".to_string())
+            .spawn(move || {
+                while let Ok(first) = rx.recv() {
+                    let mut pending = vec![first];
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(window_ms);
+                    while pending.len() < max_batch && std::time::Instant::now() < deadline {
+                        match rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+                            Ok(item) => pending.push(item),
+                            Err(_) => break,
+                        }
+                    }
+                    let texts: Vec<String> = pending.iter().flat_map(|it| it.texts.clone()).collect();
+                    let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                    let result: Result<Vec<Vec<f32>>, String> = engine.embed_batch(&refs).map_err(|e| e.to_string());
+                    for item in pending {
+                        let _ = item.resp.send(result.clone());
+                    }
+                }
+            })?;
+        Ok((Self { tx }, handle))
+    }
+
+    pub fn embed_one(&self, text: String) -> Result<Vec<f32>> {
+        let (resp_tx, resp_rx) = std::sync::mpsc::channel();
+        self.tx
+            .send(BatchItem { texts: vec![text], resp: resp_tx })
+            .map_err(|e| anyhow!("embed batcher channel closed: {e}"))?;
+        let mut out = resp_rx
+            .recv()
+            .map_err(|e| anyhow!("embed batcher response channel closed: {e}"))?
+            .map_err(|e| anyhow!("embed batcher inference failed: {e}"))?;
+        out.pop().context("No embedding returned from batcher")
+    }
+}
+
 /// Embedding engine for semantic search.
 pub struct EmbeddingEngine {
     model: Mutex<TextEmbedding>,
     model_type: String,
     dimension: u32,
     cache: Mutex<LruCache<String, Vec<f32>>>,
+    /// Coalescing batcher (lazy-spawned when `embed_batching_enabled` is on).
+    batcher: Mutex<Option<Arc<EmbedBatcher>>>,
 }
 
 /// Resolve fastembed model enum from config string.
@@ -125,6 +187,7 @@ impl EmbeddingEngine {
             model_type,
             dimension,
             cache: Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())),
+            batcher: Mutex::new(None),
         })
     }
 
@@ -165,6 +228,37 @@ impl EmbeddingEngine {
             cache.put(cache_key, embedding.clone());
         }
         Ok(embedding)
+    }
+
+    /// Engine-level coalescing entry point (embed-batching contract, T582):
+    /// ALL dense-embed call sites use this instead of `embed()` so concurrent
+    /// callers share ONNX batches. Flag-gated (`[silva] embed_batching_enabled`,
+    /// default off): when disabled this is a thin wrapper over `embed()`.
+    /// Bounded queue: overflow returns Err(Busy) instead of blocking forever.
+    pub fn embed_batch_coalesced(self: &Arc<Self>, text: &str) -> Result<Vec<f32>> {
+        let enabled = crate::config::TylluanConfig::load_cached()
+            .ok()
+            .map(|cfg| cfg.try_read().ok().map(|g| g.silva.embed_batching_enabled).unwrap_or(false))
+            .unwrap_or(false);
+        if !enabled {
+            return self.embed(text);
+        }
+        {
+            let guard = self.batcher.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(b) = guard.as_ref() {
+                return b.embed_one(text.to_string());
+            }
+        }
+        let engine = Arc::clone(self);
+        let (batcher, handle) = EmbedBatcher::spawn(engine, 16, 5)?;
+        let _ = handle;
+        let arc = Arc::new(batcher);
+        if let Ok(mut guard) = self.batcher.lock() {
+            if guard.is_none() {
+                *guard = Some(Arc::clone(&arc));
+            }
+        }
+        arc.embed_one(text.to_string())
     }
 
     /// Embed multiple texts in one ONNX batch call.

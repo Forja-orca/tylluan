@@ -1,4 +1,4 @@
-use rmcp::model::CallToolResult;
+﻿use rmcp::model::CallToolResult;
 use tracing::{info, warn};
 use chrono;
 
@@ -16,7 +16,7 @@ pub(crate) async fn resolve_guild_name(
 ) -> Result<(String, Vec<String>), CallToolResult> {
     let mut trace = Vec::new();
     if let Some(hint) = guild_hint {
-        // Known to the semantic matcher OR live in the registry — external MCPs
+        // Known to the semantic matcher OR live in the registry â€” external MCPs
         // activated at runtime (M25-B) exist only in the registry until reboot.
         let known = server.matcher.available_guilds().iter().any(|g| g.name == hint)
             || server.registry.read().await.guilds.contains_key(&hint);
@@ -26,7 +26,7 @@ pub(crate) async fn resolve_guild_name(
                 "Unknown guild '{hint}'. Use list_available_guilds to see valid options.",
             )));
         }
-        info!("🎯 tylluan_do: guild hint '{}' bypasses router", hint);
+        info!("ðŸŽ¯ tylluan_do: guild hint '{}' bypasses router", hint);
         trace.push(format!("guild_hint='{hint}' bypasses router"));
         Ok((hint, trace))
     } else {
@@ -38,7 +38,7 @@ pub(crate) async fn resolve_guild_name(
         // (required arg `task`), failing the post with "guild 'coordinator'
         // requires argument(s): task" -- reproduced live 2026-08-25.
         if super::coloquio_utils::is_coloquio_dispatch_intent(intent) {
-            trace.push("deterministic coloquio prefix → coloquio".to_string());
+            trace.push("deterministic coloquio prefix â†’ coloquio".to_string());
             return Ok(("coloquio".to_string(), trace));
         }
 
@@ -48,11 +48,11 @@ pub(crate) async fn resolve_guild_name(
             intent.to_string()
         };
 
-        // M20: Proactive Cascade check — skip if this is already a coordinator dispatch
+        // M20: Proactive Cascade check â€” skip if this is already a coordinator dispatch
         let is_coordinator_worker = agent_id.is_some_and(|a| a.starts_with("coordinator"));
 
         let query_embedding = server.matcher.engine()
-            .and_then(|engine| tokio::task::block_in_place(|| engine.embed(&intent_for_matching)).ok());
+            .and_then(|engine| tokio::task::block_in_place(|| engine.embed_batch_coalesced(&intent_for_matching)).ok());
         let c_score = crate::router::complexity::score_complexity(&intent_for_matching);
         let mlp_features = crate::router::complexity::extract_mlp_features(&intent_for_matching);
         let mlp_feats_f32: Vec<f32> = mlp_features.iter().map(|&v| v as f32).collect();
@@ -67,12 +67,12 @@ pub(crate) async fn resolve_guild_name(
             }
 
         let registry_has_coordinator = server.registry.read().await.guilds.contains_key("coordinator");
-        // WS2 delegation gate (2026-09-13 audit — coordinator hijack):
-        // complexity ≥0.6 alone no longer routes to coordinator. The intent
+        // WS2 delegation gate (2026-09-13 audit â€” coordinator hijack):
+        // complexity â‰¥0.6 alone no longer routes to coordinator. The intent
         // must explicitly request delegation/orchestration, or the caller
         // must be coordinator itself. has_explicit_hint is `false` here by
         // construction: an explicit guild hint early-returned at the top of
-        // this function, so this site is only reachable hint-less — coordinator
+        // this function, so this site is only reachable hint-less â€” coordinator
         // requests by name bypass the gate entirely, which is the intended
         // semantics (a user asking for coordinator by name is a decision,
         // not a heuristic).
@@ -83,14 +83,14 @@ pub(crate) async fn resolve_guild_name(
             is_coordinator_worker,
         );
         if registry_has_coordinator && cascade_eligible && blended >= 0.6 {
-            info!("⚡ Proactive Cascade (score={:.2}, mlp={:?}): '{}' → coordinator", blended, mlp_score, intent_for_matching);
+            info!("âš¡ Proactive Cascade (score={:.2}, mlp={:?}): '{}' â†’ coordinator", blended, mlp_score, intent_for_matching);
             trace.push(format!("proactive_cascade=coordinator score={blended:.2}"));
             return Ok(("coordinator".to_string(), trace));
         }
         if !cascade_eligible && blended >= 0.6 && registry_has_coordinator {
             // Observability for the gate: this intent WOULD have been hijacked
             // under the pre-WS2 rule. Keep visible until the Scheduler cutover.
-            info!("🚧 Delegation gate: complex intent (score={blended:.2}) without delegation signal → matcher, not coordinator");
+            info!("ðŸš§ Delegation gate: complex intent (score={blended:.2}) without delegation signal â†’ matcher, not coordinator");
             trace.push(format!("delegation_gate=blocked score={blended:.2}"));
         }
 
@@ -106,7 +106,7 @@ pub(crate) async fn resolve_guild_name(
             );
         }
 
-        // R14-3: Lesson prior — check SilvaDB for past successful routing before falling through to matcher
+        // R14-3: Lesson prior â€” check SilvaDB for past successful routing before falling through to matcher
         let lesson_key = format!("lesson:intent:{}",
             intent_for_matching.to_lowercase()
                 .split_whitespace()
@@ -116,10 +116,10 @@ pub(crate) async fn resolve_guild_name(
         if let Ok(Some(node)) = server.silva.get_node(&lesson_key).await {
             let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
             if node.weight >= 0.6 {
-                // Verificar que la lección no es demasiado antigua (30 días)
+                // Verificar que la lecciÃ³n no es demasiado antigua (30 dÃ­as)
                 let age_days = (now_unix - node.last_touched.timestamp()) as f64 / 86400.0;
                 if age_days > 30.0 {
-                    // Lección expirada — reducir weight y no usarla
+                    // LecciÃ³n expirada â€” reducir weight y no usarla
                     let silva_c = server.silva.clone();
                     let lk = lesson_key.clone();
                     tokio::spawn(async move {
@@ -127,12 +127,12 @@ pub(crate) async fn resolve_guild_name(
                     });
                     // Fall through to normal matcher
                 } else {
-                    // R16-2: Success-rate check — deprecate if too many rejections
+                    // R16-2: Success-rate check â€” deprecate if too many rejections
                     let window = now_unix - (7 * 86400);
                     let total = server.silva.get_trace_count_since(&lesson_key, window).await.unwrap_or(0);
                     let rejected = server.silva.get_trace_count_by_type(&lesson_key, "rejected", window).await.unwrap_or(0);
                     if total >= 5 && rejected as f64 / total as f64 > 0.5 {
-                        info!("🎯 Lesson prior: '{}' deprecated (rejected={}/{})", intent, rejected, total);
+                        info!("ðŸŽ¯ Lesson prior: '{}' deprecated (rejected={}/{})", intent, rejected, total);
                         let silva_c = server.silva.clone();
                         let lk = lesson_key.clone();
                         tokio::spawn(async move {
@@ -147,11 +147,11 @@ pub(crate) async fn resolve_guild_name(
                         // it means the lesson is stale (guild was added after the lesson was written).
                         if let Some(trigger) = server.matcher.trigger_match_pub(&intent_for_matching)
                             && trigger.score >= 0.7 && trigger.guild_name != guild {
-                                info!("⚡ Trigger overrides stale lesson: '{}' → {} (was: {})", intent, trigger.guild_name, guild);
+                                info!("âš¡ Trigger overrides stale lesson: '{}' â†’ {} (was: {})", intent, trigger.guild_name, guild);
                                 trace.push(format!("lesson overridden by trigger={}", trigger.guild_name));
                                 return Ok((trigger.guild_name, trace));
                             }
-                        info!("🎯 Lesson prior: '{}' → guild='{}' (weight={})", intent, guild, node.weight);
+                        info!("ðŸŽ¯ Lesson prior: '{}' â†’ guild='{}' (weight={})", intent, guild, node.weight);
                         trace.push(format!("lesson_prior match='{}' (weight={})", guild, node.weight));
                         return Ok((guild.to_string(), trace));
                     }
@@ -159,11 +159,11 @@ pub(crate) async fn resolve_guild_name(
             }
         }
 
-        // Trigger fast-path: fires AFTER lesson falls through — catches IQE/RFL-contaminated intents
+        // Trigger fast-path: fires AFTER lesson falls through â€” catches IQE/RFL-contaminated intents
         // Uses original `intent` (pre-IQE) so injected context can't poison trigger matching
         if let Some(trigger) = server.matcher.trigger_match_pub(&intent_for_matching)
             && trigger.score >= 0.85 {
-                info!("⚡ Trigger fast-path (post-lesson): '{}' → {} (score={:.2})", intent, trigger.guild_name, trigger.score);
+                info!("âš¡ Trigger fast-path (post-lesson): '{}' â†’ {} (score={:.2})", intent, trigger.guild_name, trigger.score);
                 trace.push(format!("trigger_fast_path='{}' score={:.2}", trigger.guild_name, trigger.score));
                 return Ok((trigger.guild_name, trace));
             }
@@ -177,7 +177,7 @@ pub(crate) async fn resolve_guild_name(
                         let gap = best_score - second_score;
                         if (*best_score >= 0.88 || (*best_score >= 0.70 && gap >= 0.05))
                             && server.matcher.available_guilds().iter().any(|g| &g.name == best_guild) {
-                                info!("⚓ Anchor fast-path: '{}' → {} (score={:.3}, gap={:.3})", intent, best_guild, best_score, gap);
+                                info!("âš“ Anchor fast-path: '{}' â†’ {} (score={:.3}, gap={:.3})", intent, best_guild, best_score, gap);
                                 trace.push(format!("anchor_fast_path='{best_guild}' score={best_score:.3} gap={gap:.3}"));
                                 return Ok((best_guild.clone(), trace));
                             }
@@ -195,7 +195,7 @@ pub(crate) async fn resolve_guild_name(
                                 // Try trigger_match as fallback before giving up
                                 if let Some(trigger) = server.matcher.trigger_match_pub(&intent_for_matching)
                                     && trigger.guild_name != blocked_guild && trigger.score >= 0.7 {
-                                        info!("🔀 RFL fallback: '{}' blocked → trigger → {}", blocked_guild, trigger.guild_name);
+                                        info!("ðŸ”€ RFL fallback: '{}' blocked â†’ trigger â†’ {}", blocked_guild, trigger.guild_name);
                                         trace.push(format!("rfl_fallback trigger='{}'", trigger.guild_name));
                                         return Ok((trigger.guild_name, trace));
                                     }
@@ -221,7 +221,7 @@ pub(crate) async fn resolve_guild_name(
 
                 // Log routing decision with agent context for observability
                 info!(
-                    "🎯 Routing: '{}' → guild='{}' method={:?} score={:.3} agent_role={}",
+                    "ðŸŽ¯ Routing: '{}' â†’ guild='{}' method={:?} score={:.3} agent_role={}",
                     intent, m.guild_name, m.method, m.score,
                     agent_id.unwrap_or("anonymous")
                 );
@@ -286,12 +286,12 @@ pub(crate) fn record_activity_trace(server: &TylluanServer, aid: &str, guild_nam
     let gn2 = gn.clone();
     tokio::spawn(async move {
         match silva.strengthen_edge(&aid_s2, &gn2, "executed", 0.15).await {
-            Ok(true) => info!("🌲 tylluan_do: strengthened edge: {} -[executed]-> {} (+0.15)", aid_s2, gn2),
+            Ok(true) => info!("ðŸŒ² tylluan_do: strengthened edge: {} -[executed]-> {} (+0.15)", aid_s2, gn2),
             _ => {
                 if let Err(e) = silva.add_edge(&aid_s2, &gn2, "executed", 1.0, &edge_meta).await {
-                    warn!("⚠️ tylluan_do: failed to create edge in SilvaDB: {}", e);
+                    warn!("âš ï¸ tylluan_do: failed to create edge in SilvaDB: {}", e);
                 } else {
-                    info!("🌲 tylluan_do: edge created: {} -[executed]-> {}", aid_s2, gn2);
+                    info!("ðŸŒ² tylluan_do: edge created: {} -[executed]-> {}", aid_s2, gn2);
                 }
             }
         }
@@ -316,7 +316,7 @@ pub(crate) fn maybe_auto_extract_triples(server: &TylluanServer, agent_id: Optio
         let triple_json = {
             let mut reg = reg_c.write().await;
             if let Some(guild) = reg.guilds.get_mut("knowledge") {
-                // Skip if guild is not alive — avoids "disconnected" error spam
+                // Skip if guild is not alive â€” avoids "disconnected" error spam
                 if !guild.is_running() {
                     return;
                 }
@@ -339,7 +339,7 @@ pub(crate) fn maybe_auto_extract_triples(server: &TylluanServer, agent_id: Optio
                                 let aid = aid_c.as_deref().unwrap_or("anonymous");
                                 let _ = silva_c.touch_node(subj, aid, "auto-triple").await;
                                 let _ = silva_c.touch_node(obj, aid, "auto-triple").await;
-                                info!("🌿 auto-triple: {} -[{}]-> {}", subj, pred, obj);
+                                info!("ðŸŒ¿ auto-triple: {} -[{}]-> {}", subj, pred, obj);
                             }
                         }
                     }

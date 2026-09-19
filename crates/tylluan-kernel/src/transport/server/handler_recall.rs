@@ -1,4 +1,4 @@
-use rmcp::{Error as McpError, model::*};
+﻿use rmcp::{Error as McpError, model::*};
 use serde_json;
 use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
@@ -10,9 +10,9 @@ use crate::registry::proxy::error_result;
 use super::TylluanServer;
 use crate::memory::mailbox::BlackboardMessage;
 
-// ─── Hot Context: recency-biased short-term memory (Letta-inspired) ────────
+// â”€â”€â”€ Hot Context: recency-biased short-term memory (Letta-inspired) â”€â”€â”€â”€â”€â”€â”€â”€
 // A rolling buffer of recently recalled node IDs. Boosts matching nodes on
-// subsequent recalls to create conversational coherence (recency ×2.0).
+// subsequent recalls to create conversational coherence (recency Ã—2.0).
 
 #[derive(Clone)]
 pub struct HotContext {
@@ -48,11 +48,11 @@ impl HotContext {
     }
 }
 
-// ─── Jaccard similarity for cache matching ───────────────────────────────────
+// â”€â”€â”€ Jaccard similarity for cache matching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
-// ─── LRU cache for similar recall queries ────────────────────────────────────
+// â”€â”€â”€ LRU cache for similar recall queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// In-memory LRU cache keyed by query text. Hit <2ms vs >400ms without.
 #[derive(Clone)]
@@ -110,7 +110,7 @@ impl RecallCache {
     }
 }
 
-/// M31-P1: Memory isolation — if `agent_id` has memory_isolation=true,
+/// M31-P1: Memory isolation â€” if `agent_id` has memory_isolation=true,
 /// filter out nodes that don't belong to it. Was duplicated verbatim across
 /// the cache-hit and live-query paths; consolidated into one call site.
 async fn apply_memory_isolation(scored: &mut Vec<(GraphNode, f32)>, agent_id: &Option<String>) {
@@ -121,7 +121,7 @@ async fn apply_memory_isolation(scored: &mut Vec<(GraphNode, f32)>, agent_id: &O
         let aid_pattern = format!("\"agent_id\":\"{aid}\"");
         let before = scored.len();
         scored.retain(|(n, _)| n.metadata.contains(&aid_pattern));
-        tracing::info!("🧊 Memory isolation: {before}→{} nodes for agent '{aid}'", scored.len());
+        tracing::info!("ðŸ§Š Memory isolation: {before}â†’{} nodes for agent '{aid}'", scored.len());
     }
 }
 
@@ -162,7 +162,7 @@ pub async fn handle_tylluan_recall(
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
     // Prepend agent session summary if available (using singleton manager)
-    // M34-P0: provenance-based trust gate — federation-sourced nodes carry a
+    // M34-P0: provenance-based trust gate â€” federation-sourced nodes carry a
     // disclaimer instead of implicit high-authority framing (OWASP ASI06).
     let session_context: Option<String> = if let Some(ref aid) = rec_agent_id {
         if let Some(ref amm) = server.agent_memory {
@@ -317,7 +317,7 @@ pub async fn handle_tylluan_recall(
                         let _ = coloquio.mark_read(cid, reader_id, max_turn).await;
                     }
                     return Ok(CallToolResult {
-                        content: vec![Content::text(format!("## #{cid} — Unread Messages\n\n{text}"))],
+                        content: vec![Content::text(format!("## #{cid} â€” Unread Messages\n\n{text}"))],
                         is_error: Some(false),
                     });
                 } else {
@@ -336,7 +336,7 @@ pub async fn handle_tylluan_recall(
                         format!("[T{}] @{}: {}", m.turn, m.author_id, m.content)
                     }).collect::<Vec<_>>().join("\n\n");
                     return Ok(CallToolResult {
-                        content: vec![Content::text(format!("## #{cid} — Search: '{keyword}'\n\n{text}"))],
+                        content: vec![Content::text(format!("## #{cid} â€” Search: '{keyword}'\n\n{text}"))],
                         is_error: Some(false),
                     });
                 }
@@ -367,7 +367,7 @@ pub async fn handle_tylluan_recall(
                 format!("[T{}] **@{}**: {}", m.turn, m.author_id, m.content)
             }).collect::<Vec<_>>().join("\n\n");
             return Ok(CallToolResult {
-                content: vec![Content::text(format!("## #{cid} — Messages (Limit: {limit}, Offset: {offset})\n\n{text}"))],
+                content: vec![Content::text(format!("## #{cid} â€” Messages (Limit: {limit}, Offset: {offset})\n\n{text}"))],
                 is_error: Some(false),
             });
         }
@@ -509,7 +509,7 @@ if let Some(ref mut s) = stmt {
     let cached_docs = cache.get(&effective_query, include_archived).cloned();
     drop(cache);
 
-    // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) —
+    // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) â€”
     // search_recall_cascade computes it only when lexical signals don't agree
     // enough to answer alone. Legacy path keeps the eager embed.
     let cascade = server.recall_cascade_enabled && mode != "dual";
@@ -519,7 +519,7 @@ if let Some(ref mut s) = stmt {
         server.matcher.engine().and_then(|e| {
             tokio::task::block_in_place(|| {
                 server.silva.query_embed_cache
-                    .get_or_embed(&effective_query, |q| e.embed(q))
+                    .get_or_embed(&effective_query, |q| e.embed_batch_coalesced(q))
             })
             .ok()
         })
@@ -530,7 +530,7 @@ if let Some(ref mut s) = stmt {
         let aid = rec_agent_id.as_deref().unwrap_or("anonymous");
 
         // ADR-011 Coherence Gate: the cache stores raw (pre-gate) candidates,
-        // so a cache hit must still be gated — otherwise a poisoned node
+        // so a cache hit must still be gated â€” otherwise a poisoned node
         // that made it into the cache once would bypass the gate forever.
         let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
             scored, &server.silva, query_embedding.as_deref(),
@@ -542,12 +542,12 @@ if let Some(ref mut s) = stmt {
         // Calls the LLM only for those that trigger any ambiguity zone (A/B/C/D).
         // Supersedes the older observe_layer4()/reason_about_flagged() path (full
         // v3/v4 reasoning prompt, 15-20s latency) that used to run here too on the
-        // same penalized-nodes subset — removed to stop double-calling the LLM on
+        // same penalized-nodes subset â€” removed to stop double-calling the LLM on
         // every recall (found during the 2026-07-30 connection audit).
         //
         // Opt-in gate ([security] coherence_gate_hybrid_enabled, default false,
         // 2026-08-28): this fires on every tylluan_recall, any agent, any time
-        // of day — when its trigger zone activates it calls llama_backend,
+        // of day â€” when its trigger zone activates it calls llama_backend,
         // which auto-starts a real llama-server subprocess with zero user
         // opt-in. Contributed to a 4-day Unsloth training run being killed.
         if server.coherence_gate_hybrid_enabled {
@@ -603,7 +603,7 @@ if let Some(ref mut s) = stmt {
 
         let header = if gate_warning {
             format!(
-                "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
+                "### Recall Results (Found {total_found}, Showing top {showing})\n\nâš ï¸ {} resultados filtrados por control de coherencia\n\n",
                 gate_stats.eliminated + gate_stats.penalized
             )
         } else {
@@ -637,7 +637,7 @@ if let Some(ref mut s) = stmt {
                 }
                 line
             }).collect::<Vec<_>>().join("\n");
-        let summary = format!("{header}{summary_body}\n\n---\n🔍 Cache hit");
+        let summary = format!("{header}{summary_body}\n\n---\nðŸ” Cache hit");
         if rec_agent_id.is_some() && !scored.is_empty() {
             let now = chrono::Utc::now().timestamp();
             for (node, _) in &scored {
@@ -649,7 +649,7 @@ if let Some(ref mut s) = stmt {
         return Ok(CallToolResult { content: vec![Content::text(format!("{prefix}{summary}"))], is_error: Some(false) });
     }
 
-    // M6: Dual-level retrieval (LightRAG pattern) — opt-in via mode="dual"
+    // M6: Dual-level retrieval (LightRAG pattern) â€” opt-in via mode="dual"
     let mut candidates = if mode == "dual" {
         match crate::memory::dual_retrieval::dual_retrieve(
             &server.silva, &effective_query, query_embedding.as_deref(), limit * 3,
@@ -742,7 +742,7 @@ if let Some(ref mut s) = stmt {
                 rerank_pool.get(idx).map(|(n, _)| ((*n).clone(), norm))
             })
             .collect();
-        tracing::info!("🔀 Jina reranker: {} candidates → {} reranked", rerank_pool.len(), reranked.len());
+        tracing::info!("ðŸ”€ Jina reranker: {} candidates â†’ {} reranked", rerank_pool.len(), reranked.len());
         Ok(reranked)
     } else {
         Ok(candidates)
@@ -770,11 +770,11 @@ if let Some(ref mut s) = stmt {
 
             // Layer 4 hybrid: fire-and-forget 3-way classification on ALL survivors.
             // Supersedes the older observe_layer4() call that used to run here too
-            // on the same penalized-nodes subset — removed to stop double-calling
+            // on the same penalized-nodes subset â€” removed to stop double-calling
             // the LLM on every recall (2026-07-30 connection audit).
             //
             // Opt-in gate ([security] coherence_gate_hybrid_enabled, default
-            // false, 2026-08-28) — see the sibling call site above for why.
+            // false, 2026-08-28) â€” see the sibling call site above for why.
             if server.coherence_gate_hybrid_enabled {
                 crate::security::coherence_gate::CoherenceGate::hybrid_classify(
                     &effective_query,
@@ -787,7 +787,7 @@ if let Some(ref mut s) = stmt {
 
             if gate_stats.eliminated > 0 || gate_stats.penalized > 0 {
                 tracing::info!(
-                    "🛡️ Coherence Gate: {} eliminated, {} penalized of {} candidates",
+                    "ðŸ›¡ï¸ Coherence Gate: {} eliminated, {} penalized of {} candidates",
                     gate_stats.eliminated, gate_stats.penalized, gate_stats.total
                 );
             }
@@ -797,7 +797,7 @@ if let Some(ref mut s) = stmt {
                 let _ = server.silva.reinforce_node(&node.id, 1.02).await;
                 let _ = server.silva.touch_node(&node.id, aid, "recall").await;
             }
-            tracing::info!("🧠 Rejuvenated {} nodes via recall (agent={})", scored.len(), aid);
+            tracing::info!("ðŸ§  Rejuvenated {} nodes via recall (agent={})", scored.len(), aid);
 
             let total_found = scored.len();
 
@@ -829,7 +829,7 @@ if let Some(ref mut s) = stmt {
                 scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             }
 
-            // HOT CONTEXT: Boost recently recalled nodes (recency ×2.0)
+            // HOT CONTEXT: Boost recently recalled nodes (recency Ã—2.0)
             {
                 let mut hc = server.hot_context.lock().await;
                 let mut boosted_any = false;
@@ -842,7 +842,7 @@ if let Some(ref mut s) = stmt {
                 }
                 if boosted_any {
                     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-                    tracing::info!("🔥 Hot Context boost applied ({} hot nodes)", hc.snapshot().len());
+                    tracing::info!("ðŸ”¥ Hot Context boost applied ({} hot nodes)", hc.snapshot().len());
                 }
                 // Insert top-3 results into hot context for next query
                 for (node, _) in scored.iter().take(3) {
@@ -851,7 +851,7 @@ if let Some(ref mut s) = stmt {
             }
 
             // ADR-011 LightReranker: reorder by learned score when model available.
-            // Additive, opt-in — if no trained model exists, scored is unchanged.
+            // Additive, opt-in â€” if no trained model exists, scored is unchanged.
             if let Some(ref reranker) = server.light_reranker
                 && reranker.is_active()
             {
@@ -891,7 +891,7 @@ if let Some(ref mut s) = stmt {
                         scored = order.into_iter().filter_map(|i| {
                             if i < scored.len() { Some(scored[i].clone()) } else { None }
                         }).collect();
-                        tracing::info!("🎯 LightReranker reordered {} candidates", scored.len());
+                        tracing::info!("ðŸŽ¯ LightReranker reordered {} candidates", scored.len());
                     }
             }
 
@@ -915,14 +915,14 @@ if let Some(ref mut s) = stmt {
 
             let header = if gate_warning {
                 format!(
-                    "### Recall Results (Found {total_found}, Showing top {showing})\n\n⚠️ {} resultados filtrados por control de coherencia\n\n",
+                    "### Recall Results (Found {total_found}, Showing top {showing})\n\nâš ï¸ {} resultados filtrados por control de coherencia\n\n",
                     gate_stats.eliminated + gate_stats.penalized
                 )
             } else {
                 format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
             };
 
-            // WER — Weight Exposure in Recall (R21-4)
+            // WER â€” Weight Exposure in Recall (R21-4)
             // Expose score, weight, node_type and created_at so agents can audit
             // ALD decay, TMS contradictions, and retrieval quality directly.
             // M40-P4: status and source/author/evidence are fetched on demand
@@ -970,7 +970,7 @@ if let Some(ref mut s) = stmt {
                             })
                             .collect::<Vec<_>>().join("\n");
                         if !shared.is_empty() {
-                            summary.push_str("\n\n📡 Conocimiento compartido por el colectivo:\n");
+                            summary.push_str("\n\nðŸ“¡ Conocimiento compartido por el colectivo:\n");
                             summary.push_str(&shared);
                         }
                     }
@@ -994,9 +994,9 @@ if let Some(ref mut s) = stmt {
 
             let using_embeddings = server.matcher.engine().is_some();
             let footer = if using_embeddings {
-                "\n\n---\n🔍 Búsqueda: semántica (BGE-M3)"
+                "\n\n---\nðŸ” BÃºsqueda: semÃ¡ntica (BGE-M3)"
             } else {
-                "\n\n---\n⚠️ Búsqueda: solo texto (embeddings no cargados)"
+                "\n\n---\nâš ï¸ BÃºsqueda: solo texto (embeddings no cargados)"
             };
             let prefix = session_context.unwrap_or_default();
             let full_summary = format!("{prefix}{summary}{footer}");
@@ -1115,20 +1115,20 @@ mod tests {
         let server = test_server().await;
         
         // 1. Insertar dos tipos de nodos en SilvaDB
-        server.silva.upsert_node("n1", "episodic", "Mensaje de coloquio episódico de testeo", "{}").await.unwrap();
-        server.silva.upsert_node("n2", "lesson", "Lección de testeo general", "{}").await.unwrap();
+        server.silva.upsert_node("n1", "episodic", "Mensaje de coloquio episÃ³dico de testeo", "{}").await.unwrap();
+        server.silva.upsert_node("n2", "lesson", "LecciÃ³n de testeo general", "{}").await.unwrap();
 
         // 2. Invocar recall con episodic = true
         let mut args = serde_json::Map::new();
-        args.insert("query".to_string(), serde_json::Value::String("episódico".to_string()));
+        args.insert("query".to_string(), serde_json::Value::String("episÃ³dico".to_string()));
         args.insert("episodic".to_string(), serde_json::Value::Bool(true));
         
         let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
         let text = result.content[0].as_text().unwrap();
         
-        // Debe encontrar el episódico pero no el de lección
-        assert!(text.text.contains("episódico"), "Debe retornar el nodo episódico: {text:?}");
-        assert!(!text.text.contains("general"), "No debe retornar el nodo de lección: {text:?}");
+        // Debe encontrar el episÃ³dico pero no el de lecciÃ³n
+        assert!(text.text.contains("episÃ³dico"), "Debe retornar el nodo episÃ³dico: {text:?}");
+        assert!(!text.text.contains("general"), "No debe retornar el nodo de lecciÃ³n: {text:?}");
         
         // 3. Invocar recall sin episodic (por defecto busca todo)
         let mut args_all = serde_json::Map::new();
@@ -1136,10 +1136,10 @@ mod tests {
         
         let result_all = handle_tylluan_recall(&server, Some(args_all)).await.unwrap();
         let text_all = result_all.content[0].as_text().unwrap();
-        assert!(text_all.text.contains("episódico") && text_all.text.contains("general"), "Debe contener ambos: {text_all:?}");
+        assert!(text_all.text.contains("episÃ³dico") && text_all.text.contains("general"), "Debe contener ambos: {text_all:?}");
     }
 
-    // ── Edge case tests ───────────────────────────────────────────────
+    // â”€â”€ Edge case tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[tokio::test(flavor = "multi_thread")]
     async fn recall_empty_query_returns_error() {
