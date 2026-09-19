@@ -524,10 +524,24 @@ pub async fn contract_close_handler(
             "team": entry.team,
             "closed_by": req.agent_id,
         });
-        let _ = state.silva
+        // Only release the capsule row once the synthesis actually landed —
+        // a failed write must never silently destroy the capsule's content.
+        // Buffy's live finding (T604): the previous `let _` deleted the row
+        // unconditionally, so a SilvaDB failure was worse than an orphan,
+        // it was data loss. On failure the row stays for a retry on the
+        // next close attempt.
+        let synthesis_ok = state.silva
             .upsert_node(&format!("task_synthesis:{id}"), "task_synthesis", &synthesis, &meta.to_string())
-            .await;
-        let released = state.task_context.delete(&id).unwrap_or(false);
+            .await
+            .is_ok();
+        let released = if synthesis_ok {
+            state.task_context.delete(&id).unwrap_or(false)
+        } else {
+            tracing::error!(
+                "[TCC-3] synthesis write failed for contract {id} -- capsule NOT released, retry on next close"
+            );
+            false
+        };
         let _ = state.broadcast_tx.send(serde_json::json!({
             "type": "work-contract:synthesized",
             "contract_id": id,
@@ -594,6 +608,11 @@ pub async fn contract_context_add_decision_handler(
     Path(id): Path<String>,
     Json(req): Json<AddDecisionRequest>,
 ) -> impl IntoResponse {
+    if state.contract_registry.contracts.get(&id).is_none() {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": format!("contract '{id}' does not exist")
+        }))).into_response();
+    }
     if req.agent_id.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
             "error": "agent_id cannot be empty"
@@ -617,6 +636,11 @@ pub async fn contract_context_add_pointer_handler(
     Path(id): Path<String>,
     Json(req): Json<AddPointerRequest>,
 ) -> impl IntoResponse {
+    if state.contract_registry.contracts.get(&id).is_none() {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": format!("contract '{id}' does not exist")
+        }))).into_response();
+    }
     if req.agent_id.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
             "error": "agent_id cannot be empty"
