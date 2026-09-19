@@ -128,7 +128,7 @@ impl DispatchQueue {
         if let Some(parent) = Path::new(db_path).parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        let conn = Connection::open(db_path)
+        let conn = crate::config::open_db(Path::new(db_path))
             .with_context(|| format!("Failed to open dispatch queue DB: {db_path}"))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS pending_dispatches (
