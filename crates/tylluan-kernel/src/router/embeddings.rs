@@ -253,10 +253,10 @@ impl EmbeddingEngine {
         let (batcher, handle) = EmbedBatcher::spawn(engine, 16, 5)?;
         let _ = handle;
         let arc = Arc::new(batcher);
-        if let Ok(mut guard) = self.batcher.lock() {
-            if guard.is_none() {
-                *guard = Some(Arc::clone(&arc));
-            }
+        if let Ok(mut guard) = self.batcher.lock()
+            && guard.is_none()
+        {
+            *guard = Some(Arc::clone(&arc));
         }
         arc.embed_one(text.to_string())
     }
