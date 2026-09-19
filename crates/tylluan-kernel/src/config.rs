@@ -1,4 +1,4 @@
-﻿//! Configuration system for TylluanNexus.
+//! Configuration system for TylluanNexus.
 //!
 //! Reads from `tylluan.toml` in the current directory or the default config path.
 //! Auto-generates a random auth token on first run if none is set.

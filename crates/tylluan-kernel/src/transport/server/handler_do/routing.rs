@@ -1,4 +1,4 @@
-﻿use rmcp::model::CallToolResult;
+use rmcp::model::CallToolResult;
 use tracing::{info, warn};
 use chrono;
 

@@ -1,4 +1,4 @@
-﻿use anyhow::Result;
+use anyhow::Result;
 use chrono::Utc;
 use rusqlite::params;
 use std::collections::HashMap;
