@@ -25,6 +25,11 @@ import asyncio
 # anchor is the next increment; the fixed part is the cacheable core.
 DPC_SYSTEM_ANCHOR = "Tylluan sovereign kernel: agente de continuidad, memoria y accion. Responde en el idioma de la peticion. Hechos sobre especulacion; si no hay evidencia, dilo."
 
+# bwc-8c0dc35a: async-safety rule for this file. The MCP server runs all
+# tools on one event loop; every blocking network call (urlopen, provider
+# probes, kernel memory fetch) MUST go through asyncio.to_thread.
+# Mechanical gate: scripts/check_async_guild_io.py (wired in verify.sh).
+
 def _dpc_memory_context(prompt, limit=3):
     """Structured retrieved memory as the second part of the DPC anchor
     (contract bwc-d5704634, scope 2). Fail-open: any error degrades to the
@@ -679,6 +684,26 @@ async def _stop_llama_server():
     _model_loaded = False
 
 
+def _post_chat_completion(backend_url, request_body):
+    """Blocking POST /chat/completions + parse (sync helper, bwc-8c0dc35a).
+
+    Local inference can hold the connection up to 120s — callers MUST run
+    this via asyncio.to_thread. Returns the assistant message content.
+    """
+    import urllib.request as _urllib
+
+    data = json.dumps(request_body).encode("utf-8")
+    req = _urllib.Request(
+        f"{backend_url}/chat/completions",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with _urllib.urlopen(req, timeout=120) as resp:
+        result = json.loads(resp.read())
+        return result["choices"][0]["message"]["content"]
+
+
 @mcp.tool()
 async def query_model(prompt: str, model: str = "", max_tokens: int = 256, temperature: float | None = None, grammar: str = "") -> str:
     """Query the LLM backend with a prompt. Returns generated text.
@@ -696,11 +721,11 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
         grammar: Optional GBNF grammar string to constrain output
             (only works with local llama-server, ignored for external providers).
     """
-    import urllib.request as _urllib
 
     # Try routing to a configured external provider by model name
     if model:
-        provider = _get_provider_for_model(model)
+        # Async-safety: provider resolution may probe reachability over HTTP.
+        provider = await asyncio.to_thread(_get_provider_for_model, model)
         if provider:
             t = temperature if temperature is not None else _get_config()["temperature"]
             return await asyncio.to_thread(
@@ -708,8 +733,11 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
             )
 
     # Fall back to legacy backend URL
-    backend_url = _get_backend_url()
-    is_external = _detect_external_backend() is not None
+    backend_url = await asyncio.to_thread(_get_backend_url)
+    # _get_backend_url() already ran full detection (probes included); derive
+    # the flag from its result instead of re-detecting — each detection call
+    # can probe several candidate backends over HTTP.
+    is_external = backend_url != f"http://127.0.0.1:{LLAMA_PORT}/v1"
 
     if not is_external:
         await _start_llama_server()
@@ -717,7 +745,8 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
     t = temperature if temperature is not None else _get_config()["temperature"]
 
     request_body = {
-        "messages": _dpc_messages(prompt),
+        # Async-safety: memory retrieval hits the kernel over HTTP (3s timeout).
+        "messages": await asyncio.to_thread(_dpc_messages, prompt),
         "max_tokens": max_tokens,
         "temperature": t,
         "top_p": _get_config()["top_p"],
@@ -728,17 +757,9 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
     if grammar:
         request_body["grammar"] = grammar
 
-    data = json.dumps(request_body).encode("utf-8")
-
-    req = _urllib.Request(
-        f"{backend_url}/chat/completions",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+    return await asyncio.to_thread(
+        _post_chat_completion, backend_url, request_body
     )
-    with _urllib.urlopen(req, timeout=120) as resp:
-        result = json.loads(resp.read())
-        return result["choices"][0]["message"]["content"]
 
 
 @mcp.tool()
@@ -747,13 +768,13 @@ async def backend_health() -> str:
     status = "running" if (_model_loaded and _llama_process is not None
                           and _llama_process.poll() is None) else "stopped"
 
-    ext_providers = _get_external_providers()
+    ext_providers = await asyncio.to_thread(_get_external_providers)
     return json.dumps({
         "status": status,
         "model": f"{DEFAULT_MODEL}::{DEFAULT_MODEL_FILE}",
         "port": LLAMA_PORT,
         "backend": "llama.cpp",
-        "external_backend": _detect_external_backend(),
+        "external_backend": await asyncio.to_thread(_detect_external_backend),
         "external_providers": [
             {
                 "name": name,
