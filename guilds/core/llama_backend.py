@@ -1,4 +1,4 @@
-﻿"""llama_backend guild: llama-server subprocess with GGUF auto-download.
+"""llama_backend guild: llama-server subprocess with GGUF auto-download.
 
 P0 (M19 infrastructure): replaces the manual ONNX Gemma-4 loop with a
 production-grade llama.cpp backend. Manages a llama-server subprocess
@@ -7,7 +7,7 @@ that exposes an OpenAI-compatible HTTP API on a local port. Other guilds
 doing manual ONNX inference.
 
 Architecture:
-- Auto-installs llama-cpp-python (â†’ llama-server binary) on first use
+- Auto-installs llama-cpp-python (-> llama-server binary) on first use
 - Auto-downloads GGUF model from HuggingFace hub
 - Starts llama-server as a managed subprocess
 - Health-check endpoint for dashboard
@@ -94,7 +94,7 @@ def _get_config():
             pass  # keep stale config if file is temporarily unreadable
     return _CFG
 
-# P1: External backend support â€” if the user has external LLM providers
+# P1: External backend support -- if the user has external LLM providers
 # configured via `[[external_providers]]` in tylluan.toml (OpenAI-compatible,
 # Anthropic-compatible, or Ollama-compatible), use those instead of starting
 # our own llama-server. Supports MULTIPLE providers simultaneously.
