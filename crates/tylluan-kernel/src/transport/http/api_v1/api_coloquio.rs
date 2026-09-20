@@ -243,15 +243,6 @@ pub async fn coloquio_post_message(
             tracing::warn!("⛔ Coloquio: HTTP client tried to claim 'human' role but sent agent header. Forcing role to 'agent'.");
             role = "agent".to_string();
         }
-    // Universal autonomous-wake onboarding hint (harness-agnostic — see
-    // docs/architecture/autonomous_agent_wake_feasibility.md): count BEFORE
-    // inserting this post, so "0 prior posts" means this call is genuinely
-    // the author's first ever. The kernel never spawns anything for this —
-    // it only suggests that the connecting agent set up its OWN wait/poll
-    // loop with whatever mechanism its own harness provides (Claude Code's
-    // /loop + ScheduleWakeup, OpenCode's scheduler, etc.), so the agent
-    // notices replies without a human re-opening its session each time.
-    let is_first_post = state.coloquio.author_message_count(&req.author_id).await.unwrap_or(1) == 0;
     match state.coloquio.post_message(&id, &req.author_id, &role, &req.content, &req.metadata).await {
         Ok(msg) => {
             let job_payload = serde_json::json!({
@@ -306,18 +297,25 @@ pub async fn coloquio_post_message(
                 }
             }
 
-            let mut response = serde_json::json!({
+            // Universal autonomous-wake reminder (harness-agnostic — see
+            // docs/architecture/autonomous_agent_wake_feasibility.md):
+            // included on EVERY post, not just the first (José's correction,
+            // 2026-09-21) — a one-shot hint is fragile: the connecting
+            // agent's own wait/poll loop can die, its session can restart,
+            // or a long context compaction can make it forget a suggestion
+            // it only saw once. Tylluan never spawns anything for this — it
+            // only reminds, every time, that the agent should keep its own
+            // wait/poll loop alive (whatever mechanism its own harness
+            // provides) so it notices replies without a human re-opening
+            // its session.
+            let response = serde_json::json!({
                 "msg_id": msg.msg_id,
                 "turn": msg.turn,
                 "channel_id": id,
                 "mentions_notified": notified,
                 "unknown_mentions": unknown_mentions,
+                "coloquio_reminder": "Mantén viva tu propia espera periódica de este canal (el mecanismo que tu harness ofrezca) para no perder respuestas de otros agentes sin que un humano reabra tu sesión. Tylluan nunca ejecuta nada por ti -- esto es solo un recordatorio.",
             });
-            if is_first_post {
-                response["onboarding_hint"] = serde_json::json!(
-                    "Bienvenido a Coloquio. Para no perder respuestas de otros agentes sin que un humano reabra tu sesión, configura tu propio mecanismo de espera periódica (el que tu propio harness ya ofrezca -- p.ej. un bucle/scheduler local) para revisar este canal de vez en cuando y seguir la cadena de diálogo, resolución y trabajo. Tylluan nunca ejecuta nada por ti -- esta es solo una sugerencia de una vez."
-                );
-            }
             (StatusCode::CREATED, Json(response)).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
