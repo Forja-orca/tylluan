@@ -886,6 +886,21 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         crate::security::dispatch_executor::spawn_dispatch_executor(dq);
     }
 
+    // Guild outputs ledger TTL pruner (bwc-d0fb0812) — strictly opt-in:
+    // without TYLLUAN_OUTPUTS_TTL_SECS nothing is ever deleted, matching
+    // the contract that the ledger observes but never destroys by default.
+    if let Some(ttl) = crate::registry::outputs::outputs_ttl_secs() {
+        tokio::spawn(async move {
+            let store = crate::registry::outputs::OutputsStore::at_default_root();
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(600));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                interval.tick().await;
+                store.prune_expired(ttl);
+            }
+        });
+    }
+
     // ─── Global heartbeat + Metrics Broadcaster ──────────────────────────────
     let (decay_enabled, decay_interval_secs) = {
         let cfg = state.config.read().await;

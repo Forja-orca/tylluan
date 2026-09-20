@@ -21,6 +21,7 @@ pub enum RegistryMessage {
     CallTool {
         guild_name: String,
         params: rmcp::model::CallToolRequestParam,
+        requested_by: Option<String>,
         resp: oneshot::Sender<Result<rmcp::model::CallToolResult>>,
     },
     GetTools {
@@ -89,9 +90,13 @@ impl RegistryActor {
                     let result = self.registry.write().await.ensure_guild_running(&name).await;
                     let _ = resp.send(result);
                 }
-                RegistryMessage::CallTool { guild_name, params, resp } => {
+                RegistryMessage::CallTool { guild_name, params, requested_by, resp } => {
                     let registry = Arc::clone(&self.registry);
                     tokio::spawn(async move {
+                        let call_started_unix = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
                         let timeouts_secs = [30, 60, 120, 180];
                         let mut attempt = 0;
                         let mut final_result = None;
@@ -269,6 +274,40 @@ impl RegistryActor {
                             attempt += 1;
                         }
 
+                        // bwc-d0fb0812: index guild outputs (if any) after the
+                        // call resolved — observation only, never breaks the
+                        // call path. Hashing runs off the async runtime; owned
+                        // strings move into the closure so the borrows stay
+                        // inside it.
+                        if let Some(Ok(ref res)) = final_result {
+                            let call_ended_unix = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+                            let result_json = serde_json::to_string(res).unwrap_or_default();
+                            let guild_owned = guild_name.clone();
+                            let tool_owned = params.name.to_string();
+                            let requested_owned = requested_by
+                                .clone()
+                                .unwrap_or_else(|| "unknown".to_string());
+                            let success = !res.is_error.unwrap_or(false);
+                            let store = crate::registry::outputs::OutputsStore::at_default_root();
+                            // Detached on purpose: the response must not wait
+                            // on hashing. Failure is logged inside index_call.
+                            let _outputs_index_join = tokio::task::spawn_blocking(move || {
+                                let record = crate::registry::outputs::CallRecord {
+                                    guild: &guild_owned,
+                                    tool: &tool_owned,
+                                    requested_by: &requested_owned,
+                                    success,
+                                    started_unix: call_started_unix,
+                                    ended_unix: call_ended_unix,
+                                    result_json: &result_json,
+                                    run_id_override: None,
+                                };
+                                store.index_call(&record);
+                            });
+                        }
                         let _ = resp.send(final_result.unwrap_or_else(|| Err(anyhow::anyhow!("Guild '{guild_name}' call failed after all retries"))));
                     });
                 }
@@ -374,6 +413,17 @@ impl RegistryHandle {
     }
 
     pub async fn call_tool(&self, guild_name: &str, params: rmcp::model::CallToolRequestParam) -> Result<rmcp::model::CallToolResult> {
+        self.call_tool_as(guild_name, params, None).await
+    }
+
+    /// call_tool attributed to `requested_by` in the outputs ledger
+    /// (bwc-d0fb0812). `None` behaves exactly like the legacy call_tool.
+    pub async fn call_tool_as(
+        &self,
+        guild_name: &str,
+        params: rmcp::model::CallToolRequestParam,
+        requested_by: Option<String>,
+    ) -> Result<rmcp::model::CallToolResult> {
         tracing::info!(
             gen_ai.operation.name = "tool_call",
             gen_ai.request.model = %guild_name,
@@ -384,6 +434,7 @@ impl RegistryHandle {
         self.sender.send(RegistryMessage::CallTool {
             guild_name: guild_name.to_string(),
             params,
+            requested_by,
             resp: resp_tx,
         }).await?;
         resp_rx.await?

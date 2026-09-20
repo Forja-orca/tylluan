@@ -7,6 +7,7 @@
 
 pub mod tools;
 pub mod guild_process;
+pub mod outputs;
 pub mod supervisor;
 pub mod lifecycle;
 pub mod actor;
