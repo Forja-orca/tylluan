@@ -284,4 +284,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/dispatches/{id}", get(dispatch_get_handler))
         .route("/api/v1/dispatches/{id}/approve", post(dispatch_approve_handler))
         .route("/api/v1/dispatches/{id}/reject", post(dispatch_reject_handler))
+
+        // Guild outputs ledger (bwc-d0fb0812) — read-only index of artifacts
+        // guilds write under data/outputs/; the kernel owns manifests only.
+        .route("/api/v1/outputs", get(outputs_list_handler))
+        .route("/api/v1/outputs/{run_id}/manifest", get(outputs_manifest_handler))
 }

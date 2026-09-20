@@ -15,6 +15,7 @@ use crate::transport::http::{
 use crate::memory::mailbox::BlackboardMessage;
 
 pub mod api_guilds;
+pub mod api_outputs;
 pub mod api_admin;
 pub mod api_coloquio;
 pub mod api_federation;
@@ -40,6 +41,7 @@ pub mod mcp;
 pub mod routes;
 
 pub use api_guilds::*;
+pub use api_outputs::*;
 pub use api_admin::*;
 pub use api_coloquio::*;
 pub use api_federation::*;

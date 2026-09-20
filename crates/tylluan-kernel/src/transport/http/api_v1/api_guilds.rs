@@ -80,7 +80,11 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
     let req = CallToolRequestParam { name: tool.into(), arguments: args.as_object().cloned() };
     let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let _ = state.silva.touch_node(&format!("agent:{agent_id}"), agent_id, &format!("tool_call:{guild}")).await;
-    match state.registry.call_tool(&guild, req).await {
+    // bwc-d0fb0812: attribute this call in the outputs ledger when the
+    // caller identifies itself. The actor keeps indexing best-effort and
+    // observation-only either way.
+    let requested_by = (agent_id != "unknown").then(|| agent_id.to_string());
+    match state.registry.call_tool_as(&guild, req, requested_by).await {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     }
