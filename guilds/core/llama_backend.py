@@ -17,49 +17,6 @@ Default model: SmolLM2-135M-Instruct GGUF (~200MB, works on everything).
 Dashboard (P2) will add a selector for different model sizes.
 """
 import asyncio
-# DPC (bwc-d5704634): Deterministic Prefix Canonicalization — the fixed
-# sovereign anchor prepended to every LLM call so llama-server's slot prefix
-# cache (n_keep + --cache-reuse) can reuse it across calls. This is the
-# "anchor" measured at 53-62% of prompt tokens in multi-agent workloads
-# (CacheScout, arXiv:2608.14624). The memory-retrieval extension of the
-# anchor is the next increment; the fixed part is the cacheable core.
-DPC_SYSTEM_ANCHOR = "Tylluan sovereign kernel: agente de continuidad, memoria y accion. Responde en el idioma de la peticion. Hechos sobre especulacion; si no hay evidencia, dilo."
-
-# bwc-8c0dc35a: async-safety rule for this file. The MCP server runs all
-# tools on one event loop; every blocking network call (urlopen, provider
-# probes, kernel memory fetch) MUST go through asyncio.to_thread.
-# Mechanical gate: scripts/check_async_guild_io.py (wired in verify.sh).
-
-def _dpc_memory_context(prompt, limit=3):
-    """Structured retrieved memory as the second part of the DPC anchor
-    (contract bwc-d5704634, scope 2). Fail-open: any error degrades to the
-    fixed anchor only — memory is an enhancement, never a blocker."""
-    try:
-        base = os.environ.get("KERNEL_BASE", "http://127.0.0.1:47004")
-        body = json.dumps({"query": prompt, "limit": limit}).encode("utf-8")
-        req = urllib.request.Request(
-            f"{base}/api/v1/memory/search", data=body,
-            headers={"Content-Type": "application/json"}, method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            results = json.loads(resp.read())
-        nodes = results.get("results", []) if isinstance(results, dict) else results
-        if not nodes:
-            return ""
-        lines = [f"- ({n.get('type', 'note')}) {str(n.get('content', ''))[:200]}" for n in nodes[:limit]]
-        return "Contexto de memoria relevante:\n" + "\n".join(lines) + "\n"
-    except Exception:
-        return ""
-
-def _dpc_messages(prompt):
-    """Canonical messages array: fixed system anchor + structured retrieved
-    memory + user prompt — the cacheable deterministic prefix."""
-    memory = _dpc_memory_context(prompt)
-    return [
-        {"role": "system", "content": DPC_SYSTEM_ANCHOR + memory},
-        {"role": "user", "content": prompt},
-    ]
-
 import json
 import os
 import signal
@@ -68,6 +25,44 @@ import sys
 import time
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
+
+# DPC (bwc-d5704634 / bwc-c31eee3d): Deterministic Prefix Canonicalization —
+# the fixed sovereign anchor prepended to every LLM call so llama-server's
+# slot prefix cache (n_keep + --cache-reuse) can reuse it across calls.
+# This anchor accounts for 53-62% of prompt tokens in multi-agent workloads
+# (CacheScout, arXiv:2608.14624).
+#
+# Inversion of Control (bwc-c31eee3d): Memory context is caller-injected,
+# NOT dynamically fetched via loopback HTTP inside this leaf guild. Without
+# explicit memory_context from the caller, DPC_SYSTEM_ANCHOR remains 100%
+# invariant across calls, guaranteeing maximal KV-cache hits.
+DPC_SYSTEM_ANCHOR = "Tylluan sovereign kernel: agente de continuidad, memoria y accion. Responde en el idioma de la peticion. Hechos sobre especulacion; si no hay evidencia, dilo."
+
+# bwc-8c0dc35a: async-safety rule for this file. The MCP server runs all
+# tools on one event loop; every blocking network call (urlopen, provider
+# probes) MUST go through asyncio.to_thread.
+# Mechanical gate: scripts/check_async_guild_io.py (wired in verify.sh).
+
+
+def _dpc_messages(prompt: str, memory_context: str = "") -> list:
+    """Canonical messages array: fixed system anchor (+ optional caller-injected
+    memory context) + user prompt — the cacheable deterministic prefix.
+
+    Inversion of Control (bwc-c31eee3d): llama_backend NEVER performs loopback
+    HTTP requests to fetch memory dynamically. If the caller supplies memory_context,
+    it is appended to the system message. Otherwise, the system prompt contains
+    EXCLUSIVELY DPC_SYSTEM_ANCHOR, guaranteeing 100% stable prefix cache reuse
+    in llama-server across all user/agent turns.
+    """
+    if memory_context and memory_context.strip():
+        system_content = f"{DPC_SYSTEM_ANCHOR}\n\nContexto de memoria relevante:\n{memory_context.strip()}"
+    else:
+        system_content = DPC_SYSTEM_ANCHOR
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": prompt},
+    ]
+
 
 mcp = FastMCP("llama_backend")
 
@@ -243,21 +238,23 @@ def _get_provider_for_model(model_name):
     return None
 
 
-def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, grammar=""):
+def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, grammar="", memory_context="", messages=None):
     """Call an external LLM provider with the given prompt.
-    Handles both OpenAI-compatible and Anthropic-compatible endpoints."""
+    Handles OpenAI-compatible, Anthropic-compatible, and Ollama-compatible endpoints."""
     import urllib.request as _urllib
     ptype = provider["type"]
     base = provider["base_url"].rstrip("/")
     api_key = provider["api_key"]
     model = provider["models"][0] if provider["models"] else "gpt-4o-mini"
 
+    payload_messages = messages if messages is not None else _dpc_messages(prompt, memory_context)
+
     if ptype == "anthropic_compatible":
         url = f"{base}/v1/messages"
         body = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": _dpc_messages(prompt),
+            "messages": payload_messages,
         }
         data = json.dumps(body).encode("utf-8")
         req = _urllib.Request(
@@ -278,7 +275,7 @@ def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, g
         url = f"{base}/api/chat"
         body = {
             "model": model,
-            "messages": _dpc_messages(prompt),
+            "messages": payload_messages,
             "stream": False,
         }
         data = json.dumps(body).encode("utf-8")
@@ -295,7 +292,7 @@ def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, g
         # openai_compatible (default)
         url = f"{base}/v1/chat/completions"
         body = {
-            "messages": _dpc_messages(prompt),
+            "messages": payload_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
@@ -705,7 +702,15 @@ def _post_chat_completion(backend_url, request_body):
 
 
 @mcp.tool()
-async def query_model(prompt: str, model: str = "", max_tokens: int = 256, temperature: float | None = None, grammar: str = "") -> str:
+async def query_model(
+    prompt: str,
+    model: str = "",
+    max_tokens: int = 256,
+    temperature: float | None = None,
+    grammar: str = "",
+    memory_context: str = "",
+    messages: list | None = None,
+) -> str:
     """Query the LLM backend with a prompt. Returns generated text.
 
     Routes to an external provider if one matches the requested model,
@@ -720,6 +725,11 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
             [inference.llama].temperature when not given.
         grammar: Optional GBNF grammar string to constrain output
             (only works with local llama-server, ignored for external providers).
+        memory_context: Optional caller-injected memory context (Inversion
+            of Control, bwc-c31eee3d). If empty, uses exclusively the static
+            DPC_SYSTEM_ANCHOR for 100% stable KV-cache prefix reuse.
+        messages: Optional explicit list of message dicts. If provided,
+            used directly as the request messages payload.
     """
 
     # Try routing to a configured external provider by model name
@@ -729,7 +739,7 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
         if provider:
             t = temperature if temperature is not None else _get_config()["temperature"]
             return await asyncio.to_thread(
-                _call_external_provider, provider, prompt, max_tokens, t, grammar
+                _call_external_provider, provider, prompt, max_tokens, t, grammar, memory_context, messages
             )
 
     # Fall back to legacy backend URL
@@ -744,9 +754,10 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
 
     t = temperature if temperature is not None else _get_config()["temperature"]
 
+    payload_messages = messages if messages is not None else _dpc_messages(prompt, memory_context)
+
     request_body = {
-        # Async-safety: memory retrieval hits the kernel over HTTP (3s timeout).
-        "messages": await asyncio.to_thread(_dpc_messages, prompt),
+        "messages": payload_messages,
         "max_tokens": max_tokens,
         "temperature": t,
         "top_p": _get_config()["top_p"],
