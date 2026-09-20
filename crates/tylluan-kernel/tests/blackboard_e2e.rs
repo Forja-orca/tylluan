@@ -297,3 +297,49 @@ async fn test_context_endpoints_404_for_nonexistent_contract() {
         "add_decision on a nonexistent contract must 404, not silently create an orphan capsule"
     );
 }
+
+// José's correction (2026-09-21): the coloquio_reminder must appear on
+// EVERY post, not just the author's first ever -- a one-shot hint is
+// fragile against a dead wait loop, a restarted session, or a long
+// context compaction erasing the memory of having seen it once.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_coloquio_reminder_appears_on_every_post_not_just_the_first() {
+    let state = test_state().await;
+    let app = build_test_app(state);
+
+    async fn post(app: axum::Router, turn_text: &str) -> serde_json::Value {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/coloquio/channels/general/post")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::to_vec(&json!({
+                "author_id": "repeat-poster",
+                "role": "agent",
+                "content": turn_text,
+                "metadata": "{}"
+            })).unwrap()))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status().as_u16(), 201);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    let first = post(app.clone(), "primer mensaje").await;
+    assert!(
+        first.get("coloquio_reminder").and_then(|v| v.as_str()).is_some(),
+        "first post must carry the reminder"
+    );
+
+    let second = post(app.clone(), "segundo mensaje").await;
+    assert!(
+        second.get("coloquio_reminder").and_then(|v| v.as_str()).is_some(),
+        "second post from the SAME author must still carry the reminder -- it is not one-shot"
+    );
+
+    let third = post(app, "tercer mensaje").await;
+    assert!(
+        third.get("coloquio_reminder").and_then(|v| v.as_str()).is_some(),
+        "the reminder persists indefinitely, not just for a brief onboarding window"
+    );
+}

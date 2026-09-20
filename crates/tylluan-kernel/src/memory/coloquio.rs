@@ -513,27 +513,6 @@ impl ColoquioDb {
         }
     }
 
-    /// Count how many messages `author_id` has ever posted, across all
-    /// channels. Used to detect "this is this agent's first Coloquio post"
-    /// so the kernel can hand back a one-time onboarding hint (universal
-    /// autonomous-wake pattern, harness-agnostic — see
-    /// docs/architecture/autonomous_agent_wake_feasibility.md's follow-up).
-    /// Counting BEFORE the current post's own INSERT means the caller must
-    /// call this first and compare to 0, not derive "first" from a count of
-    /// 1 after insertion (order matters, kept explicit at the call site).
-    pub async fn author_message_count(&self, author_id: &str) -> Result<i64> {
-        let author_id = author_id.to_string();
-        tokio::task::block_in_place(|| {
-            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            let count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM coloquio_messages WHERE author_id = ?1",
-                params![author_id],
-                |row| row.get(0),
-            )?;
-            Ok(count)
-        })
-    }
-
     /// Advance a reader's cursor in a channel. Never moves backwards.
     pub async fn mark_read(&self, channel_id: &str, reader_id: &str, turn: i64) -> Result<()> {
         let channel_id = channel_id.to_string();
@@ -892,29 +871,6 @@ mod tests {
         assert_eq!(fresh.len(), 1);
         assert_eq!(fresh[0].turn, 3);
         assert_eq!(fresh[0].author_id, "agent-2");
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_author_message_count_zero_before_first_post() {
-        let db = ColoquioDb::in_memory().unwrap();
-        db.create_channel("general", "General").await.unwrap();
-
-        // Never posted -> 0, so the caller can detect "first post ever".
-        assert_eq!(db.author_message_count("new-agent").await.unwrap(), 0);
-
-        db.post_message("general", "new-agent", "agent", "hola", "{}").await.unwrap();
-        assert_eq!(db.author_message_count("new-agent").await.unwrap(), 1);
-
-        db.post_message("general", "new-agent", "agent", "otra vez", "{}").await.unwrap();
-        assert_eq!(db.author_message_count("new-agent").await.unwrap(), 2);
-
-        // Counts across ALL channels, not just one.
-        db.create_channel("otro", "Otro").await.unwrap();
-        db.post_message("otro", "new-agent", "agent", "aqui tambien", "{}").await.unwrap();
-        assert_eq!(db.author_message_count("new-agent").await.unwrap(), 3);
-
-        // A different author's posts never affect this one's count.
-        assert_eq!(db.author_message_count("someone-else").await.unwrap(), 0);
     }
 
     #[tokio::test(flavor = "multi_thread")]
