@@ -1,4 +1,4 @@
-"""llama_backend guild: llama-server subprocess with GGUF auto-download.
+﻿"""llama_backend guild: llama-server subprocess with GGUF auto-download.
 
 P0 (M19 infrastructure): replaces the manual ONNX Gemma-4 loop with a
 production-grade llama.cpp backend. Manages a llama-server subprocess
@@ -7,7 +7,7 @@ that exposes an OpenAI-compatible HTTP API on a local port. Other guilds
 doing manual ONNX inference.
 
 Architecture:
-- Auto-installs llama-cpp-python (→ llama-server binary) on first use
+- Auto-installs llama-cpp-python (â†’ llama-server binary) on first use
 - Auto-downloads GGUF model from HuggingFace hub
 - Starts llama-server as a managed subprocess
 - Health-check endpoint for dashboard
@@ -17,6 +17,21 @@ Default model: SmolLM2-135M-Instruct GGUF (~200MB, works on everything).
 Dashboard (P2) will add a selector for different model sizes.
 """
 import asyncio
+# DPC (bwc-d5704634): Deterministic Prefix Canonicalization — the fixed
+# sovereign anchor prepended to every LLM call so llama-server's slot prefix
+# cache (n_keep + --cache-reuse) can reuse it across calls. This is the
+# "anchor" measured at 53-62% of prompt tokens in multi-agent workloads
+# (CacheScout, arXiv:2608.14624). The memory-retrieval extension of the
+# anchor is the next increment; the fixed part is the cacheable core.
+DPC_SYSTEM_ANCHOR = "Tylluan sovereign kernel: agente de continuidad, memoria y accion. Responde en el idioma de la peticion. Hechos sobre especulacion; si no hay evidencia, dilo."
+
+def _dpc_messages(prompt):
+    """Canonical messages array: fixed system anchor + user prompt."""
+    return [
+        {"role": "system", "content": DPC_SYSTEM_ANCHOR},
+        {"role": "user", "content": prompt},
+    ]
+
 import json
 import os
 import signal
@@ -79,7 +94,7 @@ def _get_config():
             pass  # keep stale config if file is temporarily unreadable
     return _CFG
 
-# P1: External backend support — if the user has external LLM providers
+# P1: External backend support â€” if the user has external LLM providers
 # configured via `[[external_providers]]` in tylluan.toml (OpenAI-compatible,
 # Anthropic-compatible, or Ollama-compatible), use those instead of starting
 # our own llama-server. Supports MULTIPLE providers simultaneously.
@@ -214,7 +229,7 @@ def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, g
         body = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": _dpc_messages(prompt),
         }
         data = json.dumps(body).encode("utf-8")
         req = _urllib.Request(
@@ -235,7 +250,7 @@ def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, g
         url = f"{base}/api/chat"
         body = {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": _dpc_messages(prompt),
             "stream": False,
         }
         data = json.dumps(body).encode("utf-8")
@@ -252,7 +267,7 @@ def _call_external_provider(provider, prompt, max_tokens=256, temperature=0.7, g
         # openai_compatible (default)
         url = f"{base}/v1/chat/completions"
         body = {
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": _dpc_messages(prompt),
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
@@ -679,7 +694,7 @@ async def query_model(prompt: str, model: str = "", max_tokens: int = 256, tempe
     t = temperature if temperature is not None else _get_config()["temperature"]
 
     request_body = {
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": _dpc_messages(prompt),
         "max_tokens": max_tokens,
         "temperature": t,
         "top_p": _get_config()["top_p"],
