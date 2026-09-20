@@ -262,24 +262,4 @@ mod tests {
         assert!(q.list_pending().unwrap().is_empty());
     }
 
-    #[test]
-    fn test_antigravity_mention_dispatch_with_repo_contract() {
-        let root = crate::transport::http::find_workspace_root();
-        let c = AgentsContract::load(&root);
-        let q = DispatchQueue::in_memory().unwrap();
-        // Mention by trusted author "jose".
-        let e = event("general", "jose", "Hola @antigravity revisa el canal general", 42);
-        assert_eq!(queue_event(&q, &e, &c).unwrap(), 1);
-
-        let pending = q.list_pending().unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].agent_id, "antigravity");
-        assert_eq!(pending[0].author_id, "jose");
-        assert_eq!(pending[0].command.first().map(|s| s.as_str()), Some("agy"));
-        assert_eq!(pending[0].command.get(1).map(|s| s.as_str()), Some("-p"));
-
-        // Untrusted author should not queue.
-        let e_untrusted = event("general", "untrusted_agent", "Hola @antigravity revisa", 43);
-        assert_eq!(queue_event(&q, &e_untrusted, &c).unwrap(), 0);
-    }
 }

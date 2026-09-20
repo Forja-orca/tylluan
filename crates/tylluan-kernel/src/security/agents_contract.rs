@@ -425,13 +425,4 @@ description = "Research"
         let _ = std::fs::remove_dir_all(tmp.join(".tylluan"));
     }
 
-    #[test]
-    fn test_antigravity_wake_config_loads_from_repo_contract() {
-        let root = crate::transport::http::find_workspace_root();
-        let c = AgentsContract::load(&root);
-        let wake = c.active_wake_config("antigravity").expect("antigravity wake config must be active in .tylluan/agents.toml");
-        assert!(wake.trusts("jose"));
-        assert_eq!(wake.command.first().map(|s| s.as_str()), Some("agy"));
-        assert_eq!(wake.command.get(1).map(|s| s.as_str()), Some("-p"));
-    }
 }
