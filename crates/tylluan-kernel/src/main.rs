@@ -148,22 +148,41 @@ async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
 /// 2. Kill any orphan Python guild processes from previous crashed sessions
 ///
 /// Also runs P4 garbage collection of residual data from previous sessions/stress tests.
-fn anti_orphan_protection_and_gc() {
-    // Real incident (2026-09-19): a José-approved isolated test instance
-    // (different --port, different TYLLUAN_DATA_DIR) killed the live
-    // production kernel dead, because this function ran BEFORE the
-    // TYLLUAN_DATA_DIR override is applied later in main() (config.memory /
-    // config.silva paths, line ~423) and hardcoded "./data/" regardless of
-    // env. Two instances launched from the same CWD shared the exact same
-    // PID file, so the second one saw the first as "the previous crash" and
-    // killed it on purpose (cleanup_orphan_guilds does exactly that when the
-    // PID still belongs to a live tylluan-nexus process). Read the same env
-    // var directly here, before any config is loaded, so an isolated test
-    // instance gets its own PID file and never mistakes a sibling for a
-    // stale crash.
-    let data_dir = std::env::var("TYLLUAN_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("./data"));
+/// Single owner of PID-file directory resolution — used identically at boot
+/// (anti_orphan_protection_and_gc) and at shutdown, so a test instance's
+/// cleanup always targets the exact directory its own boot used.
+///
+/// Real incident (2026-09-19), RECURRED (2026-09-20): a José-approved
+/// isolated test instance (different --port) killed the live production
+/// kernel TWICE. The first fix (27e2141) scoped the PID file to
+/// TYLLUAN_DATA_DIR when set — correct, but it recurred the very next day
+/// because the operator launched the test instance without setting the env
+/// var. A fix that depends on a human remembering an env var every single
+/// time is not a fix; it just narrowed the window. This version
+/// additionally disambiguates by port whenever TYLLUAN_DATA_DIR is unset
+/// and the port differs from the config default (47004) — a same-CWD
+/// instance bound to a different port can never again read another
+/// instance's PID file by accident, with zero operator action required.
+fn resolve_pid_data_dir(port_override: Option<u16>) -> PathBuf {
+    if let Ok(dir) = std::env::var("TYLLUAN_DATA_DIR") {
+        return PathBuf::from(dir);
+    }
+    match port_override {
+        Some(port) if port != 47004 => PathBuf::from(format!("./data-port-{port}")),
+        _ => PathBuf::from("./data"),
+    }
+}
+
+fn anti_orphan_protection_and_gc(args: &[String]) {
+    let port_override = args.iter().position(|r| r == "--port")
+        .and_then(|pos| args.get(pos + 1))
+        .and_then(|p| p.parse::<u16>().ok());
+    if let Some(port) = port_override
+        && port != 47004
+        && std::env::var("TYLLUAN_DATA_DIR").is_err() {
+            info!("🧹 --port {} differs from default 47004 -- using a port-scoped PID file to avoid killing a sibling instance", port);
+        }
+    let data_dir = resolve_pid_data_dir(port_override);
     let pid_file = data_dir.join("tylluan-nexus.pid");
     let _ = std::fs::create_dir_all(&data_dir);
 
@@ -322,7 +341,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    anti_orphan_protection_and_gc();
+    anti_orphan_protection_and_gc(&args);
 
     // 1. Initial configuration (load once at startup)
     let mut config = TylluanConfig::load()
@@ -1809,13 +1828,13 @@ async fn main() -> anyhow::Result<()> {
     // 2. Shut down auxiliary services 
     service_manager.shutdown_all().await;
 
-    // 3. Clean up PID file (anti-orphan) — same TYLLUAN_DATA_DIR resolution
-    // as anti_orphan_protection_and_gc() at boot, so an isolated test
-    // instance removes its own PID file, never the default one.
-    let pid_file = std::env::var("TYLLUAN_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("./data"))
-        .join("tylluan-nexus.pid");
+    // 3. Clean up PID file (anti-orphan) — resolve_pid_data_dir() is the
+    // single owner of this resolution, shared with boot, so a test instance
+    // always removes its own PID file, never a sibling's.
+    let port_override = args.iter().position(|r| r == "--port")
+        .and_then(|pos| args.get(pos + 1))
+        .and_then(|p| p.parse::<u16>().ok());
+    let pid_file = resolve_pid_data_dir(port_override).join("tylluan-nexus.pid");
     let _ = std::fs::remove_file(&pid_file);
 
     info!("👋 TylluanNexus stopped. No orphan processes left.");
