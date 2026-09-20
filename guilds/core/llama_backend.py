@@ -25,10 +25,33 @@ import asyncio
 # anchor is the next increment; the fixed part is the cacheable core.
 DPC_SYSTEM_ANCHOR = "Tylluan sovereign kernel: agente de continuidad, memoria y accion. Responde en el idioma de la peticion. Hechos sobre especulacion; si no hay evidencia, dilo."
 
+def _dpc_memory_context(prompt, limit=3):
+    """Structured retrieved memory as the second part of the DPC anchor
+    (contract bwc-d5704634, scope 2). Fail-open: any error degrades to the
+    fixed anchor only — memory is an enhancement, never a blocker."""
+    try:
+        base = os.environ.get("KERNEL_BASE", "http://127.0.0.1:47004")
+        body = json.dumps({"query": prompt, "limit": limit}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base}/api/v1/memory/search", data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            results = json.loads(resp.read())
+        nodes = results.get("results", []) if isinstance(results, dict) else results
+        if not nodes:
+            return ""
+        lines = [f"- ({n.get('type', 'note')}) {str(n.get('content', ''))[:200]}" for n in nodes[:limit]]
+        return "Contexto de memoria relevante:\n" + "\n".join(lines) + "\n"
+    except Exception:
+        return ""
+
 def _dpc_messages(prompt):
-    """Canonical messages array: fixed system anchor + user prompt."""
+    """Canonical messages array: fixed system anchor + structured retrieved
+    memory + user prompt — the cacheable deterministic prefix."""
+    memory = _dpc_memory_context(prompt)
     return [
-        {"role": "system", "content": DPC_SYSTEM_ANCHOR},
+        {"role": "system", "content": DPC_SYSTEM_ANCHOR + memory},
         {"role": "user", "content": prompt},
     ]
 
