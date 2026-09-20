@@ -36,7 +36,7 @@ def _dpc_memory_context(prompt, limit=3):
             f"{base}/api/v1/memory/search", data=body,
             headers={"Content-Type": "application/json"}, method="POST",
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             results = json.loads(resp.read())
         nodes = results.get("results", []) if isinstance(results, dict) else results
         if not nodes:
