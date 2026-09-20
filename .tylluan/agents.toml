@@ -30,6 +30,15 @@ description = "Dashboard audits/refactor — bounded, verified tasks, not open-e
 role = "writer"
 description = "Dashboard/UI — browser-based, MCP client, bounded tasks only"
 
+[agents.antigravity.wake]
+enabled = true
+trusted_authors = ["jose"]
+command = [
+    "agy",
+    "-p",
+    "Revisa Coloquio en el canal general de Tylluan, busca menciones o contratos de trabajo dirigidos a ti, y actúa utilizando tus herramientas soberanas de Tylluan.",
+]
+
 [agents.qwen]
 role = "reader"
 description = "Web research + deep research — SSE MCP, no disk access"
