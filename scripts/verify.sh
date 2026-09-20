@@ -172,6 +172,29 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "UTF-8 BOM detected — run 'scripts/check_bom.sh --fix', review the diff, commit"
     fi
 
+    # Async event-loop I/O gate (blocking, ratchet): FastMCP guild servers run
+    # every @mcp.tool() on ONE event loop — a sync network call inside an async
+    # def stalls ALL concurrent tool calls for its whole timeout (T633: 120s
+    # local inference did exactly that; contract bwc-8c0dc35a). The gate runs
+    # its own fixture self-test first: it must catch the bug class it exists
+    # for. Baseline (ratchet): scripts/async_io_baseline.json lists the 30
+    # pre-existing violations found on first run (browser/comfy_ui/n8n_bridge,
+    # cleanup decision belongs to the TL) — NEW violations fail the push,
+    # known ones warn, stale entries are reported for removal.
+    PY_CMD="python"
+    if ! command -v python >/dev/null 2>&1; then
+        PY_CMD="python3"
+    fi
+    if command -v "$PY_CMD" >/dev/null 2>&1; then
+        if "$PY_CMD" scripts/check_async_guild_io.py; then
+            ok "guild async I/O gate (no NEW blocking network calls on the MCP event loop)"
+        else
+            fail "guild async I/O gate — NEW blocking network call reachable from async def without asyncio.to_thread"
+        fi
+    else
+        fail "guild async I/O gate — python/python3 not found (this project's guilds ARE python; install it)"
+    fi
+
     # ADR-013 4th gate (non-predation). Runs in CI too, as the non-blocking
     # job 'no-predation-report' (continue-on-error, same pattern as
     # dead-config-report). Report-only per ADR-013 §2 and the gate's own
