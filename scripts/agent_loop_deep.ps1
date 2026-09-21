@@ -1,29 +1,48 @@
 # Agent Loop — Deep (2026-09-21, decision de Jose)
-# El patron correcto para trabajo autonomo 24/7: UNA sesion controlada por
-# intervalo, nunca un enjambre. Este runner es invocado por la scheduled
-# task "Tylluan-Deep-Loop" cada N minutos; revisa Coloquio, trabaja si hay
-# tarea para Deep, y termina (el intervalo es el "sueno").
+# UNA sesion controlada por intervalo, nunca un enjambre. Invocado por la
+# scheduled task "Tylluan-Deep-Loop" cada 10 minutos.
 #
-# - Lock anti-solapamiento: si una corrida anterior sigue activa, esta sale
-#   sin hacer nada (nunca dos instancias del loop a la vez).
-# - El prompt del loop instruye: revisar el canal de tareas/Coloquio,
-#   trabajar si hay tarea para deep, reportar en Coloquio, o responder IDLE.
+# Fix 2026-09-21 (verificado por auditoria cruzada, LastTaskResult=1):
+# - El gotcha de PS 5.1: $ErrorActionPreference="Stop" + 2>&1 convierte el
+#   stderr de comandos nativos en error terminante -> el script moria en la
+#   invocacion de opencode. Eliminado: la invocacion va por Start-Process
+#   con redireccion a LOG, nunca por el pipeline.
+# - WorkingDirectory explicito a la raiz del repo (la tarea arranca en
+#   System32 si no se fija) -> opencode run tiene contexto de proyecto.
+# - Log persistente obligatorio: toda corrida deja evidencia en
+#   E:\tylluan\data\logs\deep_loop.log (rotacion basica a 200KB).
+# - Exit code explicito: 0 siempre que la invocacion exista (el resultado
+#   del agente se registra en el log), exit 1 solo si el runner mismo falla.
 
 $ErrorActionPreference = "Stop"
 $lockFile = Join-Path $env:TEMP "tylluan_deep_loop.lock"
+$repoRoot = "E:\tylluan"
+$logDir = Join-Path $repoRoot "data\logs"
+$logFile = Join-Path $logDir "deep_loop.log"
 $opencode = "C:\Users\FoRJa\AppData\Roaming\npm\opencode.cmd"
+$runId = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-# Anti-solapamiento: lock exclusivo de corta vida.
+function Write-Log([string]$msg) {
+    if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+    $line = "[$runId] $msg"
+    Add-Content -Path $logFile -Value $line -Encoding UTF8
+    Write-Output $line
+}
+
+# Anti-solapamiento.
 if (Test-Path $lockFile) {
     $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
     if ($age.TotalMinutes -lt 30) {
-        Write-Output "[deep-loop] corrida anterior activa, saliendo (intervalo hara el siguiente check)"
+        Write-Log "corrida anterior activa, saliendo"
         exit 0
     }
     Remove-Item $lockFile -Force
 }
 New-Item -ItemType File -Path $lockFile -Force | Out-Null
+
 try {
+    Set-Location $repoRoot
+
     $loopPrompt = @"
 Eres Deep, agente backend Rust + guilds Python de la flota Tylluan.
 Este es tu ciclo periodico de revision.
@@ -37,9 +56,39 @@ Este es tu ciclo periodico de revision.
    verificacion. Si una tarea necesita rebuild del kernel o decision de
    Jose, dejala anotada en Coloquio y termina.
 "@
-    Write-Output "[deep-loop] check iniciado $(Get-Date -Format 'HH:mm:ss')"
-    & $opencode run $loopPrompt --log-level ERROR 2>&1 | Out-Host
-    Write-Output "[deep-loop] check completado $(Get-Date -Format 'HH:mm:ss')"
+
+    Write-Log "check iniciado"
+
+    $agentOut = Join-Path $logDir "deep_loop_run_$([DateTime]::Now.ToString('HHmmss')).out"
+    $agentErr = Join-Path $logDir "deep_loop_run_$([DateTime]::Now.ToString('HHmmss')).err"
+
+    # Invocacion sin el gotcha de stderr: Start-Process con redireccion.
+    $proc = Start-Process -FilePath $opencode -ArgumentList @("run", $loopPrompt, "--log-level", "ERROR") `
+        -WorkingDirectory $repoRoot -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr `
+        -NoNewWindow -PassThru -Wait
+    $code = $proc.ExitCode
+
+    Write-Log "opencode run terminado (exit=$code)"
+    if ($code -ne 0) {
+        $errTail = ""
+        if (Test-Path $agentErr) {
+            $errTail = (Get-Content $agentErr -Tail 3 -ErrorAction SilentlyContinue) -join " | "
+        }
+        Write-Log "ERROR opencode exit=$code stderr: $errTail"
+    }
+
+    # Rotacion basica del log principal.
+    if ((Get-Item $logFile -ErrorAction SilentlyContinue).Length -gt 200KB) {
+        Remove-Item "$logFile.old" -Force -ErrorAction SilentlyContinue
+        Rename-Item $logFile "$logFile.old"
+    }
+
+    Write-Log "check completado"
+    exit 0
+} catch {
+    $err = $_.Exception.Message
+    Write-Log "RUNNER FAIL: $err"
+    exit 1
 } finally {
     Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
 }
