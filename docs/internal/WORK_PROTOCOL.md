@@ -179,5 +179,53 @@ cosas quedaron confirmadas y dos reglas nuevas nacen de ahí:
   pieza) ocurrió exactamente por una entrega silenciosa — la prueba de
   por qué esta regla no es teórica.
 
+## 7. Regla de observabilidad para loops y tareas programadas (2026-09-22)
+
+Nace de dos incidentes reales de la misma noche, ambos de la misma clase:
+**un mecanismo que no deja evidencia falla en silencio y el fallo se descubre
+tarde o nunca**.
+
+1. **`Executed` enmascarando un spawn fallido (T684/T685):** el dispatcher
+   auto-aprobó dos wakes reales y el estado quedó en `Executed` aunque el
+   spawn había fallado (`program not found` — el kernel corría sin `opencode`
+   en su PATH). Solo el kernel.log, grepeado por los UUIDs, reveló la causa.
+2. **Un loop con exit 1 invisible (Tylluan-Deep-Loop, pre-fix):** la tarea
+   corría cada 10 min y fallaba en cada disparo sin dejar rastro — sin
+   WorkingDirectory, sin fichero de log, el error solo en stdout de un
+   contexto de tarea que nadie lee. El fix (`ae26d04`) añadió log persistente
+   y la causa raíz se vio en minutos. Esa misma noche apareció el síndrome
+   complementario: el proceso que **no termina** (opencode headless colgado
+   tras responder) bloquea todas las pasadas siguientes vía anti-solapamiento
+   del scheduler (0x800710E0 / 0x41301) — visible también solo gracias al log.
+
+**Regla:** una tarea programada (scheduled task, cron, loop) de un agente de
+esta flota **no cuenta como desplegada** hasta que cumpla los tres puntos:
+
+1. **Exit code legible** — `LastTaskResult` consultable y con significado
+   documentado (0 = ok; códigos de error conocidos). Si el trabajo invocado
+   puede no terminar (un agente, un CLI externo), el runner debe tener
+   **techo de tiempo interno** (`Wait-Process -Timeout`, watchdog) — un hang
+   no puede bloquear la cadencia indefinidamente.
+2. **Log persistente en disco** — ruta conocida y compartida en Coloquio
+   (p. ej. `logs/buffy_loop.log`, `data/logs/deep_loop.log`). Nunca solo
+   `Out-Host`/stdout de tarea. El log debe bastar para diagnosticar un fallo
+   sin acceso al shell de quien lo escribió.
+3. **Evidencia de una pasada real en SU entorno** — disparo forzado
+   (`schtasks /run`) o primera corrida programada verificada en el log, no
+   una prueba desde el shell interactivo del agente que la escribió (el
+   contraejemplo canónico: la prueba de spawn del TL funcionaba en su shell
+   mientras el proceso del kernel no encontraba el binario).
+
+Mientras falte cualquiera de los tres, el estado honesto en Coloquio es
+**"experimento en curso"**, no "desplegado". La verificación cruzada de un
+loop (rol de quien audita: Buffy por defecto, o el TL si es pieza de Buffy)
+exige estos tres puntos con evidencia, igual que un commit exige tests.
+
+Precedentes que ya cumplen: `TylluanBuffyColoquioLoop` (T694 — disparo
+forzado verificado en su entorno, exit 0, log con capturas reales) y
+`Tylluan-Deep-Loop` post-`ae26d04` (T704/T705 — verde en exit y log, techo
+de tiempo pendiente en su siguiente iteración por el síndrome del proceso
+no-terminal).
+
 Este documento se actualiza cuando el protocolo cambie de verdad — no es un
 manifiesto fijo, es el reflejo de cómo trabajamos hoy.
