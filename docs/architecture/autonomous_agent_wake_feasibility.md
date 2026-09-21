@@ -126,6 +126,59 @@ sin saber ni importarle qué hay dentro. Lo único que crece con cada
 cliente nuevo es **el catálogo de recetas de argv por Clase A conocida**
 (§2) más **una única receta de Clase B ya cerrada** (`mcphost`) que
 cubre todo lo demás, conocido o no. No hace falta un 6º sovereign tool
+
+### 0.5 Corrección importante — spawn-por-mención descartado para trabajo continuo (2026-09-21)
+
+> Ciclo real completado el mismo día que expuso el error de encuadre:
+> se implementó `auto_approve` (§ver dispatch_queue.rs/dispatch_executor.rs,
+> commit `88c2129`), se activó para Deep (`63d81af`) y Buffy (`324d176`),
+> se corrigió un bug real de spawn (`513a389`, argv sin ruta absoluta a
+> `opencode.cmd` — `opencode` a secas resolvía al shim PowerShell que
+> `Command::new` no puede ejecutar), y **entonces José lo descartó como
+> mecanismo para trabajo continuo**, con una objeción correcta que no
+> habíamos visto: sin límite agregado de conversaciones simultáneas, un
+> día activo de Coloquio podría disparar un arranque en frío de `opencode`
+> por cada mención — "no quiero cientos de instancias de opencode
+> hablándose". El rate limit de 10/agente/min no lo evita, solo lo
+> ralentiza.
+
+**Qué se congela, qué se queda:**
+
+- `[wake].auto_approve` y el spawn-por-mención (BWC-1..4 completo) siguen
+  existiendo en el código, PERO se reservan para su caso de uso correcto:
+  una acción puntual, rara, con aprobación humana (BWC-2) — no el motor
+  del trabajo diario del equipo.
+- El campo `auto_approve` en `.tylluan/agents.toml` queda desactivado
+  para Deep y Buffy (ambos lo desactivaron ellos mismos desde su propio
+  lado, mismo patrón que su activación).
+
+**El patrón correcto para "el equipo trabaja 24/7 sobre una lista de
+tareas"** (José, la idea original, nunca abandonada — solo mal resuelta
+la primera vez): **UN loop persistente y supervisado por agente**, no un
+proceso nuevo por evento:
+
+1. El agente despierta cada X tiempo (minutos, no segundos) por su propio
+   mecanismo — cron del SO, tarea programada de Windows, el scheduler
+   nativo del harness si lo trae (Antigravity ya lo hace así con su cron
+   de IDE), o el equivalente de `/loop`/`ScheduleWakeup` que Claude Code
+   ya usa internamente para este mismo propósito.
+2. En cada despertar, hace **una sola llamada** — revisa Coloquio
+   (mensajes no leídos, la lista de tareas del día), y si hay trabajo
+   pendiente para él, lo hace; si no, vuelve a dormir. No se lanza una
+   instancia nueva por cada mensaje individual — una iteración del loop
+   puede procesar varios mensajes acumulados desde la última vez.
+3. José y el tech lead generan juntos, cada día, la lista de tareas del
+   equipo en Coloquio; cada agente la consume a su propio ritmo desde su
+   propio loop.
+
+Esto es exactamente el `coloquio_watcher.py` que falló operativamente en
+2026-09-16/17 (documentado en `event_driven_agent_triggers_research.md`)
+— **el patrón nunca estuvo mal, la ejecución sí**: era un script de
+terminal sin supervisión, moría al cerrar la ventana, sin visibilidad de
+si seguía vivo. La lección correcta no era "abandonar el loop por push
+del kernel", era "supervisar el loop de verdad" — con las herramientas
+que cada harness ya trae (cron nativo, tareas programadas del SO,
+`/loop` de Claude Code), no con un script huérfano en una terminal.
 para esto — el mecanismo universal ya vive fuera del contador de tools,
 en el dispatcher.
 
