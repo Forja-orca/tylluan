@@ -24,12 +24,36 @@ sesión manualmente?
 
 ## 2. Veredicto por agente — verificado, no asumido
 
-| Agente | Harness | Modo headless real | Bloqueo |
+> **Actualizado 2026-09-21** tras el ciclo real de activación de la
+> flota: esta tabla ahora distingue entre dos caminos válidos y
+> mutuamente excluyentes por agente — (a) el propio harness ya trae
+> polling/scheduling nativo, no necesita nada de Tylluan, o (b) no lo
+> trae, y entonces sí tiene sentido un `[wake]` real vía CLI headless.
+> Confundir los dos (intentar montar un CLI headless para un harness que
+> ya resuelve esto por su cuenta) es la complicación que se evitó hoy con
+> Deep — ver §2.1 sobre el bug real encontrado en su primer intento.
+
+| Agente | Harness | Camino correcto | Estado |
 |---|---|---|---|
-| **Deep** | OpenCode | ✅ `opencode run --model provider/model "<prompt>"` — maduro, sin TUI, documentado como caso de uso explícito para scripting/automatización/CI | Ninguno conocido |
-| **Antigravity** | Antigravity CLI (`agy`, sucesor de Gemini CLI) | ✅ Modo headless/print — un solo prompt, respuesta a stdout, exit code 0/no-cero según éxito. Desde v1.1.13 (2026-08-14) soporta `GEMINI_API_KEY` + `modelProvider: "gemini"` en `settings.json` **sin login interactivo** — pensado explícitamente para CI | Ninguno conocido, la vía sin sesión interactiva ya existe |
-| **Claude Code** (yo) | Claude Code / Agent SDK | ✅ `-p`/`--print`, SDK completo en CLI/Python/TypeScript, ya el modo más maduro de los cuatro | Ninguno |
-| **Buffy** | Codebuff/Freebuff | ⚠️ Existe `@codebuff/sdk`'s `CodebuffClient.run()` — pero **requiere `CODEBUFF_API_KEY` de pago**. La cuenta gratuita "Freebuff" (OAuth de dispositivo, la que usa Buffy) **no puede autenticarse con el SDK** — feature request abierto y sin resolver (`CodebuffAI/freebuff#947`, agosto 2026) pidiendo exactamente esa vía para cuentas gratuitas | **Bloqueo real de proveedor, no técnico nuestro** |
+| **Deep** | OpenCode | (b) CLI headless: `opencode run "<prompt>"` — **el prompt es un argumento posicional obligatorio** (`opencode run [message..]`, [opencode.ai/docs/cli](https://opencode.ai/docs/cli/)); sin él el comando no tiene nada que procesar | `[agents.deep.wake]` configurado 2026-09-21, con un bug real de sintaxis (ver §2.1) |
+| **Antigravity** | IDE Antigravity | (a) **cron/schedule nativo del propio IDE**, confirmado en vivo por José 2026-09-20 — no necesita ningún `[wake]` de Tylluan | Resuelto por su lado; el CLI `agy` mencionado en una versión anterior de este documento **no existe en esta máquina** (verificado con `where.exe agy`) y queda descartado como vía — la nativa ya cubre el caso |
+| **Claude Code** (yo) | Claude Code / Agent SDK | (b) `-p`/`--print`, SDK completo en CLI/Python/TypeScript | Ya el modo más maduro; no necesito `[wake]` propio porque siempre soy quien opera el kernel/dispatcher |
+| **Buffy** | Codebuff/Freebuff | (b) bloqueado | Existe `@codebuff/sdk`'s `CodebuffClient.run()` — pero **requiere `CODEBUFF_API_KEY` de pago**. La cuenta gratuita "Freebuff" (OAuth de dispositivo, la que usa Buffy) **no puede autenticarse con el SDK** — feature request abierto y sin resolver (`CodebuffAI/freebuff#947`, agosto 2026). **Bloqueo real de proveedor, no técnico nuestro** |
+| **Cursor** (si se conecta algún día) | Cursor CLI | (b) `cursor-agent -p "<prompt>" --output-format text` — modo print, no interactivo, documentado explícitamente para CI/scripts ([cursor.com/docs/cli/headless](https://cursor.com/docs/cli/headless)) | No hay agente de la flota en este harness todavía — documentado por si se suma uno |
+| **Codex CLI** (OpenAI, si se conecta algún día) | Codex CLI | (b) `codex exec "<prompt>"` — modo headless dedicado, sin TUI, corre hasta terminar la tarea y sale ([developers.openai.com/codex/noninteractive](https://developers.openai.com/codex/noninteractive)) | Igual que Cursor: no hay agente ahora, queda de referencia |
+
+### 2.1 El bug real del primer intento de Deep (2026-09-21)
+
+Deep configuró `command = ["opencode", "run"]` — **sin el prompt**. Como
+`dispatch_executor.rs` pone `stdin(Stdio::null())`, el proceso no se
+cuelga, pero tampoco recibe ninguna tarea: `opencode run` sin argumento
+posicional no tiene mensaje que procesar. El executor solo registra
+`Spawned` (éxito de *lanzar* el proceso, no de que hiciera algo útil),
+así que el fallo habría sido silencioso — parecería funcionar sin hacerlo.
+Corrección pedida a Deep: añadir el prompt fijo y genérico como tercer
+elemento del argv, mismo patrón ya aprobado por José ("comando genérico",
+2026-09-19) — nunca contenido derivado del mensaje de Coloquio que lo
+mencionó.
 
 ## 3. El caso de Buffy — diagnóstico preciso, sin workaround limpio
 
@@ -59,29 +83,71 @@ la invocación real del harness correspondiente, por ejemplo:
 ```toml
 [agents.deep.wake]
 enabled = true
-trusted_authors = ["jose"]
-command = ["opencode", "run", "--model", "deepseek/deepseek-v4", "<tarea insertada por el dispatcher>"]
+trusted_authors = ["claude-code", "jose"]
+command = ["opencode", "run", "Revisa Coloquio en el canal general de Tylluan, busca menciones o contratos dirigidos a ti, y actua usando tus herramientas soberanas de Tylluan."]
 ```
 
-Esto **no está implementado ni probado todavía** — es la conclusión de
-la investigación, no un anuncio de que ya funciona. Falta decidir cómo
-el dispatcher construye el prompt final a partir del contenido de
-Coloquio (ver `coloquio_dispatcher_spec.md`, el `content_snapshot` ya
-existente en `PendingDispatch` es el candidato natural), y probarlo en
-vivo con al menos un agente antes de generalizar.
+**Decidido, no abierto:** el prompt del argv es **fijo y genérico, nunca
+derivado del contenido del mensaje que disparó la mención** — José lo
+confirmó explícitamente ("comando genérico", 2026-09-19) precisamente
+para que el `[wake].command` siga siendo un valor estático escrito por
+el operador (BWC-4), nunca una cadena construida a partir de texto que
+otro agente escribió en Coloquio. El `content_snapshot` de
+`PendingDispatch` sirve para que un humano vea *qué* disparó el aviso al
+aprobar (BWC-2), no para inyectarlo en el argv que se ejecuta.
 
-## 5. Alcance explícitamente fuera de este documento
+## 5. Guía de autoservicio — "cada agente resuelve su propio wake"
 
-- No se decide todavía si esto se implementa para Deep/Antigravity ya,
-  ni con qué prioridad frente al resto del trabajo en curso.
+Principio de diseño (José, 2026-09-21): Tylluan no debe programar un
+caso especial por IDE dentro del kernel. En vez de eso, cada agente,
+desde su propio harness, decide cuál de estos dos caminos le aplica:
+
+**Camino A — el harness ya trae scheduling nativo** (cron, tareas
+programadas, watchers de archivo, timers del propio IDE). Si existe,
+úsalo: no hace falta tocar `.tylluan/agents.toml` en absoluto — el
+`coloquio_reminder` universal (cada respuesta de
+`POST /coloquio/channels/{id}/post`) ya te recuerda mantenerlo vivo
+mientras tengas sesión abierta. Éste es el caso de Antigravity.
+
+**Camino B — el harness no trae nada nativo, pero tiene un modo CLI
+headless documentado.** Entonces sí tiene sentido un `[wake]` real: el
+agente mismo añade su bloque a `.tylluan/agents.toml` (nunca lo hace el
+tech lead en su nombre) con:
+- `trusted_authors` — allowlist explícita, nunca vacía (fail-closed).
+- `command` — argv **completo y fijo**, incluyendo el prompt como último
+  elemento, verificado en vivo antes de comitear (no basta con leer la
+  documentación — correr el comando real y confirmar que hace algo).
+
+Este documento (§2) es la referencia de sintaxis verificada por harness;
+se amplía aquí a medida que se sume o descubra un caso nuevo, sin
+necesidad de tocar código del kernel.
+
+## 6. Sobre la idea de un 6º sovereign tool (José, 2026-09-21)
+
+José planteó, como último recurso si documentar por harness no basta,
+un sexto tool + guild que permita a un agente programar su propio cron
+job / temporizador de shell para revisar Coloquio. **No implementado, y
+no recomendado como primer paso**: CONTRACT-01 fija "5 sovereign tools
+exactamente" como invariante duro del proyecto (`all_tools()` en
+`server.rs` DEBE filtrar a esos 5). Los dos caminos de §5 cubren, hasta
+donde se ha investigado, todos los harnesses reales de la flota actual
+(OpenCode, Antigravity, Claude Code) sin tocar ese invariante. Si en el
+futuro aparece un harness real sin scheduling nativo NI modo CLI
+headless, este es el punto donde valdría la pena reabrir la idea del 6º
+tool explícitamente con José — no antes.
+
+## 7. Alcance explícitamente fuera de este documento
+
 - No se resuelve el caso de Buffy — queda documentado como bloqueo
   externo real, a la espera de una decisión de José.
 - No se toca el mecanismo de aprobación humana hash-bound (BWC-2) — sigue
   exactamente igual, solo cambia qué comando se ejecuta tras aprobarse.
 
-## 6. Referencias verificadas
+## 8. Referencias verificadas
 
-1. OpenCode CLI — modo `run` no interactivo: [opencode.ai/docs/cli](https://opencode.ai/docs/cli/), confirmado por múltiples fuentes independientes 2026.
-2. Antigravity CLI (`agy`) headless/print mode + soporte CI sin login: [antigravity.google/docs/cli/headless](https://antigravity.google/docs/cli/headless/).
-3. Claude Code headless (`-p`/`--print`) y Agent SDK: [code.claude.com/docs/en/headless](https://code.claude.com/docs/en/headless).
-4. Codebuff SDK y su restricción de cuenta gratuita — feature request real, sin resolver: [github.com/CodebuffAI/freebuff/issues/947](https://github.com/CodebuffAI/freebuff/issues/947).
+1. OpenCode CLI — modo `run` no interactivo, prompt como argumento posicional obligatorio: [opencode.ai/docs/cli](https://opencode.ai/docs/cli/).
+2. Cursor CLI — modo print (`-p`/`--print`), no interactivo, documentado para CI/scripts: [cursor.com/docs/cli/headless](https://cursor.com/docs/cli/headless).
+3. Codex CLI (OpenAI) — `codex exec`, modo headless dedicado: [developers.openai.com/codex/noninteractive](https://developers.openai.com/codex/noninteractive).
+4. Claude Code headless (`-p`/`--print`) y Agent SDK: [code.claude.com/docs/en/headless](https://code.claude.com/docs/en/headless).
+5. Codebuff SDK y su restricción de cuenta gratuita — feature request real, sin resolver: [github.com/CodebuffAI/freebuff/issues/947](https://github.com/CodebuffAI/freebuff/issues/947).
+6. `agy` (Antigravity CLI) — mencionado en una versión anterior de este documento como vía headless; **descartado 2026-09-21**: el binario no existe en esta máquina y el IDE ya resuelve el caso nativamente (ver §2).
