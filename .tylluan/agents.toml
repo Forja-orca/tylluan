@@ -28,25 +28,28 @@ description = "Backend Rust + guilds Python — complex features, deep bug fixin
 # this machine with cached auth (exit 0, no unique setup needed — contract
 # bwc-6fce78ed). The FIXED GENERIC PROMPT is the third argv element.
 #
-# auto_approve support shipped 2026-09-21 (code: dispatch_queue.rs /
-# dispatch_subscriber.rs / dispatch_executor.rs, rate-limited at 10/min).
-# NOT enabled here yet -- Jose caught, correctly, that flipping it FOR Deep
-# was the tech lead configuring another agent's wake on their behalf, the
-# exact thing the whole "cada agente configura lo suyo desde su lado" rule
-# exists to prevent. Deep enables auto_approve = true from his own side,
-# same as he did with [wake] itself, when he's ready.
+# FROZEN 2026-09-21 (Jose, direct correction): auto_approve here would
+# spawn a brand-new, cold-boot `opencode` process on every single mention
+# -- no cap on how many conversations could be happening at once, and the
+# 10/min rate limit does not prevent "cientos de instancias de opencode
+# hableindose" (Jose's words), it only slows it down. This is the WRONG
+# mechanism for continuous 24/7 team work. `enabled = true` stays (so the
+# dispatcher can still queue a RARE, human-approved, punctual action for
+# Deep -- e.g. BWC-2's manual approve endpoint), but `auto_approve` is
+# left OFF/absent on purpose: this [wake] table is no longer meant to
+# fire per Coloquio mention at all as the primary path.
+#
+# The correct pattern for daily autonomous work (Jose, same correction):
+# Deep runs ONE persistent, supervised LOOP -- checks Coloquio on its own
+# cadence, does the pending task if there is one, sleeps, repeats. Never
+# a fresh process per mention. See
+# docs/architecture/autonomous_agent_wake_feasibility.md section 0.5 for
+# the concrete recipe (cron/scheduled-task calling `opencode run` on an
+# interval, or an OpenCode-native scheduler if one exists) -- Deep sets
+# this up from his own side, same rule as always.
 [agents.deep.wake]
 enabled = true
 trusted_authors = ["claude-code", "jose"]
-# auto_approve = true — DECISION PROPIA DE DEEP (2026-09-21), tomada desde
-# mi lado como pide la regla de la flota. Razon: el ciclo mención→ejecución
-# existe para eliminar la dependencia del clic humano; con auto_approve off,
-# cada wake requiere aprobación manual y el cuello de botella que este ciclo
-# fue construido para cerrar sigue intacto. La red de seguridad restante es
-# real y aprobada: allowlist (solo claude-code y jose pueden disparar), argv
-# fijo genérico nunca derivado del contenido de la mención, y rate limit
-# 10/min como freno anti-bucle que sustituye al clic. Reversible con un flip.
-auto_approve = true
 command = ["C:\\Users\\FoRJa\\AppData\\Roaming\\npm\\opencode.cmd", "run", "Eres Deep, agente backend Rust + guilds Python de la flota Tylluan. Un compañero te ha mencionado en Coloquio. El mensaje siguiente contiene la mención: léela, revisa el contexto del canal si hace falta, y actúa según la cadena de trabajo establecida — responde en el canal o ejecuta la tarea y reporta. Nunca modifiques trabajo de otros agentes."]
 
 [agents.mimo]
