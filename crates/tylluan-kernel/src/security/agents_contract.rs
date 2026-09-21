@@ -17,14 +17,22 @@ pub struct AgentContractEntry {
 }
 
 /// Push-dispatch policy for one agent (`.tylluan/agents.toml`,
-/// `[agents.<id>.wake]`). NOT wired to actually spawn anything yet — this
-/// is data + validation only, prototype for the design discussed in
-/// docs/architecture/coloquio_push_dispatch_research.md and
-/// event_driven_agent_triggers_research.md (2026-09-17). The kernel-side
-/// dispatcher that reads this and invokes `command` is a separate,
-/// not-yet-built piece — deliberately, per José's decision that both
-/// mitigations (allowlist + human confirmation) must exist before anything
-/// executes automatically.
+/// `[agents.<id>.wake]`), consumed live by `dispatch_subscriber.rs` (BWC-3)
+/// and `dispatch_executor.rs` (BWC-4) — the kernel's always-on broadcast
+/// subscriber + poll loop, confirmed 2026-09-21 to already BE the
+/// "persistent supervised connector" pattern real multi-agent bridges
+/// (Telegram/Discord bots) use, since the kernel itself is the one
+/// component that never dies with a terminal window.
+///
+/// History: originally shipped with a MANDATORY human hash-bound approval
+/// (BWC-2) before any command could execute. José's decision 2026-09-21
+/// ("relajamos la seguridad al minimo, si no podemos usarlo para que lo
+/// queremos") made that click optional per-agent via `auto_approve` — the
+/// mitigations that remain non-negotiable regardless of that flag are
+/// `trusted_authors` (below), `command` staying fixed/generic (never built
+/// from message content), self-mention exclusion, and the per-agent rate
+/// limit in `dispatch_executor.rs` that now plays the anti-runaway-loop
+/// role the human click used to play.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WakeConfig {
     /// Master switch. Defaults to false — an agent must opt in explicitly;
@@ -47,6 +55,22 @@ pub struct WakeConfig {
     /// `shell=True`, so message content can't inject additional argv).
     #[serde(default)]
     pub command: Vec<String>,
+    /// Skip the human hash-bound approval step (BWC-2) and execute as soon
+    /// as the dispatch is queued. Jose's explicit decision 2026-09-21
+    /// ("relajamos la seguridad al minimo, si no podemos usarlo para que
+    /// lo queremos") after the kernel's own dispatch loop (always-on,
+    /// spawn-only-on-message) was confirmed to already BE the persistent
+    /// supervised connector pattern real Telegram/Discord multi-agent
+    /// bridges use -- the human click was the one piece of friction those
+    /// bridges never have. Defaults to `false`: an agent that doesn't set
+    /// this still requires a human to approve every dispatch, same as
+    /// before. What stays non-negotiable regardless of this flag: the
+    /// `trusted_authors` allowlist above, the fixed/generic `command`
+    /// (never built from message content), self-mention exclusion, and the
+    /// per-agent rate limit in `dispatch_executor.rs` that replaces the
+    /// human brake as the anti-runaway-loop safety net.
+    #[serde(default)]
+    pub auto_approve: bool,
 }
 
 impl WakeConfig {
@@ -301,6 +325,7 @@ description = "Rust implementation"
             enabled: true,
             trusted_authors: vec![],
             command: vec!["opencode".to_string(), "run".to_string()],
+            ..Default::default()
         };
         assert!(!enabled_no_authors.is_active(), "enabled with no trusted authors must stay inert");
 
@@ -308,6 +333,7 @@ description = "Rust implementation"
             enabled: true,
             trusted_authors: vec!["claude-code".to_string()],
             command: vec![],
+            ..Default::default()
         };
         assert!(!enabled_no_command.is_active(), "enabled with no command must stay inert");
 
@@ -315,6 +341,7 @@ description = "Rust implementation"
             enabled: false,
             trusted_authors: vec!["claude-code".to_string()],
             command: vec!["opencode".to_string(), "run".to_string()],
+            ..Default::default()
         };
         assert!(!disabled_but_configured.is_active(), "enabled=false must stay inert regardless of the rest");
 
@@ -322,6 +349,7 @@ description = "Rust implementation"
             enabled: true,
             trusted_authors: vec!["claude-code".to_string()],
             command: vec!["opencode".to_string(), "run".to_string()],
+            ..Default::default()
         };
         assert!(fully_active.is_active());
     }
@@ -332,6 +360,7 @@ description = "Rust implementation"
             enabled: true,
             trusted_authors: vec!["Claude-Code".to_string(), "jose".to_string()],
             command: vec!["opencode".to_string(), "run".to_string()],
+            ..Default::default()
         };
         assert!(w.trusts("claude-code"));
         assert!(w.trusts("CLAUDE-CODE"));
@@ -363,7 +392,7 @@ description = "Rust implementation"
         agents.insert("deep".to_string(), AgentContractEntry {
             role: "writer".to_string(),
             description: "".to_string(),
-            wake: Some(WakeConfig { enabled: false, trusted_authors: vec!["jose".to_string()], command: vec!["opencode".to_string()] }),
+            wake: Some(WakeConfig { enabled: false, trusted_authors: vec!["jose".to_string()], command: vec!["opencode".to_string()], ..Default::default() }),
         });
         let c = AgentsContract { agents };
         assert!(c.active_wake_config("deep").is_none(), "enabled=false must not surface as an active config");
@@ -379,6 +408,7 @@ description = "Rust implementation"
                 enabled: true,
                 trusted_authors: vec!["claude-code".to_string()],
                 command: vec!["opencode".to_string(), "run".to_string()],
+                ..Default::default()
             }),
         });
         let c = AgentsContract { agents };

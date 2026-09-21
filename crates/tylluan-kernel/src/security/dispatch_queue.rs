@@ -276,6 +276,49 @@ impl DispatchQueue {
         Ok(inserted == 1)
     }
 
+    /// Same exactly-once semantics as [`enqueue_once`](Self::enqueue_once),
+    /// but inserts directly into `Approved` instead of `Pending` — for
+    /// `[wake].auto_approve = true` agents only (Jose, 2026-09-21: the
+    /// human hash-bound click was the one piece of friction a real
+    /// always-on connector shouldn't need; the executor's poll loop, the
+    /// trusted_authors allowlist, the fixed/generic command, and the
+    /// per-agent rate limit in `dispatch_executor.rs` are what replace it).
+    /// The content hash is still computed and stored for audit — this
+    /// skips WHO approves, never WHAT gets recorded.
+    pub fn enqueue_once_auto_approved(
+        &self,
+        agent_id: &str,
+        author_id: &str,
+        channel: &str,
+        turn: i64,
+        content_snapshot: &str,
+        command: Vec<String>,
+    ) -> Result<bool> {
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let content_hash = Self::hash_of(content_snapshot);
+        let command_json = serde_json::to_string(&command)?;
+        let queued_at = chrono::Utc::now().timestamp();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let inserted = conn.execute(
+            "INSERT OR IGNORE INTO pending_dispatches
+             (id, agent_id, author_id, channel, turn, content_snapshot, content_hash, command_json, state, queued_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                agent_id,
+                author_id,
+                channel,
+                turn,
+                content_snapshot,
+                content_hash,
+                command_json,
+                DispatchState::Approved.as_str(),
+                queued_at,
+            ],
+        )?;
+        Ok(inserted == 1)
+    }
+
     /// Fetch a dispatch by id (any state).
     pub fn get(&self, id: &str) -> Result<Option<PendingDispatch>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());

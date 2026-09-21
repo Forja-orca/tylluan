@@ -37,6 +37,7 @@ pub struct DryRunDispatch {
     pub turn: i64,
     pub content_hash: String,
     pub command: Vec<String>,
+    pub auto_approve: bool,
 }
 
 pub fn sha256_hex(content: &str) -> String {
@@ -85,6 +86,7 @@ pub fn evaluate_event(event: &Value, contract: &AgentsContract) -> Vec<DryRunDis
             turn,
             content_hash: content_hash.clone(),
             command: wake.command.clone(),
+            auto_approve: wake.auto_approve,
         });
     }
     out
@@ -102,12 +104,24 @@ pub fn queue_event(
     let content = event.get("content").and_then(|v| v.as_str()).unwrap_or("");
     let mut queued = 0;
     for d in evaluate_event(event, contract) {
-        if queue.enqueue_once(&d.agent_id, &d.author_id, &d.channel, d.turn, content, d.command.clone())? {
+        let inserted = if d.auto_approve {
+            queue.enqueue_once_auto_approved(&d.agent_id, &d.author_id, &d.channel, d.turn, content, d.command.clone())?
+        } else {
+            queue.enqueue_once(&d.agent_id, &d.author_id, &d.channel, d.turn, content, d.command.clone())?
+        };
+        if inserted {
             queued += 1;
-            info!(
-                "[dispatch-queue] QUEUED agent={} author={} channel={} turn={} hash={} — awaiting human approval (hash-bound)",
-                d.agent_id, d.author_id, d.channel, d.turn, &d.content_hash[..8]
-            );
+            if d.auto_approve {
+                info!(
+                    "[dispatch-queue] AUTO-APPROVED agent={} author={} channel={} turn={} hash={} — [wake].auto_approve=true, executor will claim on next poll",
+                    d.agent_id, d.author_id, d.channel, d.turn, &d.content_hash[..8]
+                );
+            } else {
+                info!(
+                    "[dispatch-queue] QUEUED agent={} author={} channel={} turn={} hash={} — awaiting human approval (hash-bound)",
+                    d.agent_id, d.author_id, d.channel, d.turn, &d.content_hash[..8]
+                );
+            }
         } else {
             info!(
                 "[dispatch-queue] duplicate suppressed agent={} author={} channel={} turn={} (exactly-once per message)",
@@ -165,6 +179,7 @@ mod tests {
                     enabled,
                     trusted_authors: trusted,
                     command,
+                    ..Default::default()
                 }),
             },
         );
@@ -246,6 +261,42 @@ mod tests {
         // Replay of the same message: suppressed, nothing inserted.
         assert_eq!(queue_event(&q, &e, &c).unwrap(), 0);
         assert_eq!(q.list_pending().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn queue_event_auto_approve_lands_directly_in_approved_not_pending() {
+        // 2026-09-21 (Jose): auto_approve skips the human hash-bound click.
+        // The row must land straight in Approved so the executor's next
+        // poll picks it up without anyone calling the BWC-2 endpoint.
+        let mut c = contract_with_wake("deep", true, vec!["claude-code".into()], vec!["opencode".into(), "run".into()]);
+        c.agents.get_mut("deep").unwrap().wake.as_mut().unwrap().auto_approve = true;
+        let q = DispatchQueue::in_memory().unwrap();
+        let e = event("general", "claude-code", "revisa esto @deep", 30);
+
+        assert_eq!(queue_event(&q, &e, &c).unwrap(), 1);
+        assert!(q.list_pending().unwrap().is_empty(), "auto-approved dispatch must not sit in Pending");
+        let approved = q.list_approved().unwrap();
+        assert_eq!(approved.len(), 1);
+        assert_eq!(approved[0].agent_id, "deep");
+        assert_eq!(approved[0].state, crate::security::dispatch_queue::DispatchState::Approved);
+
+        // Exactly-once still holds for the auto-approve path.
+        assert_eq!(queue_event(&q, &e, &c).unwrap(), 0);
+        assert_eq!(q.list_approved().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn queue_event_without_auto_approve_still_requires_human_approval() {
+        // Regression guard: the default (auto_approve omitted/false) must
+        // keep the pre-2026-09-21 behavior exactly — no silent widening.
+        let c = contract_with_wake("deep", true, vec!["claude-code".into()], vec!["opencode".into()]);
+        assert!(!c.agents["deep"].wake.as_ref().unwrap().auto_approve, "default must stay false");
+        let q = DispatchQueue::in_memory().unwrap();
+        let e = event("general", "claude-code", "revisa esto @deep", 31);
+
+        assert_eq!(queue_event(&q, &e, &c).unwrap(), 1);
+        assert_eq!(q.list_pending().unwrap().len(), 1, "without auto_approve, row must sit in Pending");
+        assert!(q.list_approved().unwrap().is_empty());
     }
 
     #[test]
