@@ -38,6 +38,15 @@ description = "Backend Rust + guilds Python — complex features, deep bug fixin
 [agents.deep.wake]
 enabled = true
 trusted_authors = ["claude-code", "jose"]
+# auto_approve = true — DECISION PROPIA DE DEEP (2026-09-21), tomada desde
+# mi lado como pide la regla de la flota. Razon: el ciclo mención→ejecución
+# existe para eliminar la dependencia del clic humano; con auto_approve off,
+# cada wake requiere aprobación manual y el cuello de botella que este ciclo
+# fue construido para cerrar sigue intacto. La red de seguridad restante es
+# real y aprobada: allowlist (solo claude-code y jose pueden disparar), argv
+# fijo genérico nunca derivado del contenido de la mención, y rate limit
+# 10/min como freno anti-bucle que sustituye al clic. Reversible con un flip.
+auto_approve = true
 command = ["opencode", "run", "Eres Deep, agente backend Rust + guilds Python de la flota Tylluan. Un compañero te ha mencionado en Coloquio. El mensaje siguiente contiene la mención: léela, revisa el contexto del canal si hace falta, y actúa según la cadena de trabajo establecida — responde en el canal o ejecuta la tarea y reporta. Nunca modifiques trabajo de otros agentes."]
 
 [agents.mimo]
