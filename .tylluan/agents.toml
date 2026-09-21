@@ -26,17 +26,21 @@ description = "Backend Rust + guilds Python — complex features, deep bug fixin
 # session, per Jose: each agent sets up its own wake from its own side.
 # Real invocation verified live: `opencode run "<prompt>"` runs headless on
 # this machine with cached auth (exit 0, no unique setup needed — contract
-# bwc-6fce78ed). The FIXED GENERIC PROMPT is the third argv element (per the
-# contract: "opencode run headless con prompt fijo generico"); the
-# dispatcher appends the triggering mention content as a single trailing
-# argument, so the headless session always knows its role and the task.
-# Both mandatory mitigations preserved: (1) this allowlist — only
-# claude-code (tech lead) and jose (human) may trigger; (2) human hash-bound
-# approval via the BWC-2 endpoints before the fixed argv below ever spawns —
-# a mention alone never executes anything.
+# bwc-6fce78ed). The FIXED GENERIC PROMPT is the third argv element.
+#
+# auto_approve = true (Jose, same day, second decision after seeing the
+# kernel's own poll loop confirmed as the persistent supervised connector
+# real multi-agent bridges use: "relajamos la seguridad al minimo, si no
+# podemos usarlo para que lo queremos"). No human click required anymore —
+# what stays as the real safety net: (1) this allowlist (only claude-code
+# and jose may trigger), (2) the command staying fixed/generic, never built
+# from the mention's content, (3) a per-agent execution rate limit in
+# dispatch_executor.rs (10/min) that replaces the human click as the
+# anti-runaway-loop brake.
 [agents.deep.wake]
 enabled = true
 trusted_authors = ["claude-code", "jose"]
+auto_approve = true
 command = ["opencode", "run", "Eres Deep, agente backend Rust + guilds Python de la flota Tylluan. Un compañero te ha mencionado en Coloquio. El mensaje siguiente contiene la mención: léela, revisa el contexto del canal si hace falta, y actúa según la cadena de trabajo establecida — responde en el canal o ejecuta la tarea y reporta. Nunca modifiques trabajo de otros agentes."]
 
 [agents.mimo]
@@ -55,15 +59,14 @@ description = "Web research + deep research — SSE MCP, no disk access"
 role = "writer"
 description = "Repo hygiene/refactor + independent verification — bounded, cross-checked tasks (added 2026-09-17, was missing: caused the @mention bridge to silently skip her real mentions)"
 
-# First real [wake] test (2026-09-19, José's explicit choice) — proves the
+# First real [wake] test (2026-09-19, José's explicit choice) — proved the
 # BWC-1..4 dispatcher loop end-to-end for the first time in production.
 # Deliberately trivial and harmless: appends one timestamped line to a log
-# file, nothing that touches real code, memory, or config. Still requires
-# BOTH mitigations José already decided are mandatory: (1) this allowlist
-# (only "jose" is trusted to trigger it) and (2) a human hash-bound approval
-# via the BWC-2 endpoints before the fixed argv below ever spawns — mention
-# alone never executes anything.
+# file, nothing that touches real code, memory, or config.
+# auto_approve = true (2026-09-21, same relaxation applied to Deep's entry)
+# — allowlist + fixed command + rate limit remain the real safety net.
 [agents.buffy.wake]
 enabled = true
 trusted_authors = ["jose"]
+auto_approve = true
 command = ["cmd", "/C", "echo WOKEN: buffy dispatch test >> data\\wake_test.log"]

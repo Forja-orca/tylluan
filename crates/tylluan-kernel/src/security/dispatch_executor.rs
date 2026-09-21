@@ -5,17 +5,24 @@
 //! CAS-style (`Approved → Executed`, exactly-once even with concurrent
 //! pollers), and spawns the FIXED argv stored in the row.
 //!
-//! Why this is safe to exist (the three mitigation layers, José's decision
-//! of 2026-09-17 — both are mandatory, not either/or):
+//! Why this is safe to exist — updated 2026-09-21 (José: "relajamos la
+//! seguridad al minimo, si no podemos usarlo para que lo queremos" — the
+//! kernel's own always-on poll loop already IS the persistent supervised
+//! connector real multi-agent bridges need; the human click was the one
+//! piece of friction those bridges never have):
 //! 1. The filter chain upstream (`dispatch_subscriber::evaluate_event`,
 //!    Deep's BWC-3) is fail-closed: no `[wake]` config, no allowlisted
-//!    author, no queue row. Today `agents.toml` ships no `[wake]` at all —
-//!    zero dispatches exist until the operator enables one.
-//! 2. A row only becomes `Approved` through the human HITL endpoint
-//!    (BWC-2) whose approval is hash-bound to the exact content snapshot
-//!    the reviewer saw. This executor NEVER approves anything.
+//!    author, no queue row — unconditionally, `auto_approve` or not.
+//! 2. A row becomes `Approved` either through the human HITL endpoint
+//!    (BWC-2, hash-bound to the content the reviewer saw) OR, for agents
+//!    with `[wake].auto_approve = true`, directly at enqueue time
+//!    (`enqueue_once_auto_approved`). This executor still NEVER approves
+//!    anything itself — it only claims rows already `Approved` by one of
+//!    those two paths.
 //! 3. The claim here is a CAS: exactly one executor instance can take a
 //!    given dispatch, and only from `Approved`.
+//! 4. The per-agent rate limit below is what replaces the human click as
+//!    the anti-runaway-loop brake for auto-approved agents.
 //!
 //! Command construction is deliberately rigid: `argv[0]` is the program,
 //! the rest are literal args, no shell is ever involved, stdio is null,
@@ -30,6 +37,7 @@
 //! activated only by a `[wake]` config the operator wrote, per-message.
 
 use crate::security::dispatch_queue::{ClaimOutcome, DispatchQueue, PendingDispatch};
+use crate::security::rate_limiter::RateLimiter;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +45,17 @@ use tracing::{error, info, warn};
 
 /// How often the executor polls the queue for human-approved dispatches.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// Per-agent execution cap: replaces the human click as the anti-runaway-
+/// loop brake for `auto_approve` agents (Jose, 2026-09-21). Self-mention is
+/// already excluded upstream (`dispatch_subscriber.rs`), but a two-agent
+/// ping-pong (A mentions B, B's reply mentions A, ...) is still possible
+/// once no human gates each step — this caps it without adding friction to
+/// normal back-and-forth coordination. Applies uniformly to every agent
+/// (not just auto-approved rows) rather than tracking approval provenance:
+/// a human clicking approve 11 times in a minute for one agent is not a
+/// realistic cost — it just waits for the next poll tick.
+const EXECUTION_RATE_LIMIT_PER_AGENT_PER_MINUTE: u32 = 10;
 
 /// What one `execute_one` attempt did. Exists so tests can pin the
 /// executor's contract without asserting on real child processes.
@@ -111,14 +130,22 @@ fn spawn_fixed_argv(dispatch: &PendingDispatch) -> ExecutionReport {
 /// `Approved` — this loop can never approve, only execute.
 pub fn spawn_dispatch_executor(queue: Arc<DispatchQueue>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        let limiter = RateLimiter::new(Some(EXECUTION_RATE_LIMIT_PER_AGENT_PER_MINUTE));
         info!(
-            "[dispatch-executor] active (poll interval {}s) — executes ONLY hash-approved dispatches",
-            POLL_INTERVAL.as_secs()
+            "[dispatch-executor] active (poll interval {}s, {} exec/agent/min cap) — executes approved dispatches",
+            POLL_INTERVAL.as_secs(), EXECUTION_RATE_LIMIT_PER_AGENT_PER_MINUTE
         );
         loop {
             match queue.list_approved() {
                 Ok(approved) => {
                     for d in approved {
+                        if let Err(reason) = limiter.check_and_record(&d.agent_id) {
+                            warn!(
+                                "[dispatch-executor] rate-limited agent={} dispatch={} — {reason} (leaving Approved, retries next poll)",
+                                d.agent_id, d.id
+                            );
+                            continue;
+                        }
                         if let Err(e) = execute_one(&queue, &d.id) {
                             error!("[dispatch-executor] execute_one failed for {}: {e:#}", d.id);
                         }
