@@ -1,7 +1,8 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Cpu, Link2, Plug, Network, Loader2 } from 'lucide-react';
+import { Cpu, Link2, Plug, Network, Loader2, FolderArchive } from 'lucide-react';
 
 const GuildsTab = lazy(() => import('./GuildsTab').then(m => ({ default: m.GuildsTab })));
+const OutputsLedgerPanel = lazy(() => import('./OutputsLedgerPanel').then(m => ({ default: m.OutputsLedgerPanel })));
 const ConnectorsTab = lazy(() => import('./ConnectorsTab').then(m => ({ default: m.ConnectorsTab })));
 const McpRegistryPanel = lazy(() => import('./McpRegistryPanel').then(m => ({ default: m.McpRegistryPanel })));
 const FederationTab = lazy(() => import('./FederationTab').then(m => ({ default: m.FederationTab })));
@@ -29,6 +30,17 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
         >
           <Cpu className="w-3.5 h-3.5" />
           Guilds
+        </button>
+        <button
+          onClick={() => setSubTab('outputs')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+            subTab === 'outputs'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FolderArchive className="w-3.5 h-3.5" />
+          Outputs Ledger
         </button>
         <button
           onClick={() => setSubTab('connectors')}
@@ -70,7 +82,7 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
         <Suspense fallback={
           <div className="flex items-center justify-center py-12 text-slate-500 text-xs font-mono gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            <span>Loading guilds panel...</span>
+            <span>Loading panel...</span>
           </div>
         }>
           {subTab === 'guilds' && (
@@ -78,6 +90,12 @@ export function GuildsConsolidated(props: GuildsConsolidatedProps) {
               bridge={props.bridge}
               notify={props.notify}
               events={props.events}
+            />
+          )}
+          {subTab === 'outputs' && (
+            <OutputsLedgerPanel
+              bridge={props.bridge}
+              notify={props.notify}
             />
           )}
           {subTab === 'connectors' && (
