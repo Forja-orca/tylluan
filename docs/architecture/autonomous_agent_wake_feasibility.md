@@ -14,6 +14,123 @@
 
 ---
 
+## 0. Marco universal — por qué esto NO es "un caso por IDE" (2026-09-21)
+
+> José, tras ver el caso concreto de un modelo local vía `llama.cpp`,
+> preguntó por la solución **agnóstica de cliente**, no una más de la
+> lista: "esto ya está resuelto en la literatura de arquitectura de
+> harness o multiagentes". Lo está — esta sección lo fundamenta con la
+> propia especificación de MCP y con la literatura de sistemas
+> multiagente de producción en 2026, investigación a fondo, no intuición.
+
+### 0.1 El protocolo mismo ya descartó el "push nativo"
+
+`sampling/createMessage` era la única vía a nivel de protocolo MCP para
+que el **servidor** empujara trabajo al **cliente** sin que éste
+preguntara primero. Dos hechos la descartan como solución:
+
+1. **Deprecada en la spec 2026-07-28** (SEP-2577, MCP9005) — puede
+   desaparecer en una versión futura.
+2. **Soporte desigual incluso antes de deprecarse**: Claude Code nunca
+   la implementó como cliente; OpenCode la sumó recién en abril 2026.
+   Ningún diseño que dependa de ella habría sido universal ni siquiera
+   en su mejor momento.
+
+Más revelador todavía: la propia spec **se movió a stateless** en esa
+misma versión — "al dejar de permitir que los servidores mantengan una
+conexión abierta y empujen actualizaciones por ella, un primitivo
+asíncrono basado en poll dejó de ser opcional: es la única vía que
+queda" (MCP Tasks extension, `io.modelcontextprotocol/tasks`). Esto
+**confirma que el diseño de Tylluan (cola en el kernel + spawn externo,
+nunca una conexión viva empujando)** no es una limitación nuestra: es
+la dirección hacia la que fue todo el ecosistema MCP, por las mismas
+razones (fiabilidad, no depender de que una conexión siga viva).
+
+Nota aparte: MCP Tasks (la extensión que sí sobrevivió) resuelve un
+problema distinto — una tool call que tarda mucho y el cliente sondea
+su progreso. No resuelve "despertar a un agente sin ninguna sesión
+corriendo", porque sigue exigiendo que el cliente ya esté conectado y
+preguntando. No es la pieza que falta aquí.
+
+### 0.2 La literatura de sistemas multiagente: esto ya tiene nombre
+
+El patrón que resuelve exactamente este problema es el **Actor Model /
+árbol de supervisión** (Erlang/OTP, 1986; retomado como fundamento
+explícito por los frameworks multiagente de producción en 2026, p.ej.
+LangGraph 1.0 GA): *un agente se activa al recibir un mensaje, se
+desactiva por completo cuando está inactivo (no queda ningún proceso
+sondeando), y su estado vive en almacenamiento durable para poder
+reanudar tras un crash o un reinicio.* La responsabilidad de decidir
+"cuándo despertar a quién" nunca vive en el propio agente — vive en un
+supervisor externo, siempre encendido, que no es él mismo un LLM.
+
+Esto **es literalmente lo que BWC-1..4 ya implementa**, sin que lo
+hubiéramos etiquetado así:
+
+| Concepto del Actor Model | Pieza equivalente en Tylluan |
+|---|---|
+| Buzón del actor | Coloquio (mención = mensaje en el buzón) |
+| Checkpoint durable de "hay trabajo pendiente" | `PendingDispatch` en `dispatch_queue.rs` (SQLite) |
+| Supervisor que activa el actor | `dispatch_executor.rs::spawn_fixed_argv` |
+| El actor en sí, dormido hasta ser activado | El proceso del agente — no existe hasta que se spawnea |
+
+No hace falta inventar arquitectura nueva. La pregunta correcta no era
+"¿qué mecanismo de protocolo despierta a un cliente?" (esa vía la cerró
+el propio MCP), sino "¿qué comando OS arranca el proceso correcto para
+cada tipo de agente?" — y esa pregunta sí tiene una respuesta agnóstica.
+
+### 0.3 La taxonomía real: 2 clases, no N-por-IDE
+
+El error de encuadre inicial era pensar en "un caso por IDE conectado".
+Investigado a fondo (§2 y hallazgos de hoy), todo cliente MCP conocido
+cae en una de solo dos clases — y la segunda clase tiene un único
+representante universal que cubre cualquier IDE, conocido o no:
+
+**Clase A — el propio producto trae headless/scheduling nativo.**
+El `[wake].command` (o nada, si hay scheduling nativo) invoca
+directamente ese producto. Ejemplos verificados: Antigravity (cron del
+IDE), OpenCode (`opencode run "<prompt>"`), Claude Code (`-p`/`--print`),
+Cursor (`cursor-agent -p "<prompt>"`), Codex CLI (`codex exec "<prompt>"`),
+Gemini CLI (`gemini -p "<prompt>"` o `--non-interactive`, distinto del
+`agy` de Antigravity que no existe en esta máquina).
+
+**Clase B — el producto NO trae ningún camino headless propio**
+(verificado hoy: Windsurf/Cascade — "su bucle agéntico está atado a la
+superficie del IDE, no es el camino que optimiza"), **o no hay ningún
+producto encima, solo un modelo servido crudo** (llama.cpp, vLLM,
+Ollama, cualquier endpoint OpenAI-compatible). En ambos casos, la
+solución es la misma y es **universal por construcción**: un host MCP
+genérico que invoca el **modelo subyacente directamente por su API**
+(local o cloud), sin pasar por el IDE en absoluto. Representante real,
+maduro y MIT: **[`mcphost`](https://github.com/mark3labs/mcphost)**
+(mark3labs, Go) — conecta cualquier modelo OpenAI-compatible
+(`--provider-url`, incluido `llama-server`) a cualquier servidor MCP
+por HTTP, corre el ciclo de tool-calling completo, y tiene modo headless
+de un solo prompt: `mcphost -p "<prompt>" --quiet --provider-url <url>
+--model openai/<modelo> --config <mcp-config>`.
+
+**Por qué esto cierra el problema para siempre, no solo para hoy**: la
+Clase B no depende de que nosotros conozcamos el IDE. Cualquier IDE
+futuro que no traiga headless mode sigue teniendo, por definición, un
+modelo detrás accesible por alguna API — y `mcphost` (o equivalente)
+llega a ese modelo sin tocar el IDE. La única precondición real es que
+el modelo del agente sea alcanzable por alguna API, local o remota — eso
+es universal, no depende de que sea "conocido o más usado".
+
+### 0.4 Qué significa esto para el diseño del dispatcher
+
+Nada cambia en `dispatch_executor.rs` ni en el contrato de seguridad
+(`[wake]` fijo + allowlist + aprobación hash-bound BWC-2) — eso ya es
+100% agnóstico del cliente, spawnea `Command::new(program).args(...)`
+sin saber ni importarle qué hay dentro. Lo único que crece con cada
+cliente nuevo es **el catálogo de recetas de argv por Clase A conocida**
+(§2) más **una única receta de Clase B ya cerrada** (`mcphost`) que
+cubre todo lo demás, conocido o no. No hace falta un 6º sovereign tool
+para esto — el mecanismo universal ya vive fuera del contador de tools,
+en el dispatcher.
+
+---
+
 ## 1. La pregunta exacta
 
 ¿Puede el mecanismo de `[wake].command` ya construido (BWC-4) invocar, en
