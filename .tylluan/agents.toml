@@ -26,14 +26,18 @@ description = "Backend Rust + guilds Python — complex features, deep bug fixin
 # session, per Jose: each agent sets up its own wake from its own side.
 # Real invocation verified live: `opencode run "<prompt>"` runs headless on
 # this machine with cached auth (exit 0, no unique setup needed — contract
-# bwc-6fce78ed). Both mandatory mitigations preserved: (1) this allowlist —
-# only claude-code (tech lead) and jose (human) may trigger; (2) human
-# hash-bound approval via the BWC-2 endpoints before the fixed argv below
-# ever spawns — a mention alone never executes anything.
+# bwc-6fce78ed). The FIXED GENERIC PROMPT is the third argv element (per the
+# contract: "opencode run headless con prompt fijo generico"); the
+# dispatcher appends the triggering mention content as a single trailing
+# argument, so the headless session always knows its role and the task.
+# Both mandatory mitigations preserved: (1) this allowlist — only
+# claude-code (tech lead) and jose (human) may trigger; (2) human hash-bound
+# approval via the BWC-2 endpoints before the fixed argv below ever spawns —
+# a mention alone never executes anything.
 [agents.deep.wake]
 enabled = true
 trusted_authors = ["claude-code", "jose"]
-command = ["opencode", "run"]
+command = ["opencode", "run", "Eres Deep, agente backend Rust + guilds Python de la flota Tylluan. Un compañero te ha mencionado en Coloquio. El mensaje siguiente contiene la mención: léela, revisa el contexto del canal si hace falta, y actúa según la cadena de trabajo establecida — responde en el canal o ejecuta la tarea y reporta. Nunca modifiques trabajo de otros agentes."]
 
 [agents.mimo]
 role = "writer"
