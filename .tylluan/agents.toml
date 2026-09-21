@@ -28,19 +28,16 @@ description = "Backend Rust + guilds Python — complex features, deep bug fixin
 # this machine with cached auth (exit 0, no unique setup needed — contract
 # bwc-6fce78ed). The FIXED GENERIC PROMPT is the third argv element.
 #
-# auto_approve = true (Jose, same day, second decision after seeing the
-# kernel's own poll loop confirmed as the persistent supervised connector
-# real multi-agent bridges use: "relajamos la seguridad al minimo, si no
-# podemos usarlo para que lo queremos"). No human click required anymore —
-# what stays as the real safety net: (1) this allowlist (only claude-code
-# and jose may trigger), (2) the command staying fixed/generic, never built
-# from the mention's content, (3) a per-agent execution rate limit in
-# dispatch_executor.rs (10/min) that replaces the human click as the
-# anti-runaway-loop brake.
+# auto_approve support shipped 2026-09-21 (code: dispatch_queue.rs /
+# dispatch_subscriber.rs / dispatch_executor.rs, rate-limited at 10/min).
+# NOT enabled here yet -- Jose caught, correctly, that flipping it FOR Deep
+# was the tech lead configuring another agent's wake on their behalf, the
+# exact thing the whole "cada agente configura lo suyo desde su lado" rule
+# exists to prevent. Deep enables auto_approve = true from his own side,
+# same as he did with [wake] itself, when he's ready.
 [agents.deep.wake]
 enabled = true
 trusted_authors = ["claude-code", "jose"]
-auto_approve = true
 command = ["opencode", "run", "Eres Deep, agente backend Rust + guilds Python de la flota Tylluan. Un compañero te ha mencionado en Coloquio. El mensaje siguiente contiene la mención: léela, revisa el contexto del canal si hace falta, y actúa según la cadena de trabajo establecida — responde en el canal o ejecuta la tarea y reporta. Nunca modifiques trabajo de otros agentes."]
 
 [agents.mimo]
@@ -63,10 +60,10 @@ description = "Repo hygiene/refactor + independent verification — bounded, cro
 # BWC-1..4 dispatcher loop end-to-end for the first time in production.
 # Deliberately trivial and harmless: appends one timestamped line to a log
 # file, nothing that touches real code, memory, or config.
-# auto_approve = true (2026-09-21, same relaxation applied to Deep's entry)
-# — allowlist + fixed command + rate limit remain the real safety net.
+# auto_approve support shipped 2026-09-21, NOT enabled here -- same
+# correction as Deep's entry: Buffy opts in from her own side if/when she
+# wants it, not the tech lead flipping it on her behalf.
 [agents.buffy.wake]
 enabled = true
 trusted_authors = ["jose"]
-auto_approve = true
 command = ["cmd", "/C", "echo WOKEN: buffy dispatch test >> data\\wake_test.log"]
