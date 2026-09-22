@@ -75,7 +75,9 @@ Este es tu ciclo periodico de revision.
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
         $code = 124
     } else {
-        $code = $proc.ExitCode
+        try { [void]$proc.WaitForExit() } catch {}
+        try { $proc.Refresh() } catch {}
+        $code = if ($proc.HasExited -and $null -ne $proc.ExitCode) { [int]$proc.ExitCode } else { 0 }
     }
 
     Write-Log "opencode run terminado (exit=$code)"
