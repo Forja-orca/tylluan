@@ -182,10 +182,20 @@ if [ "$RUN_DOCS" = "1" ]; then
     # cleanup decision belongs to the TL) — NEW violations fail the push,
     # known ones warn, stale entries are reported for removal.
     PY_CMD="python"
-    if ! command -v python >/dev/null 2>&1; then
+    if command -v python >/dev/null 2>&1; then
+        PY_CMD="python"
+    elif command -v python.exe >/dev/null 2>&1; then
+        PY_CMD="python.exe"
+    elif command -v python3 >/dev/null 2>&1; then
         PY_CMD="python3"
+    elif command -v py.exe >/dev/null 2>&1; then
+        PY_CMD="py.exe"
+    elif [ -f ".venv/Scripts/python.exe" ]; then
+        PY_CMD=".venv/Scripts/python.exe"
+    elif [ -f ".venv/bin/python" ]; then
+        PY_CMD=".venv/bin/python"
     fi
-    if command -v "$PY_CMD" >/dev/null 2>&1; then
+    if command -v "$PY_CMD" >/dev/null 2>&1 || [ -f "$PY_CMD" ]; then
         if "$PY_CMD" scripts/check_async_guild_io.py; then
             ok "guild async I/O gate (no NEW blocking network calls on the MCP event loop)"
         else
