@@ -62,11 +62,20 @@ Este es tu ciclo periodico de revision.
     $agentOut = Join-Path $logDir "deep_loop_run_$([DateTime]::Now.ToString('HHmmss')).out"
     $agentErr = Join-Path $logDir "deep_loop_run_$([DateTime]::Now.ToString('HHmmss')).err"
 
-    # Invocacion sin el gotcha de stderr: Start-Process con redireccion.
+    # Invocacion sin el gotcha de stderr y con techo de tiempo estricto (WORK_PROTOCOL.md §7).
     $proc = Start-Process -FilePath $opencode -ArgumentList @("run", $loopPrompt, "--log-level", "ERROR") `
         -WorkingDirectory $repoRoot -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr `
-        -NoNewWindow -PassThru -Wait
-    $code = $proc.ExitCode
+        -NoNewWindow -PassThru
+
+    $timeoutMs = 900000 # 15 minutos
+    $finished = $proc.WaitForExit($timeoutMs)
+    if (-not $finished) {
+        Write-Log "TIMEOUT: opencode run excedio 15 min, forzando terminacion de PID $($proc.Id)"
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        $code = 124
+    } else {
+        $code = $proc.ExitCode
+    }
 
     Write-Log "opencode run terminado (exit=$code)"
     if ($code -ne 0) {
