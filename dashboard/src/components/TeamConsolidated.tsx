@@ -2,6 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import { Users, MessageSquare, Shield, ShieldCheck, Loader2 } from 'lucide-react';
 
 const FleetTab = lazy(() => import('./FleetTab').then(m => ({ default: m.FleetTab })));
+const FleetHealthPanel = lazy(() => import('./FleetHealthPanel').then(m => ({ default: m.FleetHealthPanel })));
 const ColoquioTab = lazy(() => import('./ColoquioTab').then(m => ({ default: m.ColoquioTab })));
 const CollectiveTab = lazy(() => import('./CollectiveTab').then(m => ({ default: m.CollectiveTab })));
 const DispatchesPanel = lazy(() => import('./DispatchesPanel').then(m => ({ default: m.DispatchesPanel })));
@@ -27,6 +28,17 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
         >
           <Users className="w-3.5 h-3.5" />
           Fleet Status
+        </button>
+        <button
+          onClick={() => setSubTab('health')}
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+            subTab === 'health'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Loop Health
         </button>
         <button
           onClick={() => setSubTab('coloquio')}
@@ -75,6 +87,11 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
             <div className="flex-1 overflow-y-auto">
               <FleetTab />
             </div>
+          )}
+          {subTab === 'health' && (
+            <FleetHealthPanel
+              bridge={props.bridge}
+            />
           )}
           {subTab === 'coloquio' && (
             <ColoquioTab
