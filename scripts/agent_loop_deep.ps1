@@ -70,7 +70,8 @@ Este es tu ciclo periodico de revision.
     $timeoutMs = 900000 # 15 minutos
     $finished = $proc.WaitForExit($timeoutMs)
     if (-not $finished) {
-        Write-Log "TIMEOUT: opencode run excedio 15 min, forzando terminacion de PID $($proc.Id)"
+        Write-Log "TIMEOUT: opencode run excedio 15 min, forzando terminacion de PID $($proc.Id) y arbol de procesos"
+        & taskkill.exe /F /T /PID $proc.Id 2>&1 | Out-Null
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
         $code = 124
     } else {
