@@ -504,10 +504,14 @@ if let Some(ref mut s) = stmt {
         None => query.clone(),
     };
 
+    // P1 instrumentation (T696): per-stage timing of the 3 serialized layers.
+    let _recall_t0 = std::time::Instant::now();
+
     // Jaccard LRU cache: skip expensive embedding + search if similar query exists
     let mut cache = server.recall_cache.lock().await;
     let cached_docs = cache.get(&effective_query, include_archived).cloned();
     drop(cache);
+    let embed_t0 = std::time::Instant::now();
 
     // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) â€”
     // search_recall_cascade computes it only when lexical signals don't agree
@@ -524,17 +528,20 @@ if let Some(ref mut s) = stmt {
             .ok()
         })
     };
+    tracing::info!(gen_ai.operation.name = "recall_stage_embed", stage_ms = embed_t0.elapsed().as_millis() as u64, "recall stage: dense embed");
 
-    if let Some(cached) = cached_docs {
+if let Some(cached) = cached_docs {
         let mut scored: Vec<(GraphNode, f32)> = cached;
         let aid = rec_agent_id.as_deref().unwrap_or("anonymous");
 
         // ADR-011 Coherence Gate: the cache stores raw (pre-gate) candidates,
-        // so a cache hit must still be gated â€” otherwise a poisoned node
+        // so a cache hit must still be gated — otherwise a poisoned node
         // that made it into the cache once would bypass the gate forever.
+        let gate_t0 = std::time::Instant::now();
         let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
             scored, &server.silva, query_embedding.as_deref(),
         ).await;
+        tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, "recall stage: coherence gate");
         scored = gated;
         let gate_warning = gate_stats.should_warn();
 
@@ -730,11 +737,13 @@ if let Some(ref mut s) = stmt {
     // Stage 2: Jina cross-encoder rerank on top-50 candidates (if available)
     // This corrects the RRF score ordering with a true relevance signal.
     let docs: Result<Vec<(GraphNode, f32)>, anyhow::Error> = if let Some(ref reranker) = server.reranker {
+        let rerank_t0 = std::time::Instant::now();
         let rerank_pool = candidates.iter().take(RERANK_WINDOW.load(Ordering::Relaxed)).collect::<Vec<_>>();
         let texts: Vec<&str> = rerank_pool.iter().map(|(n, _)| n.content.as_str()).collect();
         let ranked = tokio::task::block_in_place(|| reranker.rerank(&effective_query, &texts)).unwrap_or_else(|_| {
             (0..texts.len()).map(|i| (i, 0.0f32)).collect()
         });
+        tracing::info!(gen_ai.operation.name = "recall_stage_rerank", stage_ms = rerank_t0.elapsed().as_millis() as u64, "recall stage: jina rerank");
         let reranked: Vec<(GraphNode, f32)> = ranked.into_iter()
             .filter_map(|(idx, logit)| {
                 // Normalize cross-encoder logit to (0,1) with sigmoid before mixing with RRF scores
