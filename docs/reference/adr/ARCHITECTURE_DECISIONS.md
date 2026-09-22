@@ -15,5 +15,8 @@
 - [ADR-010 — Embedded SLM: T5 vs SmolLM2](ADR010_embedded_sllm_t5_vs_smollm2.md) — §2-5 abierto (decisión de inserción pendiente).
 - [ADR-011 — Learned Reranker Coherence Gate](ADR011_learned_reranker_coherence_gate.md).
 - [ADR-012 — Memory Lifecycle Design](ADR012_memory_lifecycle.md) — 2026-08-21. Formaliza los estados de vida de los nodos SilvaDB y sus transiciones, cerrando la discusion de Coloquio T124-T135.
+- [ADR-013 — Non-Predation Contract](ADR013_non_predation_contract.md) — 2026-09-12. Principio fundacional y gate mecánico de no-depredación: la mejora nunca daña a otro escalón.
+- [ADR-014 — Capability Provider Fabric](ADR014_capability_provider_fabric.md) — 2026-09-14. Jerarquía formal Capability -> Provider -> Scheduler y deuda semántica.
+- [ADR-015 — Stigmergic Fleet Coordination](ADR015_stigmergic_fleet_coordination.md) — 2026-09-22. Coordinación emergente por calor semántico, zonas de trabajo y atenuación exponencial bio-inspirada.
 
-> Índice reconstruido 2026-08-22 tras auditoría full-proyecto (Coloquio #mision-activa T196): solo ADR-004 y ADR-012 estaban listados de 12 archivos reales en este directorio.
+> Índice actualizado 2026-09-22 con ADR-013, ADR-014 y ADR-015.
