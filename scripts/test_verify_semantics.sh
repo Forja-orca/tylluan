@@ -121,6 +121,15 @@ make_sandbox() {
     cp "$VERIFY_SRC" "$sbx/scripts/verify.sh"
     echo '# sandbox STATUS.md' > "$sbx/STATUS.md"
     echo '# sandbox README.md' > "$sbx/README.md"
+    # check_async_guild_io.py is invoked directly by its .py filename
+    # (scripts/check_async_guild_io.py), not via a "check_*.sh" name, so the
+    # `all_gates` auto-discovery above (which only matches "check_*.sh")
+    # never finds or stubs it -- real bug caught live 2026-09-22: T1 ("all
+    # gates green -> exit 0") failed in CI because this gate is real and
+    # blocking (fail()) in the sandboxed verify.sh, but the file it needs
+    # doesn't exist there. This gate isn't part of what T1-T5 test (they
+    # validate OTHER gates' wiring), so it always gets a neutral pass stub.
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_async_guild_io.py"
 }
 
 # run_case <sandbox> <case-tag> -> sets RUN_OUT and RUN_RC
