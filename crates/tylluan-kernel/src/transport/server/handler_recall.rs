@@ -771,9 +771,11 @@ if let Some(cached) = cached_docs {
             // ADR-011 Coherence Gate: eliminate/penalize before anything downstream
             // (stigmergy reinforcement, hot context, eventual generative consumption)
             // trusts these nodes further.
+            let gate_t0 = std::time::Instant::now();
             let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
                 scored, &server.silva, query_embedding.as_deref(),
             ).await;
+            tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, "recall stage: coherence gate (cache-miss path)");
             scored = gated;
             let gate_warning = gate_stats.should_warn();
 
