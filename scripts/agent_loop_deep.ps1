@@ -19,7 +19,10 @@ $lockFile = Join-Path $env:TEMP "tylluan_deep_loop.lock"
 $repoRoot = "E:\tylluan"
 $logDir = Join-Path $repoRoot "data\logs"
 $logFile = Join-Path $logDir "deep_loop.log"
-$opencode = "C:\Users\FoRJa\AppData\Roaming\npm\opencode.cmd"
+# 2026-09-22 fix (hallazgo Buffy T714): spawnear el BINARIO real, no el shim .cmd.
+# El shim desprende el exit code de node/cmd (no del agente) y WaitForExit(timeout)
+# devuelve false espurio con salida redirigida -> falsos timeouts y huerfanos vivos.
+$opencode = "C:\Users\FoRJa\AppData\Roaming\npm\node_modules\opencode-ai\bin\opencode.exe"
 $runId = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
 function Write-Log([string]$msg) {
