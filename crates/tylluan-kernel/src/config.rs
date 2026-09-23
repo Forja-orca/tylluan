@@ -1039,6 +1039,13 @@ pub struct SilvaConfig {
     /// per-call path stays untouched when disabled.
     #[serde(default)]
     pub embed_batching_enabled: bool,
+
+    /// SPIKE P1 (medicion del mutex del reranker): false desactiva la carga
+    /// del cross-encoder (fallback a RRF puro) -- permite medir cuanto del
+    /// 68% bajo concurrencia explica SOLO el mutex del reranker, sin tocar
+    /// el coalescing todavia. Default true (comportamiento actual).
+    #[serde(default = "default_bool_true")]
+    pub reranker_enabled: bool,
 }
 
 impl Default for SilvaConfig {
@@ -1053,6 +1060,7 @@ impl Default for SilvaConfig {
             hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
             cascade_enabled: default_cascade_enabled(),
             embed_batching_enabled: false,
+            reranker_enabled: true,
             recall_abstain_min_score: default_recall_abstain_min_score(),
         }
     }
