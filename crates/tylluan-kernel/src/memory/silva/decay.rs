@@ -319,17 +319,73 @@ impl super::SilvaDB {
     pub async fn get_stigmergy_heat(&self, node_id: &str, window_hours: u64) -> Result<f64> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
-            // touched_at is i64 seconds
             let sql = format!(
                 "SELECT COUNT(*) FROM node_traces WHERE node_id = ?1 AND touched_at >= (strftime('%s', 'now') - {})",
                 window_hours * 3600
             );
             let count: i64 = conn.query_row(&sql, params![node_id], |r| r.get(0))?;
-            // Normalize heat: 1.0 = 10 touches per hour, capped at 2.0
             let hours = window_hours as f64;
             let heat = (count as f64 / (hours * 10.0)).min(2.0);
             Ok(heat)
         })
+    }
+
+    /// ADR-015 Fase 2 — hybrid exact heat over `work_traces` (bio-inspired
+    /// exponential pheromone decay). Two layers:
+    /// 1. SQL window filter: only traces newer than 4×T½ (16h with T½=4h)
+    ///    leave the DB (bounded, index-backed).
+    /// 2. Rust vectorized exponential sum in memory:
+    ///    Heat = min(2.0, Σ w_r · 2^(-(t_now − t_r) / 14400))
+    /// where 14400s = T½ (4h attention half-life) and w_r is the trace
+    /// weight (1.0 direct, 0.3 diffuse per ADR-015).
+    pub async fn work_traces_heat_exact(
+        &self,
+        target_uri: &str,
+        now_unix: Option<i64>,
+    ) -> Result<f64> {
+        const HALF_LIFE_SECS: f64 = 14400.0; // T½ = 4h
+        const WINDOW_SECS: i64 = 4 * 14400; // 4 × T½ = 16h
+        const WEIGHT_DIFFUSE: f64 = 0.3;
+        let now = now_unix.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        });
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let cutoff = now - WINDOW_SECS;
+            let mut stmt = conn.prepare(
+                "SELECT trace_type, weight, touched_at FROM work_traces
+                 WHERE target_uri = ?1 AND touched_at >= ?2",
+            )?;
+            let rows = stmt.query_map(params![target_uri, cutoff], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?))
+            })?;
+            let mut heat = 0.0f64;
+            for row in rows {
+                let (trace_type, weight, touched_at) = row?;
+                let dt = (now - touched_at).max(0) as f64;
+                let w = if trace_type == "diffuse" { WEIGHT_DIFFUSE } else { weight };
+                heat += w * 2f64.powf(-dt / HALF_LIFE_SECS);
+            }
+            Ok(heat.min(2.0))
+        })
+    }
+
+    /// Batch variant of `work_traces_heat_exact` for the heatmap consumer
+    /// (Antigravity's dashboard). One query per URI via the same path.
+    pub async fn work_traces_heat_batch(
+        &self,
+        uris: &[String],
+        now_unix: Option<i64>,
+    ) -> Result<HashMap<String, f64>> {
+        let mut out = HashMap::new();
+        for uri in uris {
+            let heat = self.work_traces_heat_exact(uri, now_unix).await?;
+            out.insert(uri.clone(), heat);
+        }
+        Ok(out)
     }
 
     /// Batch heat calculation for multiple nodes.
