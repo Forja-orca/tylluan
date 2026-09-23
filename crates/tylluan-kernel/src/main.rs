@@ -690,7 +690,7 @@ async fn main() -> anyhow::Result<()> {
     // fix under panic=abort is to never let `ort` panic in the first place --
     // probe whether the library is actually loadable via a real Result
     // (onnx_runtime_available(), below) before ever calling into `ort`.
-    let reranker = if !onnx_runtime_available() {
+    let reranker = if !onnx_runtime_available() || !config.silva.reranker_enabled {
         warn!("⚠️ Reranker: ONNX Runtime library not loadable (checked before calling into ort) -- fallback a RRF puro");
         None
     } else {
