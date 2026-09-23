@@ -332,10 +332,12 @@ impl super::SilvaDB {
 
     /// ADR-015 Fase 2 — hybrid exact heat over `work_traces` (bio-inspired
     /// exponential pheromone decay). Two layers:
+    ///
     /// 1. SQL window filter: only traces newer than 4×T½ (16h with T½=4h)
     ///    leave the DB (bounded, index-backed).
     /// 2. Rust vectorized exponential sum in memory:
     ///    Heat = min(2.0, Σ w_r · 2^(-(t_now − t_r) / 14400))
+    ///
     /// where 14400s = T½ (4h attention half-life) and w_r is the trace
     /// weight (1.0 direct, 0.3 diffuse per ADR-015).
     pub async fn work_traces_heat_exact(
