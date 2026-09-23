@@ -1,10 +1,11 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Users, MessageSquare, Shield, ShieldCheck, Loader2, Brain, Flame } from 'lucide-react';
+import { Users, MessageSquare, Shield, ShieldCheck, Loader2, Brain, Flame, GitCompare } from 'lucide-react';
 
 const FleetTab = lazy(() => import('./FleetTab').then(m => ({ default: m.FleetTab })));
 const FleetHealthPanel = lazy(() => import('./FleetHealthPanel').then(m => ({ default: m.FleetHealthPanel })));
 const WorkContractsPanel = lazy(() => import('./WorkContractsPanel').then(m => ({ default: m.WorkContractsPanel })));
 const AgentCompetencyPanel = lazy(() => import('./AgentCompetencyPanel').then(m => ({ default: m.AgentCompetencyPanel })));
+const SchedulerConfusionPanel = lazy(() => import('./SchedulerConfusionPanel').then(m => ({ default: m.SchedulerConfusionPanel })));
 const StigmergyHeatmapPanel = lazy(() => import('./StigmergyHeatmapPanel').then(m => ({ default: m.StigmergyHeatmapPanel })));
 const ColoquioTab = lazy(() => import('./ColoquioTab').then(m => ({ default: m.ColoquioTab })));
 const CollectiveTab = lazy(() => import('./CollectiveTab').then(m => ({ default: m.CollectiveTab })));
@@ -65,6 +66,17 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
         >
           <Brain className="w-3.5 h-3.5" />
           Competencies
+        </button>
+        <button
+          onClick={() => setSubTab('confusion')}
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-mono font-bold uppercase rounded-lg border transition-all ${
+            subTab === 'confusion'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <GitCompare className="w-3.5 h-3.5" />
+          Confusion
         </button>
         <button
           onClick={() => setSubTab('heatmap')}
@@ -137,6 +149,11 @@ export function TeamConsolidated(props: TeamConsolidatedProps) {
           )}
           {subTab === 'competencies' && (
             <AgentCompetencyPanel
+              bridge={props.bridge}
+            />
+          )}
+          {subTab === 'confusion' && (
+            <SchedulerConfusionPanel
               bridge={props.bridge}
             />
           )}
