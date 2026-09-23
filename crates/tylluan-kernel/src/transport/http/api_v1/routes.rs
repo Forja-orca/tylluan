@@ -289,4 +289,8 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // guilds write under data/outputs/; the kernel owns manifests only.
         .route("/api/v1/outputs", get(outputs_list_handler))
         .route("/api/v1/outputs/{run_id}/manifest", get(outputs_manifest_handler))
+
+        // ADR-015 Stigmergic Fleet Coordination — read-only workprints heatmap
+        .route("/api/v1/stigmergy/zones", get(stigmergy_zones_handler))
 }
+
