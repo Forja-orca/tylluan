@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Flame,
   Snowflake,
@@ -10,8 +10,10 @@ import {
   Compass,
   FolderTree,
   Clock,
+  Radio,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePolling } from '../hooks/usePolling';
 import { agentStyle } from '../lib/agent-meta';
 import { MetricCard } from './ui/MetricPrimitives';
 
@@ -28,7 +30,7 @@ export interface WorkprintTrace {
 
 export interface StigmergicZone {
   zone_id: string; // e.g. "crates/tylluan-kernel/transport"
-  subsystem: 'kernel' | 'link' | 'dashboard' | 'guilds' | 'docs';
+  subsystem: 'kernel' | 'link' | 'dashboard' | 'guilds' | 'docs' | string;
   description: string;
   heat: number; // 0.0 to 2.0
   half_life_hours: number; // default 4.0
@@ -39,6 +41,14 @@ export interface StigmergicZone {
   neighbor_zones?: string[]; // 1-hop diffusion targets
   contention_risk?: 'low' | 'moderate' | 'high';
 }
+
+export interface StigmergyHeatmapPanelProps {
+  bridge?: {
+    fetchRaw: (url: string, init?: RequestInit) => Promise<unknown>;
+  } | null;
+  notify?: (msg: string, type?: 'info' | 'error') => void;
+}
+
 
 // Realistic repository mock data based on Tylluan's actual workspace structure
 export const MOCK_STIGMERGIC_ZONES: StigmergicZone[] = [
@@ -242,12 +252,43 @@ export function formatTimeAgo(unixSecs: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function StigmergyHeatmapPanel() {
+export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelProps = {}) {
   const [zones, setZones] = useState<StigmergicZone[]>(MOCK_STIGMERGIC_ZONES);
   const [selectedSubsystem, setSelectedSubsystem] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedZone, setSelectedZone] = useState<StigmergicZone | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchZones = useCallback(async () => {
+    if (!bridge) return;
+    setLoading(true);
+    try {
+      const res = (await bridge.fetchRaw('/api/v1/stigmergy/zones')) as {
+        zones?: StigmergicZone[];
+        count?: number;
+      };
+      if (res && Array.isArray(res.zones) && res.zones.length > 0) {
+        setZones(res.zones);
+        setIsLive(true);
+      }
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.warn('Failed to fetch live stigmergy zones, using fallback:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [bridge]);
+
+  usePolling('stigmergy-heatmap-zones', fetchZones, { interval: 'standard' });
+
+  useEffect(() => {
+    if (bridge) {
+      fetchZones();
+    }
+  }, [bridge, fetchZones]);
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -308,9 +349,16 @@ export function StigmergyHeatmapPanel() {
               <h2 className="text-base font-bold text-slate-100 tracking-tight font-mono">
                 Stigmergic Heatmap & Workprints
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-amber-950/60 border border-amber-800/50 text-amber-300">
-                ADR-015 Phase 4 Mockup
-              </span>
+              {isLive ? (
+                <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
+                  <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                  Live Kernel Stream
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-amber-950/60 border border-amber-800/50 text-amber-300">
+                  ADR-015 Phase 4
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Emergent coordination by semantic warmth, active code footprints, and collision detection (T½ = 4h)
@@ -319,15 +367,29 @@ export function StigmergyHeatmapPanel() {
         </div>
 
         <div className="flex items-center gap-2">
+          {bridge && (
+            <button
+              onClick={fetchZones}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 text-xs font-mono transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin text-amber-400')} />
+              <span>Refresh</span>
+            </button>
+          )}
           <button
-            onClick={() => setZones([...MOCK_STIGMERGIC_ZONES])}
+            onClick={() => {
+              setZones([...MOCK_STIGMERGIC_ZONES]);
+              if (notify) notify('Reset heatmap to reference workspace topology', 'info');
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 text-xs font-mono transition-all"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Simulate Decay</span>
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
+            <span>Reset / Mock</span>
           </button>
         </div>
       </div>
+
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
