@@ -416,6 +416,18 @@ impl super::SilvaDB {
                  CREATE INDEX IF NOT EXISTS idx_node_traces_node ON node_traces(node_id);
                  CREATE INDEX IF NOT EXISTS idx_node_traces_time ON node_traces(touched_at DESC);
 
+                 CREATE TABLE IF NOT EXISTS work_traces (
+                     trace_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     target_uri TEXT NOT NULL,
+                     target_kind TEXT NOT NULL,
+                     agent_id TEXT NOT NULL,
+                     trace_type TEXT NOT NULL,
+                     weight REAL DEFAULT 1.0,
+                     touched_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_work_traces_target ON work_traces(target_uri, touched_at DESC);
+                 CREATE INDEX IF NOT EXISTS idx_work_traces_agent ON work_traces(agent_id, touched_at DESC);
+
                  CREATE TABLE IF NOT EXISTS mcp_sessions (
                      agent_id TEXT PRIMARY KEY,
                      client_name TEXT NOT NULL,
