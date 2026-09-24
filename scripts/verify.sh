@@ -172,6 +172,17 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "UTF-8 BOM detected — run 'scripts/check_bom.sh --fix', review the diff, commit"
     fi
 
+    # Mojibake gate (blocking): distinct bug class from byte-0 BOM above --
+    # mid-file double-encoded UTF-8 (PowerShell Set-Content re-encoding, or
+    # similar). Recurred a 4th time in Deep's ADR-015 Fase 2 commit (517b77d,
+    # ~70 lines of config.rs, caught and repaired before push). No --fix:
+    # repair needs the original characters, not a mechanical reverse-decode.
+    if bash scripts/check_mojibake.sh; then
+        ok "no mid-file mojibake in tracked files"
+    else
+        fail "Mojibake detected — restore affected lines from a clean prior revision, see scripts/check_mojibake.sh output"
+    fi
+
     # Async event-loop I/O gate (blocking, ratchet): FastMCP guild servers run
     # every @mcp.tool() on ONE event loop — a sync network call inside an async
     # def stalls ALL concurrent tool calls for its whole timeout (T633: 120s
