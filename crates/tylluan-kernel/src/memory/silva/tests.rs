@@ -319,6 +319,165 @@ async fn test_silva() -> SilvaDB {
         assert!(heat > 0.0);
     }
 
+    // ------------------------------------------------------------------
+    // ADR-015 Fase 3 — work_traces_heat_exact / work_traces_heat_batch
+    // (T753: these had zero tests; cases below pin the documented math:
+    // T½=14400s, 16h SQL window, diffuse=0.3, cap 2.0, total per-URI).
+    // Deterministic time via now_unix — no sleeps, no wall-clock races.
+    // Seeds go through conn_lock() with plain SQL: production has no write
+    // API for work_traces yet (schema.rs:419 owns the table, decay.rs only
+    // reads it).
+    // ------------------------------------------------------------------
+
+    async fn seed_work_trace(db: &SilvaDB, uri: &str, trace_type: &str, weight: f64, touched_at: i64) {
+        let conn_arc = db.conn_lock();
+        let conn = conn_arc.lock().await;
+        conn.execute(
+            "INSERT INTO work_traces (target_uri, target_kind, agent_id, trace_type, weight, touched_at)
+             VALUES (?1, 'file', 'test-agent', ?2, ?3, ?4)",
+            params![uri, trace_type, weight, touched_at],
+        )
+        .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_heat_empty_and_batch_input_contract() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+
+        // Unknown URI → 0.0, never an error.
+        let heat = db.work_traces_heat_exact("no-such-uri.rs", Some(now)).await.unwrap();
+        assert_eq!(heat, 0.0);
+
+        // Empty batch → empty map.
+        let batch = db.work_traces_heat_batch(&[], Some(now)).await.unwrap();
+        assert!(batch.is_empty());
+
+        // URIs without any trace: present in the map with 0.0 (heatmap
+        // contract), not missing keys and not errors (T753).
+        let uris = vec!["a.rs".to_string(), "b.rs".to_string()];
+        let batch = db.work_traces_heat_batch(&uris, Some(now)).await.unwrap();
+        assert_eq!(batch.len(), 2, "every input URI must appear in the output");
+        assert_eq!(batch["a.rs"], 0.0);
+        assert_eq!(batch["b.rs"], 0.0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_direct_vs_diffuse_weight() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+
+        // Direct: the row's weight column is honored (1.0 at dt=0).
+        seed_work_trace(&db, "direct.rs", "direct", 1.0, now).await;
+        let heat = db.work_traces_heat_exact("direct.rs", Some(now)).await.unwrap();
+        assert!((heat - 1.0).abs() < 1e-6, "direct at dt=0 should be 1.0, got {heat}");
+
+        // Diffuse: trace_type "diffuse" forces 0.3 — even when the row's
+        // weight column says otherwise (type wins over column by design).
+        seed_work_trace(&db, "diffuse.rs", "diffuse", 1.0, now).await;
+        let heat = db.work_traces_heat_exact("diffuse.rs", Some(now)).await.unwrap();
+        assert!((heat - 0.3).abs() < 1e-6, "diffuse at dt=0 should be 0.3, got {heat}");
+
+        seed_work_trace(&db, "diffuse2.rs", "diffuse", 0.9, now).await;
+        let heat = db.work_traces_heat_exact("diffuse2.rs", Some(now)).await.unwrap();
+        assert!((heat - 0.3).abs() < 1e-6, "diffuse weight override must be 0.3, got {heat}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_exact_half_life_at_4h() {
+        let db = test_silva().await;
+        let t0 = 1_800_000_000i64;
+        seed_work_trace(&db, "hl.rs", "direct", 1.0, t0).await;
+
+        // Exactly T½ = 14400s later: w · 2^(-1) = 0.5 (T753 boundary case).
+        let heat = db.work_traces_heat_exact("hl.rs", Some(t0 + 14400)).await.unwrap();
+        assert!((heat - 0.5).abs() < 1e-6, "heat at T½ must be exactly 0.5, got {heat}");
+
+        // Two half-lives: 0.25.
+        let heat = db.work_traces_heat_exact("hl.rs", Some(t0 + 28800)).await.unwrap();
+        assert!((heat - 0.25).abs() < 1e-6);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_window_exclusion_boundary() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+
+        // Just inside the 16h window (cutoff = now - 57600): contributes.
+        seed_work_trace(&db, "inside.rs", "direct", 1.0, now - 57599).await;
+        let heat = db.work_traces_heat_exact("inside.rs", Some(now)).await.unwrap();
+        assert!(heat > 0.0, "trace inside the window must contribute");
+
+        // Exactly at the cutoff: SQL filter is >=, so it is included —
+        // decayed to 2^(-57600/14400) = 2^-4 = 0.0625.
+        seed_work_trace(&db, "boundary.rs", "direct", 1.0, now - 57600).await;
+        let heat = db.work_traces_heat_exact("boundary.rs", Some(now)).await.unwrap();
+        assert!((heat - 0.0625).abs() < 1e-6, "cutoff boundary is inclusive (>=): 2^-4, got {heat}");
+
+        // One second past the cutoff: excluded by the SQL filter → 0.0.
+        seed_work_trace(&db, "outside.rs", "direct", 1.0, now - 57601).await;
+        let heat = db.work_traces_heat_exact("outside.rs", Some(now)).await.unwrap();
+        assert_eq!(heat, 0.0, "trace older than 4×T½ must be excluded by the SQL window");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_heat_cap_at_2() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        for _ in 0..5 {
+            seed_work_trace(&db, "hot.rs", "direct", 1.0, now).await;
+        }
+        // Raw sum would be 5.0; documented cap is 2.0.
+        let heat = db.work_traces_heat_exact("hot.rs", Some(now)).await.unwrap();
+        assert!((heat - 2.0).abs() < 1e-6, "5 fresh direct traces must cap at 2.0, got {heat}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_batch_matches_exact_and_decay_math() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        seed_work_trace(&db, "x.rs", "direct", 1.0, now).await;
+        seed_work_trace(&db, "x.rs", "diffuse", 1.0, now - 7200).await;
+        seed_work_trace(&db, "y.rs", "direct", 0.4, now - 3600).await;
+        seed_work_trace(&db, "old.rs", "direct", 1.0, now - 100_000).await;
+
+        let uris = vec![
+            "x.rs".to_string(),
+            "y.rs".to_string(),
+            "old.rs".to_string(),
+            "ghost.rs".to_string(),
+        ];
+        let batch = db.work_traces_heat_batch(&uris, Some(now)).await.unwrap();
+
+        // Batch must agree with the single-URI path exactly.
+        let x = db.work_traces_heat_exact("x.rs", Some(now)).await.unwrap();
+        assert!((batch["x.rs"] - x).abs() < 1e-9);
+
+        // Closed-form decay sums: x = 1.0 + 0.3·2^(-0.5); y = 0.4·2^(-0.25).
+        let expected_x = 1.0 + 0.3 * 2f64.powf(-0.5);
+        assert!((batch["x.rs"] - expected_x).abs() < 1e-6, "x.rs heat {}, want {expected_x}", batch["x.rs"]);
+        let expected_y = 0.4 * 2f64.powf(-0.25);
+        assert!((batch["y.rs"] - expected_y).abs() < 1e-6);
+
+        assert_eq!(batch["old.rs"], 0.0, "pre-window trace excluded");
+        assert_eq!(batch["ghost.rs"], 0.0, "never-touched URI is 0.0, present");
+        assert_eq!(batch.len(), 4);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_work_traces_now_none_uses_wall_clock() {
+        let db = test_silva().await;
+        let wall_now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        seed_work_trace(&db, "fresh.rs", "direct", 1.0, wall_now).await;
+
+        // now_unix=None defaults to wall clock: a just-seeded trace is hot.
+        let heat = db.work_traces_heat_exact("fresh.rs", None).await.unwrap();
+        assert!(heat > 0.0 && heat <= 2.0, "fresh trace via default now must be hot, got {heat}");
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_prune_cold_nodes() {
         let db = test_silva().await;
