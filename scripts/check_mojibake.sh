@@ -5,8 +5,7 @@
 # (check_bom.sh) -- this is UTF-8 text that got double-encoded somewhere in
 # the write path (typically PowerShell Set-Content or a similar tool reading
 # UTF-8 bytes as Latin-1/cp1252 and re-saving), turning real characters like
-# emoji and em-dashes into multi-byte garbage (e.g. "\xe2\x9a\xa0\xef\xb8\x8f"
-# becomes "Ã¢Å¡Â Ã¯Â¸Â"). Deep's ADR-015 Fase 2 commit (517b77d, caught and
+# emoji and em-dashes into multi-byte garbage. Deep's ADR-015 Fase 2 commit (517b77d, caught and
 # repaired by Claude Code before push) corrupted ~70 lines of config.rs this
 # way -- the 4th recurrence of this general encoding-corruption pattern in
 # this project (after 3 waves of the byte-0 BOM bug), the 2nd caused by Deep
@@ -31,7 +30,7 @@
 # Scope notes:
 #   - Binary files, .git/, target/, node_modules/, dist/, build/ excluded.
 #   - Detection is a fixed set of the most common mojibake byte sequences
-#     seen in this project's real incidents (Ã¢, Ã°, Ã£, Â  runs) -- not an
+#     seen in this project's real incidents -- not an
 #     exhaustive encoding-corruption detector. False negatives on encodings
 #     this project hasn't hit yet are possible; false positives are the
 #     bigger risk this gate guards against, so the pattern list stays
@@ -43,7 +42,10 @@ cd "$(dirname "$0")/.."
 # Fixed set of real mojibake byte sequences seen in this project's incidents.
 # Each is UTF-8 bytes that decode as visible mojibake when the source was
 # actually valid UTF-8 misread as Latin-1/cp1252 and re-saved as UTF-8.
-PATTERN='Ã¢â‚¬|Ã¢Å¡|Ã°Å¸|Ã¢Å"|Ã¢Å’|Ã¯Â¸Â|Ã¢â€ž|Ã¢â€š'
+# ANSI-C \xNN escapes (not literal mojibake characters) so this file's own
+# source text doesn't trip the gate it implements -- see incident this gate
+# itself hit on first run, fixed the same day it was written.
+PATTERN=$'\xc3\x83\xc2\xa2\xc3\xa2\xe2\x80\x9a\xc2\xac|\xc3\x83\xc2\xa2\xc3\x85\xc2\xa1|\xc3\x83\xc2\xb0\xc3\x85\xc2\xb8|\xc3\x83\xc2\xa2\xc3\x85\x22|\xc3\x83\xc2\xa2\xc3\x85\xe2\x80\x99|\xc3\x83\xc2\xaf\xc3\x82\xc2\xb8\xc3\x82|\xc3\x83\xc2\xa2\xc3\xa2\xe2\x82\xac\xc5\xbe|\xc3\x83\xc2\xa2\xc3\xa2\xe2\x82\xac\xc5\xa1'
 
 if ! command -v git >/dev/null 2>&1; then
     echo "check_mojibake.sh: git not found" >&2
