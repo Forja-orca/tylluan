@@ -1,0 +1,550 @@
+{
+  "timestamp": "2026-09-13 21:57:03",
+  "system_info": {
+    "platform": "Windows",
+    "processor": "Intel64 Family 6 Model 79 Stepping 1, GenuineIntel",
+    "cpu_cores_logical": 56,
+    "cpu_cores_physical": 28,
+    "total_ram_gb": 221.88,
+    "python_version": "3.14.3"
+  },
+  "model_file": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--bartowski--SmolLM2-1.7B-Instruct-GGUF/snapshots\\1f03464768bfcc0319fc50da8ff5fb20b6417ba2\\SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+  "total_cases": 25,
+  "pre_registered_criteria": {
+    "min_fact_coverage_delta_pp": 10.0,
+    "max_p50_latency_ms": 2000.0
+  },
+  "cases_detail": [
+    {
+      "case_id": "digest_case_01_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        1,
+        17,
+        18,
+        19
+      ],
+      "heuristic_summary_len": 541,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[kernel Turn 1]: 🛑 **ForjaNexus kernel apagándose** (v3.0.0 commit `b66e2f5`). Rebuild en progreso — reconectar en ~2 min.\n[kernel Turn 17]: 🛑 **TylluanNexus kernel apagándose** (v0",
+      "generative_summary_len": 218,
+      "generative_fact_coverage_pct": 100.0,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 68647.37
+    },
+    {
+      "case_id": "digest_case_02_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        61,
+        62,
+        63,
+        64
+      ],
+      "heuristic_summary_len": 544,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[kernel Turn 61]: 🛑 **TylluanNexus kernel apagándose** (v0.14.0 commit `572cf62`). Rebuild en progreso — reconectar en ~2 min.\n[kernel Turn 62]: 🛑 **TylluanNexus kernel apagándose** (",
+      "generative_summary_len": 220,
+      "generative_fact_coverage_pct": 100.0,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 91318.52
+    },
+    {
+      "case_id": "digest_case_03_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        107,
+        108,
+        109,
+        110
+      ],
+      "heuristic_summary_len": 1250,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[agent Turn 107]: @deep plan aprobado tal cual, los 4 casos incluidos (author_id con el mismo patron tiene sentido). Ya pushee mi fix de limit/offset (commit ya en origin/main) -- el archivo esta libre, arranca ya. Cuando termines: cargo check + clippy -",
+      "generative_summary_len": 291,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "test",
+        "kernel"
+      ],
+      "latency_gen_ms": 92611.15
+    },
+    {
+      "case_id": "digest_case_04_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        152,
+        153,
+        154,
+        155
+      ],
+      "heuristic_summary_len": 1244,
+      "heuristic_fact_coverage_pct": 33.3,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n1. @antigravity: Parte de Antigravity (Dashboard / UI-Core Contracts para Fase 1) completada y verificada:\n   - Contratos TS en @tylluan/ui-core (api-client.ts):\n     - Añadido type LifecycleState = 'active' | 'quiet' | 'consolidated",
+      "generative_summary_len": 270,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "commit",
+        "verificacion",
+        "test"
+      ],
+      "latency_gen_ms": 100228.07
+    },
+    {
+      "case_id": "digest_case_05_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        197,
+        198,
+        199,
+        200
+      ],
+      "heuristic_summary_len": 1238,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[agent Turn 197]: @jose @claude-code INFORME DE AUDITORIA \"Tylluan de raíz a superficie\" — investigación, sin tocar nada. Evidencia real verificada hoy.\n\n=== ESTADO DEL ENTORNO (hallazgo 0) ===\n**K",
+      "generative_summary_len": 234,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "commit",
+        "test",
+        "kernel",
+        "port"
+      ],
+      "latency_gen_ms": 233447.77
+    },
+    {
+      "case_id": "digest_case_06_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        243,
+        244,
+        245,
+        246
+      ],
+      "heuristic_summary_len": 1244,
+      "heuristic_fact_coverage_pct": 50.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[agent Turn 243]: @jose @claude-code @antigravity @codex @buffy @qwen Cierre de Deep — alineado con la convergencia confirmada en T242, con mi estado exacto:\n\n**1. Skills globales — confirmo mi alineación con la división final:**",
+      "generative_summary_len": 266,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "commit",
+        "test",
+        "kernel",
+        "port"
+      ],
+      "latency_gen_ms": 92161.44
+    },
+    {
+      "case_id": "digest_case_07_mision-activa",
+      "channel_id": "mision-activa",
+      "turns": [
+        288,
+        289,
+        290,
+        291
+      ],
+      "heuristic_summary_len": 1250,
+      "heuristic_fact_coverage_pct": 50.0,
+      "generative_summary": "Channel: #mision-activa\n\nTranscript:\n[agent Turn 288]: necesitamos papers HIGH-IMPACT (2023-2026) para 3 áreas de Tylluan. Área 1: sparse+lexical embeddings complement para retrieval denso (sin reentrenar BGE-M3). Área 2: contrastive rerankers bajo",
+      "generative_summary_len": 248,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "test",
+        "kernel",
+        "port",
+        "verificacion"
+      ],
+      "latency_gen_ms": 50834.14
+    },
+    {
+      "case_id": "digest_case_08_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "heuristic_summary_len": 983,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Claude successfully resolved the bug in the Dockerfile, CI, and CodeQL pipelines. The split of the nexus-bridge.ts file was moved to the domain modules, and the reconciliation of the test-count in STATUS.md/AGENTS.md was completed. The working tree is clean, and the main branch is up-to-date.\n\nClaude also verified the guild coloquio and applied the fix for the dynamic port issue.",
+      "generative_summary_len": 382,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "verificacion",
+        "commit",
+        "kernel"
+      ],
+      "latency_gen_ms": 18041.73
+    },
+    {
+      "case_id": "digest_case_09_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        63,
+        64,
+        65,
+        66
+      ],
+      "heuristic_summary_len": 1249,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Executive Digest:\n\n- **Channel**: #equipo\n- **Transcript**:\n  - [antigravity Turn 63]: Auditoria E2E Signal Loop (ADR-011) — Reporte de Antigravity\n  - [antigravity Turn 64]: Re-Auditoría E2E Signal Loop (ADR-011) — Reporte Final de Antigravity\n  - [",
+      "generative_summary_len": 250,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "commit",
+        "test",
+        "kernel"
+      ],
+      "latency_gen_ms": 23936.63
+    },
+    {
+      "case_id": "digest_case_10_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        130,
+        131,
+        132,
+        133
+      ],
+      "heuristic_summary_len": 1249,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "1. **Claude's Turn 130**: Verified the plan dashboard (T129) and refactored salience (T128), both by Antigravity.\n2. **Deep's Turn 131**: Accepted the plan total audit and redirection plan -- Antigravity.\n3. **Claude's Turn 132**: Verified the commit by Deep (dfaf0e0)",
+      "generative_summary_len": 268,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "test",
+        "port",
+        "verificacion"
+      ],
+      "latency_gen_ms": 11126.02
+    },
+    {
+      "case_id": "digest_case_11_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        192,
+        193,
+        194,
+        195
+      ],
+      "heuristic_summary_len": 1235,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #equipo\n\nTranscript:\n[deep Turn 192]: Held-out set ampliado listo: 55 intents desde guild_audit_log (89 distintos, estratificados por longitud: 20 cortos, 20 medios, 15 largos). benchmarks/spikes/distilbert_complexity/heldout_intents.json",
+      "generative_summary_len": 247,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "commit",
+        "port",
+        "verificacion"
+      ],
+      "latency_gen_ms": 35684.99
+    },
+    {
+      "case_id": "digest_case_12_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        254,
+        255,
+        256,
+        257
+      ],
+      "heuristic_summary_len": 1249,
+      "heuristic_fact_coverage_pct": 50.0,
+      "generative_summary": "Channel: #equipo\n\nTranscript:\n[antigravity Turn 254]: **Pruebas Completadas: Pipeline Gemma-4-E2B ONNX Coordinador Verificado al 100% — Antigravity**\n\n@claude-code @deep @qwen @jose\n\nEjecutados los dos comandos de verificación del pipeline `G",
+      "generative_summary_len": 242,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "test",
+        "verificacion",
+        "commit",
+        "port"
+      ],
+      "latency_gen_ms": 17264.15
+    },
+    {
+      "case_id": "digest_case_13_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        315,
+        316,
+        317,
+        318
+      ],
+      "heuristic_summary_len": 1243,
+      "heuristic_fact_coverage_pct": 25.0,
+      "generative_summary": "Claude confirms P2, P3, and P4 as closed with real results. P2's coherence gate (Antigravity) was updated with commit e5af4ae, achieving 78.85% accuracy over 52 real cases with calibration v3. P4's router intents (Deep) was committed with c1af7d8, verified by Claude.",
+      "generative_summary_len": 267,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "test",
+        "kernel",
+        "verificacion"
+      ],
+      "latency_gen_ms": 8003.27
+    },
+    {
+      "case_id": "digest_case_14_equipo",
+      "channel_id": "equipo",
+      "turns": [
+        377,
+        378,
+        379,
+        380
+      ],
+      "heuristic_summary_len": 1152,
+      "heuristic_fact_coverage_pct": 66.7,
+      "generative_summary": "Channel: #equipo\n\nTranscript:\n\n[mimo Turn 377]: Fase 2 Zustand - progreso de Mimo\n\n**Fase 2 completada (parcialmente):**\n\n1. **Zustand 5.0.14 instalado** en dashboard\n2. **useAppStore creado** (src/stores/useAppStore.ts) - 21",
+      "generative_summary_len": 225,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "commit",
+        "kernel",
+        "verificacion"
+      ],
+      "latency_gen_ms": 19236.22
+    },
+    {
+      "case_id": "digest_case_15_general",
+      "channel_id": "general",
+      "turns": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "heuristic_summary_len": 621,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "The agent has successfully shut down the kernel in all three channel turns, indicating no further issues.",
+      "generative_summary_len": 105,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "commit"
+      ],
+      "latency_gen_ms": 2674.82
+    },
+    {
+      "case_id": "digest_case_16_general",
+      "channel_id": "general",
+      "turns": [
+        49,
+        50,
+        51,
+        52
+      ],
+      "heuristic_summary_len": 622,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n[agent-as-system Turn 49]: Kernel apagandose limpiamente (v0.14.0 commit d7613fa). Si era una ventana de despliegue, reintentad en ~60s.\n[agent-as-system Turn 50]: Kernel apagandose limpiamente (v0.14",
+      "generative_summary_len": 231,
+      "generative_fact_coverage_pct": 100.0,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 7096.57
+    },
+    {
+      "case_id": "digest_case_17_general",
+      "channel_id": "general",
+      "turns": [
+        97,
+        98,
+        99,
+        100
+      ],
+      "heuristic_summary_len": 1093,
+      "heuristic_fact_coverage_pct": 50.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n[claude-code Turn 97]: Confirmado por José: `marketplace.json`+`plugins/tylluan-connector/` era un scaffold de Codex (`.codex-plugin/plugin.json` lo delataba), sin trackear, sin coordinar en Coloquio. Eliminado por decisión explícita — no era parte de M",
+      "generative_summary_len": 284,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "commit",
+        "kernel",
+        "verificacion",
+        "scheduler"
+      ],
+      "latency_gen_ms": 24563.12
+    },
+    {
+      "case_id": "digest_case_18_general",
+      "channel_id": "general",
+      "turns": [
+        145,
+        146,
+        147,
+        148
+      ],
+      "heuristic_summary_len": 1231,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n[deep Turn 145]: \"P7 hecho, @claude. Reporte: \\n\\nSUITE NUEVA: tests/concurrency_load.rs (untracked, queda en working tree para ti). 2 tests:\\n- test_n_parallel_agents_full_stack_no_races: 8 agentes paralelos (bar",
+      "generative_summary_len": 244,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "commit",
+        "kernel"
+      ],
+      "latency_gen_ms": 50730.32
+    },
+    {
+      "case_id": "digest_case_19_general",
+      "channel_id": "general",
+      "turns": [
+        193,
+        194,
+        195,
+        196
+      ],
+      "heuristic_summary_len": 1075,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n193. [SHUTDOWN] Kernel apagandose limpiamente (v0.16.0 commit eee1a24). Si era una ventana de despliegue, reintentad en ~60s.\n194. @claude-code CERRADO expand/query con convención warnings (FASE 2). Commit",
+      "generative_summary_len": 236,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "test",
+        "clippy"
+      ],
+      "latency_gen_ms": 18192.18
+    },
+    {
+      "case_id": "digest_case_20_general",
+      "channel_id": "general",
+      "turns": [
+        241,
+        242,
+        243,
+        244
+      ],
+      "heuristic_summary_len": 1079,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n1. @jose @claude-code — Deep arranca H1 (rerank síncrono en async) + H2 (LightReranker::score) + H3 (guard anti-panic del cycle_in_flight). Archivos: handler_recall.rs, memory/silva/search.rs, handler_think no debería cambiar (ar",
+      "generative_summary_len": 260,
+      "generative_fact_coverage_pct": 0.0,
+      "generative_missing_facts": [
+        "scheduler",
+        "commit",
+        "kernel",
+        "clippy"
+      ],
+      "latency_gen_ms": 8725.16
+    },
+    {
+      "case_id": "digest_case_21_general",
+      "channel_id": "general",
+      "turns": [
+        290,
+        291,
+        292,
+        293
+      ],
+      "heuristic_summary_len": 1225,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n[agent Turn 290]: LO QUE ESTÁ BIEN (y es excelente): 1) The central question is correct: 'What does Tylluan bring to an external agent?' — not 'How many tests pass?' nor 'How many guilds do we have'. 2) The 4 experimental conditions (C0-C3) are correct: baseline, local, federated,",
+      "generative_summary_len": 312,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "port",
+        "verificacion",
+        "kernel"
+      ],
+      "latency_gen_ms": 120785.57
+    },
+    {
+      "case_id": "digest_case_22_general",
+      "channel_id": "general",
+      "turns": [
+        469,
+        470,
+        471,
+        472
+      ],
+      "heuristic_summary_len": 1075,
+      "heuristic_fact_coverage_pct": 100.0,
+      "generative_summary": "Channel: #general\n\nTranscript:\n[agent-as-system Turn 473]: [SHUTDOWN] Kernel apagandose limpiamente (v0.17.0 commit 56b98b3). Si era una ventana de despliegue, reintentad en ~60s.\n[buffy Turn 474]: T460 — @buffy entreg",
+      "generative_summary_len": 218,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "test",
+        "port"
+      ],
+      "latency_gen_ms": 21416.2
+    },
+    {
+      "case_id": "digest_case_23_dev",
+      "channel_id": "dev",
+      "turns": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "heuristic_summary_len": 1222,
+      "heuristic_fact_coverage_pct": 50.0,
+      "generative_summary": "1. [agent Turn 1]: Autocorrección + 3 fixes reales de la 3ª ronda de auditoría externa (2026-08-12), ambos commits ya verificados green en CI+CodeQL real: AUTOCORRECCIÓN (61716c8) y ROADMAP.md público ya reflejo v",
+      "generative_summary_len": 213,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "port",
+        "verificacion",
+        "test"
+      ],
+      "latency_gen_ms": 19979.59
+    },
+    {
+      "case_id": "digest_case_24_dev",
+      "channel_id": "dev",
+      "turns": [
+        3,
+        4,
+        5,
+        6
+      ],
+      "heuristic_summary_len": 1222,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #dev\n\nTranscript:\n[agent Turn 3]: Ciclo completo de auditorías externas del día (2026-08-12) cerrado. 4ª ronda: auth.rs::extract_token ahora emite warn!() al usar token por query string (no header), nuevo test de regresión para el fallback a admin de current_",
+      "generative_summary_len": 268,
+      "generative_fact_coverage_pct": 25.0,
+      "generative_missing_facts": [
+        "kernel",
+        "commit",
+        "clippy"
+      ],
+      "latency_gen_ms": 8443.41
+    },
+    {
+      "case_id": "digest_case_25_dev",
+      "channel_id": "dev",
+      "turns": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "heuristic_summary_len": 1222,
+      "heuristic_fact_coverage_pct": 75.0,
+      "generative_summary": "Channel: #dev\n\nTranscript:\n[agent Turn 5]: Cierre del ciclo completo de hoy (2026-08-12), 4 entregas de la flota, todas verificadas independientemente contra el código real antes de comitear -- nada aceptado de oficio, cada una compilada+testeada+clippy limp",
+      "generative_summary_len": 258,
+      "generative_fact_coverage_pct": 50.0,
+      "generative_missing_facts": [
+        "commit",
+        "port"
+      ],
+      "latency_gen_ms": 13765.0
+    }
+  ],
+  "metrics": {
+    "heuristic_mean_coverage_pct": 76.0,
+    "generative_mean_coverage_pct": 32.0,
+    "coverage_delta_pp": -44.0,
+    "latency_ms": {
+      "min": 2674.82,
+      "p50": 21416.2,
+      "p95": 120785.57,
+      "p99": 233447.77,
+      "max": 233447.77,
+      "mean": 46356.54,
+      "stddev": 52402.13
+    },
+    "verdict": "NO-GO (Latency Bound)",
+    "verdict_rationale": "CPU Latency FAILED: p50 is 21416.2ms (exceeds 2000ms threshold by 10.7x). Fact coverage delta: -44.0 pp.",
+    "quality_passes": false,
+    "latency_passes": false
+  }
+}

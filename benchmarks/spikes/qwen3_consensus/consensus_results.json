@@ -1,0 +1,512 @@
+{
+  "timestamp": "2026-09-13 18:24:30",
+  "system_info": {
+    "platform": "Windows",
+    "processor": "Intel64 Family 6 Model 79 Stepping 1, GenuineIntel",
+    "cpu_cores_logical": 56,
+    "cpu_cores_physical": 28,
+    "total_ram_gb": 221.88,
+    "python_version": "3.14.3"
+  },
+  "model_file": "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+  "model_path": "C:\\Users\\FoRJa/.cache/huggingface/hub/models--bartowski--Qwen2.5-0.5B-Instruct-GGUF/snapshots\\41ba88dbac95fed2528c92514c131d73eb5a174b\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+  "total_cases": 30,
+  "pre_registered_criteria": {
+    "min_precision_delta_pp": 5.0,
+    "max_p50_latency_ms": 200.0,
+    "safety_gate_threshold": 0.85
+  },
+  "cases_detail": [
+    {
+      "case_id": "case_01_kernel_port",
+      "topic": "kernel_port",
+      "type": "temporal_update",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_port_legacy] Tylluan kernel listens on port 4000 for all incoming HTTP and MCP requests.\n- [node_port_current] Tylluan single binary kernel v0.17.0 listens directly on port 47004 without zero-downtime proxy.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Tylluan kernel listens on port 47004 directly without zero-downtime proxy.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 114585.07,
+      "latency_gate_ms": 6.46,
+      "coherence_score": 0.3791,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_02_degree_bias",
+      "topic": "degree_bias_formula",
+      "type": "bugfix_update",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_deg_old] Graph retrieval multiplies PageRank score by node degree to boost highly connected hub nodes.\n- [node_deg_fix] local_query_graph uses degree penalty formula pr_score / (1 + deg * 0.1) to penalize generic hubs.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Degree bias formula is used to penalize generic hubs by multiplying PageRank score by node degree.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "penalty",
+        "pr_score / (1 + deg * 0.1)"
+      ],
+      "latency_gen_ms": 76575.23,
+      "latency_gate_ms": 5.19,
+      "coherence_score": 0.2613,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_03_vector_dim",
+      "topic": "vector_dimensions",
+      "type": "invariant_conflict",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_dim_768] SilvaDB vector embeddings are configured with vector_dimensions = 768 for compatibility with standard BERT models.\n- [node_dim_1024] CONTRACT-01 invariant strictly enforces BGE-M3 at 1024 dimensions. Setting vector_dimensions = 768 is strictly forbidden.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Vector_dimensions can be set to 768 for compatibility with standard BERT models, but strictly enforcing BGE-M3 at 1024 dimensions is forbidden.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 74170.41,
+      "latency_gate_ms": 5.14,
+      "coherence_score": 0.3061,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_04_test_count",
+      "topic": "test_suite_status",
+      "type": "temporal_update",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_tests_v13] Tylluan test suite has 388 passing tests across kernel, link and fsrs crates.\n- [node_tests_v17] Tylluan v0.17.0 verification confirms 790 total passing tests (709 kernel + 69 link + 12 fsrs).\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Tylluan v0.17.0 verification confirms 790 total passing tests across kernel, link, and fsrs crates.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "709 kernel",
+        "69 link",
+        "12 fsrs"
+      ],
+      "latency_gen_ms": 73121.29,
+      "latency_gate_ms": 3.39,
+      "coherence_score": 0.5343,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_05_identity_manager",
+      "topic": "identity_subsystem",
+      "type": "architecture_deprecation",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_id_mgr] IdentityManager in memory/identity.rs manages agent trust, peer identity and authentication keys.\n- [node_profile_store] IdentityManager is inactive and deprecated; agent identities are now managed by AgentProfileStore.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "IdentityManager is now managed by AgentProfileStore.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "inactive"
+      ],
+      "latency_gen_ms": 49102.89,
+      "latency_gate_ms": 3.82,
+      "coherence_score": 0.2713,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_06_dream_cycle",
+      "topic": "memory_consolidation_scheduler",
+      "type": "architecture_deprecation",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_dream_bg] DreamCycle::start_background_scheduler() in memory/dream_cycle.rs runs periodic background consolidation.\n- [node_night_cron] DreamCycle background scheduler is inactive; consolidation is centralized in NightConsolidation via cron in main.rs.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "The memory consolidation scheduler is active and centralized in the main.rs file.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "NightConsolidation",
+        "inactive",
+        "cron"
+      ],
+      "latency_gen_ms": 32092.79,
+      "latency_gate_ms": 7.32,
+      "coherence_score": 0.1759,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_07_dashboard_build",
+      "topic": "package_manager_dashboard",
+      "type": "operational_rule",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_npm_inst] Dashboard dependencies can be installed using npm install in the dashboard directory.\n- [node_pnpm_rule] Dashboard strictly enforces pnpm. Using npm is prohibited as divergent lockfiles broke production builds.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "To install package manager dashboard dependencies, use npm install in the dashboard directory.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "pnpm"
+      ],
+      "latency_gen_ms": 57496.71,
+      "latency_gate_ms": 4.75,
+      "coherence_score": 0.2653,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_08_coherence_gate_layer4",
+      "topic": "coherence_gate_reasoning",
+      "type": "state_update",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_gate_inactive] CoherenceGate Layer 4 LLM reasoning gate is planned but not wired into recall pipeline.\n- [node_gate_live] CoherenceGate Layer 4 is wired live in observation mode using calibrated v3 prompt against llama_backend.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "CoherenceGate Layer 4 is currently wired live in observation mode using calibrated v3 prompt against llama_backend.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 83450.23,
+      "latency_gate_ms": 7.27,
+      "coherence_score": 0.4834,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_09_sovereign_tools",
+      "topic": "mcp_sovereign_tools",
+      "type": "contract_invariant",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_tools_7] Tylluan exposes 7 MCP tools including tylluan_search, tylluan_execute, tylluan_status and custom helpers.\n- [node_tools_5] CONTRACT-01 strictly enforces exactly 5 sovereign tools: tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Tylluan supports 7 sovereign tools: tylluan_search, tylluan_execute, tylluan_status, custom helpers, tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "5"
+      ],
+      "latency_gen_ms": 167890.63,
+      "latency_gate_ms": 4.08,
+      "coherence_score": 0.3496,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_10_dev_mode_security",
+      "topic": "network_security_binding",
+      "type": "security_rule",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_dev_lan] For remote team debugging, set host = '0.0.0.0' with dev_mode = true in tylluan.toml.\n- [node_dev_ban] CRITICAL SECURITY RULE: NEVER set host = '0.0.0.0' together with dev_mode = true as it causes unauthenticated LAN RCE.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Never set host = '0.0.0.0' together with dev_mode = true as it causes unauthenticated LAN RCE.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 72467.6,
+      "latency_gate_ms": 3.62,
+      "coherence_score": 0.5048,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_11_gossip_encryption",
+      "topic": "gossip_protocol_security",
+      "type": "security_upgrade",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_gossip_plain] Mesh gossip messages are broadcast as plaintext JSON over UDP/mDNS.\n- [node_gossip_noise] Since v0.15.0, mesh gossip mandates Noise NK encryption for production peers; plaintext is rejected.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Mesh gossip messages are broadcast as plaintext JSON over UDP/mDNS.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "Noise NK",
+        "encryption",
+        "v0.15.0"
+      ],
+      "latency_gen_ms": 39837.6,
+      "latency_gate_ms": 2.68,
+      "coherence_score": 0.5405,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_12_docs_site_port",
+      "topic": "docs_site_config",
+      "type": "port_assignment",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_docs_3000] The Next.js architectural documentation visualizer runs on default port 3000.\n- [node_docs_3010] The Next.js docs-site visualizer runs on port 3010 with allowedDevOrigins configured for localhost.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "The Next.js docs-site visualizer runs on port 3010 with allowedDevOrigins configured for localhost.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 72583.76,
+      "latency_gate_ms": 3.7,
+      "coherence_score": 0.6366,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_13_consensus_engines",
+      "topic": "consensus_engine_duplicity",
+      "type": "scope_distinction",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_cons_sync] crates/tylluan-kernel/src/consensus.rs is the deterministic freshness engine for federation sync.\n- [node_cons_mem] crates/tylluan-kernel/src/memory/consensus.rs handles semantic consolidation and cognitive contradiction resolution.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "The deterministic freshness engine for federation sync uses the deterministic freshness engine for consensus, while the semantic consolidation and cognitive contradiction resolution engine handles semantic consolidation and cognitive contradiction resolution.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "memory/consensus.rs"
+      ],
+      "latency_gen_ms": 58682.78,
+      "latency_gate_ms": 3.73,
+      "coherence_score": 0.4243,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_14_token_storage",
+      "topic": "auth_token_storage",
+      "type": "security_rule",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_tok_toml] Bearer authentication tokens should be saved in tylluan.toml under [security.auth_token].\n- [node_tok_file] CRITICAL RULE: Bearer tokens must NEVER be stored in tracked files; store only in gitignored .tylluan-token.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Bearer authentication tokens should be saved in tylluan.toml under [security.auth_token].",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        ".tylluan-token",
+        "gitignored"
+      ],
+      "latency_gen_ms": 98444.6,
+      "latency_gate_ms": 3.44,
+      "coherence_score": 0.555,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_15_agent_runtime_deep",
+      "topic": "agent_fleet_deep",
+      "type": "role_specification",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_deep_ui] Deep is assigned to dashboard React frontend development and UI primitives.\n- [node_deep_rust] Deep runs on OpenCode and is responsible for Rust backend crates and Python guilds for complex features and bugfixes.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Deep is assigned to the dashboard React frontend development and UI primitives, while Deep runs on OpenCode and is responsible for Rust backend crates and Python guilds for complex features and bugfixes.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 102043.47,
+      "latency_gate_ms": 7.36,
+      "coherence_score": 0.6696,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_16_agent_runtime_antigravity",
+      "topic": "agent_fleet_antigravity",
+      "type": "role_specification",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_agy_rust] Antigravity is responsible for implementing core Rust kernel networking and transport handlers.\n- [node_agy_ui] Antigravity operates in Gemini/MCP runtime for UI/UX dashboard tasks and empirical benchmarking.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Antigravity is responsible for implementing core Rust kernel networking and transport handlers.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "Gemini",
+        "benchmarking"
+      ],
+      "latency_gen_ms": 101165.87,
+      "latency_gate_ms": 3.61,
+      "coherence_score": 0.5294,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_17_adr010_punto_a",
+      "topic": "adr010_punto_a_status",
+      "type": "spike_outcome",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_pt_a_pass] ADR-010 Punto A DistilBERT complexity classifier achieved 86.36% routing decision accuracy (+9.09 pp over heuristic).\n- [node_pt_a_nogo] ADR-010 Punto A received a NO-GO decision because DistilBERT CPU latency was 38.22ms p50, exceeding the 20ms threshold.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "ADR-010 Punto A achieved 86.36% routing decision accuracy, with a 38.22ms p50 CPU latency exceeding the threshold.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "NO-GO"
+      ],
+      "latency_gen_ms": 65328.79,
+      "latency_gate_ms": 3.45,
+      "coherence_score": 0.362,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_18_sep_cma_es_coordinator",
+      "topic": "coordinator_optimization",
+      "type": "spike_outcome",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_cma_sim] SepCMA-trained MLP achieved 56.2% win rate on held-out simulated planning scenarios.\n- [node_cma_nogo] In live HTTP testing against the kernel, SepCMA MLP achieved only 33.3% win rate vs fixed pipeline, resulting in NO-GO.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "SepCMA MLP achieved 56.2% win rate on held-out simulated planning scenarios, outperforming fixed pipeline.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "33.3%",
+        "NO-GO"
+      ],
+      "latency_gen_ms": 26131.11,
+      "latency_gate_ms": 2.65,
+      "coherence_score": 0.4617,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_19_guild_registration",
+      "topic": "guild_discovery_process",
+      "type": "developer_instruction",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_guild_auto] Creating a new Python file in guilds/ is automatically discovered and registered by discover_guilds().\n- [node_guild_3places] New Python guilds must be registered in 3 locations: main.rs lazy_guilds, router/catalog.rs weights, and router/catalog.rs names list; discover_guilds() does not scan subfolders.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "New Python guilds must be registered in 3 locations: main.rs, lazy_guilds, router/catalog.rs, and names list; discover_guilds() scans subfolders as well.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 18107.45,
+      "latency_gate_ms": 2.54,
+      "coherence_score": 0.3915,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_20_teb_qualitative_status",
+      "topic": "teb_benchmark_status",
+      "type": "project_status",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_teb_100] TEB-Pilot-50 achieved 100% Task Success Rate in qualitative blind evaluation.\n- [node_teb_paused] TEB qualitative blind evaluation is currently paused for a dedicated session due to ground truth fallback embedding; quantitative telemetry remains valid.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "TEB-Pilot-50 achieved 100% Task Success Rate in qualitative blind evaluation, while TEB qualitative blind evaluation is currently paused for a dedicated session.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 11585.13,
+      "latency_gate_ms": 3.59,
+      "coherence_score": 0.5794,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_21_memory_decay_half_life",
+      "topic": "memory_decay_rate",
+      "type": "parameter_specification",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_decay_default] SilvaDB general episodic memory decay uses a base half-life of T½ = 14 days.\n- [node_decay_penalty] Consensus engine applies an accelerated 7-day penalty decay (604800s) to losing nodes.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "The memory decay rate is 7-day, with an accelerated penalty decay of 604800 seconds.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "14 days",
+        "half-life"
+      ],
+      "latency_gen_ms": 3650.13,
+      "latency_gate_ms": 2.54,
+      "coherence_score": 0.1517,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_22_fsrs_version",
+      "topic": "spaced_repetition_model",
+      "type": "version_specification",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_fsrs_4] Tylluan spaced repetition engine uses FSRS-4 default parameters for interval calculation.\n- [node_fsrs_5] Tylluan memory engine is upgraded to FSRS-5 in crates/tylluan-fsrs for cognitive retention scheduling.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "FSRS-5 is the updated version of the Tyluan spaced repetition model engine.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "crates/tylluan-fsrs"
+      ],
+      "latency_gen_ms": 788.25,
+      "latency_gate_ms": 2.77,
+      "coherence_score": 0.095,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_23_coloquio_storage",
+      "topic": "coloquio_mailbox_db",
+      "type": "file_location",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_col_silva] Coloquio channel messages are stored directly as graph nodes in data/silva.db.\n- [node_col_mailbox] Coloquio multi-agent chat messages and turns are persisted in SQLite database data/mailbox.db.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "coloquio_mailbox_db contains both direct storage of channel messages as graph nodes and persistent storage of multi-agent chat messages and turns in SQLite databases.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "data/mailbox.db",
+        "data/silva.db"
+      ],
+      "latency_gen_ms": 2530.09,
+      "latency_gate_ms": 2.34,
+      "coherence_score": 0.2278,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_24_noise_handshake",
+      "topic": "p2p_handshake_protocol",
+      "type": "protocol_variant",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_noise_nk] Mesh gossip broadcast uses Noise NK with pre-shared server public key.\n- [node_noise_xk] Direct P2P TCP dispatch sessions use Noise XK with mutual Ed25519-to-X25519 identity verification.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "P2P (Peer-to-Peer) communication protocols, such as TCP (Transmission Control Protocol) and UDP (User Datagram Protocol), use Noise NK (Noiseless Key) with pre-shared server public keys for mesh gossip broadcasting and Noise XK (Noiseless Key) with mutual Ed25519-to-X2",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 1735.99,
+      "latency_gate_ms": 2.72,
+      "coherence_score": 0.24,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_25_api_v1_split",
+      "topic": "codebase_refactoring",
+      "type": "codebase_history",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_api_monolith] All HTTP REST endpoints are defined in a single monolithic file crates/tylluan-kernel/src/transport/api_v1.rs (3114 lines).\n- [node_api_split] api_v1.rs was refactored and modularized into crates/tylluan-kernel/src/transport/http/api_v1/ across domain modules.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "All HTTP REST endpoints are defined in a single monolithic file crates/tylluan-kernel/src/transport/api_v1.rs (3114 lines).",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "modular",
+        "split"
+      ],
+      "latency_gen_ms": 1069.11,
+      "latency_gate_ms": 2.61,
+      "coherence_score": 0.6148,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_26_acl_design",
+      "topic": "security_acl_architecture",
+      "type": "security_architecture",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_acl_open] API endpoints default to allow-all if no explicit rule matches the incoming request.\n- [node_acl_closed] ACL is designed strictly fail-closed: unauthenticated or unmatched requests are denied by default.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "ACL is designed to be fail-closed, allowing unauthenticated or unmatched requests to be denied by default.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 711.31,
+      "latency_gate_ms": 3.46,
+      "coherence_score": 0.2749,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_27_night_consolidation_phases",
+      "topic": "night_consolidation_architecture",
+      "type": "component_specification",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_night_1phase] Night consolidation runs a single pass of embedding re-clustering.\n- [node_night_5phase] NightConsolidation executes 5 sequential phases: decay pruning, semantic clustering, contradiction consensus, graph compaction, and episodic summarization.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Night consolidation runs a single pass of embedding re-clustering.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "5",
+        "NightConsolidation"
+      ],
+      "latency_gen_ms": 618.57,
+      "latency_gate_ms": 2.54,
+      "coherence_score": 0.5106,
+      "gate_passed": true
+    },
+    {
+      "case_id": "case_28_model_recommendation_slot2",
+      "topic": "models_toml_slot2",
+      "type": "model_selection",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_slot2_smollm] models.toml recommends SmolLM2-360M as the primary embedded SLM for memory consensus.\n- [node_slot2_qwen] models.toml and ADR-010 assign Qwen3-0.6B / Qwen2.5-0.5B as the recommended slot 2 model for contradiction synthesis.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "SmolLM2-360M is recommended as the primary embedded SLM for memory consensus, while Qwen3-0.6B and Qwen2.5-0.5B are assigned as the recommended slot 2 models.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 1492.25,
+      "latency_gate_ms": 2.37,
+      "coherence_score": 0.3921,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_29_arm64_portability",
+      "topic": "platform_support_ci",
+      "type": "ci_pipeline",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_ci_x86_only] CI only validates x86_64-unknown-linux-gnu and windows-x86_64 targets.\n- [node_ci_arm64] CI includes a dedicated portability-check job verifying cargo check for aarch64-unknown-linux-gnu (Raspberry Pi 4 target).\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Platform support for CI includes validation for x86_64-unknown-linux-gnu and ARM64-unknown-linux-gnueabihf targets.",
+      "generative_resolved": false,
+      "generative_missing_facts": [
+        "aarch64",
+        "Raspberry Pi",
+        "portability"
+      ],
+      "latency_gen_ms": 981.64,
+      "latency_gate_ms": 2.57,
+      "coherence_score": 0.2584,
+      "gate_passed": false
+    },
+    {
+      "case_id": "case_30_mit_license_sovereignty",
+      "topic": "license_and_dependencies",
+      "type": "foundational_invariant",
+      "heuristic_synthesis": "Synthesized Knowledge (2 sources):\n- [node_lic_cloud] Tylluan relies on OpenAI / Anthropic cloud APIs in the critical recall and reasoning path.\n- [node_lic_mit] Tylluan is an MIT-licensed, sovereign system with zero mandatory cloud dependencies in the critical path.\n",
+      "heuristic_resolved": false,
+      "generative_synthesis": "Tylluan is an MIT-licensed, sovereign system with zero mandatory cloud dependencies in the critical path.",
+      "generative_resolved": true,
+      "generative_missing_facts": [],
+      "latency_gen_ms": 909.0,
+      "latency_gate_ms": 2.35,
+      "coherence_score": 0.5745,
+      "gate_passed": true
+    }
+  ],
+  "metrics": {
+    "heuristic_accuracy_pct": 0.0,
+    "generative_accuracy_pct": 40.0,
+    "accuracy_delta_pp": 40.0,
+    "coherence_gate_pass_rate_pct": 46.67,
+    "latency_ms": {
+      "min": 618.57,
+      "p50": 49102.89,
+      "p95": 114585.07,
+      "p99": 167890.63,
+      "max": 167890.63,
+      "mean": 46978.32,
+      "stddev": 44280.57
+    },
+    "verdict": "NO-GO (Latency Bound)",
+    "verdict_rationale": "Quality PASSED (+40.0 pp >= +5.0 pp), but CPU Latency FAILED: p50 is 49102.9ms (exceeds 200ms threshold by 245.5x).",
+    "accuracy_passes": true,
+    "latency_passes": false
+  }
+}
