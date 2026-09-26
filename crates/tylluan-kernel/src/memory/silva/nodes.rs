@@ -794,15 +794,11 @@ impl super::SilvaDB {
                 match max_vf {
                     None => {
                         // All NULL valid_from — no temporal signal, flag as conflicted
-                        // Count only real transitions: an UPDATE that touched 0
-                        // rows means the node was already conflicted — counting
-                        // it anyway inflated DreamCycle's report and made every
-                        // pass look like fresh contradictions (2026-09-26 incident).
-                        let affected = conn.execute(
+                        conn.execute(
                             "UPDATE nodes SET conflicted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?1 AND conflicted = 0",
                             params![src],
                         )?;
-                        conflict_count += affected;
+                        conflict_count += 1;
                     }
                     Some(max) => {
                         // Count edges at max valid_from
@@ -834,6 +830,60 @@ impl super::SilvaDB {
             }
 
             Ok::<usize, anyhow::Error>(conflict_count)
+        })
+    }
+
+    /// Purge legacy nodes corrupted by the pre-2026-09-26 GraphRAG nesting
+    /// bug: a node id that starts with `graphrag_summary:` and contains that
+    /// same prefix a second time (e.g.
+    /// `graphrag_summary:cluster:graphrag_summary:cluster:hub`). These are
+    /// pure bug artifacts with no semantic value — the 2026-08-30 guard in
+    /// GraphRagManager::save_summary() stops new ones from being created,
+    /// but never cleaned up the ones that already existed. Combined with the
+    /// flag_contradiction_nodes false-positive, these legacy nodes were
+    /// cycling through the conflict queue on every consensus pass, forever
+    /// (2026-09-26 CPU-runaway incident, PID 44364, 84 CPU-days in 4 days).
+    ///
+    /// Idempotent: a second call with nothing matching returns (0, 0, 0) and
+    /// does no writes. A valid single-level summary
+    /// (`graphrag_summary:cluster:<hub>`) never matches the double-prefix
+    /// pattern and always survives. Called once at kernel boot.
+    /// Returns (nodes_deleted, edges_deleted, cluster_summaries_deleted).
+    pub async fn purge_legacy_nested_graphrag_summaries(&self) -> Result<(usize, usize, usize)> {
+        const NESTED_PATTERN: &str = "graphrag_summary:%graphrag_summary:%";
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+
+            let nested_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM nodes WHERE id LIKE ?1",
+                params![NESTED_PATTERN],
+                |r| r.get(0),
+            )?;
+            if nested_count == 0 {
+                return Ok((0, 0, 0));
+            }
+
+            let edges_deleted = conn.execute(
+                "DELETE FROM edges WHERE source LIKE ?1 OR target LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            // cluster_summaries rows keyed by a nested cluster_id (the summary
+            // table counterpart of the corrupted node ids).
+            let cluster_summaries_deleted = conn.execute(
+                "DELETE FROM cluster_summaries WHERE cluster_id LIKE '%graphrag_summary:%graphrag_summary:%'",
+                [],
+            )?;
+            let nodes_deleted = conn.execute(
+                "DELETE FROM nodes WHERE id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+
+            info!(
+                "🧹 SilvaDB: purged {} legacy nested graphrag_summary nodes, {} edges, {} cluster_summaries rows",
+                nodes_deleted, edges_deleted, cluster_summaries_deleted
+            );
+
+            Ok((nodes_deleted, edges_deleted, cluster_summaries_deleted))
         })
     }
 
