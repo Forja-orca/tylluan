@@ -1741,6 +1741,7 @@ async fn main() -> anyhow::Result<()> {
         server_arc.clone(),
         data_dir.to_path_buf(),
         matcher.clone(),
+        config.night.clone(),
     ));
 
 
@@ -1855,6 +1856,7 @@ async fn run_night_consolidation_loop(
     server: Arc<RwLock<TylluanServer>>,
     data_dir: PathBuf,
     matcher: Arc<GuildMatcher>,
+    night_config: tylluan_kernel::config::NightConfig,
 ) {
     use tylluan_kernel::memory::night::{
         PhaseOrchestrator, PhaseContext,
@@ -1881,7 +1883,7 @@ async fn run_night_consolidation_loop(
         // Phase 0: opt-in (default OFF via [eval] slm_society_eval_enabled).
         // Evaluates 3-arm SLM society benchmark (Arm A/B/C) on a 24h cadence.
         Box::new(SlmSocietyPhase),
-    ]);
+    ], night_config.max_parallel_phases);
 
     let ctx = PhaseContext {
         silva,
@@ -1892,7 +1894,7 @@ async fn run_night_consolidation_loop(
         matcher,
     };
 
-    let mut interval = tokio::time::interval(Duration::from_secs(1800));
+    let mut interval = tokio::time::interval(Duration::from_secs(night_config.interval_secs));
     loop {
         interval.tick().await;
         orchestrator.run_all(&ctx).await;
