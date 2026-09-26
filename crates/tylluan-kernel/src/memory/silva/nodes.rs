@@ -751,10 +751,22 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
 
-            // Fetch all edges (except related_to) ordered by source, type, valid_from
+            // Fetch all edges ordered by source, type, valid_from. Excludes
+            // predicates that are intentionally one-to-many by design, not
+            // factual contradictions: `related_to` (generic association),
+            // `member_of` (a GraphRAG cluster summary legitimately links to
+            // every one of its members — graph_rag.rs save_summary), and
+            // `remembers` (an agent identity node legitimately links to every
+            // thing it has remembered — main.rs / handler_remember.rs).
+            // Regression: omitting either exclusion re-creates the 2026-09-26
+            // CPU runaway where every GraphRAG summary and every agent identity
+            // node was flagged conflicted=1 on every pass, forever (see tests
+            // flag_contradiction_nodes_ignores_member_of_fan_out /
+            // flag_contradiction_nodes_ignores_remembers_fan_out in this same
+            // file's #[cfg(test)] mod tests).
             let mut stmt = conn.prepare(
                 "SELECT source, type, target, valid_from FROM edges
-                 WHERE type != 'related_to'
+                 WHERE type != 'related_to' AND type != 'member_of' AND type != 'remembers'
                  ORDER BY source, type, valid_from ASC NULLS LAST"
             )?;
             let rows: Vec<(String, String, String, Option<i64>)> = stmt.query_map([], |row| {
@@ -819,6 +831,104 @@ impl super::SilvaDB {
             }
 
             Ok::<usize, anyhow::Error>(conflict_count)
+        })
+    }
+
+    /// Purge legacy nodes corrupted by the pre-2026-09-26 GraphRAG nesting
+    /// bug: a node id that starts with `graphrag_summary:` and contains that
+    /// same prefix a second time (e.g.
+    /// `graphrag_summary:cluster:graphrag_summary:cluster:hub`). These are
+    /// pure bug artifacts with no semantic value -- the 2026-08-30 guard in
+    /// GraphRagManager::save_summary() stops new ones from being created,
+    /// but never cleaned up the ones that already existed. Combined with the
+    /// flag_contradiction_nodes false-positive, these legacy nodes were
+    /// cycling through the conflict queue on every consensus pass, forever
+    /// (2026-09-26 CPU-runaway incident, PID 44364, 84 CPU-days in 4 days).
+    ///
+    /// Idempotent: a second call with nothing matching returns (0, 0, 0) and
+    /// does no writes. A valid single-level summary
+    /// (`graphrag_summary:cluster:<hub>`) never matches the double-prefix
+    /// pattern and always survives. Called once at kernel boot.
+    ///
+    /// Follows the same satellite-table contract as `delete_node()` — edges,
+    /// node_traces, node_embeddings, node_sparse_embeddings, nodes, and
+    /// nodes_fts are all cleaned up (foreign keys have no `ON DELETE CASCADE`
+    /// enforcement here since `PRAGMA foreign_keys` is never enabled on this
+    /// connection), plus the GraphRAG-specific cluster_summaries table.
+    /// Everything except nodes_fts (which is keyed by rowid, not id) happens
+    /// inside one transaction.
+    /// Returns (nodes_deleted, edges_deleted, cluster_summaries_deleted).
+    pub async fn purge_legacy_nested_graphrag_summaries(&self) -> Result<(usize, usize, usize)> {
+        const NESTED_PATTERN: &str = "graphrag_summary:%graphrag_summary:%";
+        // `find_clusters()` (graph_rag.rs) excludes any `graphrag_summary:%`-prefixed
+        // id from the hub-candidate pool, so no *valid* cluster_id can ever contain
+        // that substring — only corrupted ones can. A single occurrence is enough:
+        // graph_rag.rs builds `node_id = format!("graphrag_summary:{cluster_id}")`,
+        // i.e. one extra `graphrag_summary:` prefix on the node id vs. the
+        // cluster_id it's keyed by, so a doubly-nested node id
+        // (`graphrag_summary:cluster:graphrag_summary:cluster:X`) has a
+        // cluster_id of `cluster:graphrag_summary:cluster:X` — containing the
+        // marker only once.
+        const CLUSTER_SUMMARY_PATTERN: &str = "%graphrag_summary:%";
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+
+            let mut stmt = conn.prepare("SELECT id, rowid FROM nodes WHERE id LIKE ?1")?;
+            let matches: Vec<(String, i64)> = stmt
+                .query_map(params![NESTED_PATTERN], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(stmt);
+
+            if matches.is_empty() {
+                return Ok((0, 0, 0));
+            }
+
+            let fts_rowids: Vec<i64> = matches.iter().map(|(_, rowid)| *rowid).collect();
+
+            let tx = conn.unchecked_transaction()?;
+            let edges_deleted = tx.execute(
+                "DELETE FROM edges WHERE source LIKE ?1 OR target LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            tx.execute(
+                "DELETE FROM node_traces WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            tx.execute(
+                "DELETE FROM node_embeddings WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            tx.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            // cluster_summaries rows keyed by a nested cluster_id (the summary
+            // table counterpart of the corrupted node ids). GraphRAG-specific,
+            // so delete_node() doesn't need to know about it.
+            let cluster_summaries_deleted = tx.execute(
+                "DELETE FROM cluster_summaries WHERE cluster_id LIKE ?1",
+                params![CLUSTER_SUMMARY_PATTERN],
+            )?;
+            let nodes_deleted = tx.execute(
+                "DELETE FROM nodes WHERE id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            tx.commit()?;
+
+            // nodes_fts joins by rowid, not id (search.rs), so it must be cleaned
+            // up outside the transaction by captured rowid, same non-fatal
+            // best-effort pattern as delete_node().
+            for rowid in fts_rowids {
+                conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", params![rowid]).ok();
+            }
+
+            info!(
+                "🧹 SilvaDB: purged {} legacy nested graphrag_summary nodes, {} edges, {} cluster_summaries rows",
+                nodes_deleted, edges_deleted, cluster_summaries_deleted
+            );
+
+            Ok((nodes_deleted, edges_deleted, cluster_summaries_deleted))
         })
     }
 
@@ -1445,5 +1555,163 @@ pub fn build_contextual_text(metadata_json: &str, content: &str) -> String {
         (Some(s), Some(h)) => format!("[{s} > {h}]\n{content}"),
         (Some(s), None)    => format!("[{s}]\n{content}"),
         _                  => content.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    // Regression test for the CPU-runaway incident found live 2026-09-26:
+    // flag_contradiction_nodes() flagged every GraphRAG summary node and
+    // every agent identity node as conflicted=1 on every pass, because it
+    // treated the intentional one-to-many fan-out of `member_of` and
+    // `remembers` edges as a factual contradiction (>1 distinct target for
+    // the same predicate). ConsensusEngine::resolve_conflicts() then
+    // unmarked them, and the next pass re-marked them — a perpetual loop
+    // that pinned CPU at ~2000% sustained. This locks in the exclusion so
+    // it can't silently regress.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_ignores_member_of_fan_out() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("summary_hub", "concept", "a cluster summary", "{}").await.unwrap();
+        for i in 0..5 {
+            let member_id = format!("member_{i}");
+            db.upsert_node(&member_id, "memory", "a member node", "{}").await.unwrap();
+            db.add_edge("summary_hub", &member_id, "member_of", 1.0, "{}").await.unwrap();
+        }
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("summary_hub").await.unwrap().unwrap();
+        assert!(
+            !node.conflicted,
+            "member_of fan-out (one summary, many members) must never be flagged as a contradiction"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_ignores_remembers_fan_out() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("agent_memory:claude-code", "agent_identity", "agent identity", "{}").await.unwrap();
+        for i in 0..5 {
+            let memory_id = format!("memory:{i}");
+            db.upsert_node(&memory_id, "memory", "a remembered thing", "{}").await.unwrap();
+            db.add_edge("agent_memory:claude-code", &memory_id, "remembers", 1.0, "{}").await.unwrap();
+        }
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("agent_memory:claude-code").await.unwrap().unwrap();
+        assert!(
+            !node.conflicted,
+            "remembers fan-out (one agent identity, many remembered things) must never be flagged as a contradiction"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_still_flags_real_contradictions() {
+        // Genuine contradiction: same predicate, two different targets, both
+        // with NULL valid_from — the exclusion must not swallow real cases.
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("claim_a", "concept", "a claim", "{}").await.unwrap();
+        db.upsert_node("target_1", "concept", "target one", "{}").await.unwrap();
+        db.upsert_node("target_2", "concept", "target two", "{}").await.unwrap();
+        db.add_edge("claim_a", "target_1", "asserts", 1.0, "{}").await.unwrap();
+        db.add_edge("claim_a", "target_2", "asserts", 1.0, "{}").await.unwrap();
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("claim_a").await.unwrap().unwrap();
+        assert!(
+            node.conflicted,
+            "a genuine same-predicate contradiction must still be flagged"
+        );
+    }
+
+    // Regression test for the legacy-cleanup half of the 2026-09-26 CPU
+    // runaway fix: nodes created before the flag_contradiction_nodes fix
+    // (Task 1) are already corrupted with nested graphrag_summary: ids and
+    // must be purged on startup, without touching a valid single-level
+    // summary or its member_of edges.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn purge_legacy_nested_graphrag_summaries_removes_only_nested() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+
+        // A valid, single-level summary -- must survive. "summary" is a
+        // drift-sensitive type (DRIFT_SENSITIVE_TYPES) so it must go through
+        // upsert_node_with_validity with allow_drift=true, same as the real
+        // internal caller (GraphRagManager::save_summary).
+        db.upsert_node_with_validity(
+            "graphrag_summary:cluster:hub_a", "summary", "a valid summary", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+        db.upsert_node("member_a", "memory", "a member", "{}").await.unwrap();
+        db.add_edge("graphrag_summary:cluster:hub_a", "member_a", "member_of", 1.0, "{}").await.unwrap();
+
+        // A legacy corrupted, doubly-nested summary -- must be purged.
+        let nested_id = "graphrag_summary:cluster:graphrag_summary:cluster:hub_b";
+        db.upsert_node_with_validity(
+            nested_id, "summary", "a corrupted nested summary", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+        db.upsert_node("member_b", "memory", "a member", "{}").await.unwrap();
+        db.add_edge(nested_id, "member_b", "member_of", 1.0, "{}").await.unwrap();
+
+        // cluster_summaries rows: one for the corrupted (nested) cluster_id,
+        // one for the valid cluster_id — only the corrupted one must go.
+        {
+            let conn = db.conn.lock().await;
+            conn.execute(
+                "INSERT INTO cluster_summaries (cluster_id, summary, members, created_at) VALUES ('cluster:graphrag_summary:cluster:hub_b', 'x', '[]', 0)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO cluster_summaries (cluster_id, summary, members, created_at) VALUES ('cluster:hub_a', 'x', '[]', 0)",
+                [],
+            ).unwrap();
+        }
+
+        let (nodes_deleted, edges_deleted, cluster_summaries_deleted) =
+            db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+
+        assert_eq!(nodes_deleted, 1, "exactly the one nested node must be purged");
+        assert!(edges_deleted >= 1, "the nested node's member_of edge must be purged too");
+        assert_eq!(
+            cluster_summaries_deleted, 1,
+            "exactly the one corrupted cluster_summaries row must be purged"
+        );
+
+        assert!(
+            db.get_node("graphrag_summary:cluster:hub_a").await.unwrap().is_some(),
+            "the valid single-level summary must survive"
+        );
+        assert!(
+            db.get_node(nested_id).await.unwrap().is_none(),
+            "the nested legacy summary must be gone"
+        );
+        {
+            let conn = db.conn.lock().await;
+            let remaining: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM cluster_summaries WHERE cluster_id = 'cluster:hub_a'",
+                [],
+                |r| r.get(0),
+            ).unwrap();
+            assert_eq!(remaining, 1, "the valid cluster_summaries row must survive");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn purge_legacy_nested_graphrag_summaries_is_idempotent() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node_with_validity(
+            "graphrag_summary:cluster:graphrag_summary:cluster:hub_c", "summary", "corrupted", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+
+        let first = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+        assert_eq!(first.0, 1);
+
+        let second = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+        assert_eq!(second, (0, 0, 0), "a second run with nothing left to purge must be a clean no-op");
     }
 }

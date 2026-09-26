@@ -181,7 +181,43 @@ pub struct TylluanConfig {
     /// same precedent as [security] coherence_gate_hybrid_enabled).
     #[serde(default)]
     pub eval: EvalConfig,
+
+    /// NightConsolidation scheduling and concurrency settings.
+    #[serde(default)]
+    pub night: NightConfig,
 }
+
+/// NightConsolidation scheduling and concurrency settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NightConfig {
+    /// Caps how many NightConsolidation phases run concurrently. `None`
+    /// (the default) preserves the original behavior: capped only by
+    /// `min(available_parallelism(), phase_count)`, which on a many-core
+    /// machine can still mean a dozen-plus phases racing for CPU at once
+    /// every cycle. Set to a small number (e.g. 2-4) on a shared or
+    /// latency-sensitive machine to bound each NightConsolidation burst.
+    /// Root cause context: 2026-09-26 incident where uncapped parallelism
+    /// combined with a separate contradiction-flagging bug (see nodes.rs
+    /// flag_contradiction_nodes) produced sustained ~2000% CPU.
+    #[serde(default)]
+    pub max_parallel_phases: Option<usize>,
+
+    /// Seconds between NightConsolidation cycles. Default 1800 (30 min),
+    /// matching the hardcoded interval this replaces.
+    #[serde(default = "default_night_interval_secs")]
+    pub interval_secs: u64,
+}
+
+impl Default for NightConfig {
+    fn default() -> Self {
+        Self {
+            max_parallel_phases: None,
+            interval_secs: default_night_interval_secs(),
+        }
+    }
+}
+
+fn default_night_interval_secs() -> u64 { 1800 }
 
 /// J-14 DeepEval (J-6 faithfulness / J-7 contextual precision) settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]

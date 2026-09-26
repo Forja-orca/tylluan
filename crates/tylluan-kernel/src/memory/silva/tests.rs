@@ -927,6 +927,10 @@ async fn test_silva() -> SilvaDB {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_flag_contradiction_direct() {
         let db = SilvaDB::in_memory().await.unwrap();
+        // Create nodes explicitly for good test fixture hygiene
+        db.upsert_node("s", "concept", "source node", "{}").await.unwrap();
+        db.upsert_node("t1", "concept", "target one", "{}").await.unwrap();
+        db.upsert_node("t2", "concept", "target two", "{}").await.unwrap();
         db.add_edge("s", "t1", "rel", 1.0, "{}").await.unwrap();
         db.add_edge("s", "t2", "rel", 1.0, "{}").await.unwrap();
         let count = db.flag_contradiction_nodes().await.unwrap();
