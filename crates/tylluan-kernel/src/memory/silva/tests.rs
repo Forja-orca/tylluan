@@ -927,6 +927,12 @@ async fn test_silva() -> SilvaDB {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_flag_contradiction_direct() {
         let db = SilvaDB::in_memory().await.unwrap();
+        // Nodes must exist for the flag UPDATE to transition 0->1: the count
+        // only reflects real flips, not re-counts of already-conflicted nodes
+        // (2026-09-26 incident: inflated contradiction counts every pass).
+        db.upsert_node("s", "concept", "source node", "{}").await.unwrap();
+        db.upsert_node("t1", "concept", "target one", "{}").await.unwrap();
+        db.upsert_node("t2", "concept", "target two", "{}").await.unwrap();
         db.add_edge("s", "t1", "rel", 1.0, "{}").await.unwrap();
         db.add_edge("s", "t2", "rel", 1.0, "{}").await.unwrap();
         let count = db.flag_contradiction_nodes().await.unwrap();
