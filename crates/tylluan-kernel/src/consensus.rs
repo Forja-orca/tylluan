@@ -42,6 +42,7 @@ impl ConsensusEngine {
 
                 self.silva.upsert_node(&matched.id, &matched.node_type, &matched.content, &updated_meta.to_string()).await?;
                 self.silva.set_weight(&node_id, 0.0).await?;
+                self.silva.mark_conflicted(&node_id, false).await?;
             } else {
                 let _ = self.silva.mark_conflicted(&node_id, false).await;
                 info!("✅ [Consensus] Approved unique thought: '{}'", node_id);
@@ -316,9 +317,10 @@ mod freshness_tests {
         engine.resolve_conflicts().await.unwrap();
 
         // Postconditions:
-        // fact_2 should be merged (weight set to 0.0)
+        // fact_2 should be merged (weight set to 0.0) AND unflagged as conflicted
         let node2 = silva.get_node("fact_2").await.unwrap().expect("fact_2 must exist");
         assert_eq!(node2.weight, 0.0, "Merged node fact_2 must have weight 0.0");
+        assert!(!node2.conflicted, "Merged node fact_2 must have conflicted=false to prevent re-entering conflict queue");
 
         // fact_1 should be reinforced: metadata contains updated weight 1.1 and last_reinforced
         let node1 = silva.get_node("fact_1").await.unwrap().expect("fact_1 must exist");
@@ -357,5 +359,35 @@ mod freshness_tests {
         // fact_1 should remain unchanged
         let node1 = silva.get_node("fact_1").await.unwrap().expect("fact_1 must exist");
         assert_eq!(node1.metadata, "{}", "fact_1 should not be modified");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_merged_node_cleared_from_conflicted_queue() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let engine = ConsensusEngine::new(silva.clone());
+
+        silva.upsert_node("fact_a", "fact", "Deterministic consensus prevents LLM freshness hallucinations", "{}").await.unwrap();
+        let mut emb_a = vec![0.0f32; 1024];
+        emb_a[0] = 1.0;
+        silva.save_embedding("fact_a", &emb_a, "bge-m3", None).await.unwrap();
+
+        silva.upsert_node("fact_b", "fact", "Deterministic consensus prevents LLM freshness errors", "{}").await.unwrap();
+        let mut emb_b = vec![0.0f32; 1024];
+        emb_b[0] = 1.0;
+        silva.save_embedding("fact_b", &emb_b, "bge-m3", None).await.unwrap();
+        silva.mark_conflicted("fact_b", true).await.unwrap();
+
+        // Resolve conflicts
+        engine.resolve_conflicts().await.unwrap();
+
+        // The conflicted queue must now be completely empty
+        let conflicted_after = silva.get_all_conflicted().await.unwrap();
+        assert!(conflicted_after.is_empty(), "All conflicted nodes must be cleared from the conflict queue");
+
+        // Running resolve_conflicts again must be a clean no-op
+        engine.resolve_conflicts().await.unwrap();
+        let node_b = silva.get_node("fact_b").await.unwrap().expect("fact_b must exist");
+        assert_eq!(node_b.weight, 0.0);
+        assert!(!node_b.conflicted);
     }
 }
