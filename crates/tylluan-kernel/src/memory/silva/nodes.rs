@@ -751,10 +751,21 @@ impl super::SilvaDB {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
 
-            // Fetch all edges (except related_to) ordered by source, type, valid_from
+            // Fetch all edges ordered by source, type, valid_from. Excludes
+            // predicates that are intentionally one-to-many by design, not
+            // factual contradictions: `related_to` (generic association),
+            // `member_of` (a GraphRAG cluster summary legitimately links to
+            // every one of its members — graph_rag.rs save_summary), and
+            // `remembers` (an agent identity node legitimately links to every
+            // thing it has remembered — main.rs / handler_remember.rs).
+            // Regression: omitting either exclusion re-creates the 2026-09-26
+            // CPU runaway where every GraphRAG summary and every agent identity
+            // node was flagged conflicted=1 on every pass, forever (see tests
+            // test_contradiction_ignores_member_of_fan_out /
+            // test_contradiction_ignores_remembers_fan_out in silva/tests.rs).
             let mut stmt = conn.prepare(
                 "SELECT source, type, target, valid_from FROM edges
-                 WHERE type != 'related_to'
+                 WHERE type != 'related_to' AND type != 'member_of' AND type != 'remembers'
                  ORDER BY source, type, valid_from ASC NULLS LAST"
             )?;
             let rows: Vec<(String, String, String, Option<i64>)> = stmt.query_map([], |row| {
@@ -783,11 +794,15 @@ impl super::SilvaDB {
                 match max_vf {
                     None => {
                         // All NULL valid_from — no temporal signal, flag as conflicted
-                        conn.execute(
+                        // Count only real transitions: an UPDATE that touched 0
+                        // rows means the node was already conflicted — counting
+                        // it anyway inflated DreamCycle's report and made every
+                        // pass look like fresh contradictions (2026-09-26 incident).
+                        let affected = conn.execute(
                             "UPDATE nodes SET conflicted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?1 AND conflicted = 0",
                             params![src],
                         )?;
-                        conflict_count += 1;
+                        conflict_count += affected;
                     }
                     Some(max) => {
                         // Count edges at max valid_from
@@ -1445,5 +1460,76 @@ pub fn build_contextual_text(metadata_json: &str, content: &str) -> String {
         (Some(s), Some(h)) => format!("[{s} > {h}]\n{content}"),
         (Some(s), None)    => format!("[{s}]\n{content}"),
         _                  => content.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    // Regression test for the CPU-runaway incident found live 2026-09-26:
+    // flag_contradiction_nodes() flagged every GraphRAG summary node and
+    // every agent identity node as conflicted=1 on every pass, because it
+    // treated the intentional one-to-many fan-out of `member_of` and
+    // `remembers` edges as a factual contradiction (>1 distinct target for
+    // the same predicate). ConsensusEngine::resolve_conflicts() then
+    // unmarked them, and the next pass re-marked them — a perpetual loop
+    // that pinned CPU at ~2000% sustained. This locks in the exclusion so
+    // it can't silently regress.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_ignores_member_of_fan_out() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("summary_hub", "concept", "a cluster summary", "{}").await.unwrap();
+        for i in 0..5 {
+            let member_id = format!("member_{i}");
+            db.upsert_node(&member_id, "memory", "a member node", "{}").await.unwrap();
+            db.add_edge("summary_hub", &member_id, "member_of", 1.0, "{}").await.unwrap();
+        }
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("summary_hub").await.unwrap().unwrap();
+        assert!(
+            !node.conflicted,
+            "member_of fan-out (one summary, many members) must never be flagged as a contradiction"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_ignores_remembers_fan_out() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("agent_memory:claude-code", "agent_identity", "agent identity", "{}").await.unwrap();
+        for i in 0..5 {
+            let memory_id = format!("memory:{i}");
+            db.upsert_node(&memory_id, "memory", "a remembered thing", "{}").await.unwrap();
+            db.add_edge("agent_memory:claude-code", &memory_id, "remembers", 1.0, "{}").await.unwrap();
+        }
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("agent_memory:claude-code").await.unwrap().unwrap();
+        assert!(
+            !node.conflicted,
+            "remembers fan-out (one agent identity, many remembered things) must never be flagged as a contradiction"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_still_flags_real_contradictions() {
+        // Genuine contradiction: same predicate, two different targets, both
+        // with NULL valid_from — the exclusion must not swallow real cases.
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("claim_a", "concept", "a claim", "{}").await.unwrap();
+        db.upsert_node("target_1", "concept", "target one", "{}").await.unwrap();
+        db.upsert_node("target_2", "concept", "target two", "{}").await.unwrap();
+        db.add_edge("claim_a", "target_1", "asserts", 1.0, "{}").await.unwrap();
+        db.add_edge("claim_a", "target_2", "asserts", 1.0, "{}").await.unwrap();
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("claim_a").await.unwrap().unwrap();
+        assert!(
+            node.conflicted,
+            "a genuine same-predicate contradiction must still be flagged"
+        );
     }
 }
