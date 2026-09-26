@@ -540,6 +540,11 @@ async fn main() -> anyhow::Result<()> {
 
     memory.init().await?;
     silva.init().await?;
+    // No direct test coverage for this call site — main()'s boot sequence
+    // isn't unit-testable in this codebase's existing patterns. A future
+    // refactor of the boot sequence must preserve this call (2026-09-26
+    // CPU-runaway fix); see purge_legacy_nested_graphrag_summaries()'s own
+    // unit tests in silva/nodes.rs for coverage of the underlying behavior.
     match silva.purge_legacy_nested_graphrag_summaries().await {
         Ok((nodes, edges, summaries)) if nodes > 0 => {
             info!("🧹 Startup cleanup: purged {nodes} legacy nested GraphRAG nodes ({edges} edges, {summaries} cluster_summaries rows)");
@@ -1894,7 +1899,10 @@ async fn run_night_consolidation_loop(
         matcher,
     };
 
-    let mut interval = tokio::time::interval(Duration::from_secs(night_config.interval_secs));
+    // .max(1): a configured 0 would make tokio::time::interval panic on a
+    // zero-duration interval, silently killing this loop for the process
+    // lifetime — same guard as max_parallel_override.max(1) applied above.
+    let mut interval = tokio::time::interval(Duration::from_secs(night_config.interval_secs.max(1)));
     loop {
         interval.tick().await;
         orchestrator.run_all(&ctx).await;

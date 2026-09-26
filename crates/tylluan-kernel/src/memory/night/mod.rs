@@ -81,8 +81,10 @@ impl PhaseOrchestrator {
     ///
     /// Sized off `available_parallelism()` rather than a fixed number so the
     /// same code gives a Raspberry Pi (2-4 cores) safe, non-contending
-    /// concurrency and a many-core workstation full 8-way parallelism —
-    /// no config knob, no hardcoded thread count either direction.
+    /// concurrency and a many-core workstation full 8-way parallelism by
+    /// default — an operator can still cap it lower via `[night]
+    /// max_parallel_phases` in tylluan.toml (`max_parallel_override`, applied
+    /// above), but there is no way to raise it above the real core count.
     /// Phases are independent (each touches SilvaDB through its own
     /// `Arc<Mutex<Connection>>`-serialized calls), so concurrent execution
     /// is safe. Spawning also means one phase panicking no longer aborts

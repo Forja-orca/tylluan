@@ -761,8 +761,9 @@ impl super::SilvaDB {
             // Regression: omitting either exclusion re-creates the 2026-09-26
             // CPU runaway where every GraphRAG summary and every agent identity
             // node was flagged conflicted=1 on every pass, forever (see tests
-            // test_contradiction_ignores_member_of_fan_out /
-            // test_contradiction_ignores_remembers_fan_out in silva/tests.rs).
+            // flag_contradiction_nodes_ignores_member_of_fan_out /
+            // flag_contradiction_nodes_ignores_remembers_fan_out in this same
+            // file's #[cfg(test)] mod tests).
             let mut stmt = conn.prepare(
                 "SELECT source, type, target, valid_from FROM edges
                  WHERE type != 'related_to' AND type != 'member_of' AND type != 'remembers'
@@ -848,35 +849,79 @@ impl super::SilvaDB {
     /// does no writes. A valid single-level summary
     /// (`graphrag_summary:cluster:<hub>`) never matches the double-prefix
     /// pattern and always survives. Called once at kernel boot.
+    ///
+    /// Follows the same satellite-table contract as `delete_node()` — edges,
+    /// node_traces, node_embeddings, node_sparse_embeddings, nodes, and
+    /// nodes_fts are all cleaned up (foreign keys have no `ON DELETE CASCADE`
+    /// enforcement here since `PRAGMA foreign_keys` is never enabled on this
+    /// connection), plus the GraphRAG-specific cluster_summaries table.
+    /// Everything except nodes_fts (which is keyed by rowid, not id) happens
+    /// inside one transaction.
     /// Returns (nodes_deleted, edges_deleted, cluster_summaries_deleted).
     pub async fn purge_legacy_nested_graphrag_summaries(&self) -> Result<(usize, usize, usize)> {
         const NESTED_PATTERN: &str = "graphrag_summary:%graphrag_summary:%";
+        // `find_clusters()` (graph_rag.rs) excludes any `graphrag_summary:%`-prefixed
+        // id from the hub-candidate pool, so no *valid* cluster_id can ever contain
+        // that substring — only corrupted ones can. A single occurrence is enough:
+        // graph_rag.rs builds `node_id = format!("graphrag_summary:{cluster_id}")`,
+        // i.e. one extra `graphrag_summary:` prefix on the node id vs. the
+        // cluster_id it's keyed by, so a doubly-nested node id
+        // (`graphrag_summary:cluster:graphrag_summary:cluster:X`) has a
+        // cluster_id of `cluster:graphrag_summary:cluster:X` — containing the
+        // marker only once.
+        const CLUSTER_SUMMARY_PATTERN: &str = "%graphrag_summary:%";
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
 
-            let nested_count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM nodes WHERE id LIKE ?1",
-                params![NESTED_PATTERN],
-                |r| r.get(0),
-            )?;
-            if nested_count == 0 {
+            let mut stmt = conn.prepare("SELECT id, rowid FROM nodes WHERE id LIKE ?1")?;
+            let matches: Vec<(String, i64)> = stmt
+                .query_map(params![NESTED_PATTERN], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(stmt);
+
+            if matches.is_empty() {
                 return Ok((0, 0, 0));
             }
 
-            let edges_deleted = conn.execute(
+            let fts_rowids: Vec<i64> = matches.iter().map(|(_, rowid)| *rowid).collect();
+
+            let tx = conn.unchecked_transaction()?;
+            let edges_deleted = tx.execute(
                 "DELETE FROM edges WHERE source LIKE ?1 OR target LIKE ?1",
                 params![NESTED_PATTERN],
             )?;
-            // cluster_summaries rows keyed by a nested cluster_id (the summary
-            // table counterpart of the corrupted node ids).
-            let cluster_summaries_deleted = conn.execute(
-                "DELETE FROM cluster_summaries WHERE cluster_id LIKE '%graphrag_summary:%graphrag_summary:%'",
-                [],
+            tx.execute(
+                "DELETE FROM node_traces WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
             )?;
-            let nodes_deleted = conn.execute(
+            tx.execute(
+                "DELETE FROM node_embeddings WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            tx.execute(
+                "DELETE FROM node_sparse_embeddings WHERE node_id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            // cluster_summaries rows keyed by a nested cluster_id (the summary
+            // table counterpart of the corrupted node ids). GraphRAG-specific,
+            // so delete_node() doesn't need to know about it.
+            let cluster_summaries_deleted = tx.execute(
+                "DELETE FROM cluster_summaries WHERE cluster_id LIKE ?1",
+                params![CLUSTER_SUMMARY_PATTERN],
+            )?;
+            let nodes_deleted = tx.execute(
                 "DELETE FROM nodes WHERE id LIKE ?1",
                 params![NESTED_PATTERN],
             )?;
+            tx.commit()?;
+
+            // nodes_fts joins by rowid, not id (search.rs), so it must be cleaned
+            // up outside the transaction by captured rowid, same non-fatal
+            // best-effort pattern as delete_node().
+            for rowid in fts_rowids {
+                conn.execute("DELETE FROM nodes_fts WHERE rowid = ?1", params![rowid]).ok();
+            }
 
             info!(
                 "🧹 SilvaDB: purged {} legacy nested graphrag_summary nodes, {} edges, {} cluster_summaries rows",
@@ -1612,10 +1657,29 @@ mod tests {
         db.upsert_node("member_b", "memory", "a member", "{}").await.unwrap();
         db.add_edge(nested_id, "member_b", "member_of", 1.0, "{}").await.unwrap();
 
-        let (nodes_deleted, edges_deleted, _) = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+        // cluster_summaries rows: one for the corrupted (nested) cluster_id,
+        // one for the valid cluster_id — only the corrupted one must go.
+        {
+            let conn = db.conn.lock().await;
+            conn.execute(
+                "INSERT INTO cluster_summaries (cluster_id, summary, members, created_at) VALUES ('cluster:graphrag_summary:cluster:hub_b', 'x', '[]', 0)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO cluster_summaries (cluster_id, summary, members, created_at) VALUES ('cluster:hub_a', 'x', '[]', 0)",
+                [],
+            ).unwrap();
+        }
+
+        let (nodes_deleted, edges_deleted, cluster_summaries_deleted) =
+            db.purge_legacy_nested_graphrag_summaries().await.unwrap();
 
         assert_eq!(nodes_deleted, 1, "exactly the one nested node must be purged");
         assert!(edges_deleted >= 1, "the nested node's member_of edge must be purged too");
+        assert_eq!(
+            cluster_summaries_deleted, 1,
+            "exactly the one corrupted cluster_summaries row must be purged"
+        );
 
         assert!(
             db.get_node("graphrag_summary:cluster:hub_a").await.unwrap().is_some(),
@@ -1625,6 +1689,15 @@ mod tests {
             db.get_node(nested_id).await.unwrap().is_none(),
             "the nested legacy summary must be gone"
         );
+        {
+            let conn = db.conn.lock().await;
+            let remaining: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM cluster_summaries WHERE cluster_id = 'cluster:hub_a'",
+                [],
+                |r| r.get(0),
+            ).unwrap();
+            assert_eq!(remaining, 1, "the valid cluster_summaries row must survive");
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]
