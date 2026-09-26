@@ -752,21 +752,19 @@ impl super::SilvaDB {
             let conn = self.conn.blocking_lock();
 
             // Fetch all edges ordered by source, type, valid_from. Excludes
-            // predicates that are intentionally one-to-many by design, not
-            // factual contradictions: `related_to` (generic association),
-            // `member_of` (a GraphRAG cluster summary legitimately links to
-            // every one of its members — graph_rag.rs save_summary), and
-            // `remembers` (an agent identity node legitimately links to every
-            // thing it has remembered — main.rs / handler_remember.rs).
-            // Regression: omitting either exclusion re-creates the 2026-09-26
-            // CPU runaway where every GraphRAG summary and every agent identity
-            // node was flagged conflicted=1 on every pass, forever (see tests
-            // flag_contradiction_nodes_ignores_member_of_fan_out /
-            // flag_contradiction_nodes_ignores_remembers_fan_out in this same
-            // file's #[cfg(test)] mod tests).
+            // predicates that are intentionally one-to-many by design: `related_to`
+            // (generic association), structural GraphRAG cluster summaries linking
+            // to their members (`type = 'member_of' AND source LIKE 'graphrag_summary:%'`),
+            // and structural agent identity nodes linking to remembered items
+            // (`type = 'remembers' AND source LIKE 'agent_memory:%'`).
+            // General semantic member_of edges (e.g. "capital of France") from
+            // non-summary sources remain subject to contradiction checking and
+            // temporal supersession (M35).
             let mut stmt = conn.prepare(
                 "SELECT source, type, target, valid_from FROM edges
-                 WHERE type != 'related_to' AND type != 'member_of' AND type != 'remembers'
+                 WHERE type != 'related_to'
+                   AND NOT (type = 'member_of' AND source LIKE 'graphrag_summary:%')
+                   AND NOT (type = 'remembers' AND source LIKE 'agent_memory:%')
                  ORDER BY source, type, valid_from ASC NULLS LAST"
             )?;
             let rows: Vec<(String, String, String, Option<i64>)> = stmt.query_map([], |row| {
@@ -1573,19 +1571,22 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn flag_contradiction_nodes_ignores_member_of_fan_out() {
         let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
-        db.upsert_node("summary_hub", "concept", "a cluster summary", "{}").await.unwrap();
+        db.upsert_node_with_validity(
+            "graphrag_summary:cluster:hub", "summary", "a cluster summary", "{}",
+            crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
         for i in 0..5 {
             let member_id = format!("member_{i}");
             db.upsert_node(&member_id, "memory", "a member node", "{}").await.unwrap();
-            db.add_edge("summary_hub", &member_id, "member_of", 1.0, "{}").await.unwrap();
+            db.add_edge("graphrag_summary:cluster:hub", &member_id, "member_of", 1.0, "{}").await.unwrap();
         }
 
         db.flag_contradiction_nodes().await.unwrap();
 
-        let node = db.get_node("summary_hub").await.unwrap().unwrap();
+        let node = db.get_node("graphrag_summary:cluster:hub").await.unwrap().unwrap();
         assert!(
             !node.conflicted,
-            "member_of fan-out (one summary, many members) must never be flagged as a contradiction"
+            "member_of fan-out for GraphRAG summary node must never be flagged as a contradiction"
         );
     }
 
@@ -1626,6 +1627,52 @@ mod tests {
             node.conflicted,
             "a genuine same-predicate contradiction must still be flagged"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_flags_semantic_member_of_contradiction() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("capital_of_france", "concept", "capital of France", "{}").await.unwrap();
+        db.upsert_node("paris", "concept", "Paris", "{}").await.unwrap();
+        db.upsert_node("lyon", "concept", "Lyon", "{}").await.unwrap();
+        // Two conflicting member_of edges for non-summary node, NULL valid_from (genuine contradiction)
+        db.add_edge("capital_of_france", "paris", "member_of", 1.0, "{}").await.unwrap();
+        db.add_edge("capital_of_france", "lyon", "member_of", 1.0, "{}").await.unwrap();
+
+        db.flag_contradiction_nodes().await.unwrap();
+
+        let node = db.get_node("capital_of_france").await.unwrap().unwrap();
+        assert!(
+            node.conflicted,
+            "semantic member_of contradiction for non-summary node must be flagged as conflicted"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn flag_contradiction_nodes_supersedes_semantic_member_of() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("ceo_of_acme", "concept", "CEO of Acme", "{}").await.unwrap();
+        db.upsert_node("alice", "person", "Alice", "{}").await.unwrap();
+        db.upsert_node("bob", "person", "Bob", "{}").await.unwrap();
+        // Sequential valid_from: Alice at 100, Bob at 200
+        db.add_edge_with_validity("ceo_of_acme", "alice", "member_of", 1.0, "{}", Some(100), None).await.unwrap();
+        db.add_edge_with_validity("ceo_of_acme", "bob", "member_of", 1.0, "{}", Some(200), None).await.unwrap();
+
+        let count = db.flag_contradiction_nodes().await.unwrap();
+        assert_eq!(count, 0, "supersession must not flag ceo_of_acme as conflicted");
+
+        let node = db.get_node("ceo_of_acme").await.unwrap().unwrap();
+        assert!(!node.conflicted, "ceo_of_acme should not be conflicted after supersession");
+
+        // Verify older edge (alice) has valid_until set to 200
+        let alice_until: Option<i64> = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT valid_until FROM edges WHERE source = 'ceo_of_acme' AND target = 'alice' AND type = 'member_of'",
+                [], |row| row.get(0),
+            ).ok().flatten()
+        });
+        assert_eq!(alice_until, Some(200), "older member_of edge must be superseded with valid_until = 200");
     }
 
     // Regression test for the legacy-cleanup half of the 2026-09-26 CPU
