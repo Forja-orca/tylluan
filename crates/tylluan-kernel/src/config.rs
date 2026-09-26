@@ -194,12 +194,17 @@ pub struct NightConfig {
     /// (the default) preserves the original behavior: capped only by
     /// `min(available_parallelism(), phase_count)`, which on a many-core
     /// machine can still mean a dozen-plus phases racing for CPU at once
-    /// every cycle. Set to a small number (e.g. 2-4) on a shared or
-    /// latency-sensitive machine to bound each NightConsolidation burst.
-    /// Root cause context: 2026-09-26 incident where uncapped parallelism
+    /// every cycle. Defaults to `Some(2)` — fail-safe by design, not opt-in:
+    /// the 2026-09-26 incident showed each phase already serializes its
+    /// SilvaDB access through one `Arc<Mutex<Connection>>` (see
+    /// `PhaseOrchestrator::run_all`'s doc comment), so wall-time barely
+    /// improves past 2-way parallelism — extra concurrency only buys CPU
+    /// contention, not throughput. Root cause context: uncapped parallelism
     /// combined with a separate contradiction-flagging bug (see nodes.rs
-    /// flag_contradiction_nodes) produced sustained ~2000% CPU.
-    #[serde(default)]
+    /// flag_contradiction_nodes) produced sustained ~2000% CPU. Set
+    /// explicitly higher (e.g. 4) only after measuring that some phase is
+    /// genuinely CPU-free and not blocked on that same mutex.
+    #[serde(default = "default_max_parallel_phases")]
     pub max_parallel_phases: Option<usize>,
 
     /// Seconds between NightConsolidation cycles. Default 1800 (30 min),
@@ -211,11 +216,13 @@ pub struct NightConfig {
 impl Default for NightConfig {
     fn default() -> Self {
         Self {
-            max_parallel_phases: None,
+            max_parallel_phases: default_max_parallel_phases(),
             interval_secs: default_night_interval_secs(),
         }
     }
 }
+
+fn default_max_parallel_phases() -> Option<usize> { Some(2) }
 
 fn default_night_interval_secs() -> u64 { 1800 }
 
@@ -2318,5 +2325,34 @@ code = "permissive"
             models: vec![],
         };
         assert!(p.is_safe().is_err());
+    }
+
+    // Regression test for the 2026-09-26 incident's follow-up: a #[serde(default)]
+    // on an Option<T> field always deserializes to None when the key is absent,
+    // regardless of what impl Default for the struct returns — editing only the
+    // Default impl (as a first pass at this fix did) would NOT have changed the
+    // real TOML-parsing behavior for an installation with no [night] section.
+    // This locks in that the serde-level default function is what actually governs
+    // a fresh/unspecified config, matching Buffy's verified finding that each
+    // NightConsolidation phase already serializes through one Arc<Mutex<Connection>>
+    // (see PhaseOrchestrator::run_all), so Some(2) captures the real available
+    // concurrency without buying CPU contention for no wall-time gain.
+    #[test]
+    fn test_night_config_defaults_to_safe_parallelism_when_toml_section_absent() {
+        let cfg: TylluanConfig = toml::from_str("").unwrap();
+        assert_eq!(
+            cfg.night.max_parallel_phases,
+            Some(2),
+            "an installation with no [night] section must default to a safe, bounded \
+             parallelism cap, not None (unbounded) -- this is the exact incident regression"
+        );
+        assert_eq!(cfg.night.interval_secs, 1800);
+    }
+
+    #[test]
+    fn test_night_config_explicit_override_still_works() {
+        let toml_str = "[night]\nmax_parallel_phases = 8\n";
+        let cfg: TylluanConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.night.max_parallel_phases, Some(8));
     }
 }
