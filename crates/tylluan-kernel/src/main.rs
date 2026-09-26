@@ -541,6 +541,7 @@ async fn main() -> anyhow::Result<()> {
     memory.init().await?;
     silva.init().await?;
     mailbox.init().await?;
+
     // ─── Learned-sparse retrieval source (opt-in) ───────────────────
     // Loads a second ONNX model (~1GB RAM). Failure is non-fatal: search_hybrid
     // keeps running with the pre-existing 3-source fusion.
@@ -1726,18 +1727,14 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ─── NightConsolidation (hourly: selective decay + agent memory consolidation) ──
-    {
-        let config = Arc::new(RwLock::new(config.clone()));
-        tokio::spawn(run_night_consolidation_loop(
-            silva.clone(),
-            agent_profiles.clone(),
-            curriculum.clone(),
-            server_arc.clone(),
-            data_dir.to_path_buf(),
-            matcher.clone(),
-            config,
-        ));
-    }
+    tokio::spawn(run_night_consolidation_loop(
+        silva.clone(),
+        agent_profiles.clone(),
+        curriculum.clone(),
+        server_arc.clone(),
+        data_dir.to_path_buf(),
+        matcher.clone(),
+    ));
 
 
     // ─── P1: Periodic SQLite Maintenance ───────────────────────────
@@ -1851,7 +1848,6 @@ async fn run_night_consolidation_loop(
     server: Arc<RwLock<TylluanServer>>,
     data_dir: PathBuf,
     matcher: Arc<GuildMatcher>,
-    config: Arc<RwLock<TylluanConfig>>,
 ) {
     use tylluan_kernel::memory::night::{
         PhaseOrchestrator, PhaseContext,
@@ -1859,11 +1855,6 @@ async fn run_night_consolidation_loop(
         DecayPhase, AgentPhase, CurriculumPhase, IdleLabPhase, FeedbackSignalPhase,
         LifecyclePhase, DeepEvalPhase, SlmSocietyPhase,
     };
-
-    // Snapshot [night] config once at spawn: max_parallel_phases caps the
-    // per-cycle phase burst (None = historical behavior), interval_secs
-    // replaces the previously hardcoded 1800s cadence.
-    let night_config = { config.read().await.night.clone() };
 
     let orchestrator = PhaseOrchestrator::new(vec![
         Box::new(DreamPhase),
@@ -1883,7 +1874,7 @@ async fn run_night_consolidation_loop(
         // Phase 0: opt-in (default OFF via [eval] slm_society_eval_enabled).
         // Evaluates 3-arm SLM society benchmark (Arm A/B/C) on a 24h cadence.
         Box::new(SlmSocietyPhase),
-    ], night_config.max_parallel_phases);
+    ]);
 
     let ctx = PhaseContext {
         silva,
@@ -1894,7 +1885,7 @@ async fn run_night_consolidation_loop(
         matcher,
     };
 
-    let mut interval = tokio::time::interval(Duration::from_secs(night_config.interval_secs));
+    let mut interval = tokio::time::interval(Duration::from_secs(1800));
     loop {
         interval.tick().await;
         orchestrator.run_all(&ctx).await;
