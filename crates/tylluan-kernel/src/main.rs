@@ -540,6 +540,13 @@ async fn main() -> anyhow::Result<()> {
 
     memory.init().await?;
     silva.init().await?;
+    match silva.purge_legacy_nested_graphrag_summaries().await {
+        Ok((nodes, edges, summaries)) if nodes > 0 => {
+            info!("🧹 Startup cleanup: purged {nodes} legacy nested GraphRAG nodes ({edges} edges, {summaries} cluster_summaries rows)");
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("Startup cleanup: failed to purge legacy nested GraphRAG nodes: {e}"),
+    }
     mailbox.init().await?;
 
     // ─── Learned-sparse retrieval source (opt-in) ───────────────────

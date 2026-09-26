@@ -833,6 +833,60 @@ impl super::SilvaDB {
         })
     }
 
+    /// Purge legacy nodes corrupted by the pre-2026-09-26 GraphRAG nesting
+    /// bug: a node id that starts with `graphrag_summary:` and contains that
+    /// same prefix a second time (e.g.
+    /// `graphrag_summary:cluster:graphrag_summary:cluster:hub`). These are
+    /// pure bug artifacts with no semantic value -- the 2026-08-30 guard in
+    /// GraphRagManager::save_summary() stops new ones from being created,
+    /// but never cleaned up the ones that already existed. Combined with the
+    /// flag_contradiction_nodes false-positive, these legacy nodes were
+    /// cycling through the conflict queue on every consensus pass, forever
+    /// (2026-09-26 CPU-runaway incident, PID 44364, 84 CPU-days in 4 days).
+    ///
+    /// Idempotent: a second call with nothing matching returns (0, 0, 0) and
+    /// does no writes. A valid single-level summary
+    /// (`graphrag_summary:cluster:<hub>`) never matches the double-prefix
+    /// pattern and always survives. Called once at kernel boot.
+    /// Returns (nodes_deleted, edges_deleted, cluster_summaries_deleted).
+    pub async fn purge_legacy_nested_graphrag_summaries(&self) -> Result<(usize, usize, usize)> {
+        const NESTED_PATTERN: &str = "graphrag_summary:%graphrag_summary:%";
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+
+            let nested_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM nodes WHERE id LIKE ?1",
+                params![NESTED_PATTERN],
+                |r| r.get(0),
+            )?;
+            if nested_count == 0 {
+                return Ok((0, 0, 0));
+            }
+
+            let edges_deleted = conn.execute(
+                "DELETE FROM edges WHERE source LIKE ?1 OR target LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+            // cluster_summaries rows keyed by a nested cluster_id (the summary
+            // table counterpart of the corrupted node ids).
+            let cluster_summaries_deleted = conn.execute(
+                "DELETE FROM cluster_summaries WHERE cluster_id LIKE '%graphrag_summary:%graphrag_summary:%'",
+                [],
+            )?;
+            let nodes_deleted = conn.execute(
+                "DELETE FROM nodes WHERE id LIKE ?1",
+                params![NESTED_PATTERN],
+            )?;
+
+            info!(
+                "🧹 SilvaDB: purged {} legacy nested graphrag_summary nodes, {} edges, {} cluster_summaries rows",
+                nodes_deleted, edges_deleted, cluster_summaries_deleted
+            );
+
+            Ok((nodes_deleted, edges_deleted, cluster_summaries_deleted))
+        })
+    }
+
     /// Mark a node as protected so it never decays or gets pruned.
     pub async fn protect_node(&self, id: &str) -> Result<()> {
         tokio::task::block_in_place(|| {
@@ -1527,5 +1581,64 @@ mod tests {
             node.conflicted,
             "a genuine same-predicate contradiction must still be flagged"
         );
+    }
+
+    // Regression test for the legacy-cleanup half of the 2026-09-26 CPU
+    // runaway fix: nodes created before the flag_contradiction_nodes fix
+    // (Task 1) are already corrupted with nested graphrag_summary: ids and
+    // must be purged on startup, without touching a valid single-level
+    // summary or its member_of edges.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn purge_legacy_nested_graphrag_summaries_removes_only_nested() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+
+        // A valid, single-level summary -- must survive. "summary" is a
+        // drift-sensitive type (DRIFT_SENSITIVE_TYPES) so it must go through
+        // upsert_node_with_validity with allow_drift=true, same as the real
+        // internal caller (GraphRagManager::save_summary).
+        db.upsert_node_with_validity(
+            "graphrag_summary:cluster:hub_a", "summary", "a valid summary", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+        db.upsert_node("member_a", "memory", "a member", "{}").await.unwrap();
+        db.add_edge("graphrag_summary:cluster:hub_a", "member_a", "member_of", 1.0, "{}").await.unwrap();
+
+        // A legacy corrupted, doubly-nested summary -- must be purged.
+        let nested_id = "graphrag_summary:cluster:graphrag_summary:cluster:hub_b";
+        db.upsert_node_with_validity(
+            nested_id, "summary", "a corrupted nested summary", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+        db.upsert_node("member_b", "memory", "a member", "{}").await.unwrap();
+        db.add_edge(nested_id, "member_b", "member_of", 1.0, "{}").await.unwrap();
+
+        let (nodes_deleted, edges_deleted, _) = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+
+        assert_eq!(nodes_deleted, 1, "exactly the one nested node must be purged");
+        assert!(edges_deleted >= 1, "the nested node's member_of edge must be purged too");
+
+        assert!(
+            db.get_node("graphrag_summary:cluster:hub_a").await.unwrap().is_some(),
+            "the valid single-level summary must survive"
+        );
+        assert!(
+            db.get_node(nested_id).await.unwrap().is_none(),
+            "the nested legacy summary must be gone"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn purge_legacy_nested_graphrag_summaries_is_idempotent() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        db.upsert_node_with_validity(
+            "graphrag_summary:cluster:graphrag_summary:cluster:hub_c", "summary", "corrupted", "{}",
+            super::NodeWriteOptions::new("agent_generated").drift_allowed(true),
+        ).await.unwrap();
+
+        let first = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+        assert_eq!(first.0, 1);
+
+        let second = db.purge_legacy_nested_graphrag_summaries().await.unwrap();
+        assert_eq!(second, (0, 0, 0), "a second run with nothing left to purge must be a clean no-op");
     }
 }
