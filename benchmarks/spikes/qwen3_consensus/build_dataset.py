@@ -1,0 +1,348 @@
+import json
+from pathlib import Path
+
+CONTRADICTION_CASES = [
+    {
+        "id": "case_01_kernel_port",
+        "topic": "kernel_port",
+        "type": "temporal_update",
+        "sources": [
+            {"id": "node_port_legacy", "content": "Tylluan kernel listens on port 4000 for all incoming HTTP and MCP requests."},
+            {"id": "node_port_current", "content": "Tylluan single binary kernel v0.17.0 listens directly on port 47004 without zero-downtime proxy."}
+        ],
+        "ground_truth_resolution": "Tylluan kernel historically listened on port 4000, but in v0.17.0 it listens directly on port 47004 without a proxy.",
+        "key_facts_required": ["47004", "port"]
+    },
+    {
+        "id": "case_02_degree_bias",
+        "topic": "degree_bias_formula",
+        "type": "bugfix_update",
+        "sources": [
+            {"id": "node_deg_old", "content": "Graph retrieval multiplies PageRank score by node degree to boost highly connected hub nodes."},
+            {"id": "node_deg_fix", "content": "local_query_graph uses degree penalty formula pr_score / (1 + deg * 0.1) to penalize generic hubs."}
+        ],
+        "ground_truth_resolution": "local_query_graph applies a degree penalty (pr_score / (1 + deg * 0.1)) to avoid over-boosting generic hubs, replacing the old degree multiplication bug.",
+        "key_facts_required": ["penalty", "pr_score / (1 + deg * 0.1)"]
+    },
+    {
+        "id": "case_03_vector_dim",
+        "topic": "vector_dimensions",
+        "type": "invariant_conflict",
+        "sources": [
+            {"id": "node_dim_768", "content": "SilvaDB vector embeddings are configured with vector_dimensions = 768 for compatibility with standard BERT models."},
+            {"id": "node_dim_1024", "content": "CONTRACT-01 invariant strictly enforces BGE-M3 at 1024 dimensions. Setting vector_dimensions = 768 is strictly forbidden."}
+        ],
+        "ground_truth_resolution": "SilvaDB strictly enforces BGE-M3 embeddings at 1024 dimensions per CONTRACT-01; 768 dimensions is strictly forbidden.",
+        "key_facts_required": ["1024", "BGE-M3"]
+    },
+    {
+        "id": "case_04_test_count",
+        "topic": "test_suite_status",
+        "type": "temporal_update",
+        "sources": [
+            {"id": "node_tests_v13", "content": "Tylluan test suite has 388 passing tests across kernel, link and fsrs crates."},
+            {"id": "node_tests_v17", "content": "Tylluan v0.17.0 verification confirms 790 total passing tests (709 kernel + 69 link + 12 fsrs)."}
+        ],
+        "ground_truth_resolution": "The test suite grew from 388 tests in v0.13.0 to 790 verified passing tests in v0.17.0 (709 kernel, 69 link, 12 fsrs).",
+        "key_facts_required": ["790", "709 kernel", "69 link", "12 fsrs"]
+    },
+    {
+        "id": "case_05_identity_manager",
+        "topic": "identity_subsystem",
+        "type": "architecture_deprecation",
+        "sources": [
+            {"id": "node_id_mgr", "content": "IdentityManager in memory/identity.rs manages agent trust, peer identity and authentication keys."},
+            {"id": "node_profile_store", "content": "IdentityManager is inactive and deprecated; agent identities are now managed by AgentProfileStore."}
+        ],
+        "ground_truth_resolution": "IdentityManager in memory/identity.rs is inactive and has been replaced by AgentProfileStore for agent identity management.",
+        "key_facts_required": ["IdentityManager", "AgentProfileStore", "inactive"]
+    },
+    {
+        "id": "case_06_dream_cycle",
+        "topic": "memory_consolidation_scheduler",
+        "type": "architecture_deprecation",
+        "sources": [
+            {"id": "node_dream_bg", "content": "DreamCycle::start_background_scheduler() in memory/dream_cycle.rs runs periodic background consolidation."},
+            {"id": "node_night_cron", "content": "DreamCycle background scheduler is inactive; consolidation is centralized in NightConsolidation via cron in main.rs."}
+        ],
+        "ground_truth_resolution": "DreamCycle's background scheduler is inactive; memory consolidation is now centralized in NightConsolidation driven by main.rs cron.",
+        "key_facts_required": ["NightConsolidation", "inactive", "cron"]
+    },
+    {
+        "id": "case_07_dashboard_build",
+        "topic": "package_manager_dashboard",
+        "type": "operational_rule",
+        "sources": [
+            {"id": "node_npm_inst", "content": "Dashboard dependencies can be installed using npm install in the dashboard directory."},
+            {"id": "node_pnpm_rule", "content": "Dashboard strictly enforces pnpm. Using npm is prohibited as divergent lockfiles broke production builds."}
+        ],
+        "ground_truth_resolution": "The dashboard strictly requires pnpm; using npm is prohibited due to past lockfile divergence breaking production.",
+        "key_facts_required": ["pnpm", "npm"]
+    },
+    {
+        "id": "case_08_coherence_gate_layer4",
+        "topic": "coherence_gate_reasoning",
+        "type": "state_update",
+        "sources": [
+            {"id": "node_gate_inactive", "content": "CoherenceGate Layer 4 LLM reasoning gate is planned but not wired into recall pipeline."},
+            {"id": "node_gate_live", "content": "CoherenceGate Layer 4 is wired live in observation mode using calibrated v3 prompt against llama_backend."}
+        ],
+        "ground_truth_resolution": "CoherenceGate Layer 4 is currently wired live in observation mode using the v3 calibrated prompt via llama_backend.",
+        "key_facts_required": ["Layer 4", "observation mode", "llama_backend"]
+    },
+    {
+        "id": "case_09_sovereign_tools",
+        "topic": "mcp_sovereign_tools",
+        "type": "contract_invariant",
+        "sources": [
+            {"id": "node_tools_7", "content": "Tylluan exposes 7 MCP tools including tylluan_search, tylluan_execute, tylluan_status and custom helpers."},
+            {"id": "node_tools_5", "content": "CONTRACT-01 strictly enforces exactly 5 sovereign tools: tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph."}
+        ],
+        "ground_truth_resolution": "CONTRACT-01 restricts Tylluan to exactly 5 sovereign MCP tools: tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, and tylluan_graph.",
+        "key_facts_required": ["5", "tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"]
+    },
+    {
+        "id": "case_10_dev_mode_security",
+        "topic": "network_security_binding",
+        "type": "security_rule",
+        "sources": [
+            {"id": "node_dev_lan", "content": "For remote team debugging, set host = '0.0.0.0' with dev_mode = true in tylluan.toml."},
+            {"id": "node_dev_ban", "content": "CRITICAL SECURITY RULE: NEVER set host = '0.0.0.0' together with dev_mode = true as it causes unauthenticated LAN RCE."}
+        ],
+        "ground_truth_resolution": "Setting host = '0.0.0.0' combined with dev_mode = true is strictly prohibited because it creates an unauthenticated remote code execution vulnerability.",
+        "key_facts_required": ["0.0.0.0", "dev_mode", "RCE"]
+    },
+    {
+        "id": "case_11_gossip_encryption",
+        "topic": "gossip_protocol_security",
+        "type": "security_upgrade",
+        "sources": [
+            {"id": "node_gossip_plain", "content": "Mesh gossip messages are broadcast as plaintext JSON over UDP/mDNS."},
+            {"id": "node_gossip_noise", "content": "Since v0.15.0, mesh gossip mandates Noise NK encryption for production peers; plaintext is rejected."}
+        ],
+        "ground_truth_resolution": "Mesh gossip was upgraded in v0.15.0 to mandate Noise NK encryption for production peers, rejecting plaintext broadcasts.",
+        "key_facts_required": ["Noise NK", "encryption", "v0.15.0"]
+    },
+    {
+        "id": "case_12_docs_site_port",
+        "topic": "docs_site_config",
+        "type": "port_assignment",
+        "sources": [
+            {"id": "node_docs_3000", "content": "The Next.js architectural documentation visualizer runs on default port 3000."},
+            {"id": "node_docs_3010", "content": "The Next.js docs-site visualizer runs on port 3010 with allowedDevOrigins configured for localhost."}
+        ],
+        "ground_truth_resolution": "The Next.js documentation visualizer (docs-site) runs on port 3010 with configured dev origins, not 3000.",
+        "key_facts_required": ["3010", "docs-site"]
+    },
+    {
+        "id": "case_13_consensus_engines",
+        "topic": "consensus_engine_duplicity",
+        "type": "scope_distinction",
+        "sources": [
+            {"id": "node_cons_sync", "content": "crates/tylluan-kernel/src/consensus.rs is the deterministic freshness engine for federation sync."},
+            {"id": "node_cons_mem", "content": "crates/tylluan-kernel/src/memory/consensus.rs handles semantic consolidation and cognitive contradiction resolution."}
+        ],
+        "ground_truth_resolution": "Tylluan has two distinct consensus engines: root consensus.rs manages deterministic federation freshness, while memory/consensus.rs handles semantic contradiction resolution.",
+        "key_facts_required": ["federation", "semantic", "memory/consensus.rs"]
+    },
+    {
+        "id": "case_14_token_storage",
+        "topic": "auth_token_storage",
+        "type": "security_rule",
+        "sources": [
+            {"id": "node_tok_toml", "content": "Bearer authentication tokens should be saved in tylluan.toml under [security.auth_token]."},
+            {"id": "node_tok_file", "content": "CRITICAL RULE: Bearer tokens must NEVER be stored in tracked files; store only in gitignored .tylluan-token."}
+        ],
+        "ground_truth_resolution": "Bearer authentication tokens must never be written to tracked config files like tylluan.toml; they must reside exclusively in the gitignored .tylluan-token file.",
+        "key_facts_required": [".tylluan-token", "gitignored"]
+    },
+    {
+        "id": "case_15_agent_runtime_deep",
+        "topic": "agent_fleet_deep",
+        "type": "role_specification",
+        "sources": [
+            {"id": "node_deep_ui", "content": "Deep is assigned to dashboard React frontend development and UI primitives."},
+            {"id": "node_deep_rust", "content": "Deep runs on OpenCode and is responsible for Rust backend crates and Python guilds for complex features and bugfixes."}
+        ],
+        "ground_truth_resolution": "Deep operates on OpenCode and specializes in the Rust backend crates and Python guilds, while frontend UI is handled by other agents.",
+        "key_facts_required": ["Deep", "Rust", "OpenCode"]
+    },
+    {
+        "id": "case_16_agent_runtime_antigravity",
+        "topic": "agent_fleet_antigravity",
+        "type": "role_specification",
+        "sources": [
+            {"id": "node_agy_rust", "content": "Antigravity is responsible for implementing core Rust kernel networking and transport handlers."},
+            {"id": "node_agy_ui", "content": "Antigravity operates in Gemini/MCP runtime for UI/UX dashboard tasks and empirical benchmarking."}
+        ],
+        "ground_truth_resolution": "Antigravity operates in the Gemini/MCP runtime and is tasked with UI/UX dashboard refinements and empirical benchmarking, not core Rust kernel networking.",
+        "key_facts_required": ["Antigravity", "Gemini", "benchmarking"]
+    },
+    {
+        "id": "case_17_adr010_punto_a",
+        "topic": "adr010_punto_a_status",
+        "type": "spike_outcome",
+        "sources": [
+            {"id": "node_pt_a_pass", "content": "ADR-010 Punto A DistilBERT complexity classifier achieved 86.36% routing decision accuracy (+9.09 pp over heuristic)."},
+            {"id": "node_pt_a_nogo", "content": "ADR-010 Punto A received a NO-GO decision because DistilBERT CPU latency was 38.22ms p50, exceeding the 20ms threshold."}
+        ],
+        "ground_truth_resolution": "ADR-010 Punto A demonstrated higher routing accuracy (86.36%, +9.09 pp) but was marked NO-GO due to 38.22ms p50 latency exceeding the 20ms budget.",
+        "key_facts_required": ["86.36%", "38.22ms", "NO-GO"]
+    },
+    {
+        "id": "case_18_sep_cma_es_coordinator",
+        "topic": "coordinator_optimization",
+        "type": "spike_outcome",
+        "sources": [
+            {"id": "node_cma_sim", "content": "SepCMA-trained MLP achieved 56.2% win rate on held-out simulated planning scenarios."},
+            {"id": "node_cma_nogo", "content": "In live HTTP testing against the kernel, SepCMA MLP achieved only 33.3% win rate vs fixed pipeline, resulting in NO-GO."}
+        ],
+        "ground_truth_resolution": "The SepCMA coordinator spike was closed with NO-GO after achieving only a 33.3% win rate in real HTTP kernel execution compared to the fixed heuristic.",
+        "key_facts_required": ["SepCMA", "33.3%", "NO-GO"]
+    },
+    {
+        "id": "case_19_guild_registration",
+        "topic": "guild_discovery_process",
+        "type": "developer_instruction",
+        "sources": [
+            {"id": "node_guild_auto", "content": "Creating a new Python file in guilds/ is automatically discovered and registered by discover_guilds()."},
+            {"id": "node_guild_3places", "content": "New Python guilds must be registered in 3 locations: main.rs lazy_guilds, router/catalog.rs weights, and router/catalog.rs names list; discover_guilds() does not scan subfolders."}
+        ],
+        "ground_truth_resolution": "New Python guilds are not auto-discovered from subdirectories and must be manually registered in 3 locations: main.rs lazy_guilds, catalog weights, and catalog names list.",
+        "key_facts_required": ["3", "main.rs", "catalog.rs"]
+    },
+    {
+        "id": "case_20_teb_qualitative_status",
+        "topic": "teb_benchmark_status",
+        "type": "project_status",
+        "sources": [
+            {"id": "node_teb_100", "content": "TEB-Pilot-50 achieved 100% Task Success Rate in qualitative blind evaluation."},
+            {"id": "node_teb_paused", "content": "TEB qualitative blind evaluation is currently paused for a dedicated session due to ground truth fallback embedding; quantitative telemetry remains valid."}
+        ],
+        "ground_truth_resolution": "Qualitative TEB blind evaluation is currently paused pending dedicated re-engineering, while historical quantitative telemetry in guild_audit_log remains valid.",
+        "key_facts_required": ["paused", "TEB"]
+    },
+    {
+        "id": "case_21_memory_decay_half_life",
+        "topic": "memory_decay_rate",
+        "type": "parameter_specification",
+        "sources": [
+            {"id": "node_decay_default", "content": "SilvaDB general episodic memory decay uses a base half-life of T½ = 14 days."},
+            {"id": "node_decay_penalty", "content": "Consensus engine applies an accelerated 7-day penalty decay (604800s) to losing nodes."}
+        ],
+        "ground_truth_resolution": "SilvaDB memory uses a standard 14-day half-life for normal decay, but consensus applies an accelerated 7-day penalty decay to non-winning conflicting nodes.",
+        "key_facts_required": ["14 days", "7", "half-life"]
+    },
+    {
+        "id": "case_22_fsrs_version",
+        "topic": "spaced_repetition_model",
+        "type": "version_specification",
+        "sources": [
+            {"id": "node_fsrs_4", "content": "Tylluan spaced repetition engine uses FSRS-4 default parameters for interval calculation."},
+            {"id": "node_fsrs_5", "content": "Tylluan memory engine is upgraded to FSRS-5 in crates/tylluan-fsrs for cognitive retention scheduling."}
+        ],
+        "ground_truth_resolution": "Tylluan uses FSRS-5 in crates/tylluan-fsrs for spaced repetition memory scheduling, superseding earlier FSRS versions.",
+        "key_facts_required": ["FSRS-5", "crates/tylluan-fsrs"]
+    },
+    {
+        "id": "case_23_coloquio_storage",
+        "topic": "coloquio_mailbox_db",
+        "type": "file_location",
+        "sources": [
+            {"id": "node_col_silva", "content": "Coloquio channel messages are stored directly as graph nodes in data/silva.db."},
+            {"id": "node_col_mailbox", "content": "Coloquio multi-agent chat messages and turns are persisted in SQLite database data/mailbox.db."}
+        ],
+        "ground_truth_resolution": "Coloquio team channel messages and turns are stored in data/mailbox.db, while digested episodes are later indexed into data/silva.db.",
+        "key_facts_required": ["data/mailbox.db", "data/silva.db"]
+    },
+    {
+        "id": "case_24_noise_handshake",
+        "topic": "p2p_handshake_protocol",
+        "type": "protocol_variant",
+        "sources": [
+            {"id": "node_noise_nk", "content": "Mesh gossip broadcast uses Noise NK with pre-shared server public key."},
+            {"id": "node_noise_xk", "content": "Direct P2P TCP dispatch sessions use Noise XK with mutual Ed25519-to-X25519 identity verification."}
+        ],
+        "ground_truth_resolution": "Tylluan uses Noise NK for mesh gossip broadcasts and Noise XK with Ed25519/X25519 key conversion for direct P2P TCP dispatch sessions.",
+        "key_facts_required": ["Noise NK", "Noise XK", "Ed25519"]
+    },
+    {
+        "id": "case_25_api_v1_split",
+        "topic": "codebase_refactoring",
+        "type": "codebase_history",
+        "sources": [
+            {"id": "node_api_monolith", "content": "All HTTP REST endpoints are defined in a single monolithic file crates/tylluan-kernel/src/transport/api_v1.rs (3114 lines)."},
+            {"id": "node_api_split", "content": "api_v1.rs was refactored and modularized into crates/tylluan-kernel/src/transport/http/api_v1/ across domain modules."}
+        ],
+        "ground_truth_resolution": "The 3,114-line monolithic api_v1.rs was split into modular domain handlers under crates/tylluan-kernel/src/transport/http/api_v1/.",
+        "key_facts_required": ["api_v1", "modular", "split"]
+    },
+    {
+        "id": "case_26_acl_design",
+        "topic": "security_acl_architecture",
+        "type": "security_architecture",
+        "sources": [
+            {"id": "node_acl_open", "content": "API endpoints default to allow-all if no explicit rule matches the incoming request."},
+            {"id": "node_acl_closed", "content": "ACL is designed strictly fail-closed: unauthenticated or unmatched requests are denied by default."}
+        ],
+        "ground_truth_resolution": "The security ACL architecture is strictly fail-closed, rejecting unauthenticated or unmatched requests by default.",
+        "key_facts_required": ["fail-closed", "denied"]
+    },
+    {
+        "id": "case_27_night_consolidation_phases",
+        "topic": "night_consolidation_architecture",
+        "type": "component_specification",
+        "sources": [
+            {"id": "node_night_1phase", "content": "Night consolidation runs a single pass of embedding re-clustering."},
+            {"id": "node_night_5phase", "content": "NightConsolidation executes 5 sequential phases: decay pruning, semantic clustering, contradiction consensus, graph compaction, and episodic summarization."}
+        ],
+        "ground_truth_resolution": "NightConsolidation operates in 5 sequential phases encompassing decay pruning, clustering, contradiction consensus, compaction, and summarization.",
+        "key_facts_required": ["5", "NightConsolidation"]
+    },
+    {
+        "id": "case_28_model_recommendation_slot2",
+        "topic": "models_toml_slot2",
+        "type": "model_selection",
+        "sources": [
+            {"id": "node_slot2_smollm", "content": "models.toml recommends SmolLM2-360M as the primary embedded SLM for memory consensus."},
+            {"id": "node_slot2_qwen", "content": "models.toml and ADR-010 assign Qwen3-0.6B / Qwen2.5-0.5B as the recommended slot 2 model for contradiction synthesis."}
+        ],
+        "ground_truth_resolution": "models.toml and ADR-010 designate Qwen2.5-0.5B / Qwen3-0.6B as the primary slot 2 recommendation for memory consensus, with SmolLM2 as fallback.",
+        "key_facts_required": ["Qwen", "slot 2", "consensus"]
+    },
+    {
+        "id": "case_29_arm64_portability",
+        "topic": "platform_support_ci",
+        "type": "ci_pipeline",
+        "sources": [
+            {"id": "node_ci_x86_only", "content": "CI only validates x86_64-unknown-linux-gnu and windows-x86_64 targets."},
+            {"id": "node_ci_arm64", "content": "CI includes a dedicated portability-check job verifying cargo check for aarch64-unknown-linux-gnu (Raspberry Pi 4 target)."}
+        ],
+        "ground_truth_resolution": "CI enforces an automated portability check for aarch64-unknown-linux-gnu to guarantee Raspberry Pi 4 ARM64 compatibility alongside x86_64.",
+        "key_facts_required": ["aarch64", "Raspberry Pi", "portability"]
+    },
+    {
+        "id": "case_30_mit_license_sovereignty",
+        "topic": "license_and_dependencies",
+        "type": "foundational_invariant",
+        "sources": [
+            {"id": "node_lic_cloud", "content": "Tylluan relies on OpenAI / Anthropic cloud APIs in the critical recall and reasoning path."},
+            {"id": "node_lic_mit", "content": "Tylluan is an MIT-licensed, sovereign system with zero mandatory cloud dependencies in the critical path."}
+        ],
+        "ground_truth_resolution": "Tylluan is an MIT-licensed sovereign system engineered to run completely offline without mandatory cloud dependencies in its critical path.",
+        "key_facts_required": ["MIT", "sovereign", "cloud"]
+    }
+]
+
+def main():
+    out_dir = Path(__file__).resolve().parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / "contradiction_cases_heldout.json"
+    
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(CONTRADICTION_CASES, f, indent=2, ensure_ascii=False)
+    
+    print(f"Saved {len(CONTRADICTION_CASES)} held-out contradiction cases to {out_file}")
+
+if __name__ == "__main__":
+    main()
