@@ -30,7 +30,7 @@ impl ConsensusEngine {
         for node in conflicted {
             let node_id = node.id.clone();
 
-            if let Ok(Some((matched, _score))) = self.find_similar(&node.content, 0.88).await {
+            if let Ok(Some((matched, _score))) = self.find_similar(&node_id, 0.88).await {
                 info!("🔄 [Consensus] Merge '{}' -> '{}'", node_id, matched.id);
 
                 let current_meta: serde_json::Value = serde_json::from_str(&matched.metadata).unwrap_or(serde_json::json!({}));
@@ -42,6 +42,7 @@ impl ConsensusEngine {
 
                 self.silva.upsert_node(&matched.id, &matched.node_type, &matched.content, &updated_meta.to_string()).await?;
                 self.silva.set_weight(&node_id, 0.0).await?;
+                self.silva.mark_conflicted(&node_id, false).await?;
             } else {
                 let _ = self.silva.mark_conflicted(&node_id, false).await;
                 info!("✅ [Consensus] Approved unique thought: '{}'", node_id);
@@ -51,13 +52,13 @@ impl ConsensusEngine {
         Ok(())
     }
 
-    async fn find_similar(&self, content: &str, threshold: f64) -> Result<Option<(GraphNode, f64)>> {
-        let emb = self.silva.get_node_embedding(&format!("query:{content}")).await?;
+    async fn find_similar(&self, node_id: &str, threshold: f64) -> Result<Option<(GraphNode, f64)>> {
+        let emb = self.silva.get_node_embedding(node_id).await?;
         let Some(emb) = emb else { return Ok(None); };
 
         let results = self.silva.search_vector(&emb, 5).await?;
         for (node, score) in results {
-            if score as f64 >= threshold && node.id != format!("query:{content}") {
+            if score as f64 >= threshold && node.id != node_id {
                 return Ok(Some((node, score as f64)));
             }
         }
@@ -287,5 +288,106 @@ mod freshness_tests {
                 reason: "remote version is newer (2026-07-02T00:00:00Z > 2026-07-01T00:00:00Z)".into()
             }
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_resolve_conflicts_merges_similar_conflicted_node() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let engine = ConsensusEngine::new(silva.clone());
+
+        // Node 1: Established node (weight 1.0, not conflicted)
+        silva.upsert_node("fact_1", "fact", "Rust ensures memory safety without garbage collection", "{}").await.unwrap();
+        let mut emb1 = vec![0.0f32; 1024];
+        emb1[0] = 1.0;
+        silva.save_embedding("fact_1", &emb1, "bge-m3", None).await.unwrap();
+
+        // Node 2: Incoming duplicate node (weight 1.0, marked conflicted)
+        silva.upsert_node("fact_2", "fact", "Rust provides memory safety without a GC", "{}").await.unwrap();
+        let mut emb2 = vec![0.0f32; 1024];
+        emb2[0] = 1.0; // Identical normalized vector -> cosine similarity 1.0 >= 0.88
+        silva.save_embedding("fact_2", &emb2, "bge-m3", None).await.unwrap();
+        silva.mark_conflicted("fact_2", true).await.unwrap();
+
+        // Verify precondition
+        let conflicted_before = silva.get_all_conflicted().await.unwrap();
+        assert_eq!(conflicted_before.len(), 1);
+        assert_eq!(conflicted_before[0].id, "fact_2");
+
+        // Run conflict resolution
+        engine.resolve_conflicts().await.unwrap();
+
+        // Postconditions:
+        // fact_2 should be merged (weight set to 0.0) AND unflagged as conflicted
+        let node2 = silva.get_node("fact_2").await.unwrap().expect("fact_2 must exist");
+        assert_eq!(node2.weight, 0.0, "Merged node fact_2 must have weight 0.0");
+        assert!(!node2.conflicted, "Merged node fact_2 must have conflicted=false to prevent re-entering conflict queue");
+
+        // fact_1 should be reinforced: metadata contains updated weight 1.1 and last_reinforced
+        let node1 = silva.get_node("fact_1").await.unwrap().expect("fact_1 must exist");
+        let meta1: serde_json::Value = serde_json::from_str(&node1.metadata).unwrap();
+        assert_eq!(meta1.get("weight").and_then(|v| v.as_f64()), Some(1.1), "fact_1 metadata weight should be reinforced to 1.1");
+        assert!(meta1.get("last_reinforced").is_some(), "fact_1 metadata should have last_reinforced timestamp");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_resolve_conflicts_approves_dissimilar_unique_node() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let engine = ConsensusEngine::new(silva.clone());
+
+        // Node 1: Established node
+        silva.upsert_node("fact_1", "fact", "Rust ensures memory safety", "{}").await.unwrap();
+        let mut emb1 = vec![0.0f32; 1024];
+        emb1[0] = 1.0;
+        silva.save_embedding("fact_1", &emb1, "bge-m3", None).await.unwrap();
+
+        // Node 3: Completely distinct topic (orthogonal vector, cosine sim = 0.0 < 0.88)
+        silva.upsert_node("thought_3", "thought", "Photosynthesis in plants requires sunlight and water", "{}").await.unwrap();
+        let mut emb3 = vec![0.0f32; 1024];
+        emb3[1] = 1.0; // Orthogonal
+        silva.save_embedding("thought_3", &emb3, "bge-m3", None).await.unwrap();
+        silva.mark_conflicted("thought_3", true).await.unwrap();
+
+        // Run conflict resolution
+        engine.resolve_conflicts().await.unwrap();
+
+        // Postconditions:
+        // thought_3 should NOT be merged: weight remains 1.0 and conflicted becomes false
+        let node3 = silva.get_node("thought_3").await.unwrap().expect("thought_3 must exist");
+        assert_eq!(node3.weight, 1.0, "Unique thought_3 weight must remain 1.0");
+        assert!(!node3.conflicted, "thought_3 should no longer be marked conflicted");
+
+        // fact_1 should remain unchanged
+        let node1 = silva.get_node("fact_1").await.unwrap().expect("fact_1 must exist");
+        assert_eq!(node1.metadata, "{}", "fact_1 should not be modified");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_merged_node_cleared_from_conflicted_queue() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let engine = ConsensusEngine::new(silva.clone());
+
+        silva.upsert_node("fact_a", "fact", "Deterministic consensus prevents LLM freshness hallucinations", "{}").await.unwrap();
+        let mut emb_a = vec![0.0f32; 1024];
+        emb_a[0] = 1.0;
+        silva.save_embedding("fact_a", &emb_a, "bge-m3", None).await.unwrap();
+
+        silva.upsert_node("fact_b", "fact", "Deterministic consensus prevents LLM freshness errors", "{}").await.unwrap();
+        let mut emb_b = vec![0.0f32; 1024];
+        emb_b[0] = 1.0;
+        silva.save_embedding("fact_b", &emb_b, "bge-m3", None).await.unwrap();
+        silva.mark_conflicted("fact_b", true).await.unwrap();
+
+        // Resolve conflicts
+        engine.resolve_conflicts().await.unwrap();
+
+        // The conflicted queue must now be completely empty
+        let conflicted_after = silva.get_all_conflicted().await.unwrap();
+        assert!(conflicted_after.is_empty(), "All conflicted nodes must be cleared from the conflict queue");
+
+        // Running resolve_conflicts again must be a clean no-op
+        engine.resolve_conflicts().await.unwrap();
+        let node_b = silva.get_node("fact_b").await.unwrap().expect("fact_b must exist");
+        assert_eq!(node_b.weight, 0.0);
+        assert!(!node_b.conflicted);
     }
 }
