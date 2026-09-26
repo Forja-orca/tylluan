@@ -64,29 +64,40 @@ pub trait Phase: Send + Sync {
 
 pub struct PhaseOrchestrator {
     phases: Vec<Arc<dyn Phase>>,
+    max_parallel_override: Option<usize>,
 }
 
 impl PhaseOrchestrator {
-    pub fn new(phases: Vec<Box<dyn Phase>>) -> Self {
-        Self { phases: phases.into_iter().map(Arc::from).collect() }
+    pub fn new(phases: Vec<Box<dyn Phase>>, max_parallel_override: Option<usize>) -> Self {
+        Self {
+            phases: phases.into_iter().map(Arc::from).collect(),
+            max_parallel_override,
+        }
     }
 
-    /// Runs every phase concurrently, capped to the machine's real core count.
+    /// Runs every phase concurrently, capped to the machine's real core
+    /// count -- or to `max_parallel_override` when the operator has set
+    /// `[night] max_parallel_phases` in tylluan.toml, whichever is smaller.
     ///
     /// Sized off `available_parallelism()` rather than a fixed number so the
     /// same code gives a Raspberry Pi (2-4 cores) safe, non-contending
-    /// concurrency and a many-core workstation full 8-way parallelism —
-    /// no config knob, no hardcoded thread count either direction.
+    /// concurrency and a many-core workstation full 8-way parallelism by
+    /// default — an operator can still cap it lower via `[night]
+    /// max_parallel_phases` in tylluan.toml (`max_parallel_override`, applied
+    /// above), but there is no way to raise it above the real core count.
     /// Phases are independent (each touches SilvaDB through its own
     /// `Arc<Mutex<Connection>>`-serialized calls), so concurrent execution
     /// is safe. Spawning also means one phase panicking no longer aborts
     /// the rest — each is isolated in its own task.
     pub async fn run_all(&self, ctx: &PhaseContext) {
         let start = Instant::now();
-        let max_parallel = std::thread::available_parallelism()
+        let mut max_parallel = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
             .min(self.phases.len().max(1));
+        if let Some(override_cap) = self.max_parallel_override {
+            max_parallel = max_parallel.min(override_cap.max(1));
+        }
         let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel));
         info!(
             "🌙 NightConsolidation: starting {} phase(s), up to {} in parallel",
@@ -195,7 +206,7 @@ mod tests {
             Box::new(LightRerankerTrainPhase),
             Box::new(LifecyclePhase),
         ];
-        let orch = PhaseOrchestrator::new(phases);
+        let orch = PhaseOrchestrator::new(phases, None);
         orch.run_all(&ctx).await;
         // No panic means success (all phases ran, each in its own task)
     }
@@ -233,7 +244,7 @@ mod tests {
             Box::new(PanicPhase),
             Box::new(AutoLinkPhase),
         ];
-        let orch = PhaseOrchestrator::new(phases);
+        let orch = PhaseOrchestrator::new(phases, None);
         orch.run_all(&ctx).await;
         // The panic in PanicPhase must not abort DreamPhase or AutoLinkPhase
         // tokio::spawn catches panics per-task
@@ -242,7 +253,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn orchestrator_empty_phase_list() {
         let ctx = test_phase_context().await;
-        let orch = PhaseOrchestrator::new(vec![]);
+        let orch = PhaseOrchestrator::new(vec![], None);
         orch.run_all(&ctx).await;
         // Must not panic on empty phase list
     }
@@ -265,10 +276,56 @@ mod tests {
             }) as Box<dyn Phase>
         }).collect();
 
-        let orch = PhaseOrchestrator::new(phases);
+        let orch = PhaseOrchestrator::new(phases, None);
         orch.run_all(&ctx).await;
         let max = max_concurrent.load(std::sync::atomic::Ordering::SeqCst);
         assert!(max >= 1, "expected at least 1 concurrent phase, got {max}");
+    }
+
+    struct CountingPhase {
+        name: &'static str,
+        current_concurrent: Arc<std::sync::atomic::AtomicUsize>,
+        max_concurrent: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl Phase for CountingPhase {
+        fn name(&self) -> &'static str { self.name }
+        async fn run(&self, _ctx: &PhaseContext) -> PhaseReport {
+            let cur = self.current_concurrent.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            self.max_concurrent.fetch_max(cur, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            self.current_concurrent.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            PhaseReport { name: self.name, duration_ms: 25, ok: true, detail: "ok".into() }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_all_respects_configured_parallelism_cap() {
+        let ctx = test_phase_context().await;
+        let max_concurrent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let current_concurrent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let phases: Vec<Box<dyn Phase>> = (0..8).map(|i| {
+            let max_concurrent = max_concurrent.clone();
+            let current_concurrent = current_concurrent.clone();
+            Box::new(CountingPhase {
+                name: Box::leak(format!("phase_{i}").into_boxed_str()),
+                current_concurrent,
+                max_concurrent,
+            }) as Box<dyn Phase>
+        }).collect();
+
+        // Cap at 2, even though 8 phases exist and the machine likely has
+        // more than 2 cores available.
+        let orch = PhaseOrchestrator::new(phases, Some(2));
+        orch.run_all(&ctx).await;
+
+        let observed_max = max_concurrent.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            observed_max <= 2,
+            "configured cap of 2 must never be exceeded, observed {observed_max}"
+        );
     }
 
     // ── DreamPhase ──────────────────────────────────────────────────
@@ -535,7 +592,7 @@ mod tests {
             Box::new(OrderPhase { name: "second", order: order.clone() }),
             Box::new(OrderPhase { name: "third", order: order.clone() }),
         ];
-        let orch = PhaseOrchestrator::new(phases);
+        let orch = PhaseOrchestrator::new(phases, None);
         orch.run_all(&ctx).await;
 
         let executed = order.lock().unwrap().clone();
