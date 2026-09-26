@@ -92,7 +92,11 @@ pub struct EmbeddingEngine {
 /// Resolve fastembed model enum from config string.
 pub fn resolve_model(embedding_model: &str) -> EmbeddingModel {
     let lower = embedding_model.to_lowercase();
-    if lower.contains("nomic") {
+    if lower.contains("mxbai-q") || lower.contains("mxbai-quantized") {
+        EmbeddingModel::MxbaiEmbedLargeV1Q
+    } else if lower.contains("mxbai") {
+        EmbeddingModel::MxbaiEmbedLargeV1
+    } else if lower.contains("nomic") {
         EmbeddingModel::NomicEmbedTextV15
     } else if lower.contains("minilm") {
         EmbeddingModel::AllMiniLML6V2
@@ -111,7 +115,7 @@ pub fn resolve_dimension(embedding_model: &str) -> u32 {
         return 0;
     }
     let lower = embedding_model.to_lowercase();
-    if lower.contains("bge-m3") || lower == "bge" {
+    if lower.contains("bge-m3") || lower == "bge" || lower.contains("mxbai") {
         1024
     } else if lower.contains("nomic") {
         768
@@ -125,7 +129,11 @@ pub fn resolve_dimension(embedding_model: &str) -> u32 {
 /// Human-readable model name for logs.
 fn model_display_name(embedding_model: &str) -> &'static str {
     let lower = embedding_model.to_lowercase();
-    if lower.contains("bge-m3") {
+    if lower.contains("mxbai-q") || lower.contains("mxbai-quantized") {
+        "Mxbai-Embed-Large-v1-Quantized"
+    } else if lower.contains("mxbai") {
+        "Mxbai-Embed-Large-v1"
+    } else if lower.contains("bge-m3") {
         "BGE-M3"
     } else if lower.contains("bge-small") {
         "BGE-Small"
@@ -143,7 +151,11 @@ fn model_display_name(embedding_model: &str) -> &'static str {
 /// Model type string for engine_id().
 fn resolve_model_type(embedding_model: &str) -> String {
     let lower = embedding_model.to_lowercase();
-    if lower.contains("bge-m3") {
+    if lower.contains("mxbai-q") || lower.contains("mxbai-quantized") {
+        "mxbai-embed-large-q"
+    } else if lower.contains("mxbai") {
+        "mxbai-embed-large"
+    } else if lower.contains("bge-m3") {
         "bge-m3"
     } else if lower.contains("bge-small") {
         "bge-small"
@@ -556,13 +568,40 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_model() {
+        assert_eq!(resolve_model("mxbai-embed-large"), EmbeddingModel::MxbaiEmbedLargeV1);
+        assert_eq!(resolve_model("mxbai-embed-large-v1"), EmbeddingModel::MxbaiEmbedLargeV1);
+        assert_eq!(resolve_model("mxbai-q"), EmbeddingModel::MxbaiEmbedLargeV1Q);
+        assert_eq!(resolve_model("mxbai-quantized"), EmbeddingModel::MxbaiEmbedLargeV1Q);
+        assert_eq!(resolve_model("bge-m3"), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("bge"), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("nomic"), EmbeddingModel::NomicEmbedTextV15);
+        assert_eq!(resolve_model("minilm"), EmbeddingModel::AllMiniLML6V2);
+        assert_eq!(resolve_model("bge-small"), EmbeddingModel::BGESmallENV15);
+        assert_eq!(resolve_model("unknown-custom"), EmbeddingModel::BGEM3);
+    }
+
+    #[test]
     fn test_resolve_dimension() {
+        assert_eq!(resolve_dimension("mxbai-embed-large"), 1024);
+        assert_eq!(resolve_dimension("mxbai-embed-large-v1"), 1024);
+        assert_eq!(resolve_dimension("mxbai-q"), 1024);
         assert_eq!(resolve_dimension("bge-m3"), 1024);
         assert_eq!(resolve_dimension("bge-small"), 384);
         assert_eq!(resolve_dimension("minilm"), 384);
         assert_eq!(resolve_dimension("nomic-embed-text"), 768);
         assert_eq!(resolve_dimension("none"), 0);
         assert_eq!(resolve_dimension(""), 0);
+    }
+
+    #[test]
+    fn test_model_display_name_and_type() {
+        assert_eq!(model_display_name("mxbai-embed-large"), "Mxbai-Embed-Large-v1");
+        assert_eq!(model_display_name("mxbai-q"), "Mxbai-Embed-Large-v1-Quantized");
+        assert_eq!(model_display_name("bge-m3"), "BGE-M3");
+        assert_eq!(resolve_model_type("mxbai-embed-large"), "mxbai-embed-large");
+        assert_eq!(resolve_model_type("mxbai-q"), "mxbai-embed-large-q");
+        assert_eq!(resolve_model_type("bge-m3"), "bge-m3");
     }
 
     #[test]
@@ -589,6 +628,8 @@ mod tests {
         assert_eq!(resolve_dimension("BGE-M3"), 1024);
         assert_eq!(resolve_dimension("bge"), 1024);
         assert_eq!(resolve_dimension("BGE"), 1024);
+        assert_eq!(resolve_dimension("mxbai-embed-large"), 1024);
+        assert_eq!(resolve_dimension("MXBAI-EMBED-LARGE"), 1024);
         assert_eq!(resolve_dimension(""), 0);
         assert_eq!(resolve_dimension("none"), 0);
     }
