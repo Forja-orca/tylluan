@@ -57,9 +57,27 @@ impl EmbedBatcher {
                     }
                     let texts: Vec<String> = pending.iter().flat_map(|it| it.texts.clone()).collect();
                     let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                    let sizes: Vec<usize> = pending.iter().map(|it| it.texts.len()).collect();
                     let result: Result<Vec<Vec<f32>>, String> = engine.embed_batch(&refs).map_err(|e| e.to_string());
-                    for item in pending {
-                        let _ = item.resp.send(result.clone());
+                    match result {
+                        Ok(all) => {
+                            // Each pending request must receive ITS OWN slice:
+                            // the merged batch returns embeddings in the same
+                            // order as the merged texts. (Before this split,
+                            // every caller got the FULL merged batch and
+                            // `embed_one` popped the last vector — the wrong
+                            // embedding for every caller except the final one
+                            // whenever the window merged >1 request.)
+                            let split = split_batch_results(&sizes, all);
+                            for (item, slice) in pending.into_iter().zip(split) {
+                                let _ = item.resp.send(Ok(slice));
+                            }
+                        }
+                        Err(e) => {
+                            for item in pending {
+                                let _ = item.resp.send(Err(e.clone()));
+                            }
+                        }
                     }
                 }
             })?;
@@ -77,6 +95,37 @@ impl EmbedBatcher {
             .map_err(|e| anyhow!("embed batcher inference failed: {e}"))?;
         out.pop().context("No embedding returned from batcher")
     }
+
+    /// Send a multi-text request through the same coalescing window: the
+    /// collector merges it with concurrent single-text requests into ONE
+    /// ONNX batch and returns exactly this request's own embeddings, in
+    /// order. Used by the reindexer so its chunks share inference with
+    /// recall instead of serializing against it on the model Mutex.
+    pub fn embed_many(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
+        let (resp_tx, resp_rx) = std::sync::mpsc::channel();
+        self.tx
+            .send(BatchItem { texts, resp: resp_tx })
+            .map_err(|e| anyhow!("embed batcher channel closed: {e}"))?;
+        resp_rx
+            .recv()
+            .map_err(|e| anyhow!("embed batcher response channel closed: {e}"))?
+            .map_err(|e| anyhow!("embed batcher inference failed: {e}"))
+    }
+}
+
+/// Split a merged batch result back into per-request slices, in the same
+/// order the requests were merged. Pure helper so the offset arithmetic is
+/// unit-testable without an ONNX model (the wrong-slice bug lived here).
+fn split_batch_results(sizes: &[usize], merged: Vec<Vec<f32>>) -> Vec<Vec<Vec<f32>>> {
+    let mut offset = 0usize;
+    sizes
+        .iter()
+        .map(|&n| {
+            let slice = merged[offset..offset + n].to_vec();
+            offset += n;
+            slice
+        })
+        .collect()
 }
 
 /// Embedding engine for semantic search.
@@ -248,17 +297,49 @@ impl EmbeddingEngine {
     /// default off): when disabled this is a thin wrapper over `embed()`.
     /// Bounded queue: overflow returns Err(Busy) instead of blocking forever.
     pub fn embed_batch_coalesced(self: &Arc<Self>, text: &str) -> Result<Vec<f32>> {
-        let enabled = crate::config::TylluanConfig::load_cached()
-            .ok()
-            .map(|cfg| cfg.try_read().ok().map(|g| g.silva.embed_batching_enabled).unwrap_or(false))
-            .unwrap_or(false);
-        if !enabled {
+        if !Self::batching_enabled() {
             return self.embed(text);
         }
+        self.shared_batcher()?.embed_one(text.to_string())
+    }
+
+    /// Async-safe coalesced batch entry (reindexer contract, 2026-09-27):
+    /// when `embed_batching_enabled` is on, routes ALL texts through the
+    /// shared EmbedBatcher window so background re-indexing coalesces with
+    /// concurrent recall traffic (one ONNX batch instead of serialized
+    /// mutex contention — the contamination measured in the A/B baseline).
+    /// When the flag is off it delegates to `embed_batch_async` (blocking
+    /// pool), preserving exact current behavior. Never runs ONNX on an
+    /// async worker.
+    pub async fn embed_batch_coalesced_async(
+        self: &Arc<Self>,
+        texts: Vec<String>,
+    ) -> Result<Vec<Vec<f32>>> {
+        if !Self::batching_enabled() {
+            return self.embed_batch_async(texts).await;
+        }
+        let batcher = self.shared_batcher()?;
+        tokio::task::block_in_place(move || batcher.embed_many(texts))
+    }
+
+    /// Is the coalescing flag on? Reads the cached runtime config; defaults
+    /// to off on any load failure (fail-safe: no behavioral change).
+    fn batching_enabled() -> bool {
+        crate::config::TylluanConfig::load_cached()
+            .ok()
+            .map(|cfg| cfg.try_read().ok().map(|g| g.silva.embed_batching_enabled).unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    /// Get-or-spawn the shared coalescing batcher (lazy; only called when
+    /// the flag is on). Losing the spawn race just means the caller uses its
+    /// own local batcher for this one call; the winner is stored for the
+    /// next callers.
+    fn shared_batcher(self: &Arc<Self>) -> Result<Arc<EmbedBatcher>> {
         {
             let guard = self.batcher.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(b) = guard.as_ref() {
-                return b.embed_one(text.to_string());
+                return Ok(Arc::clone(b));
             }
         }
         let engine = Arc::clone(self);
@@ -270,7 +351,7 @@ impl EmbeddingEngine {
         {
             *guard = Some(Arc::clone(&arc));
         }
-        arc.embed_one(text.to_string())
+        Ok(arc)
     }
 
     /// Embed multiple texts in one ONNX batch call.
@@ -619,6 +700,35 @@ mod tests {
         let vector = engine.embed("Hello from portable mode").expect("Inference failed");
         assert_eq!(vector.len(), 384, "MiniLM should produce 384-dim vectors");
         assert_eq!(engine.dimension(), 384);
+    }
+
+    // Regression (2026-09-27): the EmbedBatcher collector used to send every
+    // caller the FULL merged batch and `embed_one` popped the last vector —
+    // the wrong embedding for every caller except the final one whenever the
+    // 5ms window merged >1 request (multi-caller misalignment).
+    #[test]
+    fn split_batch_results_returns_each_caller_its_own_slice() {
+        let merged = vec![
+            vec![1.0, 0.0],
+            vec![2.0, 0.0],
+            vec![3.0, 0.0],
+            vec![4.0, 0.0],
+        ];
+        let sizes = [1usize, 2, 1];
+        let split = split_batch_results(&sizes, merged.clone());
+        assert_eq!(split.len(), 3);
+        assert_eq!(split[0], vec![vec![1.0, 0.0]]);
+        assert_eq!(split[1], vec![vec![2.0, 0.0], vec![3.0, 0.0]]);
+        assert_eq!(split[2], vec![vec![4.0, 0.0]]);
+        let remerged: Vec<Vec<f32>> = split.into_iter().flatten().collect();
+        assert_eq!(remerged, merged, "slices must re-assemble the merged batch in order");
+    }
+
+    #[test]
+    fn split_batch_results_single_caller_gets_everything() {
+        let merged = vec![vec![1.0], vec![2.0]];
+        let split = split_batch_results(&[2], merged);
+        assert_eq!(split, vec![vec![vec![1.0], vec![2.0]]]);
     }
 
     // CONTRACT-01 invariant: BGE-M3 is ALWAYS 1024 dimensions

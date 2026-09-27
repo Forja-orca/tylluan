@@ -81,4 +81,24 @@ mod tests {
         let g3 = budget.acquire().await;
         assert!(g3.is_some(), "after release a new job can enter");
     }
+
+    /// Regression (2026-09-27): the periodic SQLite maintenance loop (the
+    /// checkpoint spawn in main.rs) is wired to the same background budget
+    /// as reindexer/HNSW/consensus. This models the checkpoint's skip-if-busy
+    /// contract: when the other heavy loops hold ALL permits, the checkpoint
+    /// tick SKIPS (after the wait budget) instead of queuing unboundedly;
+    /// once a permit frees, the next checkpoint tick enters.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn checkpoint_skips_when_budget_exhausted_by_heavy_loops() {
+        let budget = BackgroundBudget::new(2, 1); // 2 permits: reindexer + HNSW
+        let _reindex = budget.acquire().await.expect("reindexer enters");
+        let _hnsw = budget.acquire().await.expect("HNSW enters");
+        let started = std::time::Instant::now();
+        let maint = budget.acquire().await;
+        assert!(maint.is_none(), "checkpoint skips its tick when heavy loops hold all permits");
+        assert!(started.elapsed() >= Duration::from_millis(950), "skip must respect the wait budget");
+        drop(_hnsw);
+        let maint2 = budget.acquire().await;
+        assert!(maint2.is_some(), "checkpoint enters once a permit frees");
+    }
 }
