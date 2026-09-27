@@ -49,6 +49,24 @@ FAILED=0
 fail() { echo "❌ $1"; FAILED=1; }
 ok()   { echo "✅ $1"; }
 
+# ── Live kernel drift (local-only, informational, NEVER wired to CI) ─────
+# Deliberately outside RUN_RUST/RUN_DASHBOARD/RUN_DOCS and always runs: its
+# whole point (per its own header) is "check this at the START of a work
+# session", the same way you'd run `git status` first. Never fails the push
+# -- restarting a stale production kernel is José's call alone (CLAUDE.md),
+# not something an agent can self-remediate by re-running verify.sh, so
+# blocking on it here would just leave a push stuck for a decision no agent
+# in this chain can make. And it is NEVER added to CI: CI starts a fresh
+# runner with no live kernel every time, so there is no "stale running
+# process" for it to ever observe there -- wiring it to CI would only add a
+# permanent no-op step. Wired here 2026-09-27, fifth external audit round.
+if bash scripts/check_live_kernel_drift.sh; then
+    ok "live kernel drift (informational, local-only)"
+else
+    echo "⚠️  live kernel drift detected — see above. Informational only, does not block this push (production restart is José's call)."
+fi
+echo
+
 # ── Rust: kernel + tylluan-link, pinned to `stable` (CI's exact toolchain) ──
 # Never use the ambient default toolchain here — that mismatch is the
 # single most repeated real bug this project has hit. `rustup run stable`
@@ -151,6 +169,47 @@ fi
 # STATUS.md/README.md and quietly lying about the project's real state. ──
 if [ "$RUN_DOCS" = "1" ]; then
     echo "── Docs drift ──"
+    # Doc-path/doc-port/version-consistency gate. Wired 2026-09-27 (fifth
+    # external audit round found it existed since the 2026-09-11 cycle but
+    # was never cabled in): needed two real fixes first to run clean --
+    # (1) it died with awk fatal + exit 2 in a clean clone because line 47
+    # read the gitignored tylluan.toml instead of the versioned
+    # tylluan.example.toml; (2) 26 false positives from file:line citations
+    # mismatched as 4-5-digit ports, and from docs that document a
+    # deliberate second/other kernel instance (Docker-secondary, a restore
+    # drill, a federation peer) by design -- see the script's own comments.
+    if bash scripts/check_docs_reality.sh; then
+        ok "doc-path/doc-port/version consistency (check_docs_reality.sh)"
+    else
+        fail "doc-path/doc-port/version drift — see scripts/check_docs_reality.sh output above"
+    fi
+
+    # Pilar 2 (repo-pillars) contract gate: JSON schemas under schemas/ are
+    # valid, and if a kernel happens to be live on :47004 its real endpoints
+    # get checked against them too. Degrades gracefully with no live kernel
+    # (CI never has one) -- exit 0 either way once schemas are valid. Wired
+    # 2026-09-27 after the fifth external audit round found it existed but
+    # was never invoked from here or from CI. Lives here (not --rust) so
+    # scripts/test_verify_semantics.sh's --docs-only test harness exercises
+    # its blocking semantics for real.
+    if bash scripts/check_contracts.sh; then
+        ok "Pilar 2 contract gate (schemas/ + live endpoints if reachable)"
+    else
+        fail "Pilar 2 contract gate — see scripts/check_contracts.sh output above"
+    fi
+
+    # Dead-code/stale-test heuristic (G3, name-based grep, not type-aware).
+    # Report-only by its own design until the suspect list is triaged and
+    # stable (see the script's own header) -- do NOT pass --strict here.
+    # Wired 2026-09-27, same audit round as above; non-blocking on purpose,
+    # matching check_no_predation.sh's pattern below. Same reason as
+    # check_contracts.sh above for living here, not --rust.
+    if bash scripts/check_dead_code_tests.sh; then
+        ok "dead-code/stale-test heuristic (G3, report-only)"
+    else
+        echo "⚠️  dead-code/stale-test heuristic (G3) found suspects — see above. Report-only, does not block this push."
+    fi
+
     if bash scripts/check_head_sync.sh; then
         ok "STATUS.md HEAD citation"
     else

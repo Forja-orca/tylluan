@@ -51,7 +51,7 @@ fi
 
 # ── Gate classification: the ONE place mapping gate -> blocking semantics ──
 # Gates wired in verify.sh --docs that must NEVER flip FAILED (report-only).
-REPORT_ONLY_GATES="check_no_predation"
+REPORT_ONLY_GATES="check_no_predation check_dead_code_tests check_live_kernel_drift"
 # All other discovered gates are exercised as blocking by T3.
 
 # ── Discover gates dynamically from verify.sh's own body ──

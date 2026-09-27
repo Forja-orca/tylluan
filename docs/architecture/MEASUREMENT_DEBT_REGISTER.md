@@ -237,7 +237,7 @@ correcta adoptada, no borrado del número.
 
 ---
 
-## MD-9 · Gates de verificación existentes pero no invocados — `ABIERTO`
+## MD-9 · Gates de verificación existentes pero no invocados — `PARCIAL`
 
 **Qué dice medir:** la batería de 13 scripts `scripts/check_*` / `verify_*` presenta al proyecto como cubierto frente a deriva de docs, de contratos, de kernel vivo y de tests sobre código muerto.
 
@@ -247,7 +247,9 @@ correcta adoptada, no borrado del número.
 
 **Origen:** quinta ronda de auditoría externa (Claude Opus 5, 2026-09-27) — ver `docs/roadmap/ROADMAP_O3.md`.
 
-**Cierre:** arreglar la línea 47 para leer `tylluan.example.toml` o fallar ruidosamente; cablear los cinco a `verify.sh` y a CI; añadir un meta-test que falle si un script de `scripts/check_*` no aparece invocado en ninguno de los dos sitios (el mismo patrón de `test_verify_semantics.sh`), para que este hallazgo no pueda repetirse en silencio.
+**Cierre parcial (2026-09-27, Claude Code):** línea 47 arreglada (lee `tylluan.example.toml` cuando `tylluan.toml` no existe; falla ruidosamente si tampoco existe ninguno) — corre limpio en clon limpio y con config real, verificado ambos casos. Al correrlo por primera vez de verdad aparecieron 26 hallazgos nuevos, dos clases de falso positivo reales que hubo que arreglar antes de cablear (no se cableó "tal cual" el script roto): citas `fichero.rs:línea` mal capturadas como puerto de 4-5 dígitos, y 5 documentos que describen una segunda instancia/drill por diseño (Docker secundario, drill de restore, nodo peer B) tratados como low-confidence igual que los ADRs históricos. Los 4 gates que degradan con gracia sin kernel vivo (`check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh` reporte-only, y el propio) quedan cableados a `scripts/verify.sh --docs` **y** a `.github/workflows/ci.yml` (jobs `docs-reality-check`, `contracts-check`, `dead-code-tests-report`). `check_live_kernel_drift.sh` se cableó SOLO a `verify.sh` (informativo, nunca bloqueante) y deliberadamente NO a CI — su propia cabecera documenta por qué: compara un kernel EN VIVO contra HEAD, y un runner de CI nunca tiene uno corriendo, así que cablearlo ahí sería un paso sin efecto para siempre. `scripts/test_verify_semantics.sh` actualizado (`REPORT_ONLY_GATES`) y sus 5 tests (T1-T5) pasan con la cablería nueva.
+
+**Pendiente para cerrar del todo:** el meta-test de cobertura que el hallazgo original pedía ("que falle si un script de `scripts/check_*` no aparece invocado en ninguno de los dos sitios") no se construyó todavía — sin él, una sexta ronda de auditoría podría volver a encontrar un script nuevo sin cablear. Sin asignar.
 
 ---
 
@@ -263,4 +265,4 @@ correcta adoptada, no borrado del número.
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
-| MD-9 | Gates de verificación existentes pero no invocados | ABIERTO | Claude Code |
+| MD-9 | Gates de verificación existentes pero no invocados | PARCIAL | Claude Code cerró adelante (4 gates a CI+verify.sh, 1 a verify.sh); meta-test de cobertura pendiente |

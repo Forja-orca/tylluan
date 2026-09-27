@@ -31,8 +31,8 @@
 # Exit 0 if no findings, exit 1 if any. This script only REPORTS -- it never
 # edits docs. A human or agent reviews the output and fixes the docs.
 #
-# NOT wired into scripts/verify.sh yet: it must first run clean against the
-# real repo without false positives (historical port refs are the known trap).
+# Wired into scripts/verify.sh and CI (2026-09-27) -- ran clean against the
+# real repo before cabling, per the note above.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -42,18 +42,41 @@ while IFS= read -r d; do
     DOCS+=("$d")
 done < <(find docs -name '*.md' -type f 2>/dev/null | sort || true)
 
-# The kernel's real port lives in the [nexus] section (line ~201: port = 47004);
-# tylluan.toml also has OTHER services' ports (llama 9000, etc.).
-real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{gsub(/[^0-9]/,"",$0); print; exit}' tylluan.toml | head -1)
-echo "Real port (tylluan.toml [nexus]): ${real_port:-<none>}"
+# The kernel's real port lives in the [nexus] section (line ~201: port = 47004).
+# `tylluan.toml` is the LIVE config (gitignored -- absent in a clean clone/CI,
+# it also has OTHER services' ports, llama 9000 etc.); `tylluan.example.toml`
+# is the versioned source of truth the docs actually describe. Prefer the
+# live file when it exists locally (catches a real drifted port a developer
+# is running), fall back to the example (always present, what CI has), and
+# fail loudly instead of dying in awk if somehow neither exists (2026-09-27
+# incident: this exact awk call on a missing `tylluan.toml` killed the whole
+# script silently -- exit 2, zero of its 3 checks run -- found by external
+# audit, fifth round).
+port_source="tylluan.toml"
+[ -f "$port_source" ] || port_source="tylluan.example.toml"
+if [ ! -f "$port_source" ]; then
+    echo "❌ check_docs_reality.sh: neither tylluan.toml nor tylluan.example.toml found -- cannot determine the real kernel port. Run from the repo root."
+    exit 1
+fi
+real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{gsub(/[^0-9]/,"",$0); print; exit}' "$port_source" | head -1)
+echo "Real port ($port_source [nexus]): ${real_port:-<none>}"
 echo "Docs scanned: ${#DOCS[@]} (STATUS.md, README.md, AGENTS.md, CLAUDE.md, docs/**/*.md)"
 echo ""
 
 problems=0
 low_conf=0
 
-# Lines that mark a port mention as historical context, not current truth.
-hist_regex='antes|historico|hist[oó]rico|migro|migr[oó]|previously|was port|old port|former port|commit [0-9a-f]{7,}'
+# Lines that mark a port mention as NOT a claim about "the" kernel port --
+# either historical context, or a deliberate second/other instance (Docker
+# secondary, restore drill, a second federation peer). Found by running this
+# script for real before wiring it (2026-09-27, fifth external audit round):
+# without this, FEDERATION.md/FEDERATION_TWO_INSTANCES.md/ARCHITECTURE_BLUEPRINTS.md
+# (documented Docker-secondary instance on :3040), RUNBOOK_RESTORE.md (ephemeral
+# restore-drill instance on :3045) and spike_inference_mesh_2node_plan.md (a
+# second federation peer, "node-b") would all be permanent false positives --
+# exactly the class of noise the script's own original header warned about
+# ("must first run clean ... without false positives").
+hist_regex='antes|historico|hist[oó]rico|migro|migr[oó]|previously|was port|old port|former port|commit [0-9a-f]{7,}|secondary|secundari|docker.compose|node-b|node b|drill|ef[ií]mera|restaur'
 
 # ── Check 1: backtick-cited paths must exist ──────────────────────────────
 # One grep pass per doc: GNU grep -n -o prints "lineno:match" per match.
@@ -94,12 +117,19 @@ for doc in "${DOCS[@]}"; do
         case "$tok" in
             arXiv:*) continue ;; # arXiv IDs (:2602.01848) are NOT ports
         esac
-        # Check if the full line contains historical keywords
+        # Check if the full line contains historical/other-instance keywords
         full_line=$(sed -n "${lineno}p" "$doc")
         if echo "$full_line" | grep -qE "$hist_regex"; then
             continue
         fi
         p="${tok#:}"
+        # Skip file:line citations (e.g. `main.rs:1859`) that the port regex
+        # mismatches as a 4-5 digit port -- only happens for line numbers in
+        # that range, which is why it slipped through unnoticed until the
+        # fifth external audit round ran this for real (2026-09-27).
+        if echo "$full_line" | grep -qE "\.(rs|py|toml|json|sh|md|yml|yaml|ts|tsx|html|css|svg|lock|db):$p\b"; then
+            continue
+        fi
         # Skip known non-kernel ports (Vite dev server, STUN server, etc.)
         case "$p" in
             5173|19302) continue ;;
@@ -107,10 +137,19 @@ for doc in "${DOCS[@]}"; do
         if [ "$p" != "$real_port" ]; then
             # ADRs record decisions at a point in time -- old ports there are
             # inherently historical context, report as low-confidence, never
-            # a hard error.
+            # a hard error. Same treatment for docs that are *by design*
+            # about a second/other kernel instance (not "the" kernel), which
+            # a per-line keyword check can't catch reliably because the
+            # "this is instance B" context usually lives a few lines above
+            # the port mention, not on the same line -- verified by reading
+            # each file, fifth external audit round, 2026-09-27.
             case "$doc" in
                 docs/reference/adr/*)
                     echo "⚠️  low-confidence $doc:$lineno: cita puerto :$p, el real es :$real_port (ADRs son registros historicos por naturaleza)"
+                    low_conf=$((low_conf+1))
+                    ;;
+                docs/concepts/FEDERATION.md|docs/concepts/FEDERATION_TWO_INSTANCES.md|docs/concepts/ARCHITECTURE_BLUEPRINTS.md|docs/guides/RUNBOOK_RESTORE.md|docs/architecture/spike_inference_mesh_2node_plan.md)
+                    echo "⚠️  low-confidence $doc:$lineno: cita puerto :$p, el real es :$real_port (documento describe una segunda instancia/drill por diseño, no el kernel real)"
                     low_conf=$((low_conf+1))
                     ;;
                 *)
