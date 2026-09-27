@@ -1653,12 +1653,18 @@ async fn main() -> anyhow::Result<()> {
                             if texts.is_empty() {
                                 continue;
                             }
-                            // MUST use embed_batch_async (blocking pool), never
-                            // the sync embed_batch: the sync call runs 2-8s of
-                            // ONNX on the async worker while holding the engine
-                            // mutex, starving the runtime (live HTTP hang
+                            // Coalesced entry: when `embed_batching_enabled` is
+                            // on, these texts join the shared EmbedBatcher
+                            // window with concurrent recall traffic — ONE ONNX
+                            // batch for both instead of the reindexer
+                            // serializing against recall on the model Mutex
+                            // (the contamination measured in the A/B baseline).
+                            // When the flag is off it delegates to the
+                            // blocking-pool batch (`embed_batch_async`), never
+                            // the sync `embed_batch`: 2-8s of ONNX on the async
+                            // worker would starve the runtime (live HTTP hang
                             // 2026-09-01 — even /health stopped answering).
-                            match engine.embed_batch_async(texts.clone()).await {
+                            match engine.embed_batch_coalesced_async(texts.clone()).await {
                                 Ok(vectors) => {
                                     for (vector, (nid, mid, mhash_str)) in vectors.into_iter().zip(nodes.drain(..)) {
                                         let sid = silva_inner.clone();
@@ -1700,7 +1706,7 @@ async fn main() -> anyhow::Result<()> {
     // Optimized: Uses 60s tick instead of 1s to save CPU on toaster hardware
     let silva_consensus = silva.clone();
     let matcher_consensus = matcher.clone();
-    let budget_consensus = background_budget;
+    let budget_consensus = background_budget.clone();
     tokio::spawn(async move {
         let mut consensus_interval = tokio::time::interval(Duration::from_secs(60));
         let mut secs_to_consensus: u64 = 3600;
@@ -1755,10 +1761,16 @@ async fn main() -> anyhow::Result<()> {
     let maint_silva = silva.clone();
     let maint_memory = memory.clone();
     let maint_mailbox = mailbox.clone();
+    let budget_maint = background_budget.clone();
     tokio::spawn(async move {
         let mut maint_interval = tokio::time::interval(Duration::from_secs(300));
         loop {
             maint_interval.tick().await;
+            // Latency budget: skip this tick if the background budget is
+            // exhausted (same skip-if-busy pattern as reindexer/HNSW/consensus
+            // above). WAL checkpoint can block on busy connections; it must
+            // never queue unboundedly behind another heavy job.
+            let Some(_bg) = budget_maint.acquire().await else { continue };
             info!("🧹 Running periodic SQLite maintenance (Checkpoints)...");
             
             if let Err(e) = maint_silva.checkpoint().await {
