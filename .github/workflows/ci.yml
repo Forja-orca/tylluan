@@ -195,6 +195,49 @@ jobs:
       - name: Verify STATUS.md cites exactly one HEAD and it's the real one
         run: bash scripts/check_head_sync.sh
 
+  docs-reality-check:
+    name: Docs — path/port/version citations match reality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Existed since the 2026-09-11 cycle but was never cabled in here or in
+      # verify.sh (fifth external audit round, 2026-09-27, found it). Needed
+      # two real fixes first to run clean in a runner with no live
+      # tylluan.toml (gitignored -- CI never has one): read the versioned
+      # tylluan.example.toml instead of dying with awk fatal at line 47, and
+      # exclude file:line citations / documented second-instance ports that
+      # were false-positiving as port drift.
+      - name: Verify docs cite real paths, the real port, and a consistent version
+        run: bash scripts/check_docs_reality.sh
+
+  contracts-check:
+    name: Pilar 2 — schemas valid, live endpoints checked if reachable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # No live kernel in a fresh runner -- degrades gracefully to
+      # static-only schema validation (its own design, verified before
+      # wiring). Blocking: schema-file validity itself should never regress.
+      - name: Verify schemas/ contracts (static; live check skipped, no kernel here)
+        run: bash scripts/check_contracts.sh
+
+  dead-code-tests-report:
+    name: Docs — dead-code/stale-test heuristic report (non-blocking, G3)
+    runs-on: ubuntu-latest
+    continue-on-error: true # report-only by the script's own design (see its
+                             # header) until the suspect list is triaged and
+                             # stable -- do not add --strict here yet.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Run dead-code/stale-test heuristic (G3, report-only)
+        run: bash scripts/check_dead_code_tests.sh
+
+  # NOTE (fifth external audit round, 2026-09-27): check_live_kernel_drift.sh
+  # is deliberately NOT wired here. Its own header explains why: it compares
+  # a LIVE running kernel's embedded commit against HEAD, and a fresh CI
+  # runner never has one -- wiring it would only add a permanent no-op step.
+  # It IS wired into scripts/verify.sh (local-only, always runs, informational).
+
   no-predation-report:
     name: Docs — non-predation gate report (non-blocking, ADR-013)
     runs-on: ubuntu-latest
