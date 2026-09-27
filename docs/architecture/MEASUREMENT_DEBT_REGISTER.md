@@ -237,6 +237,20 @@ correcta adoptada, no borrado del número.
 
 ---
 
+## MD-9 · Gates de verificación existentes pero no invocados — `ABIERTO`
+
+**Qué dice medir:** la batería de 13 scripts `scripts/check_*` / `verify_*` presenta al proyecto como cubierto frente a deriva de docs, de contratos, de kernel vivo y de tests sobre código muerto.
+
+**Qué mide realmente:** solo 8 de los 13 corren en algún punto. `check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh`, `check_live_kernel_drift.sh` y `verify_contracts.py` no se invocan desde `.github/workflows/*` ni desde `scripts/verify.sh` — verificado por inspección cruzada de invocaciones, 2026-09-27, HEAD `6dd53a7`, y confirmado independientemente por el tech lead con el mismo grep antes de aceptar el hallazgo. Además `check_docs_reality.sh` es inejecutable en clon limpio (exit 2 en línea 47, lee `tylluan.toml` que está en `.gitignore:32`) — reproducido corriendo el script sin ese fichero. Cuatro de las cinco dimensiones que el proyecto cree cubiertas están sin cubrir.
+
+**Matiz encontrado al verificar:** la cabecera del propio script (`check_docs_reality.sh:34-35`) ya documenta "NOT wired into scripts/verify.sh yet: it must first run clean against the real repo without false positives" — es un TODO explícito y conocido desde su creación, no un hueco descubierto por accidente ni ocultado. No cambia el estado (`ABIERTO`), sí cambia la lectura: el problema no es que nadie lo supiera, es que un TODO declarado lleva semanas sin cerrarse.
+
+**Origen:** quinta ronda de auditoría externa (Claude Opus 5, 2026-09-27) — ver `docs/roadmap/ROADMAP_O3.md`.
+
+**Cierre:** arreglar la línea 47 para leer `tylluan.example.toml` o fallar ruidosamente; cablear los cinco a `verify.sh` y a CI; añadir un meta-test que falle si un script de `scripts/check_*` no aparece invocado en ninguno de los dos sitios (el mismo patrón de `test_verify_semantics.sh`), para que este hallazgo no pueda repetirse en silencio.
+
+---
+
 ## Resumen
 
 | ID | Ítem | Estado | Dueño del cierre |
@@ -249,3 +263,4 @@ correcta adoptada, no borrado del número.
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
+| MD-9 | Gates de verificación existentes pero no invocados | ABIERTO | Claude Code |
