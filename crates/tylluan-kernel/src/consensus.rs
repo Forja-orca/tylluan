@@ -299,13 +299,13 @@ mod freshness_tests {
         silva.upsert_node("fact_1", "fact", "Rust ensures memory safety without garbage collection", "{}").await.unwrap();
         let mut emb1 = vec![0.0f32; 1024];
         emb1[0] = 1.0;
-        silva.save_embedding("fact_1", &emb1, "bge-m3", None).await.unwrap();
+        silva.save_embedding("fact_1", &emb1, "test-model", None).await.unwrap();
 
         // Node 2: Incoming duplicate node (weight 1.0, marked conflicted)
         silva.upsert_node("fact_2", "fact", "Rust provides memory safety without a GC", "{}").await.unwrap();
         let mut emb2 = vec![0.0f32; 1024];
         emb2[0] = 1.0; // Identical normalized vector -> cosine similarity 1.0 >= 0.88
-        silva.save_embedding("fact_2", &emb2, "bge-m3", None).await.unwrap();
+        silva.save_embedding("fact_2", &emb2, "test-model", None).await.unwrap();
         silva.mark_conflicted("fact_2", true).await.unwrap();
 
         // Verify precondition
@@ -338,13 +338,13 @@ mod freshness_tests {
         silva.upsert_node("fact_1", "fact", "Rust ensures memory safety", "{}").await.unwrap();
         let mut emb1 = vec![0.0f32; 1024];
         emb1[0] = 1.0;
-        silva.save_embedding("fact_1", &emb1, "bge-m3", None).await.unwrap();
+        silva.save_embedding("fact_1", &emb1, "test-model", None).await.unwrap();
 
         // Node 3: Completely distinct topic (orthogonal vector, cosine sim = 0.0 < 0.88)
         silva.upsert_node("thought_3", "thought", "Photosynthesis in plants requires sunlight and water", "{}").await.unwrap();
         let mut emb3 = vec![0.0f32; 1024];
         emb3[1] = 1.0; // Orthogonal
-        silva.save_embedding("thought_3", &emb3, "bge-m3", None).await.unwrap();
+        silva.save_embedding("thought_3", &emb3, "test-model", None).await.unwrap();
         silva.mark_conflicted("thought_3", true).await.unwrap();
 
         // Run conflict resolution
@@ -369,12 +369,12 @@ mod freshness_tests {
         silva.upsert_node("fact_a", "fact", "Deterministic consensus prevents LLM freshness hallucinations", "{}").await.unwrap();
         let mut emb_a = vec![0.0f32; 1024];
         emb_a[0] = 1.0;
-        silva.save_embedding("fact_a", &emb_a, "bge-m3", None).await.unwrap();
+        silva.save_embedding("fact_a", &emb_a, "test-model", None).await.unwrap();
 
         silva.upsert_node("fact_b", "fact", "Deterministic consensus prevents LLM freshness errors", "{}").await.unwrap();
         let mut emb_b = vec![0.0f32; 1024];
         emb_b[0] = 1.0;
-        silva.save_embedding("fact_b", &emb_b, "bge-m3", None).await.unwrap();
+        silva.save_embedding("fact_b", &emb_b, "test-model", None).await.unwrap();
         silva.mark_conflicted("fact_b", true).await.unwrap();
 
         // Resolve conflicts

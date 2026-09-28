@@ -1510,7 +1510,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
     let embed_blob: Vec<u8> = vec![0u8; 1024 * 4]; // 1024-dim f32
     tokio::task::block_in_place(|| {
         let conn = db.conn.blocking_lock();
-        conn.execute("INSERT INTO node_embeddings (node_id, embedding, model_id) VALUES ('n4', ?1, 'bge-m3')",
+        conn.execute("INSERT INTO node_embeddings (node_id, embedding, model_id) VALUES ('n4', ?1, 'legacy-bge-m3')",
                      rusqlite::params![embed_blob]).unwrap();
     });
     let count_before: i64 = tokio::task::block_in_place(|| {

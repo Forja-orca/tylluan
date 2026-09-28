@@ -1347,14 +1347,15 @@ async fn main() -> anyhow::Result<()> {
                             let node_id = mgr.record_memory(author, &formatted_content, 1.2).await;
                             let tagged_text = format!("[{author}] {formatted_content}");
                             let embedding = matcher_clone.engine()
-                                .and_then(|e| e.embed(&tagged_text).ok());
-                            if let Some(emb) = embedding {
+                                .and_then(|e| e.embed(&tagged_text).ok()
+                                    .map(|emb| (emb, e.engine_id())));
+                            if let Some((emb, model_id)) = embedding {
                                 let metadata = serde_json::json!({
                                     "agent_id": author,
                                     "importance": 1.2,
                                     "channel_id": channel_id,
                                 }).to_string();
-                                let _ = silva_clone.save_embedding(&node_id, &emb, "nomic", None).await;
+                                let _ = silva_clone.save_embedding(&node_id, &emb, &model_id, None).await;
                                 let _ = memory_clone.add_document(&tagged_text, &metadata, Some(&emb)).await;
                             } else {
                                 let metadata = serde_json::json!({

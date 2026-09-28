@@ -973,13 +973,14 @@ pub async fn health_detailed_handler(
     let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
 
     // Server capabilities
-    let (embeddings_loaded, reranker_loaded) = if let Some(ref srv_arc) = state.server {
+    let (embeddings_loaded, reranker_loaded, embedding_model) = if let Some(ref srv_arc) = state.server {
         if let Ok(s) = srv_arc.try_read() {
-            let emb = s.matcher.engine().is_some();
+            let emb = s.matcher.engine();
+            let emb_model = emb.as_ref().map(|e| e.engine_id()).unwrap_or_default();
             let rer = s.reranker.is_some();
-            (emb, rer)
-        } else { (false, false) }
-    } else { (false, false) };
+            (emb.is_some(), rer, emb_model)
+        } else { (false, false, String::new()) }
+    } else { (false, false, String::new()) };
 
     // Overall health score (0-100)
     let mut score = 100u8;
@@ -997,7 +998,7 @@ pub async fn health_detailed_handler(
         "score": score,
         "version": &state.version,
         "components": {
-            "embeddings": { "ok": embeddings_loaded, "model": "bge-m3" },
+            "embeddings": { "ok": embeddings_loaded, "model": embedding_model },
             "reranker":   { "ok": reranker_loaded,   "model": "jina-reranker-v1-turbo-en" },
             "guilds":     { "ok": active_guilds > 0,
                             "active": active_guilds, "total": total_guilds },

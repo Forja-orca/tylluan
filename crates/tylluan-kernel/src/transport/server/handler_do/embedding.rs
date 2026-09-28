@@ -75,20 +75,22 @@ pub async fn re_embed_legacy_nodes(
         None => return Err("no embedding engine available".into()),
     };
 
-    let target_model: &str = "distill-v1";
+    let target_model = engine.engine_id();
     let types = &["episode", "lesson"];
     let nodes = silva.get_nodes_by_types(types, 2000).await.map_err(|e| e.to_string())?;
     let mut count = 0usize;
     let mut skipped = 0usize;
 
     for node in &nodes {
-        // Skip if already tagged with distill-v1 (idempotent across restarts)
-        match silva.get_node_embedding_model(&node.id).await {
-            Ok(Some(ref model)) if model == target_model => {
-                skipped += 1;
-                continue;
-            }
-            _ => {}
+        // Idempotent across restarts via a metadata marker — NOT via a
+        // synthetic model_name. Tagging these rows "distill-v1" in
+        // model_name made them permanently stale to the Agnostic Reindexer
+        // (get_stale_embeddings compares model_name against the live
+        // engine), which re-embedded them every 10 minutes and undid the
+        // distill work — the stuck 98/196 stale-counter loop (2026-09-28).
+        if node.metadata.contains("\"embed_distill\":\"v1\"") {
+            skipped += 1;
+            continue;
         }
 
         let (intent, preview) = parse_content_for_embedding(&node.content, &node.node_type);
@@ -100,9 +102,13 @@ pub async fn re_embed_legacy_nodes(
             Ok(e) => e,
             Err(_) => continue,
         };
-        if let Err(e) = silva.save_embedding(&node.id, &emb, target_model, None).await {
+        if let Err(e) = silva.save_embedding(&node.id, &emb, &target_model, None).await {
             tracing::warn!("re-embed: node {} failed: {}", node.id, e);
             continue;
+        }
+        if let Ok(mut meta) = serde_json::from_str::<serde_json::Value>(&node.metadata) {
+            meta["embed_distill"] = serde_json::json!("v1");
+            let _ = silva.update_node_metadata(&node.id, &meta.to_string()).await;
         }
         count += 1;
         if count.is_multiple_of(50) {
