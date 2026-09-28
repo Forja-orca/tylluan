@@ -237,19 +237,21 @@ correcta adoptada, no borrado del número.
 
 ---
 
-## MD-9 · Gates de verificación existentes pero no invocados — `PARCIAL`
+## MD-9 · Gates de verificación existentes pero no invocados — `CERRADO` (2026-09-28)
 
-**Qué dice medir:** la batería de 13 scripts `scripts/check_*` / `verify_*` presenta al proyecto como cubierto frente a deriva de docs, de contratos, de kernel vivo y de tests sobre código muerto.
+**Qué dice medir:** la batería de scripts `scripts/check_*` / `verify_*` presenta al proyecto como cubierto frente a deriva de docs, de contratos, de kernel vivo, de portabilidad y de tests sobre código muerto.
 
-**Qué mide realmente:** solo 8 de los 13 corren en algún punto. `check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh`, `check_live_kernel_drift.sh` y `verify_contracts.py` no se invocan desde `.github/workflows/*` ni desde `scripts/verify.sh` — verificado por inspección cruzada de invocaciones, 2026-09-27, HEAD `6dd53a7`, y confirmado independientemente por el tech lead con el mismo grep antes de aceptar el hallazgo. Además `check_docs_reality.sh` es inejecutable en clon limpio (exit 2 en línea 47, lee `tylluan.toml` que está en `.gitignore:32`) — reproducido corriendo el script sin ese fichero. Cuatro de las cinco dimensiones que el proyecto cree cubiertas están sin cubrir.
-
-**Matiz encontrado al verificar:** la cabecera del propio script (`check_docs_reality.sh:34-35`) ya documenta "NOT wired into scripts/verify.sh yet: it must first run clean against the real repo without false positives" — es un TODO explícito y conocido desde su creación, no un hueco descubierto por accidente ni ocultado. No cambia el estado (`ABIERTO`), sí cambia la lectura: el problema no es que nadie lo supiera, es que un TODO declarado lleva semanas sin cerrarse.
+**Qué medía realmente (antes del fix):** solo 8 de los 13 scripts corrían en algún punto. `check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh`, `check_live_kernel_drift.sh`, `verify_contracts.py` y `no-absolute-paths.sh` no se invocaban de forma completa desde `.github/workflows/*` ni desde `scripts/verify.sh`. Además `check_docs_reality.sh` era inejecutable en clon limpio (exit 2 en línea 47).
 
 **Origen:** quinta ronda de auditoría externa (Claude Opus 5, 2026-09-27) — ver `docs/roadmap/ROADMAP_O3.md`.
 
-**Cierre parcial (2026-09-27, Claude Code):** línea 47 arreglada (lee `tylluan.example.toml` cuando `tylluan.toml` no existe; falla ruidosamente si tampoco existe ninguno) — corre limpio en clon limpio y con config real, verificado ambos casos. Al correrlo por primera vez de verdad aparecieron 26 hallazgos nuevos, dos clases de falso positivo reales que hubo que arreglar antes de cablear (no se cableó "tal cual" el script roto): citas `fichero.rs:línea` mal capturadas como puerto de 4-5 dígitos, y 5 documentos que describen una segunda instancia/drill por diseño (Docker secundario, drill de restore, nodo peer B) tratados como low-confidence igual que los ADRs históricos. Los 4 gates que degradan con gracia sin kernel vivo (`check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh` reporte-only, y el propio) quedan cableados a `scripts/verify.sh --docs` **y** a `.github/workflows/ci.yml` (jobs `docs-reality-check`, `contracts-check`, `dead-code-tests-report`). `check_live_kernel_drift.sh` se cableó SOLO a `verify.sh` (informativo, nunca bloqueante) y deliberadamente NO a CI — su propia cabecera documenta por qué: compara un kernel EN VIVO contra HEAD, y un runner de CI nunca tiene uno corriendo, así que cablearlo ahí sería un paso sin efecto para siempre. `scripts/test_verify_semantics.sh` actualizado (`REPORT_ONLY_GATES`) y sus 5 tests (T1-T5) pasan con la cablería nueva.
-
-**Pendiente para cerrar del todo:** el meta-test de cobertura que el hallazgo original pedía ("que falle si un script de `scripts/check_*` no aparece invocado en ninguno de los dos sitios") no se construyó todavía — sin él, una sexta ronda de auditoría podría volver a encontrar un script nuevo sin cablear. Sin asignar.
+**Cierre (2026-09-27 Claude Code; 2026-09-28 Antigravity):**
+1. **Pase 1 (Claude Code):** línea 47 de `check_docs_reality.sh` arreglada; 4 gates (`check_docs_reality.sh`, `check_contracts.sh`, `check_dead_code_tests.sh`, `check_no_predation.sh`) cableados a `scripts/verify.sh` y a `.github/workflows/ci.yml`. `check_live_kernel_drift.sh` cableado a `verify.sh` (local-only, documentado).
+2. **Pase 2 y Cierre Total (Antigravity):**
+   - Implementado el **meta-test de cobertura** `T6` y su **control negativo** `T7` en `scripts/test_verify_semantics.sh`: inspecciona dinámicamente todo script de verificación (`check_*.sh`, `check_*.py`, `verify_*.py`, `verify_*.sh`, `no-absolute-paths.sh`) en disco y valida mecánicamente que esté invocado en `scripts/verify.sh`, en `.github/workflows/*.yml`, o como sub-helper explícito de otro gate (ej. `verify_contracts.py` invocado por `check_contracts.sh`).
+   - `T7` (control negativo hermético): un gate huérfano introducido en sandbox hace fallar el test inmediatamente, demostrando que la detección es load-bearing y previene regresiones en futuras auditorías.
+   - Cableados a `scripts/verify.sh --docs` los gates restantes: `check_dead_config.sh` (report-only) y `no-absolute-paths.sh` (portabilidad). Añadidos a CI los jobs `mojibake-check` y `no-absolute-paths-check`.
+   - Verificación: 7/7 tests semánticos pasan en `test_verify_semantics.sh` (T1-T7), `verify.sh --docs` limpio, cero scripts huérfanos en disco.
 
 ---
 
@@ -257,7 +259,7 @@ correcta adoptada, no borrado del número.
 
 | ID | Ítem | Estado | Dueño del cierre |
 |----|------|--------|------------------|
-| MD-1 | TEB mide al arnés (ground_truth inyectado) | ABIERTO | WS1 / Antigravity |
+| MD-1 | TEB mide al arnés (ground_truth inyectado) | ABIERTO | WS1 / Antigravity (merge `88dfe18` listo por Deep) |
 | MD-2 | Identidad de benchmarks | PARCIAL | WS5 cerró adelante; retroactivo pendiente |
 | MD-3 | Accuracy live mezcla routing+args+dataset | ABIERTO | sin asignar (eval protocol) |
 | MD-4 | Golden-signals errors sintético | ABIERTO | sin asignar |
@@ -265,4 +267,4 @@ correcta adoptada, no borrado del número.
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
-| MD-9 | Gates de verificación existentes pero no invocados | PARCIAL | Claude Code cerró adelante (4 gates a CI+verify.sh, 1 a verify.sh); meta-test de cobertura pendiente |
+| MD-9 | Gates de verificación existentes pero no invocados | CERRADO | cerrado 2026-09-28 (Claude Code cablería inicial + Antigravity meta-test T6/T7 y cobertura 100%) |

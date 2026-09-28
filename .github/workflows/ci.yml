@@ -281,6 +281,22 @@ jobs:
       - name: Report config.rs fields that appear unread outside config.rs
         run: bash scripts/check_dead_config.sh
 
+  mojibake-check:
+    name: Docs — no mid-file mojibake in tracked files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify no mid-file mojibake
+        run: bash scripts/check_mojibake.sh
+
+  no-absolute-paths-check:
+    name: Portability — no machine-specific absolute paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify no hardcoded machine-specific absolute paths
+        run: bash scripts/no-absolute-paths.sh
+
   boot-smoke-no-onnx:
     name: Boot smoke — no ONNX (BM25-only config must reach /health)
     runs-on: ubuntu-latest
