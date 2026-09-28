@@ -210,6 +210,13 @@ if [ "$RUN_DOCS" = "1" ]; then
         echo "⚠️  dead-code/stale-test heuristic (G3) found suspects — see above. Report-only, does not block this push."
     fi
 
+    # Dead-config heuristic (report-only, matches CI dead-config-report).
+    if bash scripts/check_dead_config.sh; then
+        ok "dead config fields heuristic (check_dead_config.sh, report-only)"
+    else
+        echo "⚠️  dead config fields heuristic found suspects — see above. Report-only, does not block this push."
+    fi
+
     if bash scripts/check_head_sync.sh; then
         ok "STATUS.md HEAD citation"
     else
@@ -240,6 +247,14 @@ if [ "$RUN_DOCS" = "1" ]; then
         ok "no mid-file mojibake in tracked files"
     else
         fail "Mojibake detected — restore affected lines from a clean prior revision, see scripts/check_mojibake.sh output"
+    fi
+
+    # Portability path gate: detects hardcoded machine-specific absolute paths
+    # (drive letters, home directories) in relocatable source.
+    if bash scripts/no-absolute-paths.sh; then
+        ok "no machine-specific absolute paths in portable source (no-absolute-paths.sh)"
+    else
+        fail "machine-specific absolute paths found — see scripts/no-absolute-paths.sh output"
     fi
 
     # Async event-loop I/O gate (blocking, ratchet): FastMCP guild servers run
