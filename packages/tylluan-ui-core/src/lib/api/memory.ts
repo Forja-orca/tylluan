@@ -394,6 +394,24 @@ export async function getCollectiveHeatmap(client: Fetcher): Promise<{ heatmap: 
   }
 }
 
+export interface CollectiveSuggestResult {
+  domain: string;
+  best_agent: string | null;
+  rate?: number;
+  total_calls?: number;
+  confidence?: number;
+  alternatives?: Array<{ agent_id: string; rate: number; total: number }>;
+  message?: string;
+}
+
+export async function getCollectiveSuggest(client: Fetcher, domain: string): Promise<CollectiveSuggestResult> {
+  try {
+    return await client.fetch(`/api/v1/collective/suggest?domain=${encodeURIComponent(domain)}`);
+  } catch {
+    return { domain, best_agent: null, message: 'Cannot reach kernel' };
+  }
+}
+
 export async function getCollectivePulse(client: Fetcher): Promise<CollectivePulse> {
   try {
     return await client.fetch('/api/v1/collective/pulse');

@@ -22,6 +22,7 @@ import type {
   AgentMemorySummary, 
   AgentProfile 
 } from '../lib/nexus-bridge';
+import type { CollectiveSuggestResult } from '../lib/api-client';
 import { cn } from '../lib/utils';
 import { SessionsTab } from './SessionsTab';
 
@@ -438,8 +439,22 @@ export function CollectiveTab() {
   const [reputation, setReputation] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sseUrl, setSseUrl] = useState<string>(`${window.location.origin}/sse`);
+  const [suggestDomain, setSuggestDomain] = useState('');
+  const [suggestResult, setSuggestResult] = useState<CollectiveSuggestResult | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   const agentColor = (id: string) => AGENT_COLORS[Math.abs(id.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % AGENT_COLORS.length];
+
+  const handleSuggest = useCallback(async () => {
+    if (!bridge || !suggestDomain.trim()) return;
+    setSuggestLoading(true);
+    try {
+      const result = await bridge.getCollectiveSuggest(suggestDomain.trim());
+      setSuggestResult(result);
+    } finally {
+      setSuggestLoading(false);
+    }
+  }, [bridge, suggestDomain]);
 
   const fetchAll = useCallback(async () => {
     if (!bridge) return;
@@ -595,6 +610,58 @@ export function CollectiveTab() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Agent Suggestion — /api/v1/collective/suggest */}
+          <div className="px-6 py-4 border-t border-slate-800 bg-slate-800/20">
+            <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mb-2">¿Quién es mejor para este dominio?</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={suggestDomain}
+                onChange={(e) => setSuggestDomain(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSuggest(); }}
+                placeholder="e.g. rust, dashboard, security"
+                className="flex-1 px-3 py-2 rounded-lg bg-slate-950/50 border border-slate-700 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+              />
+              <button
+                onClick={handleSuggest}
+                disabled={suggestLoading || !suggestDomain.trim()}
+                className="px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold uppercase tracking-widest hover:bg-amber-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {suggestLoading ? '...' : 'Suggest'}
+              </button>
+            </div>
+            {suggestResult && (
+              <div className="mt-3 p-3 rounded-xl bg-slate-800/40 border border-slate-700/50">
+                {suggestResult.best_agent ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200">{suggestResult.best_agent}</span>
+                      {suggestResult.confidence != null && (
+                        <span className="text-[10px] text-emerald-400 font-mono">{(suggestResult.confidence * 100).toFixed(0)}% confianza</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">
+                      {suggestResult.rate != null && `${(suggestResult.rate * 100).toFixed(0)}% éxito`}
+                      {suggestResult.total_calls != null && ` · ${suggestResult.total_calls} llamadas`}
+                    </div>
+                    {suggestResult.alternatives && suggestResult.alternatives.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-slate-800 space-y-1">
+                        {suggestResult.alternatives.map((alt, i) => (
+                          <div key={alt.agent_id + i} className="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>{alt.agent_id}</span>
+                            <span>{(alt.rate * 100).toFixed(0)}% · {alt.total} calls</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">{suggestResult.message ?? 'No reputation data for this domain yet'}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
