@@ -10,6 +10,7 @@ import * as scopes from './api/scopes';
 import * as system from './api/system';
 import * as memory from './api/memory';
 import * as security from './api/security';
+export type { CollectiveSuggestResult } from './api/memory';
 
 // ============ CONTRACTS (TypeScript Interfaces) ============
 export interface Session {
@@ -667,6 +668,7 @@ export class NexusBridge {
   async getCollectiveReputation() { return memory.getCollectiveReputation(this); }
   async getCollectiveHeatmap() { return memory.getCollectiveHeatmap(this); }
   async getCollectivePulse() { return memory.getCollectivePulse(this); }
+  async getCollectiveSuggest(domain: string) { return memory.getCollectiveSuggest(this, domain); }
 }
 
 // Standalone Helper functions (delegating to a NexusBridge instance)

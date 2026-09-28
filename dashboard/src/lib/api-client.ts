@@ -7,5 +7,5 @@ export type {
   NodeTrace, Interoception, AgentMemory, AgentMemorySummary,
   ProjectSkill, BackgroundJob, AgentProfile, ProbeResult,
   DiagnosticReport, SetupHint, MetricsSnapshot, MetricsHistory,
-  DashboardSummary, AutoResearchSummary,
+  DashboardSummary, AutoResearchSummary, CollectiveSuggestResult,
 } from '@tylluan/ui-core';
