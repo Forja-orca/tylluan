@@ -1668,11 +1668,16 @@ async fn main() -> anyhow::Result<()> {
                             match engine.embed_batch_coalesced_async(texts.clone()).await {
                                 Ok(vectors) => {
                                     for (vector, (nid, mid, mhash_str)) in vectors.into_iter().zip(nodes.drain(..)) {
-                                        let sid = silva_inner.clone();
-                                        tokio::spawn(async move {
-                                            let mhash_ref = if mhash_str.is_empty() { None } else { Some(mhash_str.as_str()) };
-                                            let _ = sid.save_embedding(&nid, &vector, &mid, mhash_ref).await;
-                                        });
+                                        let mhash_ref = if mhash_str.is_empty() { None } else { Some(mhash_str.as_str()) };
+                                        // Await each write in sequence (T842-i):
+                                        // the round must only close AFTER its
+                                        // writes landed — the old fire-and-forget
+                                        // tokio::spawn lost races against
+                                        // shutdown/tick and left nodes stale
+                                        // forever (the stuck 98/196 counter).
+                                        if let Err(e) = silva_inner.save_embedding(&nid, &vector, &mid, mhash_ref).await {
+                                            warn!("Re-index save failed for {}: {:?}", nid, e);
+                                        }
                                     }
                                 }
                                 Err(e) => warn!("Batch re-index error for {} nodes: {:?}", chunk.len(), e),
