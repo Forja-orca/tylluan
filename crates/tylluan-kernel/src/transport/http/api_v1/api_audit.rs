@@ -110,6 +110,89 @@ pub(crate) fn cutoff_clause(window_minutes: Option<i64>) -> String {
     }
 }
 
+// ── MD-4 closure: real golden-signals `errors` block ─────────────────────
+//
+// `api_ops::golden_signals_handler` and `api_monitor::dashboard_summary_handler`
+// used to ship hardcoded values here (`rate_percent` 0/5/20 keyed off
+// `diag.status`, `total_errors: 0`, `slo_target: 99.9` with nothing behind
+// it) — fields that looked like metrics but were placeholders (MD-4 in
+// docs/architecture/MEASUREMENT_DEBT_REGISTER.md). The real source of truth
+// already exists: `guild_audit_log` records `status != 'ok'` for every failed
+// tylluan_do dispatch (written by `handler_do::log_audit_entry`).
+
+/// Default lookback window for the golden-signals error counters (24h).
+pub(crate) const ERRORS_WINDOW_MINUTES: i64 = 24 * 60;
+
+/// Read-only single-pass error counters over the audit DB (strictly SELECT),
+/// path-injected so tests exercise THIS code against a temp file. Mirrors the
+/// reader convention of `latency_rows_from` (MD-7): DB errors are returned,
+/// never panicked; handlers render them as `available: false`.
+pub(crate) fn error_counts_from(
+    path: &std::path::Path,
+    window_minutes: i64,
+) -> Result<(u64, u64), String> {
+    let conn = handler_do::audit_open_readonly(path)?;
+    let cutoff = cutoff_clause(Some(window_minutes));
+    let query = format!(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END) AS errors FROM guild_audit_log{cutoff}"
+    );
+    let (total, errors) = conn
+        .query_row(&query, [], |row| {
+            let total: u64 = row.get(0)?;
+            // SUM over zero rows is NULL in SQLite; a 24h with no dispatches
+            // is a valid state (0 errors), not an error.
+            let errors: Option<u64> = row.get(1)?;
+            Ok((total, errors.unwrap_or(0)))
+        })
+        .map_err(|e| format!("audit error_counts query: {e}"))?;
+    Ok((total, errors))
+}
+
+/// Real `errors` block for the golden-signals payload (MD-4). Read-only over
+/// `guild_audit_log` via `spawn_blocking`; every failure mode degrades to
+/// `available: false` with the reason inline — same non-fatal convention as
+/// `audit_latency_stats_handler`, never a 500.
+pub(crate) async fn golden_errors_block() -> serde_json::Value {
+    let db_path = handler_do::audit_db_path();
+    let window = ERRORS_WINDOW_MINUTES;
+    let res = tokio::task::spawn_blocking(move || error_counts_from(&db_path, window)).await;
+    match res {
+        Ok(Ok((total, errors))) => {
+            let rate = if total > 0 {
+                (errors as f64 * 100.0 / total as f64 * 100.0).round() / 100.0
+            } else {
+                0.0
+            };
+            serde_json::json!({
+                "rate_percent": rate,
+                "total_errors": errors,
+                "total_dispatches": total,
+                "window_minutes": window,
+                "source": "guild_audit_log",
+                "available": true,
+            })
+        }
+        Ok(Err(e)) => serde_json::json!({
+            "rate_percent": serde_json::Value::Null,
+            "total_errors": serde_json::Value::Null,
+            "window_minutes": window,
+            "source": "guild_audit_log",
+            "available": false,
+            "error": e,
+        }),
+        // join error: the blocking task panicked or the runtime is shutting
+        // down — report unavailable, keep the handler alive.
+        Err(e) => serde_json::json!({
+            "rate_percent": serde_json::Value::Null,
+            "total_errors": serde_json::Value::Null,
+            "window_minutes": window,
+            "source": "guild_audit_log",
+            "available": false,
+            "error": format!("join error: {e}"),
+        }),
+    }
+}
+
 // Path resolution lives in `handler_do::audit_db_path` (single owner — the
 // writer and the verifier resolve through the same function; this module
 // does NOT check TYLLUAN_AUDIT_DB itself anymore).
@@ -355,6 +438,82 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("audit_latm_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let res = latency_rows_from(&dir.join("nope.db"), "");
+        assert!(res.is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── MD-4: golden-signals error counters ──────────────────────────────
+
+    fn error_counts_seed(path: &std::path::Path) -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                guild TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '',
+                intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok',
+                result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '',
+                hash TEXT NOT NULL
+            );
+            INSERT INTO guild_audit_log (timestamp, guild, tool_name, status, prev_hash, hash) VALUES
+                ('2026-09-14T10:00:00+00:00', 'g', 't', 'ok',    '',  'h1'),
+                ('2026-09-14T10:01:00+00:00', 'g', 't', 'error', 'h1', 'h2'),
+                ('2026-09-14T10:02:00+00:00', 'g', 't', 'error', 'h2', 'h3'),
+                ('2026-09-14T10:03:00+00:00', 'g', 't', 'ok',    'h3', 'h4');",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn error_counts_empty_db_is_zero_total_zero_errors() {
+        let dir = std::env::temp_dir().join(format!("audit_err_e_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("a.db");
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE guild_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                guild TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT '',
+                intent TEXT,
+                status TEXT NOT NULL DEFAULT 'ok',
+                result_preview TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '',
+                hash TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+        drop(conn);
+        let (total, errors) = error_counts_from(&db, 60).unwrap();
+        assert_eq!((total, errors), (0, 0), "SUM over zero rows must be 0 errors, not NULL/None");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn error_counts_counts_status_not_ok_as_error() {
+        let dir = std::env::temp_dir().join(format!("audit_err_c_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("a.db");
+        let conn = error_counts_seed(&db);
+        drop(conn);
+        let (total, errors) = error_counts_from(&db, 24 * 60 * 365 * 10).unwrap();
+        assert_eq!(total, 4);
+        assert_eq!(errors, 2, "only status != 'ok' rows count as errors");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn error_counts_missing_db_is_err_not_panic() {
+        let dir = std::env::temp_dir().join(format!("audit_err_m_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let res = error_counts_from(&dir.join("nope.db"), 60);
         assert!(res.is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
