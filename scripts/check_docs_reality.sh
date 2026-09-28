@@ -175,6 +175,36 @@ elif [ -z "$agents_ver" ] || [ -z "$claude_ver" ]; then
     low_conf=$((low_conf+1))
 fi
 
+# ── Check 4: STATUS.md canonical test-count line is internally consistent
+#    (MD-6, sentinel de frescura) ────────────────────────────────────────
+# check_test_count.sh already verifies README.md's number against a real
+# `cargo test` run; check_head_sync.sh verifies the HEAD hash. Neither
+# catches the canonical line's own arithmetic being wrong -- exactly the
+# recurring bug class MD-6 documents (839/758 in 2026-09-13, 861 vs 867 in
+# 2026-09-14, and a real live instance found by hand 2026-09-28: the line
+# said "980 total" for "900 kernel lib + 69 link lib + 12 fsrs", which sums
+# to 981, not 980). This check makes that specific arithmetic-drift class
+# mechanical instead of requiring a human to do the sum by eye.
+if [ -f STATUS.md ]; then
+    canonical_line=$(grep -m1 '^\*\*HEAD:\*\*' STATUS.md || true)
+    if [ -n "$canonical_line" ]; then
+        total=$(echo "$canonical_line" | grep -oE '\*\*[0-9]+ total\*\*' | grep -oE '[0-9]+' | head -1)
+        kernel=$(echo "$canonical_line" | grep -oE '[0-9]+ kernel lib' | grep -oE '[0-9]+' | head -1)
+        link=$(echo "$canonical_line" | grep -oE '[0-9]+ link lib' | grep -oE '[0-9]+' | head -1)
+        fsrs=$(echo "$canonical_line" | grep -oE '[0-9]+ fsrs' | grep -oE '[0-9]+' | head -1)
+        if [ -n "$total" ] && [ -n "$kernel" ] && [ -n "$link" ] && [ -n "$fsrs" ]; then
+            sum=$((kernel + link + fsrs))
+            if [ "$sum" != "$total" ]; then
+                echo "❌ STATUS.md:1: la línea canónica dice '$total total' pero $kernel kernel + $link link + $fsrs fsrs = $sum — inconsistencia aritmética en la propia cita (MD-6)"
+                problems=1
+            fi
+        else
+            echo "⚠️  low-confidence: no se pudieron extraer los 4 números (total/kernel/link/fsrs) de la línea canónica de STATUS.md — formato cambió, revisar a mano"
+            low_conf=$((low_conf+1))
+        fi
+    fi
+fi
+
 echo ""
 if [ "$problems" -eq 0 ]; then
     echo "✅ No doc-path, doc-port or version drift found ($low_conf low-confidence findings suppressed)."
