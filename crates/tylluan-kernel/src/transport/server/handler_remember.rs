@@ -145,8 +145,9 @@ pub async fn handle_tylluan_remember(
     // On hit: reinforces the existing node and returns it instead of creating a duplicate.
     const DCR_THRESHOLD: f32 = 0.87;
     let early_embedding = server.matcher.engine()
-        .and_then(|e| tokio::task::block_in_place(|| e.embed(content.trim())).ok());
-    if let Some(ref emb) = early_embedding
+        .and_then(|e| tokio::task::block_in_place(|| e.embed(content.trim())).ok()
+            .map(|emb| (emb, e.engine_id())));
+    if let Some((ref emb, _)) = early_embedding
         && let Ok(candidates) = server.silva.search_vector(emb, 3).await
             && let Some((existing_node, sim)) = candidates.into_iter().find(|(_, s)| *s >= DCR_THRESHOLD) {
                 tracing::info!(
@@ -345,9 +346,11 @@ pub async fn handle_tylluan_remember(
     }));
 
     // Reuse early_embedding computed for DCR check (avoids double embedding call)
-    let embedding = early_embedding.or_else(|| server.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(&tagged_content)).ok()));
-    if let Some(emb) = embedding.as_deref() {
-        let _ = server.silva.save_embedding(&node_id, emb, "nomic", None).await;
+    let embedding = early_embedding.or_else(|| server.matcher.engine()
+        .and_then(|e| tokio::task::block_in_place(|| e.embed(&tagged_content)).ok()
+            .map(|emb| (emb, e.engine_id()))));
+    if let Some((emb, model_id)) = embedding.as_ref() {
+        let _ = server.silva.save_embedding(&node_id, emb, model_id, None).await;
 
         // TMS: deprecate contradictions after storing
         if let Ok(deprecated_count) = server.silva.deprecate_contradictions(&node_id, emb, &tagged_content).await
@@ -356,7 +359,7 @@ pub async fn handle_tylluan_remember(
             }
     }
 
-    match server.memory.add_document(&tagged_content, &metadata, embedding.as_deref()).await {
+    match server.memory.add_document(&tagged_content, &metadata, embedding.as_ref().map(|(v, _)| v.as_slice())).await {
         Ok(_) => {
             // Invalidate caches so new memories are immediately visible
             {
