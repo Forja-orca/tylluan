@@ -16,7 +16,7 @@
 
 ---
 
-## MD-1 · TEB-Pilot-50 mide al arnés, no a un agente — `ABIERTO`
+## MD-1 · TEB-Pilot-50 mide al arnés, no a un agente — `CERRADO` (2026-09-28, `877ad5e`)
 
 **Qué dice medir:** la mejora que Tylluan aporta a un agente real
 (condición C0 baseline vs C1 Tylluan, protocolo pareado).
@@ -35,11 +35,15 @@ C0=40.0%/C1=89.33% (+49.33pp, `b16f4f4`); (3) C0=20.0%/C1=100.0% (+80.0pp,
 `e08ecf8`, el que estaba en disco). Ninguno debe citarse como evidencia de
 valor de producto.
 
-**Cierre:** reemplazar `evaluate_task_c0()`/`evaluate_task_c1()` por
-inferencia real del mismo agente externo en ambas condiciones, juez sin
-acceso al repo (sandbox separado) y mapping A/B aleatorizado por tarea.
-Asignado: WS1 (Antigravity, handoff publicado en Coloquio 2026-09-13).
-El piloto de 50 tareas se repite desde cero antes de escalar a N=200-500.
+**Cierre real (2026-09-28, `f395c7f` Antigravity → merge `877ad5e`):**
+`evaluate_task_c0()`/`evaluate_task_c1()` reemplazados por inferencia real
+(0 ocurrencias de `ground_truth` verificadas en el harness), +202 líneas de
+test nuevo (`tests/python/test_teb_orchestrator.py`, 5/5 en verde). Verificado
+por el tech lead antes de mergear: diff línea a línea, sin regresión en 898
+kernel tests. El piloto de 50 tareas sigue pendiente de re-ejecutarse desde
+cero con el harness ya corregido antes de escalar a N=200-500 — el fix del
+arnés está cerrado, la re-ejecución del piloto es trabajo nuevo, sin dueño
+todavía.
 
 ---
 
@@ -259,7 +263,7 @@ correcta adoptada, no borrado del número.
 
 | ID | Ítem | Estado | Dueño del cierre |
 |----|------|--------|------------------|
-| MD-1 | TEB mide al arnés (ground_truth inyectado) | ABIERTO | WS1 / Antigravity (merge `88dfe18` listo por Deep) |
+| MD-1 | TEB mide al arnés (ground_truth inyectado) | CERRADO | cerrado 2026-09-28, `877ad5e` — re-ejecución del piloto sigue pendiente, sin dueño |
 | MD-2 | Identidad de benchmarks | PARCIAL | WS5 cerró adelante; retroactivo pendiente |
 | MD-3 | Accuracy live mezcla routing+args+dataset | ABIERTO | sin asignar (eval protocol) |
 | MD-4 | Golden-signals errors sintético | ABIERTO | sin asignar |
