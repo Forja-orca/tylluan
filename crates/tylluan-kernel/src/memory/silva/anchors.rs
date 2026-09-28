@@ -23,12 +23,17 @@ impl super::SilvaDB {
 
     /// Store a routing anchor (curated or learned example intent) for a guild.
     /// ID is deterministic: same guild+intent always maps to the same node.
+    ///
+    /// `embedding` carries BOTH the vector and the id of the engine that
+    /// produced it — a bare vector is not enough, because `save_embedding`
+    /// must record the real model name (hardcoding "bge-m3"/"nomic" here
+    /// recreated permanently-stale rows under every other engine, 2026-09-28).
     pub async fn upsert_routing_anchor(
         &self,
         guild: &str,
         intent: &str,
         source: &str, // "seed" | "learned" | "agent"
-        embedding: Option<&[f32]>,
+        embedding: Option<(&[f32], &str)>,
     ) -> Result<()> {
         use sha2::{Sha256, Digest};
         let hash_bytes = Sha256::digest(intent.as_bytes());
@@ -36,8 +41,8 @@ impl super::SilvaDB {
         let id = format!("routing_anchor:{guild}:{hash_str}");
         let meta = serde_json::json!({"guild": guild, "source": source}).to_string();
         self.upsert_node(&id, "routing_anchor", intent, &meta).await?;
-        if let Some(emb) = embedding {
-            self.save_embedding(&id, emb, "bge-m3", None).await
+        if let Some((emb, model)) = embedding {
+            self.save_embedding(&id, emb, model, None).await
                 .map_err(|e| warn!("🌲 Failed to save anchor embedding for '{}': {}", id, e)).ok();
         }
         Ok(())
@@ -259,9 +264,10 @@ impl super::SilvaDB {
 
         let total = missing.len();
         let mut done = 0usize;
+        let model_id = engine.engine_id();
         for (id, content) in missing {
             if let Ok(emb) = tokio::task::block_in_place(|| engine.embed(&content)) {
-                self.save_embedding(&id, &emb, "bge-m3", None).await
+                self.save_embedding(&id, &emb, &model_id, None).await
                     .map_err(|e| warn!("🌲 Reembed save failed for '{}': {}", id, e)).ok();
                 done += 1;
             }
@@ -294,5 +300,21 @@ mod asi06_shareable_tests {
             !shareable.iter().any(|n| n.id == "shareable_quarantined"),
             "a quarantined node must never be shareable to federation peers"
         );
+    }
+
+    /// Regression (2026-09-28): anchor embeddings must record the model id
+    /// of the engine that produced them — hardcoded names made them
+    /// permanently stale to the Agnostic Reindexer.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn anchor_embedding_records_caller_model_name() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let emb = vec![0.5f32; 1024];
+        db.upsert_routing_anchor("bash", "listar archivos del directorio", "agent", Some((&emb, "mxbai-embed-large-v2-onnx")))
+            .await
+            .unwrap();
+        let anchors = db.get_routing_anchors(None, 10).await.unwrap();
+        let anchor = anchors.iter().find(|a| a.content.contains("listar archivos")).expect("anchor stored");
+        let stored_model = db.get_node_embedding_model(&anchor.id).await.unwrap();
+        assert_eq!(stored_model.as_deref(), Some("mxbai-embed-large-v2-onnx"));
     }
 }

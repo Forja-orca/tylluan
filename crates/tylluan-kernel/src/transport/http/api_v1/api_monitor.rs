@@ -177,7 +177,7 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
         let cap = serde_json::json!({
             "embeddings_loaded": srv.matcher.engine().is_some(),
             "reranker_loaded": srv.reranker.is_some(),
-            "embedding_model": if srv.matcher.engine().is_some() { "bge-m3" } else { "none" },
+            "embedding_model": srv.matcher.engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {
@@ -626,7 +626,7 @@ pub async fn interoception_handler(State(state): State<Arc<HttpState>>) -> impl 
         let cap = serde_json::json!({
             "embeddings_loaded": srv.matcher.engine().is_some(),
             "reranker_loaded": srv.reranker.is_some(),
-            "embedding_model": if srv.matcher.engine().is_some() { "bge-m3" } else { "none" },
+            "embedding_model": srv.matcher.engine().map(|e| e.engine_id()).unwrap_or_else(|| "none".to_string()),
             "reranker_model": if srv.reranker.is_some() { "jina-reranker-v1-turbo-en" } else { "none" },
         });
         if let Ok(h) = srv.hormones.lock() {

@@ -774,4 +774,39 @@ mod tests {
         let empty = SparseVec { indices: vec![], values: vec![] };
         assert_eq!(a.dot(&empty), 0.0);
     }
+
+    /// Anti-drift (2026-09-28): embedding writes must never hardcode a model
+    /// name. `save_embedding`/`INSERT INTO node_embeddings` must record the
+    /// id of the engine that produced the vector — hardcoded "bge-m3"/"nomic"
+    /// recreated permanently-stale rows under every other engine, feeding
+    /// the Agnostic Reindexer's never-converging stale loop (98/196 nodes).
+    #[test]
+    fn no_hardcoded_model_names_in_embedding_writes() {
+        let banned: &[&str] = &["\"bge-m3\"", "'bge-m3'", "\"nomic\"", "'nomic'"];
+        let mut violations: Vec<String> = Vec::new();
+        let mut stack: Vec<std::path::PathBuf> = vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                    if let Ok(src) = std::fs::read_to_string(&path) {
+                        for (ln, line) in src.lines().enumerate() {
+                            if (line.contains("save_embedding(") || line.contains("INSERT INTO node_embeddings"))
+                                && banned.iter().any(|b| line.contains(b)) {
+                                violations.push(format!("{}:{}", path.display(), ln + 1));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "hardcoded model names in embedding writes (use engine.engine_id()):\n{}",
+            violations.join("\n")
+        );
+    }
 }
