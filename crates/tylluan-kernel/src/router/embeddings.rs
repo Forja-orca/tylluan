@@ -791,15 +791,14 @@ mod tests {
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    if let Ok(src) = std::fs::read_to_string(&path) {
+                } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                    && let Ok(src) = std::fs::read_to_string(&path) {
                         for (ln, line) in src.lines().enumerate() {
                             if (line.contains("save_embedding(") || line.contains("INSERT INTO node_embeddings"))
                                 && banned.iter().any(|b| line.contains(b)) {
                                 violations.push(format!("{}:{}", path.display(), ln + 1));
                             }
                         }
-                    }
                 }
             }
         }
