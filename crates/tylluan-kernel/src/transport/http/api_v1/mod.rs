@@ -620,7 +620,8 @@ async fn silva_add_edge_handler(State(state): State<Arc<HttpState>>, Json(p): Js
             let embed_text = format!("{}: {} -> {}", p.edge_type, p.source, p.target);
             if let Some(engine) = state.matcher.engine()
                 && let Ok(vec) = engine.embed(&embed_text) {
-                    let _ = state.silva.save_embedding(&edge_embed_id, &vec, "bge-m3", None).await;
+                    let model_id = engine.engine_id();
+                    let _ = state.silva.save_embedding(&edge_embed_id, &vec, &model_id, None).await;
                 }
             (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
         }
@@ -713,7 +714,8 @@ async fn silva_create_node_handler(State(state): State<Arc<HttpState>>, Json(p):
             // BGE-M3 embedding like nodes created via tylluan_remember/handler_do.
             if let Some(engine) = state.matcher.engine()
                 && let Ok(vec) = engine.embed(&p.content) {
-                    let _ = state.silva.save_embedding(&node_id, &vec, "bge-m3", None).await;
+                    let model_id = engine.engine_id();
+                    let _ = state.silva.save_embedding(&node_id, &vec, &model_id, None).await;
                 }
             (StatusCode::CREATED, Json(serde_json::json!({"ok": true, "id": node_id}))).into_response()
         }
@@ -1086,7 +1088,7 @@ async fn embed_handler(
                     let resp = EmbedResponse {
                         dimension: embedding.len(),
                         embedding,
-                        model: "bge-m3".to_string(),
+                        model: engine.engine_id(),
                     };
                     Json(resp).into_response()
                 }

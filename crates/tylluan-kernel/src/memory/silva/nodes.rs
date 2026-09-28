@@ -344,6 +344,24 @@ impl super::SilvaDB {
         Ok(())
     }
 
+    /// Overwrite a node's metadata JSON without touching any other column
+    /// (weight, content, protected, provenance all preserved). Used by the
+    /// M22 distill pass to mark nodes already distilled — the marker lives
+    /// in metadata, never in `model_name` (a synthetic model_name would
+    /// keep the node permanently stale to the Agnostic Reindexer).
+    pub async fn update_node_metadata(&self, node_id: &str, metadata: &str) -> Result<()> {
+        let node_id = node_id.to_string();
+        let metadata = metadata.to_string();
+        tokio::task::block_in_place(move || {
+            let conn = self.conn.blocking_lock();
+            conn.execute(
+                "UPDATE nodes SET metadata = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+                params![metadata, node_id],
+            )?;
+            Ok(())
+        })
+    }
+
     /// Store a learned-sparse vector for a node (BLOB pair: u32 LE indices, f32 LE values).
     pub async fn save_sparse_embedding(&self, node_id: &str, sv: &crate::router::embeddings::SparseVec) -> Result<()> {
         use crate::router::embeddings::SparseEngine;

@@ -1292,10 +1292,14 @@ async fn health_handler(
         let edge_count = state.silva.edge_count().await.unwrap_or(0);
         let (total_guilds, active_guilds) = state.registry.guild_stats().await.unwrap_or((0, 0));
 
-        let embeddings_loaded = state.server.as_ref()
+        let (embeddings_loaded, embedding_model) = state.server.as_ref()
             .and_then(|s| s.try_read().ok())
-            .map(|s| s.matcher.engine().is_some())
-            .unwrap_or(false);
+            .map(|s| {
+                let e = s.matcher.engine();
+                let model = e.as_ref().map(|eng| eng.engine_id()).unwrap_or_default();
+                (e.is_some(), model)
+            })
+            .unwrap_or((false, String::new()));
         let reranker_loaded = state.server.as_ref()
             .and_then(|s| s.try_read().ok())
             .map(|s| s.reranker.is_some())
@@ -1317,7 +1321,7 @@ async fn health_handler(
             "boot_ready": ready,
             "components": {
                 "kernel": { "ok": ready },
-                "embeddings": { "ok": embeddings_loaded, "model": "bge-m3" },
+                "embeddings": { "ok": embeddings_loaded, "model": embedding_model },
                 "reranker":   { "ok": reranker_loaded, "model": "jina-reranker-v1-turbo-en" },
                 "silva":      { "ok": node_count > 0, "nodes": node_count, "edges": edge_count },
                 "guilds":     { "ok": active_guilds > 0, "active": active_guilds, "total": total_guilds },

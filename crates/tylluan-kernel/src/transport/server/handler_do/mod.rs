@@ -1243,10 +1243,12 @@ async fn post_process_outcome(
         let intent_anchor = intent.to_string();
         let guild_anchor = guild_name.to_string();
         tokio::spawn(async move {
-            let embedding = engine_anchor.as_ref().and_then(|e| tokio::task::block_in_place(|| e.embed(&intent_anchor)).ok());
+            let embedding = engine_anchor.as_ref()
+                .and_then(|e| tokio::task::block_in_place(|| e.embed(&intent_anchor)).ok()
+                    .map(|emb| (emb, e.engine_id())));
             let _ = silva_anchor.upsert_routing_anchor(
                 &guild_anchor, &intent_anchor, "learned",
-                embedding.as_deref(),
+                embedding.as_ref().map(|(v, m)| (v.as_slice(), m.as_str())),
             ).await;
         });
     }
@@ -1373,8 +1375,10 @@ async fn persist_remember(
     };
     let meta = serde_json::json!({ "source": "tylluan_do", "guild": guild_name, "tool": tool_name, "agent_id": agent_id.as_deref().unwrap_or("anonymous") }).to_string();
     let embedding_target = distill_for_embedding(intent, &output_preview);
-    let embedding = server.matcher.engine().and_then(|e| tokio::task::block_in_place(|| e.embed(&embedding_target)).ok());
-    if let Err(e) = server.memory.add_document(&trace, &meta, embedding.as_deref()).await {
+    let embedded = server.matcher.engine()
+        .and_then(|e| tokio::task::block_in_place(|| e.embed(&embedding_target)).ok()
+            .map(|emb| (emb, e.engine_id())));
+    if let Err(e) = server.memory.add_document(&trace, &meta, embedded.as_ref().map(|(v, _)| v.as_slice())).await {
         warn!("⚠️ tylluan_do remember: hybrid memory write failed: {}", e);
     }
     let node_id = format!("memory:{}", chrono::Utc::now().timestamp_millis());
@@ -1389,8 +1393,8 @@ async fn persist_remember(
         let trace_clone = trace.clone();
         tokio::spawn(async move { let _ = silva_clone.auto_link_similar(&nid_clone, &trace_clone, 3, 0.3).await; });
     }
-    if let Some(emb) = embedding.as_deref()
-        && let Err(e) = server.silva.save_embedding(&node_id, emb, "nomic", None).await {
+    if let Some((emb, model_id)) = embedded.as_ref()
+        && let Err(e) = server.silva.save_embedding(&node_id, emb, model_id, None).await {
             warn!("⚠️ tylluan_do remember: embedding save failed for {}: {}", node_id, e);
         }
     server.notify("memory_added", serde_json::json!({
