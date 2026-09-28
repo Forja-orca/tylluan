@@ -40,10 +40,15 @@ valor de producto.
 (0 ocurrencias de `ground_truth` verificadas en el harness), +202 líneas de
 test nuevo (`tests/python/test_teb_orchestrator.py`, 5/5 en verde). Verificado
 por el tech lead antes de mergear: diff línea a línea, sin regresión en 898
-kernel tests. El piloto de 50 tareas sigue pendiente de re-ejecutarse desde
-cero con el harness ya corregido antes de escalar a N=200-500 — el fix del
-arnés está cerrado, la re-ejecución del piloto es trabajo nuevo, sin dueño
-todavía.
+kernel tests.
+
+**Re-ejecución del piloto (2026-09-28, T1):** Re-ejecutado sobre `311e505` con 3 runs
+(seeds 42..44) contra SilvaDB real (7218 nodos, FTS5 activo) y audit telemetry real
+(3754 filas, p95=192ms). Artefactos: `benchmarks/teb/pilot_results_v2.json` y
+`benchmarks/teb/PILOT_HARNESS_REPORT_v2.md`. Resultados en modo heurístico honesto:
+TSR C0=2.0%, C1=6.0% (Δ=+4.0pp), OF -46.8%, CD -100%, MHR=80.0% (documentado que
+el 80% en modo heurístico se debe a volcado literal de nodos sin LLM de razonamiento;
+el salto cualitativo requiere correr con `--provider http` contra un endpoint LLM real).
 
 ---
 
