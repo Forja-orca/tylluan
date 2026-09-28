@@ -20,10 +20,15 @@
 #       pre-49950c2 pattern) DOES flip the exit -- proves T2 is load-bearing
 #   T5  real doc drift (STATUS.md citing a bogus HEAD, detected by the REAL
 #       check_head_sync.sh in a disposable git worktree) -> --docs exits 1
+#   T6  gate coverage & zero-orphan invariant (MD-9) -> all check_*/verify_*
+#       and portability scripts on disk must be wired in verify.sh, CI, or caller gates
+#   T7  negative control for gate coverage: an uninvoked gate in sandbox
+#       MUST cause the coverage test to fail (proves T6 is load-bearing)
 #
 # Hermetic by design: T1-T4 never touch git or cargo (all gates stubbed);
 # T5 runs inside a disposable git worktree that is removed afterwards. The
-# real checkout, its refs and its working tree are never modified.
+# real checkout, its refs and its working tree are never modified; T6-T7 inspect
+# file trees and sandbox copies.
 #
 # Gate discovery is dynamic: whatever check_*.sh scripts verify.sh invokes
 # are stubbed, and the report-only set is declared ONCE here
@@ -34,7 +39,7 @@
 #     new gate is actually report-only, classify it in REPORT_ONLY_GATES --
 #     until then T2 never claims protection it doesn't have.
 #
-# Usage:  scripts/test_verify_semantics.sh          (run the 5 tests)
+# Usage:  scripts/test_verify_semantics.sh          (run all tests)
 #         scripts/test_verify_semantics.sh --list   (show discovered gates)
 # Exit 0 if all tests pass; exit 1 with a summary otherwise.
 
@@ -51,15 +56,76 @@ fi
 
 # ── Gate classification: the ONE place mapping gate -> blocking semantics ──
 # Gates wired in verify.sh --docs that must NEVER flip FAILED (report-only).
-REPORT_ONLY_GATES="check_no_predation check_dead_code_tests check_live_kernel_drift"
+REPORT_ONLY_GATES="check_no_predation check_dead_code_tests check_live_kernel_drift check_dead_config"
 # All other discovered gates are exercised as blocking by T3.
 
 # ── Discover gates dynamically from verify.sh's own body ──
-mapfile -t all_gates < <(grep -oE 'check_[a-z_]+\.sh' "$VERIFY_SRC" | sed 's/\.sh$//' | sort -u)
+mapfile -t all_gates < <(grep -oE '(check_[a-z_]+|no-absolute-paths)\.sh' "$VERIFY_SRC" | sed -E 's/\.sh$//' | sort -u)
 if [ "${#all_gates[@]}" -eq 0 ]; then
     echo "❌ No check_*.sh gates found inside verify.sh -- wiring changed?"
     exit 2
 fi
+
+# ── Gate coverage helper (MD-9): checks for unwired/orphan gate scripts ──
+# EXEMPT_GATE_HELPERS lists tools that are not run as pre-commit/CI gates
+# directly but serve as standalone developer/build utilities with documented rationale.
+EXEMPT_GATE_HELPERS="verify_portable_guild.py"
+
+find_orphan_gates() {
+    local root="$1"
+    local verify_file="$root/scripts/verify.sh"
+    local ci_dir="$root/.github/workflows"
+    local orphans=()
+
+    # Discover candidate gate scripts on disk
+    local candidates=()
+    for f in "$root"/scripts/check_*.sh "$root"/scripts/check_*.py \
+             "$root"/scripts/verify_*.py "$root"/scripts/verify_*.sh \
+             "$root"/scripts/no-absolute-paths.sh; do
+        [ -e "$f" ] || continue
+        local bname
+        bname="$(basename "$f")"
+        [ "$bname" = "verify.sh" ] && continue
+        [ "$bname" = "test_verify_semantics.sh" ] && continue
+        candidates+=("$bname")
+    done
+
+    for gf in "${candidates[@]}"; do
+        # 1. Is it explicitly exempt?
+        if echo " $EXEMPT_GATE_HELPERS " | grep -q " $gf "; then
+            continue
+        fi
+        # 2. Is it wired in verify.sh?
+        if [ -f "$verify_file" ] && grep -q "$gf" "$verify_file" 2>/dev/null; then
+            continue
+        fi
+        # 3. Is it wired in .github/workflows/*.yml?
+        if [ -d "$ci_dir" ] && grep -rq "$gf" "$ci_dir" 2>/dev/null; then
+            continue
+        fi
+        # 4. Is it invoked as a helper by another script in scripts/*.sh?
+        local found_caller=0
+        for other_sh in "$root"/scripts/*.sh; do
+            [ -f "$other_sh" ] || continue
+            [ "$(basename "$other_sh")" = "$gf" ] && continue
+            if grep -q "$gf" "$other_sh" 2>/dev/null; then
+                found_caller=1
+                break
+            fi
+        done
+        if [ "$found_caller" -eq 1 ]; then
+            continue
+        fi
+
+        orphans+=("$gf")
+    done
+
+    if [ "${#orphans[@]}" -gt 0 ]; then
+        echo "${orphans[*]}"
+        return 1
+    fi
+    return 0
+}
 
 is_report_only() {
     local g
@@ -255,11 +321,39 @@ else
     badt "could not create a disposable worktree -- T5 skipped as failed"
 fi
 
+# ── T6: Gate coverage & zero-orphan invariant (MD-9) ────────────────────
+# Every check_*.sh, check_*.py, verify_*.py, verify_*.sh, and no-absolute-paths.sh
+# script present in scripts/ must be wired into verify.sh, CI, or a caller gate.
+t "T6: gate coverage & zero-orphan invariant (MD-9)"
+if uninvoked=$(find_orphan_gates "$REPO_ROOT"); then
+    okt "all check_*/verify_* scripts on disk are wired in verify.sh, CI, or caller gates"
+else
+    badt "orphan verification script(s) found on disk with no caller or CI wiring: $uninvoked"
+fi
+
+# ── T7: negative control for gate coverage ──────────────────────────────
+# An uninvoked gate placed into a sandbox MUST fail the coverage check.
+t "T7: negative control -- synthetic orphan gate in sandbox MUST fail coverage check"
+SBX_T7="$SBASHOME/t7_neg"
+mkdir -p "$SBX_T7/scripts" "$SBX_T7/.github/workflows"
+cp "$VERIFY_SRC" "$SBX_T7/scripts/verify.sh"
+cp "$REPO_ROOT/.github/workflows/ci.yml" "$SBX_T7/.github/workflows/ci.yml"
+touch "$SBX_T7/scripts/check_orphan_test_dummy.sh"
+if uninvoked_neg=$(find_orphan_gates "$SBX_T7"); then
+    badt "synthetic orphan gate was NOT detected -- coverage check is vacuous"
+else
+    if echo "$uninvoked_neg" | grep -q "check_orphan_test_dummy.sh"; then
+        okt "synthetic orphan gate detected as expected -> T6 criterion is load-bearing"
+    else
+        badt "coverage check failed but did not name check_orphan_test_dummy.sh: $uninvoked_neg"
+    fi
+fi
+
 rm -rf "$SBASHOME"
 
 echo
 if [ "$failures" -eq 0 ]; then
-    echo "✅ verify.sh semantics hold: report-only stays report-only, real drift still blocks."
+    echo "✅ verify.sh semantics hold: report-only stays report-only, real drift still blocks, zero orphan gates."
     exit 0
 else
     echo "❌ $failures semantic test(s) failed -- see above. The wiring between"
