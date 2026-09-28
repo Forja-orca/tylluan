@@ -144,17 +144,28 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
     let edge_count = state.silva.edge_count().await.unwrap_or(0);
     let node_count = state.silva.node_count().await.unwrap_or(0);
 
+    // MD-4: real error counters from guild_audit_log + measured SLO
+    // availability (same semantic as /api/v1/slo/summary) instead of the
+    // former hardcoded rate_percent/total_errors/slo_target placeholders.
+    let mut errors_block = super::api_audit::golden_errors_block().await;
+    if let Some(obj) = errors_block.as_object_mut() {
+        obj.insert("critical".into(), serde_json::json!(diag.status == "critical"));
+    }
+    let always_on_count = statuses.iter().filter(|s| s.always_on).count() as f64;
+    let online_always_on = statuses.iter().filter(|s| s.always_on && s.running).count() as f64;
+    let slo_availability = if always_on_count > 0.0 {
+        (online_always_on / always_on_count * 100.0).round() as i64
+    } else {
+        100
+    };
+
     let golden_signals = serde_json::json!({
         "traffic": {
             "active_guilds": online,
             "total_guilds": statuses.len(),
             "active_tools": total_tools
         },
-        "errors": {
-            "rate_percent": if diag.status == "healthy" { 0 } else if diag.status == "degraded" { 5 } else { 20 },
-            "total_errors": 0,
-            "critical": diag.status == "critical"
-        },
+        "errors": errors_block,
         "saturation": {
             "memory_percent": diag.system.memory_percent.round(),
             "storage_percent": 0,
@@ -163,6 +174,7 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
         },
         "uptime_seconds": state.start_time.elapsed().as_secs(),
         "slo_target": 99.9,
+        "slo_availability_percent": slo_availability,
         "status": {
             "guilds_online": online,
             "guilds_total": statuses.len(),
