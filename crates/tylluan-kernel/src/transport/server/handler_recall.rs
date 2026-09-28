@@ -520,13 +520,28 @@ if let Some(ref mut s) = stmt {
     let mut query_embedding = if cascade {
         None
     } else {
-        server.matcher.engine().and_then(|e| {
+        match server.matcher.engine().map(|e| {
             tokio::task::block_in_place(|| {
                 server.silva.query_embed_cache
                     .get_or_embed(&effective_query, |q| e.embed_batch_coalesced(q))
             })
-            .ok()
-        })
+        }) {
+            Some(Ok(emb)) => Some(emb),
+            Some(Err(err)) if err.to_string().contains("inference budget saturated") => {
+                // Tarea Raíz 1 (2026-09-28): explicit fast rejection under
+                // saturation, surfaced to the caller — NOT the legacy silent
+                // lexical-only degradation that made the 68% recall loss
+                // under 8 agents invisible for weeks. With the default
+                // unbounded budget config this branch is unreachable.
+                tracing::warn!("recall embed rejected by inference budget (saturation) — surfacing explicit error");
+                return Err(rmcp::Error::internal_error(
+                    "inference budget saturated: embedding queue full after max_queue_wait — retry shortly (Retry-After: 2s)",
+                    None,
+                ));
+            }
+            Some(Err(_)) => None, // genuine engine failure: legacy graceful fallback
+            None => None,         // engine not loaded: legacy fallback
+        }
     };
     tracing::info!(gen_ai.operation.name = "recall_stage_embed", stage_ms = embed_t0.elapsed().as_millis() as u64, "recall stage: dense embed");
 
@@ -740,7 +755,14 @@ if let Some(cached) = cached_docs {
         let rerank_t0 = std::time::Instant::now();
         let rerank_pool = candidates.iter().take(RERANK_WINDOW.load(Ordering::Relaxed)).collect::<Vec<_>>();
         let texts: Vec<&str> = rerank_pool.iter().map(|(n, _)| n.content.as_str()).collect();
-        let ranked = tokio::task::block_in_place(|| reranker.rerank(&effective_query, &texts)).unwrap_or_else(|_| {
+        let ranked = tokio::task::block_in_place(|| reranker.rerank(&effective_query, &texts)).unwrap_or_else(|err| {
+            // Tarea Raíz 1: a rerank budget rejection after the bounded wait
+            // is logged loudly (results still ship in RRF order — reranking
+            // is an ordering refinement, not a precondition); the rejection
+            // itself is counted in golden-signals inference_budget metrics.
+            if err.to_string().contains("inference budget saturated") {
+                tracing::warn!("recall rerank rejected by inference budget (saturation) — shipping RRF order");
+            }
             (0..texts.len()).map(|i| (i, 0.0f32)).collect()
         });
         tracing::info!(gen_ai.operation.name = "recall_stage_rerank", stage_ms = rerank_t0.elapsed().as_millis() as u64, "recall stage: jina rerank");

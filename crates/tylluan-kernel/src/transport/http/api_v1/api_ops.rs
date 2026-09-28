@@ -128,6 +128,11 @@ pub async fn golden_signals_handler(State(state): State<Arc<HttpState>>) -> impl
             "active_tools": total_tools
         },
         "errors": errors_block,
+        // Tarea Raíz 1 (2026-09-28): real interactive-inference backpressure
+        // metrics (queue depth, wait p50/p95, rejection rate) from the shared
+        // InferenceBudget that now gates embed_batch + rerank. Read-only
+        // snapshot — observing never consumes capacity.
+        "inference_budget": crate::memory::inference_budget::InferenceBudget::global().metrics_json(),
         "saturation": {
             "memory_percent": diag.system.memory_percent.round(),
             "storage_percent": 0,
