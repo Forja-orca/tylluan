@@ -130,29 +130,62 @@ asignado a nadie aún (2026-09-14).
 
 ---
 
-## MD-5 · Claims globales de latencia vs cola pesada condicionada — `ABIERTO`
+## MD-5 · Claims globales de latencia vs cola pesada condicionada — `CERRADO` (2026-09-29, T4)
 
-**Qué dice medir:** "la latencia de Tylluan" como cifra única.
+**Qué decía medir:** "la latencia de Tylluan" como cifra única.
 
-**Qué mide realmente:** una distribución con cola pesada fuertemente
+**Qué medía realmente:** una distribución con cola pesada fuertemente
 condicionada. Baseline comiteado (`benchmarks/results/
 latency_baseline_20260907.json`, kernel `667243f`, CPU, n=36 por op):
 recall p50=664ms pero p95=16.0s/p99=20.0s; do p50=502ms pero p95=30.8s/
 p99=102.8s. Cita honesta: citar p50 sin p95/p99 y sin condición es
 presentar la cola como si no existiera.
 
-**Matiz verificado:** la causa dominante del tail de arranque fue
-identificada y corregida DESPUÉS del baseline (primer tick inmediato del
-Agnostic Reindexer compitiendo por el modelo ONNX — ciclo 2026-09-07/08 de
-`STATUS.md`, fix `2890d35`, primer disparo retrasado 600s). **No existe
-baseline post-fix comiteado** — el tamaño real del tail hoy es desconocido,
-y esa es la deuda, no el número viejo.
+**Cierre real (2026-09-28/29, Deep, T4 del plan T464):** el harness de
+latencia que faltaba ahora existe comiteado con atribución
+(`benchmarks/latency/cpu_baseline.py`, Antigravity, merge `eeeed9d`) y el
+primer baseline post-fixes está medido y comiteado con dos condiciones del
+flag `embed_batching_enabled`. Kernel `0d46c4d` (contiene T842-i
+`da0f34d`, literales `c73dd0f`, checkpoint bajo budget `7118fe7`), test
+aislado `:47005`, `mxbai-embed-large` CPU, n=50 por celda por op,
+`system_snapshot` estampado. Artefactos:
+`benchmarks/latency/results_concurrent_20260928_224924.json` (flag OFF,
+default producción) y `results_concurrent_20260928_233858.json` (flag ON,
+experimental).
 
-**Cierre:** la matriz SLO (`docs/architecture/SLO_MATRIX.md`, mismo ciclo)
-define objetivo por operación × condición; falta el harness que produzca
-esas corridas condicionadas de forma reproducible (el WIP de
-`benchmarks/latency/` en el working tree, de otro agente, apunta ahí — no
-se construye sobre él hasta que lo comitee con su atribución).
+**Cifras por condición (nunca una sola):**
+
+Flag OFF (baseline de producción):
+
+| Op | C=1 p50/p95/p99 | C=4 p50/p95/p99 | C=8 p50/p95/p99 |
+|----|-----------------|-----------------|-----------------|
+| recall | 5.2s / 18.3s / 18.9s | 43.3s / 61.5s / 63.7s | 84.2s / 110.4s / 115.5s |
+| do | 121ms / 391ms / 724ms | 272ms / 1.07s / 1.28s | 739ms / 10.9s / 13.2s |
+
+Flag ON (experimental): recall C=4 p50 baja a 25.0s (el coalescer agrupa
+bien a concurrencia moderada) pero C=1 p50 sube a 12.6s, C=8 p99 sube a
+236s y `do` se degrada en las 3 condiciones (121ms→1.3s, 272ms→3.2s,
+739ms→6.9s de p50) — el batcher global único crea head-of-line blocking
+cruzado entre recall y el embed de routing de `do`.
+
+**Hallazgos honestos de la medición (registrados, no ocultados):**
+1. El suelo de recall con mxbai-large en CPU y queries distintas (cache
+   fría) es ~5s por embed; el techo C=8 es la cola del Mutex del modelo.
+   El viejo p50=664ms no es comparable (modelo/cache distintos).
+2. Flag ON generó 31 nodos stale en mitad de la corrida C=8 (reindexer:
+   "Found 31 stale" a las 23:26:03 UTC, 0/1 en el resto) — hipótesis
+   mecanística: la cola acotada del batcher rechaza con Busy bajo C≥4 y
+   esos embeds caídos dejan nodos sin embedding. Refuerza el NO-GO de
+   `e70bc42`: el flag sigue sin ser adoptable; queda OFF en producción.
+3. Cadencia de producción intacta: 1 checkpoint TRUNCATE por celda
+   (correlación de ventana verificada contra el log) — el stall periódico
+   de mantenimiento sigue presente por diseño; su gate de config es la
+   pieza pequeña pendiente (Buffy T844.3), no bloqueante para este cierre.
+
+**Recomendación registrada:** mantener `embed_batching_enabled=false`.
+Si se revisita el batching, necesita colas por clase de call-site (recall
+vs routing) o integración con la LRU cache — un solo batcher global
+acoplado a la cola acotada actual degrada más de lo que salva.
 
 ---
 
@@ -267,7 +300,7 @@ correcta adoptada, no borrado del número.
 | MD-2 | Identidad de benchmarks | PARCIAL | WS5 cerró adelante; retroactivo pendiente |
 | MD-3 | Accuracy live mezcla routing+args+dataset | ABIERTO | sin asignar (eval protocol) |
 | MD-4 | Golden-signals errors sintético | ABIERTO | sin asignar |
-| MD-5 | Claims globales de latencia vs cola condicionada | ABIERTO | matriz SLO + harness de latencia |
+| MD-5 | Claims globales de latencia vs cola condicionada | CERRADO | cerrado 2026-09-29 (Deep, T4) — baseline post-fixes comiteado con 2 condiciones del flag de batching; flag ON NO-GO re-confirmado con datos |
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
