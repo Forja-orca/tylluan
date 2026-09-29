@@ -76,7 +76,7 @@ low_conf=0
 # second federation peer, "node-b") would all be permanent false positives --
 # exactly the class of noise the script's own original header warned about
 # ("must first run clean ... without false positives").
-hist_regex='antes|historico|hist[oó]rico|migro|migr[oó]|previously|was port|old port|former port|commit [0-9a-f]{7,}|secondary|secundari|docker.compose|node-b|node b|drill|ef[ií]mera|restaur'
+hist_regex='antes|historico|hist[oó]rico|migro|migr[oó]|previously|was port|old port|former port|commit [0-9a-f]{7,}|secondary|secundari|docker.compose|node-b|node b|drill|ef[ií]mera|restaur|aislad[oa]|isolated|test kernel|kernel de test'
 
 # ── Check 1: backtick-cited paths must exist ──────────────────────────────
 # One grep pass per doc: GNU grep -n -o prints "lineno:match" per match.

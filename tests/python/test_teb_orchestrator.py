@@ -11,7 +11,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from benchmarks.teb.teb_orchestrator import (
+from benchmarks.teb.teb_orchestrator import (  # noqa: E402
     query_silva_memory,
     log_real_audit,
     score_task_exact_tokens,
