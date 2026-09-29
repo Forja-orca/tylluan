@@ -15,11 +15,14 @@ lazy_load_timeout_secs = 180
 [memory]
 db_path = "data/tylluan.db"
 # embedding_model options:
-#   "bge-m3"  — full quality, ~1.2 GB download, requires 4 GB+ RAM (default)
-#   "none"    — BM25 text search only, zero download, works on any hardware
+#   "mxbai-embed-large" — full quality, 1024-dim native (default since 2026-09-30)
+#   "bge-m3"             — previous default, also 1024-dim native, still fully supported
+#   "none"               — BM25 text search only, zero download, works on any hardware
 # Tip: use "none" on first boot or low-RAM devices, upgrade later with tylluan-cli download-models
-embedding_model = "bge-m3"
-# CRITICAL: BGE-M3 is native 1024-dim. NEVER change to 768.
+embedding_model = "mxbai-embed-large"
+# CRITICAL: the embedding model MUST be 1024-dim native (mxbai-embed-large and
+# bge-m3 both are). NEVER change to a 768-dim model without also migrating
+# every existing vector -- this is a schema-breaking change, not a config flag.
 vector_dimensions = 1024
 # Max vector search results before partitioning
 vector_limit = 5000

@@ -28,7 +28,7 @@ Most AI memory systems ask you to trust someone else's server with your data: an
 
 Concretely, that means:
 
-- **Your data stays yours.** Memory lives in a local SQLite database with BGE-M3 embeddings. There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
+- **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (mxbai-embed-large by default, BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
 - **It works without an internet connection.** We've run it on a Raspberry Pi 4 with 12,000 stored memories, federated with three peers over encrypted Noise XK, on a network with no internet access at all.
 - **Nothing here can be taken away from you.** MIT licensed, no vendor lock-in, no feature gated behind a subscription.
 
@@ -48,7 +48,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + BGE-M3 vector search, fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
+| **Memory** | BM25 + FTS5 + local vector search (mxbai-embed-large, 1024-dim), fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) — role assignment per `agent_id`, no manual wiring |
 | **Tools** | 46 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
@@ -111,12 +111,14 @@ That's deliberate. Whatever guild ends up doing the work — git, vision, a data
 
 ### How well does retrieval actually work?
 
+> **These numbers are from `v0.12.0` (2026-07-05), measured with BGE-M3 — the model Tylluan used at the time, not the current default.** The kernel has since moved to `mxbai-embed-large` (2026-09-30) as its default embedding model. We have not re-run LongMemEval-S against the new default yet, so treat the table below as a historical baseline for the retrieval *architecture* (BM25+vector+RRF+graph), not a live claim about today's exact numbers. Re-running this benchmark against the current default is open work — see [ROADMAP.md](ROADMAP.md).
+
 We evaluated on **LongMemEval-S** (50 human-authored questions covering episodic memory, multi-hop reasoning, and temporal questions), using real BGE-M3 embeddings on CPU — no simulated numbers:
 
 | Metric | Value | Backend |
 |--------|-------|---------|
-| Recall@5 | **82%** | BGE-M3 + BM25 + RRF |
-| Recall@10 | **90%** | BGE-M3 + BM25 + RRF |
+| Recall@5 | 82% | BGE-M3 + BM25 + RRF |
+| Recall@10 | 90% | BGE-M3 + BM25 + RRF |
 | Recall@1 | 46% | BGE-M3 + BM25 + RRF |
 | MRR / R-Precision | 0.46 | BGE-M3 + BM25 + RRF |
 | Latency p50 | 12.9 ms | CPU, no GPU |
@@ -129,11 +131,13 @@ For comparison, a synthetic corpus of short descriptions only reaches 50% Recall
 
 Three profiles trade retrieval quality for footprint — pick based on what you're running on:
 
-| Profile | Model | Download | RAM | R@5 | R@10 | Latency p50 |
+| Profile | Model | Download | RAM | R@5* | R@10* | Latency p50* |
 |---------|-------|----------|-----|-----|------|--------------|
 | `portable` | BM25 only | 0 MB | ~30 MB | 38% | 42% | 0.4 ms |
 | `clinic` | BGE-Small (384d) | ~100 MB | ~300 MB | 61% | 68% | 3.2 ms |
-| `server` | BGE-M3 (1024d) | ~1.2 GB | ~1.5 GB | 82% | 90% | 12.9 ms |
+| `server` | mxbai-embed-large (1024d, default) | unverified | unverified | 82% | 90% | 12.9 ms |
+
+*\*`server` row's R@5/R@10/latency are the BGE-M3 numbers above, not yet re-measured against the current default (`mxbai-embed-large`) — see the note above. `portable`/`clinic` are unaffected by the default-model change.*
 
 `portable` is the right call for a Raspberry Pi Zero or a fully offline deployment; `clinic` suits a RAM-constrained laptop; `server` is for a desktop or server where retrieval quality is the priority.
 
@@ -156,11 +160,11 @@ Once connected, an agent can call any guild through `tylluan_do` just by describ
 
 No — routing is 100% local, and no LLM sits in that path.
 
-When you call `tylluan_do("search for Rust async patterns")`, the kernel embeds the intent with BGE-M3 (local ONNX, CPU — or falls back to keyword scoring if you've set `embedding_model = "none"`), scores it against every guild's description, escalates to a coordinator if the intent looks multi-step or ambiguous, and returns the best match with structured arguments. No HTTP call leaves your machine, no API key required — the escalation logic is pure heuristics running in-process on your CPU.
+When you call `tylluan_do("search for Rust async patterns")`, the kernel embeds the intent with the local embedding model (mxbai-embed-large by default, local ONNX, CPU — or falls back to keyword scoring if you've set `embedding_model = "none"`), scores it against every guild's description, escalates to a coordinator if the intent looks multi-step or ambiguous, and returns the best match with structured arguments. No HTTP call leaves your machine, no API key required — the escalation logic is pure heuristics running in-process on your CPU.
 
 Two things worth not conflating here:
 
-- **Embeddings (BGE-M3) are always in the path.** Every routing decision and every memory search runs through a local neural network — that's not optional, and it's not a generative LLM.
+- **Embeddings are always in the path.** Every routing decision and every memory search runs through a local neural network — that's not optional, and it's not a generative LLM.
 - **Generative LLM inference is optional and never in the routing hot path.** Tylluan can run one internally via `llama.cpp` + GGUF (auto-downloads a precompiled binary, no external service needed) for specific, non-blocking uses — an offline evaluation judge, and a calibrated second opinion on memory candidates already flagged by the cheaper deterministic filters. You can also point it at an Ollama, LM Studio, or `llama.cpp` instance you already have running — it detects a live backend before starting its own.
 
 So "no cloud required" is the real invariant here. "No LLM at all" was never quite accurate for the embedding layer, and it isn't for the optional generative layer either — what stays true is that nothing in Tylluan depends on a cloud service to function.
@@ -175,7 +179,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ## Quick Start
 
-> **Setup takes about 10 minutes**, most of it spent downloading the BGE-M3 model on first boot (~1.2 GB, one-time). Set `embedding_model = "none"` in `tylluan.toml` to skip that download. The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
+> **Setup takes about 10 minutes**, most of it spent downloading the embedding model (mxbai-embed-large by default) on first boot, one-time. Set `embedding_model = "none"` in `tylluan.toml` to skip that download. The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
 
 **Supported platforms:**
 
@@ -206,10 +210,10 @@ This drops `tylluan-nexus` and `tylluan-cli` into `~/.tylluan/bin/` and adds the
 tylluan-cli start
 ```
 
-On the very first run, BGE-M3 downloads with a progress bar (5–15 minutes depending on your connection, one-time only):
+On the very first run, the embedding model downloads with a progress bar (one-time only, size and time depend on your connection):
 
 ```
-Downloading BGE-M3 embedding model... [##########] 1.2 GB
+Downloading mxbai-embed-large embedding model... [##########]
 ✅ Tylluan v0.17.0 running at http://127.0.0.1:47004
 ```
 
@@ -316,7 +320,7 @@ flowchart LR
 
   subgraph SOVEREIGN["Sovereign layer"]
     TOOLS["5 Sovereign Tools<br/>tylluan_do · remember · recall · think · graph"]
-    ROUTER["Guild matcher<br/>RRF (BGE-M3+BM25)"]
+    ROUTER["Guild matcher<br/>RRF (mxbai+BM25)"]
   end
 
   subgraph MEMORY["SilvaDB"]
@@ -330,7 +334,7 @@ flowchart LR
     CONTRACTS["Work Contracts"]
   end
 
-  INFER["ONNX Runtime<br/>BGE-M3 + Jina reranker"]
+  INFER["ONNX Runtime<br/>mxbai-embed-large + Jina reranker"]
 
   subgraph MESH["tylluan-link mesh"]
     P2P["Gossip + Kademlia DHT<br/>Noise NK/XK"]
@@ -394,10 +398,10 @@ flowchart LR
 | Component | Technology |
 |-----------|------------|
 | Kernel | Rust (tokio + axum) |
-| Embeddings | BGE-M3 (local ONNX, CPU) — configurable: bge-small, nomic, none |
+| Embeddings | mxbai-embed-large (local ONNX, CPU, default) — configurable: bge-m3, bge-small, nomic, none |
 | Reranker | Jina v1 Turbo (local ONNX) |
 | Generative inference | `llama.cpp` (`llama-server`, auto-downloaded), agnostic to an external Ollama/LM Studio if one's already running |
-| Search | BM25 + FTS5 + BGE-M3 vector + RRF hybrid fusion + entity boost |
+| Search | BM25 + FTS5 + local vector + RRF hybrid fusion + entity boost |
 | Storage | SQLite WAL + mmap vector index |
 | Federation | SQLite `peers.db` + Noise NK / ChaCha20-Poly1305 |
 | Mesh | Kademlia DHT + Gossip + Noise Protocol XK/NK |
