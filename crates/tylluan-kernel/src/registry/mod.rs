@@ -5,6 +5,7 @@
 //! - **Proxy**: Forward MCP `list_tools` and `call_tool` to the appropriate guild
 //! - **Lifecycle**: Auto-unload guilds after inactivity timeout
 
+pub mod capability_registry;
 pub mod tools;
 pub mod guild_process;
 pub mod outputs;

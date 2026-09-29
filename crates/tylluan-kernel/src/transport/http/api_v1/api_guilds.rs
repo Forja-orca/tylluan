@@ -179,3 +179,32 @@ pub async fn guild_dispatch_execute_handler(
         }
     }
 }
+
+/// GET /api/v1/capability-registry — Tarea Raíz 2 (2026-09-28): read-only
+/// Capability Registry MVP. Static index over TOOL_METADATA + the real guild
+/// catalog (one capability per tool, Local providers, verbatim declared
+/// risk). NOTE: distinct from the pre-existing runtime view at
+/// /api/v1/capabilities (sessions + live guild tools) — this one is the
+/// static declarative index TaskContext v2 / ADR-014 build on. Pure read
+/// layer: zero changes to router/scheduler behavior.
+pub async fn capability_registry_handler() -> impl IntoResponse {
+    Json(crate::registry::capability_registry::registry_json())
+}
+
+/// GET /api/v1/capability-registry/{guild} — capabilities provided by one
+/// guild (Local providers only in the MVP; empty list if the guild declares
+/// no tools).
+pub async fn capability_registry_guild_handler(
+    Path(guild): Path<String>,
+) -> impl IntoResponse {
+    let caps = crate::registry::capability_registry::capabilities_for_guild(&guild);
+    let capabilities: Vec<serde_json::Value> = caps
+        .iter()
+        .map(|c| serde_json::to_value(c).unwrap_or(serde_json::Value::Null))
+        .collect();
+    Json(serde_json::json!({
+        "guild": guild,
+        "capabilities": capabilities,
+        "count": capabilities.len(),
+    }))
+}
