@@ -1759,7 +1759,7 @@ fn default_host() -> String { "0.0.0.0".into() }
 fn default_port() -> u16 { 3030 }
 fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
-fn default_embedding_model() -> String { "bge-m3".into() }
+fn default_embedding_model() -> String { "mxbai-embed-large".into() }
 fn default_dimensions() -> u32 {
     crate::router::embeddings::resolve_dimension(&default_embedding_model())
 }
@@ -2034,7 +2034,7 @@ port = 47004
         let config: TylluanConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.nexus.port, 47004);
         // Defaults should still work
-        assert_eq!(config.memory.embedding_model, "bge-m3");
+        assert_eq!(config.memory.embedding_model, "mxbai-embed-large");
     }
 
     #[test]
