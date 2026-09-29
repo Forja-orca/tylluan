@@ -111,22 +111,25 @@ unknowns / composición del dataset), nunca "accuracy" a secas.
 
 ---
 
-## MD-4 · El bloque `errors` de golden-signals es sintético — `ABIERTO`
+## MD-4 · El bloque `errors` de golden-signals es sintético — `CERRADO` (2026-09-28, T3)
 
-**Qué dice medir:** tasa de errores del sistema (señal dorada "errors").
+**Qué decía medir:** tasa de errores del sistema (señal dorada "errors").
 
-**Qué mide realmente:** constantes. `api_ops.rs:116-117` (verificado en
-disco 2026-09-14): `rate_percent` = 0/5/20 según `diag.status`
-(healthy/degraded/otro), `total_errors: 0` hardcodeado. Además el payload
-declara `slo_target: 99.9` sin ninguna medición de disponibilidad detrás.
-Estos campos parecen métricas y son placeholders — exactamente el patrón
-"datos simulados presentados como reales" que la flota ya sufrió en
-dashboard (incidente documentado en `AGENTS.md`).
+**Qué medía realmente:** constantes. `api_ops.rs:116-117`: `rate_percent`
+= 0/5/20 según `diag.status`, `total_errors: 0` hardcodeado, y
+`slo_target: 99.9` sin medición detrás. El bloque estaba además DUPLICADO
+en `api_monitor.rs` (dashboard_summary_handler) — alcance mayor que el
+documentado aquí (descubierto al implementar).
 
-**Cierre:** o se cablean contadores reales (la tabla `guild_audit_log` ya
-tiene `status` por llamada y es la fuente natural), o el payload se etiqueta
-explícitamente como placeholder. Decisión pendiente de asignación — no
-asignado a nadie aún (2026-09-14).
+**Cierre (0ca5579, merge 8929c3e):** `api_audit::error_counts_from()` +
+`golden_errors_block()` — SELECT single-pass sobre `guild_audit_log`
+(status != 'ok', ventana 24h, cutoff datetime()-normalizado, convención
+MD-7), consumo real en AMBOS handlers con degradación elegante
+(available: false, nunca 500), y `slo_availability_percent` medida en vez
+del target huérfano. 3 tests del agregador; dashboard sin cambios de
+contrato (rate null → no-data). Detectado por auditoría externa
+28-29/09 como instancia viva de drift MD-6 (fix mergeado, registro
+stale) y corregido en el mismo pase por Buffy.
 
 ---
 
@@ -299,7 +302,7 @@ correcta adoptada, no borrado del número.
 | MD-1 | TEB mide al arnés (ground_truth inyectado) | CERRADO | cerrado 2026-09-28, `877ad5e` — re-ejecución del piloto sigue pendiente, sin dueño |
 | MD-2 | Identidad de benchmarks | PARCIAL | WS5 cerró adelante; retroactivo pendiente |
 | MD-3 | Accuracy live mezcla routing+args+dataset | ABIERTO | sin asignar (eval protocol) |
-| MD-4 | Golden-signals errors sintético | ABIERTO | sin asignar |
+| MD-4 | Golden-signals errors sintético | CERRADO | 0ca5579 (merge 8929c3e), Buffy/Codebuff 2026-09-28 |
 | MD-5 | Claims globales de latencia vs cola condicionada | CERRADO | cerrado 2026-09-29 (Deep, T4) — baseline post-fixes comiteado con 2 condiciones del flag de batching; flag ON NO-GO re-confirmado con datos |
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
