@@ -357,10 +357,20 @@ impl EmbeddingEngine {
     /// Embed multiple texts in one ONNX batch call.
     /// FastEmbed natively batches — this avoids N sequential inference calls.
     /// Each returned vector is L2-normalized for cosine similarity.
+    ///
+    /// Tarea Raíz 1 (2026-09-28): this is THE chokepoint every dense path
+    /// converges on (`embed()` L1-miss, `embed_batch_async`, the coalescing
+    /// batcher thread), so the interactive inference budget is acquired here,
+    /// AFTER the L1 cache (a cache hit must not consume budget) and BEFORE
+    /// the raw model mutex. With the default config this is an unbounded wait
+    /// (legacy behavior preserved, zero rejections); with
+    /// `[inference.budget] max_queue_wait_secs > 0` saturation returns an
+    /// explicit fast error instead of an unobservable mutex pile-up.
     pub fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
+        let _budget = crate::memory::inference_budget::InferenceBudget::global().acquire_sync()?;
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
         let mut embeddings = model.embed(texts, None)
             .map_err(|e| anyhow!("Batch inference failed: {e:?}"))?;
@@ -623,8 +633,15 @@ impl RerankEngine {
     }
 
     /// Rerank documents against query. Returns indices sorted by relevance descending.
+    ///
+    /// Tarea Raíz 1 (2026-09-28): acquires the same shared interactive
+    /// inference budget as the dense path before the raw model mutex (one
+    /// local machine serves one interactive inference at a time; each caller
+    /// acquires once, sequentially — no deadlock). Bounded/rejection behavior
+    /// identical to `embed_batch`.
     pub fn rerank(&self, query: &str, documents: &[&str]) -> Result<Vec<(usize, f32)>> {
         if documents.is_empty() { return Ok(vec![]); }
+        let _budget = crate::memory::inference_budget::InferenceBudget::global().acquire_sync()?;
         let mut model = self.model.lock().map_err(|_| anyhow!("reranker mutex poisoned"))?;
         let results = model.rerank(query, documents, false, None)
             .map_err(|e| anyhow!("Rerank failed: {e:?}"))?;

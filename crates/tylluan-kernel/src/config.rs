@@ -737,7 +737,12 @@ pub struct InferenceConfig {
     #[serde(default = "auto_select_device")]
     pub device: InferenceDevice,
     #[serde(default)]
-    pub llama: InferenceLlamaConfig,
+    pub llama: InferenceLlamaConfig,    /// Tarea Raíz 1 (2026-09-28): bounded queue + explicit rejection for the
+    /// interactive inference path (embeddings + reranker). DEFAULT = legacy
+    /// (unbounded wait, zero rejections) — backpressure is an explicit
+    /// operator opt-in via `[inference.budget] max_queue_wait_secs > 0`.
+    #[serde(default)]
+    pub budget: crate::memory::inference_budget::InferenceBudgetConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -827,6 +832,7 @@ impl Default for InferenceConfig {
             primary_model: default_model(),
             device: auto_select_device(),
             llama: InferenceLlamaConfig::default(),
+            budget: crate::memory::inference_budget::InferenceBudgetConfig::default(),
         }
     }
 }
