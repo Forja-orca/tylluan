@@ -2,6 +2,28 @@ use rmcp::{Error as McpError, model::*};
 use tracing::{info, warn};
 use chrono;
 
+/// MD-3 (MEASUREMENT_DEBT_REGISTER): prefijos estables y parseables por máquina
+/// para los fallos de Stage-1 de `tylluan_do`. Convención estrictamente aditiva:
+/// el prefijo se antepone y el cuerpo legible del mensaje se preserva verbatim,
+/// de modo que consumidores existentes (tests, dashboard, triaje de benchmarks)
+/// sigan haciendo match con el texto anterior. Las denegaciones ACL ya llevan su
+/// propio prefijo estable (`ACCESS_DENIED:`, `transport/http/auth.rs`) y los
+/// intents sin guild ya llevan `NO_GUILD_MATCH:`; ambos se dejan intactos a
+/// propósito.
+///
+/// NOTA de parsing para consumidores: todo mensaje que sale por `error_result()`
+/// lleva el wrapper uniforme `"❌ Error: "` (`registry/proxy.rs`), así que el
+/// texto final que ve un cliente es `"❌ Error: {PREFIX} {cuerpo}"`. El
+/// clasificador debe quitar ese wrapper antes de matchear el prefijo (o buscar
+/// el token del prefijo directamente).
+pub mod error_prefixes {
+    pub const ROUTING_FAILED: &str = "ROUTING_FAILED:";
+    pub const RATE_LIMITED: &str = "RATE_LIMITED:";
+    pub const START_FAILED: &str = "START_FAILED:";
+    pub const NO_TOOLS: &str = "NO_TOOLS:";
+    pub const MISSING_ARGS: &str = "MISSING_ARGS:";
+}
+
 use crate::registry::proxy::error_result;
 use super::utils::{extract_path_from_intent, extract_url_from_intent, extract_command_from_intent};
 use super::TylluanServer;
@@ -712,7 +734,8 @@ async fn resolve_and_prepare_tool_call(
     if let Err(msg) = server.guild_rate_limiter.check_and_record(&guild_name) {
         warn!("Guild rate limit exceeded for '{}': {}", guild_name, msg);
         return Err(error_result(&format!(
-            "Rate limit for guild '{guild_name}' exceeded. Try again later."
+            "{} Rate limit for guild '{guild_name}' exceeded. Try again later.",
+            error_prefixes::RATE_LIMITED
         )));
     }
 
@@ -745,7 +768,10 @@ async fn resolve_and_prepare_tool_call(
 
     if let Err(e) = server.registry.write().await.ensure_guild_running(&guild_name).await {
         penalize_lesson_fn(intent, server.silva.clone());
-        return Err(error_result(&format!("Failed to start guild '{guild_name}': {e}")));
+        return Err(error_result(&format!(
+            "{} Failed to start guild '{guild_name}': {e}",
+            error_prefixes::START_FAILED
+        )));
     }
 
     let mut tool_name = {
@@ -766,7 +792,10 @@ async fn resolve_and_prepare_tool_call(
 
     if tool_name.is_empty() {
         penalize_lesson_fn(intent, server.silva.clone());
-        return Err(error_result(&format!("Guild '{guild_name}' has no tools.")));
+        return Err(error_result(&format!(
+            "{} Guild '{guild_name}' has no tools.",
+            error_prefixes::NO_TOOLS
+        )));
     }
 
     let path_hint = extract_path_from_intent(intent);
@@ -954,9 +983,10 @@ async fn resolve_and_prepare_tool_call(
                 let missing_list = missing.join(", ");
                 let example = format!("tylluan_do(intent='...', {}<value>)", missing[0]);
                 return Err(error_result(&format!(
-                    "Error: guild '{guild_name}' requires argument(s): {missing_list}. \
+                    "{} Error: guild '{guild_name}' requires argument(s): {missing_list}. \
                      Provide them explicitly: {example}. \
-                     Check guild documentation for required fields."
+                     Check guild documentation for required fields.",
+                    error_prefixes::MISSING_ARGS
                 )));
             }
         }
@@ -2548,5 +2578,117 @@ mod tests {
         assert!(is_bash_state_intent("State_Restore"));
         assert!(is_bash_state_intent("RESTORE STATE"));
         assert!(is_bash_state_intent("State_Checkpoint after update"));
+    }
+
+    // ── MD-3: prefijos de error estables para fallos de Stage-1 ─────────────
+    // MEASUREMENT_DEBT_REGISTER MD-3: el harness de accuracy descompuesta
+    // (benchmarks/benchmark_md3_decomposed_accuracy.py) clasifica los fallos de
+    // tylluan_do parseando prefijos estables máquina-legibles. Estos tests fijan
+    // cada prefijo en su chokepoint real para que un refactor futuro no rompa
+    // silenciosamente el clasificador. Convención aditiva: prefijo + cuerpo
+    // verbatim (los consumidores del texto viejo siguen haciendo match).
+    // NO_TOOLS y MISSING_ARGS requieren un guild vivo (ensure_guild_running
+    // hace un handshake MCP real contra un proceso), así que su pin end-to-end
+    // lo hace la corrida del harness contra el kernel de test aislado, no aquí.
+
+    fn md3_error_text(res: &CallToolResult) -> String {
+        res.content.iter().filter_map(|c| c.as_text()).map(|t| t.text.clone()).collect::<String>()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn md3_unknown_guild_hint_is_routing_failed() {
+        let server = test_server().await;
+        let hint = Some("guild_inexistente_md3".to_string());
+        let agent_id: Option<String> = None;
+        let arguments: Option<serde_json::Map<String, serde_json::Value>> = None;
+        let err = match resolve_and_prepare_tool_call(
+            &server, "haz algo md3", "haz algo md3", "haz algo md3",
+            &hint, &agent_id, &arguments,
+        )
+        .await
+        {
+            Ok(_) => panic!("hint de guild desconocido debe fallar"),
+            Err(e) => e,
+        };
+        let text = md3_error_text(&err);
+        assert!(
+            text.starts_with("❌ Error: ROUTING_FAILED:"),
+            "debe llevar prefijo ROUTING_FAILED: tras el wrapper de error_result, got: {text}"
+        );
+        // Cuerpo verbatim preservado para consumidores existentes.
+        assert!(
+            text.contains("Unknown guild 'guild_inexistente_md3'"),
+            "cuerpo del mensaje debe preservarse, got: {text}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn md3_http_guild_spawn_failure_is_start_failed() {
+        let server = test_server().await;
+        // register_http_mcp registra un guild sin levantar proceso;
+        // ensure_guild_running intentará conectar a un puerto cerrado de
+        // 127.0.0.1 y fallará de forma determinista.
+        server.registry.write().await.register_http_mcp(
+            "md3_dead_guild",
+            "http://127.0.0.1:1/mcp",
+            Default::default(),
+            Some(500),
+        );
+        let hint = Some("md3_dead_guild".to_string());
+        let agent_id: Option<String> = None;
+        let arguments: Option<serde_json::Map<String, serde_json::Value>> = None;
+        let err = match resolve_and_prepare_tool_call(
+            &server, "usa el guild muerto", "usa el guild muerto", "usa el guild muerto",
+            &hint, &agent_id, &arguments,
+        )
+        .await
+        {
+            Ok(_) => panic!("guild http muerto debe fallar al arrancar"),
+            Err(e) => e,
+        };
+        let text = md3_error_text(&err);
+        assert!(
+            text.starts_with("❌ Error: START_FAILED:"),
+            "debe llevar prefijo START_FAILED: tras el wrapper de error_result, got: {text}"
+        );
+        assert!(
+            text.contains("Failed to start guild 'md3_dead_guild'"),
+            "cuerpo del mensaje debe preservarse, got: {text}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn md3_rate_limit_error_is_rate_limited() {
+        let server = test_server().await;
+        // Agotar el limiter per-guild de TylluanServer::new (120/min) ANTES de
+        // que el handler vea la llamada, usando un guild real del catálogo para
+        // pasar el check de hint conocido y llegar al chokepoint del limiter.
+        for _ in 0..120 {
+            server
+                .guild_rate_limiter
+                .check_and_record("bash")
+                .expect("el limiter debe aceptar hasta su máximo");
+        }
+        let hint = Some("bash".to_string());
+        let agent_id: Option<String> = None;
+        let arguments: Option<serde_json::Map<String, serde_json::Value>> = None;
+        let err = match resolve_and_prepare_tool_call(
+            &server, "ejecuta algo md3", "ejecuta algo md3", "ejecuta algo md3",
+            &hint, &agent_id, &arguments,
+        )
+        .await
+        {
+            Ok(_) => panic!("guild en rate limit debe fallar"),
+            Err(e) => e,
+        };
+        let text = md3_error_text(&err);
+        assert!(
+            text.starts_with("❌ Error: RATE_LIMITED:"),
+            "debe llevar prefijo RATE_LIMITED: tras el wrapper de error_result, got: {text}"
+        );
+        assert!(
+            text.contains("Rate limit for guild 'bash' exceeded"),
+            "cuerpo del mensaje debe preservarse, got: {text}"
+        );
     }
 }
