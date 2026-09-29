@@ -18,5 +18,6 @@
 - [ADR-013 — Non-Predation Contract](ADR013_non_predation_contract.md) — 2026-09-12. Principio fundacional y gate mecánico de no-depredación: la mejora nunca daña a otro escalón.
 - [ADR-014 — Capability Provider Fabric](ADR014_capability_provider_fabric.md) — 2026-09-14. Jerarquía formal Capability -> Provider -> Scheduler y deuda semántica.
 - [ADR-015 — Stigmergic Fleet Coordination](ADR015_stigmergic_fleet_coordination.md) — 2026-09-22. Coordinación emergente por calor semántico, zonas de trabajo y atenuación exponencial bio-inspirada.
+- [ADR-016 — NVIDIA OpenShell Runtime](ADR016_nvidia_openshell_runtime.md) — 2026-09-29. NO-GO como dependencia (exige contenedor/MicroVM, rompe perfil `portable` y ARM64/Pi 4); GO para receta de despliegue opcional y 3 patrones de diseño. Lectura estratégica: el sandboxing de agentes se comoditiza — el diferenciador es la memoria, no el aislamiento.
 
-> Índice actualizado 2026-09-22 con ADR-013, ADR-014 y ADR-015.
+> Índice actualizado 2026-09-29 con ADR-016.
