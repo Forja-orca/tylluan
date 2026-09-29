@@ -72,7 +72,8 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
         let srv = srv_arc.read().await;
         if let Err(_msg) = srv.guild_rate_limiter.check_and_record(&guild) {
             return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
-                "error": format!("Rate limit for guild '{}' exceeded. Try again later.", guild)
+                "error": format!("{} Rate limit for guild '{}' exceeded. Try again later.",
+                    crate::transport::server::handler_do::error_prefixes::RATE_LIMITED, guild)
             }))).into_response();
         }
     }

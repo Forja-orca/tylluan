@@ -3,6 +3,7 @@ use tracing::{info, warn};
 use chrono;
 
 use crate::registry::proxy::error_result;
+use super::error_prefixes;
 use crate::router::matcher::GuildContext;
 use crate::memory::mailbox::BlackboardMessage;
 use rmcp::model::CallToolRequestParam;
@@ -23,7 +24,8 @@ pub(crate) async fn resolve_guild_name(
         if !known {
             trace.push(format!("Guild hint '{hint}' rejected (unknown guild)"));
             return Err(error_result(&format!(
-                "Unknown guild '{hint}'. Use list_available_guilds to see valid options.",
+                "{} Unknown guild '{hint}'. Use list_available_guilds to see valid options.",
+                error_prefixes::ROUTING_FAILED,
             )));
         }
         info!("ðŸŽ¯ tylluan_do: guild hint '{}' bypasses router", hint);
@@ -201,7 +203,8 @@ pub(crate) async fn resolve_guild_name(
                                     }
                                 crate::security::friction_log::log_routing_mismatch(intent, &m.guild_name, "", &format!("RFL blocked: weight={:.0}%", node.weight * 100.0));
                                 return Err(error_result(&format!(
-                                    "Routing BLOCKED: guild '{}' previously failed for this intent (weight={:.0}%). Try a different phrasing.",
+                                    "{} Routing BLOCKED: guild '{}' previously failed for this intent (weight={:.0}%). Try a different phrasing.",
+                                    error_prefixes::ROUTING_FAILED,
                                     m.guild_name, node.weight * 100.0
                                 )));
                             }
@@ -211,10 +214,11 @@ pub(crate) async fn resolve_guild_name(
                 if m.score < MIN_CONFIDENCE {
                     crate::security::friction_log::log_routing_mismatch(intent, &m.guild_name, "", &format!("low confidence: score={:.2}", m.score));
                     return Err(error_result(&format!(
-                        "Error: intent '{}' unclear. Closest guild was '{}' \
+                        "{} Error: intent '{}' unclear. Closest guild was '{}' \
                          but confidence too low ({:.0}%). \
                          Try being more specific, e.g.: \
                          'run command X', 'search files Y', 'show git status'.",
+                        error_prefixes::ROUTING_FAILED,
                         intent, m.guild_name, m.score * 100.0
                     )));
                 }
