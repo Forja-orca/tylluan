@@ -82,7 +82,13 @@ pub async fn agents_list_handler(State(state): State<Arc<HttpState>>) -> impl In
     (StatusCode::OK, Json(serde_json::json!({ "agents": agents, "count": agents.len() }))).into_response()
 }
 
-pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+use crate::memory::silva::SilvaDB;
+
+/// Core of `GET /api/v1/stigmergy/zones`, split out of the handler so its
+/// contract (12 default zones + live work_traces inside the 16h window, heat
+/// math, contention_risk matrix) is testable against a real SilvaDB with
+/// deterministic time -- mirrors the work_traces tests in silva/tests.rs.
+pub async fn stigmergy_zones_core(db: &SilvaDB, now_unix: i64) -> serde_json::Value {
     let default_zones: Vec<(&str, &str, &str, Vec<&str>)> = vec![
         ("crates/tylluan-kernel/transport", "kernel", "Sovereign MCP transport handlers, SSE event loop, HTTP router & rate limiter", vec!["crates/tylluan-kernel/router", "crates/tylluan-link/p2p"]),
         ("dashboard/src/components", "dashboard", "React dashboard UI, consolidated tab suites, metric primitives, and observability panels", vec!["dashboard/src/hooks", "packages/tylluan-ui-core"]),
@@ -98,16 +104,11 @@ pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> imp
         ("docs/roadmap", "docs", "Technical roadmaps (ROADMAP_O3), milestone trackers, and specification drafts", vec!["docs/reference/adr"]),
     ];
 
-    let now_unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
-
     let mut uris_set: std::collections::HashSet<String> = default_zones.iter().map(|(id, _, _, _)| (*id).to_string()).collect();
 
     let cutoff = now_unix - (16 * 3600);
     let extra_uris = tokio::task::block_in_place(|| {
-        let conn_arc = state.silva.conn_lock();
+        let conn_arc = db.conn_lock();
         let conn = conn_arc.blocking_lock();
         let mut stmt = match conn.prepare("SELECT DISTINCT target_uri FROM work_traces WHERE touched_at >= ?1") {
             Ok(s) => s,
@@ -124,10 +125,10 @@ pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> imp
     }
 
     let all_uris: Vec<String> = uris_set.into_iter().collect();
-    let heat_map = state.silva.work_traces_heat_batch(&all_uris, Some(now_unix)).await.unwrap_or_default();
+    let heat_map = db.work_traces_heat_batch(&all_uris, Some(now_unix)).await.unwrap_or_default();
 
     let zones_details = tokio::task::block_in_place(|| {
-        let conn_arc = state.silva.conn_lock();
+        let conn_arc = db.conn_lock();
         let conn = conn_arc.blocking_lock();
         let mut map: std::collections::HashMap<String, (Vec<serde_json::Value>, Vec<String>, usize, i64)> = std::collections::HashMap::new();
 
@@ -228,12 +229,154 @@ pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> imp
         hb.partial_cmp(&ha).unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    (StatusCode::OK, Json(serde_json::json!({
+    let ts = chrono::DateTime::from_timestamp(now_unix, 0)
+        .unwrap_or_else(chrono::Utc::now)
+        .to_rfc3339();
+    serde_json::json!({
         "zones": zones_list,
         "count": zones_list.len(),
         "half_life_hours": 4.0,
         "window_hours": 16,
-        "ts": chrono::Utc::now().to_rfc3339(),
-    }))).into_response()
+        "ts": ts,
+    })
+}
+
+/// `GET /api/v1/stigmergy/zones` — thin wrapper over the testable core.
+pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let body = stigmergy_zones_core(&state.silva, now_unix).await;
+    (StatusCode::OK, Json(body)).into_response()
+}
+
+#[cfg(test)]
+mod stigmergy_zones_tests {
+    use super::*;
+    use crate::memory::silva::SilvaDB;
+
+    async fn test_silva() -> SilvaDB {
+        SilvaDB::in_memory().await.expect("test silva init")
+    }
+
+    async fn touch(db: &SilvaDB, agent: &str, zone: &str, ago_secs: i64, now: i64) {
+        let conn_arc = db.conn_lock();
+        let conn = conn_arc.lock().await;
+        conn.execute(
+            "INSERT INTO work_traces (target_uri, target_kind, agent_id, trace_type, weight, touched_at)
+             VALUES (?1, 'file', ?2, 'direct', 1.0, ?3)",
+            rusqlite::params![zone, agent, now - ago_secs],
+        )
+        .expect("insert work trace");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn zones_contract_twelve_default_zones() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        let body = stigmergy_zones_core(&db, now).await;
+        assert_eq!(body["count"].as_u64(), Some(12), "must expose the 12 default zones");
+        assert_eq!(body["half_life_hours"].as_f64(), Some(4.0));
+        assert_eq!(body["window_hours"].as_u64(), Some(16));
+        assert!(body["zones"].is_array());
+        let ids: Vec<&str> = body["zones"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|z| z["zone_id"].as_str())
+            .collect();
+        assert!(ids.contains(&"crates/tylluan-kernel/transport"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn zones_live_traces_rank_hot_zone_first_with_real_heat() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        // Hot zone: 3 agents recently; cold zone: 1 old trace.
+        touch(&db, "buffy", "crates/tylluan-kernel/transport", 600, now).await;
+        touch(&db, "deep", "crates/tylluan-kernel/transport", 900, now).await;
+        touch(&db, "mimo", "crates/tylluan-kernel/transport", 1200, now).await;
+        touch(&db, "buffy", "docs/reference/adr", 60_000, now).await;
+
+        let body = stigmergy_zones_core(&db, now).await;
+        let zones = body["zones"].as_array().unwrap();
+        let hot = zones
+            .iter()
+            .find(|z| z["zone_id"] == "crates/tylluan-kernel/transport")
+            .expect("hot zone present");
+        let cold = zones
+            .iter()
+            .find(|z| z["zone_id"] == "docs/reference/adr")
+            .expect("cold zone present");
+
+        assert!(hot["heat"].as_f64().unwrap_or(0.0) > cold["heat"].as_f64().unwrap_or(0.0));
+        // Zones are sorted by heat descending.
+        assert_eq!(zones[0]["zone_id"], "crates/tylluan-kernel/transport");
+        assert_eq!(hot["total_traces"].as_u64(), Some(3));
+        let agents: Vec<&str> = hot["active_agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(agents.contains(&"buffy") && agents.contains(&"deep") && agents.contains(&"mimo"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn zones_window_cuts_traces_older_than_16h() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        // 20h old: outside the 16h window, must not count.
+        touch(&db, "buffy", "crates/tylluan-kernel/memory", 72_000, now).await;
+        // 1h old: inside.
+        touch(&db, "deep", "crates/tylluan-kernel/memory", 3_600, now).await;
+
+        let body = stigmergy_zones_core(&db, now).await;
+        let mem = body["zones"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|z| z["zone_id"] == "crates/tylluan-kernel/memory")
+            .expect("memory zone present");
+        assert_eq!(mem["total_traces"].as_u64(), Some(1), "20h-old trace must be cut by the 16h window");
+        let agents: Vec<&str> = mem["active_agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(!agents.contains(&"buffy"));
+        assert!(agents.contains(&"deep"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn zones_contention_risk_matrix() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        // high: heat >= 1.5 && agents > 1 (3 fresh traces, 3 agents).
+        touch(&db, "a1", "crates/tylluan-link/gossip", 60, now).await;
+        touch(&db, "a2", "crates/tylluan-link/gossip", 90, now).await;
+        touch(&db, "a3", "crates/tylluan-link/gossip", 120, now).await;
+        // moderate: heat >= 1.0, single agent.
+        touch(&db, "a1", "crates/tylluan-kernel/config", 60, now).await;
+        touch(&db, "a1", "crates/tylluan-kernel/config", 90, now).await;
+        // low: single stale-ish trace.
+        touch(&db, "a1", "docs/roadmap", 3_600, now).await;
+
+        let body = stigmergy_zones_core(&db, now).await;
+        let risk = |zone: &str| -> String {
+            body["zones"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|z| z["zone_id"] == zone)
+                .map(|z| z["contention_risk"].as_str().unwrap_or("").to_string())
+                .unwrap_or_default()
+        };
+        assert_eq!(risk("crates/tylluan-link/gossip"), "high");
+        assert_eq!(risk("crates/tylluan-kernel/config"), "moderate");
+        assert_eq!(risk("docs/roadmap"), "low");
+    }
 }
 
