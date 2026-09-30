@@ -31,9 +31,9 @@ fn periodic_actions(
     monitoring_freq: u64,
 ) -> (bool, bool, bool) {
     (
-        iteration % checkpoint_freq.max(1) == 0,
-        iteration % decay_freq.max(1) == 0,
-        iteration % monitoring_freq.max(1) == 0,
+        iteration.is_multiple_of(checkpoint_freq.max(1)),
+        iteration.is_multiple_of(decay_freq.max(1)),
+        iteration.is_multiple_of(monitoring_freq.max(1)),
     )
 }
 
