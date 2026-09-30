@@ -616,7 +616,7 @@ async def generate_image(
             width, height = qwen_w, qwen_h
         else:
             if not checkpoint:
-                checkpoint = _detect_checkpoint(prefer_flux=True)
+                checkpoint = await asyncio.to_thread(_detect_checkpoint, prefer_flux=True)
                 if not checkpoint:
                     return "❌ No checkpoints found in ComfyUI. Install a model first."
 
@@ -638,8 +638,8 @@ async def generate_image(
             used_checkpoint = checkpoint
 
         logging.info("Submitting txt2img [%s]: %s…", used_checkpoint[:30], full_prompt[:60])
-        prompt_id = _submit_prompt(workflow)
-        result    = _poll_until_done(prompt_id)
+        prompt_id = await asyncio.to_thread(_submit_prompt, workflow)
+        result    = await asyncio.to_thread(_poll_until_done, prompt_id)
         saved     = _save_outputs(prompt_id, result.get("outputs", {}))
 
         if not saved:
@@ -692,7 +692,7 @@ async def img2img(
         if not os.path.exists(image_path):
             return f"❌ Image not found: {image_path}"
         if not checkpoint:
-            checkpoint = _detect_checkpoint(prefer_flux=False)
+            checkpoint = await asyncio.to_thread(_detect_checkpoint, prefer_flux=False)
             if not checkpoint:
                 return "❌ No checkpoints found in ComfyUI."
 
@@ -700,8 +700,8 @@ async def img2img(
             prompt=prompt, image_path=image_path, negative=negative_prompt,
             checkpoint=checkpoint, denoise=denoise, steps=steps, cfg=cfg, seed=seed,
         )
-        prompt_id = _submit_prompt(workflow)
-        result    = _poll_until_done(prompt_id)
+        prompt_id = await asyncio.to_thread(_submit_prompt, workflow)
+        result    = await asyncio.to_thread(_poll_until_done, prompt_id)
         saved     = _save_outputs(prompt_id, result.get("outputs", {}))
 
         if not saved:
@@ -741,7 +741,7 @@ async def list_models(model_type: str = "checkpoints", intent: str = "") -> str:
             elif "control" in il: model_type = "controlnet"
             elif "embed" in il: model_type = "embeddings"
 
-        data   = _http_get(f"/models/{model_type}")
+        data   = await asyncio.to_thread(_http_get, f"/models/{model_type}")
         models = data if isinstance(data, list) else []
 
         if not models:
@@ -769,7 +769,7 @@ async def get_node_schema(node_type: str, intent: str = "") -> str:
         intent: Natural language description (used to infer node_type if left empty).
     """
     try:
-        all_nodes = _http_get("/object_info")
+        all_nodes = await asyncio.to_thread(_http_get, "/object_info")
 
         if not node_type and intent:
             q          = intent.lower()
@@ -817,8 +817,8 @@ async def comfy_status(intent: str = "") -> str:
     what's in the queue, generation queue.
     """
     try:
-        system   = _http_get("/system_stats")
-        queue    = _http_get("/queue")
+        system   = await asyncio.to_thread(_http_get, "/system_stats")
+        queue    = await asyncio.to_thread(_http_get, "/queue")
         gpu      = system.get("devices", [{}])[0] if system.get("devices") else {}
         gpu_name = gpu.get("name", "CPU")
         vram_free  = gpu.get("vram_free", 0)
@@ -889,7 +889,7 @@ async def generate_short(
             scene_texts = [paragraphs[i % len(paragraphs)] for i in range(scene_count)]
 
         # 2. Pick model
-        checkpoint = _detect_checkpoint(prefer_flux=True)
+        checkpoint = await asyncio.to_thread(_detect_checkpoint, prefer_flux=True)
         if not checkpoint:
             return "❌ No checkpoints found in ComfyUI."
         use_flux = _is_flux(checkpoint)
@@ -914,8 +914,8 @@ async def generate_short(
                     steps=4, cfg=1.0, sampler="euler", scheduler="simple",
                 )
 
-            pid    = _submit_prompt(wf)
-            result = _poll_until_done(pid, timeout_secs=1800)
+            pid    = await asyncio.to_thread(_submit_prompt, wf)
+            result = await asyncio.to_thread(_poll_until_done, pid, timeout_secs=1800)
             saved  = _save_outputs(pid, result.get("outputs", {}))
             if not saved:
                 return f"⚠️ Scene {i + 1}/{scene_count} — no image output from ComfyUI."
@@ -964,8 +964,8 @@ async def generate_short(
         audio_path: str | None = None
         try:
             tts_wf     = _kokoro_tts_workflow(narration_text, voice=voice)
-            tts_pid    = _submit_prompt(tts_wf)
-            tts_result = _poll_until_done(tts_pid, timeout_secs=300)
+            tts_pid    = await asyncio.to_thread(_submit_prompt, tts_wf)
+            tts_result = await asyncio.to_thread(_poll_until_done, tts_pid, timeout_secs=300)
             tts_saved  = _save_audio_outputs(tts_pid, tts_result.get("outputs", {}))
             if tts_saved:
                 audio_path = tts_saved[0]
@@ -1057,7 +1057,7 @@ async def generate_documentary_video(
         else:
             scene_texts = [paragraphs[i % len(paragraphs)] for i in range(scene_count)]
 
-        checkpoint = _detect_checkpoint(prefer_flux=True)
+        checkpoint = await asyncio.to_thread(_detect_checkpoint, prefer_flux=True)
         if not checkpoint:
             return "❌ No checkpoints found in ComfyUI."
         use_flux = _is_flux(checkpoint)
@@ -1077,8 +1077,8 @@ async def generate_documentary_video(
                     checkpoint=checkpoint, width=768, height=432,
                     steps=4, cfg=1.0, sampler="euler", scheduler="simple",
                 )
-            pid    = _submit_prompt(wf)
-            result = _poll_until_done(pid, timeout_secs=1800)
+            pid    = await asyncio.to_thread(_submit_prompt, wf)
+            result = await asyncio.to_thread(_poll_until_done, pid, timeout_secs=1800)
             saved  = _save_outputs(pid, result.get("outputs", {}))
             if not saved:
                 return f"⚠️ Scene {i + 1} failed — no image output."
@@ -1165,8 +1165,8 @@ async def generate_wan_video(
         dims = "1088×1920 (Shorts)" if mode == "shorts" else "1280×704 (Landscape)"
         frames = 53 if mode == "shorts" else 121
         logging.info("Submitting Wan2.2 video [%s]: %s…", dims, prompt[:60])
-        prompt_id = _submit_prompt(workflow)
-        result = _poll_until_done(prompt_id, timeout=3600)
+        prompt_id = await asyncio.to_thread(_submit_prompt, workflow)
+        result = await asyncio.to_thread(_poll_until_done, prompt_id, timeout=3600)  # TODO(bug pre-existente): kwarg invalido (timeout vs timeout_secs) - TypeError hoy, preservado tal cual
         saved = _save_outputs(prompt_id, result.get("outputs", {}))
         if not saved:
             return f"⚠️ Video generation completed (ID: {prompt_id}) but no output files found."
@@ -1190,7 +1190,7 @@ async def generate_wan_video(
 
 async def _get_first_checkpoint() -> str:
     try:
-        models = _http_get("/models/checkpoints")
+        models = await asyncio.to_thread(_http_get, "/models/checkpoints")
         return models[0] if models else ""
     except Exception:
         return ""
