@@ -21,7 +21,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-three': ['three', 'react-force-graph-3d'],
+          'vendor-force-graph': ['react-force-graph-2d'],
           'vendor-tldraw': ['@tldraw/tldraw'],
           'vendor-lucide': ['lucide-react'],
         },
@@ -42,7 +42,11 @@ export default defineConfig({
       // unused by the dashboard). Needs explicit anti-buffering headers or
       // Node's proxy can sit on the stream and the UI never sees events.
       '/api/v1/events': {
-        target: 'http://127.0.0.1:4000',
+        // El kernel canónico escucha en :47004 (CONTRACT-01, puerto único). El
+        // target viejo :4000 apuntaba a un kernel que no existe en este repo —
+        // con él, el dashboard dev arrancaba sin datos (queja original: el grafo
+        // "no me parota nada").
+        target: 'http://127.0.0.1:47004',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyRes', (_proxyRes, _req, res) => {
@@ -53,14 +57,14 @@ export default defineConfig({
         },
       },
       '/api': {
-        target: 'http://127.0.0.1:4000',
+        target: 'http://127.0.0.1:47004',
         changeOrigin: true,
         // WebSocket upgrade support (canvas /api/v1/canvas/ws) — Vite does not
         // enable ws proxying on custom proxy entries by default.
         ws: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:4000',
+        target: 'http://127.0.0.1:47004',
         changeOrigin: true,
       },
     },
