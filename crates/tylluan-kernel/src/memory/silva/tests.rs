@@ -596,6 +596,48 @@ async fn test_silva() -> SilvaDB {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_node_decay_is_idempotent_across_repeated_reads() {
+        // Hallazgo #2 (auditoría 2026-09-30): apply_node_decay NO movía
+        // last_touched, así que get_node re-aplicaba el decay del MISMO
+        // intervalo congelado en CADA lectura — un nodo con 3h de antigüedad
+        // leído 3 veces acumulaba ~9h de decay, acelerando la pérdida de peso
+        // de los nodos más leídos. Invariante: N lecturas consecutivas pesan
+        // lo mismo que UNA lectura con el mismo tiempo total transcurrido.
+        let db = test_silva().await;
+        db.upsert_node("y", "concept", "leido tres veces", "{}").await.unwrap();
+        db.upsert_node("z", "concept", "leido una vez", "{}").await.unwrap();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        {
+            let conn = db.conn.lock().await;
+            conn.execute(
+                "UPDATE nodes SET last_touched = ?1, weight = 1.0 WHERE id = 'y'",
+                params![now - 3 * 3600],
+            ).unwrap();
+            conn.execute(
+                "UPDATE nodes SET last_touched = ?1, weight = 1.0 WHERE id = 'z'",
+                params![now - 3 * 3600],
+            ).unwrap();
+        }
+
+        let w1 = db.apply_node_decay("y").await.unwrap();
+        let w2 = db.apply_node_decay("y").await.unwrap();
+        let w3 = db.apply_node_decay("y").await.unwrap();
+        let single = db.apply_node_decay("z").await.unwrap();
+
+        // Con el fix, la 1ª aplicación mueve el ancla a now: las lecturas
+        // siguientes caen en el guard hours<1 y son no-op exactas.
+        assert!((w2 - w1).abs() < 1e-6 && (w3 - w2).abs() < 1e-6,
+            "lecturas consecutivas no deben volver a aplicar decay: {w1} {w2} {w3}");
+        // 3 lecturas de un nodo con 3h == 1 lectura con 3h (con el bug: exp(-λ·9h)).
+        assert!((w3 - single).abs() < 1e-3,
+            "3 lecturas con 3h de antigüedad deben pesar como 1 lectura con 3h: {w3} vs {single}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_hub_node_decays_slower() {
         let db = test_silva().await;
         db.upsert_node("hub", "concept", "Hub Node", "{}").await.unwrap();

@@ -1062,9 +1062,17 @@ impl super::SilvaDB {
             lambda_eff *= type_multiplier;
             let new_weight = weight * (-lambda_eff * hours).exp();
             let salience = new_weight * (1.0 + (trace_count as f64 + 1.0).ln() * 0.1);
+            // Hallazgo #2 (auditoría 2026-09-30): el UPDATE NO movía
+            // `last_touched`, así que CADA lectura posterior re-aplicaba el
+            // decay del MISMO intervalo congelado (10h congeladas = 10h de
+            // decay por cada lectura), acelerando artificialmente la pérdida
+            // de peso de los nodos más leídos — justo los que más importan.
+            // Mover el ancla a `now` hace el decay idempotente entre lecturas:
+            // cada aplicación solo descuenta el tiempo REAL transcurrido desde
+            // la aplicación anterior.
             conn.execute(
-                "UPDATE nodes SET weight = ?1, salience_score = ?2 WHERE id = ?3",
-                params![new_weight, salience, node_id],
+                "UPDATE nodes SET weight = ?1, salience_score = ?2, last_touched = ?3 WHERE id = ?4",
+                params![new_weight, salience, now, node_id],
             )?;
             Ok(new_weight)
         })
