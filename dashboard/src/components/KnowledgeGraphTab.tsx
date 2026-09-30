@@ -22,9 +22,12 @@ import { useNexus } from '../hooks/useNexus';
 import { cn } from '../lib/utils';
 import { IngestPanel } from './IngestPanel';
 
-// three.js/WebGL is heavy — only load it when the Knowledge tab is actually opened.
-const KnowledgeCortex3D = lazy(() =>
-  import('./graph/KnowledgeCortex3D').then((m) => ({ default: m.KnowledgeCortex3D }))
+// The graph canvas is heavy enough to warrant code-splitting — only load it
+// when the Knowledge tab is actually opened. 2D canvas renderer (see
+// KnowledgeCortex2D: three.js/WebGL removed after user feedback — same data,
+// same semantics, a fraction of the cost).
+const KnowledgeCortex2D = lazy(() =>
+  import('./graph/KnowledgeCortex2D').then((m) => ({ default: m.KnowledgeCortex2D }))
 );
 
 interface Props {
@@ -266,10 +269,10 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               <div className="flex-1 min-h-0 flex flex-col">
                 <Suspense fallback={
                   <div className="flex-1 min-h-0 rounded-xl bg-slate-900/60 flex items-center justify-center gap-2 text-xs text-slate-500">
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Loading 3D cortex...
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Loading graph canvas...
                   </div>
                 }>
-                  <KnowledgeCortex3D bridge={bridge} events={events} />
+                  <KnowledgeCortex2D bridge={bridge} events={events} />
                 </Suspense>
               </div>
               <IngestPanel bridge={bridge} notify={notify} onIngestComplete={handleIngestComplete} />
