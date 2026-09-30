@@ -1073,6 +1073,18 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
+/// True iff `file_path` canonicalizes to somewhere inside `base` — the containment
+/// check that keeps the unauthenticated static-asset fallback from serving anything
+/// outside `dashboard/dist` (e.g. a `..`-laden request for `.tylluan-token`).
+/// canonicalize() fails closed on a path that doesn't exist, so this also subsumes
+/// the old `file_path.is_file()` existence check.
+fn is_static_path_contained(file_path: &std::path::Path, base: &std::path::Path) -> bool {
+    match (file_path.canonicalize(), base.canonicalize()) {
+        (Ok(canon_file), Ok(canon_base)) => canon_file.starts_with(&canon_base),
+        _ => false,
+    }
+}
+
 /// Build the FULL production router (public routes + bearer-auth-protected
 /// API v1/MCP/SSE + fallback). `pub` so integration tests (WS7 adversarial
 /// battery) can drive the real middleware stack — handlers-only tests on
@@ -1175,9 +1187,12 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
                             return Ok(resp);
                         }
                     }
-                    // Static assets (JS/CSS/fonts) — serve from disk
+                    // Static assets (JS/CSS/fonts) — serve from disk.
+                    // SECURITY: `path` comes straight from the request URI, so a raw `..`
+                    // segment (e.g. GET /../../.tylluan-token) must never resolve outside
+                    // static_dir_inner — see is_static_path_contained().
                     let file_path = static_dir_inner.join(path.trim_start_matches('/'));
-                    if file_path.is_file()
+                    if is_static_path_contained(&file_path, &static_dir_inner)
                         && let Ok(bytes) = tokio::fs::read(&file_path).await {
                             let mime = match file_path.extension().and_then(|e| e.to_str()) {
                                 Some("js")   => "application/javascript; charset=utf-8",
@@ -1444,6 +1459,52 @@ mod tests {
         assert_eq!(found_root.canonicalize().unwrap(), root_path.canonicalize().unwrap());
         assert_eq!(contract.agents.len(), 1);
         assert!(contract.agents.contains_key("claude-code"));
+    }
+
+    #[test]
+    fn test_static_path_traversal_rejected() {
+        // Regression guard for the unauthenticated static-asset fallback (findings audit,
+        // 2026-09-30): a raw `..` segment from the request URI must never resolve outside
+        // the dashboard's static_dir, e.g. GET /../../.tylluan-token must not read the token.
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("dashboard_dist");
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("app.js"), b"console.log(1)").unwrap();
+
+        // A secret living just outside the static dir, as .tylluan-token does relative
+        // to dashboard/dist in production.
+        std::fs::write(temp.path().join("secret.token"), b"top-secret").unwrap();
+
+        let traversal_target = base.join("..").join("secret.token");
+        assert!(
+            !is_static_path_contained(&traversal_target, &base),
+            "path traversal outside static_dir must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_static_path_legitimate_asset_accepted() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("dashboard_dist");
+        let nested = base.join("assets");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("app.js"), b"console.log(1)").unwrap();
+
+        let legit = base.join("assets").join("app.js");
+        assert!(
+            is_static_path_contained(&legit, &base),
+            "a real nested asset inside static_dir must still be served"
+        );
+    }
+
+    #[test]
+    fn test_static_path_nonexistent_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("dashboard_dist");
+        std::fs::create_dir_all(&base).unwrap();
+
+        let missing = base.join("does-not-exist.js");
+        assert!(!is_static_path_contained(&missing, &base));
     }
 
     fn test_identity() -> tylluan_link::identity::NodeIdentity {
