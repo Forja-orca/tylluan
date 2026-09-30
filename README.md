@@ -390,7 +390,7 @@ flowchart LR
     <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
   </a>
 </p>
-<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom.</i></sub></p>
+<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom. For an interactive version (pan/zoom, click a component to see its real source file:line) download <a href="docs/assets/architecture_interactive.html">architecture_interactive.html</a> and open it locally.</i></sub></p>
 
 
 ## Stack
