@@ -950,4 +950,46 @@ mod tests {
              tylluan.toml's [guilds.v2]."
         );
     }
+
+    /// Regression guard for the MD-3 harness finding (2026-09-30): a
+    /// LAZY_GUILDS entry whose hardcoded module path no longer exists on disk
+    /// used to win the "first registration wins" race against [guilds.v2] and
+    /// every lazy spawn died with "MCP handshake FAILED" (reproduced isolated
+    /// by benchmarks/benchmark_md3_decomposed_accuracy.py; masked in
+    /// production by the persisted registry.json). main.rs now resolves the
+    /// module path from the catalog first, but this test keeps the hardcoded
+    /// fallback list itself honest: every entry must resolve to a real .py,
+    /// either via its catalog descriptor or via its legacy path.
+    #[test]
+    fn test_lazy_guilds_module_paths_resolve_to_real_files() {
+        use crate::registry::guild_list::LAZY_GUILDS;
+
+        // CARGO_MANIFEST_DIR is crates/tylluan-kernel; repo root is two up.
+        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let catalog = builtin_catalog();
+        let by_name: std::collections::HashMap<&str, &str> = catalog
+            .iter()
+            .map(|d| (d.name.as_str(), d.module_path.as_str()))
+            .collect();
+
+        for (name, legacy_module, _) in LAZY_GUILDS.iter().copied() {
+            let catalog_path_ok = by_name
+                .get(name)
+                .map(|mp| repo_root.join(mp.replace('.', "/") + ".py").exists())
+                .unwrap_or(false);
+            let legacy_path_ok = repo_root
+                .join(legacy_module.replace('.', "/") + ".py")
+                .exists();
+            assert!(
+                catalog_path_ok || legacy_path_ok,
+                "LAZY_GUILDS entry '{name}' points to '{legacy_module}' which does not \
+                 exist on disk, and no catalog descriptor provides an alternative \
+                 module path — lazy spawn would fail with \"MCP handshake FAILED\" \
+                 (MD-3 harness finding, 2026-09-30). Move the plugin back, or fix \
+                 the path, or remove the entry if the guild is v2-only."
+            );
+        }
+    }
 }
