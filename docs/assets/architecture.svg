@@ -136,7 +136,7 @@
       <!-- Hybrid Router -->
       <rect x="560" y="348" width="360" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
       <text x="575" y="368" fill="#ffffff" font-size="13" font-weight="700">Hybrid Matcher &amp; Router</text>
-      <text x="575" y="386" fill="#a7f3d0" font-size="11">RRF Fusion (BGE-M3 + BM25) · Lessons · Triggers · Anchors</text>
+      <text x="575" y="386" fill="#a7f3d0" font-size="11">RRF Fusion (mxbai + BM25) · Lessons · Triggers · Anchors</text>
 
       <!-- Roadmap: Retrieval Gate (Translucent) -->
       <rect x="940" y="348" width="260" height="55" rx="8" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
@@ -173,7 +173,7 @@
 
       <rect x="770" y="465" width="430" height="85" rx="8" fill="#1e1b4b" stroke="#9333ea" stroke-width="1"/>
       <text x="785" y="488" fill="#ffffff" font-size="13" font-weight="700">ONNX Runtime Embedded (ort)</text>
-      <text x="785" y="506" fill="#d8b4fe" font-size="11">• BGE-M3 (1024-dim dense vector embeddings)</text>
+      <text x="785" y="506" fill="#d8b4fe" font-size="11">• mxbai-embed-large (1024-dim dense embeddings)</text>
       <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo (fast cross-encoder)</text>
       <text x="785" y="538" fill="#d8b4fe" font-size="11">• Fallback to BM25-only without ONNX (G2 Smoke)</text>
 
