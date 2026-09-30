@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 26;
+            const SCHEMA_VERSION: i32 = 27;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -346,6 +346,21 @@ impl super::SilvaDB {
                     [],
                 );
                 tracing::info!("🌲 SilvaDB: added recall_feedback.signal_kind (v26, señales separadas)");
+            }
+            if schema_version < 27 {
+                // ADR-011 §Fase 3: real per-row retrieval-quality features so the
+                // LightReranker trains on signal, not on the constant proxies
+                // (score_graph=0.0, recency=0.5) that carried zero variance.
+                // All three are nullable REAL: NULL means "not computable for this
+                // row" (graph skip, cache-hit path, unparseable timestamp, or any
+                // row written before this migration) — never silently 0.0, which
+                // would look like a real measurement to the trainer. Consumers
+                // (train_light_reranker.py, light_reranker_train_phase.rs) fall
+                // back to the documented proxies only for NULL rows.
+                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN score_rrf REAL", []);
+                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN score_graph REAL", []);
+                let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN recency_score REAL", []);
+                tracing::info!("🌲 SilvaDB: added recall_feedback score_rrf/score_graph/recency_score (v27, ADR-011 §Fase 3)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

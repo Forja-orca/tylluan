@@ -5,6 +5,20 @@ use std::collections::HashMap;
 
 use super::GraphNode;
 
+/// ADR-011 §Fase 3: per-recall retrieval-quality features, recorded alongside
+/// `rank_position` in `recall_feedback` so the LightReranker trains on real
+/// signals instead of the constant proxies (0.0 / 0.5) that carried zero
+/// variance. `None` = genuinely not computable (e.g. graph skip, or the
+/// recall_cache path that never passes through `search_hybrid`) — never a
+/// fabricated value.
+#[derive(Debug, Clone, Default)]
+pub struct SearchMeta {
+    /// Raw RRF contribution of the LightRAG local graph traversal (Personalized
+    /// PageRank) per node id, BEFORE the entity boost / temporal penalty.
+    /// Empty map = graph step skipped (`skip_graph=true`) or no vector seeds.
+    pub graph_contrib: HashMap<String, f32>,
+}
+
 impl super::SilvaDB {
     /// Pure Rust vector cosine similarity search on the graph.
     /// Fast path: HNSW â†’ IVF â†’ linear fallback.
@@ -192,11 +206,30 @@ impl super::SilvaDB {
         type_filter: Option<&str>,
         skip_graph: bool,
     ) -> Result<Vec<(GraphNode, f32)>> {
-        // Reciprocal Rank Fusion (RRF): score(d) = Î£ 1/(k + rank)
-        // k=60 is the standard constant (Cormack et al. 2009).
-        // Fuses by rank position, not raw score â€” no normalization needed.
+        self.search_hybrid_detailed(query, query_embedding, limit, type_filter, skip_graph)
+            .await
+            .map(|(results, _meta)| results)
+    }
+
+    /// Same fusion as `search_hybrid` plus the [`SearchMeta`]
+    /// telemetry (per-node graph contribution). Signature-stable variant: the
+    /// ~14 existing `search_hybrid` call sites stay untouched; only the recall
+    /// path consumes the extra features (ADR-011 §Fase 3).
+    pub async fn search_hybrid_detailed(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        limit: usize,
+        type_filter: Option<&str>,
+        skip_graph: bool,
+    ) -> Result<(Vec<(GraphNode, f32)>, SearchMeta)> {
         const K: f32 = 60.0;
         let mut rrf_scores: HashMap<String, (GraphNode, f32)> = HashMap::new();
+        // Always-on in the detailed variant (its whole point is the telemetry);
+        // the plain `search_hybrid` wrapper discards it. Inlining this fn for
+        // the plain path would hard-code None here and keep the hot path at
+        // zero allocation for the telemetry map.
+        let mut graph_meta: Option<SearchMeta> = Some(SearchMeta::default());
 
         let mut vector_results = Vec::new();
         if let Some(emb) = query_embedding {
@@ -219,6 +252,14 @@ impl super::SilvaDB {
             if let Ok(graph_results) = self.local_query_graph(&seed_ids, limit).await {
                 for (rank, (node, _score)) in graph_results.into_iter().enumerate() {
                     let rrf = 1.0 / (K + rank as f32 + 1.0);
+                    // ADR-011 §Fase 3: record the graph's own contribution so
+                    // recall_feedback can store score_graph per row. Additive
+                    // telemetry — the fusion below is untouched.
+                    if let Some(meta) = graph_meta.as_mut() {
+                        meta.graph_contrib.entry(node.id.clone())
+                            .and_modify(|v| *v += rrf)
+                            .or_insert(rrf);
+                    }
                     rrf_scores.entry(node.id.clone())
                         .and_modify(|e| e.1 += rrf)
                         .or_insert((node, rrf));
@@ -290,7 +331,8 @@ impl super::SilvaDB {
         final_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         final_results.truncate(limit);
 
-        Ok(final_results)
+        let meta = graph_meta.unwrap_or_default();
+        Ok((final_results, meta))
     }
 
     /// Agent-facing hybrid recall with an explicit archived-node policy.
@@ -305,13 +347,32 @@ impl super::SilvaDB {
         skip_graph: bool,
         include_archived: bool,
     ) -> Result<Vec<(GraphNode, f32)>> {
+        self.search_hybrid_for_recall_detailed(query, query_embedding, limit, type_filter, skip_graph, include_archived)
+            .await
+            .map(|(results, _meta)| results)
+    }
+
+    /// Same recall policy as `search_hybrid_for_recall` plus the
+    /// [`SearchMeta`] telemetry (per-node LightRAG graph contribution) so the
+    /// ADR-011 Signal Loop can persist real per-row features. Signature-stable
+    /// variant: the existing `search_hybrid_for_recall` call sites stay
+    /// untouched.
+    pub async fn search_hybrid_for_recall_detailed(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        limit: usize,
+        type_filter: Option<&str>,
+        skip_graph: bool,
+        include_archived: bool,
+    ) -> Result<(Vec<(GraphNode, f32)>, SearchMeta)> {
         let source_limit = if include_archived {
             limit
         } else {
             limit.saturating_mul(3).max(limit)
         };
-        let mut results = self
-            .search_hybrid(query, query_embedding, source_limit, type_filter, skip_graph)
+        let (mut results, meta) = self
+            .search_hybrid_detailed(query, query_embedding, source_limit, type_filter, skip_graph)
             .await?;
         if !include_archived {
             let archived_ids = self
@@ -380,7 +441,7 @@ impl super::SilvaDB {
                 )
             });
         }
-        Ok(results)
+        Ok((results, meta))
     }
 
     /// Stage-1 body shared by the cascade and the diagnostic probe: fuse
