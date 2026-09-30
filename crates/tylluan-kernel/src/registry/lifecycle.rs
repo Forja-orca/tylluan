@@ -92,8 +92,8 @@ pub fn start_lifecycle_reaper_with_silva(
             let (checkpoint_due, decay_due, monitoring_due) =
                 periodic_actions(iteration, checkpoint_freq, DECAY_FREQ, monitoring_freq);
 
-            if checkpoint_due {
-                if let Some(silva_db) = &silva {
+            if checkpoint_due
+                && let Some(silva_db) = &silva {
                     if let Err(e) = silva_db.checkpoint().await {
                         tracing::warn!("⚠️ WAL checkpoint failed: {}", e);
                     } else {
@@ -106,14 +106,13 @@ pub fn start_lifecycle_reaper_with_silva(
                             tracing::warn!("⚠️ Truth Consensus failed: {}", e);
                         }
                 }
-            }
 
             // Step 2: Biological Decay (T26) — cada DECAY_FREQ iteraciones REALES
             // (con check_interval=60s: ~100 min). Con el loop_count compartido
             // viejo, el reset del checkpoint hacía que esto se disparara cada
             // ~5 minutos y borrara memorias vivas mucho antes de tiempo.
-            if decay_due {
-                if let Some(silva_db) = &silva {
+            if decay_due
+                && let Some(silva_db) = &silva {
                     info!("🧠 [T26] Applying biological decay to SilvaDB...");
                     let _ = silva_db.apply_decay().await;
                     let deleted = silva_db.apply_cleanup(0.05).await.unwrap_or(0);
@@ -121,7 +120,6 @@ pub fn start_lifecycle_reaper_with_silva(
                         info!("🧹 [T26] Biological pruning removed {} dead memories.", deleted);
                     }
                 }
-            }
 
             if monitoring_due {
                 // Solo-lectura: el heartbeat solo cuenta guilds, no necesita
