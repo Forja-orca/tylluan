@@ -86,9 +86,9 @@ hash) y en cada fila del store de confusión WS3 (`8ac01f4`).
 
 ---
 
-## MD-3 · "Accuracy del matcher en vivo" mezcla routing con validación de argumentos — `ABIERTO`
+## MD-3 · "Accuracy del matcher en vivo" mezcla routing con validación de argumentos — `CERRADO` (2026-09-30, Buffy/Codebuff)
 
-**Qué dice medir:** la calidad del enrutamiento de producción
+**Qué decía medir:** la calidad del enrutamiento de producción
 (live matcher) frente al híbrido offline.
 
 **Qué mide realmente:** accuracy end-to-end de `tylluan_do`, que mezcla
@@ -106,13 +106,44 @@ error antes de que exista `result`), **11** = dispatch legítimo de subtools
 soberanos (ítems del dataset que no son casos de routing), **1** =
 coordinator-hijack de la cascada proactiva (esa familia la cierra WS2,
 commit `9fc8fbf`→`9fc8bfb` con gate de delegación + regresión test),
-**1** = genuine no-match. Es decir: el fallo atribuible al *routing* en
-sí es ~1 de 29, y el dataset arrastra 11 ítems que no miden routing.
+**1** = genuine no-match. Lectura de entonces: el fallo atribuible al
+*routing* puro era ~1 de 29 — la medición descompuesta (abajo) la matiza:
+la suposición "guild correcto" de los 17 era optimista (~45% real en vivo).
 
-**Cierre:** un protocolo de evaluación que separe (a) decisión de guild,
-(b) completitud de args, (c) validez del ítem como caso de routing. Mientras
-tanto, citar siempre las 4 cifras por separado (live / hybrid / triage de
-unknowns / composición del dataset), nunca "accuracy" a secas.
+**Cierre (protocolo de 3 ejes operativo):** tres piezas, todas comiteadas:
+
+1. **Prefijos de error estables de Stage-1** (`handler_do::error_prefixes`,
+   commit `00a93af`): `ROUTING_FAILED:`, `RATE_LIMITED:`, `START_FAILED:`,
+   `NO_TOOLS:`, `MISSING_ARGS:` antepuestos con cuerpo del mensaje verbatim
+   (consumidores del texto previo intactos; `ACCESS_DENIED:` y
+   `NO_GUILD_MATCH:` ya existían y no se tocan). 3 tests unitarios fijan
+   cada prefijo en su chokepoint real (fixture `test_server` de handler_do).
+2. **Harness** `benchmarks/benchmark_md3_decomposed_accuracy.py`: corre el
+   held-out N=77 con `plan=true` contra **kernel de test aislado** (nunca
+   producción), clasifica por los 3 ejes con los prefijos y emite per-item
+   JSONL incremental. Corrida real: kernel `844c105`, HEAD `f00d293`, lag 0,
+   0 fallos de infra, 0 respuestas sin clasificar.
+3. **Baseline descompuesto** (`benchmarks/BENCHMARK_MD3_DECOMPOSED.md`,
+   kernel de test, memoria fría — NO comparable item a item con bca9238):
+   **(1) routing pura 31/68 = 45.59%** · **(2) completitud de args 40/60 =
+   66.67%** · **(3) validez de ítem: 68 routing / 8 subtool / 1 hijack**
+   (11.7% del held-out no mide routing) · **(4) end-to-end 32/73 = 43.84%**.
+
+Hallazgos de la descomposición que la cifra única ocultaba: (a) la
+suposición central del triaje v3 era optimista — de los 20 `MISSING_ARGS`
+de routing cases, solo 9/20 tenían el guild correcto; (b) el fractal gate
+(M23) intercepta 8 ítems con 4 candidatos sin que el target esté entre
+ellos; (c) el coordinator-hijack está muerto en vivo (WS2 verificado
+end-to-end: el ítem va a `code_graph` con `MISSING_ARGS:`, no a
+coordinator); (d) el harness destapó 2 bugs reales de registro de guilds
+enmascarados por el `registry.json` persistido (rutas legacy stale en
+`LAZY_GUILDS` y registro v2 dependiente del CWD), cerrados en `f00d293`
+con test de regresión estructural.
+
+**Regla vigente:** citar SIEMPRE las 4 cifras por separado (routing pura /
+completitud de args / validez de ítem / end-to-end), nunca "accuracy" a
+secas. El baseline descompuesto es el punto de partida para medir mejoras
+del matcher; la referencia v3 (36.36/61.04) queda como histórica.
 
 ---
 
@@ -306,7 +337,7 @@ correcta adoptada, no borrado del número.
 |----|------|--------|------------------|
 | MD-1 | TEB mide al arnés (ground_truth inyectado) | CERRADO | cerrado 2026-09-28, `877ad5e` — re-ejecución del piloto sigue pendiente, sin dueño |
 | MD-2 | Identidad de benchmarks | PARCIAL | WS5 cerró adelante; retroactivo pendiente |
-| MD-3 | Accuracy live mezcla routing+args+dataset | ABIERTO | sin asignar (eval protocol) |
+| MD-3 | Accuracy live mezcla routing+args+dataset | CERRADO | cerrado 2026-09-30 (Buffy/Codebuff) — protocolo descompuesto operativo (prefijos Stage-1 `00a93af` + harness + fixes registro `f00d293`); baseline 4 cifras en `benchmarks/BENCHMARK_MD3_DECOMPOSED.md` |
 | MD-4 | Golden-signals errors sintético | CERRADO | 0ca5579 (merge 8929c3e), Buffy/Codebuff 2026-09-28 |
 | MD-5 | Claims globales de latencia vs cola condicionada | CERRADO | cerrado 2026-09-29 (Deep, T4) — baseline post-fixes comiteado con 2 condiciones del flag de batching; flag ON NO-GO re-confirmado con datos |
 | MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
