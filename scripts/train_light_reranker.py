@@ -39,18 +39,36 @@ MIN_RESOLVED_ROWS = 5000  # ADR-011 §3.3
 def load_training_data(db_path: Path) -> tuple[np.ndarray, np.ndarray]:
     """Reads resolved recall_feedback rows and builds (X, y).
 
-    score_rrf/score_graph aren't persisted per-row today (recall_feedback
-    only stores rank_position, not the raw fused scores) — this is a known
-    gap versus a fully faithful reconstruction. rank_position is used as a
-    proxy for score_rrf (inverse-rank), which is the same ordinal signal
-    RRF itself is built from. agent_affinity is computed as this agent's
-    historical useful-rate for the node's type, from the same table.
+    Since schema v27 (ADR-011 §Fase 3), recall_feedback persists the real
+    per-row retrieval features: score_rrf, score_graph (LightRAG RRF
+    contribution recorded in search_hybrid) and recency_score (FSRS
+    retrievability from nodes.created_at). All three are nullable: NULL means
+    "row written before the migration" or "not computable at recall time"
+    (graph skipped, cache-hit path). For those rows ONLY, we fall back to the
+    documented proxies below — post-migration rows with real values always
+    train on the real signal, and the ratio is printed so the mix is visible
+    instead of silent.
+
+    agent_affinity is computed as this agent's historical useful-rate for the
+    node's type, from the same table.
     """
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
 
+    # Column detection keeps the script runnable against pre-v27 databases.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(recall_feedback)").fetchall()}
+    feature_cols = ", score_rrf, score_graph, recency_score" if {"score_rrf", "score_graph", "recency_score"} <= cols else ""
+    if not feature_cols:
+        print(
+            "WARNING: recall_feedback lacks score_rrf/score_graph/recency_score "
+            "(schema < v27). Training on proxy features only — run the kernel "
+            "once on this DB to migrate."
+        )
+
     rows = conn.execute(
-        "SELECT memory_id, agent_id, rank_position, useful FROM recall_feedback WHERE useful != 0"
+        "SELECT memory_id, agent_id, rank_position, useful"
+        + (", score_rrf, score_graph, recency_score" if feature_cols else "")
+        + " FROM recall_feedback WHERE useful != 0"
     ).fetchall()
 
     if len(rows) < MIN_RESOLVED_ROWS:
@@ -69,14 +87,28 @@ def load_training_data(db_path: Path) -> tuple[np.ndarray, np.ndarray]:
     affinity_rate = {aid: (sum(v) / len(v)) for aid, v in affinity.items()}
 
     X, y = [], []
+    real_feature_rows = 0
     for r in rows:
-        score_rrf_proxy = 1.0 / (60.0 + r["rank_position"] + 1.0)  # same RRF constant as search.rs
-        score_graph_proxy = 0.0  # not persisted per-row today; see docstring gap note
-        recency_score = 0.5  # not persisted per-row today; see docstring gap note
+        # Real values when present; the documented proxies ONLY for pre-v27
+        # (NULL) rows. The old constant-proxies-for-every-row behavior is gone:
+        # score_graph/recency now carry actual variance for new rows.
+        has_real = feature_cols and r["score_rrf"] is not None
+        if has_real:
+            real_feature_rows += 1
+        score_rrf = r["score_rrf"] if has_real else 1.0 / (60.0 + r["rank_position"] + 1.0)  # same RRF constant as search.rs
+        score_graph = (r["score_graph"] if r["score_graph"] is not None else 0.0) if feature_cols else 0.0
+        recency_score = (r["recency_score"] if r["recency_score"] is not None else 0.5) if feature_cols else 0.5
         agent_affinity = affinity_rate.get(r["agent_id"], 0.5)
-        X.append([score_rrf_proxy, score_graph_proxy, recency_score, agent_affinity])
+        X.append([score_rrf, score_graph, recency_score, agent_affinity])
         y.append(1.0 if r["useful"] == 1 else 0.0)
 
+    if rows:
+        pct = 100.0 * real_feature_rows / len(rows)
+        print(
+            f"Features: {real_feature_rows}/{len(rows)} rows use real persisted "
+            f"score_rrf/score_graph/recency_score ({pct:.1f}%); the rest fall "
+            f"back to the documented rank/recency proxies (pre-v27 rows)."
+        )
     conn.close()
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
 

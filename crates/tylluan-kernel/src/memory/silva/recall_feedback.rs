@@ -26,6 +26,13 @@ impl SilvaDB {
     /// `task_hash` groups all memories returned for the same query/turn.
     /// Idempotent per (memory_id, task_hash) — a repeated recall of the same
     /// memory for the same task does not duplicate the row.
+    ///
+    /// ADR-011 §Fase 3: `score_rrf` / `score_graph` / `recency_score` carry the
+    /// real per-row retrieval features (see [`Self::recency_score_from_created_at`]
+    /// for how the last one is derived). `None` is stored as SQL NULL — honest
+    /// absence (graph skipped, cache-hit path, unparseable timestamp), never a
+    /// fabricated value; rows written before schema v27 also read back NULL.
+    #[allow(clippy::too_many_arguments)] // mirrors the recall_feedback column set 1:1, like add_edge_with_validity
     pub async fn log_recall_feedback(
         &self,
         memory_id: &str,
@@ -33,6 +40,9 @@ impl SilvaDB {
         task_hash: &str,
         query_text: &str,
         rank_position: i64,
+        score_rrf: Option<f32>,
+        score_graph: Option<f32>,
+        recency_score: Option<f32>,
     ) -> Result<()> {
         if agent_id.is_empty() {
             return Ok(()); // no agent_id -> nothing to correlate against later
@@ -41,12 +51,45 @@ impl SilvaDB {
             let conn = self.conn.blocking_lock();
             conn.execute(
                 "INSERT OR IGNORE INTO recall_feedback \
-                 (memory_id, agent_id, task_hash, query_text, rank_position) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![memory_id, agent_id, task_hash, query_text, rank_position],
+                 (memory_id, agent_id, task_hash, query_text, rank_position, \
+                  score_rrf, score_graph, recency_score) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![memory_id, agent_id, task_hash, query_text, rank_position,
+                    score_rrf, score_graph, recency_score],
             )?;
             Ok::<(), anyhow::Error>(())
         })
+    }
+
+    /// Parses a `nodes.created_at` value into a UTC timestamp. The column is
+    /// written in two shapes (see `read_timestamp` in nodes.rs): SQLite
+    /// CURRENT_TIMESTAMP text ("YYYY-MM-DD HH:MM:SS") or the original text the
+    /// writer supplied (usually RFC 3339). Returns None for anything
+    /// unparseable — callers must store NULL, never a fabricated recency.
+    pub fn parse_created_at(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S") {
+            return Some(dt.and_utc());
+        }
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+            return Some(dt.with_timezone(&chrono::Utc));
+        }
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+            return d.and_hms_opt(0, 0, 0).map(|dt| dt.and_utc());
+        }
+        None
+    }
+
+    /// ADR-011 §Fase 3: recency feature for a recalled node, derived from its
+    /// `created_at` through the existing, tested FSRS retrievability curve —
+    /// `FsrsItem::default()` (stability 14 days), R(t) = 2^(-t/14): ~1.0 for
+    /// just-created content decaying smoothly toward 0. No new formula invented;
+    /// the same curve ALD decay already trusts. `None` when `created_at` is
+    /// missing or unparseable so the trainer sees NULL, not an invented value.
+    pub fn recency_score_from_created_at(created_at: Option<&str>) -> Option<f32> {
+        let raw = created_at?;
+        let dt = Self::parse_created_at(raw)?;
+        let elapsed_days = (chrono::Utc::now() - dt).num_seconds() as f64 / 86_400.0;
+        Some(tylluan_fsrs::FsrsItem::default().retrievability(elapsed_days) as f32)
     }
 
     /// Resolves pending (`useful = 0`) feedback rows older than `min_age_secs`
@@ -256,8 +299,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn log_recall_feedback_is_idempotent_per_task() {
         let db = SilvaDB::in_memory().await.unwrap();
-        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0).await.unwrap();
-        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0).await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0, Some(0.5), Some(0.25), Some(0.9)).await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0, Some(0.5), Some(0.25), Some(0.9)).await.unwrap();
         let count: i64 = tokio::task::block_in_place(|| {
             let conn = db.conn.blocking_lock();
             conn.query_row("SELECT COUNT(*) FROM recall_feedback", [], |r| r.get(0)).unwrap()
@@ -268,12 +311,68 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn log_recall_feedback_skips_empty_agent_id() {
         let db = SilvaDB::in_memory().await.unwrap();
-        db.log_recall_feedback("mem1", "", "task-1", "query text", 0).await.unwrap();
+        db.log_recall_feedback("mem1", "", "task-1", "query text", 0, None, None, None).await.unwrap();
         let count: i64 = tokio::task::block_in_place(|| {
             let conn = db.conn.blocking_lock();
             conn.query_row("SELECT COUNT(*) FROM recall_feedback", [], |r| r.get(0)).unwrap()
         });
         assert_eq!(count, 0, "no agent_id means no way to correlate later -> nothing logged");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn log_recall_feedback_persists_real_features_and_nulls() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "query text", 0, Some(0.5), Some(0.25), Some(0.9)).await.unwrap();
+        // NULL is the honest-absence channel: a cache-hit path (no graph
+        // traversal) or a pre-migration row must read back NULL, not a fake 0.0
+        // that the trainer would mistake for a real measurement.
+        db.log_recall_feedback("mem2", "agent-a", "task-1", "query text", 1, None, None, None).await.unwrap();
+        let (rrf, graph, recency): (Option<f64>, Option<f64>, Option<f64>) = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT score_rrf, score_graph, recency_score FROM recall_feedback WHERE memory_id = 'mem1'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ).unwrap()
+        });
+        assert!((rrf.unwrap() - 0.5).abs() < 1e-6);
+        assert!((graph.unwrap() - 0.25).abs() < 1e-6);
+        assert!((recency.unwrap() - 0.9).abs() < 1e-6);
+        let (rrf2, graph2, recency2): (Option<f64>, Option<f64>, Option<f64>) = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT score_rrf, score_graph, recency_score FROM recall_feedback WHERE memory_id = 'mem2'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ).unwrap()
+        });
+        assert!(rrf2.is_none() && graph2.is_none() && recency2.is_none(),
+            "absent features must persist as NULL, never fabricated 0.0");
+    }
+
+    #[test]
+    fn parse_created_at_accepts_both_storage_formats() {
+        let sql = SilvaDB::parse_created_at("2020-01-02 03:04:05").unwrap();
+        assert_eq!(sql.format("%Y-%m-%d %H:%M:%S").to_string(), "2020-01-02 03:04:05");
+        let rfc = SilvaDB::parse_created_at("2020-01-02T03:04:05Z").unwrap();
+        assert_eq!(rfc.format("%Y-%m-%dT%H:%M:%S").to_string(), "2020-01-02T03:04:05");
+        assert!(SilvaDB::parse_created_at("garbage").is_none());
+        assert!(SilvaDB::parse_created_at("").is_none());
+    }
+
+    #[test]
+    fn recency_score_uses_fsrs_default_stability_curve() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let fresh = SilvaDB::recency_score_from_created_at(Some(now.as_str())).unwrap();
+        assert!((fresh - 1.0).abs() < 0.01, "just-created content is ~fully retrievable, got {fresh}");
+        // 14 days elapsed == FsrsItem::default() stability == R = 2^-1 = 0.5.
+        let two_weeks = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        let mid = SilvaDB::recency_score_from_created_at(Some(two_weeks.as_str())).unwrap();
+        assert!((mid - 0.5).abs() < 0.01, "R(14d) with default stability must be ~0.5, got {mid}");
+        // Monotonically decreasing as content ages.
+        let old = (chrono::Utc::now() - chrono::Duration::days(56)).to_rfc3339();
+        let old_r = SilvaDB::recency_score_from_created_at(Some(old.as_str())).unwrap();
+        assert!(old_r < mid && mid < fresh);
+        assert!(SilvaDB::recency_score_from_created_at(None).is_none());
+        assert!(SilvaDB::recency_score_from_created_at(Some("not a timestamp")).is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -443,7 +542,7 @@ mod tests {
     async fn resolve_pending_feedback_ignores_rows_within_window() {
         let db = SilvaDB::in_memory().await.unwrap();
         db.upsert_node("mem1", "concept", "recent memory not yet in resolution window", "{}").await.unwrap();
-        db.log_recall_feedback("mem1", "agent-a", "task-1", "query", 0).await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "query", 0, None, None, None).await.unwrap();
 
         let (useful, not_useful) = db.resolve_pending_feedback("/nonexistent/audit.db", 60).await.unwrap();
         assert_eq!(useful, 0);
@@ -453,7 +552,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn resolved_feedback_count_only_counts_resolved_rows() {
         let db = SilvaDB::in_memory().await.unwrap();
-        db.log_recall_feedback("mem1", "agent-a", "task-1", "q", 0).await.unwrap();
+        db.log_recall_feedback("mem1", "agent-a", "task-1", "q", 0, None, None, None).await.unwrap();
         assert_eq!(db.resolved_feedback_count().await.unwrap(), 0);
 
         tokio::task::block_in_place(|| {
@@ -466,8 +565,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn get_resolved_feedback_map_excludes_pending_and_missing() {
         let db = SilvaDB::in_memory().await.unwrap();
-        db.log_recall_feedback("mem-resolved", "agent-a", "task-1", "q", 0).await.unwrap();
-        db.log_recall_feedback("mem-pending", "agent-a", "task-2", "q", 0).await.unwrap();
+        db.log_recall_feedback("mem-resolved", "agent-a", "task-1", "q", 0, None, None, None).await.unwrap();
+        db.log_recall_feedback("mem-pending", "agent-a", "task-2", "q", 0, None, None, None).await.unwrap();
         tokio::task::block_in_place(|| {
             let conn = db.conn.blocking_lock();
             conn.execute("UPDATE recall_feedback SET useful = -1, resolved_at = datetime('now') WHERE memory_id = 'mem-resolved'", []).unwrap();

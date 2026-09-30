@@ -105,8 +105,14 @@ impl Phase for LightRerankerTrainPhase {
 async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]>, Vec<f32>)> {
     let rows = tokio::task::block_in_place(|| {
         let conn = ctx.silva.conn.blocking_lock();
+        // ADR-011 §Fase 3: score_rrf/score_graph/recency_score are persisted
+        // per-row since schema v27 (nullable REAL). NULL = row written before
+        // the migration or feature not computable at recall time (graph skip,
+        // cache-hit path) — fall back to the documented proxies below, but ONLY
+        // for those rows, so post-migration rows always train on real signal.
         let mut stmt = conn.prepare(
-            "SELECT memory_id, agent_id, rank_position, useful, accessed_at FROM recall_feedback WHERE useful != 0"
+            "SELECT memory_id, agent_id, rank_position, useful, accessed_at, \
+             score_rrf, score_graph, recency_score FROM recall_feedback WHERE useful != 0"
         )?;
         let rows = stmt.query_map([], |r| {
             Ok((
@@ -115,6 +121,9 @@ async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]
                 r.get::<_, i64>(2)?,
                 r.get::<_, i64>(3)?,
                 r.get::<_, String>(4)?,
+                r.get::<_, Option<f64>>(5)?,
+                r.get::<_, Option<f64>>(6)?,
+                r.get::<_, Option<f64>>(7)?,
             ))
         })?;
         Ok::<_, anyhow::Error>(rows.flatten().collect::<Vec<_>>())
@@ -123,19 +132,21 @@ async fn build_training_data(ctx: &PhaseContext) -> anyhow::Result<(Vec<[f32; 4]
     let mut inputs = Vec::with_capacity(rows.len());
     let mut targets = Vec::with_capacity(rows.len());
 
-    for (memory_id, agent_id, rank_position, useful, accessed_at) in &rows {
-        let score_rrf = 1.0 / (1.0 + *rank_position as f32);
-        let score_graph = match ctx.silva.get_node(memory_id).await {
-            Ok(Some(n)) => n.weight as f32,
-            _ => 0.0,
-        };
-        let recency_score = match chrono::DateTime::parse_from_rfc3339(accessed_at) {
-            Ok(dt) => {
-                let days = chrono::Utc::now().signed_duration_since(dt.naive_utc().and_utc()).num_days().max(0) as f32;
-                1.0 / (1.0 + days)
-            }
-            Err(_) => 0.0,
-        };
+    for (memory_id, agent_id, rank_position, useful, accessed_at, stored_rrf, stored_graph, stored_recency) in &rows {
+        let score_rrf = stored_rrf.map(|v| v as f32)
+            .unwrap_or_else(|| 1.0 / (1.0 + *rank_position as f32));
+        // Pre-v27 rows only: this used to be conflated with the ALD weight, a
+        // different signal entirely. Real rows carry the LightRAG RRF
+        // contribution recorded at recall time.
+        let score_graph = stored_graph.map(|v| v as f32).unwrap_or(0.0);
+        let recency_score = stored_recency.map(|v| v as f32)
+            .unwrap_or_else(|| match chrono::DateTime::parse_from_rfc3339(accessed_at) {
+                Ok(dt) => {
+                    let days = chrono::Utc::now().signed_duration_since(dt.naive_utc().and_utc()).num_days().max(0) as f32;
+                    1.0 / (1.0 + days)
+                }
+                Err(_) => 0.0,
+            });
         let agent_affinity = ctx.silva.agent_affinity_for_memory(memory_id, agent_id).await.unwrap_or(0.0);
         inputs.push([score_rrf, score_graph, recency_score, agent_affinity]);
         targets.push(if *useful > 0 { 1.0 } else { 0.0 });
