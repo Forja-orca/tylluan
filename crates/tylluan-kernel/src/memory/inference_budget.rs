@@ -419,13 +419,32 @@ mod tests {
     fn concurrent_saturations_produce_explicit_rejections_not_hangs() {
         // n callers against 1 permit with a tiny budget: some admit, the rest
         // are explicitly rejected — the whole call must finish promptly.
+        //
+        // CI flake fixed 2026-09-30 (found by a real CI failure, not
+        // reproduced locally): the original version had every caller drop
+        // its guard immediately after acquiring, so on a fast/uncontended
+        // runner all 8 could race through the single permit within the 1s
+        // window without ANY rejection -- timing-dependent, not
+        // deterministic. Fix: the first caller holds the permit for a fixed
+        // duration comfortably longer than max_queue_wait_secs while a
+        // barrier releases the other 7 at the same instant, guaranteeing
+        // real saturation regardless of machine speed.
         let budget = std::sync::Arc::new(InferenceBudget::new(InferenceBudgetConfig { permits: 1, max_queue_wait_secs: 1 }));
+        let barrier = Arc::new(Barrier::new(8));
         let mut handles = Vec::new();
         for i in 0..8 {
             let b = std::sync::Arc::clone(&budget);
+            let bar = Arc::clone(&barrier);
             handles.push(std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(i * 5));
-                b.acquire_sync()
+                bar.wait();
+                let res = b.acquire_sync();
+                // Hold the only permit well past max_queue_wait_secs (1s) so
+                // every other caller's wait genuinely exhausts, then drop it
+                // for real -- taking ownership out of `res`, not borrowing.
+                if i == 0 && res.is_ok() {
+                    std::thread::sleep(Duration::from_millis(1500));
+                }
+                res
             }));
         }
         let mut admitted = 0usize;
