@@ -859,10 +859,24 @@ async fn main() -> anyhow::Result<()> {
     // Killing ONNX inference mid-run wastes all prior computation. Patience is correct on CPU.
     // Network/fast guilds: tool_timeout = None falls back to 120s default in guild_process.rs.
     let cpu_inference_guilds = ["vision", "deep_analysis", "knowledge", "comfy_ui", "n8n_bridge"];
-    for (name, module, _) in LAZY_GUILDS.iter().copied() {
+    for (name, legacy_module, _) in LAZY_GUILDS.iter().copied() {
         if !registry_raw.guilds.contains_key(name) {
+            // Hallazgo MD-3 (2026-09-30): resolver el module path desde el
+            // catálogo (que deriva module_path del layout real en disco en cada
+            // arranque) en vez de confiar en la ruta hardcodeada de
+            // LAZY_GUILDS. Siete entradas seguían apuntando a guilds.core.<name>
+            // tras migrar los plugins a los gremios, así que el registro
+            // pre-v2 ganaba la carrera de "primera registración gana" sobre
+            // [guilds.v2] y todo spawn perezoso moría con "MCP handshake
+            // FAILED" (reproducido aislado por el harness MD-3; enmascarado en
+            // producción por el registry.json persistido). Mismo fallback que
+            // usa el loop always_on de abajo.
+            let module = catalog.iter()
+                .find(|d| d.name == name)
+                .map(|d| d.module_path.clone())
+                .unwrap_or_else(|| legacy_module.to_string());
             // cpu_inference_guilds explicitly get None (unlimited); others get system default
-            registry_raw.register(name, module, false, None);
+            registry_raw.register(name, &module, false, None);
         }
     }
 
@@ -892,10 +906,28 @@ async fn main() -> anyhow::Result<()> {
                     warn!("⚠️ [V2] Gremio '{}' is missing guild.md specification at {}", gremioguilds.name, base_path);
                 }
 
+            // Hallazgo MD-3 (2026-09-30): la existencia del plugin se
+            // comprobaba contra una ruta RELATIVA al CWD del proceso, así
+            // que cualquier kernel lanzado desde otro directorio (kernel de
+            // test con tylluan.toml propio, patrón T4; servicio; acceso
+            // directo) descartaba TODOS los plugins v2 con "declared in TOML
+            // but missing on disk" y sus spawns morían. Anclar al directorio
+            // que realmente contiene el árbol guilds/ (en producción es el
+            // mismo workspace root; en kernels de test hay que subir).
+            let mut plugins_root = workspace_root.clone();
+            if !plugins_root.join("guilds").exists() {
+                for _ in 0..5 {
+                    match plugins_root.parent() {
+                        Some(p) => plugins_root = p.to_path_buf(),
+                        None => break,
+                    }
+                    if plugins_root.join("guilds").exists() { break; }
+                }
+            }
             let mut registered_count = 0;
             for plugin in &gremioguilds.plugins {
                 let guild_name = plugin.trim_end_matches(".py");
-                let plugin_file = Path::new(base_path).join(plugin);
+                let plugin_file = plugins_root.join(base_path).join(plugin);
                 if !plugin_file.exists() {
                     warn!("⚠️ [V2] Guild plugin '{}' declared in TOML but missing on disk at {} -- skipping", guild_name, plugin_file.display());
                     continue;
