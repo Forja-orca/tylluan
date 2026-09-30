@@ -37,6 +37,13 @@ def _headers() -> dict:
     return h
 
 
+def _healthz() -> bool:
+    """Probe n8n /healthz (no auth). Blocking - call via asyncio.to_thread."""
+    req = urllib.request.Request(f"{_BASE}/healthz", headers=_headers(), method="GET")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read().decode()).get("status") == "ok"
+
+
 def _get(path: str, timeout: int = 10) -> dict | list:
     url = f"{_BASE}/api/v1{path}"
     req = urllib.request.Request(url, headers=_headers(), method="GET")
@@ -96,7 +103,7 @@ async def list_workflows(
         intent: Natural language description of what you're looking for.
     """
     try:
-        data = _get("/workflows")
+        data = await asyncio.to_thread(_get, "/workflows")
         workflows = data if isinstance(data, list) else data.get("data", [])
 
         if active_only or "active only" in (intent or "").lower():
@@ -153,7 +160,7 @@ async def execute_workflow(
     try:
         # Resolve name → id
         if not workflow_id and (workflow_name or intent):
-            data = _get("/workflows")
+            data = await asyncio.to_thread(_get, "/workflows")
             all_wf = data if isinstance(data, list) else data.get("data", [])
             q = (workflow_name or intent).lower()
             matches = [w for w in all_wf if q in w.get("name", "").lower()]
@@ -173,7 +180,7 @@ async def execute_workflow(
         except json.JSONDecodeError:
             input_data = {"text": payload}
 
-        result = _post(f"/workflows/{workflow_id}/run", {"runData": input_data})
+        result = await asyncio.to_thread(_post, f"/workflows/{workflow_id}/run", {"runData": input_data})
 
         exec_id = result.get("data", {}).get("executionId") or result.get("executionId", "?")
         return (
@@ -193,7 +200,7 @@ async def kernel_pulse(intent: str = "") -> str:
     Use for: kernel pulse, system pulse, tylluan status via n8n, kernel snapshot, pulse report,
     estado del kernel, pulso del sistema, n8n pulse, get kernel pulse.
     """
-    result = _post_webhook("webhook/tylluan-pulse", {"source": "tylluan_do", "intent": intent}, timeout=180)
+    result = await asyncio.to_thread(_post_webhook, "webhook/tylluan-pulse", {"source": "tylluan_do", "intent": intent}, timeout=180)
     try:
         data = json.loads(result)
         if isinstance(data, dict) and "pulse" in data:
@@ -227,7 +234,7 @@ async def trigger_webhook(
             data = {"text": payload}
 
         full_path = f"webhook/{webhook_path.lstrip('/')}"
-        result = _post_webhook(full_path, data)
+        result = await asyncio.to_thread(_post_webhook, full_path, data)
         return f"✅ **Webhook triggered**: `{webhook_path}`\n\nResponse:\n```\n{result}\n```"
     except Exception as e:
         return f"❌ Webhook failed: {e}"
@@ -247,7 +254,7 @@ async def get_execution_status(
         intent: Natural language description.
     """
     try:
-        data = _get(f"/executions/{execution_id}")
+        data = await asyncio.to_thread(_get, f"/executions/{execution_id}")
         exec_data = data.get("data", data)
 
         status = exec_data.get("status", "unknown")
@@ -283,15 +290,12 @@ async def n8n_status(intent: str = "") -> str:
     try:
         # Check healthz first (no auth needed)
         try:
-            req = urllib.request.Request(f"{_BASE}/healthz", headers=_headers(), method="GET")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                healthz = json.loads(resp.read().decode())
-                health_ok = healthz.get("status") == "ok"
+            health_ok = await asyncio.to_thread(_healthz)
         except Exception as e:
             return f"❌ n8n unreachable: {e}"
 
         # Fetch workflows to check API Key and count workflows
-        workflows = _get("/workflows")
+        workflows = await asyncio.to_thread(_get, "/workflows")
         all_wf = workflows if isinstance(workflows, list) else workflows.get("data", [])
         active = sum(1 for w in all_wf if w.get("active"))
         return (

@@ -106,8 +106,12 @@ async def send_cdp_command(port: int, method: str, params: dict = None) -> dict:
         import urllib.parse
         
         url = f"http://localhost:{port}/json"
-        response = urllib.request.urlopen(url, timeout=5)
-        tabs = json.loads(response.read().decode())
+
+        def _fetch_tabs() -> list:
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.loads(response.read().decode())
+
+        tabs = await asyncio.to_thread(_fetch_tabs)
         
         if not tabs:
             return {"error": "No tabs found"}
