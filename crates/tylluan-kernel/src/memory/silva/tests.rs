@@ -1624,3 +1624,151 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         // Idempotent: a second run removes nothing.
         assert_eq!(db.prune_superseded("agent_summary", 14).await.unwrap(), 0, "second prune run must be a no-op");
     }
+
+    // ── ADR-011 §Fase 3: real recall_feedback features (score_rrf/score_graph/recency) ──
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_search_hybrid_detailed_records_graph_contribution() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("n1", "entity", "Entity 1 Tokio async", "{}").await.unwrap();
+        db.upsert_node("n2", "entity", "Entity 2 Tokio runner", "{}").await.unwrap();
+        db.add_edge("n1", "n2", "link", 1.0, "{}").await.unwrap();
+
+        let mut emb = vec![0.0f32; 1024];
+        emb[0] = 1.0;
+        let emb_bytes: Vec<u8> = emb.iter().flat_map(|v| v.to_le_bytes()).collect();
+        tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.execute(
+                "INSERT OR REPLACE INTO node_embeddings (node_id, embedding, model_id) VALUES (?1, ?2, ?3)",
+                rusqlite::params!["n1", emb_bytes, "test"],
+            ).unwrap();
+        });
+
+        let (results, meta) = db.search_hybrid_detailed("Tokio async", Some(&emb), 5, None, false).await.unwrap();
+        assert!(!results.is_empty(), "fusion must still return results");
+        assert!(!meta.graph_contrib.is_empty(),
+            "graph traversal ran (skip_graph=false, vector seeds exist) — its RRF contribution must be recorded");
+        assert!(meta.graph_contrib.values().all(|v| *v > 0.0 && *v < 1.0),
+            "graph contributions are RRF fractions in (0,1), got {:?}", meta.graph_contrib);
+
+        // Same query with the graph step skipped: telemetry must be empty.
+        let (_skip, meta_skipped) = db.search_hybrid_detailed("Tokio async", Some(&emb), 5, None, true).await.unwrap();
+        assert!(meta_skipped.graph_contrib.is_empty(),
+            "skip_graph=true means the LightRAG traversal never ran — no graph signal to record");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_search_hybrid_detailed_matches_plain_search_hybrid() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("m1", "episodic", "Mensaje de coloquio episódico de testeo", "{}").await.unwrap();
+        let (plain, detailed_only) = tokio::join!(
+            db.search_hybrid("testeo", None, 5, None, false),
+            db.search_hybrid_detailed("testeo", None, 5, None, false),
+        );
+        let plain = plain.unwrap();
+        let (detailed, meta) = detailed_only.unwrap();
+        let plain_ids: Vec<&str> = plain.iter().map(|(n, _)| n.id.as_str()).collect();
+        let detailed_ids: Vec<&str> = detailed.iter().map(|(n, _)| n.id.as_str()).collect();
+        assert_eq!(plain_ids, detailed_ids, "detailed variant must not change the fused result");
+        assert!(meta.graph_contrib.is_empty(),
+            "no vector seeds (no embedding) -> LightRAG traversal never runs -> empty graph telemetry");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_schema_v27_recall_feedback_feature_columns_migration() {
+        let dir = std::env::temp_dir().join(format!("test_silva_v27_{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("silva.db");
+        let db_path_str = db_path.to_string_lossy().to_string();
+
+        // Simulate a pre-v27 database: create the v18 table shape manually and
+        // stamp user_version=26, so the migration runs over REAL old DDL
+        // instead of relying on a fresh-create to prove anything.
+        {
+            let conn = crate::config::open_db(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE recall_feedback (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    memory_id     TEXT NOT NULL,
+                    agent_id      TEXT NOT NULL,
+                    task_hash     TEXT NOT NULL,
+                    query_text    TEXT NOT NULL,
+                    rank_position INTEGER NOT NULL,
+                    useful        INTEGER NOT NULL DEFAULT 0,
+                    accessed_at   TEXT NOT NULL DEFAULT (datetime('now')),
+                    resolved_at   TEXT,
+                    UNIQUE(memory_id, task_hash)
+                );
+                INSERT INTO recall_feedback (memory_id, agent_id, task_hash, query_text, rank_position, useful)
+                VALUES ('old-mem', 'agent-a', 'old-task', 'old query', 0, 1);
+                -- minimal nodes table as a real v26 DB had it (base shape WITHOUT
+                -- the v1/v21 columns); the trailing index block in init_schema
+                -- needs conflicted/quarantined to not error out on old DBs.
+                CREATE TABLE nodes (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    metadata TEXT DEFAULT '{}',
+                    weight REAL DEFAULT 1.0,
+                    protected INTEGER DEFAULT 0,
+                    topic_key TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    content_hash TEXT DEFAULT '',
+                    lifecycle_state TEXT NOT NULL DEFAULT 'active',
+                    last_agent_access INTEGER NOT NULL DEFAULT 0,
+                    reactivation_count INTEGER NOT NULL DEFAULT 0
+                );
+                ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE nodes ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0;
+                PRAGMA user_version = 26;"
+            ).unwrap();
+        }
+
+        // Open + init: must migrate to v27 without touching the old row.
+        let db = SilvaDB::open(&db_path_str).unwrap();
+        db.init_schema().await.unwrap();
+        let has_cols = |cols: &std::collections::HashSet<String>| {
+            ["score_rrf", "score_graph", "recency_score"].iter().all(|c| cols.contains(*c))
+        };
+        let (version, cols_ok, old_row) = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            let mut stmt = conn.prepare("PRAGMA table_info(recall_feedback)").unwrap();
+            let cols: std::collections::HashSet<String> = stmt
+                .query_map([], |r| r.get::<_, String>(1))
+                .unwrap()
+                .flatten()
+                .collect();
+            let ok = has_cols(&cols);
+            let old_row: (Option<f64>, Option<f64>, Option<f64>) = conn.query_row(
+                "SELECT score_rrf, score_graph, recency_score FROM recall_feedback WHERE memory_id = 'old-mem'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ).unwrap();
+            Ok::<_, anyhow::Error>((version, ok, old_row))
+        }).unwrap();
+
+        assert_eq!(version, 27, "user_version must be stamped to 27");
+        assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
+        assert!(old_row.0.is_none() && old_row.1.is_none() && old_row.2.is_none(),
+            "pre-migration rows must read back NULL (honest absence), not 0.0");
+
+        // Idempotency: running init_schema twice must be a no-op.
+        db.init_schema().await.unwrap();
+        let version2: i32 = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let version2: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            let mut stmt = conn.prepare("PRAGMA table_info(recall_feedback)").unwrap();
+            let cols2: std::collections::HashSet<String> = stmt
+                .query_map([], |r| r.get::<_, String>(1))
+                .unwrap()
+                .flatten()
+                .collect();
+            assert!(has_cols(&cols2), "columns must still exist after a second init_schema run");
+            Ok::<_, anyhow::Error>(version2)
+        }).unwrap();
+        assert_eq!(version2, 27);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }

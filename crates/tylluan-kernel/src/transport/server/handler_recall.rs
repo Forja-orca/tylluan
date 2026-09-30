@@ -616,9 +616,14 @@ if let Some(cached) = cached_docs {
             let task_hash: String = format!("{effective_query}|{aid_val}").bytes()
                 .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64))
                 .to_string();
-            for (rank, (node, _)) in scored.iter().enumerate() {
+            for (rank, (node, score)) in scored.iter().enumerate() {
+                // ADR-011 §Fase 3: cache-hit path never passes through
+                // search_hybrid, so score_graph is genuinely unknown here — NULL,
+                // not a fabricated value. score_rrf/recency are still real.
                 let _ = server.silva.log_recall_feedback(
                     &node.id, aid_val, &task_hash, &effective_query, rank as i64,
+                    Some(*score), None,
+                    crate::memory::silva::SilvaDB::recency_score_from_created_at(node.created_at.as_deref()),
                 ).await;
             }
         }
@@ -691,6 +696,10 @@ if let Some(cached) = cached_docs {
         vec![]
     };
 
+    // ADR-011 §Fase 3: per-node LightRAG graph contribution from the fusion,
+    // consumed by the LightReranker features and log_recall_feedback so
+    // score_graph is a real signal instead of the fused score or 0.0.
+    let mut graph_meta: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     if candidates.is_empty() {
         // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
@@ -708,8 +717,8 @@ if let Some(cached) = cached_docs {
                 query_embedding = emb;
             }
         }
-        if candidates.is_empty() {
-            candidates = server.silva.search_hybrid_for_recall(
+        if candidates.is_empty()
+            && let Ok((mut results, meta)) = server.silva.search_hybrid_for_recall_detailed(
                     &effective_query,
                     query_embedding.as_deref(),
                     candidate_pool,
@@ -718,7 +727,9 @@ if let Some(cached) = cached_docs {
                     include_archived,
                 )
                 .await
-                .unwrap_or_default();
+        {
+            graph_meta = meta.graph_contrib;
+            candidates = std::mem::take(&mut results);
         }
 
         if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
@@ -911,10 +922,17 @@ if let Some(cached) = cached_docs {
                                 )
                                 .num_days()
                                 .max(0) as f32;
+                            // ADR-011 §Fase 3: real persisted features when available.
+                            // score_graph now carries the node's actual LightRAG RRF
+                            // contribution (0.0 fallback = the old proxy, only while
+                            // pre-fix feedback rows are still in circulation).
+                            let score_graph = *graph_meta.get(&node.id).unwrap_or(&0.0);
+                            let recency_score = crate::memory::silva::SilvaDB::recency_score_from_created_at(node.created_at.as_deref())
+                                .unwrap_or(1.0 / (1.0 + days));
                             (crate::router::light_reranker::RerankFeatures {
                                 score_rrf: *score,
-                                score_graph: *score,
-                                recency_score: 1.0 / (1.0 + days),
+                                score_graph,
+                                recency_score,
                                 agent_affinity: *affinity_map.get(&node.id).unwrap_or(&0.0),
                             }, idx)
                         })
@@ -939,9 +957,21 @@ if let Some(cached) = cached_docs {
                 let task_hash: String = format!("{effective_query}|{aid_val}").bytes()
                     .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64))
                     .to_string();
-                for (rank, (node, _)) in scored.iter().enumerate() {
+                for (rank, (node, score)) in scored.iter().enumerate() {
+                    // ADR-011 §Fase 3: real features when computable, None (SQL
+                    // NULL) otherwise — graph_meta only has entries when the
+                    // LightRAG traversal actually contributed, and the hybrid:
+                    // synthetic nodes (HybridMemory docs) have no SilvaDB row to
+                    // parse a timestamp from.
+                    let score_graph = graph_meta.get(&node.id).copied();
+                    let recency_score = if node.id.starts_with("hybrid:") {
+                        None
+                    } else {
+                        crate::memory::silva::SilvaDB::recency_score_from_created_at(node.created_at.as_deref())
+                    };
                     let _ = server.silva.log_recall_feedback(
                         &node.id, aid_val, &task_hash, &effective_query, rank as i64,
+                        Some(*score), score_graph, recency_score,
                     ).await;
                 }
             }
