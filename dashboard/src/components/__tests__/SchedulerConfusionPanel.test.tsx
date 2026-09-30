@@ -70,11 +70,13 @@ describe('SchedulerConfusionPanel', () => {
 
     render(<SchedulerConfusionPanel bridge={mockBridge} />);
 
+    // Wait for the actual re-render after setData, not just the mock call --
+    // waiting only on fetchRaw races against the state update + re-render
+    // that follows it, and flaked in CI (found 2026-09-30, run 36714903565).
     await waitFor(() => {
-      expect(mockBridge.fetchRaw).toHaveBeenCalledWith('/api/v1/scheduler/confusion');
+      expect(screen.getByText(/No Scheduler Confusion Observations Recorded Yet/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/No Scheduler Confusion Observations Recorded Yet/i)).toBeInTheDocument();
     expect(screen.getByText(/store not created yet/i)).toBeInTheDocument();
   });
 

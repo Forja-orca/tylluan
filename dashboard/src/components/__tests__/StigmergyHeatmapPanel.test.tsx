@@ -147,12 +147,12 @@ describe('StigmergyHeatmapPanel', () => {
 
     render(<StigmergyHeatmapPanel bridge={mockBridge} />);
 
+    // Wait for the actual re-render after setData, not just the mock call --
+    // waiting only on fetchRaw races against the state update that follows
+    // it (same class of CI flake found in SchedulerConfusionPanel, 2026-09-30).
     await waitFor(() => {
-      expect(mockBridge.fetchRaw).toHaveBeenCalledWith('/api/v1/stigmergy/zones');
+      expect(screen.getByText(/Live Kernel Stream/i)).toBeInTheDocument();
     });
-
-    // Live badge should appear
-    expect(screen.getByText(/Live Kernel Stream/i)).toBeInTheDocument();
     expect(screen.getByText('dashboard/src/components')).toBeInTheDocument();
 
     // Click zone card to open inspector modal and verify workprint trace note
