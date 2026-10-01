@@ -200,12 +200,48 @@ pub struct SilvaDB {
     /// first call after restart behaves exactly like pre-cache Tylluan — no
     /// schema/DB cost for an optimization of medium priority.
     pub(crate) pagerank_cache: std::sync::Mutex<Option<std::collections::HashMap<String, f64>>>,
+    /// SQLite mutex-wait telemetry (Phase 0 del diseño de pool de conexiones,
+    /// 2026-09-29): espera acumulada de adquisición del `conn` Mutex + nº de
+    /// adquisiciones medidas. Son contadores GLOBALES compartidos por todas
+    /// las peticiones — los deltas que registra el path de recall se
+    /// etiquetan como tal, nunca como espera por-request.
+    pub(crate) sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64,
+    pub(crate) sqlite_lock_acqs: std::sync::atomic::AtomicU64,
 }
 
 impl SilvaDB {
     /// Access to the internal connection for testing/advanced manipulation.
     pub fn conn_lock(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.conn)
+    }
+
+    /// Timed acquisition of the SQLite mutex: records the WAIT (queueing)
+    /// time in the shared telemetry atomics. Used by the recall hot path
+    /// (search_hybrid, local_query_graph, get_node) so the T696 per-stage
+    /// instrumentation can separate SQLite contention from actual query
+    /// work — Phase 0 of the connection-pool design (2026-09-29).
+    /// `conn` is a tokio Mutex; in blocking contexts `blocking_lock()`
+    /// waits synchronously, so the timing wraps exactly the queue wait.
+    pub(crate) fn conn_timed(&self) -> tokio::sync::MutexGuard<'_, Connection> {
+        let t0 = std::time::Instant::now();
+        let guard = self.conn.blocking_lock();
+        let wait_ns = t0.elapsed().as_nanos() as u64;
+        self.sqlite_lock_wait_nanos
+            .fetch_add(wait_ns, std::sync::atomic::Ordering::Relaxed);
+        self.sqlite_lock_acqs
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        guard
+    }
+
+    /// Snapshot of the lock-wait telemetry: (total wait nanos, acquisitions).
+    /// GLOBAL counters — callers must treat deltas as shared, not per-request.
+    pub fn sqlite_lock_wait_snapshot(&self) -> (u64, u64) {
+        (
+            self.sqlite_lock_wait_nanos
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.sqlite_lock_acqs
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// Open or create a SilvaDB database at the given path.
@@ -234,6 +270,8 @@ impl SilvaDB {
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
+            sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
+            sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };
         Ok(db)
     }
@@ -333,6 +371,8 @@ impl SilvaDB {
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
+            sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
+            sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {
