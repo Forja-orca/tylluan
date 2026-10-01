@@ -590,9 +590,11 @@ mod tests {
         // Sanity bound (load-tolerant): wake-on-signal must be far below any
         // plausible timeout, not a lost-wakeup hang. NOT a precision claim:
         // precise latency is scheduler-dependent under the parallel test
-        // runner.
+        // runner -- 250ms flaked under the full 940+-test parallel suite
+        // (got 343ms), so the bound is generous (2s) and only guards against
+        // an actual hang, never against OS scheduler jitter.
         assert!(
-            woken < Duration::from_millis(250),
+            woken < Duration::from_secs(2),
             "waiter must be woken by give(), not hang until a timeout, got {woken:?}"
         );
         // Still zero polling attempts after the whole cycle.
