@@ -26,14 +26,33 @@ struct BatchItem {
     resp: std::sync::mpsc::Sender<Result<Vec<Vec<f32>>, String>>,
 }
 
+/// Capacity of the coalescing batcher's request queue — ~16 full coalescing
+/// batches at the default max_batch=16. The queue is a bounded `sync_channel`:
+/// if the collector stalls (e.g. inference queued on the model mutex or the
+/// budget), senders block (backpressure) instead of growing the queue without
+/// bound. Explicit overflow REJECTION deliberately lives one layer down in
+/// `InferenceBudget::acquire_sync` (`Err(Saturated)`), not here — see the
+/// `EmbedBatcher` docs.
+const EMBED_QUEUE_CAPACITY: usize = 256;
+
 /// Coalescing batcher (embed-batching contract, T582): a collector thread
 /// merges concurrent single-text requests arriving within a short window
 /// into ONE `embed_batch` call — N concurrent callers pay one ONNX inference
-/// (one mutex acquisition) instead of N serialized ones. Bounded queue with
-/// explicit rejection: the sender refuses (Err) instead of blocking forever,
-/// ending the silent-timeout failure mode under load.
+/// (one mutex acquisition) instead of N serialized ones.
+///
+/// Queue discipline (corrected 2026-10-01, P0-4): the request channel is a
+/// BOUNDED `sync_channel` (`EMBED_QUEUE_CAPACITY`). When it is full the
+/// sender BLOCKS until the collector drains one batch — backpressure, never
+/// unbounded queue growth. This layer does NOT reject: explicit overflow
+/// rejection is `InferenceBudget::acquire_sync`'s job (see `embed_batch`),
+/// which returns the `Err(Saturated)` the HTTP layer renders as
+/// 503 + Retry-After once an operator opts into `[inference.budget]`.
+/// (The old comment claimed "bounded queue with explicit rejection" here,
+/// but the channel was `mpsc::channel` — unbounded — and only the budget
+/// ever rejected. Both halves of that claim are now true: bounded here,
+/// rejection at the budget.)
 pub struct EmbedBatcher {
-    tx: std::sync::mpsc::Sender<BatchItem>,
+    tx: std::sync::mpsc::SyncSender<BatchItem>,
 }
 
 impl EmbedBatcher {
@@ -42,7 +61,7 @@ impl EmbedBatcher {
         max_batch: usize,
         window_ms: u64,
     ) -> Result<(Self, std::thread::JoinHandle<()>)> {
-        let (tx, rx) = std::sync::mpsc::channel::<BatchItem>();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<BatchItem>(EMBED_QUEUE_CAPACITY);
         let handle = std::thread::Builder::new()
             .name("embed-batcher".to_string())
             .spawn(move || {
@@ -295,7 +314,10 @@ impl EmbeddingEngine {
     /// ALL dense-embed call sites use this instead of `embed()` so concurrent
     /// callers share ONNX batches. Flag-gated (`[silva] embed_batching_enabled`,
     /// default off): when disabled this is a thin wrapper over `embed()`.
-    /// Bounded queue: overflow returns Err(Busy) instead of blocking forever.
+    /// Queue: bounded (`sync_channel`, see `EmbedBatcher`) — a full queue
+    /// blocks the sender (backpressure) until the collector drains; explicit
+    /// overflow rejection stays in `InferenceBudget` (`Err(Saturated)` when
+    /// `[inference.budget] max_queue_wait_secs > 0`).
     pub fn embed_batch_coalesced(self: &Arc<Self>, text: &str) -> Result<Vec<f32>> {
         if !Self::batching_enabled() {
             return self.embed(text);
