@@ -207,6 +207,11 @@ pub struct SilvaDB {
     /// etiquetan como tal, nunca como espera por-request.
     pub(crate) sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64,
     pub(crate) sqlite_lock_acqs: std::sync::atomic::AtomicU64,
+    /// Test-only observability for the P1-1 batch-embedding invariant: size of
+    /// the last `get_node_embeddings_batch` call (0 if none yet). Lets gate
+    /// tests prove "1 batch round trip for N candidates" instead of relying on
+    /// timing. Cheap relaxed store per batch call, never read in production.
+    pub embedding_fetch_batch_size: std::sync::atomic::AtomicUsize,
 }
 
 impl SilvaDB {
@@ -270,6 +275,7 @@ impl SilvaDB {
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
+            embedding_fetch_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };
@@ -371,6 +377,7 @@ impl SilvaDB {
             dense_engine: std::sync::Mutex::new(None),
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
+            embedding_fetch_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };
