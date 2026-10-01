@@ -789,7 +789,7 @@ impl super::SilvaDB {
         // final_score = pr_score / (1.0 + degree * 0.1)
         // Inverted bias: high-degree hub nodes are penalized, low-degree specific nodes are preferred.
         let results = tokio::task::block_in_place(|| -> Result<Vec<(GraphNode, f32)>> {
-            let conn = self.conn.blocking_lock();
+            let conn = self.conn_timed();
             let mut scored_nodes = Vec::new();
 
             for (id, pr_score) in pagerank_results {

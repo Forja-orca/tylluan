@@ -160,7 +160,7 @@ impl super::SilvaDB {
             .and_then(|v| v.get("federation_source").and_then(|s| s.as_str().map(String::from)));
 
         tokio::task::block_in_place(|| {
-            let mut conn = self.conn.blocking_lock();
+            let mut conn = self.conn_timed();
             // Compute deterministic content hash (SHA-256) for SH-conflict detection (paper 1.3)
             use sha2::Digest;
             let content_hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
@@ -220,7 +220,7 @@ impl super::SilvaDB {
     pub async fn get_node(&self, id: &str) -> Result<Option<GraphNode>> {
         self.apply_node_decay(id).await.map_err(|e| warn!("🌲 node_decay failed for '{}': {}", id, e)).ok();
         tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let conn = self.conn_timed();
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
