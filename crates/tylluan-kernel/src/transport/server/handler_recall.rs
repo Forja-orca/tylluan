@@ -506,6 +506,10 @@ if let Some(ref mut s) = stmt {
 
     // P1 instrumentation (T696): per-stage timing of the 3 serialized layers.
     let _recall_t0 = std::time::Instant::now();
+    // Phase 0 del diseño de pool SQLite (2026-09-29): snapshot de la espera
+    // GLOBAL de adquisición del Mutex de la conexión — los deltas por stage
+    // miden contención compartida, no espera por-request.
+    let (sqlite_w0, sqlite_a0) = server.silva.sqlite_lock_wait_snapshot();
 
     // Jaccard LRU cache: skip expensive embedding + search if similar query exists
     let mut cache = server.recall_cache.lock().await;
@@ -543,7 +547,8 @@ if let Some(ref mut s) = stmt {
             None => None,         // engine not loaded: legacy fallback
         }
     };
-    tracing::info!(gen_ai.operation.name = "recall_stage_embed", stage_ms = embed_t0.elapsed().as_millis() as u64, "recall stage: dense embed");
+    let (sq_w_embed, sq_a_embed) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
+    tracing::info!(gen_ai.operation.name = "recall_stage_embed", stage_ms = embed_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_embed, sqlite_acqs = sq_a_embed, "recall stage: dense embed");
 
 if let Some(cached) = cached_docs {
         let mut scored: Vec<(GraphNode, f32)> = cached;
@@ -556,7 +561,8 @@ if let Some(cached) = cached_docs {
         let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
             scored, &server.silva, query_embedding.as_deref(),
         ).await;
-        tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, "recall stage: coherence gate");
+        let (sq_w_gate, sq_a_gate) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
+        tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_gate, sqlite_acqs = sq_a_gate, "recall stage: coherence gate");
         scored = gated;
         let gate_warning = gate_stats.should_warn();
 
@@ -776,7 +782,8 @@ if let Some(cached) = cached_docs {
             }
             (0..texts.len()).map(|i| (i, 0.0f32)).collect()
         });
-        tracing::info!(gen_ai.operation.name = "recall_stage_rerank", stage_ms = rerank_t0.elapsed().as_millis() as u64, "recall stage: jina rerank");
+        let (sq_w_rerank, sq_a_rerank) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
+        tracing::info!(gen_ai.operation.name = "recall_stage_rerank", stage_ms = rerank_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_rerank, sqlite_acqs = sq_a_rerank, "recall stage: jina rerank");
         let reranked: Vec<(GraphNode, f32)> = ranked.into_iter()
             .filter_map(|(idx, logit)| {
                 // Normalize cross-encoder logit to (0,1) with sigmoid before mixing with RRF scores
@@ -808,7 +815,8 @@ if let Some(cached) = cached_docs {
             let (gated, gate_stats) = crate::security::coherence_gate::CoherenceGate::filter(
                 scored, &server.silva, query_embedding.as_deref(),
             ).await;
-            tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, "recall stage: coherence gate (cache-miss path)");
+            let (sq_w_gate2, sq_a_gate2) = sqlite_wait_delta(&server.silva, sqlite_w0, sqlite_a0);
+            tracing::info!(gen_ai.operation.name = "recall_stage_gate", stage_ms = gate_t0.elapsed().as_millis() as u64, sqlite_wait_ms = sq_w_gate2, sqlite_acqs = sq_a_gate2, "recall stage: coherence gate (cache-miss path)");
             scored = gated;
             let gate_warning = gate_stats.should_warn();
 
@@ -1081,6 +1089,21 @@ if let Some(cached) = cached_docs {
         Err(e) => Ok(error_result(&format!("Memory search failed: {e}"))),
     }
 }
+
+/// Phase 0 del diseño de pool SQLite (2026-09-29): delta de la espera GLOBAL
+/// de adquisición del Mutex de la conexión de SilvaDB entre el snapshot
+/// inicial del recall y este stage. Devuelve (wait_ms, adquisiciones) —
+/// es contención COMPARTIDA entre peticiones concurrentes, no espera
+/// atribuible a esta petición en exclusiva; así se etiqueta en el log.
+fn sqlite_wait_delta(
+    silva: &crate::memory::silva::SilvaDB,
+    w0: u64,
+    a0: u64,
+) -> (u64, u64) {
+    let (w1, a1) = silva.sqlite_lock_wait_snapshot();
+    ((w1.saturating_sub(w0)) / 1_000_000, a1.saturating_sub(a0))
+}
+
 fn truncate_adaptive(content: &str, score: f32, compact: bool) -> String {
     if !compact {
         return content.to_string();

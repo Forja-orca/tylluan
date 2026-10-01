@@ -54,7 +54,7 @@ impl super::SilvaDB {
         }
 
         let results: Vec<(GraphNode, f32)> = tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let conn = self.conn_timed();
             let mut results = Vec::new();
             for (id, dist) in &hnsw_results {
                 if let Ok(Some(node)) = self.get_node_sync(id, &conn) {
@@ -76,7 +76,7 @@ impl super::SilvaDB {
         }
 
         let result = tokio::task::block_in_place(|| {
-            let conn = self.conn.blocking_lock();
+            let conn = self.conn_timed();
             let mut stmt = conn.prepare(
                 "SELECT node_id, embedding FROM node_embeddings ORDER BY rowid DESC LIMIT 5000"
             )?;
@@ -172,7 +172,7 @@ impl super::SilvaDB {
 
         if let Some(mut scored) = scored_opt {
             let result: std::result::Result<Vec<(GraphNode, f32)>, anyhow::Error> = tokio::task::block_in_place(|| {
-                let conn = self.conn.blocking_lock();
+                let conn = self.conn_timed();
                 scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 scored.truncate(limit);
 
@@ -402,7 +402,7 @@ impl super::SilvaDB {
                     query.hash(&mut h);
                     let qhash = format!("{:016x}", h.finish());
                     let _ = tokio::task::block_in_place(|| {
-                        let conn = self.conn.blocking_lock();
+                        let conn = self.conn_timed();
                         conn.execute(
                             "INSERT INTO recall_misses (ts, query_hash, reason) VALUES (?1, ?2, 'below_relevance_floor')",
                             params![std::time::SystemTime::now()
@@ -431,7 +431,7 @@ impl super::SilvaDB {
             query.hash(&mut h);
             let qhash = format!("{:016x}", h.finish());
             let _ = tokio::task::block_in_place(|| {
-                let conn = self.conn.blocking_lock();
+                let conn = self.conn_timed();
                 conn.execute(
                     "INSERT INTO recall_misses (ts, query_hash, reason) VALUES (?1, ?2, 'empty')",
                     params![std::time::SystemTime::now()

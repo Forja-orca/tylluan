@@ -1814,3 +1814,29 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// Phase 0 del diseño de pool SQLite (2026-09-29): la adquisición con
+    /// telemetría (`conn_timed`) debe registrar la espera de cola cuando otro
+    /// hilo mantiene el Mutex de la conexión ocupado.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn sqlite_lock_wait_telemetry_records_queueing() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let conn_lock = db.conn_lock();
+        let (w_before, a_before) = db.sqlite_lock_wait_snapshot();
+        let holder = std::thread::spawn(move || {
+            let _guard = conn_lock.blocking_lock();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        tokio::task::block_in_place(|| {
+            let _g = db.conn_timed();
+        });
+        holder.join().unwrap();
+        let (w_after, a_after) = db.sqlite_lock_wait_snapshot();
+        assert!(a_after > a_before, "one timed acquisition recorded");
+        let wait_ms = (w_after - w_before) / 1_000_000;
+        assert!(
+            wait_ms >= 150,
+            "queueing wait recorded (got {wait_ms}ms; expected >=150ms behind the 300ms holder)"
+        );
+    }
