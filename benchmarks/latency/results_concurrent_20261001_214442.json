@@ -1,0 +1,3153 @@
+{
+  "benchmark": "tylluan_cpu_latency_multi_condition_slo",
+  "date": "2026-10-01T21:44:42.405947Z",
+  "environment": {
+    "kernel_version": "0.17.0",
+    "kernel_commit": "f547c8c",
+    "os": "Windows",
+    "os_release": "11",
+    "architecture": "AMD64",
+    "python_version": "3.14.3",
+    "device": "CPU-only (No GPU inference fallback)",
+    "port": 47005
+  },
+  "conditions_summary": [
+    {
+      "condition": "warm_idle",
+      "concurrency": 1,
+      "total_throughput_qps": 0.21,
+      "tylluan_recall": {
+        "count": 50,
+        "p50": 9472.35,
+        "p90": 10905.06,
+        "p95": 11585.86,
+        "p99": 12456.2,
+        "mean": 8968.04,
+        "stddev": 2073.84,
+        "min": 4125.64,
+        "max": 12881.1
+      },
+      "tylluan_do": {
+        "count": 50,
+        "p50": 570.76,
+        "p90": 1165.56,
+        "p95": 1210.81,
+        "p99": 1719.24,
+        "mean": 643.52,
+        "stddev": 356.35,
+        "min": 18.54,
+        "max": 2192.01
+      }
+    },
+    {
+      "condition": "warm_loaded_4c",
+      "concurrency": 4,
+      "total_throughput_qps": 0.34,
+      "tylluan_recall": {
+        "count": 50,
+        "p50": 23774.28,
+        "p90": 32524.78,
+        "p95": 34141.26,
+        "p99": 44026.88,
+        "mean": 21604.37,
+        "stddev": 10023.38,
+        "min": 5501.89,
+        "max": 44702.16
+      },
+      "tylluan_do": {
+        "count": 50,
+        "p50": 1414.08,
+        "p90": 1733.07,
+        "p95": 1775.68,
+        "p99": 1794.55,
+        "mean": 989.41,
+        "stddev": 731.75,
+        "min": 69.61,
+        "max": 1800.91
+      }
+    },
+    {
+      "condition": "warm_loaded_8c",
+      "concurrency": 8,
+      "total_throughput_qps": 0.4,
+      "tylluan_recall": {
+        "count": 50,
+        "p50": 33826.24,
+        "p90": 61383.65,
+        "p95": 66838.2,
+        "p99": 75686.22,
+        "mean": 35781.68,
+        "stddev": 17378.41,
+        "min": 6162.68,
+        "max": 76791.22
+      },
+      "tylluan_do": {
+        "count": 50,
+        "p50": 246.93,
+        "p90": 3658.35,
+        "p95": 3756.28,
+        "p99": 4043.59,
+        "mean": 1457.6,
+        "stddev": 1572.84,
+        "min": 8.97,
+        "max": 4264.9
+      }
+    }
+  ],
+  "conditions_detail": [
+    {
+      "condition": "warm_idle",
+      "concurrency": 1,
+      "timestamp": "2026-10-01T21:35:40.768820Z",
+      "wall_time_seconds": 480.59,
+      "total_throughput_qps": 0.21,
+      "recall_throughput_qps": 0.11,
+      "do_throughput_qps": 1.55,
+      "overall": {
+        "count": 100,
+        "p50": 3158.83,
+        "p90": 10490.32,
+        "p95": 10896.1,
+        "p99": 12022.62,
+        "mean": 4805.78,
+        "stddev": 4420.21,
+        "min": 18.54,
+        "max": 12881.1
+      },
+      "tylluan_recall": {
+        "overall": {
+          "count": 50,
+          "p50": 9472.35,
+          "p90": 10905.06,
+          "p95": 11585.86,
+          "p99": 12456.2,
+          "mean": 8968.04,
+          "stddev": 2073.84,
+          "min": 4125.64,
+          "max": 12881.1
+        },
+        "by_length": {
+          "short": {
+            "count": 17,
+            "p50": 10013.8,
+            "p90": 11445.37,
+            "p95": 12187.38,
+            "p99": 12742.36,
+            "mean": 9868.07,
+            "stddev": 1252.3,
+            "min": 8291.42,
+            "max": 12881.1
+          },
+          "medium": {
+            "count": 17,
+            "p50": 9768.14,
+            "p90": 10964.73,
+            "p95": 11264.66,
+            "p99": 11852.0,
+            "mean": 9739.97,
+            "stddev": 1076.31,
+            "min": 8061.32,
+            "max": 11998.84
+          },
+          "long": {
+            "count": 16,
+            "p50": 6117.61,
+            "p90": 10462.71,
+            "p95": 10578.58,
+            "p99": 10612.26,
+            "mean": 7191.58,
+            "stddev": 2427.6,
+            "min": 4125.64,
+            "max": 10620.68
+          }
+        }
+      },
+      "tylluan_do": {
+        "overall": {
+          "count": 50,
+          "p50": 570.76,
+          "p90": 1165.56,
+          "p95": 1210.81,
+          "p99": 1719.24,
+          "mean": 643.52,
+          "stddev": 356.35,
+          "min": 18.54,
+          "max": 2192.01
+        },
+        "by_category": {
+          "Direct": {
+            "count": 17,
+            "p50": 546.22,
+            "p90": 626.9,
+            "p95": 949.73,
+            "p99": 1943.55,
+            "mean": 564.83,
+            "stddev": 443.98,
+            "min": 18.54,
+            "max": 2192.01
+          },
+          "Reactive": {
+            "count": 17,
+            "p50": 550.72,
+            "p90": 957.23,
+            "p95": 1220.03,
+            "p99": 1225.75,
+            "mean": 611.06,
+            "stddev": 254.23,
+            "min": 226.94,
+            "max": 1227.18
+          },
+          "Proactive": {
+            "count": 16,
+            "p50": 794.55,
+            "p90": 1168.37,
+            "p95": 1179.34,
+            "p99": 1197.25,
+            "mean": 761.61,
+            "stddev": 311.58,
+            "min": 230.86,
+            "max": 1201.73
+          }
+        }
+      },
+      "records": [
+        {
+          "type": "recall",
+          "id": "rec_s01",
+          "category": "short",
+          "input": "BGE-M3",
+          "latency_ms": 8706.66,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s02",
+          "category": "short",
+          "input": "degree penalty",
+          "latency_ms": 8933.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s03",
+          "category": "short",
+          "input": "Noise XK",
+          "latency_ms": 9073.0,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s04",
+          "category": "short",
+          "input": "audit trail",
+          "latency_ms": 10198.35,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s05",
+          "category": "short",
+          "input": "FSRS-5",
+          "latency_ms": 8553.2,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s06",
+          "category": "short",
+          "input": "coloquio read state",
+          "latency_ms": 10404.16,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s07",
+          "category": "short",
+          "input": "quarantine",
+          "latency_ms": 11066.31,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s08",
+          "category": "short",
+          "input": "consensus engine",
+          "latency_ms": 8291.42,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s09",
+          "category": "short",
+          "input": "NightConsolidation",
+          "latency_ms": 10507.87,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s10",
+          "category": "short",
+          "input": "federation peer",
+          "latency_ms": 10028.74,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s11",
+          "category": "short",
+          "input": "PageRank",
+          "latency_ms": 10351.65,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s12",
+          "category": "short",
+          "input": "vector_dimensions",
+          "latency_ms": 8591.09,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s13",
+          "category": "short",
+          "input": "circuit breaker",
+          "latency_ms": 12881.1,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s14",
+          "category": "short",
+          "input": "LightReranker",
+          "latency_ms": 8578.48,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s15",
+          "category": "short",
+          "input": "memory decay",
+          "latency_ms": 9563.51,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s16",
+          "category": "short",
+          "input": "tylluan_do",
+          "latency_ms": 10013.8,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s17",
+          "category": "short",
+          "input": "tylluan_recall",
+          "latency_ms": 12013.95,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m01",
+          "category": "medium",
+          "input": "vector dimensions invariant in SilvaDB",
+          "latency_ms": 8061.32,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m02",
+          "category": "medium",
+          "input": "PageRank degree centrality penalty formula",
+          "latency_ms": 8632.37,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m03",
+          "category": "medium",
+          "input": "kernel port and zero downtime proxy",
+          "latency_ms": 10201.06,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m04",
+          "category": "medium",
+          "input": "Noise protocol handshake in federation mesh",
+          "latency_ms": 8982.2,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m05",
+          "category": "medium",
+          "input": "ADR-011 LightReranker cutover gate threshold",
+          "latency_ms": 9666.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m06",
+          "category": "medium",
+          "input": "guild registration requirements in catalog",
+          "latency_ms": 10646.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m07",
+          "category": "medium",
+          "input": "prevent LAN RCE in configuration",
+          "latency_ms": 11081.11,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m08",
+          "category": "medium",
+          "input": "memory decay half life parameters",
+          "latency_ms": 8587.08,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m09",
+          "category": "medium",
+          "input": "bounded work contracts multi agent protocol",
+          "latency_ms": 8323.22,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m10",
+          "category": "medium",
+          "input": "hybrid search BM25 vector RRF",
+          "latency_ms": 9858.53,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m11",
+          "category": "medium",
+          "input": "single ONNX mutex batch embeddings",
+          "latency_ms": 10887.14,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m12",
+          "category": "medium",
+          "input": "hardware capabilities in gossip messages",
+          "latency_ms": 10488.37,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m13",
+          "category": "medium",
+          "input": "partitionable transport network simulation modes",
+          "latency_ms": 11998.84,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m14",
+          "category": "medium",
+          "input": "transparent P2P TCP remote dispatch",
+          "latency_ms": 10421.11,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m15",
+          "category": "medium",
+          "input": "untracked bearer token security rules",
+          "latency_ms": 9381.2,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m16",
+          "category": "medium",
+          "input": "author impersonation guard in coloquio",
+          "latency_ms": 9768.14,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m17",
+          "category": "medium",
+          "input": "dream cycle background consolidation scheduler",
+          "latency_ms": 8594.04,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l01",
+          "category": "long",
+          "input": "What configuration combination in tylluan.toml is strictly forbidden to prevent LAN RCE?",
+          "latency_ms": 10133.09,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l02",
+          "category": "long",
+          "input": "Explain how local_query_graph in SilvaDB adjusts PageRank score for node degree penalty vs boost",
+          "latency_ms": 10033.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l03",
+          "category": "long",
+          "input": "What are the three sites where a new Python guild must be registered to avoid Unknown Guild?",
+          "latency_ms": 8426.85,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l04",
+          "category": "long",
+          "input": "Which author IDs cannot be impersonated in Coloquio via automated tools without role validation?",
+          "latency_ms": 10360.87,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l05",
+          "category": "long",
+          "input": "How does DispatchDecision route when a remote peer has specialized GPU capability and lower load?",
+          "latency_ms": 10620.68,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l06",
+          "category": "long",
+          "input": "What is the threshold requirement of resolved rows in recall_feedback table for LightReranker cutover?",
+          "latency_ms": 8162.49,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l07",
+          "category": "long",
+          "input": "What fault scenarios does PartitionableTransport simulate in link tests for distributed mesh?",
+          "latency_ms": 10564.55,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l08",
+          "category": "long",
+          "input": "What happens to vector embeddings if vector_dimensions is changed from 1024 to 768?",
+          "latency_ms": 6203.39,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l09",
+          "category": "long",
+          "input": "How does Tylluan handle GPU TDR timeout crashes on Windows when running local vision inference?",
+          "latency_ms": 4934.08,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l10",
+          "category": "long",
+          "input": "Explain the difference between Noise NK one-way gossip and Noise XK two-way P2P TCP dispatch session pool",
+          "latency_ms": 6031.83,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l11",
+          "category": "long",
+          "input": "What are the exactly 5 sovereign tools registered in Tylluan server and why are no other tools allowed?",
+          "latency_ms": 4265.0,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l12",
+          "category": "long",
+          "input": "How does FSRS-5 calculate stability and difficulty for episodic memory retention across sessions?",
+          "latency_ms": 4125.64,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l13",
+          "category": "long",
+          "input": "Explain the role of CoherenceGate Layer 4 hybrid verification in filtering unsafe or stale memory writes",
+          "latency_ms": 5910.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l14",
+          "category": "long",
+          "input": "Where must bearer security tokens be stored to prevent accidental git leakage in public repository commits?",
+          "latency_ms": 5112.16,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l15",
+          "category": "long",
+          "input": "What is the degree centrality penalty formula used in SilvaDB local query graph to penalize generic hub nodes?",
+          "latency_ms": 4157.77,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l16",
+          "category": "long",
+          "input": "How does the dispatch router circuit breaker handle consecutive failures when calling a remote mesh node?",
+          "latency_ms": 6023.75,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d01",
+          "category": "Direct",
+          "input": "obtener estado del sistema",
+          "latency_ms": 57.99,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d02",
+          "category": "Direct",
+          "input": "verificar uso de memoria y cpu",
+          "latency_ms": 369.29,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d03",
+          "category": "Direct",
+          "input": "consultar logs recientes de auditoria",
+          "latency_ms": 297.11,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d04",
+          "category": "Direct",
+          "input": "listar guilds activos",
+          "latency_ms": 507.99,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d05",
+          "category": "Direct",
+          "input": "verificar estado de salud del kernel",
+          "latency_ms": 18.54,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d06",
+          "category": "Direct",
+          "input": "consultar estadisticas de red",
+          "latency_ms": 432.17,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d07",
+          "category": "Direct",
+          "input": "inspeccionar estado de sesiones mcp activas",
+          "latency_ms": 579.55,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d08",
+          "category": "Direct",
+          "input": "verificar espacio en disco de data silva",
+          "latency_ms": 590.82,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d09",
+          "category": "Direct",
+          "input": "comprobar version y commit del kernel",
+          "latency_ms": 491.56,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d10",
+          "category": "Direct",
+          "input": "consultar conteo de nodos y aristas en silva",
+          "latency_ms": 604.1,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d11",
+          "category": "Direct",
+          "input": "listar herramientas soberanas disponibles",
+          "latency_ms": 555.71,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d12",
+          "category": "Direct",
+          "input": "consultar golden signals de latencia",
+          "latency_ms": 546.22,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d13",
+          "category": "Direct",
+          "input": "obtener resumen de utilization de guilds",
+          "latency_ms": 542.73,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d14",
+          "category": "Direct",
+          "input": "consultar balance de hormonas y estado cognitivo",
+          "latency_ms": 558.51,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d15",
+          "category": "Direct",
+          "input": "inspeccionar estado de los canales de coloquio",
+          "latency_ms": 639.16,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d16",
+          "category": "Direct",
+          "input": "verificar estado del semaforo de background budget",
+          "latency_ms": 618.72,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d17",
+          "category": "Direct",
+          "input": "consultar peers registrados en el mesh",
+          "latency_ms": 2192.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r01",
+          "category": "Reactive",
+          "input": "diagnosticar latencia de busqueda hibrida",
+          "latency_ms": 547.76,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r02",
+          "category": "Reactive",
+          "input": "analizar causas de fallos en auditoria",
+          "latency_ms": 565.13,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r03",
+          "category": "Reactive",
+          "input": "comprobar consistencia del grafo de silva",
+          "latency_ms": 521.25,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r04",
+          "category": "Reactive",
+          "input": "evaluar tasa de acierto de memoria episodica",
+          "latency_ms": 550.72,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r05",
+          "category": "Reactive",
+          "input": "verificar sincronizacion con peers de federacion",
+          "latency_ms": 559.06,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r06",
+          "category": "Reactive",
+          "input": "diagnosticar contencion en el mutex de onnx",
+          "latency_ms": 576.39,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r07",
+          "category": "Reactive",
+          "input": "validar firmas ed25519 de la sesion actual",
+          "latency_ms": 1227.18,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r08",
+          "category": "Reactive",
+          "input": "comprobar integridad de indices vectoriales",
+          "latency_ms": 276.6,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r09",
+          "category": "Reactive",
+          "input": "evaluar drift semantico en nodos de sintesis",
+          "latency_ms": 543.67,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r10",
+          "category": "Reactive",
+          "input": "analizar retencion de nodos bajo modelo fsrs",
+          "latency_ms": 514.69,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r11",
+          "category": "Reactive",
+          "input": "diagnosticar estado de circuit breaker de dispatch",
+          "latency_ms": 519.24,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r12",
+          "category": "Reactive",
+          "input": "inspeccionar alertas de seguridad activas",
+          "latency_ms": 644.7,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r13",
+          "category": "Reactive",
+          "input": "verificar cobertura de pruebas en crates del kernel",
+          "latency_ms": 484.7,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r14",
+          "category": "Reactive",
+          "input": "comprobar estado de cuarentena en silva",
+          "latency_ms": 628.59,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r15",
+          "category": "Reactive",
+          "input": "diagnosticar rendimiento de serializacion json rpc",
+          "latency_ms": 1218.24,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r16",
+          "category": "Reactive",
+          "input": "analizar balance de carga entre guilds de inferencia",
+          "latency_ms": 783.23,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r17",
+          "category": "Reactive",
+          "input": "evaluar tasa de errores en despacho p2p",
+          "latency_ms": 226.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p01",
+          "category": "Proactive",
+          "input": "planificar consolidacion nocturna de memoria y poda de nodos obsoletos",
+          "latency_ms": 1171.88,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p02",
+          "category": "Proactive",
+          "input": "sintetizar resolucion de contradicciones en cluster semantico de puertos",
+          "latency_ms": 864.36,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p03",
+          "category": "Proactive",
+          "input": "coordinar despacho remoto a peer mesh con capacidad gpu disponible",
+          "latency_ms": 828.66,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p04",
+          "category": "Proactive",
+          "input": "generar reporte de estado cognitivo y salud de la federacion",
+          "latency_ms": 237.89,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p05",
+          "category": "Proactive",
+          "input": "evaluar y recalibrar parametros de decaimiento fsrs para memoria episódica",
+          "latency_ms": 1201.73,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p06",
+          "category": "Proactive",
+          "input": "orquestar sincronizacion bilateral con peer remoto usando noise xk",
+          "latency_ms": 860.35,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p07",
+          "category": "Proactive",
+          "input": "analizar y estructurar nuevo dataset de fine-tuning para sllm",
+          "latency_ms": 230.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p08",
+          "category": "Proactive",
+          "input": "generar plan de ejecucion distribuida para procesamiento por lotes",
+          "latency_ms": 582.28,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p09",
+          "category": "Proactive",
+          "input": "reconciliar estados divergentes entre nodos de silva y proponer nodo de sintesis",
+          "latency_ms": 600.27,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p10",
+          "category": "Proactive",
+          "input": "coordinar ciclo deliberativo multi-agente en canal de coloquio",
+          "latency_ms": 1164.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p11",
+          "category": "Proactive",
+          "input": "estructurar y registrar nuevo contrato bounded work contract",
+          "latency_ms": 240.74,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p12",
+          "category": "Proactive",
+          "input": "auditar cumplimiento de invariantes de seguridad en toda la red mesh",
+          "latency_ms": 1102.22,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p13",
+          "category": "Proactive",
+          "input": "optimizar distribucion de indices hnsw y fts5 para acelerar retrieval",
+          "latency_ms": 759.15,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p14",
+          "category": "Proactive",
+          "input": "planificar rebalanceo de carga entre instancias de tylluan-link",
+          "latency_ms": 788.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p15",
+          "category": "Proactive",
+          "input": "evaluar impacto de complejidad y riesgo para despacho en cognitive scheduler",
+          "latency_ms": 751.38,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p16",
+          "category": "Proactive",
+          "input": "generar sintesis ejecutiva de episodios recientes de coloquio para silva",
+          "latency_ms": 800.17,
+          "success": true,
+          "status_code": 200
+        }
+      ]
+    },
+    {
+      "condition": "warm_loaded_4c",
+      "concurrency": 4,
+      "timestamp": "2026-10-01T21:40:31.377286Z",
+      "wall_time_seconds": 290.61,
+      "total_throughput_qps": 0.34,
+      "recall_throughput_qps": 0.18,
+      "do_throughput_qps": 3.86,
+      "overall": {
+        "count": 100,
+        "p50": 3651.4,
+        "p90": 29655.65,
+        "p95": 32505.84,
+        "p99": 43337.81,
+        "mean": 11296.89,
+        "stddev": 12519.82,
+        "min": 69.61,
+        "max": 44702.16
+      },
+      "tylluan_recall": {
+        "overall": {
+          "count": 50,
+          "p50": 23774.28,
+          "p90": 32524.78,
+          "p95": 34141.26,
+          "p99": 44026.88,
+          "mean": 21604.37,
+          "stddev": 10023.38,
+          "min": 5501.89,
+          "max": 44702.16
+        },
+        "by_length": {
+          "short": {
+            "count": 17,
+            "p50": 27437.8,
+            "p90": 37916.11,
+            "p95": 43599.66,
+            "p99": 44481.66,
+            "mean": 24981.04,
+            "stddev": 11857.05,
+            "min": 5803.58,
+            "max": 44702.16
+          },
+          "medium": {
+            "count": 17,
+            "p50": 23596.94,
+            "p90": 27515.71,
+            "p95": 29801.5,
+            "p99": 30734.95,
+            "mean": 20001.03,
+            "stddev": 8301.09,
+            "min": 5501.89,
+            "max": 30968.31
+          },
+          "long": {
+            "count": 16,
+            "p50": 24124.39,
+            "p90": 27274.7,
+            "p95": 29223.62,
+            "p99": 31834.24,
+            "mean": 19720.21,
+            "stddev": 8542.6,
+            "min": 5571.89,
+            "max": 32486.9
+          }
+        }
+      },
+      "tylluan_do": {
+        "overall": {
+          "count": 50,
+          "p50": 1414.08,
+          "p90": 1733.07,
+          "p95": 1775.68,
+          "p99": 1794.55,
+          "mean": 989.41,
+          "stddev": 731.75,
+          "min": 69.61,
+          "max": 1800.91
+        },
+        "by_category": {
+          "Direct": {
+            "count": 17,
+            "p50": 1227.29,
+            "p90": 1628.81,
+            "p95": 1705.99,
+            "p99": 1711.61,
+            "mean": 924.99,
+            "stddev": 682.17,
+            "min": 69.61,
+            "max": 1713.01
+          },
+          "Reactive": {
+            "count": 17,
+            "p50": 1604.09,
+            "p90": 1774.26,
+            "p95": 1784.13,
+            "p99": 1797.55,
+            "mean": 1207.85,
+            "stddev": 719.6,
+            "min": 73.95,
+            "max": 1800.91
+          },
+          "Proactive": {
+            "count": 16,
+            "p50": 752.73,
+            "p90": 1719.84,
+            "p95": 1746.43,
+            "p99": 1779.63,
+            "mean": 825.76,
+            "stddev": 739.46,
+            "min": 80.81,
+            "max": 1787.93
+          }
+        }
+      },
+      "records": [
+        {
+          "type": "recall",
+          "id": "rec_s01",
+          "category": "short",
+          "input": "BGE-M3",
+          "latency_ms": 5803.58,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s02",
+          "category": "short",
+          "input": "degree penalty",
+          "latency_ms": 9421.19,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s03",
+          "category": "short",
+          "input": "Noise XK",
+          "latency_ms": 12895.25,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s04",
+          "category": "short",
+          "input": "audit trail",
+          "latency_ms": 18154.32,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s05",
+          "category": "short",
+          "input": "FSRS-5",
+          "latency_ms": 18633.19,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s09",
+          "category": "short",
+          "input": "NightConsolidation",
+          "latency_ms": 9229.7,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s06",
+          "category": "short",
+          "input": "coloquio read state",
+          "latency_ms": 32179.8,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s08",
+          "category": "short",
+          "input": "consensus engine",
+          "latency_ms": 31507.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s07",
+          "category": "short",
+          "input": "quarantine",
+          "latency_ms": 44702.16,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s10",
+          "category": "short",
+          "input": "federation peer",
+          "latency_ms": 33934.0,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s11",
+          "category": "short",
+          "input": "PageRank",
+          "latency_ms": 34310.83,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s13",
+          "category": "short",
+          "input": "circuit breaker",
+          "latency_ms": 27437.8,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s12",
+          "category": "short",
+          "input": "vector_dimensions",
+          "latency_ms": 43324.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s14",
+          "category": "short",
+          "input": "LightReranker",
+          "latency_ms": 32865.72,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s17",
+          "category": "short",
+          "input": "tylluan_recall",
+          "latency_ms": 11172.58,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s15",
+          "category": "short",
+          "input": "memory decay",
+          "latency_ms": 31937.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s16",
+          "category": "short",
+          "input": "tylluan_do",
+          "latency_ms": 27167.69,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m04",
+          "category": "medium",
+          "input": "Noise protocol handshake in federation mesh",
+          "latency_ms": 6899.82,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m02",
+          "category": "medium",
+          "input": "PageRank degree centrality penalty formula",
+          "latency_ms": 18625.77,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m01",
+          "category": "medium",
+          "input": "vector dimensions invariant in SilvaDB",
+          "latency_ms": 29509.8,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m03",
+          "category": "medium",
+          "input": "kernel port and zero downtime proxy",
+          "latency_ms": 25563.73,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m08",
+          "category": "medium",
+          "input": "memory decay half life parameters",
+          "latency_ms": 5602.69,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m05",
+          "category": "medium",
+          "input": "ADR-011 LightReranker cutover gate threshold",
+          "latency_ms": 23596.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m06",
+          "category": "medium",
+          "input": "guild registration requirements in catalog",
+          "latency_ms": 26186.31,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m07",
+          "category": "medium",
+          "input": "prevent LAN RCE in configuration",
+          "latency_ms": 22521.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m12",
+          "category": "medium",
+          "input": "hardware capabilities in gossip messages",
+          "latency_ms": 6119.02,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m09",
+          "category": "medium",
+          "input": "bounded work contracts multi agent protocol",
+          "latency_ms": 23164.64,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m11",
+          "category": "medium",
+          "input": "single ONNX mutex batch embeddings",
+          "latency_ms": 18646.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m10",
+          "category": "medium",
+          "input": "hybrid search BM25 vector RRF",
+          "latency_ms": 30968.31,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m16",
+          "category": "medium",
+          "input": "author impersonation guard in coloquio",
+          "latency_ms": 5501.89,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m13",
+          "category": "medium",
+          "input": "partitionable transport network simulation modes",
+          "latency_ms": 23957.36,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m14",
+          "category": "medium",
+          "input": "transparent P2P TCP remote dispatch",
+          "latency_ms": 25873.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m15",
+          "category": "medium",
+          "input": "untracked bearer token security rules",
+          "latency_ms": 23681.64,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l03",
+          "category": "long",
+          "input": "What are the three sites where a new Python guild must be registered to avoid Unknown Guild?",
+          "latency_ms": 7889.54,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m17",
+          "category": "medium",
+          "input": "dream cycle background consolidation scheduler",
+          "latency_ms": 23597.77,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l01",
+          "category": "long",
+          "input": "What configuration combination in tylluan.toml is strictly forbidden to prevent LAN RCE?",
+          "latency_ms": 26413.54,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l02",
+          "category": "long",
+          "input": "Explain how local_query_graph in SilvaDB adjusts PageRank score for node degree penalty vs boost",
+          "latency_ms": 24712.38,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l07",
+          "category": "long",
+          "input": "What fault scenarios does PartitionableTransport simulate in link tests for distributed mesh?",
+          "latency_ms": 5571.89,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l06",
+          "category": "long",
+          "input": "What is the threshold requirement of resolved rows in recall_feedback table for LightReranker cutover?",
+          "latency_ms": 13945.82,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l05",
+          "category": "long",
+          "input": "How does DispatchDecision route when a remote peer has specialized GPU capability and lower load?",
+          "latency_ms": 25449.4,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l04",
+          "category": "long",
+          "input": "Which author IDs cannot be impersonated in Coloquio via automated tools without role validation?",
+          "latency_ms": 32486.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l11",
+          "category": "long",
+          "input": "What are the exactly 5 sovereign tools registered in Tylluan server and why are no other tools allowed?",
+          "latency_ms": 6585.23,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l08",
+          "category": "long",
+          "input": "What happens to vector embeddings if vector_dimensions is changed from 1024 to 768?",
+          "latency_ms": 25499.75,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l09",
+          "category": "long",
+          "input": "How does Tylluan handle GPU TDR timeout crashes on Windows when running local vision inference?",
+          "latency_ms": 24518.5,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l10",
+          "category": "long",
+          "input": "Explain the difference between Noise NK one-way gossip and Noise XK two-way P2P TCP dispatch session pool",
+          "latency_ms": 24381.85,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l15",
+          "category": "long",
+          "input": "What is the degree centrality penalty formula used in SilvaDB local query graph to penalize generic hub nodes?",
+          "latency_ms": 6018.23,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l12",
+          "category": "long",
+          "input": "How does FSRS-5 calculate stability and difficulty for episodic memory retention across sessions?",
+          "latency_ms": 23866.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l14",
+          "category": "long",
+          "input": "Where must bearer security tokens be stored to prevent accidental git leakage in public repository commits?",
+          "latency_ms": 21015.58,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l13",
+          "category": "long",
+          "input": "Explain the role of CoherenceGate Layer 4 hybrid verification in filtering unsafe or stale memory writes",
+          "latency_ms": 28135.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l16",
+          "category": "long",
+          "input": "How does the dispatch router circuit breaker handle consecutive failures when calling a remote mesh node?",
+          "latency_ms": 19031.91,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d01",
+          "category": "Direct",
+          "input": "obtener estado del sistema",
+          "latency_ms": 74.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d05",
+          "category": "Direct",
+          "input": "verificar estado de salud del kernel",
+          "latency_ms": 99.51,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d02",
+          "category": "Direct",
+          "input": "verificar uso de memoria y cpu",
+          "latency_ms": 507.66,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d03",
+          "category": "Direct",
+          "input": "consultar logs recientes de auditoria",
+          "latency_ms": 877.79,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d04",
+          "category": "Direct",
+          "input": "listar guilds activos",
+          "latency_ms": 1227.29,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d09",
+          "category": "Direct",
+          "input": "comprobar version y commit del kernel",
+          "latency_ms": 78.76,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d06",
+          "category": "Direct",
+          "input": "consultar estadisticas de red",
+          "latency_ms": 1434.52,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d07",
+          "category": "Direct",
+          "input": "inspeccionar estado de sesiones mcp activas",
+          "latency_ms": 1479.49,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d08",
+          "category": "Direct",
+          "input": "verificar espacio en disco de data silva",
+          "latency_ms": 1533.42,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d13",
+          "category": "Direct",
+          "input": "obtener resumen de utilization de guilds",
+          "latency_ms": 80.87,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d10",
+          "category": "Direct",
+          "input": "consultar conteo de nodos y aristas en silva",
+          "latency_ms": 1577.36,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d15",
+          "category": "Direct",
+          "input": "inspeccionar estado de los canales de coloquio",
+          "latency_ms": 120.27,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d11",
+          "category": "Direct",
+          "input": "listar herramientas soberanas disponibles",
+          "latency_ms": 1713.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d17",
+          "category": "Direct",
+          "input": "consultar peers registrados en el mesh",
+          "latency_ms": 69.61,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d12",
+          "category": "Direct",
+          "input": "consultar golden signals de latencia",
+          "latency_ms": 1704.24,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d14",
+          "category": "Direct",
+          "input": "consultar balance de hormonas y estado cognitivo",
+          "latency_ms": 1578.53,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d16",
+          "category": "Direct",
+          "input": "verificar estado del semaforo de background budget",
+          "latency_ms": 1567.65,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r04",
+          "category": "Reactive",
+          "input": "evaluar tasa de acierto de memoria episodica",
+          "latency_ms": 82.37,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r01",
+          "category": "Reactive",
+          "input": "diagnosticar latencia de busqueda hibrida",
+          "latency_ms": 1640.21,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r02",
+          "category": "Reactive",
+          "input": "analizar causas de fallos en auditoria",
+          "latency_ms": 1779.94,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r03",
+          "category": "Reactive",
+          "input": "comprobar consistencia del grafo de silva",
+          "latency_ms": 1800.91,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r08",
+          "category": "Reactive",
+          "input": "comprobar integridad de indices vectoriales",
+          "latency_ms": 126.5,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r05",
+          "category": "Reactive",
+          "input": "verificar sincronizacion con peers de federacion",
+          "latency_ms": 1587.48,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r06",
+          "category": "Reactive",
+          "input": "diagnosticar contencion en el mutex de onnx",
+          "latency_ms": 1616.52,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r11",
+          "category": "Reactive",
+          "input": "diagnosticar estado de circuit breaker de dispatch",
+          "latency_ms": 73.95,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r12",
+          "category": "Reactive",
+          "input": "inspeccionar alertas de seguridad activas",
+          "latency_ms": 97.62,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r07",
+          "category": "Reactive",
+          "input": "validar firmas ed25519 de la sesion actual",
+          "latency_ms": 1678.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r09",
+          "category": "Reactive",
+          "input": "evaluar drift semantico en nodos de sintesis",
+          "latency_ms": 1603.4,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r10",
+          "category": "Reactive",
+          "input": "analizar retencion de nodos bajo modelo fsrs",
+          "latency_ms": 1770.47,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r16",
+          "category": "Reactive",
+          "input": "analizar balance de carga entre guilds de inferencia",
+          "latency_ms": 109.85,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r13",
+          "category": "Reactive",
+          "input": "verificar cobertura de pruebas en crates del kernel",
+          "latency_ms": 1604.09,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r14",
+          "category": "Reactive",
+          "input": "comprobar estado de cuarentena en silva",
+          "latency_ms": 1737.35,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p02",
+          "category": "Proactive",
+          "input": "sintetizar resolucion de contradicciones en cluster semantico de puertos",
+          "latency_ms": 114.22,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p03",
+          "category": "Proactive",
+          "input": "coordinar despacho remoto a peer mesh con capacidad gpu disponible",
+          "latency_ms": 125.06,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r15",
+          "category": "Reactive",
+          "input": "diagnosticar rendimiento de serializacion json rpc",
+          "latency_ms": 1672.65,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p05",
+          "category": "Proactive",
+          "input": "evaluar y recalibrar parametros de decaimiento fsrs para memoria episódica",
+          "latency_ms": 84.02,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p06",
+          "category": "Proactive",
+          "input": "orquestar sincronizacion bilateral con peer remoto usando noise xk",
+          "latency_ms": 87.43,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p07",
+          "category": "Proactive",
+          "input": "analizar y estructurar nuevo dataset de fine-tuning para sllm",
+          "latency_ms": 80.81,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r17",
+          "category": "Reactive",
+          "input": "evaluar tasa de errores en despacho p2p",
+          "latency_ms": 1552.15,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p01",
+          "category": "Proactive",
+          "input": "planificar consolidacion nocturna de memoria y poda de nodos obsoletos",
+          "latency_ms": 1732.6,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p04",
+          "category": "Proactive",
+          "input": "generar reporte de estado cognitivo y salud de la federacion",
+          "latency_ms": 1380.39,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p11",
+          "category": "Proactive",
+          "input": "estructurar y registrar nuevo contrato bounded work contract",
+          "latency_ms": 91.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p08",
+          "category": "Proactive",
+          "input": "generar plan de ejecucion distribuida para procesamiento por lotes",
+          "latency_ms": 1489.34,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p13",
+          "category": "Proactive",
+          "input": "optimizar distribucion de indices hnsw y fts5 para acelerar retrieval",
+          "latency_ms": 86.62,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p09",
+          "category": "Proactive",
+          "input": "reconciliar estados divergentes entre nodos de silva y proponer nodo de sintesis",
+          "latency_ms": 1787.93,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p15",
+          "category": "Proactive",
+          "input": "evaluar impacto de complejidad y riesgo para despacho en cognitive scheduler",
+          "latency_ms": 89.25,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p10",
+          "category": "Proactive",
+          "input": "coordinar ciclo deliberativo multi-agente en canal de coloquio",
+          "latency_ms": 1707.07,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p12",
+          "category": "Proactive",
+          "input": "auditar cumplimiento de invariantes de seguridad en toda la red mesh",
+          "latency_ms": 1581.15,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p14",
+          "category": "Proactive",
+          "input": "planificar rebalanceo de carga entre instancias de tylluan-link",
+          "latency_ms": 1393.63,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p16",
+          "category": "Proactive",
+          "input": "generar sintesis ejecutiva de episodios recientes de coloquio para silva",
+          "latency_ms": 1380.76,
+          "success": true,
+          "status_code": 200
+        }
+      ]
+    },
+    {
+      "condition": "warm_loaded_8c",
+      "concurrency": 8,
+      "timestamp": "2026-10-01T21:44:42.404843Z",
+      "wall_time_seconds": 251.03,
+      "total_throughput_qps": 0.4,
+      "recall_throughput_qps": 0.21,
+      "do_throughput_qps": 4.75,
+      "overall": {
+        "count": 100,
+        "p50": 5213.79,
+        "p90": 52779.95,
+        "p95": 61379.99,
+        "p99": 74558.66,
+        "mean": 18619.64,
+        "stddev": 21137.1,
+        "min": 8.97,
+        "max": 76791.22
+      },
+      "tylluan_recall": {
+        "overall": {
+          "count": 50,
+          "p50": 33826.24,
+          "p90": 61383.65,
+          "p95": 66838.2,
+          "p99": 75686.22,
+          "mean": 35781.68,
+          "stddev": 17378.41,
+          "min": 6162.68,
+          "max": 76791.22
+        },
+        "by_length": {
+          "short": {
+            "count": 17,
+            "p50": 28504.53,
+            "p90": 59807.76,
+            "p95": 65640.19,
+            "p99": 72756.93,
+            "mean": 32708.62,
+            "stddev": 18910.16,
+            "min": 6162.68,
+            "max": 74536.11
+          },
+          "medium": {
+            "count": 17,
+            "p50": 34129.53,
+            "p90": 64724.85,
+            "p95": 71068.65,
+            "p99": 75646.71,
+            "mean": 38281.32,
+            "stddev": 19439.68,
+            "min": 10559.17,
+            "max": 76791.22
+          },
+          "long": {
+            "count": 16,
+            "p50": 34263.36,
+            "p90": 54111.54,
+            "p95": 55728.93,
+            "p99": 58708.52,
+            "mean": 36390.94,
+            "stddev": 12052.82,
+            "min": 21064.7,
+            "max": 59453.42
+          }
+        }
+      },
+      "tylluan_do": {
+        "overall": {
+          "count": 50,
+          "p50": 246.93,
+          "p90": 3658.35,
+          "p95": 3756.28,
+          "p99": 4043.59,
+          "mean": 1457.6,
+          "stddev": 1572.84,
+          "min": 8.97,
+          "max": 4264.9
+        },
+        "by_category": {
+          "Direct": {
+            "count": 17,
+            "p50": 266.6,
+            "p90": 3055.96,
+            "p95": 3396.57,
+            "p99": 3705.12,
+            "mean": 1139.49,
+            "stddev": 1282.43,
+            "min": 8.97,
+            "max": 3782.26
+          },
+          "Reactive": {
+            "count": 17,
+            "p50": 160.19,
+            "p90": 3760.01,
+            "p95": 3903.58,
+            "p99": 4192.64,
+            "mean": 1796.46,
+            "stddev": 1802.99,
+            "min": 70.19,
+            "max": 4264.9
+          },
+          "Proactive": {
+            "count": 16,
+            "p50": 146.18,
+            "p90": 3247.53,
+            "p95": 3287.19,
+            "p99": 3370.86,
+            "mean": 1435.54,
+            "stddev": 1516.34,
+            "min": 81.56,
+            "max": 3391.78
+          }
+        }
+      },
+      "records": [
+        {
+          "type": "recall",
+          "id": "rec_s04",
+          "category": "short",
+          "input": "audit trail",
+          "latency_ms": 6162.68,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s02",
+          "category": "short",
+          "input": "degree penalty",
+          "latency_ms": 9874.37,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s03",
+          "category": "short",
+          "input": "Noise XK",
+          "latency_ms": 13403.33,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s09",
+          "category": "short",
+          "input": "NightConsolidation",
+          "latency_ms": 12590.47,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s08",
+          "category": "short",
+          "input": "consensus engine",
+          "latency_ms": 24812.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s07",
+          "category": "short",
+          "input": "quarantine",
+          "latency_ms": 28504.53,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s06",
+          "category": "short",
+          "input": "coloquio read state",
+          "latency_ms": 34497.46,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s12",
+          "category": "short",
+          "input": "vector_dimensions",
+          "latency_ms": 20072.21,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s11",
+          "category": "short",
+          "input": "PageRank",
+          "latency_ms": 28906.53,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s10",
+          "category": "short",
+          "input": "federation peer",
+          "latency_ms": 38679.35,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s13",
+          "category": "short",
+          "input": "circuit breaker",
+          "latency_ms": 27534.66,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s05",
+          "category": "short",
+          "input": "FSRS-5",
+          "latency_ms": 57402.12,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s01",
+          "category": "short",
+          "input": "BGE-M3",
+          "latency_ms": 63416.21,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s17",
+          "category": "short",
+          "input": "tylluan_recall",
+          "latency_ms": 25571.36,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m01",
+          "category": "medium",
+          "input": "vector dimensions invariant in SilvaDB",
+          "latency_ms": 24605.57,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s16",
+          "category": "short",
+          "input": "tylluan_do",
+          "latency_ms": 38026.09,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m02",
+          "category": "medium",
+          "input": "PageRank degree centrality penalty formula",
+          "latency_ms": 28089.69,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s15",
+          "category": "short",
+          "input": "memory decay",
+          "latency_ms": 52056.17,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m03",
+          "category": "medium",
+          "input": "kernel port and zero downtime proxy",
+          "latency_ms": 34129.53,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m08",
+          "category": "medium",
+          "input": "memory decay half life parameters",
+          "latency_ms": 15446.29,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_s14",
+          "category": "short",
+          "input": "LightReranker",
+          "latency_ms": 74536.11,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m11",
+          "category": "medium",
+          "input": "single ONNX mutex batch embeddings",
+          "latency_ms": 10559.17,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m05",
+          "category": "medium",
+          "input": "ADR-011 LightReranker cutover gate threshold",
+          "latency_ms": 43634.85,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m04",
+          "category": "medium",
+          "input": "Noise protocol handshake in federation mesh",
+          "latency_ms": 52673.76,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m12",
+          "category": "medium",
+          "input": "hardware capabilities in gossip messages",
+          "latency_ms": 18296.62,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m09",
+          "category": "medium",
+          "input": "bounded work contracts multi agent protocol",
+          "latency_ms": 41629.91,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m10",
+          "category": "medium",
+          "input": "hybrid search BM25 vector RRF",
+          "latency_ms": 40328.12,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m14",
+          "category": "medium",
+          "input": "transparent P2P TCP remote dispatch",
+          "latency_ms": 23876.38,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m16",
+          "category": "medium",
+          "input": "author impersonation guard in coloquio",
+          "latency_ms": 20182.14,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m07",
+          "category": "medium",
+          "input": "prevent LAN RCE in configuration",
+          "latency_ms": 69638.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m06",
+          "category": "medium",
+          "input": "guild registration requirements in catalog",
+          "latency_ms": 76791.22,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m17",
+          "category": "medium",
+          "input": "dream cycle background consolidation scheduler",
+          "latency_ms": 28075.5,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l01",
+          "category": "long",
+          "input": "What configuration combination in tylluan.toml is strictly forbidden to prevent LAN RCE?",
+          "latency_ms": 27660.7,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l02",
+          "category": "long",
+          "input": "Explain how local_query_graph in SilvaDB adjusts PageRank score for node degree penalty vs boost",
+          "latency_ms": 25303.27,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m13",
+          "category": "medium",
+          "input": "partitionable transport network simulation modes",
+          "latency_ms": 61449.41,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l05",
+          "category": "long",
+          "input": "How does DispatchDecision route when a remote peer has specialized GPU capability and lower load?",
+          "latency_ms": 21516.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_m15",
+          "category": "medium",
+          "input": "untracked bearer token security rules",
+          "latency_ms": 61376.34,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l08",
+          "category": "long",
+          "input": "What happens to vector embeddings if vector_dimensions is changed from 1024 to 768?",
+          "latency_ms": 21064.7,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l07",
+          "category": "long",
+          "input": "What fault scenarios does PartitionableTransport simulate in link tests for distributed mesh?",
+          "latency_ms": 28470.51,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l06",
+          "category": "long",
+          "input": "What is the threshold requirement of resolved rows in recall_feedback table for LightReranker cutover?",
+          "latency_ms": 35371.64,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l04",
+          "category": "long",
+          "input": "Which author IDs cannot be impersonated in Coloquio via automated tools without role validation?",
+          "latency_ms": 48496.26,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l03",
+          "category": "long",
+          "input": "What are the three sites where a new Python guild must be registered to avoid Unknown Guild?",
+          "latency_ms": 59453.42,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l10",
+          "category": "long",
+          "input": "Explain the difference between Noise NK one-way gossip and Noise XK two-way P2P TCP dispatch session pool",
+          "latency_ms": 34664.63,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l09",
+          "category": "long",
+          "input": "How does Tylluan handle GPU TDR timeout crashes on Windows when running local vision inference?",
+          "latency_ms": 43413.61,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l15",
+          "category": "long",
+          "input": "What is the degree centrality penalty formula used in SilvaDB local query graph to penalize generic hub nodes?",
+          "latency_ms": 21447.5,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l13",
+          "category": "long",
+          "input": "Explain the role of CoherenceGate Layer 4 hybrid verification in filtering unsafe or stale memory writes",
+          "latency_ms": 33862.1,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l14",
+          "category": "long",
+          "input": "Where must bearer security tokens be stored to prevent accidental git leakage in public repository commits?",
+          "latency_ms": 33790.39,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l11",
+          "category": "long",
+          "input": "What are the exactly 5 sovereign tools registered in Tylluan server and why are no other tools allowed?",
+          "latency_ms": 54487.44,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l12",
+          "category": "long",
+          "input": "How does FSRS-5 calculate stability and difficulty for episodic memory retention across sessions?",
+          "latency_ms": 53735.63,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "recall",
+          "id": "rec_l16",
+          "category": "long",
+          "input": "How does the dispatch router circuit breaker handle consecutive failures when calling a remote mesh node?",
+          "latency_ms": 39516.42,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d05",
+          "category": "Direct",
+          "input": "verificar estado de salud del kernel",
+          "latency_ms": 8.97,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d02",
+          "category": "Direct",
+          "input": "verificar uso de memoria y cpu",
+          "latency_ms": 115.0,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d04",
+          "category": "Direct",
+          "input": "listar guilds activos",
+          "latency_ms": 142.82,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d03",
+          "category": "Direct",
+          "input": "consultar logs recientes de auditoria",
+          "latency_ms": 180.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d01",
+          "category": "Direct",
+          "input": "obtener estado del sistema",
+          "latency_ms": 265.45,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d10",
+          "category": "Direct",
+          "input": "consultar conteo de nodos y aristas en silva",
+          "latency_ms": 199.75,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d09",
+          "category": "Direct",
+          "input": "comprobar version y commit del kernel",
+          "latency_ms": 328.98,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d11",
+          "category": "Direct",
+          "input": "listar herramientas soberanas disponibles",
+          "latency_ms": 228.41,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d12",
+          "category": "Direct",
+          "input": "consultar golden signals de latencia",
+          "latency_ms": 192.87,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d17",
+          "category": "Direct",
+          "input": "consultar peers registrados en el mesh",
+          "latency_ms": 266.6,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d08",
+          "category": "Direct",
+          "input": "verificar espacio en disco de data silva",
+          "latency_ms": 680.44,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r01",
+          "category": "Reactive",
+          "input": "diagnosticar latencia de busqueda hibrida",
+          "latency_ms": 100.86,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r02",
+          "category": "Reactive",
+          "input": "analizar causas de fallos en auditoria",
+          "latency_ms": 96.87,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r03",
+          "category": "Reactive",
+          "input": "comprobar consistencia del grafo de silva",
+          "latency_ms": 108.39,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d07",
+          "category": "Direct",
+          "input": "inspeccionar estado de sesiones mcp activas",
+          "latency_ms": 1902.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d06",
+          "category": "Direct",
+          "input": "consultar estadisticas de red",
+          "latency_ms": 2356.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d13",
+          "category": "Direct",
+          "input": "obtener resumen de utilization de guilds",
+          "latency_ms": 2527.46,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r08",
+          "category": "Reactive",
+          "input": "comprobar integridad de indices vectoriales",
+          "latency_ms": 160.19,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r09",
+          "category": "Reactive",
+          "input": "evaluar drift semantico en nodos de sintesis",
+          "latency_ms": 94.47,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r10",
+          "category": "Reactive",
+          "input": "analizar retencion de nodos bajo modelo fsrs",
+          "latency_ms": 109.95,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d14",
+          "category": "Direct",
+          "input": "consultar balance de hormonas y estado cognitivo",
+          "latency_ms": 2893.16,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r11",
+          "category": "Reactive",
+          "input": "diagnosticar estado de circuit breaker de dispatch",
+          "latency_ms": 70.19,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d15",
+          "category": "Direct",
+          "input": "inspeccionar estado de los canales de coloquio",
+          "latency_ms": 3300.15,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_d16",
+          "category": "Direct",
+          "input": "verificar estado del semaforo de background budget",
+          "latency_ms": 3782.26,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r04",
+          "category": "Reactive",
+          "input": "evaluar tasa de acierto de memoria episodica",
+          "latency_ms": 3813.25,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r16",
+          "category": "Reactive",
+          "input": "analizar balance de carga entre guilds de inferencia",
+          "latency_ms": 117.79,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r17",
+          "category": "Reactive",
+          "input": "evaluar tasa de errores en despacho p2p",
+          "latency_ms": 89.42,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p01",
+          "category": "Proactive",
+          "input": "planificar consolidacion nocturna de memoria y poda de nodos obsoletos",
+          "latency_ms": 169.15,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p02",
+          "category": "Proactive",
+          "input": "sintetizar resolucion de contradicciones en cluster semantico de puertos",
+          "latency_ms": 123.2,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r05",
+          "category": "Reactive",
+          "input": "verificar sincronizacion con peers de federacion",
+          "latency_ms": 4264.9,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r06",
+          "category": "Reactive",
+          "input": "diagnosticar contencion en el mutex de onnx",
+          "latency_ms": 3701.91,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r07",
+          "category": "Reactive",
+          "input": "validar firmas ed25519 de la sesion actual",
+          "latency_ms": 3724.52,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r12",
+          "category": "Reactive",
+          "input": "inspeccionar alertas de seguridad activas",
+          "latency_ms": 3251.14,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p07",
+          "category": "Proactive",
+          "input": "analizar y estructurar nuevo dataset de fine-tuning para sllm",
+          "latency_ms": 91.18,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p08",
+          "category": "Proactive",
+          "input": "generar plan de ejecucion distribuida para procesamiento por lotes",
+          "latency_ms": 81.56,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p09",
+          "category": "Proactive",
+          "input": "reconciliar estados divergentes entre nodos de silva y proponer nodo de sintesis",
+          "latency_ms": 85.64,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p10",
+          "category": "Proactive",
+          "input": "coordinar ciclo deliberativo multi-agente en canal de coloquio",
+          "latency_ms": 99.8,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r13",
+          "category": "Reactive",
+          "input": "verificar cobertura de pruebas en crates del kernel",
+          "latency_ms": 3653.51,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r14",
+          "category": "Reactive",
+          "input": "comprobar estado de cuarentena en silva",
+          "latency_ms": 3633.44,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_r15",
+          "category": "Reactive",
+          "input": "diagnosticar rendimiento de serializacion json rpc",
+          "latency_ms": 3549.01,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p14",
+          "category": "Proactive",
+          "input": "planificar rebalanceo de carga entre instancias de tylluan-link",
+          "latency_ms": 87.88,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p15",
+          "category": "Proactive",
+          "input": "evaluar impacto de complejidad y riesgo para despacho en cognitive scheduler",
+          "latency_ms": 96.12,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p16",
+          "category": "Proactive",
+          "input": "generar sintesis ejecutiva de episodios recientes de coloquio para silva",
+          "latency_ms": 84.96,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p03",
+          "category": "Proactive",
+          "input": "coordinar despacho remoto a peer mesh con capacidad gpu disponible",
+          "latency_ms": 3086.46,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p04",
+          "category": "Proactive",
+          "input": "generar reporte de estado cognitivo y salud de la federacion",
+          "latency_ms": 3391.78,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p05",
+          "category": "Proactive",
+          "input": "evaluar y recalibrar parametros de decaimiento fsrs para memoria episódica",
+          "latency_ms": 3252.33,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p06",
+          "category": "Proactive",
+          "input": "orquestar sincronizacion bilateral con peer remoto usando noise xk",
+          "latency_ms": 3160.6,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p11",
+          "category": "Proactive",
+          "input": "estructurar y registrar nuevo contrato bounded work contract",
+          "latency_ms": 2795.03,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p12",
+          "category": "Proactive",
+          "input": "auditar cumplimiento de invariantes de seguridad en toda la red mesh",
+          "latency_ms": 3120.28,
+          "success": true,
+          "status_code": 200
+        },
+        {
+          "type": "do",
+          "id": "do_p13",
+          "category": "Proactive",
+          "input": "optimizar distribucion de indices hnsw y fts5 para acelerar retrieval",
+          "latency_ms": 3242.74,
+          "success": true,
+          "status_code": 200
+        }
+      ]
+    }
+  ]
+}
