@@ -1823,11 +1823,20 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         let db = SilvaDB::in_memory().await.unwrap();
         let conn_lock = db.conn_lock();
         let (w_before, a_before) = db.sqlite_lock_wait_snapshot();
+        // Deterministic handoff instead of a fixed sleep (flaky on a loaded
+        // machine: a 50ms sleep is not a guarantee the holder thread has
+        // actually acquired the lock yet -- found failing in CI, 2026-10-01,
+        // got 0ms queueing because the main thread raced the holder).
+        let holder_has_lock = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = std::sync::Arc::clone(&holder_has_lock);
         let holder = std::thread::spawn(move || {
             let _guard = conn_lock.blocking_lock();
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
             std::thread::sleep(std::time::Duration::from_millis(300));
         });
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        while !holder_has_lock.load(std::sync::atomic::Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         tokio::task::block_in_place(|| {
             let _g = db.conn_timed();
         });
