@@ -262,6 +262,20 @@ impl CoherenceGate {
         let mut survivors = Vec::with_capacity(total);
         let mut penalized_nodes = Vec::new();
 
+        // P1-1 (2026-10-01): ONE batched round trip for the whole candidate
+        // set instead of one SELECT per candidate inside the loop (N+1). The
+        // per-node lookup below falls back to "no embedding" semantics for
+        // any id missing from the map — identical behavior to the old
+        // per-id `Ok(None)` case.
+        let node_embeddings: std::collections::HashMap<String, Vec<f32>> =
+            if query_embedding.is_some() && !results.is_empty() {
+                let ids: Vec<String> = results.iter().map(|(n, _)| n.id.clone()).collect();
+                silva.get_node_embeddings_batch(&ids).await
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashMap::new()
+            };
+
         for (node, mut score) in results {
             if matches_injection_pattern(&node.content) {
                 eliminated += 1;
@@ -276,9 +290,9 @@ impl CoherenceGate {
             }
 
             if let Some(q_emb) = query_embedding
-                && let Ok(Some(node_emb)) = silva.get_node_embedding(&node.id).await
+                && let Some(node_emb) = node_embeddings.get(&node.id)
             {
-                let cosim = crate::memory::cosine::cosine_similarity(q_emb, &node_emb);
+                let cosim = crate::memory::cosine::cosine_similarity(q_emb, node_emb);
                 if cosim < COHERENCE_THRESHOLD {
                     score *= SEMANTIC_PENALTY;
                     node_penalized = true;
@@ -350,10 +364,23 @@ impl CoherenceGate {
             let mut cosines: Vec<f32> = Vec::with_capacity(survivors_clone.len());
             let scores: Vec<f32> = survivors_clone.iter().map(|(_, s)| *s).collect();
 
+            // P1-1: same batching as the deterministic gate — one IN-query
+            // for all survivors instead of N awaited per-id SELECTs inside
+            // the spawned task. Missing ids default to cosim 1.0, exactly
+            // like the old per-id `Ok(None)` branch.
+            let survivor_embeddings: std::collections::HashMap<String, Vec<f32>> =
+                if query_embedding.is_some() {
+                    let ids: Vec<String> = survivors_clone.iter().map(|(n, _)| n.id.clone()).collect();
+                    silva.get_node_embeddings_batch(&ids).await
+                        .unwrap_or_default()
+                } else {
+                    std::collections::HashMap::new()
+                };
+
             for (node, _score) in &survivors_clone {
                 let cosim: f32 = if let Some(ref q_emb) = query_embedding {
-                    if let Ok(Some(node_emb)) = silva.get_node_embedding(&node.id).await {
-                        crate::memory::cosine::cosine_similarity(q_emb, &node_emb)
+                    if let Some(node_emb) = survivor_embeddings.get(&node.id) {
+                        crate::memory::cosine::cosine_similarity(q_emb, node_emb)
                     } else { 1.0 }
                 } else { 1.0 };
 
@@ -477,6 +504,64 @@ mod tests {
             content_hash: String::new(),
             provenance: provenance.to_string(),
         }
+    }
+
+    /// P1-1: with query embeddings in play, the gate must fetch ALL candidate
+    /// embeddings in ONE batch round trip — not one SELECT per candidate
+    /// (N+1). `SilvaDB::embedding_fetch_batch_size` is the last batch size,
+    /// set only by `get_node_embeddings_batch`, so reaching it with size N
+    /// (and the penalized outcome below) proves the new path is live.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn gate_fetches_embeddings_in_one_batch_round_trip() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        for id in ["a", "b", "c", "d"] {
+            db.upsert_node(id, "concept", "content of {id}", "{}").await.unwrap();
+            db.save_embedding(id, &[1.0, 0.0, 0.0], "test-model", None).await.unwrap();
+        }
+        let results = vec![
+            (node("a", "alpha", "unverified", 1.0), 0.9),
+            (node("b", "beta", "unverified", 1.0), 0.9),
+            (node("c", "gamma", "unverified", 1.0), 0.9),
+            (node("d", "delta", "unverified", 1.0), 0.9),
+        ];
+        // Query embedding orthogonal to the node embeddings: every candidate
+        // lands below COHERENCE_THRESHOLD and must be penalized (proves the
+        // batch map actually feeds the cosine check).
+        let q_emb = [0.0f32, 1.0, 0.0];
+        let (survivors, stats) = CoherenceGate::filter(results, &db, Some(&q_emb)).await;
+        assert_eq!(survivors.len(), 4, "penalized nodes survive, not eliminated");
+        assert_eq!(stats.penalized, 4, "all 4 must be semantically penalized via the batch map");
+        for (n, s) in &survivors {
+            assert!((s - 0.09).abs() < 1e-5, "node {} must carry the x0.1 penalty, got {}", n.id, s);
+        }
+        assert_eq!(
+            db.embedding_fetch_batch_size.load(std::sync::atomic::Ordering::Relaxed),
+            4,
+            "the gate must fetch all 4 candidate embeddings in ONE batch call"
+        );
+    }
+
+    /// P1-1 regression: candidates WITHOUT a stored embedding must keep the
+    /// legacy behavior — no penalty (old per-id path returned Ok(None) and
+    /// skipped the cosine check entirely).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn candidates_without_embedding_are_not_penalized() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("has_emb", "concept", "content of has_emb", "{}").await.unwrap();
+        db.save_embedding("has_emb", &[1.0, 0.0, 0.0], "test-model", None).await.unwrap();
+        let results = vec![
+            (node("has_emb", "with embedding", "unverified", 1.0), 0.9),
+            (node("no_emb", "without embedding", "unverified", 1.0), 0.9),
+        ];
+        let q_emb = [0.0f32, 1.0, 0.0];
+        let (survivors, stats) = CoherenceGate::filter(results, &db, Some(&q_emb)).await;
+        assert_eq!(survivors.len(), 2);
+        let scores: Vec<(String, f32)> = survivors.iter().map(|(n, s)| (n.id.clone(), *s)).collect();
+        let with_emb = &scores.iter().find(|(id, _)| id == "has_emb").unwrap().1;
+        let without_emb = &scores.iter().find(|(id, _)| id == "no_emb").unwrap().1;
+        assert!((with_emb - 0.09).abs() < 1e-5, "embedded node penalized, got {with_emb}");
+        assert!((*without_emb - 0.9).abs() < 1e-5, "node without embedding must NOT be penalized, got {without_emb}");
+        assert_eq!(stats.penalized, 1);
     }
 
     #[tokio::test(flavor = "multi_thread")]
