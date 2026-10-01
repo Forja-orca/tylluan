@@ -31,8 +31,13 @@ pub enum RetrievalTier { Fast, Balanced, Deep }
 pub fn classify_query_tier(query: &str) -> RetrievalTier {
     let tokens = query.split_whitespace().count();
     let entropy = shannon_entropy_text(query);
+    // P1-2 (2026-10-01): the first arm now returns Fast, as the docstring
+    // always described. It previously fell through to Balanced, so
+    // RetrievalTier::Fast was never constructed and the BM25-only path
+    // (search_fast, wired at the tier dispatch) was dead code — every short
+    // query paid the embedding/fusion cost the Fast tier exists to skip.
     match (tokens, entropy) {
-        (t, e) if t <= 3 && e < 3.0 => RetrievalTier::Balanced,
+        (t, e) if t <= 3 && e < 3.0 => RetrievalTier::Fast,
         (t, e) if t <= 8 && e < 4.5 => RetrievalTier::Balanced,
         _ => RetrievalTier::Deep,
     }
@@ -577,6 +582,41 @@ mod tests {
         assert_eq!(sanitize_fts_query("hello AND world"), "hello AND world");
         assert_eq!(sanitize_fts_query("test(){}*"), "test");
         assert_eq!(sanitize_fts_query("  spaces  "), "spaces");
+    }
+
+    /// P1-2: the Fast tier must actually be constructed for short,
+    /// low-entropy queries (it never was — both arms returned Balanced and
+    /// search_fast was dead code).
+    #[test]
+    fn test_classify_tier_fast_is_reachable() {
+        // 1 token, 2 distinct chars: entropy log2(2) = 1.0 < 3.0 → Fast.
+        assert_eq!(classify_query_tier("ab"), RetrievalTier::Fast);
+        // 1 token, 5 distinct chars: entropy log2(5) ≈ 2.32 < 3.0 → Fast.
+        assert_eq!(classify_query_tier("hello"), RetrievalTier::Fast);
+        // 2 tokens, entropy ≈ 3.95 (>= 3.0): not Fast → Balanced.
+        assert_eq!(classify_query_tier("machine learning"), RetrievalTier::Balanced);
+        // 9 tokens: above the Balanced token budget → Deep regardless.
+        assert_eq!(classify_query_tier("a b c d e f g h i"), RetrievalTier::Deep);
+    }
+
+    /// P1-2 end-to-end: a short low-entropy query must take the BM25-only
+    /// Fast path (scores fixed at 1.0, no fusion) even when a query embedding
+    /// is supplied — that skip is the entire point of the tier.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fast_tier_routes_to_bm25_only() {
+        let mem = test_memory().await;
+        mem.add_document("rust programming language", "{}", None).await.unwrap();
+        mem.add_document("rust cargo build", "{}", None).await.unwrap();
+        mem.add_document("unrelated content", "{}", None).await.unwrap();
+        // "rust": 1 token, 4 distinct chars, entropy log2(4) = 2.0 < 3.0 → Fast.
+        assert_eq!(classify_query_tier("rust"), RetrievalTier::Fast);
+        let emb = vec![1.0_f32, 0.0, 0.0];
+        let results = mem.search("rust", Some(&emb), 5).await.unwrap();
+        assert!(!results.is_empty(), "BM25-only Fast path must return FTS matches");
+        assert!(results.iter().all(|d| (d.score - 1.0).abs() < 1e-5),
+            "Fast path scores are flat 1.0 (no RRF fusion), got {:?}", results.iter().map(|d| d.score).collect::<Vec<_>>());
+        assert!(results.iter().all(|d| d.content.contains("rust")),
+            "only the two rust docs match, no fusion noise");
     }
 
     #[tokio::test(flavor = "multi_thread")]
