@@ -399,6 +399,48 @@ impl super::SilvaDB {
         })
     }
 
+    /// Batch variant of `get_node_embedding` for the recall hot path: one
+    /// `WHERE node_id IN (...)` round trip instead of N per-id queries
+    /// (CoherenceGate used to issue one SELECT per candidate — P1-1). Returns
+    /// ONLY the ids that have an embedding row; callers treat a missing id
+    /// exactly as the old `Ok(None)` case. Duplicate ids in the input are
+    /// harmless (last row wins in the map). Test-visible batch size is
+    /// tracked in `embedding_fetch_batch_size` so the gate tests can prove
+    /// the single-round-trip invariant.
+    pub async fn get_node_embeddings_batch(
+        &self,
+        node_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<f32>>> {
+        if node_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        self.embedding_fetch_batch_size
+            .store(node_ids.len(), std::sync::atomic::Ordering::Relaxed);
+        let placeholders: String = (1..=node_ids.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})"
+        );
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare(&sql)?;
+            let mut rows = stmt.query(rusqlite::params_from_iter(node_ids.iter()))?;
+            let mut out = std::collections::HashMap::with_capacity(node_ids.len());
+            while let Some(row) = rows.next()? {
+                let id: String = row.get(0)?;
+                let bytes: Vec<u8> = row.get(1)?;
+                let vector: Vec<f32> = bytes
+                    .chunks_exact(4)
+                    .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk should be exactly 4 bytes")))
+                    .collect();
+                out.insert(id, vector);
+            }
+            Ok(out)
+        })
+    }
+
     /// Get the embedding model_name for a node, if one exists.
     pub async fn get_node_embedding_model(&self, node_id: &str) -> Result<Option<String>> {
         tokio::task::block_in_place(|| {
