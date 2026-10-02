@@ -226,6 +226,22 @@ Si se revisita el batching, necesita colas por clase de call-site (recall
 vs routing) o integración con la LRU cache — un solo batcher global
 acoplado a la cola acotada actual degrada más de lo que salva.
 
+**Phase 0 del pool SQLite (2026-10-01, `b2a5b89`, decisión con dato):**
+tercera corrida del mismo harness (`results_concurrent_20261001_214442.json`,
+kernel `f547c8c` con la telemetría de espera del Mutex de conexión) para
+decidir si el read-pool se justificaba. Espera SQLite medida en el camino
+caliente de recall (search_hybrid/local_query_graph/get_node/upsert_node):
+C=1 → **0ms** en todo el cell; C=4 → ~4.4ms por log de stage; C=8 →
+~31ms por log. Con recall p50 de 84s en C=8, la espera SQLite es
+**<0.1% del p50** — el Mutex de conexión NO es el cuello de botella; lo
+es el Mutex del modelo ONNX (5s/embed, cola en C≥4). **Decisión: no se
+construye read-pool por ahora**; el diseño queda documentado (Buffy T860:
+1 writer + 3 readers `query_only=1`, kill switch) para cuando el embed
+deje de dominar. Caveat declarado: la telemetría cubre los sitios
+cableados (cota inferior) y los deltas por stage son acumulativos por
+request — el orden de magnitud no cambia ni un 10x de error lo acercaría
+a la cola del embed.
+
 ---
 
 ## MD-6 · Drift narrativo de cifras canónicas — `ABIERTO`, con instancia viva hoy

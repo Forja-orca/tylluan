@@ -1,10 +1,10 @@
 # Tylluan Kernel: CPU Latency Baseline & Multi-Condition SLO Report
 
-**Date:** 2026-09-28 23:38:58 UTC  
+**Date:** 2026-10-01 21:44:42 UTC  
 **Kernel Target:** `http://127.0.0.1:47005`  
-**Kernel Build:** Version `0.17.0` | Commit `0d46c4d`  
+**Kernel Build:** Version `0.17.0` | Commit `f547c8c`  
 **Execution Environment:** CPU-only (`AMD64`, `Windows 11`) — No GPU offloading  
-**Raw Telemetry Artifact:** [`benchmarks/latency/results_concurrent_20260928_233858.json`](file:///E:/tylluan/benchmarks/latency/results_concurrent_20260928_233858.json)  
+**Raw Telemetry Artifact:** [`benchmarks/latency/results_concurrent_20261001_214442.json`](file:///E:/tylluan/benchmarks/latency/results_concurrent_20261001_214442.json)  
 
 ---
 
@@ -21,12 +21,12 @@ Each condition executes **100 live requests** (50 recall + 50 do) against the ke
 
 | Operation | Condition | p50 (ms) | p90 (ms) | p95 (ms) | p99 (ms) | Mean $\pm$ StdDev (ms) | Throughput (QPS) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`tylluan_recall`** | **warm idle (C=1)** | **12617.3** | 15449.1 | **18340.0** | **19417.2** | 13077.3 $\pm$ 2085.6 | 0.08 |
-| **`tylluan_recall`** | **warm loaded (C=4)** | **25002.7** | 32976.1 | **35461.2** | **43714.2** | 25180.0 $\pm$ 7024.4 | 0.15 |
-| **`tylluan_recall`** | **warm loaded (C=8)** | **78471.6** | 160605.6 | **194689.3** | **235997.3** | 89543.4 $\pm$ 52005.0 | 0.08 |
-| **`tylluan_do`** | **warm idle (C=1)** | **1318.9** | 3712.2 | **4369.9** | **4790.6** | 1737.8 $\pm$ 1092.5 | 0.58 |
-| **`tylluan_do`** | **warm loaded (C=4)** | **3225.9** | 7699.4 | **10947.7** | **13324.7** | 4133.9 $\pm$ 3230.5 | 0.91 |
-| **`tylluan_do`** | **warm loaded (C=8)** | **6882.9** | 25004.3 | **26259.1** | **27991.3** | 12230.9 $\pm$ 9425.3 | 0.59 |
+| **`tylluan_recall`** | **warm idle (C=1)** | **9472.4** | 10905.1 | **11585.9** | **12456.2** | 8968.0 $\pm$ 2073.8 | 0.11 |
+| **`tylluan_recall`** | **warm loaded (C=4)** | **23774.3** | 32524.8 | **34141.3** | **44026.9** | 21604.4 $\pm$ 10023.4 | 0.18 |
+| **`tylluan_recall`** | **warm loaded (C=8)** | **33826.2** | 61383.7 | **66838.2** | **75686.2** | 35781.7 $\pm$ 17378.4 | 0.21 |
+| **`tylluan_do`** | **warm idle (C=1)** | **570.8** | 1165.6 | **1210.8** | **1719.2** | 643.5 $\pm$ 356.4 | 1.55 |
+| **`tylluan_do`** | **warm loaded (C=4)** | **1414.1** | 1733.1 | **1775.7** | **1794.5** | 989.4 $\pm$ 731.8 | 3.86 |
+| **`tylluan_do`** | **warm loaded (C=8)** | **246.9** | 3658.3 | **3756.3** | **4043.6** | 1457.6 $\pm$ 1572.8 | 4.75 |
 
 ---
 
@@ -36,29 +36,29 @@ Each condition executes **100 live requests** (50 recall + 50 do) against the ke
 
 | Query Length | Condition | p50 (ms) | p90 (ms) | p95 (ms) | p99 (ms) | Mean (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Short (1-3 words)** | warm idle (C=1) | 12044.2 | 13182.3 | 13446.4 | 13477.3 | 12154.7 |
-| | warm loaded (C=4) | 22448.0 | 27992.3 | 30435.2 | 37698.7 | 21441.4 |
-| | warm loaded (C=8) | 100605.8 | 172835.4 | 194433.8 | 208414.2 | 100667.9 |
-| **Medium (4-8 words)** | warm idle (C=1) | 12386.9 | 13555.5 | 13951.6 | 14970.8 | 12553.7 |
-| | warm loaded (C=4) | 24965.6 | 30795.3 | 31246.3 | 32483.4 | 24619.9 |
-| | warm loaded (C=8) | 77437.0 | 139141.7 | 168140.5 | 240940.6 | 87878.1 |
-| **Long (9+ words)** | warm idle (C=1) | 13389.6 | 18731.9 | 19182.7 | 19724.0 | 14613.8 |
-| | warm loaded (C=4) | 29019.5 | 35394.2 | 38985.6 | 45996.4 | 29747.3 |
-| | warm loaded (C=8) | 62086.3 | 134129.7 | 170010.5 | 192780.4 | 79492.9 |
+| **Short (1-3 words)** | warm idle (C=1) | 10013.8 | 11445.4 | 12187.4 | 12742.4 | 9868.1 |
+| | warm loaded (C=4) | 27437.8 | 37916.1 | 43599.7 | 44481.7 | 24981.0 |
+| | warm loaded (C=8) | 28504.5 | 59807.8 | 65640.2 | 72756.9 | 32708.6 |
+| **Medium (4-8 words)** | warm idle (C=1) | 9768.1 | 10964.7 | 11264.7 | 11852.0 | 9740.0 |
+| | warm loaded (C=4) | 23596.9 | 27515.7 | 29801.5 | 30735.0 | 20001.0 |
+| | warm loaded (C=8) | 34129.5 | 64724.8 | 71068.6 | 75646.7 | 38281.3 |
+| **Long (9+ words)** | warm idle (C=1) | 6117.6 | 10462.7 | 10578.6 | 10612.3 | 7191.6 |
+| | warm loaded (C=4) | 24124.4 | 27274.7 | 29223.6 | 31834.2 | 19720.2 |
+| | warm loaded (C=8) | 34263.4 | 54111.5 | 55728.9 | 58708.5 | 36390.9 |
 
 ### B. `tylluan_do` Under Concurrency
 
 | Intent Category | Condition | p50 (ms) | p90 (ms) | p95 (ms) | p99 (ms) | Mean (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Direct** | warm idle (C=1) | 2151.3 | 4618.1 | 4724.0 | 4861.4 | 2418.3 |
-| | warm loaded (C=4) | 1854.6 | 6116.9 | 6470.2 | 7384.0 | 2988.7 |
-| | warm loaded (C=8) | 6887.6 | 21189.9 | 22342.4 | 22858.0 | 10571.8 |
-| **Reactive** | warm idle (C=1) | 1644.8 | 2092.3 | 2199.0 | 2415.8 | 1458.5 |
-| | warm loaded (C=4) | 5274.4 | 11960.3 | 13168.5 | 13491.0 | 5537.4 |
-| | warm loaded (C=8) | 4928.0 | 25974.0 | 27152.4 | 27869.5 | 12828.0 |
-| **Proactive** | warm idle (C=1) | 1184.2 | 1801.1 | 2243.5 | 2684.6 | 1311.6 |
-| | warm loaded (C=4) | 3225.9 | 6290.7 | 6691.5 | 7546.1 | 3859.5 |
-| | warm loaded (C=8) | 12851.5 | 25204.2 | 26063.7 | 27558.0 | 13359.3 |
+| **Direct** | warm idle (C=1) | 546.2 | 626.9 | 949.7 | 1943.5 | 564.8 |
+| | warm loaded (C=4) | 1227.3 | 1628.8 | 1706.0 | 1711.6 | 925.0 |
+| | warm loaded (C=8) | 266.6 | 3056.0 | 3396.6 | 3705.1 | 1139.5 |
+| **Reactive** | warm idle (C=1) | 550.7 | 957.2 | 1220.0 | 1225.8 | 611.1 |
+| | warm loaded (C=4) | 1604.1 | 1774.3 | 1784.1 | 1797.5 | 1207.8 |
+| | warm loaded (C=8) | 160.2 | 3760.0 | 3903.6 | 4192.6 | 1796.5 |
+| **Proactive** | warm idle (C=1) | 794.5 | 1168.4 | 1179.3 | 1197.2 | 761.6 |
+| | warm loaded (C=4) | 752.7 | 1719.8 | 1746.4 | 1779.6 | 825.8 |
+| | warm loaded (C=8) | 146.2 | 3247.5 | 3287.2 | 3370.9 | 1435.5 |
 
 ---
 
@@ -66,7 +66,7 @@ Each condition executes **100 live requests** (50 recall + 50 do) against the ke
 
 1. **BGE-M3 Mutex Serialization on `tylluan_recall`:**
    - **Mechanism:** In `crates/tylluan-kernel/src/router/embeddings.rs:24`, the ONNX `TextEmbedding` session is guarded by a single standard `Mutex<TextEmbedding>`.
-   - **Impact Under Load:** When 4 to 8 agents issue concurrent recall requests, the embedding forward pass cannot execute in parallel on CPU. Invocations are serialized in a FIFO queue. Client-perceived wall-clock latency scales approximately linearly with concurrency ($T_{obs} \approx C \times T_{embed}$), driving $p95$ recall latency from **~18340.0ms (idle)** up to **~194689.3ms (8 agents)**.
+   - **Impact Under Load:** When 4 to 8 agents issue concurrent recall requests, the embedding forward pass cannot execute in parallel on CPU. Invocations are serialized in a FIFO queue. Client-perceived wall-clock latency scales approximately linearly with concurrency ($T_{obs} \approx C \times T_{embed}$), driving $p95$ recall latency from **~11585.9ms (idle)** up to **~66838.2ms (8 agents)**.
    - **Long-Tail Amplification:** Long queries (16+ tokens) holding the mutex for ~5s create transient head-of-line blocking for subsequent short queries.
 
 2. **Scaling Properties of `tylluan_do`:**
@@ -74,7 +74,7 @@ Each condition executes **100 live requests** (50 recall + 50 do) against the ke
    - **Impact Under Load:** `tylluan_do` handles concurrency gracefully ($p50$ remains sub-250ms even under 8 concurrent agents), except when invoking guilds that perform write transactions on SQLite (`audit.db` or `silva.db`) where SQLite busy lock retries occur.
 
 3. **Throughput Ceiling on Single CPU Core Node:**
-   - The effective recall throughput is bounded at **~0.15 QPS** on CPU, confirming that increasing client concurrency does not increase embedding throughput without model-level batching or threadpool sharding.
+   - The effective recall throughput is bounded at **~0.18 QPS** on CPU, confirming that increasing client concurrency does not increase embedding throughput without model-level batching or threadpool sharding.
 
 ---
 
