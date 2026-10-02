@@ -1072,6 +1072,79 @@ async fn test_cleanup_orphan_nodes() {
     assert!(db.get_node("identity_orphan").await.unwrap().is_some());
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_apply_cleanup_sweeps_orphan_node_embeddings() {
+    let db = test_silva().await;
+    db.upsert_node("victim", "concept", "Doomed Node", "{}").await.unwrap();
+    db.upsert_node("keeper", "concept", "Alive Node", "{}").await.unwrap();
+
+    // 64 f32 little-endian values — enough for both satellite tables.
+    let blob: Vec<u8> = (0..64u32).flat_map(|i| (i as f32).to_le_bytes()).collect();
+    {
+        let conn = db.conn.lock().await;
+        // Dense embeddings for both live nodes...
+        conn.execute(
+            "INSERT INTO node_embeddings(node_id, embedding) VALUES('victim', ?1)",
+            rusqlite::params![blob],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO node_embeddings(node_id, embedding) VALUES('keeper', ?1)",
+            rusqlite::params![blob],
+        ).unwrap();
+        // ...plus a pre-existing dense orphan ('ghost'). The vendored SQLite
+        // build has FKs ON by default (libsqlite3-sys SQLITE_DEFAULT_FOREIGN_KEYS=1),
+        // so a dense orphan can only exist under a relaxed regime — toggle FKs
+        // off for the insert to simulate exactly that (legacy DB rows, a
+        // system-sqlite build, or a future toolchain change), then restore.
+        conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+        conn.execute(
+            "INSERT INTO node_embeddings(node_id, embedding) VALUES('ghost', ?1)",
+            rusqlite::params![blob],
+        ).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        // And the same ghost on the sparse table (that sweep already worked —
+        // guards against dropping it in a future refactor).
+        conn.execute(
+            "INSERT INTO node_sparse_embeddings(node_id, indices, vals) VALUES('ghost', x'', x'')",
+            [],
+        ).unwrap();
+        // Push victim below the cleanup threshold.
+        conn.execute("UPDATE nodes SET weight = 0.01 WHERE id = 'victim'", []).unwrap();
+    }
+
+    let deleted = db.apply_cleanup(0.05).await.unwrap();
+    assert_eq!(deleted, 1, "only the low-weight victim node must be deleted");
+    assert!(db.get_node("victim").await.unwrap().is_none());
+    assert!(db.get_node("keeper").await.unwrap().is_some());
+
+    // THE fix under test: apply_cleanup must sweep BOTH satellite tables —
+    // rows orphaned by this very pass (victim, also covered by the FK CASCADE
+    // under the vendored build) and pre-existing ghosts outside the FK's reach.
+    // The sparse sweep is not optional either: that table has NO foreign key at
+    // all (schema v24), so without the explicit DELETE its orphans accumulate.
+    {
+        let conn = db.conn.lock().await;
+        let dense_orphans: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+            [],
+            |r| r.get(0),
+        ).unwrap();
+        let sparse_orphans: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+            [],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(dense_orphans, 0, "dense orphans (victim + ghost) must be swept");
+        assert_eq!(sparse_orphans, 0, "sparse orphans must still be swept");
+        let keeper_dense: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM node_embeddings WHERE node_id = 'keeper'",
+            [],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(keeper_dense, 1, "surviving node's dense embedding must not be touched");
+    }
+}
+
 #[test]
 fn test_build_contextual_text_with_source_and_heading() {
     use crate::memory::silva::nodes::build_contextual_text;
