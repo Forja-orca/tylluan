@@ -21,3 +21,7 @@
 - [ADR-016 — NVIDIA OpenShell Runtime](ADR016_nvidia_openshell_runtime.md) — 2026-09-29. NO-GO como dependencia (exige contenedor/MicroVM, rompe perfil `portable` y ARM64/Pi 4); GO para receta de despliegue opcional y 3 patrones de diseño. Lectura estratégica: el sandboxing de agentes se comoditiza — el diferenciador es la memoria, no el aislamiento.
 
 > Índice actualizado 2026-09-29 con ADR-016.
+
+- [ADR-017 - Batchers de embeddings por clase de call-site](ADR017_embedding_batcher_classes.md) - 2026-10-01. DISENO (no implementado): 3 clases (RECALL/ROUTING/BACKGROUND) en vez del batcher global unico que midio peor en 5 de 8 celdas; + LRU warm-start de anchors al boot; gates de medicion por fase; read-pool SQLite descartado con dato (Phase 0).
+
+> Indice actualizado 2026-10-01 con ADR-017.
