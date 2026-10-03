@@ -155,6 +155,12 @@ pub struct EmbeddingEngine {
     cache: Mutex<LruCache<String, Vec<f32>>>,
     /// Coalescing batcher (lazy-spawned when `embed_batching_enabled` is on).
     batcher: Mutex<Option<Arc<EmbedBatcher>>>,
+    /// ADR-017 F1: batcher de la clase ROUTING (fallback semántico de do,
+    /// anchors, DCR) — ventana y lote propios, separado del batcher global
+    /// de recall para eliminar el head-of-line blocking cruzado medido en la
+    /// RUN2 del harness (do p50 ×10 con el batcher único). Lazy, solo si
+    /// `[silva] embed_batching_routing_enabled` está on.
+    routing_batcher: Mutex<Option<Arc<EmbedBatcher>>>,
 }
 
 /// Resolve fastembed model enum from config string.
@@ -268,6 +274,7 @@ impl EmbeddingEngine {
             dimension,
             cache: Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())),
             batcher: Mutex::new(None),
+            routing_batcher: Mutex::new(None),
         })
     }
 
@@ -351,6 +358,56 @@ impl EmbeddingEngine {
             .ok()
             .map(|cfg| cfg.try_read().ok().map(|g| g.silva.embed_batching_enabled).unwrap_or(false))
             .unwrap_or(false)
+    }
+
+    /// ADR-017 F1: entry point de la clase ROUTING. Gated por
+    /// `[silva] embed_batching_routing_enabled` (independiente del master de
+    /// recall): cuando está off degrada a `embed()` — comportamiento exacto
+    /// de producción actual. Cuando está on, coalesce los embeds cortos de
+    /// routing en su PROPIA ventana (75ms, lote 32; valor inicial a calibrar
+    /// empíricamente según ADR-017 §3/F1). Invariante del ADR: ningún rechazo
+    /// deja datos a medias — si la cola falla, cae a embed directo con warn,
+    /// nunca devuelve error hacia arriba.
+    pub fn embed_batch_coalesced_routing(self: &Arc<Self>, text: &str) -> Result<Vec<f32>> {
+        if !Self::routing_batching_enabled() {
+            return self.embed(text);
+        }
+        match self.routing_shared_batcher().and_then(|b| b.embed_one(text.to_string())) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                warn!("routing batcher fallback: {e} (embed directo, sin pérdida)");
+                self.embed(text)
+            }
+        }
+    }
+
+    /// Flag de la clase ROUTING (ADR-017 F1). Fail-safe off.
+    fn routing_batching_enabled() -> bool {
+        crate::config::TylluanConfig::load_cached()
+            .ok()
+            .map(|cfg| cfg.try_read().ok().map(|g| g.silva.embed_batching_routing_enabled).unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    /// Get-or-spawn del batcher ROUTING (ventana 75ms, lote 32 — punto de
+    /// calibración de F1; el segundo valor se medirá en el gate).
+    fn routing_shared_batcher(self: &Arc<Self>) -> Result<Arc<EmbedBatcher>> {
+        {
+            let guard = self.routing_batcher.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(b) = guard.as_ref() {
+                return Ok(Arc::clone(b));
+            }
+        }
+        let engine = Arc::clone(self);
+        let (batcher, handle) = EmbedBatcher::spawn(engine, 32, 75)?;
+        let _ = handle;
+        let arc = Arc::new(batcher);
+        if let Ok(mut guard) = self.routing_batcher.lock()
+            && guard.is_none()
+        {
+            *guard = Some(Arc::clone(&arc));
+        }
+        Ok(arc)
     }
 
     /// Get-or-spawn the shared coalescing batcher (lazy; only called when
