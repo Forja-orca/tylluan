@@ -59,15 +59,38 @@ impl FrictionStore {
 // Backward-compatible helpers — delegate to FrictionStore internally
 // ---------------------------------------------------------------------------
 
-/// Test-only override for the friction DB path. Every lib test that touches
-/// friction log writes to its OWN temp DB (see the tests module) so the suite
-/// never contends with the live kernel, which holds `./data/audit.db` open and
-/// writes friction entries on every tool call. TEST_MUTEX serializes the tests
-/// among themselves but cannot serialize them against another process — that
-/// cross-process contention was the root cause of the flaky
-/// "friction open: unable to open database file: ./data/audit.db" failures.
+// Test-only override for the friction DB path — THREAD-LOCAL (2026-10-03,
+// root cause of the security::llm_examples flake). The previous GLOBAL
+// Mutex<Option<PathBuf>> meant ANY friction/example write from a thread
+// that never opted into the test-DB protocol (production code exercised by
+// another test: handler_do routing friction, matcher tiebreak) resolved to
+// the LAST participant's unique DB and corrupted its exact-count assertions
+// (stats.total == 40, agreement 1/3). Thread-local scoping guarantees a
+// non-participant thread NEVER sees another test's DB. TEST_MUTEX still
+// serializes the participating tests among themselves (belt and suspenders).
 #[cfg(test)]
-static TEST_DB_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+thread_local! {
+    static TEST_DB_PATH: std::cell::RefCell<Option<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Per-process scratch DB for test builds: where friction/example writes
+/// land from threads that never called `set_unique_test_db()`. Never
+/// `./data/audit.db` (the live kernel holds it — the original cross-process
+/// flake) and never another test's unique DB. Every writer to it is
+/// best-effort (`let _ = log_*`), so contention on it is harmless.
+#[cfg(test)]
+fn test_scratch_db_path() -> std::path::PathBuf {
+    static SCRATCH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    SCRATCH
+        .get_or_init(|| {
+            std::env::temp_dir().join(format!(
+                "tylluan_friction_scratch_{}.db",
+                std::process::id()
+            ))
+        })
+        .clone()
+}
 
 /// Serializa los tests que escriben a la DB de test (friction_log,
 /// llm_examples, router matcher): TODOS apuntan al mismo TEST_DB_PATH global,
@@ -80,10 +103,11 @@ pub(crate) static TEST_DB_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(()
 static TEST_COUNTER: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-/// Point every friction write at a dedicated temp DB (unique within the
-/// process). Production keeps `./data/audit.db`; tests never touch it, so the
-/// live kernel can hold it without flaking us. Visible to other modules'
-/// tests (e.g. router::matcher) whose code paths log friction events.
+/// Point every friction write on THIS thread at a dedicated temp DB (one per
+/// test, unique within the process). Production keeps `./data/audit.db`;
+/// tests never touch it, so the live kernel can hold it without flaking us.
+/// Visible to other modules' tests (e.g. router::matcher) whose code paths
+/// log friction events.
 #[cfg(test)]
 pub(crate) fn set_unique_test_db() {
     let n = TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -92,20 +116,28 @@ pub(crate) fn set_unique_test_db() {
         std::process::id(),
         n
     ));
-    *TEST_DB_PATH.lock().unwrap() = Some(path);
+    TEST_DB_PATH.with(|c| *c.borrow_mut() = Some(path));
 }
 
-/// Resolve the friction DB path. Tests may redirect it via
-/// `set_unique_test_db()`; other modules (e.g. `llm_examples`) reuse it so
-/// all audit-style writes share the same DB and test isolation.
+/// Resolve the friction DB path.
+/// - Production: `./data/audit.db` (unchanged).
+/// - Test builds, thread that opted in (`set_unique_test_db()` on THIS
+///   thread): that test's unique DB.
+/// - Test builds, any other thread (non-participant: production friction
+///   code exercised by another test's runtime, e.g. handler_do routing or
+///   the matcher tiebreak): the per-process scratch DB — NEVER another
+///   test's unique DB and never the live kernel's audit.db.
+#[cfg(test)]
 pub(crate) fn friction_db_path() -> std::path::PathBuf {
-    #[cfg(test)]
-    {
-        if let Some(p) = TEST_DB_PATH.lock().unwrap().clone() {
-            return p;
-        }
+    if let Some(p) = TEST_DB_PATH.with(|c| c.borrow().clone()) {
+        return p;
     }
+    test_scratch_db_path()
+}
 
+/// Resolve the friction DB path (production): `./data/audit.db`.
+#[cfg(not(test))]
+pub(crate) fn friction_db_path() -> std::path::PathBuf {
     std::path::PathBuf::from("./data/audit.db")
 }
 
@@ -707,6 +739,70 @@ mod tests {
 
         let stats = get_session_friction(sid).expect("get_session_friction failed");
         assert_eq!(stats.avg_ttfua_seconds, 0.0, "no TTFUA samples should average to the COALESCE default");
+    }
+
+    /// (2026-10-03, flake de security::llm_examples) Un hilo que NUNCA entro
+    /// al protocolo de test-DB (codigo de produccion ejercitado por otro test:
+    /// friction de handler_do/routing, tiebreak del matcher) JAMAS debe
+    /// aterrizar su escritura en la DB unica de OTRO test. La implementacion
+    /// anterior redirigia via un Mutex<Option<PathBuf>> GLOBAL: cualquier
+    /// escritura no sincronizada resolvia a la DB del ultimo test participante
+    /// y corrompia sus asserts (stats.total == 40, agreement 1/3).
+    /// Determinista: join() ordena la escritura ajena estrictamente entre el
+    /// setup de la DB unica y el conteo de filas.
+    #[test]
+    fn test_foreign_thread_write_never_reaches_unique_test_db() {
+        use std::thread;
+
+        let _guard = TEST_MUTEX.lock().unwrap();
+        unique_test_db();
+
+        // Semilla: crea el fichero + schema de la DB unica de ESTE test.
+        log_friction_event_standalone("isolation_seed", "owner thread write")
+            .expect("seed write");
+
+        let unique_path = friction_db_path();
+        assert!(
+            unique_path.to_string_lossy().contains("tylluan_friction_test_"),
+            "expected this test's unique DB, got {}",
+            unique_path.display()
+        );
+
+        // Escritor ajeno estilo produccion (sin set_unique_test_db en su hilo).
+        let probe = thread::spawn(|| {
+            let foreign_path = friction_db_path();
+            let _ = log_friction_event_standalone("isolation_probe", "foreign thread write");
+            foreign_path
+        });
+        let foreign_path = probe.join().expect("probe thread panicked");
+
+        assert_ne!(
+            foreign_path, unique_path,
+            "a thread that never called set_unique_test_db() must not resolve to this test's unique DB"
+        );
+        assert!(
+            foreign_path.to_string_lossy().contains("tylluan_friction_scratch_"),
+            "foreign thread must fall back to the per-process scratch DB, got {}",
+            foreign_path.display()
+        );
+
+        let count: i64 = rusqlite::Connection::open(&unique_path)
+            .expect("open unique db")
+            .query_row("SELECT COUNT(*) FROM friction_events", [], |r| r.get(0))
+            .expect("count events");
+        assert_eq!(
+            count, 1,
+            "a foreign-thread friction write landed in this test's unique DB — the security::llm_examples flake is back"
+        );
+
+        // Control positivo: la escritura del PROPIO hilo sigue en su DB unica.
+        log_friction_event_standalone("isolation_probe_main", "owner thread write again")
+            .expect("owner write #2");
+        let count: i64 = rusqlite::Connection::open(&unique_path)
+            .expect("reopen unique db")
+            .query_row("SELECT COUNT(*) FROM friction_events", [], |r| r.get(0))
+            .expect("count events #2");
+        assert_eq!(count, 2, "the owning thread's writes must land in its unique DB");
     }
 
     // -----------------------------------------------------------------------
