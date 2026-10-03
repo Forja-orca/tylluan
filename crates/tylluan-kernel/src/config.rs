@@ -1089,6 +1089,21 @@ pub struct SilvaConfig {
     #[serde(default)]
     pub embed_batching_enabled: bool,
 
+    /// ADR-017 F1: batcher por clase de call-site. Este flag activa SOLO la
+    /// clase ROUTING (fallback semántico de tylluan_do, anchors de routing,
+    /// DCR) — el camino de recall sigue gobernado por `embed_batching_enabled`
+    /// (F2, pendiente del gate de F1). Default OFF = paridad con producción
+    /// actual; el gate de F1 lo enciende en el toml de test.
+    #[serde(default)]
+    pub embed_batching_routing_enabled: bool,
+
+    /// ADR-017 F1: warm-start de embeddings al boot (descripciones de guild
+    /// del catálogo → LRU del engine + query_embed_cache), ejecutado detrás
+    /// del background_budget. Default ON pero apagable (perfil "toaster"):
+    /// decisión del TL en la revisión del ADR (config-gated, no siempre-on).
+    #[serde(default = "default_bool_true")]
+    pub embed_warm_start: bool,
+
     /// SPIKE P1 (medicion del mutex del reranker): false desactiva la carga
     /// del cross-encoder (fallback a RRF puro) -- permite medir cuanto del
     /// 68% bajo concurrencia explica SOLO el mutex del reranker, sin tocar
@@ -1109,6 +1124,8 @@ impl Default for SilvaConfig {
             hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
             cascade_enabled: default_cascade_enabled(),
             embed_batching_enabled: false,
+            embed_batching_routing_enabled: false,
+            embed_warm_start: true,
             reranker_enabled: true,
             recall_abstain_min_score: default_recall_abstain_min_score(),
         }
@@ -2041,6 +2058,24 @@ port = 47004
         assert_eq!(config.nexus.port, 47004);
         // Defaults should still work
         assert_eq!(config.memory.embedding_model, "mxbai-embed-large");
+    }
+
+    /// ADR-017 F1: defaults de los nuevos flags de batching por clase.
+    #[test]
+    fn test_adr017_f1_flag_defaults() {
+        let config = TylluanConfig::default();
+        assert!(
+            config.silva.embed_warm_start,
+            "warm-start de embeddings debe estar ON por defecto (apagable por config)"
+        );
+        assert!(
+            !config.silva.embed_batching_routing_enabled,
+            "la clase ROUTING debe estar OFF por defecto (paridad con produccion actual)"
+        );
+        assert!(
+            !config.silva.embed_batching_enabled,
+            "el master de recall sigue OFF por defecto (F2 pendiente del gate de F1)"
+        );
     }
 
     #[test]

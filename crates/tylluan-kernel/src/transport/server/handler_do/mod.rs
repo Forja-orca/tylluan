@@ -1274,7 +1274,7 @@ async fn post_process_outcome(
         let guild_anchor = guild_name.to_string();
         tokio::spawn(async move {
             let embedding = engine_anchor.as_ref()
-                .and_then(|e| tokio::task::block_in_place(|| e.embed(&intent_anchor)).ok()
+                .and_then(|e| tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(&intent_anchor)).ok()
                     .map(|emb| (emb, e.engine_id())));
             let _ = silva_anchor.upsert_routing_anchor(
                 &guild_anchor, &intent_anchor, "learned",
