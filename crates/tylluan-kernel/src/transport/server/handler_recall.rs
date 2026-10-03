@@ -643,14 +643,21 @@ if let Some(cached) = cached_docs {
             format!("### Recall Results (Found {total_found}, Showing top {showing})\n\n")
         };
         // M40-P4: confidence and source/author/evidence are fetched on demand
-        // (not stored on GraphNode, see SilvaDB::get_confidence's doc comment),
-        // so this loop can't be a plain sync .map() over scored.
+        // (not stored on GraphNode, see SilvaDB::get_confidence's doc comment).
+        // N+1 fix: one batched query for all ids instead of 2 round-trips per
+        // result; missing rows (hybrid: synthetics) keep the same defaults the
+        // per-id getters returned.
+        let recall_ids: Vec<String> = scored.iter().map(|(d, _)| d.id.clone()).collect();
+        let recall_meta = server.silva.get_confidence_and_source_batch(&recall_ids).await;
         let mut statuses = Vec::with_capacity(scored.len());
         let mut source_infos: Vec<(Option<String>, Option<String>, Option<String>)> = Vec::with_capacity(scored.len());
         for (d, _) in &scored {
-            let confidence = server.silva.get_confidence(&d.id).await;
+            let (confidence, source, author, evidence_url) = recall_meta
+                .get(&d.id)
+                .map(|(c, s, a, e)| (*c, s.clone(), a.clone(), e.clone()))
+                .unwrap_or((1.0, None, None, None));
             statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
-            source_infos.push(server.silva.get_source_info(&d.id).await);
+            source_infos.push((source, author, evidence_url));
         }
         let summary_body = scored.iter().zip(statuses.iter()).zip(source_infos.iter())
             .map(|(((d, score), status), (source, author, evidence_url))| {
@@ -997,13 +1004,19 @@ if let Some(cached) = cached_docs {
             // Expose score, weight, node_type and created_at so agents can audit
             // ALD decay, TMS contradictions, and retrieval quality directly.
             // M40-P4: status and source/author/evidence are fetched on demand
-            // (see the cache-hit path above for why it can't be a plain sync .map()).
+            // (see the cache-hit path above). N+1 fix: one batched query for
+            // all ids instead of 2 round-trips per result.
+            let recall_ids: Vec<String> = scored.iter().map(|(d, _)| d.id.clone()).collect();
+            let recall_meta = server.silva.get_confidence_and_source_batch(&recall_ids).await;
             let mut statuses = Vec::with_capacity(scored.len());
             let mut source_infos: Vec<(Option<String>, Option<String>, Option<String>)> = Vec::with_capacity(scored.len());
             for (d, _) in &scored {
-                let confidence = server.silva.get_confidence(&d.id).await;
+                let (confidence, source, author, evidence_url) = recall_meta
+                    .get(&d.id)
+                    .map(|(c, s, a, e)| (*c, s.clone(), a.clone(), e.clone()))
+                    .unwrap_or((1.0, None, None, None));
                 statuses.push(crate::memory::silva::memory_status(d.conflicted, d.valid_until, confidence));
-                source_infos.push(server.silva.get_source_info(&d.id).await);
+                source_infos.push((source, author, evidence_url));
             }
             let summary_body = scored.iter().zip(statuses.iter()).zip(source_infos.iter())
                 .map(|(((d, score), status), (source, author, evidence_url))| {
