@@ -82,6 +82,8 @@ fn tokenize_query(query: &str) -> Vec<String> {
         .collect()
 }
 
+/// Production-judge-only helper (the Layer 4 body is `cfg(not(test))`).
+#[cfg(not(test))]
 fn median(values: &[f32]) -> f32 {
     if values.is_empty() { return 0.0; }
     let mut sorted: Vec<f32> = values.to_vec();
@@ -156,9 +158,13 @@ pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &
 }
 
 /// 3-way classification grammar for hybrid Layer 4 (from design §4).
+/// Production-judge-only: referenced solely from the `cfg(not(test))` body.
+#[cfg(not(test))]
 const HYBRID_GRAMMAR: &str = "root ::= decision\ndecision ::= \"IRRELEVANT\" | \"AMBIGUOUS\" | \"RELEVANT\"";
 
 /// Short classification prompt for hybrid Layer 4.
+/// Production-judge-only: referenced solely from the `cfg(not(test))` body.
+#[cfg(not(test))]
 const HYBRID_CLASSIFY_PROMPT: &str = "\
 Classify this recall candidate by relevance to the query.\n\
 Output exactly one word: IRRELEVANT, AMBIGUOUS, or RELEVANT.\n\
@@ -176,6 +182,8 @@ enum HybridDecision {
 }
 
 /// Log a hybrid Layer 4 observation decision to friction_log.
+/// Production-judge-only: referenced solely from the `cfg(not(test))` body.
+#[cfg(not(test))]
 fn log_hybrid_decision(node_id: &str, trigger: &HybridTrigger, decision: &HybridDecision) {
     let zones: Vec<&str> = [
         ("A", trigger.zone_a), ("B", trigger.zone_b),
@@ -341,141 +349,157 @@ impl CoherenceGate {
             return;
         }
 
-        // Fase 2: workflow_id determinista agrupa todos los DecisionExample
-        // de un mismo recall. Hash del query (misma query = mismo grupo) +
-        // contador atómico (recall duplicado en la misma sesión = IDs distintos).
-        let recall_counter = RECALL_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let query_hash: i64 = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            query.hash(&mut h);
-            h.finish() as i64
-        };
-        let workflow_id = query_hash.wrapping_add(recall_counter);
+        // (2026-10-03, flake de security::llm_examples) Layer 4 es telemetria
+        // fire-and-forget tras la flag opt-in coherence_gate_hybrid_enabled
+        // (default false) que NINGUN test activa, y ningun test aserte sobre los
+        // efectos de este spawn (los tests de enforcement simulan sus mutaciones
+        // manualmente). En builds de test el juez NO corre: su task escribiria
+        // telemetria FUERA del protocolo TEST_DB_MUTEX (causa raiz del flake de
+        // security::llm_examples) e intentaria HTTP real contra
+        // TYLLUAN_KERNEL_URL (el kernel vivo de esta maquina) desde un test.
+        #[cfg(test)]
+        {
+            let _ = (query, survivors, &silva, &query_embedding, penalized_node_ids);
+        }
 
-        let penalized: std::collections::HashSet<String> = penalized_node_ids.iter().cloned().collect();
-        let query_clone = query.to_string();
-        let query_words = tokenize_query(query);
-        let survivors_clone: Vec<(GraphNode, f32)> = survivors.iter()
-            .map(|(n, s)| (n.clone(), *s)).collect();
+        #[cfg(not(test))]
+        {
+            // Fase 2: workflow_id determinista agrupa todos los DecisionExample
+            // de un mismo recall. Hash del query (misma query = mismo grupo) +
+            // contador atómico (recall duplicado en la misma sesión = IDs distintos).
+            let recall_counter = RECALL_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let query_hash: i64 = {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                query.hash(&mut h);
+                h.finish() as i64
+            };
+            let workflow_id = query_hash.wrapping_add(recall_counter);
 
-        tokio::spawn(async move {
-            // Re-compute cosines and triggers for each survivor
-            let mut cosines: Vec<f32> = Vec::with_capacity(survivors_clone.len());
-            let scores: Vec<f32> = survivors_clone.iter().map(|(_, s)| *s).collect();
+            let penalized: std::collections::HashSet<String> = penalized_node_ids.iter().cloned().collect();
+            let query_clone = query.to_string();
+            let query_words = tokenize_query(query);
+            let survivors_clone: Vec<(GraphNode, f32)> = survivors.iter()
+                .map(|(n, s)| (n.clone(), *s)).collect();
 
-            // P1-1: same batching as the deterministic gate — one IN-query
-            // for all survivors instead of N awaited per-id SELECTs inside
-            // the spawned task. Missing ids default to cosim 1.0, exactly
-            // like the old per-id `Ok(None)` branch.
-            let survivor_embeddings: std::collections::HashMap<String, Vec<f32>> =
-                if query_embedding.is_some() {
-                    let ids: Vec<String> = survivors_clone.iter().map(|(n, _)| n.id.clone()).collect();
-                    silva.get_node_embeddings_batch(&ids).await
-                        .unwrap_or_default()
-                } else {
-                    std::collections::HashMap::new()
-                };
+            tokio::spawn(async move {
+                // Re-compute cosines and triggers for each survivor
+                let mut cosines: Vec<f32> = Vec::with_capacity(survivors_clone.len());
+                let scores: Vec<f32> = survivors_clone.iter().map(|(_, s)| *s).collect();
 
-            for (node, _score) in &survivors_clone {
-                let cosim: f32 = if let Some(ref q_emb) = query_embedding {
-                    if let Some(node_emb) = survivor_embeddings.get(&node.id) {
-                        crate::memory::cosine::cosine_similarity(q_emb, node_emb)
-                    } else { 1.0 }
-                } else { 1.0 };
-
-                cosines.push(cosim);
-            }
-
-            // Zone C compares the final post-penalty SCORE against the median
-            // survivor score, not the median cosine -- different scale (design §3).
-            let median_score = median(&scores);
-
-            for (i, (node, _score)) in survivors_clone.iter().enumerate() {
-                let cosim = cosines[i];
-                let trigger = compute_triggers(node, cosim, *_score, &query_words, median_score);
-                if trigger.any() {
-                    // Build classification prompt
-                    let flagged_by = {
-                        let mut flags = vec![];
-                        if node.provenance == "federation_peer" { flags.push("provenance(federation)".to_string()); }
-                        if cosim < COHERENCE_THRESHOLD { flags.push(format!("cosine({cosim:.2})")); }
-                        if flags.is_empty() { "none".to_string() } else { flags.join(", ") }
+                // P1-1: same batching as the deterministic gate — one IN-query
+                // for all survivors instead of N awaited per-id SELECTs inside
+                // the spawned task. Missing ids default to cosim 1.0, exactly
+                // like the old per-id `Ok(None)` branch.
+                let survivor_embeddings: std::collections::HashMap<String, Vec<f32>> =
+                    if query_embedding.is_some() {
+                        let ids: Vec<String> = survivors_clone.iter().map(|(n, _)| n.id.clone()).collect();
+                        silva.get_node_embeddings_batch(&ids).await
+                            .unwrap_or_default()
+                    } else {
+                        std::collections::HashMap::new()
                     };
 
-                    let query_preview: String = query_clone.chars().take(80).collect();
-                    let content_preview: String = node.content.chars().take(200).collect();
-                    let prompt = format!(
-                        "{HYBRID_CLASSIFY_PROMPT}\n\nQUERY: {query_preview}\nCONTENT: {content_preview}\nCosine: {cosim:.2}\nFlagged by: {flagged_by}\n\nRespond with one word: IRRELEVANT, AMBIGUOUS, or RELEVANT."
-                    );
+                for (node, _score) in &survivors_clone {
+                    let cosim: f32 = if let Some(ref q_emb) = query_embedding {
+                        if let Some(node_emb) = survivor_embeddings.get(&node.id) {
+                            crate::memory::cosine::cosine_similarity(q_emb, node_emb)
+                        } else { 1.0 }
+                    } else { 1.0 };
 
-                    let started = std::time::Instant::now();
-                    if let Ok(response) = call_reasoning_backend_with_grammar(&prompt, HYBRID_GRAMMAR).await {
-                        let decision = parse_hybrid_response(&response);
-                        log_hybrid_decision(&node.id, &trigger, &decision);
+                    cosines.push(cosim);
+                }
 
-                        // ── Enforcement (Layer 4 → real effect on future recalls) ──
-                        // The current recall already returned; these mutations only
-                        // affect future search_hybrid calls via the quarantine filter
-                        // (ASI06) and weight-based ranking.
-                        match &decision {
-                            HybridDecision::Reject => {
-                                // Quarantine: reuse the exact ASI06 mechanism.
-                                let node_id = node.id.clone();
-                                let silva_clone = silva.clone();
-                                let conn = silva_clone.conn_lock();
-                                let _ = tokio::task::spawn_blocking(move || {
-                                    let c = conn.blocking_lock();
-                                    c.execute(
-                                        "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
-                                        rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", node_id],
-                                    )
-                                }).await;
+                // Zone C compares the final post-penalty SCORE against the median
+                // survivor score, not the median cosine -- different scale (design §3).
+                let median_score = median(&scores);
+
+                for (i, (node, _score)) in survivors_clone.iter().enumerate() {
+                    let cosim = cosines[i];
+                    let trigger = compute_triggers(node, cosim, *_score, &query_words, median_score);
+                    if trigger.any() {
+                        // Build classification prompt
+                        let flagged_by = {
+                            let mut flags = vec![];
+                            if node.provenance == "federation_peer" { flags.push("provenance(federation)".to_string()); }
+                            if cosim < COHERENCE_THRESHOLD { flags.push(format!("cosine({cosim:.2})")); }
+                            if flags.is_empty() { "none".to_string() } else { flags.join(", ") }
+                        };
+
+                        let query_preview: String = query_clone.chars().take(80).collect();
+                        let content_preview: String = node.content.chars().take(200).collect();
+                        let prompt = format!(
+                            "{HYBRID_CLASSIFY_PROMPT}\n\nQUERY: {query_preview}\nCONTENT: {content_preview}\nCosine: {cosim:.2}\nFlagged by: {flagged_by}\n\nRespond with one word: IRRELEVANT, AMBIGUOUS, or RELEVANT."
+                        );
+
+                        let started = std::time::Instant::now();
+                        if let Ok(response) = call_reasoning_backend_with_grammar(&prompt, HYBRID_GRAMMAR).await {
+                            let decision = parse_hybrid_response(&response);
+                            log_hybrid_decision(&node.id, &trigger, &decision);
+
+                            // ── Enforcement (Layer 4 → real effect on future recalls) ──
+                            // The current recall already returned; these mutations only
+                            // affect future search_hybrid calls via the quarantine filter
+                            // (ASI06) and weight-based ranking.
+                            match &decision {
+                                HybridDecision::Reject => {
+                                    // Quarantine: reuse the exact ASI06 mechanism.
+                                    let node_id = node.id.clone();
+                                    let silva_clone = silva.clone();
+                                    let conn = silva_clone.conn_lock();
+                                    let _ = tokio::task::spawn_blocking(move || {
+                                        let c = conn.blocking_lock();
+                                        c.execute(
+                                            "UPDATE nodes SET quarantined = 1, quarantine_reason = ?1 WHERE id = ?2",
+                                            rusqlite::params!["Layer 4 hybrid: LLM classified as IRRELEVANT", node_id],
+                                        )
+                                    }).await;
+                                }
+                                HybridDecision::KeepSoft => {
+                                    // Penalize weight: halve it to lower future ranking.
+                                    // Uses reinforce_node (multiplier < 1 = decay).
+                                    let _ = silva.reinforce_node(&node.id, 0.5).await;
+                                }
+                                HybridDecision::Keep => {
+                                    // No action — LLM says relevant, keep as-is.
+                                }
                             }
-                            HybridDecision::KeepSoft => {
-                                // Penalize weight: halve it to lower future ranking.
-                                // Uses reinforce_node (multiplier < 1 = decay).
-                                let _ = silva.reinforce_node(&node.id, 0.5).await;
-                            }
-                            HybridDecision::Keep => {
-                                // No action — LLM says relevant, keep as-is.
-                            }
+
+                            // Fase 1 circuito: ejemplo estructurado A/B (best-effort).
+                            let zones = [
+                                ("A", trigger.zone_a), ("B", trigger.zone_b),
+                                ("C", trigger.zone_c), ("D", trigger.zone_d),
+                            ].iter().filter(|(_, active)| *active).map(|(z, _)| *z).collect::<Vec<_>>().join(",");
+                            let llm = match decision {
+                                HybridDecision::Keep => "KEEP",
+                                HybridDecision::KeepSoft => "KEEP_SOFT",
+                                HybridDecision::Reject => "REJECT",
+                            };
+                            let gate_label = if penalized.contains(node.id.as_str()) {
+                                crate::security::llm_examples::GateLabel::Reject
+                            } else {
+                                crate::security::llm_examples::GateLabel::Keep
+                            };
+                            let ex = crate::security::llm_examples::DecisionExample {
+                                workflow_id,
+                                query: query_clone.chars().take(500).collect(),
+                                node_id: node.id.clone(),
+                                trigger_zones: zones,
+                                llm_decision: llm.to_string(),
+                                llm_confidence: None,
+                                gate_label: gate_label.as_str().to_string(),
+                                score_before: None,
+                                score_after: *(_score),
+                                model: "unknown".to_string(),
+                                latency_ms: started.elapsed().as_millis() as i64,
+                                created_at: chrono::Utc::now().to_rfc3339(),
+                            };
+                            let _ = crate::security::llm_examples::log_decision_example(&ex);
                         }
-
-                        // Fase 1 circuito: ejemplo estructurado A/B (best-effort).
-                        let zones = [
-                            ("A", trigger.zone_a), ("B", trigger.zone_b),
-                            ("C", trigger.zone_c), ("D", trigger.zone_d),
-                        ].iter().filter(|(_, active)| *active).map(|(z, _)| *z).collect::<Vec<_>>().join(",");
-                        let llm = match decision {
-                            HybridDecision::Keep => "KEEP",
-                            HybridDecision::KeepSoft => "KEEP_SOFT",
-                            HybridDecision::Reject => "REJECT",
-                        };
-                        let gate_label = if penalized.contains(node.id.as_str()) {
-                            crate::security::llm_examples::GateLabel::Reject
-                        } else {
-                            crate::security::llm_examples::GateLabel::Keep
-                        };
-                        let ex = crate::security::llm_examples::DecisionExample {
-                            workflow_id,
-                            query: query_clone.chars().take(500).collect(),
-                            node_id: node.id.clone(),
-                            trigger_zones: zones,
-                            llm_decision: llm.to_string(),
-                            llm_confidence: None,
-                            gate_label: gate_label.as_str().to_string(),
-                            score_before: None,
-                            score_after: *(_score),
-                            model: "unknown".to_string(),
-                            latency_ms: started.elapsed().as_millis() as i64,
-                            created_at: chrono::Utc::now().to_rfc3339(),
-                        };
-                        let _ = crate::security::llm_examples::log_decision_example(&ex);
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
 }
@@ -562,6 +586,83 @@ mod tests {
         assert!((with_emb - 0.09).abs() < 1e-5, "embedded node penalized, got {with_emb}");
         assert!((*without_emb - 0.9).abs() < 1e-5, "node without embedding must NOT be penalized, got {without_emb}");
         assert_eq!(stats.penalized, 1);
+    }
+
+    /// (2026-10-03, flake de security::llm_examples) El juez hibrido Layer 4
+    /// debe ser INERTE en builds de test: su task fire-and-forget escribe
+    /// telemetria (llm_examples / friction) fuera del protocolo TEST_DB_MUTEX
+    /// e intentaria HTTP real contra TYLLUAN_KERNEL_URL desde un proceso de
+    /// test. Canary determinista: RECALL_COUNTER no se mueve (primer efecto
+    /// del cuerpo de produccion) y ninguna fila de telemetria aparece en la
+    /// DB de test actual.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hybrid_classify_is_inert_in_test_builds() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        db.upsert_node("flagged", "lesson", "some content", "{}").await.unwrap();
+
+        // DB-protocol scope: seed via the real write paths (baseline 1 row
+        // each) and fire hybrid_classify while holding TEST_DB_MUTEX. The
+        // guard is dropped BEFORE any await (clippy await_holding_lock); the
+        // thread-local unique-DB redirect persists on this thread either way.
+        let before = {
+            let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap();
+            crate::security::friction_log::set_unique_test_db();
+
+            let ex = crate::security::llm_examples::DecisionExample {
+                workflow_id: 0,
+                query: "seed".to_string(),
+                node_id: "seed".to_string(),
+                trigger_zones: "A".to_string(),
+                llm_decision: "KEEP".to_string(),
+                llm_confidence: None,
+                gate_label: "KEEP".to_string(),
+                score_before: None,
+                score_after: 0.9,
+                model: "test".to_string(),
+                latency_ms: 0,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            crate::security::llm_examples::log_decision_example(&ex).expect("seed example");
+            crate::security::friction_log::log_friction_event_standalone("seed", "baseline")
+                .expect("seed friction");
+
+            let counter = RECALL_COUNTER.load(Ordering::Relaxed);
+            let survivors = vec![
+                (node("flagged", "some content", "unverified", 1.0), 0.9),
+            ];
+            CoherenceGate::hybrid_classify(
+                "probe: trigger zones must never reach the judge in test builds",
+                &survivors,
+                std::sync::Arc::new(db),
+                None,
+                &[],
+            );
+            counter
+        };
+
+        // Give any (regressed) spawned task every chance to run and write.
+        for _ in 0..25 {
+            tokio::task::yield_now().await;
+        }
+
+        assert_eq!(
+            RECALL_COUNTER.load(Ordering::Relaxed),
+            before,
+            "hybrid_classify must not run the Layer 4 judge body in test builds"
+        );
+
+        // No telemetry may have landed in the current test DB (examples or
+        // friction events) — a regression here re-opens the llm_examples flake.
+        let conn = crate::config::open_db(&crate::security::friction_log::friction_db_path())
+            .expect("open unique test db");
+        let examples: i64 = conn
+            .query_row("SELECT COUNT(*) FROM llm_decision_examples", [], |r| r.get(0))
+            .expect("count examples");
+        let events: i64 = conn
+            .query_row("SELECT COUNT(*) FROM friction_events", [], |r| r.get(0))
+            .expect("count friction events");
+        assert_eq!(examples, 1, "the judge must not write any DecisionExample in test builds");
+        assert_eq!(events, 1, "the judge must not write any friction event in test builds");
     }
 
     #[tokio::test(flavor = "multi_thread")]
