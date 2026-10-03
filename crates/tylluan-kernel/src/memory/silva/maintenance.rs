@@ -430,7 +430,24 @@ impl super::SilvaDB {
                 []
             )?;
             
-            // Cleanup orphan embeddings
+            // Cleanup orphan embeddings — BOTH satellite tables must be swept.
+            // Only node_sparse_embeddings lacks a FOREIGN KEY (schema v24), so its
+            // orphans always need a manual sweep. node_embeddings declares
+            // ON DELETE CASCADE, and the vendored libsqlite3-sys build compiles
+            // SQLite with SQLITE_DEFAULT_FOREIGN_KEYS=1 (libsqlite3-sys 0.31.0
+            // build.rs), so node deletes DO cascade in current dev and production
+            // builds — but that enforcement is an artifact of the vendored build
+            // flags, not of any explicit PRAGMA in this codebase (none exists;
+            // several doc-comments here even claim the opposite). A system-sqlite
+            // build, a future toolchain change, or rows orphaned under a relaxed
+            // regime would silently reintroduce accumulation — the dense rows then
+            // feed the HNSW/IVF rebuild at boot as ghost vectors. Sweep both,
+            // matching prune_dead_nodes / purge_deprecated_lessons /
+            // cleanup_orphan_nodes, which already do.
+            let _ = conn.execute(
+                "DELETE FROM node_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
+                []
+            )?;
             let _ = conn.execute(
                 "DELETE FROM node_sparse_embeddings WHERE node_id NOT IN (SELECT id FROM nodes)",
                 []
