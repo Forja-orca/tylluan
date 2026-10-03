@@ -1448,6 +1448,8 @@ async fn main() -> anyhow::Result<()> {
         let matcher_warmup = matcher.clone();
         let workspace_for_seed = workspace_root.clone();
         let embedding_model = config.memory.embedding_model.clone();
+        let warm_start_enabled = config.silva.embed_warm_start;
+        let budget_warm = background_budget.clone();
         tokio::spawn(async move {
             // ── Phase 1: upsert seed corpus (no engine needed) ────────
             let seed_path = workspace_for_seed.join("data").join("routing_anchors_seed.jsonl");
@@ -1498,6 +1500,36 @@ async fn main() -> anyhow::Result<()> {
                             Ok(0) => info!("🌱 Routing anchors: all embeddings present"),
                             Ok(n) => info!("🌱 Routing anchors warmed: {} embeddings generated", n),
                             Err(e) => warn!("⚠️ Anchor reembed failed: {}", e),
+                        }
+                        // ADR-017 F1: LRU warm-start de las descripciones de
+                        // guild del catálogo (config-gated, detrás del
+                        // background budget): puebla el LRU del engine y el
+                        // query_embed_cache para que el fallback semántico de
+                        // tylluan_do no pague ONNX en caliente. Skip-if-busy:
+                        // si otro job pesado arrancó antes, el warm cede su
+                        // turno (mismo patrón que reindexer/HNSW/consensus).
+                        if warm_start_enabled {
+                            let Some(_bg) = budget_warm.acquire().await else {
+                                warn!("⚠️ Embed warm-start skipped: background budget busy at boot");
+                                return;
+                            };
+                            let catalog = tylluan_kernel::router::catalog::builtin_catalog();
+                            let mut warmed = 0usize;
+                            for g in &catalog {
+                                let text = format!("{}: {}", g.name, g.description);
+                                if tokio::task::block_in_place(|| engine.embed(&text)).is_ok() {
+                                    warmed += 1;
+                                }
+                                let key = text.clone();
+                                let text_inner = text.clone();
+                                let engine_q = engine.clone();
+                                let _ = tokio::task::block_in_place(|| {
+                                    silva_warmup
+                                        .query_embed_cache
+                                        .get_or_embed(&key, move |_| Ok(engine_q.embed(&text_inner).unwrap_or_default()))
+                                });
+                            }
+                            info!("🌱 Embed warm-start: {}/{} guild descriptions embedded", warmed, catalog.len());
                         }
                     }
                 }

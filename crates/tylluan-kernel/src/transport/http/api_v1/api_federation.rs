@@ -857,8 +857,8 @@ pub async fn routing_anchors_seed(
     let engine = state.matcher.engine();
     let (mut inserted, mut errors) = (0usize, 0usize);
     for entry in &entries {
-        let embedding = engine.as_deref()
-            .and_then(|e| tokio::task::block_in_place(|| e.embed(&entry.intent)).ok()
+        let embedding = engine.as_ref()
+            .and_then(|e| tokio::task::block_in_place(|| e.embed_batch_coalesced_routing(&entry.intent)).ok()
                 .map(|emb| (emb, e.engine_id())));
         match state.silva.upsert_routing_anchor(
             &entry.guild,
