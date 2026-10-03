@@ -1922,3 +1922,56 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             "queueing wait recorded (got {wait_ms}ms; expected >=150ms behind the 300ms holder)"
         );
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_confidence_source_batch_matches_per_id_getters() {
+        let db = test_silva().await;
+        db.upsert_node("with_prov", "concept", "Full provenance", "{}").await.unwrap();
+        db.upsert_node("plain", "concept", "No provenance", "{}").await.unwrap();
+        {
+            let conn = db.conn.lock().await;
+            conn.execute(
+                "UPDATE nodes SET confidence = 0.42, source = 'test-src', author = 'alice', \
+                 evidence_url = 'https://example.test/e1' WHERE id = 'with_prov'",
+                [],
+            ).unwrap();
+        }
+
+        // 'hybrid:synth' mimics the synthetic HybridMemory ids: no SilvaDB row.
+        let ids: Vec<String> = vec!["with_prov".into(), "plain".into(), "hybrid:synth".into()];
+        let batch = db.get_confidence_and_source_batch(&ids).await;
+
+        // Missing rows keep exactly the defaults the per-id getters return.
+        assert_eq!(batch.get("hybrid:synth"), Some(&(1.0, None, None, None)));
+
+        // Explicit values survive the batch round trip.
+        let (c, s, a, e) = batch.get("with_prov").cloned().unwrap();
+        assert_eq!(c, 0.42);
+        assert_eq!(s.as_deref(), Some("test-src"));
+        assert_eq!(a.as_deref(), Some("alice"));
+        assert_eq!(e.as_deref(), Some("https://example.test/e1"));
+
+        // Parity with the per-id getters — they remain the semantic contract.
+        for id in &["with_prov", "plain"] {
+            let (c, s, a, e) = batch.get(*id).cloned().unwrap();
+            assert_eq!(c, db.get_confidence(id).await, "confidence parity for {id}");
+            assert_eq!((s, a, e), db.get_source_info(id).await, "source parity for {id}");
+        }
+
+        // Deterministic no-N+1 invariant: one batch call = exactly ONE timed
+        // mutex acquisition (the old path took the conn mutex 2x per id).
+        let (_, acqs_before) = db.sqlite_lock_wait_snapshot();
+        let batch2 = db.get_confidence_and_source_batch(&ids).await;
+        let (_, acqs_after) = db.sqlite_lock_wait_snapshot();
+        assert_eq!(acqs_after - acqs_before, 1, "one batch call must take the conn mutex exactly once");
+        assert_eq!(batch2.get("plain"), batch.get("plain"));
+        assert_eq!(db.confidence_source_batch_size.load(std::sync::atomic::Ordering::Relaxed), 3);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_confidence_source_batch_empty_is_empty() {
+        let db = test_silva().await;
+        let out = db.get_confidence_and_source_batch(&[]).await;
+        assert!(out.is_empty());
+        assert_eq!(db.confidence_source_batch_size.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }

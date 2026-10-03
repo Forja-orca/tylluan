@@ -212,6 +212,12 @@ pub struct SilvaDB {
     /// tests prove "1 batch round trip for N candidates" instead of relying on
     /// timing. Cheap relaxed store per batch call, never read in production.
     pub embedding_fetch_batch_size: std::sync::atomic::AtomicUsize,
+    /// Test-only observability for the recall N+1 fix (get_confidence +
+    /// get_source_info batching): size of the last
+    /// `get_confidence_and_source_batch` call (0 if none yet). Same rationale
+    /// as `embedding_fetch_batch_size` — lets tests prove "one batch round
+    /// trip for N results" deterministically instead of relying on timing.
+    pub confidence_source_batch_size: std::sync::atomic::AtomicUsize,
 }
 
 impl SilvaDB {
@@ -276,6 +282,7 @@ impl SilvaDB {
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
             embedding_fetch_batch_size: std::sync::atomic::AtomicUsize::new(0),
+            confidence_source_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };
@@ -378,6 +385,7 @@ impl SilvaDB {
             abstain_floor_x1000: std::sync::atomic::AtomicI64::new(0),
             pagerank_cache: std::sync::Mutex::new(None),
             embedding_fetch_batch_size: std::sync::atomic::AtomicUsize::new(0),
+            confidence_source_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
         };

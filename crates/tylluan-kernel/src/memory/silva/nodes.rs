@@ -11,6 +11,11 @@ use std::collections::HashMap;
 use crate::memory::louvain::WeightedGraph;
 use super::{GraphNode, NodeTrace};
 
+/// Per-node recall metadata fetched by `SilvaDB::get_confidence_and_source_batch`:
+/// (confidence, source, author, evidence_url). Defaults for ids with no row:
+/// (1.0, None, None, None) — same fallback as the per-id getters.
+pub type ConfidenceSourceRow = (f64, Option<String>, Option<String>, Option<String>);
+
 fn read_timestamp(row: &rusqlite::Row, idx: usize) -> rusqlite::Result<Option<String>> {
     match row.get::<_, rusqlite::types::Value>(idx)? {
         rusqlite::types::Value::Text(s) => Ok(Some(s)),
@@ -261,6 +266,52 @@ impl super::SilvaDB {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             ).unwrap_or((None, None, None))
         })
+    }
+
+    /// Batch variant of `get_confidence` + `get_source_info` for the recall hot
+    /// path: both call sites in handler_recall.rs used to loop over results
+    /// issuing 2 per-id queries each (2N round-trips, 2N mutex acquisitions
+    /// contending with every other writer). Confidence and provenance live on
+    /// the same `nodes` row, so one `IN` query + one `conn_timed()`
+    /// acquisition covers all of them. Same fallback semantics as the per-id
+    /// getters: every requested id is present in the returned map, ids with no
+    /// row (e.g. `hybrid:` synthetic nodes) keep the defaults
+    /// (1.0, None, None, None), and a query error degrades to defaults for the
+    /// ids not yet read instead of failing the whole recall summary. The
+    /// per-id getters stay as the semantic contract (parity-tested).
+    pub async fn get_confidence_and_source_batch(
+        &self,
+        ids: &[String],
+    ) -> std::collections::HashMap<String, ConfidenceSourceRow> {
+        let mut out: std::collections::HashMap<String, ConfidenceSourceRow> =
+            ids.iter().map(|id| (id.clone(), (1.0, None, None, None))).collect();
+        if ids.is_empty() {
+            return out;
+        }
+        self.confidence_source_batch_size
+            .store(ids.len(), std::sync::atomic::Ordering::Relaxed);
+        let placeholders: String = (1..=ids.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT id, confidence, source, author, evidence_url FROM nodes WHERE id IN ({placeholders})"
+        );
+        let _ = tokio::task::block_in_place(|| -> anyhow::Result<()> {
+            let conn = self.conn_timed();
+            let mut stmt = conn.prepare(&sql)?;
+            let mut rows = stmt.query(rusqlite::params_from_iter(ids.iter()))?;
+            while let Some(row) = rows.next()? {
+                let id: String = row.get(0)?;
+                let confidence: f64 = row.get(1)?;
+                let source: Option<String> = row.get(2)?;
+                let author: Option<String> = row.get(3)?;
+                let evidence_url: Option<String> = row.get(4)?;
+                out.insert(id, (confidence, source, author, evidence_url));
+            }
+            Ok(())
+        });
+        out
     }
 
     /// Synchronous internal helper to get a node by ID.
