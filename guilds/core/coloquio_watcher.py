@@ -36,10 +36,22 @@ DEFAULT_KERNEL = os.environ.get("KERNEL_BASE", "http://127.0.0.1:47004")
 DEFAULT_WAIT_SECS = 120
 DEFAULT_INBOX = Path(os.environ.get("TYLLUAN_INBOX", str(Path.home() / ".tylluan" / "inbox")))
 
+# Fleet token injection (2026-10-04): this watcher long-polls /api/v1/coloquio
+# endpoints; without a bearer header those 401 the moment dev_mode=false.
+# Same resolution as every guild: env TYLLUAN_TOKEN (kernel-injected at spawn
+# when the kernel started this process) -> workspace .tylluan-token file.
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run: python guilds/core/coloquio_watcher.py
+    _sys_path_root = str(Path(__file__).resolve().parent.parent.parent)
+    if _sys_path_root not in __import__("sys").path:
+        __import__("sys").path.insert(0, _sys_path_root)
+    from guilds.core import kernel_auth
+
 
 def api_post(url: str, payload: dict, timeout: int = 400) -> dict:
     body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(url, data=body, headers=kernel_auth.kernel_headers(), method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read())
 

@@ -25,6 +25,13 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("coloquio_digest")
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run fallback
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -124,7 +131,8 @@ def _is_noise(text: str) -> bool:
 
 
 def _get(path: str, timeout: int = 15) -> dict:
-    with urllib.request.urlopen(f"{KERNEL_BASE}{path}", timeout=timeout) as r:
+    req = urllib.request.Request(f"{KERNEL_BASE}{path}", headers=kernel_auth.kernel_headers())
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 
@@ -132,7 +140,7 @@ def _post(path: str, body: dict, timeout: int = 30) -> dict:
     data = json.dumps(body).encode()
     req = urllib.request.Request(
         f"{KERNEL_BASE}{path}", data=data,
-        headers={"Content-Type": "application/json"}, method="POST",
+        headers=kernel_auth.kernel_headers(), method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())

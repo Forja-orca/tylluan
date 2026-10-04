@@ -14,6 +14,13 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # loaded outside the guild runner
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+    from guilds.core import kernel_auth
+
 def _resolve_kernel_base() -> str:
     if "TYLLUAN_KERNEL_URL" in os.environ:
         return os.environ["TYLLUAN_KERNEL_URL"]
@@ -27,7 +34,11 @@ def _resolve_kernel_base() -> str:
 
 
 KERNEL_URL = _resolve_kernel_base()
-AUTH_TOKEN = os.environ.get("TYLLUAN_TOKEN")
+# Fleet token injection (2026-10-04): resolve via the shared helper (env
+# TYLLUAN_TOKEN, kernel-injected at spawn -> workspace .tylluan-token file)
+# instead of the env-only lookup, which missed the file fallback that the
+# default deployment relies on.
+AUTH_TOKEN = kernel_auth.resolve_kernel_token()
 TIMEOUT_SECONDS = 30
 
 

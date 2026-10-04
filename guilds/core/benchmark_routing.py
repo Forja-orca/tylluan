@@ -12,6 +12,12 @@ import json, sys, urllib.request, urllib.error, sqlite3, re, math, time
 from pathlib import Path
 from collections import Counter
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run: python guilds/core/benchmark_routing.py
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 def _resolve_kernel_base():
     import os as _os
     if "KERNEL_BASE" in _os.environ:
@@ -35,7 +41,7 @@ def _api_call(url, data_dict, timeout=30, max_retries=5):
         try:
             req = urllib.request.Request(
                 url, data=payload,
-                headers={"Content-Type": "application/json"}, method="POST")
+                headers=kernel_auth.kernel_headers(), method="POST")
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read())
         except urllib.error.HTTPError as e:

@@ -103,7 +103,12 @@ fn parse_hybrid_response(response: &str) -> HybridDecision {
 /// Resolve the kernel's own bearer token the same way `config.rs` does at
 /// startup (TYLLUAN_TOKEN env var, then `.tylluan-token` file), so this
 /// internal self-call authenticates like any other client would.
-fn resolve_self_auth_token() -> Option<String> {
+/// `pub(crate)`: also consumed by `registry::guild_process` to inject the
+/// SAME token into every spawned guild's environment (fleet token
+/// injection, 2026-10-04) — a guild authenticating with a different token
+/// than the kernel accepts would 401 on every /api/v1 call once
+/// dev_mode=false.
+pub(crate) fn resolve_self_auth_token() -> Option<String> {
     if let Ok(token) = std::env::var("TYLLUAN_TOKEN")
         && !token.trim().is_empty() {
             return Some(token);
