@@ -32,6 +32,14 @@ fn average_cosine_to_sources(target: &[f32], sources: &[Vec<f32>]) -> Option<f32
     Some(sum / sources.len() as f32)
 }
 
+/// SOLE owner of the `nodes.conflicted` queue (since 2026-10-04). Drained
+/// only here, via the hourly scheduler in main.rs: Case A reinforces the
+/// winner, Case B synthesizes, Case C (critical ambiguity) sets status
+/// "Ambiguous" and KEEPS the conflicted flag so a human can review — that
+/// invariant is what a second queue consumer broke (the root consensus.rs
+/// engine drained everything every ~5 min before a human ever looked; now
+/// removed). Don't reintroduce another consumer of the conflicted queue;
+/// if the cadence needs changing, change THIS scheduler's interval.
 pub struct ConsensusEngine {
     silva: std::sync::Arc<SilvaDB>,
 }
