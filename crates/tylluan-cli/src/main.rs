@@ -4,6 +4,8 @@ use std::process::Command;
 use std::path::PathBuf;
 use sysinfo::System;
 
+mod backup;
+
 const DEFAULT_PORT: u16 = 47004;
 
 /// Installation profile — determines which embedding model and default settings to use.
@@ -125,6 +127,20 @@ enum Commands {
     Resume {
         /// Agent identity to resume (e.g. 'claude-code', 'qwen')
         agent_id: String,
+    },
+    /// Create a hot-consistent backup of the hub databases (kernel may keep running)
+    Backup {
+        /// Directory to write the backup into (created if missing; .db files + manifest)
+        dir: PathBuf,
+        /// Extra database to include (file name relative to the data dir, or a full path)
+        #[arg(long)]
+        db: Vec<String>,
+    },
+    /// Restore hub databases from a directory produced by `tylluan-cli backup`
+    /// (refuses to run while the kernel is up; snapshots current state first)
+    Restore {
+        /// Backup directory containing backup-manifest.json + .db files
+        dir: PathBuf,
     },
 }
 
@@ -979,6 +995,12 @@ def test_{snake}_tool_registered():
                 Ok(resp) => println!("❌ Hub returned error status: {}", resp.status()),
                 Err(_) => println!("❌ Hub is OFFLINE — start it with 'tylluan start'"),
             }
+        }
+        Commands::Backup { dir, db } => {
+            backup::run_backup(&dir, &db)?;
+        }
+        Commands::Restore { dir } => {
+            backup::run_restore(&dir, DEFAULT_PORT).await?;
         }
     }
 
