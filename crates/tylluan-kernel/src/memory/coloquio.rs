@@ -306,6 +306,26 @@ impl ColoquioDb {
         })
     }
 
+    /// Test-only: insert a message with an EXPLICIT turn number. The public
+    /// post path auto-assigns consecutive turns; sparse-turn scenarios
+    /// (the pagination regression class, Frente 1 T891) need gaps.
+    #[cfg(test)]
+    pub(crate) fn insert_test_turn(
+        &self,
+        channel_id: &str,
+        author_id: &str,
+        content: &str,
+        turn: i64,
+    ) {
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        conn.execute(
+            "INSERT OR IGNORE INTO coloquio_messages (msg_id, channel_id, author_id, role, content, turn, metadata)
+             VALUES (?1, ?2, ?3, 'agent', ?4, ?5, '{}')",
+            params![format!("test-msg-{channel_id}-{turn}"), channel_id, author_id, content, turn],
+        )
+        .expect("test-only insert must succeed");
+    }
+
     /// Messages strictly older than `before_turn` in a channel, ordered by `turn ASC`.
     /// Fetches up to `limit` prior messages (using `ORDER BY turn DESC LIMIT ?` reversed).
     pub async fn get_messages_before(
