@@ -18,6 +18,7 @@ pub enum TransportError {
 }
 
 #[async_trait]
+#[allow(clippy::double_must_use)]
 pub trait MeshTransport: Send {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError>;
     async fn receive(&mut self) -> Result<Vec<u8>, TransportError>;
