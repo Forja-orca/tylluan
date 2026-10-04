@@ -599,12 +599,29 @@ impl EmbeddingEngine {
     /// empíricamente según ADR-017 §3/F1). Invariante del ADR: ningún rechazo
     /// deja datos a medias — si la cola falla, cae a embed directo con warn,
     /// nunca devuelve error hacia arriba.
+    ///
+    /// LRU primero (gate de F1, 2026-10-04): el warm-start puebla esta cache
+    /// y el batcher no la consulta — saltarla convertía cada intent repetido
+    /// en un miss ONNX de ~5s (do C=1 121ms→1117ms en el primer gate). Un hit
+    /// devuelve sin tocar el batcher; un resultado del batcher se guarda en
+    /// la LRU para el siguiente intent idéntico.
     pub fn embed_batch_coalesced_routing(self: &Arc<Self>, text: &str) -> Result<Vec<f32>> {
         if !Self::routing_batching_enabled() {
             return self.embed(text);
         }
+        let cache_key = text.trim().to_lowercase();
+        {
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(cached) = cache.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
         match self.routing_shared_batcher().and_then(|b| b.embed_one(text.to_string())) {
-            Ok(v) => Ok(v),
+            Ok(v) => {
+                let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+                cache.put(cache_key, v.clone());
+                Ok(v)
+            }
             Err(e) => {
                 warn!("routing batcher fallback: {e} (embed directo, sin pérdida)");
                 self.embed(text)
