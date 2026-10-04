@@ -21,6 +21,12 @@ import numpy as np
 
 mcp = FastMCP("night_reasoner")
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run fallback
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 # ── SmolLM2-135M config (fallback) ──────────────────────────────────────────
 _SMOL_CACHE = Path.home() / ".cache/huggingface/hub/models--onnx-community--SmolLM2-135M-Instruct-ONNX"
 _SMOL_LAYERS = 30
@@ -225,7 +231,7 @@ def _reason_with_llama(prompt, max_tokens=128):
         req = _urllib.Request(
             f"{_KERNEL_URL}/api/v1/guilds/llama_backend/tools/query_model",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=kernel_auth.kernel_headers(),
             method="POST",
         )
         with _urllib.urlopen(req, timeout=120) as resp:
@@ -365,7 +371,7 @@ def _embed_text(text):
     req = _urllib.Request(
         f"{_KERNEL_URL}/api/v1/embed",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=kernel_auth.kernel_headers(),
         method="POST",
     )
     try:

@@ -371,7 +371,7 @@ impl GuildProcess {
             root
         };
 
-        let command = match &self.launcher {
+        let mut command = match &self.launcher {
 GuildLauncher::Python { module_path } => {
                 let python = find_python().await.map_err(|e| {
                     error!("❌ find_python() failed: {}. Check .venv exists!", e);
@@ -443,6 +443,22 @@ GuildLauncher::Python { module_path } => {
             GuildLauncher::Http { .. } => unreachable!("Http handled above"),
             GuildLauncher::Sse { .. } => unreachable!("Sse handled above"),
         };
+
+        // Fleet token injection (2026-10-04): stdio guilds call the kernel
+        // over HTTP (/api/v1/*) and bearer_auth_middleware 401s every call
+        // without a valid token once dev_mode=false. Until now only
+        // PYTHONPATH/PYTHONUNBUFFERED were set here, so a guild saw
+        // TYLLUAN_TOKEN only if the operator exported it in the kernel's own
+        // shell — with the default token-in-FILE setup (.tylluan-token) every
+        // guild ran unauthenticated (hallazgo 2, re-verificación 2026-10-04:
+        // coloquio/coordinator/scheduler/night_reasoner/seed_tools no mandan
+        // header, y ni silva_utils ni memory_bridge tenían de dónde sacarlo).
+        // Resolve the SAME token the kernel accepts (env → file, same order
+        // as config.rs startup and the kernel's own self-calls) and inject
+        // it. Guild-side pickup: guilds/core/kernel_auth.py.
+        if let Some(token) = crate::security::coherence_gate::resolve_self_auth_token() {
+            command.env("TYLLUAN_TOKEN", token);
+        }
 
         let proxy = McpProxy::spawn(
             &self.name,

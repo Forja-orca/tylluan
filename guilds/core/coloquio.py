@@ -8,6 +8,13 @@ import urllib.parse
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run: python guilds/core/coloquio.py
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 mcp = FastMCP("coloquio")
 
 
@@ -28,7 +35,8 @@ KERNEL_BASE = _resolve_kernel_base()
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 def _get(path: str) -> dict:
-    with urllib.request.urlopen(f"{KERNEL_BASE}{path}", timeout=10) as r:
+    req = urllib.request.Request(f"{KERNEL_BASE}{path}", headers=kernel_auth.kernel_headers())
+    with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 
 
@@ -37,7 +45,7 @@ def _post(path: str, body: dict) -> dict:
     req = urllib.request.Request(
         f"{KERNEL_BASE}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=kernel_auth.kernel_headers(),
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -215,6 +223,9 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
             )
         return "\n".join(lines)
     except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return ("❌ Kernel auth failed (HTTP 401): no valid bearer token. "
+                    "The kernel injects TYLLUAN_TOKEN into guild envs; check that .tylluan-token exists and matches.")
         return f"❌ Channel '{channel_id}' not found (HTTP {e.code}). Create it first from the dashboard."
     except Exception as e:
         return f"❌ Error reading channel: {e}"
