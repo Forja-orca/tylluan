@@ -4432,13 +4432,17 @@ name = "tylluan-cli"
 version = "0.17.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "ctrlc",
  "flate2",
  "reqwest",
+ "rusqlite",
+ "serde",
  "serde_json",
  "sysinfo 0.33.1",
  "tar",
+ "tempfile",
  "tokio",
  "toml",
 ]
