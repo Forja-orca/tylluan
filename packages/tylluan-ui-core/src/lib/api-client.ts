@@ -571,7 +571,7 @@ export class NexusBridge {
 
   // --- Coloquio ---
   async getColoquioChannels() { return coloquio.getColoquioChannels(this); }
-  async getColoquioThread(channelId: string) { return coloquio.getColoquioThread(this, channelId); }
+  async getColoquioThread(channelId: string, options?: coloquio.ColoquioThreadOptions) { return coloquio.getColoquioThread(this, channelId, options); }
   async postColoquioMessage(channelId: string, req: any) { return coloquio.postColoquioMessage(this, channelId, req); }
   async createColoquioChannel(channelId: string, name: string) { return coloquio.createColoquioChannel(this, channelId, name); }
   async deleteColoquioChannel(channelId: string, archive: boolean) { return coloquio.deleteColoquioChannel(this, channelId, archive); }

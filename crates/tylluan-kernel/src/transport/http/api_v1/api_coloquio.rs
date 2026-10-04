@@ -121,6 +121,8 @@ mod mention_gate_tests {
 pub struct ColoquioThreadQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub since_turn: Option<i64>,
+    pub before_turn: Option<i64>,
 }
 
 pub fn no_limit() -> i64 { i64::MAX }
@@ -178,19 +180,29 @@ pub async fn coloquio_get_thread(
     Query(q): Query<ColoquioThreadQuery>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(no_limit());
-    let offset = match q.offset {
-        Some(off) => off,
-        None => {
-            if limit < no_limit() {
-                let last_turn = state.coloquio.get_last_turn(&id).await.unwrap_or(0);
-                if last_turn > limit { last_turn - limit } else { 0 }
-            } else {
-                0
-            }
-        }
+    let offset = q.offset.unwrap_or(0);
+    let res = if let Some(since) = q.since_turn {
+        let lim = if limit < no_limit() { limit as usize } else { 1000 };
+        state.coloquio.get_messages_since(&id, since, lim).await
+    } else if let Some(before) = q.before_turn {
+        state.coloquio.get_messages_before(&id, before, limit).await
+    } else if q.offset.is_some() {
+        state.coloquio.get_thread(&id, limit, offset).await
+    } else if limit < no_limit() {
+        state.coloquio.get_thread_tail(&id, limit).await
+    } else {
+        state.coloquio.get_thread(&id, limit, 0).await
     };
-    match state.coloquio.get_thread(&id, limit, offset).await {
-        Ok(messages) => Json(serde_json::json!({ "channel_id": id, "messages": messages, "count": messages.len(), "offset": offset })).into_response(),
+
+    match res {
+        Ok(messages) => Json(serde_json::json!({
+            "channel_id": id,
+            "messages": messages,
+            "count": messages.len(),
+            "offset": offset,
+            "since_turn": q.since_turn,
+            "before_turn": q.before_turn,
+        })).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
     }
 }

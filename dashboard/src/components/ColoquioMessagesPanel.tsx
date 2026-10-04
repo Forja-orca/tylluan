@@ -1,6 +1,6 @@
 import {
   MessageSquare, Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
-  Check, Copy, Quote, FileText, Network, ChevronDown, ChevronRight
+  Check, Copy, Quote, FileText, Network, ChevronDown, ChevronRight, ChevronUp
 } from 'lucide-react';
 import { useRef, useLayoutEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
@@ -15,10 +15,40 @@ interface VMLProps {
   scrollToBottom: boolean;
   onScrollToBottomDone: () => void;
   isAtBottom: React.MutableRefObject<boolean>;
+  hasMoreOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
-function VirtualMessageList({ messages, renderItem, scrollToBottom, onScrollToBottomDone, isAtBottom }: VMLProps) {
+function VirtualMessageList({
+  messages,
+  renderItem,
+  scrollToBottom,
+  onScrollToBottomDone,
+  isAtBottom,
+  hasMoreOlder,
+  loadingOlder,
+  onLoadOlder,
+}: VMLProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+
+  useLayoutEffect(() => {
+    if (loadingOlder && ref.current) {
+      prevScrollHeightRef.current = ref.current.scrollHeight;
+    }
+  }, [loadingOlder]);
+
+  useLayoutEffect(() => {
+    if (!loadingOlder && prevScrollHeightRef.current > 0 && ref.current) {
+      const diff = ref.current.scrollHeight - prevScrollHeightRef.current;
+      if (diff > 0) {
+        ref.current.scrollTop += diff;
+      }
+      prevScrollHeightRef.current = 0;
+    }
+  }, [messages, loadingOlder]);
+
   useLayoutEffect(() => {
     if (!scrollToBottom) return;
     requestAnimationFrame(() => {
@@ -35,6 +65,27 @@ function VirtualMessageList({ messages, renderItem, scrollToBottom, onScrollToBo
 
   return (
     <div ref={ref} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 py-3">
+      {hasMoreOlder && (
+        <div className="flex justify-center mb-4">
+          <button
+            onClick={onLoadOlder}
+            disabled={loadingOlder}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-indigo-300 hover:text-indigo-200 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-800/40 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {loadingOlder ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Cargando mensajes anteriores...</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" />
+                <span>Cargar mensajes anteriores</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
       {messages.map((msg, i) => (
         <div key={msg.msg_id} id={`msg-turn-${msg.turn}`}>{renderItem(msg, i > 0 ? messages[i - 1] : null)}</div>
       ))}
@@ -117,6 +168,9 @@ interface ColoquioMessagesPanelProps {
   handleFileUpload: (files: FileList | File[]) => void;
   bridge: NexusBridge | null;
   fetchThread: () => void;
+  hasMoreOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
 export function ColoquioMessagesPanel({
@@ -148,6 +202,9 @@ export function ColoquioMessagesPanel({
   handleFileUpload,
   bridge,
   fetchThread,
+  hasMoreOlder = false,
+  loadingOlder = false,
+  onLoadOlder,
 }: ColoquioMessagesPanelProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [highlightedTurn, setHighlightedTurn] = useState<number | null>(null);
@@ -428,8 +485,16 @@ export function ColoquioMessagesPanel({
           <Sparkles className="w-6 h-6 opacity-20 animate-pulse" /><p className="text-[12px]">Empty channel</p>
         </div>
       ) : (
-        <VirtualMessageList messages={filteredMessages} renderItem={renderMessage}
-          scrollToBottom={needsScrollToBottom} onScrollToBottomDone={() => setNeedsScrollToBottom(false)} isAtBottom={isAtBottom} />
+        <VirtualMessageList
+          messages={filteredMessages}
+          renderItem={renderMessage}
+          scrollToBottom={needsScrollToBottom}
+          onScrollToBottomDone={() => setNeedsScrollToBottom(false)}
+          isAtBottom={isAtBottom}
+          hasMoreOlder={!msgSearch && hasMoreOlder}
+          loadingOlder={loadingOlder}
+          onLoadOlder={onLoadOlder}
+        />
       )}
       {Object.keys(typingStatuses).length > 0 && (
         <div className="px-5 py-1.5 text-[10px] text-slate-500 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
