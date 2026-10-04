@@ -342,20 +342,29 @@ pub async fn handle_tylluan_recall(
                 }
             }
             // Tail-Offset Querying:
-            let offset = match offset_arg {
-                Some(off) => off,
-                None => {
-                    let last_turn = coloquio.get_last_turn(cid).await.unwrap_or(0);
-                    if last_turn > limit as i64 {
-                        last_turn - limit as i64
-                    } else {
-                        0
-                    }
-                }
-            };
-            let msgs = match coloquio.get_thread(cid, limit as i64, offset).await {
-                Ok(msgs) => msgs,
-                Err(e) => return Ok(error_result(&format!("Coloquio read error: {e}"))),
+            // An explicit `offset` argument is a row-index offset into
+            // get_thread (LIMIT/OFFSET over messages). Without it, use
+            // get_thread_tail — the previous default computed
+            // last_turn - limit, a TURN-based value applied to a
+            // row-index OFFSET: with non-consecutive turns (gaps real in
+            // every channel) it landed past the end and returned 0
+            // messages (Frente 1, T891 — same bug class Antigravity
+            // fixed in api_coloquio).
+            let (msgs, offset_label) = match offset_arg {
+                Some(off) => (
+                    match coloquio.get_thread(cid, limit as i64, off).await {
+                        Ok(m) => m,
+                        Err(e) => return Ok(error_result(&format!("Coloquio read error: {e}"))),
+                    },
+                    off.to_string(),
+                ),
+                None => (
+                    match coloquio.get_thread_tail(cid, limit as i64).await {
+                        Ok(m) => m,
+                        Err(e) => return Ok(error_result(&format!("Coloquio read error: {e}"))),
+                    },
+                    "tail".to_string(),
+                ),
             };
             if msgs.is_empty() {
                 return Ok(CallToolResult {
@@ -367,7 +376,7 @@ pub async fn handle_tylluan_recall(
                 format!("[T{}] **@{}**: {}", m.turn, m.author_id, m.content)
             }).collect::<Vec<_>>().join("\n\n");
             return Ok(CallToolResult {
-                content: vec![Content::text(format!("## #{cid} â€” Messages (Limit: {limit}, Offset: {offset})\n\n{text}"))],
+                content: vec![Content::text(format!("## #{cid} â€” Messages (Limit: {limit}, Offset: {offset_label})\n\n{text}"))],
                 is_error: Some(false),
             });
         }
@@ -1207,6 +1216,45 @@ mod tests {
             doctor,
             node_router,
         )
+    }
+
+    /// Frente 1 (T891): el tail-read de `@coloquio:<canal>` calculaba
+    /// offset = last_turn - limit — un valor basado en TURN aplicado al
+    /// OFFSET de filas de get_thread. Con turnos no consecutivos (huecos
+    /// reales en cada canal) aterrizaba más allá del final y devolvía 0
+    /// mensajes. El camino sin offset debe devolver los últimos mensajes
+    /// independientemente de los huecos de turno.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn coloquio_tail_read_handles_sparse_turns() {
+        use crate::memory::coloquio::ColoquioDb;
+        use std::sync::Arc;
+        let db = Arc::new(ColoquioDb::new(":memory:").unwrap());
+        db.insert_test_turn("sparse", "a", "msg one", 1);
+        db.insert_test_turn("sparse", "b", "msg two", 2);
+        db.insert_test_turn("sparse", "c", "msg three", 200);
+
+        let mut server = test_server().await;
+        server.coloquio = Some(db.clone());
+
+        let args = Some(serde_json::Map::from_iter([
+            ("query".to_string(), serde_json::json!("@coloquio:sparse")),
+            ("limit".to_string(), serde_json::json!(5)),
+            ("mode".to_string(), serde_json::json!("personal")),
+        ]));
+        let res = handle_tylluan_recall(&server, args).await.unwrap();
+        let text = res
+            .content
+            .first()
+            .and_then(|c| c.as_text().map(|t| t.text.clone()))
+            .unwrap_or_default();
+        assert!(
+            text.contains("msg one") && text.contains("msg two") && text.contains("msg three"),
+            "tail read must return messages despite turn gaps; got: {text}"
+        );
+        assert!(
+            !text.contains("#sparse is empty"),
+            "must not report empty channel; got: {text}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
