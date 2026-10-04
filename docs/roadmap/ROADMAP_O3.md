@@ -522,6 +522,8 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | `tylluan doctor` | `tylluan-cli` | No implementado | M19-P1 |
 | Profile wizard | `tylluan-cli` | No implementado | M19-P2 |
 | Comparative benchmarks | `benchmarks/` | Solo internos, sin comparativa vs Letta/Mem0/Zep | M28-P0 |
+| Backup/restore de SilvaDB | `memory/backup.rs` existe, no expuesto | Sin comando CLI; hoy solo vía parar kernel + copiar `.db`/`.db-wal`, o `sqlite3 .backup` en caliente. Riesgo real de backup inconsistente si se copia en caliente sin `.backup`. Hallazgo de informe externo verificado 2026-10-04, confirmado contra código real. | Sin asignar |
+| Pre-check de config insegura al arranque | — (no existe) | `host=0.0.0.0` + `dev_mode=true` solo está documentado como invariante (CLAUDE.md regla 5), sin guard automático que lo bloquee antes de arrancar. Script trivial (~10 líneas) propuesto por informe externo 2026-10-04. | Sin asignar |
 
 ## Investigación pendiente (backlog, sin fecha)
 
