@@ -82,10 +82,10 @@ export function ArchitectureMap() {
             <SvgNode x={195} y={250} width={100} height={34} label="BGE-M3" sublabel="vector search" style={NODE_STYLES.core} />
             <SvgNode x={310} y={250} width={80} height={34} label="PageRank" sublabel="graph score" style={NODE_STYLES.core} />
 
-            {/* Future: HippoRAG-PPR */}
-            <rect x={80} y={300} width={310} height={32} rx={4} fill="none" stroke="#F59E0B" strokeWidth={0.8} strokeDasharray="4 2" opacity={0.5} />
-            <text x={235} y={320} textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" opacity={0.7}>
-              FUTURE: HippoRAG-PPR (Personalized PageRank)
+            {/* Active PageRank */}
+            <rect x={80} y={300} width={310} height={32} rx={4} fill="#0C1A1A" stroke="#10B981" strokeWidth={0.8} opacity={0.8} />
+            <text x={235} y={320} textAnchor="middle" fill="#6EE7B7" fontSize="10" fontFamily="ui-monospace, monospace">
+              ACTIVE: PageRank with Degree Penalty / (1 + deg * 0.1)
             </text>
 
             <SvgNode x={140} y={342} width={100} height={28} label="RRF Fusion" sublabel="rank merge" style={{ fill: '#0C1A1A', stroke: '#14B8A6', strokeWidth: 1.5 }} />
@@ -100,17 +100,17 @@ export function ArchitectureMap() {
             <SvgNode x={520} y={342} width={100} height={28} label="tldraw" sublabel="whiteboard" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 0.5, strokeDasharray: '3 2' } as any} />
           </PhaseBox>
 
-          {/* Guilds */}
-          <PhaseBox x={730} y={212} width={360} height={190} title="Guilds — Agent Capabilities" color="#A855F7">
+          {/* Sovereign Core & 46 Guilds */}
+          <PhaseBox x={730} y={212} width={360} height={190} title="5 Sovereign Tools &amp; 46 Guilds (CONTRACT-01)" color="#A855F7">
             <SvgNode x={750} y={250} width={100} height={34} label="tylluan_do" sublabel="execute actions" style={NODE_STYLES.process} />
             <SvgNode x={870} y={250} width={100} height={34} label="tylluan_recall" sublabel="memory access" style={NODE_STYLES.process} />
             <SvgNode x={750} y={300} width={100} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
             <SvgNode x={870} y={300} width={100} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
             <SvgNode x={750} y={350} width={100} height={28} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
 
-            <rect x={870} y={350} width={200} height={28} rx={4} fill="none" stroke="#F59E0B" strokeWidth={0.8} strokeDasharray="4 2" opacity={0.5} />
-            <text x={970} y={368} textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" opacity={0.7}>
-              FUTURE: Local tool-calling model (26M-1B)
+            <rect x={870} y={350} width={200} height={28} rx={4} fill="#1E1B4B" stroke="#818CF8" strokeWidth={0.8} opacity={0.8} />
+            <text x={970} y={368} textAnchor="middle" fill="#C7D2FE" fontSize="9" fontFamily="ui-monospace, monospace">
+              ACTIVE: Decision Fabric (ADR-018)
             </text>
           </PhaseBox>
 
@@ -235,26 +235,26 @@ export function ArchitectureMap() {
           <g>
             <rect x={60} y="710" width={520} height={60} rx={6} fill="#0C1A1A" stroke="#10B981" strokeWidth={0.8} opacity={0.8} />
             <text x={76} y={730} fill="#10B981" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
-              ✦ FSRS Integration (v13 — ACTIVE)
+              ✦ FSRS-5 Integration &amp; Cognitive Defense (ACTIVE)
             </text>
             <text x={76} y={746} fill="#94A3B8" fontSize="10" fontFamily="system-ui, sans-serif">
-              Replaced fixed half-life (T½=14d) with per-memory stability model.
+              Per-memory stability model + CoherenceGate L1-L4 hybrid memory firewall (ADR-011).
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  905 tests passing (824+69+12)
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,038 tests passing (957+69+12)
             </text>
           </g>
 
           <g>
             <rect x={600} y="710" width={580} height={60} rx={6} fill="#1A1510" stroke="#F59E0B" strokeWidth={0.8} opacity={0.8} />
             <text x={616} y={730} fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
-              ⬡ Project Status — Jul 2026
+              ⬡ Project Status — Oct 2026 (v0.17.0+)
             </text>
             <text x={616} y={746} fill="#94A3B8" fontSize="10" fontFamily="system-ui, sans-serif">
-              ACTIVE: Deterministic Freshness · DreamCycle · Dashboard M26 · Mem0 Benchmark ·
+              ACTIVE: Decision Fabric (ADR-018) · Cognitive Scheduler · CoherenceGate L1-L4 · Stigmergy (ADR-015) · Noise NK/XK
             </text>
             <text x={616} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              PROPOSED: HippoRAG-PPR · Local tool-calling (26M-1B) · FUTURE: KNEXA-FL (LinUCB)
+              SPIKE/RESEARCH: System One Laya ONNX (ADR-018) · Sparse Vectors (SPLADE) · Postcard zero-copy Serde
             </text>
           </g>
 
