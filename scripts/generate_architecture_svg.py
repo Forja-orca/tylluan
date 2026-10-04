@@ -86,7 +86,7 @@ def generate_svg():
     <!-- Client 1: MCP -->
     <rect x="60" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <text x="75" y="82" fill="#f8fafc" font-size="13" font-weight="600">MCP IDEs / Assistants</text>
-    <text x="75" y="99" fill="#94a3b8" font-size="11">Claude Code · Cursor · VS Code · Claude Desktop · Qwen</text>
+    <text x="75" y="99" fill="#94a3b8" font-size="11">Claude Code · Cursor · VS Code · Claude Desktop · Qwen · Antigravity</text>
 
     <!-- Client 2: A2A -->
     <rect x="455" y="62" width="370" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
@@ -109,8 +109,13 @@ def generate_svg():
     
     <text x="65" y="200" fill="#38bdf8" font-size="16" font-weight="800" letter-spacing="1">tylluan-nexus (:47004)</text>
     <text x="245" y="200" fill="#64748b" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
-    <rect x="1100" y="183" width="120" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-    <text x="1115" y="199" fill="#34d399" font-size="11" font-weight="700">MIT SOBERANO</text>
+    
+    <!-- Badges -->
+    <rect x="910" y="183" width="170" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+    <text x="925" y="199" fill="#34d399" font-size="11" font-weight="700">1,038 TESTS GREEN</text>
+    
+    <rect x="1090" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+    <text x="1105" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
 
     <!-- SECTION 1: INGRESS & TRANSPORT -->
     <g id="ingress-sec">
@@ -125,33 +130,36 @@ def generate_svg():
       <!-- A2A Server -->
       <rect x="460" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
       <text x="475" y="269" fill="#f8fafc" font-size="12" font-weight="600">A2A Protocol Server</text>
-      <text x="475" y="284" fill="#cbd5e1" font-size="10">Agent Card (/api/v1/a2a/agents) · Tasks · Messages</text>
+      <text x="475" y="284" fill="#cbd5e1" font-size="10">Agent Card (/api/v1/a2a/agents) · Tasks · Streaming SSE</text>
 
       <!-- REST Server -->
       <rect x="840" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
       <text x="855" y="269" fill="#f8fafc" font-size="12" font-weight="600">REST API v1</text>
-      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/embed · /api/v1/do · /health (JSON Schema Contracts)</text>
+      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/do · /recall · /remember · /think · /graph · /health</text>
     </g>
 
-    <!-- SECTION 2: SOVEREIGN CORE & ROUTER -->
+    <!-- SECTION 2: SOVEREIGN CORE, SCHEDULER & DECISION FABRIC -->
     <g id="sovereign-sec">
       <rect x="65" y="320" width="1150" height="95" rx="10" fill="url(#sov-grad)" stroke="#10b981" stroke-width="2"/>
-      <text x="80" y="340" fill="#6ee7b7" font-size="11" font-weight="700" letter-spacing="1">2. SOVEREIGN LAYER &amp; COGNITIVE ROUTER (CONTRACT-01)</text>
+      <text x="80" y="340" fill="#6ee7b7" font-size="11" font-weight="700" letter-spacing="1">2. SOVEREIGN LAYER, COGNITIVE SCHEDULER &amp; DECISION FABRIC (CONTRACT-01)</text>
 
       <!-- 5 Sovereign Tools -->
-      <rect x="80" y="348" width="460" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
+      <rect x="80" y="348" width="340" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
       <text x="95" y="368" fill="#ffffff" font-size="13" font-weight="700">5 Sovereign Tools</text>
-      <text x="95" y="386" fill="#6ee7b7" font-size="11">tylluan_do · tylluan_remember · tylluan_recall · tylluan_think · tylluan_graph</text>
+      <text x="95" y="384" fill="#6ee7b7" font-size="10">tylluan_do · tylluan_remember</text>
+      <text x="95" y="396" fill="#6ee7b7" font-size="10">tylluan_recall · tylluan_think · tylluan_graph</text>
 
-      <!-- Hybrid Router -->
-      <rect x="560" y="348" width="360" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
-      <text x="575" y="368" fill="#ffffff" font-size="13" font-weight="700">Hybrid Matcher &amp; Router</text>
-      <text x="575" y="386" fill="#a7f3d0" font-size="11">RRF Fusion (BGE-M3 + BM25) · Lessons · Triggers · Anchors</text>
+      <!-- Cognitive Scheduler & CoherenceGate -->
+      <rect x="435" y="348" width="380" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
+      <text x="450" y="368" fill="#ffffff" font-size="13" font-weight="700">Cognitive Scheduler &amp; CoherenceGate</text>
+      <text x="450" y="384" fill="#a7f3d0" font-size="10">TaskContext · RiskTier · CallerTrust · LatencyClass</text>
+      <text x="450" y="396" fill="#a7f3d0" font-size="10">CoherenceGate L1-L4 Firewall · Signal Loop (ADR-011)</text>
 
-      <!-- Roadmap: Retrieval Gate (Translucent) -->
-      <rect x="940" y="348" width="260" height="55" rx="8" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
-      <text x="955" y="368" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap I-6] Retrieval Gate</text>
-      <text x="955" y="386" fill="#fde68a" fill-opacity="0.75" font-size="10">Intent memory pre-filter (Waku pattern)</text>
+      <!-- Decision Fabric (ADR-018) -->
+      <rect x="830" y="348" width="370" height="55" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+      <text x="845" y="368" fill="#ffffff" font-size="13" font-weight="700">Decision Fabric (ADR-018)</text>
+      <text x="845" y="384" fill="#6ee7b7" font-size="10">DecisionProvider trait · Deterministic rules baseline</text>
+      <text x="845" y="396" fill="#6ee7b7" font-size="10">System One (Laya ONNX): choice · score · noul</text>
     </g>
 
     <!-- SECTION 3: SILVADB (LEFT) & INFERENCE (RIGHT) -->
@@ -168,7 +176,7 @@ def generate_svg():
 
       <rect x="380" y="465" width="340" height="85" rx="8" fill="#022c22" stroke="#059669" stroke-width="1"/>
       <text x="395" y="488" fill="#ffffff" font-size="13" font-weight="700">Vector &amp; Graph Engines</text>
-      <text x="395" y="506" fill="#6ee7b7" font-size="11">• HNSW Vector Index (1024-dim)</text>
+      <text x="395" y="506" fill="#6ee7b7" font-size="11">• HNSW Vector Index (1024-dim dense)</text>
       <text x="395" y="522" fill="#6ee7b7" font-size="11">• Personalized PageRank (Degree Penalty)</text>
       <text x="395" y="538" fill="#6ee7b7" font-size="11">• FSRS-5 Memory Decay &amp; Consolidation</text>
 
@@ -179,18 +187,18 @@ def generate_svg():
 
       <!-- Inference Engine -->
       <rect x="755" y="435" width="460" height="180" rx="10" fill="url(#infer-grad)" stroke="#c084fc" stroke-width="1.5"/>
-      <text x="770" y="455" fill="#e9d5ff" font-size="11" font-weight="700" letter-spacing="1">4. LOCAL INFERENCE ENGINE (ONNX)</text>
+      <text x="770" y="455" fill="#e9d5ff" font-size="11" font-weight="700" letter-spacing="1">4. LOCAL INFERENCE ENGINE (ZERO CLOUD)</text>
 
       <rect x="770" y="465" width="430" height="85" rx="8" fill="#1e1b4b" stroke="#9333ea" stroke-width="1"/>
       <text x="785" y="488" fill="#ffffff" font-size="13" font-weight="700">ONNX Runtime Embedded (ort)</text>
       <text x="785" y="506" fill="#d8b4fe" font-size="11">• BGE-M3 (1024-dim dense vector embeddings)</text>
-      <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo (fast cross-encoder)</text>
-      <text x="785" y="538" fill="#d8b4fe" font-size="11">• Fallback to BM25-only without ONNX (G2 Smoke)</text>
+      <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo / v2 (cross-encoder)</text>
+      <text x="785" y="538" fill="#d8b4fe" font-size="11">• llama_backend (llama-server GGUF) · Ollama / LM Studio</text>
 
       <!-- Roadmap: Sparse Vectors (Translucent) -->
       <rect x="770" y="560" width="430" height="42" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
-      <text x="785" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap I-7.2] Sparse Vectors (SPLADE)</text>
-      <text x="785" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">BGE-M3 multi-vector lexical weights for sparse search</text>
+      <text x="785" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Research] Sparse Vectors (SPLADE / BGE-M3 Lexical)</text>
+      <text x="785" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">Multi-vector lexical weights for hybrid sparse-dense retrieval</text>
     </g>
 
     <!-- SECTION 4: EXECUTION & GUILDS (LEFT) & FEDERATION MESH (RIGHT) -->
@@ -200,22 +208,22 @@ def generate_svg():
       <text x="80" y="655" fill="#93c5fd" font-size="11" font-weight="700" letter-spacing="1">5. TASK EXECUTION &amp; AGENTIC COLLABORATION</text>
 
       <rect x="80" y="665" width="310" height="85" rx="8" fill="#0f172a" stroke="#2563eb" stroke-width="1"/>
-      <text x="95" y="688" fill="#ffffff" font-size="13" font-weight="700">49 Python Guilds</text>
+      <text x="95" y="688" fill="#ffffff" font-size="13" font-weight="700">46 Python Guilds</text>
       <text x="95" y="706" fill="#93c5fd" font-size="11">• FastMCP stdio child processes</text>
-      <text x="95" y="722" fill="#93c5fd" font-size="11">• Dynamic execution on-demand</text>
-      <text x="95" y="738" fill="#93c5fd" font-size="11">• e.g. llama_backend (llama-server/GGUF)</text>
+      <text x="95" y="722" fill="#93c5fd" font-size="11">• Dynamic execution on-demand &amp; IPC :47004</text>
+      <text x="95" y="738" fill="#93c5fd" font-size="11">• Tools: code, bash, docker, websearch, etc.</text>
 
       <rect x="410" y="665" width="310" height="85" rx="8" fill="#0f172a" stroke="#2563eb" stroke-width="1"/>
       <text x="425" y="688" fill="#ffffff" font-size="13" font-weight="700">Coloquio &amp; Contracts</text>
-      <text x="425" y="706" fill="#93c5fd" font-size="11">• Multi-agent deliberation channels</text>
+      <text x="425" y="706" fill="#93c5fd" font-size="11">• Multi-agent deliberation channels (paginated)</text>
       <text x="425" y="722" fill="#93c5fd" font-size="11">• Bounded Work Contracts (M10)</text>
-      <text x="425" y="738" fill="#93c5fd" font-size="11">• Budget tracking &amp; consensus votes</text>
+      <text x="425" y="738" fill="#93c5fd" font-size="11">• Budget tracking &amp; deterministic freshness</text>
 
-      <!-- Roadmap: Coloquio Watch Daemon (Translucent) -->
-      <rect x="80" y="760" width="640" height="75" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
-      <text x="95" y="784" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Roadmap] Coloquio Watch &amp; Two-Tier Wake-Up Daemon</text>
-      <text x="95" y="802" fill="#fde68a" fill-opacity="0.75" font-size="10">• Synchronous deliberative multi-agent debate stream (SSE / Native)</text>
-      <text x="95" y="818" fill="#fde68a" fill-opacity="0.75" font-size="10">• Proactive wakeup scheduler for background autonomous workers</text>
+      <!-- Stigmergy & Wake-Up Engine (ADR-015) -->
+      <rect x="80" y="760" width="640" height="75" rx="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1.2"/>
+      <text x="95" y="784" fill="#93c5fd" font-size="12" font-weight="600">Stigmergy &amp; Proactive Wake-Up Engine (ADR-015)</text>
+      <text x="95" y="802" fill="#cbd5e1" font-size="10">• In-session cron &amp; proactive wakeup scheduler for background autonomous workers</text>
+      <text x="95" y="818" fill="#cbd5e1" font-size="10">• Environment-mediated indirect coordination across agents via task &amp; memory traces</text>
 
       <!-- Federation Mesh -->
       <rect x="755" y="635" width="460" height="215" rx="10" fill="url(#mesh-grad)" stroke="#38bdf8" stroke-width="1.5"/>
@@ -225,7 +233,7 @@ def generate_svg():
       <text x="785" y="688" fill="#ffffff" font-size="13" font-weight="700">Cryptographic P2P Session Pool</text>
       <text x="785" y="706" fill="#7dd3fc" font-size="11">• Noise NK/XK Handshake (Ed25519 ↔ X25519)</text>
       <text x="785" y="722" fill="#7dd3fc" font-size="11">• ChaCha20-Poly1305 Encrypted Wire Stream</text>
-      <text x="785" y="738" fill="#7dd3fc" font-size="11">• Transparent TCP Connection Pool &amp; Fallback</text>
+      <text x="785" y="738" fill="#7dd3fc" font-size="11">• Transparent TCP Connection Pool &amp; DispatchRouter</text>
 
       <rect x="770" y="760" width="430" height="75" rx="8" fill="#082f49" stroke="#0284c7" stroke-width="1"/>
       <text x="785" y="784" fill="#ffffff" font-size="13" font-weight="700">Gossip &amp; DHT Kademlia</text>
@@ -258,10 +266,13 @@ def generate_svg():
   <path d="M 1020 300 L 1020 320" stroke="#10b981" stroke-width="2.5" fill="none" marker-end="url(#arr-green)" filter="url(#glow-green)"/>
 
   <!-- Sovereign to Memory (Green) -->
-  <path d="M 310 415 L 310 435" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arr-green)"/>
+  <path d="M 250 415 L 250 435" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arr-green)"/>
   
-  <!-- Router to Execution (Blue) -->
-  <path d="M 500 415 L 500 635" stroke="#60a5fa" stroke-width="2" fill="none" marker-end="url(#arr-blue)"/>
+  <!-- Scheduler & Decision Fabric to Execution (Blue) -->
+  <path d="M 625 415 L 625 635" stroke="#60a5fa" stroke-width="2" fill="none" marker-end="url(#arr-blue)"/>
+
+  <!-- Decision Fabric to Mesh Dispatch (Cyan) -->
+  <path d="M 1015 415 L 1015 635" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arr-cyan)"/>
 
   <!-- Memory <-> Inference (Purple) -->
   <path d="M 735 525 L 755 525" stroke="#c084fc" stroke-width="2" fill="none" marker-end="url(#arr-purple)"/>
