@@ -70,6 +70,7 @@ pub enum DecisionError {
 /// el kernel solo ve esta interfaz, y cada implementación se sustituye
 /// sin tocar ningún call-site.
 #[async_trait::async_trait]
+#[allow(clippy::double_must_use)]
 pub trait DecisionProvider: Send + Sync {
     async fn decide(
         &self,
