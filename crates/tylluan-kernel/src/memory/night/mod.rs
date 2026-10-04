@@ -57,6 +57,7 @@ pub struct PhaseReport {
 }
 
 #[async_trait::async_trait]
+#[allow(clippy::double_must_use)]
 pub trait Phase: Send + Sync {
     fn name(&self) -> &'static str;
     async fn run(&self, ctx: &PhaseContext) -> PhaseReport;
