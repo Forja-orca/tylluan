@@ -16,6 +16,12 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("seed_tools")
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run fallback
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 DATA_DIR = Path("data")
 KERNEL_URL = "http://127.0.0.1:47004"
 
@@ -156,7 +162,7 @@ def seed_import(seed_path: str, dry_run: bool = True) -> str:
             req = _urllib.Request(
                 f"{KERNEL_URL}/api/v1/silva/node",
                 data=data,
-                headers={"Content-Type": "application/json"},
+                headers=kernel_auth.kernel_headers(),
                 method="POST",
             )
             with _urllib.urlopen(req, timeout=30) as resp:

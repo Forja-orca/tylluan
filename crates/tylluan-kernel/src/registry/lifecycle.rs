@@ -1,6 +1,5 @@
 use super::guild_process::GuildRegistry;
 use crate::memory::silva::SilvaDB;
-use crate::consensus::ConsensusEngine;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -61,8 +60,16 @@ pub fn start_lifecycle_reaper_with_silva(
         let monitoring_freq = (10 * 60 / check_interval_secs.max(1)).max(1); // Log status every 10 mins
         let mut iteration: u64 = 0;
 
-        // Initialize Truth Consensus if Silva is present
-        let consensus = silva.as_ref().map(|s| ConsensusEngine::new(s.clone()));
+        // NOTE (2026-10-04): this reaper deliberately does NOT run any
+        // conflict-resolution engine. It used to invoke the root consensus.rs
+        // engine every checkpoint (≈5 min) against the SAME nodes.conflicted
+        // queue that the memory::consensus engine (hourly scheduler in
+        // main.rs) owns — auto-clearing every conflicted node (merge or
+        // silent "approve", without checking protected/status) before that
+        // engine's Case C could leave ambiguous clusters for human review.
+        // The duplicate engine was removed; see crates/tylluan-kernel/src/
+        // consensus.rs header. If a periodic consensus pass is ever wanted
+        // again, it must call memory::consensus — never a second engine.
 
         loop {
             tokio::time::sleep(interval).await;
@@ -88,7 +95,9 @@ pub fn start_lifecycle_reaper_with_silva(
             // bloqueo bloqueaba TODAS las llamadas a guilds durante el borrado.
             drop(reg);
 
-            // P1 Fix: Periodic WAL checkpoint & Truth Consensus
+            // P1 Fix: Periodic WAL checkpoint (consensus removed — see the
+            // NOTE above; the conflicted queue has a single owner, the
+            // memory::consensus engine, on its hourly scheduler).
             let (checkpoint_due, decay_due, monitoring_due) =
                 periodic_actions(iteration, checkpoint_freq, DECAY_FREQ, monitoring_freq);
 
@@ -99,12 +108,6 @@ pub fn start_lifecycle_reaper_with_silva(
                     } else {
                         info!("💾 [P1] WAL checkpoint completed");
                     }
-
-                    // Run Truth Consensus (T25)
-                    if let Some(engine) = &consensus
-                        && let Err(e) = engine.resolve_conflicts().await {
-                            tracing::warn!("⚠️ Truth Consensus failed: {}", e);
-                        }
                 }
 
             // Step 2: Biological Decay (T26) — cada DECAY_FREQ iteraciones REALES
@@ -200,5 +203,27 @@ mod tests {
         assert!(cp && !decay && mon);
         let (cp, _, mon) = periodic_actions(3, 0, 100, 0);
         assert!(cp && mon);
+    }
+
+    #[test]
+    fn lifecycle_reaper_has_no_second_consensus_engine() {
+        // Structural anti-drift guard (2026-10-04): the conflicted queue has a
+        // SINGLE owner — the memory::consensus engine (hourly scheduler in
+        // main.rs), whose Case C leaves ambiguous clusters conflicted for
+        // human review. The reaper used to run the root consensus.rs engine
+        // every ~5 min and drain that same queue first (merge or silent
+        // "approve"), defeating Case C. This guard keeps any second queue
+        // consumer from coming back through this file. Only the PRODUCTION
+        // part of the file is scanned (the test module legitimately names the
+        // struct it guards against).
+        let src = include_str!("lifecycle.rs");
+        let production_src = src
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or(src);
+        assert!(
+            !production_src.contains("ConsensusEngine"),
+            "lifecycle reaper must not reference any ConsensusEngine — the nodes.conflicted queue has a single owner (memory::consensus)"
+        );
     }
 }
