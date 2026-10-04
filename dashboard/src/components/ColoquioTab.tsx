@@ -19,6 +19,10 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const [channels, setChannels] = useState<ColoquioChannel[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ColoquioMessage[]>([]);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const messagesRef = useRef<ColoquioMessage[]>([]);
+  messagesRef.current = messages;
   
   // Real-time multi-agent streaming buffer mapping msg_id -> ColoquioMessage
   const [activeStreams, setActiveStreams] = useState<Record<string, ColoquioMessage>>({});
@@ -117,14 +121,62 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const fetchThread = useCallback(async () => {
     if (!bridge || !selectedId) return;
     try {
-      const d = await bridge.getColoquioThread(selectedId) as { messages?: ColoquioMessage[] };
+      const d = await bridge.getColoquioThread(selectedId, { limit: 50 }) as { messages?: ColoquioMessage[] };
       const nm = d.messages ?? [];
-      setMessages(prev => {
-        if (prev.length === nm.length && prev.length > 0 && prev[prev.length - 1].msg_id === nm[nm.length - 1].msg_id) return prev;
-        return nm;
-      });
+      setMessages(nm);
+      setHasMoreOlder(nm.length >= 50);
     } catch {}
   }, [bridge, selectedId]);
+
+  const fetchOlderMessages = useCallback(async () => {
+    if (!bridge || !selectedId || loadingOlder || !hasMoreOlder) return;
+    const currentMsgs = messagesRef.current;
+    if (currentMsgs.length === 0) return;
+    const oldestTurn = currentMsgs[0].turn;
+    setLoadingOlder(true);
+    try {
+      const d = await bridge.getColoquioThread(selectedId, { before_turn: oldestTurn, limit: 50 }) as { messages?: ColoquioMessage[] };
+      const older = d.messages ?? [];
+      if (older.length === 0) {
+        setHasMoreOlder(false);
+      } else {
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.msg_id));
+          const filteredOlder = older.filter(m => !existingIds.has(m.msg_id));
+          return [...filteredOlder, ...prev];
+        });
+        setHasMoreOlder(older.length >= 50);
+      }
+    } catch (err) {
+      console.error('Failed to fetch older messages:', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [bridge, selectedId, loadingOlder, hasMoreOlder]);
+
+  const fetchNewMessages = useCallback(async () => {
+    if (!bridge || !selectedId) return;
+    const currentMsgs = messagesRef.current;
+    if (currentMsgs.length === 0) {
+      return fetchThread();
+    }
+    const latestTurn = currentMsgs[currentMsgs.length - 1].turn;
+    try {
+      const d = await bridge.getColoquioThread(selectedId, { since_turn: latestTurn }) as { messages?: ColoquioMessage[] };
+      const incoming = d.messages ?? [];
+      if (incoming.length > 0) {
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.msg_id));
+          const fresh = incoming.filter(m => !existingIds.has(m.msg_id));
+          if (fresh.length === 0) return prev;
+          return [...prev, ...fresh];
+        });
+        if (isAtBottom.current) {
+          setNeedsScrollToBottom(true);
+        }
+      }
+    } catch {}
+  }, [bridge, selectedId, fetchThread]);
 
   const fetchUnread = useCallback(async () => {
     if (!bridge) return;
@@ -146,6 +198,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const fetchThreadRef = useRef(fetchThread);
   const fetchChannelsRef = useRef(fetchChannels);
   const fetchUnreadRef = useRef(fetchUnread);
+  const fetchNewMessagesRef = useRef(fetchNewMessages);
 
   useEffect(() => {
     fetchThreadRef.current = fetchThread;
@@ -159,9 +212,13 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     fetchUnreadRef.current = fetchUnread;
   }, [fetchUnread]);
 
+  useEffect(() => {
+    fetchNewMessagesRef.current = fetchNewMessages;
+  }, [fetchNewMessages]);
+
   // Polling via centralized coordinator (replaces 3 scattered setInterval calls)
   usePolling('coloquio-unread', fetchUnread, { interval: 'quick', enabled: !!bridge });
-  usePolling('coloquio-thread', () => { fetchThread(); fetchChannels(); }, { interval: 'quick', enabled: !!bridge });
+  usePolling('coloquio-thread', () => { fetchNewMessages(); fetchChannels(); }, { interval: 'standard', enabled: !!bridge });
 
   // Handle SSE Real-time events
   useEffect(() => {
@@ -171,7 +228,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     if (ev.type === 'coloquio:new_turn') {
       const d = ev.data as any;
       if (d.channel_id === selectedId) {
-        fetchThread();
+        fetchNewMessages();
         // Remove completed streaming frames if database registers new turn
         setActiveStreams(prev => {
           const next = { ...prev };
@@ -202,7 +259,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
           if (d.state === 'done' || d.state === 'error') {
             const next = { ...prev };
             delete next[d.msg_id];
-            fetchThread();
+            fetchNewMessages();
             return next;
           }
 
@@ -223,7 +280,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         setNeedsScrollToBottom(true);
       }
     }
-  }, [events, selectedId, fetchThread, fetchChannels]);
+  }, [events, selectedId, fetchNewMessages, fetchChannels]);
 
   // Clean up stale typing statuses (via coordinator instead of raw setInterval)
   usePolling('coloquio-typing-cleanup', () => {
@@ -253,6 +310,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const selectChannel = (id: string) => {
     setSelectedId(id);
     setMsgSearch('');
+    setHasMoreOlder(false);
     const u = unreadMap.get(id) ?? 0;
     if (u > 0 && bridge) {
       const ch = channels.find(c => c.channel_id === id);
@@ -276,7 +334,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
       setDraft('');
       setAttachments([]);
       isAtBottom.current = true;
-      await fetchThread();
+      await fetchNewMessages();
     } catch {} finally {
       setPosting(false);
     }
@@ -431,6 +489,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
                 handleFileUpload={handleFileUpload}
                 bridge={bridge}
                 fetchThread={fetchThread}
+                hasMoreOlder={hasMoreOlder}
+                loadingOlder={loadingOlder}
+                onLoadOlder={fetchOlderMessages}
               />
             )}
           </div>

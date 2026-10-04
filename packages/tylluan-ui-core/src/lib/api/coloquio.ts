@@ -6,8 +6,25 @@ export async function getColoquioChannels(client: Fetcher): Promise<unknown> {
   return await client.fetch('/api/v1/coloquio/channels');
 }
 
-export async function getColoquioThread(client: Fetcher, channelId: string): Promise<unknown> {
-  return await client.fetch(`/api/v1/coloquio/channels/${encodeURIComponent(channelId)}`);
+export interface ColoquioThreadOptions {
+  limit?: number;
+  offset?: number;
+  since_turn?: number;
+  before_turn?: number;
+}
+
+export async function getColoquioThread(
+  client: Fetcher,
+  channelId: string,
+  options?: ColoquioThreadOptions
+): Promise<unknown> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) params.set('limit', String(options.limit));
+  if (options?.offset !== undefined) params.set('offset', String(options.offset));
+  if (options?.since_turn !== undefined) params.set('since_turn', String(options.since_turn));
+  if (options?.before_turn !== undefined) params.set('before_turn', String(options.before_turn));
+  const query = params.toString();
+  return await client.fetch(`/api/v1/coloquio/channels/${encodeURIComponent(channelId)}${query ? `?${query}` : ''}`);
 }
 
 export async function postColoquioMessage(client: Fetcher, channelId: string, req: { author_id: string; role: string; content: string; metadata: string }): Promise<{ turn: number }> {

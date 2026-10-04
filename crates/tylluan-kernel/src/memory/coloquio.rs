@@ -275,6 +275,73 @@ impl ColoquioDb {
         })
     }
 
+    /// Returns the latest `limit` messages in a channel, ordered by `turn ASC`.
+    /// Queries the tail efficiently using `ORDER BY turn DESC LIMIT ?` and reverses the result.
+    pub async fn get_thread_tail(&self, channel_id: &str, limit: i64) -> Result<Vec<ColoquioMessage>> {
+        let channel_id = channel_id.to_string();
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut stmt = conn.prepare(
+                "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
+                 FROM coloquio_messages
+                 WHERE channel_id = ?1
+                 ORDER BY turn DESC
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![channel_id, limit], |row| {
+                Ok(ColoquioMessage {
+                    msg_id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    author_id: row.get(2)?,
+                    role: row.get(3)?,
+                    content: row.get(4)?,
+                    turn: row.get(5)?,
+                    created_at: get_flexible_created_at(row, 6)?,
+                    metadata: row.get(7)?,
+                })
+            })?;
+            let mut msgs: Vec<ColoquioMessage> = rows.flatten().collect();
+            msgs.reverse();
+            Ok(msgs)
+        })
+    }
+
+    /// Messages strictly older than `before_turn` in a channel, ordered by `turn ASC`.
+    /// Fetches up to `limit` prior messages (using `ORDER BY turn DESC LIMIT ?` reversed).
+    pub async fn get_messages_before(
+        &self,
+        channel_id: &str,
+        before_turn: i64,
+        limit: i64,
+    ) -> Result<Vec<ColoquioMessage>> {
+        let channel_id = channel_id.to_string();
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut stmt = conn.prepare(
+                "SELECT COALESCE(msg_id, CAST(turn AS TEXT)), channel_id, author_id, role, content, turn, created_at, metadata
+                 FROM coloquio_messages
+                 WHERE channel_id = ?1 AND turn < ?2
+                 ORDER BY turn DESC
+                 LIMIT ?3",
+            )?;
+            let rows = stmt.query_map(params![channel_id, before_turn, limit], |row| {
+                Ok(ColoquioMessage {
+                    msg_id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    author_id: row.get(2)?,
+                    role: row.get(3)?,
+                    content: row.get(4)?,
+                    turn: row.get(5)?,
+                    created_at: get_flexible_created_at(row, 6)?,
+                    metadata: row.get(7)?,
+                })
+            })?;
+            let mut msgs: Vec<ColoquioMessage> = rows.flatten().collect();
+            msgs.reverse();
+            Ok(msgs)
+        })
+    }
+
     /// Messages strictly newer than `since_turn` in a channel, ascending.
     /// Used by the coloquio long-poll fast path (turn 498/500 design): the
     /// anti-race cursor check that answers immediately when messages already
@@ -934,4 +1001,34 @@ mod tests {
         assert!(extract_mentions("sin menciones aqui").is_empty());
         assert!(extract_mentions("@ solo arroba").is_empty());
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_pagination_tail_and_before_after() {
+        let db = ColoquioDb::in_memory().unwrap();
+        db.create_channel("dev", "Dev channel").await.unwrap();
+        for i in 1..=10 {
+            db.post_message("dev", "agent", "agent", &format!("msg {i}"), "{}").await.unwrap();
+        }
+
+        // Tail of 3 returns 8, 9, 10
+        let tail = db.get_thread_tail("dev", 3).await.unwrap();
+        assert_eq!(tail.len(), 3);
+        assert_eq!(tail[0].turn, 8);
+        assert_eq!(tail[1].turn, 9);
+        assert_eq!(tail[2].turn, 10);
+
+        // Before turn 8 with limit 3 returns 5, 6, 7
+        let before = db.get_messages_before("dev", 8, 3).await.unwrap();
+        assert_eq!(before.len(), 3);
+        assert_eq!(before[0].turn, 5);
+        assert_eq!(before[1].turn, 6);
+        assert_eq!(before[2].turn, 7);
+
+        // Since turn 8 with limit 5 returns 9, 10
+        let since = db.get_messages_since("dev", 8, 5).await.unwrap();
+        assert_eq!(since.len(), 2);
+        assert_eq!(since[0].turn, 9);
+        assert_eq!(since[1].turn, 10);
+    }
 }
+
