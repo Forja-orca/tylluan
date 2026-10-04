@@ -317,12 +317,12 @@ fn main() {
     let mut cross_total = 0usize;
     let mut seen: HashSet<&str> = HashSet::new();
     for r in &audit_route_ok {
-        if let Some(routed) = conf_by_intent.get(r.intent.as_str()) {
-            if seen.insert(r.intent.as_str()) {
-                cross_total += 1;
-                if bucket_guild(r.guild.as_str()) == bucket_guild(routed) {
-                    cross_match += 1;
-                }
+        if let Some(routed) = conf_by_intent.get(r.intent.as_str())
+            && seen.insert(r.intent.as_str())
+        {
+            cross_total += 1;
+            if bucket_guild(r.guild.as_str()) == bucket_guild(routed) {
+                cross_match += 1;
             }
         }
     }
