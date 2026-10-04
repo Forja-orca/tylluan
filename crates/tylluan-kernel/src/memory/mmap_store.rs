@@ -221,6 +221,35 @@ impl MmapEmbeddingStore {
         v
     }
 
+    /// Cosine similarity between an f32 query and the stored int8 vector
+    /// `idx` WITHOUT materializing the dequantized vector: single fused
+    /// pass computes dot + candidate norm together; the query norm is
+    /// precomputed by the caller once per query. Frente 2 P2 (Buffy's
+    /// measurement, 2026-10-04): 1.73x on the IVF path with identical
+    /// R@10 ranking — the no-norm variant was discarded for ranking churn.
+    pub fn cosine_query(&self, idx: u32, query: &[f32], query_norm: f32) -> Option<f32> {
+        if idx >= self.n_vectors || query.len() != self.dim as usize {
+            return None;
+        }
+        let vec_offset_start = 16 + (self.dim as usize * 4);
+        let start = vec_offset_start + (idx as usize * self.dim as usize);
+        let end = start + self.dim as usize;
+        let raw_i8 = &self.mmap[start..end];
+
+        let mut dot = 0.0f32;
+        let mut norm_sq = 0.0f32;
+        for d in 0..self.dim as usize {
+            let scale = self.scales.get(d).copied().unwrap_or(1.0);
+            let v = (raw_i8[d] as i8) as f32 * scale;
+            dot += v * query[d];
+            norm_sq += v * v;
+        }
+        if norm_sq == 0.0 || query_norm == 0.0 {
+            return Some(0.0);
+        }
+        Some(dot / (query_norm * norm_sq.sqrt()))
+    }
+
     pub fn node_to_index(&self, id: &str) -> Option<u32> {
         self.node_to_idx.get(id).copied()
     }
@@ -284,4 +313,90 @@ pub fn dequantize(v: &[i8], scales: &[f32]) -> Vec<f32> {
         dequantized.push(val as f32 * scale);
     }
     dequantized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn temp_store_path(name: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("tylluan_mmap_test_{}_{}.fjv1", std::process::id(), name));
+        p
+    }
+
+    /// Frente 2 P2 (fix IVF): `cosine_query` (fused, sin alloc) debe dar
+    /// el MISMO ranking que la referencia (get_vector + cosine_similarity)
+    /// — el invariante que la medicion de Buffy exige (0/400 mismatches).
+    #[test]
+    fn cosine_query_matches_dequantized_reference() {
+        let dim = 16;
+        let mut vectors: Vec<Vec<f32>> = Vec::new();
+        let mut ids: Vec<String> = Vec::new();
+        for i in 0..40usize {
+            let mut v = Vec::with_capacity(dim);
+            for d in 0..dim {
+                v.push(((i * 31 + d * 7) as f32 % 50.0) / 50.0 - 0.5);
+            }
+            let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if norm > 0.0 {
+                for x in &mut v {
+                    *x /= norm;
+                }
+            }
+            vectors.push(v);
+            ids.push(format!("node-{i}"));
+        }
+        let centroids = vec![
+            vectors[0].clone(),
+            vectors[10].clone(),
+            vectors[20].clone(),
+            vectors[30].clone(),
+        ];
+        let assignments: Vec<u32> = (0..40u32).map(|i| i % 4).collect();
+        let path = temp_store_path("parity");
+        let store =
+            MmapEmbeddingStore::create(&path, &ids, &vectors, dim, 4, &centroids, &assignments)
+                .expect("create store");
+
+        let queries: Vec<Vec<f32>> = vec![
+            vectors[0].clone(),
+            vectors[17].clone(),
+            vectors[39].clone(),
+            {
+                let q: Vec<f32> = (0..dim)
+                    .map(|d| ((d * 13 + 5) as f32 % 29.0) / 29.0 - 0.5)
+                    .collect();
+                let n: f32 = q.iter().map(|x| x * x).sum::<f32>().sqrt();
+                q.iter().map(|x| x / n).collect()
+            },
+        ];
+
+        for q in &queries {
+            let qn = (q.iter().map(|v| v * v).sum::<f32>()).sqrt();
+            let mut ref_scored: Vec<(u32, f32)> = Vec::new();
+            let mut fast_scored: Vec<(u32, f32)> = Vec::new();
+            for idx in 0..store.n_vectors() {
+                let v = store.get_vector(idx);
+                let sim_ref = crate::memory::cosine::cosine_similarity(q, &v);
+                ref_scored.push((idx, sim_ref));
+                let sim_fast = store
+                    .cosine_query(idx, q, qn)
+                    .expect("cosine_query must return a score");
+                fast_scored.push((idx, sim_fast));
+                assert!(
+                    (sim_ref - sim_fast).abs() < 1e-4,
+                    "idx {idx}: ref {sim_ref} vs fast {sim_fast}"
+                );
+            }
+            ref_scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            fast_scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            let ref_top: Vec<u32> = ref_scored.iter().take(10).map(|(i, _)| *i).collect();
+            let fast_top: Vec<u32> = fast_scored.iter().take(10).map(|(i, _)| *i).collect();
+            assert_eq!(ref_top, fast_top, "top-10 ranking must be identical");
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
 }
