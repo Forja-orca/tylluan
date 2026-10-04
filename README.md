@@ -316,71 +316,83 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ```mermaid
 flowchart LR
-  CLIENTS["Clients<br/>MCP IDEs · A2A clients · HTTP/UI"]
+  CLIENTS["Clients & IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
-  subgraph SOVEREIGN["Sovereign layer"]
+  subgraph SOVEREIGN["tylluan-nexus (:47004) — Sovereign Core"]
     TOOLS["5 Sovereign Tools<br/>tylluan_do · remember · recall · think · graph"]
-    ROUTER["Guild matcher<br/>RRF (mxbai+BM25)"]
+
+    subgraph GOVERN["Cognitive Governance & Routing"]
+      SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · System One"]
+      CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
+    end
   end
 
-  subgraph MEMORY["SilvaDB"]
-    SILVA[("SQLite WAL + FTS5")]
-    GRAPH["HNSW + PageRank + FSRS-5"]
+  subgraph MEMORY["SilvaDB Cognitive Store"]
+    SILVA[("SQLite WAL + FTS5 BM25")]
+    GRAPH["HNSW (1024d) · PageRank (Penalty) · FSRS-5"]
   end
 
-  subgraph EXEC["Execution"]
-    GUILDS["46 Python guilds"]
-    COLOQUIO["Coloquio channels"]
-    CONTRACTS["Work Contracts"]
+  subgraph INFER["Local Inference (Zero Cloud)"]
+    ONNX["ONNX Runtime Embedded<br/>BGE-M3 (1024d) · Jina Reranker"]
+    LLAMA["Local LLM Backend<br/>llama-server GGUF · Ollama"]
   end
 
-  INFER["ONNX Runtime<br/>mxbai-embed-large + Jina reranker"]
-
-  subgraph MESH["tylluan-link mesh"]
-    P2P["Gossip + Kademlia DHT<br/>Noise NK/XK"]
+  subgraph EXEC["Execution & Agent Collaboration"]
+    GUILDS["46 Python Guilds<br/>FastMCP stdio child processes"]
+    COLOQUIO["Coloquio & Contracts<br/>Multi-Agent Channels · BWC"]
+    WAKE["Stigmergy & Wake-Up (ADR-015)<br/>Insession Cron · Proactive Triggers"]
   end
 
-  PEERS["Remote peers<br/>LAN/WAN"]
+  subgraph MESH["tylluan-link Distributed Mesh"]
+    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305"]
+    GOSSIP["Gossip Engine & DHT<br/>Anti-Entropy · 256 K-Buckets · STUN"]
+  end
 
-  RGATE["I-6 Retrieval Gate"]:::future
-  WAKE["Roadmap: Wake-Up Scheduling"]:::future
-  SPARSE["Research: Sparse Vectors"]:::future
-  POSTCARD["Roadmap: postcard migration"]:::future
+  PEERS["Remote Peers<br/>LAN (mDNS) · WAN (DHT)"]
+
+  SPARSE["Research: Sparse Lexical (SPLADE)"]:::future
+  POSTCARD["Roadmap: Postcard zero-copy Serde"]:::future
 
   CLIENTS ==> TOOLS
-  TOOLS ==> ROUTER
-  TOOLS ==> MEMORY
-  ROUTER ==> EXEC
-  EXEC ==> MEMORY
-  MEMORY <==> INFER
-  MEMORY <==> MESH
-  MESH ==> PEERS
+  TOOLS ==> SCHED
+  SCHED ==> DECIDER
+  DECIDER ==> GUILDS
+  TOOLS ==> CGATE
+  CGATE ==> MEMORY
+  MEMORY <==> ONNX
+  EXEC <==> MEMORY
+  DECIDER -.-> LLAMA
+  SCHED ==> P2P
+  P2P <==> GOSSIP
+  GOSSIP ==> PEERS
 
-  ROUTER -.-> RGATE
-  COLOQUIO -.-> WAKE
-  INFER -.-> SPARSE
-  MESH -.-> POSTCARD
+  ONNX -.-> SPARSE
+  MEMORY -.-> POSTCARD
 
   classDef sovStyle fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
-  classDef memStyle fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
+  classDef govStyle fill:#065f46,stroke:#6ee7b7,color:#f8fafc,stroke-width:1.5px;
+  classDef memStyle fill:#04382c,stroke:#34d399,color:#f8fafc,stroke-width:1.5px;
   classDef execStyle fill:#172554,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px;
   classDef inferStyle fill:#4c1d95,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px;
-  classDef meshStyle fill:#1e293b,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
+  classDef meshStyle fill:#082f49,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px;
   classDef extStyle fill:#0f172a,stroke:#475569,color:#e2e8f0,stroke-width:1.5px;
   classDef future fill:#78350f,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:4 4,color:#fef3c7;
 
   class CLIENTS,PEERS extStyle;
-  class TOOLS,ROUTER sovStyle;
+  class TOOLS sovStyle;
+  class SCHED,DECIDER,CGATE govStyle;
   class SILVA,GRAPH memStyle;
-  class GUILDS,COLOQUIO,CONTRACTS execStyle;
-  class INFER inferStyle;
-  class P2P meshStyle;
+  class GUILDS,COLOQUIO,WAKE execStyle;
+  class ONNX,LLAMA inferStyle;
+  class P2P,GOSSIP meshStyle;
 
-  linkStyle 0,1,2 stroke:#34d399,stroke-width:2.5px;
-  linkStyle 3,4 stroke:#60a5fa,stroke-width:2.5px;
-  linkStyle 5 stroke:#c084fc,stroke-width:2.5px;
-  linkStyle 6,7 stroke:#38bdf8,stroke-width:2.5px;
-  linkStyle 8,9,10,11 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 0,1,2,3,4,5 stroke:#34d399,stroke-width:2.5px;
+  linkStyle 6 stroke:#c084fc,stroke-width:2px;
+  linkStyle 7 stroke:#60a5fa,stroke-width:2px;
+  linkStyle 8 stroke:#a855f7,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 9,10,11 stroke:#38bdf8,stroke-width:2.5px;
+  linkStyle 12,13 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
 
 ### Detailed Layered Topology & Circuits

@@ -36,11 +36,11 @@ const TABS = [
 ] as const;
 
 const KEY_STATS = [
-  { label: 'Subsistemas', value: '7', detail: 'LinearRAG · Coloquio · Guilds · SilvaDB · Federation · DreamCycle · Dashboard' },
-  { label: 'Retrieval Paths', value: '4+1', detail: 'BM25 · BGE-M3 · PageRank · DreamCycle · (future) HippoRAG-PPR' },
+  { label: 'Subsistemas', value: '9', detail: 'LinearRAG · Decision Fabric · Scheduler · Coloquio · Guilds · SilvaDB · Federation · DreamCycle · Dashboard' },
+  { label: 'Retrieval Paths', value: '3+1', detail: 'BM25 · BGE-M3 (1024d) · PageRank (Penalty) · FSRS Decay · (research) SPLADE' },
   { label: 'Deployment Profiles', value: '3', detail: 'portable (Pi 4) · clinic (local server) · server (full mesh)' },
   { label: 'Benchmark', value: 'R@5 82%', detail: 'LongMemEval — validated' },
-  { label: 'Tests', value: '383', detail: '310 kernel + 61 tylluan-link + 12 FSRS — all passing' },
+  { label: 'Tests', value: '1,038', detail: '957 kernel + 69 tylluan-link + 12 FSRS — all passing' },
   { label: 'Cloud Dependency', value: 'Zero', detail: 'All models local · ONNX runtime · Pi 4 compatible' },
 ];
 
