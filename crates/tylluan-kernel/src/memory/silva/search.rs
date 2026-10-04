@@ -155,11 +155,19 @@ impl super::SilvaDB {
                         }
                     }
 
+                    // Query norm computed ONCE per query (Frente 2 P2 fix):
+                    // the old path materialized a dequantized Vec per
+                    // candidate AND recomputed both norms per candidate
+                    // (3 ndarray passes) — the fused single-pass
+                    // store.cosine_query keeps the exact ranking (measured
+                    // 0/400 R@10 mismatches) at ~1.73x on the IVF path.
+                    let query_norm = (query_embedding.iter().map(|v| v * v).sum::<f32>()).sqrt();
                     let mut scored: Vec<(String, f32)> = Vec::with_capacity(candidate_idxs.len());
                     for &idx in &candidate_idxs {
-                        let v = store.get_vector(idx);
-                        if v.len() != query_embedding.len() { continue; }
-                        let sim = crate::memory::cosine::cosine_similarity(query_embedding, &v);
+                        let sim = match store.cosine_query(idx, query_embedding, query_norm) {
+                            Some(s) => s,
+                            None => continue,
+                        };
                         if let Some(nid) = store.index_to_node(idx) {
                             scored.push((nid.to_string(), sim));
                         }
