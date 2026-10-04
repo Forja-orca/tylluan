@@ -3,6 +3,10 @@
 > Source of truth for the verified technical state. Updated on each release.
 > Last updated: 2026-09-23 · HEAD `31f7251` · v0.17.0 (Cargo.toml)
 
+## Informe externo verificado (2026-10-04)
+
+Un revisor externo clonó `f96f0e3` y produjo un informe ejecutivo (`informe-tylluan.md`) con tabla de capacidades, conteo de líneas/tests citado contra el código real, y una lista de mejoras prácticas no-arquitectónicas. Revisado punto por punto: coherente con nuestra propia narrativa (TEB-Pilot-50 roto, incidente GraphRAG CPU spiral, Coloquio UX, drift narrativo — todo ya documentado aquí), sin hallazgos nuevos que contradigan el estado real. Dos gaps operativos genuinamente nuevos y accionables, añadidos a "Deuda técnica verificada" en `ROADMAP_O3.md`: backup/restore de SilvaDB sin comando CLI (solo parar-kernel-y-copiar o `sqlite3 .backup`), y falta de un pre-check automático de `host=0.0.0.0`+`dev_mode=true` al arranque (hoy solo documentado como invariante, sin guard). El resto de sugerencias del informe (scripts de monitor de salud, plantillas de guild, logs JSON) son conveniencias opcionales de bajo valor diferencial, no se trasladan al roadmap.
+
 ## Known Gaps (external audit, verified 2026-08-22)
 
 An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not just the test suite. Every item below was independently re-verified against the real source before being listed here (file:line, not taken on the reviewer's word). This is what "verified" means on this line, not "reported."
