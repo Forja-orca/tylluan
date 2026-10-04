@@ -28,6 +28,12 @@ from pathlib import Path
 
 mcp = FastMCP("scheduler")
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run fallback
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 DB_PATH = os.environ.get(
     "SCHEDULER_DB",
     str(Path(__file__).resolve().parent.parent.parent / "data" / "scheduler.db"),
@@ -85,7 +91,7 @@ def _post_to_coloquio(channel: str, message: str, author_id: str = "scheduler") 
         "metadata": "{}",
     }).encode()
     try:
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(url, data=body, headers=kernel_auth.kernel_headers())
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status == 201
     except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:

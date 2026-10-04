@@ -13,6 +13,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run fallback
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 mcp = FastMCP("coordinator")
 
 MAX_TASKS = 5
@@ -107,10 +114,7 @@ def _get_http_connection(url: str):
 def _dispatch(sub_intent: str, agent_id: str = "coordinator-worker") -> str:
     """Send a sub-task to the kernel via POST /api/v1/do using HTTP Keep-Alive (thread-safe)."""
     payload = json.dumps({"intent": sub_intent, "agent_id": agent_id}).encode()
-    headers = {
-        "Content-Type": "application/json",
-        "Connection": "keep-alive"
-    }
+    headers = kernel_auth.kernel_headers({"Connection": "keep-alive"})
     try:
         conn = _get_http_connection(KERNEL_URL)
         conn.request("POST", "/api/v1/do", body=payload, headers=headers)
@@ -137,7 +141,11 @@ def _dispatch_with_retry(idx: int, task: str, agent_id: str) -> tuple[int, str, 
     result = _dispatch(task, agent_id)
     if _is_failure(result):
         # Do not retry on known permanent infrastructure errors to save network time
-        if "Unknown guild" in result or "Failed to start guild" in result or "not found" in result.lower():
+        # "unauthorized" (kernel bearer 401, dev_mode=false) is permanent: a
+        # retry with the same missing/invalid token wastes 150s and only
+        # masks the auth cause behind a generic failure message.
+        if ("Unknown guild" in result or "Failed to start guild" in result
+                or "not found" in result.lower() or "unauthorized" in result.lower()):
             return idx, task, result
         result = _dispatch(f"retry: {task}", agent_id)
         if _is_failure(result):

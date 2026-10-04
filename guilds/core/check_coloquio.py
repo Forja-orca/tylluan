@@ -23,6 +23,14 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+# Fleet token injection (2026-10-04): this poller hits /api/v1/coloquio*;
+# without a bearer header it 401s once dev_mode=false.
+try:
+    from guilds.core import kernel_auth
+except ImportError:  # direct-script run: python guilds/core/check_coloquio.py
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from guilds.core import kernel_auth
+
 
 def resolve_reader_id(argv=None) -> str:
     """Agent identity used for unread/mention queries.
@@ -85,7 +93,7 @@ def api_get(path, params=None):
     if params:
         qs = "&".join(f"{k}={urllib.request.quote(str(v))}" for k, v in params.items())
         url = f"{url}?{qs}"
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, method="GET", headers=kernel_auth.kernel_headers())
     with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())
 
