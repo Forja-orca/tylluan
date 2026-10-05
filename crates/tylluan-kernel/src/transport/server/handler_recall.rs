@@ -526,11 +526,13 @@ if let Some(ref mut s) = stmt {
     drop(cache);
     let embed_t0 = std::time::Instant::now();
 
-    // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) â€”
+    // Cascade mode: skip the eager dense embed (2-8s CPU on cache miss) —
     // search_recall_cascade computes it only when lexical signals don't agree
-    // enough to answer alone. Legacy path keeps the eager embed.
+    // enough to answer alone.
+    // Cache hit: skip dense embed entirely — results are already cached and
+    // downstream stages (CoherenceGate Layer 4) handle None gracefully.
     let cascade = server.recall_cascade_enabled && mode != "dual";
-    let mut query_embedding = if cascade {
+    let mut query_embedding = if cascade || cached_docs.is_some() {
         None
     } else {
         match server.matcher.engine().map(|e| {
@@ -604,11 +606,6 @@ if let Some(cached) = cached_docs {
             scored.retain(|(node, _)| !archived_ids.contains(&node.id));
         }
 
-        for (node, _) in &scored {
-            let _ = server.silva.reinforce_node(&node.id, 1.02).await;
-            let _ = server.silva.touch_node(&node.id, aid, "recall").await;
-        }
-
         let total_found = scored.len();
 
         // Filter out decayed nodes for display (weight < 0.15), keeping at least one if all are decayed.
@@ -626,6 +623,12 @@ if let Some(cached) = cached_docs {
 
         scored.truncate(limit);
         let showing = scored.len();
+
+        // STIGMERGY: Reinforce only nodes actually returned (post-truncate)
+        for (node, _) in &scored {
+            let _ = server.silva.reinforce_node(&node.id, 1.02).await;
+            let _ = server.silva.touch_node(&node.id, aid, "recall").await;
+        }
 
         if let Some(ref aid_val) = rec_agent_id {
             let task_hash: String = format!("{effective_query}|{aid_val}").bytes()
@@ -860,13 +863,6 @@ if let Some(cached) = cached_docs {
                 );
             }
 
-            // STIGMERGY: Reinforce recalled nodes
-            for (node, _) in &scored {
-                let _ = server.silva.reinforce_node(&node.id, 1.02).await;
-                let _ = server.silva.touch_node(&node.id, aid, "recall").await;
-            }
-            tracing::info!("ðŸ§  Rejuvenated {} nodes via recall (agent={})", scored.len(), aid);
-
             let total_found = scored.len();
 
             // Filter out decayed nodes for display (weight < 0.15). Reranker threshold is 0.05
@@ -973,6 +969,13 @@ if let Some(cached) = cached_docs {
             // Always truncate to the requested limit at the very end
             scored.truncate(limit);
             let showing = scored.len();
+
+            // STIGMERGY: Reinforce only nodes actually returned (post-truncate)
+            for (node, _) in &scored {
+                let _ = server.silva.reinforce_node(&node.id, 1.02).await;
+                let _ = server.silva.touch_node(&node.id, aid, "recall").await;
+            }
+            tracing::info!("🧠 Rejuvenated {} nodes via recall (agent={})", scored.len(), aid);
 
             // ADR-011 Signal Loop: log which memories were actually shown to this
             // agent, so NightConsolidation's FeedbackSignalPhase can later resolve
@@ -1398,5 +1401,124 @@ mod tests {
         args.insert("agent_id".to_string(), serde_json::Value::String("test-agent-1".to_string()));
         let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
         assert!(!result.is_error.unwrap_or(false), "agent_id must not cause errors");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_cache_miss_only_reinforces_top_limit_nodes() {
+        let server = test_server().await;
+        for i in 0..5 {
+            let id = format!("cmiss_n{i}");
+            server.silva.upsert_node(&id, "concept", &format!("cache miss stigmergy item {i}"), "{}").await.unwrap();
+        }
+
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String("cache miss stigmergy item".to_string()));
+        args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(2u32)));
+        let res = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!res.is_error.unwrap_or(false));
+        let text = res.content[0].as_text().unwrap();
+        assert!(!text.text.contains("Cache hit"));
+
+        let mut reinforced_count = 0;
+        let mut unreinforced_count = 0;
+        for i in 0..5 {
+            let id = format!("cmiss_n{i}");
+            let node = server.silva.get_node(&id).await.unwrap().unwrap();
+            if (node.weight - 1.02).abs() < 1e-4 {
+                reinforced_count += 1;
+            } else if (node.weight - 1.0).abs() < 1e-4 {
+                unreinforced_count += 1;
+            }
+        }
+        assert_eq!(reinforced_count, 2, "only 2 returned nodes should be reinforced on cache miss");
+        assert_eq!(unreinforced_count, 3, "the 3 non-returned nodes should remain at weight 1.0");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_cache_hit_only_reinforces_top_limit_nodes() {
+        let server = test_server().await;
+        for i in 0..5 {
+            let id = format!("chit_n{i}");
+            server.silva.upsert_node(&id, "concept", &format!("cache hit stigmergy item {i}"), "{}").await.unwrap();
+        }
+        // First recall populates the cache with 5 items
+        let mut args1 = serde_json::Map::new();
+        args1.insert("query".to_string(), serde_json::Value::String("cache hit stigmergy item".to_string()));
+        args1.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(5u32)));
+        let res1 = handle_tylluan_recall(&server, Some(args1)).await.unwrap();
+        assert!(!res1.is_error.unwrap_or(false));
+
+        // Reset weights back to 1.0 for all nodes to test cache-hit post-truncate behavior in isolation
+        for i in 0..5 {
+            let id = format!("chit_n{i}");
+            server.silva.set_weight(&id, 1.0).await.unwrap();
+        }
+
+        // Second recall hits the cache, but requesting limit = 2
+        let mut args2 = serde_json::Map::new();
+        args2.insert("query".to_string(), serde_json::Value::String("cache hit stigmergy item".to_string()));
+        args2.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(2u32)));
+        let res2 = handle_tylluan_recall(&server, Some(args2)).await.unwrap();
+        let text2 = res2.content[0].as_text().unwrap();
+        assert!(text2.text.contains("Cache hit"), "second recall must be a cache hit: {text2:?}");
+
+        // Exactly 2 nodes should have been reinforced to 1.02; 3 must remain at 1.0
+        let mut reinforced_count = 0;
+        let mut unreinforced_count = 0;
+        for i in 0..5 {
+            let id = format!("chit_n{i}");
+            let node = server.silva.get_node(&id).await.unwrap().unwrap();
+            if (node.weight - 1.02).abs() < 1e-4 {
+                reinforced_count += 1;
+            } else if (node.weight - 1.0).abs() < 1e-4 {
+                unreinforced_count += 1;
+            }
+        }
+        assert_eq!(reinforced_count, 2, "only 2 returned nodes should be reinforced on cache hit");
+        assert_eq!(unreinforced_count, 3, "the 3 non-returned nodes should remain at weight 1.0");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cache_hit_in_dual_mode_skips_dense_embedding() {
+        let server = test_server().await;
+        let query = "dual mode test query";
+
+        let node = GraphNode {
+            id: "cached_node_dual_1".to_string(),
+            node_type: "concept".to_string(),
+            content: "cached dual mode content".to_string(),
+            metadata: "{}".to_string(),
+            weight: 1.0,
+            protected: false,
+            conflicted: false,
+            topic_key: None,
+            created_at: None,
+            updated_at: None,
+            last_touched: chrono::Utc::now(),
+            valid_from: None,
+            valid_until: None,
+            shareable: false,
+            content_hash: "".to_string(),
+            provenance: "".to_string(),
+        };
+        server.silva.upsert_node("cached_node_dual_1", "concept", "cached dual mode content", "{}").await.unwrap();
+        server.recall_cache.lock().await.put(
+            query.to_string(),
+            false,
+            vec![(node, 1.0)],
+        );
+
+        // Recall with mode = "dual" (which sets cascade = false)
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::Value::String(query.to_string()));
+        args.insert("mode".to_string(), serde_json::Value::String("dual".to_string()));
+        args.insert("limit".to_string(), serde_json::Value::Number(serde_json::Number::from(1u32)));
+        let result = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+        assert!(!result.is_error.unwrap_or(false));
+        let text = result.content[0].as_text().unwrap();
+        assert!(text.text.contains("Cache hit"), "must be a cache hit: {text:?}");
+
+        // Eager embedding should NOT have been evaluated into query_embed_cache on cache hit
+        assert!(server.silva.query_embed_cache.get(query).is_none(), "query_embed_cache must not have an entry because eager embed was skipped on cache hit");
     }
 }
