@@ -567,7 +567,7 @@ pub(crate) fn dream_cosine(a: &[u8], b: &[u8]) -> f64 {
 /// (|v| = 1.0 ± 8.4e-7), so dot(a, b) == cosine(a, b) without allocating intermediate
 /// `Vec<f32>` or recalculating vector norms on every comparison.
 pub(crate) fn cosine_similarity(a: &[u8], b: &[u8]) -> f64 {
-    if a.len() != b.len() || a.is_empty() || a.len() % 4 != 0 {
+    if a.len() != b.len() || a.is_empty() || !a.len().is_multiple_of(4) {
         return 0.0;
     }
     let mut dot = 0.0f32;

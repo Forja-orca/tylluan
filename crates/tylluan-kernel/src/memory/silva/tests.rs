@@ -42,7 +42,7 @@ async fn test_silva() -> SilvaDB {
         let mut vectors: Vec<Vec<u8>> = Vec::new();
         for seed in 1..=40 {
             let raw: Vec<f32> = (0..dim)
-                .map(|i| ((i as f32 * 0.17 + seed as f32 * 0.31).sin()))
+                .map(|i| (i as f32 * 0.17 + seed as f32 * 0.31).sin())
                 .collect();
             let norm = raw.iter().map(|x| x * x).sum::<f32>().sqrt();
             let norm_jitter = if seed % 2 == 0 { 1.0 + 5e-7 } else { 1.0 - 5e-7 };
