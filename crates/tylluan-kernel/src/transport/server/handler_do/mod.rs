@@ -1408,9 +1408,8 @@ async fn persist_remember(
     let embedded = server.matcher.engine()
         .and_then(|e| tokio::task::block_in_place(|| e.embed(&embedding_target)).ok()
             .map(|emb| (emb, e.engine_id())));
-    if let Err(e) = server.memory.add_document(&trace, &meta, embedded.as_ref().map(|(v, _)| v.as_slice())).await {
-        warn!("⚠️ tylluan_do remember: hybrid memory write failed: {}", e);
-    }
+    // F1 ROADMAP_O3:58: dual-write híbrido cerrado — el episodio se persiste solo
+    // en SilvaDB (upsert + embedding, más abajo).
     let node_id = format!("memory:{}", chrono::Utc::now().timestamp_millis());
     if let Err(e) = server.silva.upsert_node(&node_id, "episode", &trace, &meta).await {
         warn!("⚠️ tylluan_do remember: silva graph write failed: {}", e);
