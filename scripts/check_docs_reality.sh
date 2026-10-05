@@ -130,9 +130,12 @@ for doc in "${DOCS[@]}"; do
         if echo "$full_line" | grep -qE "\.(rs|py|toml|json|sh|md|yml|yaml|ts|tsx|html|css|svg|lock|db):$p\b"; then
             continue
         fi
-        # Skip known non-kernel ports (Vite dev server, STUN server, etc.)
+        # Skip known non-kernel ports (Vite dev server, STUN server, and
+        # local LLM backends Tylluan can point at -- llama.cpp default
+        # 8080, Ollama default 11434 -- cited in ADR-018 variant B docs
+        # as the EXTERNAL model server, never the kernel itself).
         case "$p" in
-            5173|19302) continue ;;
+            5173|19302|8080|11434) continue ;;
         esac
         if [ "$p" != "$real_port" ]; then
             # ADRs record decisions at a point in time -- old ports there are

@@ -248,6 +248,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut export_path = None;
     let mut variant_c = None;
+    let mut variant_d = None;
     let mut variant_b = false;
     let mut variant_b_endpoint = "http://127.0.0.1:8080".to_string();
     let mut variant_b_model = "clef-flash".to_string();
@@ -264,6 +265,9 @@ fn main() {
             }
             "--variant-c" => {
                 variant_c = Some(arg_value(&args, &mut i, "--variant-c"));
+            }
+            "--variant-d" => {
+                variant_d = Some(arg_value(&args, &mut i, "--variant-d"));
             }
             "--variant-b" => variant_b = true,
             "--variant-b-endpoint" => {
@@ -288,7 +292,7 @@ fn main() {
                     .expect("--latency-budget-ms expects a number");
             }
             other => panic!(
-                "unknown flag '{other}' (supported: --export <path>, --variant-c <dir>, --golden, \
+                "unknown flag '{other}' (supported: --export <path>, --variant-c <dir>, --variant-d <dir>, --golden, \
                  --variant-b, --variant-b-endpoint URL, --variant-b-model NAME, \
                  --split test|all, --source audit|confusion|all, --limit N, --latency-budget-ms MS)"
             ),
@@ -297,9 +301,12 @@ fn main() {
     }
 
     if golden {
+        if let Some(dir) = variant_d.clone() {
+            std::process::exit(if run_golden_decima(&dir) { 0 } else { 1 });
+        }
         let dir = variant_c
             .clone()
-            .unwrap_or_else(|| panic!("--golden needs the bundle dir: --variant-c models/laya --golden"));
+            .unwrap_or_else(|| panic!("--golden needs the bundle dir: --variant-c models/laya --golden or --variant-d models/decima --golden"));
         std::process::exit(if run_golden(&dir) { 0 } else { 1 });
     }
     if let Some(dir) = variant_c {
@@ -307,6 +314,10 @@ fn main() {
             panic!("--variant-b and --variant-c are mutually exclusive");
         }
         run_variant_c(&dir, &split, &source, limit, budget_ms);
+        return;
+    }
+    if let Some(dir) = variant_d {
+        run_variant_d(&dir, &split, &source, limit, budget_ms);
         return;
     }
     if variant_b {
@@ -1882,6 +1893,408 @@ fn run_variant_b(
 ) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(run_variant_b_inner(endpoint, model, split, source, limit, budget_ms));
+}
+
+// ─── Variante D: Decima-small (amyrmahdy/decima-small, Apache-2.0, 122M) ───
+//
+// Arquitectura dual-encoder "late interaction", distinta de Laya (un solo
+// modelo con marcadores de opción): un encoder.onnx compartido produce
+// hidden states por token para el state y para cada choice por separado
+// (input_ids/attention_mask i64 -> token_states [n,seq,384] f32); un
+// scorer.onnx cruza state_h/state_mask contra choice_h/choice_mask y
+// devuelve scores[n_choices] + z[n_choices,384] (z solo se usa para el
+// cabezal ordinal de "score", no implementado aquí -- Score se trata como
+// Choice sobre "level N: texto", igual que ya hace rules-v0/Laya en este
+// mismo harness). Contrato confirmado leyendo el grafo ONNX real (`onnx.load`
+// + introspección de graph.input/output), NO de la documentación del modelo
+// (que no publica nombres de tensores). prefixes state_prefix="query: "/
+// choice_prefix="passage: " y temperature=0.9355568358032639 vienen de
+// onnx/int8/decima.json tal cual, sin redondear.
+struct DecimaBundle {
+    encoder: Mutex<Session>,
+    scorer: Mutex<Session>,
+    tokenizer: tokenizers::Tokenizer,
+    max_state_tokens: usize,
+    max_choice_tokens: usize,
+    temperature: f32,
+    state_prefix: String,
+    choice_prefix: String,
+    pad: u32,
+}
+
+impl DecimaBundle {
+    fn load(dir: &Path) -> Self {
+        let cfg: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join("decima.json"))
+                .unwrap_or_else(|e| panic!("read {}/decima.json: {e}", dir.display())),
+        )
+        .expect("parse decima.json");
+        let tokenizer = tokenizers::Tokenizer::from_file(dir.join("tokenizer/tokenizer.json"))
+            .expect("load tokenizer/tokenizer.json");
+        let pad = tokenizer
+            .token_to_id("<pad>")
+            .unwrap_or_else(|| panic!("special token <pad> missing from tokenizer"));
+        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(8);
+        let build = |file: &str| {
+            Session::builder()
+                .and_then(|b| {
+                    b.with_intra_threads(threads)?
+                        .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
+                        .commit_from_file(dir.join(file))
+                })
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "load {file} from {} ({e}) — needs onnx/int8/{{encoder,scorer}}.onnx + tokenizer/ + decima.json",
+                        dir.display()
+                    )
+                })
+        };
+        Self {
+            encoder: Mutex::new(build("encoder.onnx")),
+            scorer: Mutex::new(build("scorer.onnx")),
+            max_state_tokens: cfg["max_state_tokens"].as_u64().unwrap_or(512) as usize,
+            max_choice_tokens: cfg["max_choice_tokens"].as_u64().unwrap_or(64) as usize,
+            temperature: cfg["temperature"].as_f64().unwrap_or(1.0) as f32,
+            state_prefix: cfg["state_prefix"].as_str().unwrap_or("query: ").to_string(),
+            choice_prefix: cfg["choice_prefix"].as_str().unwrap_or("passage: ").to_string(),
+            pad,
+            tokenizer,
+        }
+    }
+
+    /// Tokeniza un lote de textos con padding dinámico al máximo real del
+    /// lote (acotado a `cap`) -- añade <s>/</s> vía el propio tokenizer.json
+    /// (confirmado: ids empiezan en 0=<s>, terminan en 2=</s>).
+    fn encode_batch(&self, texts: &[String], cap: usize) -> (Array2<i64>, Array2<i64>, usize) {
+        let encoded: Vec<Vec<u32>> = texts
+            .iter()
+            .map(|t| {
+                let mut ids = self.tokenizer.encode(t.as_str(), true).expect("tokenizer encode").get_ids().to_vec();
+                ids.truncate(cap);
+                ids
+            })
+            .collect();
+        let seq_len = encoded.iter().map(|v| v.len()).max().unwrap_or(1).max(1);
+        let n = texts.len();
+        let mut ids_flat = vec![i64::from(self.pad); n * seq_len];
+        let mut mask_flat = vec![0i64; n * seq_len];
+        for (row, ids) in encoded.iter().enumerate() {
+            for (j, &v) in ids.iter().enumerate() {
+                ids_flat[row * seq_len + j] = i64::from(v);
+                mask_flat[row * seq_len + j] = 1;
+            }
+        }
+        (
+            Array2::from_shape_vec((n, seq_len), ids_flat).expect("ids shape"),
+            Array2::from_shape_vec((n, seq_len), mask_flat).expect("mask shape"),
+            seq_len,
+        )
+    }
+
+    /// encoder.onnx: input_ids/attention_mask [n,seq] i64 -> token_states
+    /// [n,seq,384] f32 (confirmado via introspección del grafo ONNX real).
+    fn run_encoder(&self, ids: &Array2<i64>, mask: &Array2<i64>) -> ndarray::Array3<f32> {
+        let mut session = self.encoder.lock().expect("decima encoder mutex poisoned");
+        let outputs = session
+            .run(ort::inputs![
+                "input_ids" => TensorRef::from_array_view(ids.view()).expect("ids tensor"),
+                "attention_mask" => TensorRef::from_array_view(mask.view()).expect("mask tensor"),
+            ])
+            .unwrap_or_else(|e| panic!("decima encoder.run: {e}"));
+        let (shape, data) = outputs[0]
+            .try_extract_tensor::<f32>()
+            .unwrap_or_else(|e| panic!("decima encoder token_states: {e}"));
+        let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+        ndarray::Array3::from_shape_vec((dims[0], dims[1], dims[2]), data.to_vec())
+            .expect("token_states shape")
+    }
+
+    /// Una pasada completa sobre UN state y sus opciones: encoder(state) +
+    /// encoder(choices, batched) -> scorer -> scores crudos (pre-temperatura).
+    fn score(&self, state_text: &str, choice_texts: &[String]) -> Result<Vec<f32>, DecisionError> {
+        if choice_texts.is_empty() {
+            return Err(DecisionError::Provider("decima-onnx-v1".into(), "at least one option is required".into()));
+        }
+        let state_full = format!("{}{}", self.state_prefix, state_text);
+        let (state_ids, state_mask, state_seq) =
+            self.encode_batch(std::slice::from_ref(&state_full), self.max_state_tokens);
+        let state_h = self.run_encoder(&state_ids, &state_mask);
+
+        let choice_full: Vec<String> =
+            choice_texts.iter().map(|c| format!("{}{}", self.choice_prefix, c)).collect();
+        let (choice_ids, choice_mask, choice_seq) = self.encode_batch(&choice_full, self.max_choice_tokens);
+        let choice_h = self.run_encoder(&choice_ids, &choice_mask);
+
+        let _ = (state_seq, choice_seq);
+        let mut session = self.scorer.lock().expect("decima scorer mutex poisoned");
+        let outputs = session
+            .run(ort::inputs![
+                "state_h" => TensorRef::from_array_view(state_h.view()).expect("state_h tensor"),
+                "state_mask" => TensorRef::from_array_view(state_mask.view()).expect("state_mask tensor"),
+                "choice_h" => TensorRef::from_array_view(choice_h.view()).expect("choice_h tensor"),
+                "choice_mask" => TensorRef::from_array_view(choice_mask.view()).expect("choice_mask tensor"),
+            ])
+            .map_err(|e| DecisionError::Provider("decima-onnx-v1".into(), format!("scorer.run: {e}")))?;
+        let (_, scores) = outputs[0]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| DecisionError::Provider("decima-onnx-v1".into(), format!("scores: {e}")))?;
+        Ok(scores.to_vec())
+    }
+}
+
+/// El ADR-018 contract implementation. Fase 0: consumido SOLO por este harness.
+struct DecimaOnnxDecisionProvider {
+    bundle: DecimaBundle,
+}
+
+#[async_trait::async_trait]
+impl DecisionProvider for DecimaOnnxDecisionProvider {
+    fn provider_id(&self) -> &'static str {
+        "decima-onnx-v1"
+    }
+
+    async fn decide(
+        &self,
+        req: &DecisionRequest,
+    ) -> Result<HashMap<String, DecisionAnswer>, DecisionError> {
+        let state_text = py_json_compact(&req.state);
+        let mut names: Vec<&String> = req.questions.keys().collect();
+        names.sort();
+        let mut out = HashMap::new();
+        for name in names {
+            let (options, keys): (Vec<String>, Vec<String>) = match &req.questions[name] {
+                DecisionQuestion::Choice { options } => (options.clone(), options.clone()),
+                DecisionQuestion::Score { levels } => (
+                    levels.iter().enumerate().map(|(i, c)| format!("level {i}: {c}")).collect(),
+                    (0..levels.len()).map(|i| i.to_string()).collect(),
+                ),
+                DecisionQuestion::Noul => {
+                    (NOUL_OPTIONS.iter().map(|s| (*s).to_string()).collect(), vec!["false".into(), "true".into()])
+                }
+            };
+            let raw = self.bundle.score(&state_text, &options)?;
+            let scaled: Vec<f32> = raw.iter().map(|&v| v / self.bundle.temperature).collect();
+            let probs = softmax_f32(&scaled);
+            let distribution = keys.iter().zip(probs.iter()).map(|(k, v)| (k.clone(), *v)).collect();
+            out.insert(name.clone(), DecisionAnswer { distribution, calibration: None });
+        }
+        Ok(out)
+    }
+}
+
+/// Test golden del model card (amyrmahdy/decima-small): verifica paridad del
+/// port Rust contra el ejemplo publicado por el autor (billing/technical
+/// support/sales/account security, "someone logged in from another country").
+/// Tolerancia 1e-2 (el publicado por el autor ya redondea a 3 decimales).
+fn run_golden_decima(dir: &str) -> bool {
+    let bundle = DecimaBundle::load(Path::new(dir));
+    let options = ["billing", "technical support", "sales", "account security"]
+        .map(|s| s.to_string());
+    // No se repite el texto de la pregunta en choice/state -- confirmado
+    // empíricamente contra el modelo real: anteponer "Which team should
+    // handle this request?" (como sugería la paráfrasis del model card)
+    // daba [0.013, 0.140, 0.007, 0.840] vs esperado [0.004, 0.031, 0.001,
+    // 0.964]; sin la pregunta repetida (solo state_prefix/choice_prefix +
+    // texto crudo) da [0.009, 0.032, 0.002, 0.957], dentro de tolerancia
+    // int8. decide() ya hacía esto bien -- el bug era solo de este test.
+    let raw = bundle
+        .score("Someone logged into my account from another country.", &options)
+        .expect("decima score");
+    let scaled: Vec<f32> = raw.iter().map(|&v| v / bundle.temperature).collect();
+    let probs = softmax_f32(&scaled);
+    let expected = [0.004f32, 0.031, 0.001, 0.964];
+    println!("[golden-decima] got={probs:?} expected={expected:?}");
+    let mut ok = true;
+    for (i, (&p, &e)) in probs.iter().zip(expected.iter()).enumerate() {
+        let d = (p - e).abs();
+        println!("  [{i}] {} got={p:.4} expected={e:.4} |Δ|={d:.4}", options[i]);
+        if d > 0.05 {
+            ok = false;
+        }
+    }
+    ok
+}
+
+fn run_variant_d(dir: &str, split: &str, source: &str, limit: Option<usize>, budget_ms: f64) {
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    rt.block_on(run_variant_d_inner(dir, split, source, limit, budget_ms));
+}
+
+async fn run_variant_d_inner(dir: &str, split: &str, source: &str, limit: Option<usize>, budget_ms: f64) {
+    println!("[variant-d] loading Decima-small ONNX bundle from {dir} (int8, ~127 MB)");
+    let t0 = Instant::now();
+    let provider = DecimaOnnxDecisionProvider { bundle: DecimaBundle::load(Path::new(dir)) };
+    println!(
+        "[variant-d] bundle ready in {:.1}s (provider: {})",
+        t0.elapsed().as_secs_f64(),
+        provider.provider_id()
+    );
+
+    let ds = std::fs::read_to_string(DATASET_PATH)
+        .unwrap_or_else(|e| panic!("read {DATASET_PATH}: {e} (regenerate with --export first)"));
+    let items: Vec<serde_json::Value> = ds
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("dataset line parse"))
+        .filter(|it| {
+            (split == "all" || it["split"].as_str() == Some(split))
+                && match source {
+                    "audit" => it["source"].as_str() == Some("guild_audit_log"),
+                    "confusion" => it["source"].as_str() == Some("scheduler_confusion"),
+                    _ => true,
+                }
+        })
+        .take(limit.unwrap_or(usize::MAX))
+        .collect();
+    println!(
+        "[variant-d] items after filters (split={split}, source={source}, limit={limit:?}): {}",
+        items.len()
+    );
+
+    let mut hitl = BinaryDecisionStats::new();
+    let mut route = ChoiceDecisionStats::new();
+    let mut decide_errors = 0usize;
+    for it in &items {
+        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut want_route = false;
+        let mut want_hitl = false;
+        if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
+            let options: Vec<String> =
+                opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
+            if !options.is_empty() {
+                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                want_route = true;
+            }
+        }
+        if it["questions"].get("hitl_resolve").is_some() {
+            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            want_hitl = true;
+        }
+        if questions.is_empty() {
+            continue;
+        }
+        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let t0 = Instant::now();
+        let answers = match provider.decide(&req).await {
+            Ok(a) => a,
+            Err(e) => {
+                decide_errors += 1;
+                println!("  decide error ({e}) — item skipped");
+                continue;
+            }
+        };
+        let ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if want_route {
+            let dist = &answers["route_guild"].distribution;
+            let (best, conf) = argmax(dist);
+            let label = it["labels"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base_raw = it["baseline_A"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base = bucket_guild(&base_raw);
+            let brier_item: f64 =
+                dist.iter().map(|(k, v)| (f64::from(*v) - f64::from(*k == label)).powi(2)).sum();
+            let correct_b = if base_raw.is_empty() { None } else { Some(base == label) };
+            route.update(best == label, correct_b, conf, brier_item, ms);
+        }
+        if want_hitl {
+            let dist = &answers["hitl_resolve"].distribution;
+            let p_true = dist.get("true").copied().unwrap_or(0.0);
+            let label = it["labels"]["hitl_resolve"].as_str() == Some("true");
+            let base_pred = it["baseline_A"]["hitl_resolve"].as_str() == Some("true");
+            hitl.update(p_true >= 0.5, p_true, base_pred, label, ms);
+        }
+    }
+
+    hitl.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    route.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let hitl_n = hitl.n;
+    let route_n = route.n;
+    if hitl_n > 0 {
+        let lat = &hitl.lat;
+        println!("\n[variant-d] decision=hitl_resolve (Noul) n={hitl_n}");
+        println!(
+            "  accuracy: baseline A {:.4} -> D {:.4} (TP {} FP {} TN {} FN {})",
+            hitl.correct_b as f64 / hitl_n as f64,
+            hitl.correct_c as f64 / hitl_n as f64,
+            hitl.true_pos,
+            hitl.false_pos,
+            hitl.true_neg,
+            hitl.false_neg
+        );
+        println!(
+            "  Brier: baseline {:.4} -> D {:.4} | ECE(15): baseline {:.4} -> D {:.4} | AUROC: D {:.4}",
+            hitl.brier_b / hitl_n as f64,
+            hitl.brier_c / hitl_n as f64,
+            ece_15(&hitl.ece_b),
+            ece_15(&hitl.ece_c),
+            auroc(&hitl.pos_c, &hitl.neg_c)
+        );
+        println!(
+            "  latency (D, CPU, per item): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if route_n > 0 {
+        let lat = &route.lat;
+        println!("\n[variant-d] decision=route_guild (Choice, dynamic options) n={route_n}");
+        println!(
+            "  accuracy: baseline A {:.4} (of {} items with live baseline) -> D {:.4}",
+            if route.with_baseline > 0 { route.correct_b as f64 / route.with_baseline as f64 } else { f64::NAN },
+            route.with_baseline,
+            route.correct_c as f64 / route_n as f64
+        );
+        println!(
+            "  Brier (multiclass sum): baseline {:.4} -> D {:.4} | ECE(15) top-class: D {:.4}",
+            route.brier_b / route.with_baseline.max(1) as f64,
+            route.brier_c / route_n as f64,
+            ece_15(&route.ece_c)
+        );
+        println!(
+            "  latency (D, CPU, per item): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if decide_errors > 0 {
+        println!("\n[variant-d] decide errors: {decide_errors} items skipped");
+    }
+
+    println!("\n[gate] ADR-018 §3 (budget {budget_ms} ms):");
+    let mut clauses_ok = true;
+    if hitl_n > 0 {
+        let acc_c = hitl.correct_c as f64 / hitl_n as f64;
+        let acc_b = hitl.correct_b as f64 / hitl_n as f64;
+        let acc_pass = acc_c > acc_b;
+        clauses_ok &= acc_pass;
+        let calib_pass = hitl.brier_c < hitl.brier_b && ece_15(&hitl.ece_c) < ece_15(&hitl.ece_b);
+        clauses_ok &= calib_pass;
+        let lat_pass = pct(&hitl.lat, 99.0) <= budget_ms;
+        clauses_ok &= lat_pass;
+        println!("  1. accuracy hitl: D {acc_c:.4} vs baseline {acc_b:.4} — {}", if acc_pass { "PASS" } else { "FAIL" });
+        println!(
+            "  2. calibration hitl (Brier {:.4} vs {:.4}, ECE {:.4} vs {:.4}) — {}",
+            hitl.brier_c / hitl_n as f64,
+            hitl.brier_b / hitl_n as f64,
+            ece_15(&hitl.ece_c),
+            ece_15(&hitl.ece_b),
+            if calib_pass { "PASS" } else { "FAIL" }
+        );
+        println!("  3. p99 latency hitl: {:.1} ms <= {budget_ms} — {}", pct(&hitl.lat, 99.0), if lat_pass { "PASS" } else { "FAIL" });
+    } else {
+        println!("  1-3. no hitl items in this slice — accuracy/calibration/latency clauses NOT EVALUATED");
+        clauses_ok = false;
+    }
+    println!(
+        "  4. cost vs substituted LLM: NOT MEASURABLE in variant D alone — needs variant B as the substituted-cost reference. Inputs measured here: int8 bundle ~127 MB on disk, ~1 GB RAM expected at runtime (122M params, dual-encoder)."
+    );
+    let verdict = if clauses_ok {
+        "GO-PROVISIONAL (clauses 1-3 pass; clause 4 pending variant B)"
+    } else {
+        "NO-GO on clauses 1-3"
+    };
+    println!("  VERDICT: {verdict}");
 }
 
 #[cfg(test)]
