@@ -161,6 +161,12 @@ pub struct EmbeddingEngine {
     /// RUN2 del harness (do p50 ×10 con el batcher único). Lazy, solo si
     /// `[silva] embed_batching_routing_enabled` está on.
     routing_batcher: Mutex<Option<Arc<EmbedBatcher>>>,
+    /// SHA-256 fingerprint (modelo+revisión+dims+normalización+ficheros) del
+    /// engine exacto que produjo un vector — computado UNA vez en el load.
+    /// `None` = identidad de pesos no verificable en disco (desconocido
+    /// honesto: el engine funciona; las filas quedan marcadas
+    /// `unknown-pre-hash` por la migración de boot, nunca falsa procedencia).
+    fingerprint: Option<String>,
 }
 
 /// Resolve fastembed model enum from config string.
@@ -244,6 +250,123 @@ fn resolve_model_type(embedding_model: &str) -> String {
     }.to_string()
 }
 
+// fastembed's default HF-hub cache locations. Observed in the wild:
+// `%HOME%\.fastembed_cache` (Windows); XDG cache dir on Linux.
+fn fastembed_cache_dirs() -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        out.push(home.join(".fastembed_cache"));
+    }
+    if let Some(cache) = dirs::cache_dir() {
+        out.push(cache.join("fastembed"));
+    }
+    out
+}
+
+/// HF repo id for every model type `resolve_model_type` can produce — must
+/// match the `models--<org>--<name>` layout fastembed actually downloads.
+fn hf_repo_for(model_type: &str) -> Option<&'static str> {
+    match model_type {
+        "bge-m3" => Some("BAAI/bge-m3"),
+        "bge-small" => Some("BAAI/bge-small-en-v1.5"),
+        "mxbai-embed-large" | "mxbai-embed-large-q" => Some("mixedbread-ai/mxbai-embed-large-v1"),
+        "nomic" => Some("nomic-ai/nomic-embed-text-v1.5"),
+        "minilm" => Some("sentence-transformers/all-MiniLM-L6-v2"),
+        _ => None,
+    }
+}
+
+/// Latest (lexicographically max — deterministic across boots) HF revision
+/// snapshot fastembed has for this model.
+fn find_fastembed_snapshot(model_type: &str) -> Option<std::path::PathBuf> {
+    let repo = hf_repo_for(model_type)?;
+    let hub_dir = format!("models--{}", repo.replace('/', "--"));
+    for cache in fastembed_cache_dirs() {
+        let snapshots = cache.join(&hub_dir).join("snapshots");
+        let Ok(entries) = std::fs::read_dir(&snapshots) else { continue };
+        let mut revs: Vec<std::path::PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect();
+        if revs.is_empty() {
+            continue;
+        }
+        revs.sort();
+        return revs.pop();
+    }
+    None
+}
+
+/// Streaming SHA-256 of a file (64 KiB chunks — tokenizer 17 MB, ONNX graph
+/// 725 KB; worst case a single-file model ~550 MB, ~1 s once per boot).
+fn sha256_file(path: &std::path::Path) -> Option<String> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Canonical fingerprint v1 (format `sha256:<64 hex>`): deterministic parts,
+/// NO volatile inputs (no mtimes, no absolute paths) — an identical
+/// re-download keeps the SAME fingerprint and does NOT trigger a re-embed
+/// storm. It changes only when model, HF revision, dims, normalization or
+/// file content change — exactly when re-embedding is semantically correct
+/// (get_stale_embeddings consumes it via engine_hash).
+pub(crate) fn fingerprint_from_parts(parts: &[(&str, String)]) -> String {
+    use sha2::Digest;
+    let mut canonical = String::new();
+    for (key, value) in parts {
+        canonical.push_str(key);
+        canonical.push('=');
+        canonical.push_str(value);
+        canonical.push('\n');
+    }
+    format!("sha256:{:x}", sha2::Sha256::digest(canonical.as_bytes()))
+}
+
+/// Fingerprint of the engine fastembed just loaded (TL-approved design
+/// 2026-10-05): model type + HF revision + output dims + normalization +
+/// content hashes of the ONNX graph and the tokenizer + byte size of the
+/// external weights blob. Never reads the multi-GB weights blob itself
+/// (boot stays ~100 ms); revision sha + graph/tokenizer hashes + size pin
+/// the identity. `None` = cache not found (honest unknown, never guessed).
+pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Option<String> {
+    let snapshot = find_fastembed_snapshot(model_type)?;
+    let onnx_dir = snapshot.join("onnx");
+    let graph = onnx_dir.join("model.onnx");
+    if !graph.is_file() {
+        return None;
+    }
+    let graph_hash = sha256_file(&graph)?;
+    let tokenizer_hash = sha256_file(&snapshot.join("tokenizer.json"))
+        .unwrap_or_else(|| "absent".to_string());
+    let data_size = std::fs::metadata(onnx_dir.join("model.onnx_data"))
+        .map(|m| m.len().to_string())
+        .unwrap_or_else(|_| "none".to_string());
+    let revision = snapshot.file_name()?.to_str()?.to_string();
+    let parts: Vec<(&str, String)> = vec![
+        ("scheme", "v1".to_string()),
+        ("model_type", model_type.to_string()),
+        ("revision", revision),
+        ("dims", dimension.to_string()),
+        ("norm", "l2".to_string()),
+        ("graph_sha256", graph_hash),
+        ("tokenizer_sha256", tokenizer_hash),
+        ("weights_data_size", data_size),
+    ];
+    Some(fingerprint_from_parts(&parts))
+}
+
 impl EmbeddingEngine {
     /// Initialize the embedding engine using fastembed.
     pub fn load(model_name: &str) -> Result<Self> {
@@ -268,6 +391,18 @@ impl EmbeddingEngine {
         let model_type = resolve_model_type(model_name);
         info!("🧠 {} engine ready (ONNX)", model_type.to_uppercase());
 
+        // Fingerprint UNA vez (TL 2026-10-05): modelo+revisión+dims+norm+ficheros
+        // de identidad. Best-effort: si el cache de fastembed no se localiza,
+        // fingerprint=None (desconocido honesto) y el engine sigue funcionando.
+        let fingerprint = compute_engine_fingerprint(&model_type, dimension);
+        match &fingerprint {
+            Some(fp) => info!("🧠 {} fingerprint {}", model_type.to_uppercase(), fp),
+            None => warn!(
+                "🧠 {} fingerprint unavailable (fastembed cache not found) — embeddings saved without hash, marked unknown-pre-hash at next boot",
+                model_type.to_uppercase()
+            ),
+        }
+
         Ok(Self {
             model: Mutex::new(text_model),
             model_type,
@@ -275,6 +410,7 @@ impl EmbeddingEngine {
             cache: Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())),
             batcher: Mutex::new(None),
             routing_batcher: Mutex::new(None),
+            fingerprint,
         })
     }
 
@@ -504,9 +640,13 @@ impl EmbeddingEngine {
         format!("{}-v2-onnx", self.model_type)
     }
 
-    /// Get a hash of the current weights
+    /// SHA-256 fingerprint del engine exacto que produjo un vector: modelo +
+    /// revisión HF + dims + política de normalización + hashes del grafo ONNX
+    /// y del tokenizer + tamaño de los pesos externos (esquema v1, TL
+    /// 2026-10-05). `None` = identidad no verificable en disco — esas filas
+    /// se marcan `unknown-pre-hash` en el boot, nunca se inventa procedencia.
     pub fn engine_hash(&self) -> Option<String> {
-        None
+        self.fingerprint.clone()
     }
 }
 
@@ -918,5 +1058,45 @@ mod tests {
             "hardcoded model names in embedding writes (use engine.engine_id()):\n{}",
             violations.join("\n")
         );
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic_and_sensitive() {
+        let a = fingerprint_from_parts(&[("model_type", "bge-m3".into()), ("dims", "1024".into())]);
+        let b = fingerprint_from_parts(&[("model_type", "bge-m3".into()), ("dims", "1024".into())]);
+        assert_eq!(a, b, "same parts -> same fingerprint (stable across boots)");
+        assert!(a.starts_with("sha256:"));
+        let c = fingerprint_from_parts(&[("model_type", "bge-m3".into()), ("dims", "768".into())]);
+        let d = fingerprint_from_parts(&[("model_type", "mxbai-embed-large".into()), ("dims", "1024".into())]);
+        assert_ne!(a, c, "dims are part of the identity");
+        assert_ne!(a, d, "model is part of the identity");
+    }
+
+    #[test]
+    fn hf_repo_covers_every_resolvable_model_type() {
+        for model_type in [
+            "bge-m3",
+            "bge-small",
+            "mxbai-embed-large",
+            "mxbai-embed-large-q",
+            "nomic",
+            "minilm",
+        ] {
+            assert!(hf_repo_for(model_type).is_some(), "{model_type} must map to its HF repo");
+        }
+        assert!(hf_repo_for("totally-unknown").is_none(), "unknown types never guess a repo");
+    }
+
+    /// Exercises the REAL fastembed cache discovery on machines that have it
+    /// (dev box: yes). On CI runners without the model this silently skips:
+    /// an honest None is a valid result there, nothing to verify.
+    #[test]
+    fn engine_fingerprint_matches_local_cache_when_present() {
+        if let Some(fp) = compute_engine_fingerprint("bge-m3", 1024) {
+            assert!(fp.starts_with("sha256:"), "v1 format: {fp}");
+            assert_eq!(fp.len(), "sha256:".len() + 64, "full hex digest: {fp}");
+            let again = compute_engine_fingerprint("bge-m3", 1024);
+            assert_eq!(Some(fp), again, "deterministic across calls");
+        }
     }
 }
