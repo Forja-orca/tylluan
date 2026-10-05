@@ -158,4 +158,9 @@ bundled-dashboard = ["rust-embed", "mime_guess"]
 proptest = "1"
 tempfile = "3"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
+# Variant C of the ADR-018 spike (examples/decision_fabric_spike.rs): loads
+# the bundle tokenizer/tokenizer.json — the same file the reference runtime
+# (@huggingface/tokenizers in receptron/laya) consumes. Same crate fastembed
+# already pulls (version unified in Cargo.lock); no extra features needed.
+tokenizers = { version = "0.22", default-features = false }
 
