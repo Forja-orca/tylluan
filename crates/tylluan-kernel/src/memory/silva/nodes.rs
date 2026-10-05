@@ -95,6 +95,13 @@ type EdgeGroupMap = std::collections::HashMap<(String, String), Vec<(String, Opt
 /// to prevent "drift de consolidación" — auto-generated summaries being re-ingested as facts.
 pub const DRIFT_SENSITIVE_TYPES: &[&str] = &["summary", "synthesis", "agent_summary"];
 
+/// Explicit marker for vectors produced before engine traceability existed
+/// (TL decision 2026-10-05: NEVER invent provenance). The boot migration in
+/// schema.rs stamps every NULL `model_hash` with this value, and
+/// `get_stale_embeddings` deliberately does NOT count it as a hash mismatch —
+/// unknown rows stay unknown until something else (model_name change, missing
+/// sparse signature) legitimately makes them stale.
+pub const MODEL_HASH_UNKNOWN: &str = "unknown-pre-hash";
 impl super::SilvaDB {
     fn normalize_topic_key(&self, topic: &str) -> String {
         topic.trim()
@@ -511,6 +518,11 @@ impl super::SilvaDB {
 
     /// Get node IDs with missing or outdated embeddings.
     ///
+    /// Hash semantics (TL 2026-10-05): a REAL stored hash that differs from
+    /// the current engine fingerprint marks the row stale; the
+    /// `unknown-pre-hash` sentinel and NULL never do — pre-traceability
+    /// vectors are not re-processed just because tracing was added.
+    ///
     /// When the learned-sparse engine is installed, nodes without a
     /// `node_sparse_embeddings` row also qualify: the periodic Agnostic
     /// Reindexer heals them through `save_embedding`, which refreshes the
@@ -531,10 +543,10 @@ impl super::SilvaDB {
                  LEFT JOIN node_embeddings e ON n.id = e.node_id
                  WHERE e.node_id IS NULL
                     OR e.model_name != ?1
-                    OR (e.model_hash IS NOT NULL AND ?2 IS NOT NULL AND e.model_hash != ?2){extra_missing_sparse}"
+                    OR (e.model_hash IS NOT NULL AND e.model_hash != ?3 AND ?2 IS NOT NULL AND e.model_hash != ?2){extra_missing_sparse}"
             );
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![current_model, current_hash], |row| row.get(0))?;
+            let rows = stmt.query_map(params![current_model, current_hash, MODEL_HASH_UNKNOWN], |row| row.get(0))?;
             let mut results = Vec::new();
             for res in rows { results.push(res?); }
             Ok(results)

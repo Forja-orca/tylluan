@@ -1975,3 +1975,27 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         assert!(out.is_empty());
         assert_eq!(db.confidence_source_batch_size.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stale_embeddings_detects_real_hash_mismatch_but_not_pre_hash_sentinel() {
+    use super::nodes::MODEL_HASH_UNKNOWN;
+
+    let db = SilvaDB::in_memory().await.unwrap();
+    for id in ["h1", "h2", "h3"] {
+        db.upsert_node(id, "note", id, "{}").await.unwrap();
+    }
+    let v = vec![0.0f32; 1024];
+    // h1: real hash matching the current engine fingerprint.
+    db.save_embedding("h1", &v, "bge-m3-v2-onnx", Some("sha256:aaa")).await.unwrap();
+    // h2: real hash from a DIFFERENT engine/config -> must be flagged stale
+    // (the regression this fix enables: hash mismatch was invisible before).
+    db.save_embedding("h2", &v, "bge-m3-v2-onnx", Some("sha256:bbb")).await.unwrap();
+    // h3: pre-hash sentinel -> must NOT be flagged (no mass re-embed of
+    // history just because tracing was added).
+    db.save_embedding("h3", &v, "bge-m3-v2-onnx", Some(MODEL_HASH_UNKNOWN)).await.unwrap();
+
+    let stale = db.get_stale_embeddings("bge-m3-v2-onnx", Some("sha256:aaa")).await.unwrap();
+    assert!(!stale.contains(&"h1".to_string()), "matching hash is not stale");
+    assert!(stale.contains(&"h2".to_string()), "real hash mismatch IS stale");
+    assert!(!stale.contains(&"h3".to_string()), "unknown-pre-hash sentinel never triggers re-embed");
+}
