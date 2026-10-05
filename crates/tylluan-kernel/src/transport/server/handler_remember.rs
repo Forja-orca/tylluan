@@ -359,55 +359,54 @@ pub async fn handle_tylluan_remember(
             }
     }
 
-    match server.memory.add_document(&tagged_content, &metadata, embedding.as_ref().map(|(v, _)| v.as_slice())).await {
-        Ok(_) => {
-            // Invalidate caches so new memories are immediately visible
-            {
-                let mut cache = server.recall_cache.lock().await;
-                cache.invalidate_all();
-            }
-            server.silva.query_embed_cache.invalidate();
-
-            let importance = arguments.as_ref()
-                .and_then(|a| a.get("metadata")).and_then(|m| m.get("importance"))
-                .and_then(|v| v.as_f64()).unwrap_or(0.7);
-            if content.len() > 200 {
-                let server_clone = server.clone();
-                let aid_clone = rem_agent_id.clone();
-                let content_clone = content.clone();
-                let nid_clone = node_id.clone();
-                let tagged_clone = tagged_content.clone();
-                tokio::spawn(async move {
-                    crate::transport::server::handler_do::maybe_auto_extract_triples(
-                        &server_clone,
-                        aid_clone.as_deref(),
-                        "remember",
-                        &content_clone,
-                    );
-                    
-                    // Auto-link to semantically similar nodes (grows graph density)
-                    let _ = server_clone.silva.auto_link_similar(&nid_clone, &tagged_clone, 3, 0.25).await;
-                });
-            } else {
-                // Still auto-link even if content is short and no triples extracted
-                let silva_clone = server.silva.clone();
-                let nid_clone = node_id.clone();
-                let tagged_clone = tagged_content.clone();
-                tokio::spawn(async move {
-                    let _ = silva_clone.auto_link_similar(&nid_clone, &tagged_clone, 3, 0.25).await;
-                });
-            }
-            let preview = if content.chars().count() > 80 { format!("{}...", content.chars().take(80).collect::<String>()) } else { content.clone() };
-            // ADR-012 Fase 1: actualizar last_agent_access si hay agent_id
-            if rem_agent_id.is_some() {
-                let now = chrono::Utc::now().timestamp();
-                let _ = server.silva.record_agent_access(&node_id, now).await;
-            }
-            Ok(CallToolResult {
-                content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
-                is_error: Some(false),
-            })
-        },
-        Err(e) => Ok(error_result(&format!("Memory write failed: {e}"))),
+    // F1 ROADMAP_O3:58: dual-write híbrido cerrado — la escritura híbrida se retiró;
+    // SilvaDB es la única escritura de este handler (rutas de arriba). Los side
+    // effects antes condicionados al éxito de la segunda escritura (invalidar
+    // cachés, auto-link, respuesta al caller) se ejecutan siempre.
+    // Invalidate caches so new memories are immediately visible
+    {
+        let mut cache = server.recall_cache.lock().await;
+        cache.invalidate_all();
     }
+    server.silva.query_embed_cache.invalidate();
+
+    let importance = arguments.as_ref()
+        .and_then(|a| a.get("metadata")).and_then(|m| m.get("importance"))
+        .and_then(|v| v.as_f64()).unwrap_or(0.7);
+    if content.len() > 200 {
+        let server_clone = server.clone();
+        let aid_clone = rem_agent_id.clone();
+        let content_clone = content.clone();
+        let nid_clone = node_id.clone();
+        let tagged_clone = tagged_content.clone();
+        tokio::spawn(async move {
+            crate::transport::server::handler_do::maybe_auto_extract_triples(
+                &server_clone,
+                aid_clone.as_deref(),
+                "remember",
+                &content_clone,
+            );
+
+            // Auto-link to semantically similar nodes (grows graph density)
+            let _ = server_clone.silva.auto_link_similar(&nid_clone, &tagged_clone, 3, 0.25).await;
+        });
+    } else {
+        // Still auto-link even if content is short and no triples extracted
+        let silva_clone = server.silva.clone();
+        let nid_clone = node_id.clone();
+        let tagged_clone = tagged_content.clone();
+        tokio::spawn(async move {
+            let _ = silva_clone.auto_link_similar(&nid_clone, &tagged_clone, 3, 0.25).await;
+        });
+    }
+    let preview = if content.chars().count() > 80 { format!("{}...", content.chars().take(80).collect::<String>()) } else { content.clone() };
+    // ADR-012 Fase 1: actualizar last_agent_access si hay agent_id
+    if rem_agent_id.is_some() {
+        let now = chrono::Utc::now().timestamp();
+        let _ = server.silva.record_agent_access(&node_id, now).await;
+    }
+    Ok(CallToolResult {
+        content: vec![Content::text(format!("Stored node {node_id} (importance={importance:.2}): \"{preview}\""))],
+        is_error: Some(false),
+    })
 }

@@ -1358,7 +1358,6 @@ async fn main() -> anyhow::Result<()> {
         // Background job processor for episodic_index
         let jobs_clone = jobs.clone();
         let silva_clone = silva.clone();
-        let memory_clone = memory.clone();
         let matcher_clone = matcher.clone();
         tokio::spawn(async move {
             loop {
@@ -1387,21 +1386,10 @@ async fn main() -> anyhow::Result<()> {
                             let embedding = matcher_clone.engine()
                                 .and_then(|e| e.embed(&tagged_text).ok()
                                     .map(|emb| (emb, e.engine_id())));
+                            // F1 ROADMAP_O3:58: dual-write híbrido cerrado — el job escribe solo en
+                            // SilvaDB (nodo vía record_memory + embedding aquí).
                             if let Some((emb, model_id)) = embedding {
-                                let metadata = serde_json::json!({
-                                    "agent_id": author,
-                                    "importance": 1.2,
-                                    "channel_id": channel_id,
-                                }).to_string();
                                 let _ = silva_clone.save_embedding(&node_id, &emb, &model_id, None).await;
-                                let _ = memory_clone.add_document(&tagged_text, &metadata, Some(&emb)).await;
-                            } else {
-                                let metadata = serde_json::json!({
-                                    "agent_id": author,
-                                    "importance": 1.2,
-                                    "channel_id": channel_id,
-                                }).to_string();
-                                let _ = memory_clone.add_document(&tagged_text, &metadata, None).await;
                             }
                             let agent_node_id = format!("agent:{author}");
                             let _ = silva_clone.add_edge(&agent_node_id, &node_id, "remembers", 0.9, "{}").await;
