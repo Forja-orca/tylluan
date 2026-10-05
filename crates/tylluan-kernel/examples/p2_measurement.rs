@@ -17,6 +17,7 @@
 //!
 //! Run: cargo run --release -p tylluan-kernel --example p2_measurement
 //! Output: human-readable table + a JSON block at the end.
+#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hint::black_box;
