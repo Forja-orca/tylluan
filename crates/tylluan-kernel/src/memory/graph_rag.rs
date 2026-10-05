@@ -20,10 +20,11 @@ impl GraphRagManager {
 
     /// Check if a cluster already has an identical summary with the same members.
     /// Used for idempotency: skip summarizing if nothing changed since last cycle.
-    fn has_identical_summary(&self, cluster_id: &str, member_ids: &[String]) -> bool {
+    #[allow(dead_code)]
+    pub(crate) fn has_identical_summary(&self, cluster_id: &str, member_ids: &[String]) -> bool {
         let members_json = serde_json::to_string(member_ids).unwrap_or_default();
         tokio::task::block_in_place(|| {
-            let conn = self.silva.conn.blocking_lock();
+            let conn = self.silva.conn_timed();
             let mut stmt = conn.prepare(
                 "SELECT 1 FROM cluster_summaries WHERE cluster_id = ?1 AND members = ?2 LIMIT 1"
             ).ok()?;
@@ -142,20 +143,15 @@ impl GraphRagManager {
         Ok(targets)
     }
 
-    /// Save a generated summary to both the nodes table and the cluster_summaries table.
-    /// Bug fix: previous version had wrong add_edge argument order.
+    /// Save a generated summary to both the nodes table and the cluster_summaries table
+    /// in a single atomic SQLite transaction (conn.transaction()).
+    ///
+    /// Reduces lock contention from ~23 individual mutex acquisitions down to 1.
     pub async fn save_summary(&self, cluster_id: &str, summary: &str, member_ids: Vec<String>) -> Result<String> {
         // Guard: reject nested graphrag_summary: prefixes (prevents unbounded nesting).
         if cluster_id.contains("graphrag_summary:") {
             warn!("GraphRAG: refusing to save nested summary for cluster_id={cluster_id} (already contains graphrag_summary: prefix)");
             anyhow::bail!("Cluster ID contains nested graphrag_summary: prefix — refusing to save.");
-        }
-
-        // Idempotency: skip if cluster already has an identical summary with same members.
-        if self.has_identical_summary(cluster_id, &member_ids) {
-            info!("GraphRAG: cluster {} already has identical summary with same members — skipping (idempotent)", cluster_id);
-            let existing_node_id = format!("graphrag_summary:{cluster_id}");
-            return Ok(existing_node_id);
         }
 
         let node_id = format!("graphrag_summary:{cluster_id}");
@@ -164,26 +160,94 @@ impl GraphRagManager {
             "member_count": member_ids.len(),
             "generated_at": chrono::Utc::now().to_rfc3339()
         }).to_string();
-
-        // 1. Upsert summary node (allow_drift=true: GraphRAG is an internal cognitive module)
-        self.silva.upsert_node_with_validity(&node_id, "summary", summary, &metadata, crate::memory::silva::NodeWriteOptions::new("agent_generated").drift_allowed(true)).await?;
-
-        // 2. Link members to summary (fixed arg order: source, target, edge_type, weight, metadata)
-        let mut linked = 0usize;
-        for member_id in &member_ids {
-            match self.silva.add_edge(&node_id, member_id, "member_of", 1.0, "{}").await {
-                Ok(_) => linked += 1,
-                Err(e) => warn!("GraphRAG: edge {}->{} failed: {}", node_id, member_id, e),
-            }
-        }
-
-        // 3. Write to cluster_summaries table with dedup:
-        //    If cluster_id + summary content already exists, keep the original created_at
-        //    so the canary inflation alert doesn't fire for unchanged summaries.
         let members_json = serde_json::to_string(&member_ids).unwrap_or_default();
-        tokio::task::block_in_place(|| {
-            let conn = self.silva.conn.blocking_lock();
-            conn.execute(
+
+        let (already_exists, linked) = tokio::task::block_in_place(|| -> Result<(bool, usize)> {
+            let mut conn = self.silva.conn_timed();
+            let tx = conn.transaction()?;
+
+            // Idempotency: skip if cluster already has an identical summary with same members.
+            let exists: bool = {
+                let mut stmt = tx.prepare(
+                    "SELECT 1 FROM cluster_summaries WHERE cluster_id = ?1 AND members = ?2 LIMIT 1",
+                )?;
+                stmt.query_row(
+                    rusqlite::params![cluster_id, members_json],
+                    |r| r.get(0),
+                ).unwrap_or(false)
+            };
+
+            if exists {
+                return Ok((true, 0));
+            }
+
+            // 1. Upsert summary node (allow_drift=true: GraphRAG is an internal cognitive module)
+            use sha2::Digest;
+            let content_hash = format!("{:x}", sha2::Sha256::digest(summary.as_bytes()));
+            let vf = chrono::Utc::now().timestamp();
+
+            tx.execute(
+                "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance, owner_scope, source, author, evidence_url)
+                 VALUES (?1, 'summary', ?2, ?3, 1.0, 0, 0, NULL, CURRENT_TIMESTAMP, ?4, NULL, 0, NULL, ?5, 'agent_generated', NULL, NULL, NULL, NULL)
+                 ON CONFLICT(id) DO UPDATE SET
+                    content = excluded.content,
+                    metadata = excluded.metadata,
+                    weight = CASE
+                        WHEN nodes.type = 'identity' OR nodes.protected = 1 THEN nodes.weight
+                        ELSE MAX(nodes.weight, excluded.weight)
+                    END,
+                    protected = excluded.protected,
+                    topic_key = COALESCE(excluded.topic_key, nodes.topic_key),
+                    valid_from = COALESCE(excluded.valid_from, nodes.valid_from),
+                    valid_until = COALESCE(excluded.valid_until, nodes.valid_until),
+                    shareable = excluded.shareable,
+                    federation_source = COALESCE(excluded.federation_source, nodes.federation_source),
+                    content_hash = COALESCE(excluded.content_hash, nodes.content_hash),
+                    provenance = excluded.provenance,
+                    owner_scope = COALESCE(excluded.owner_scope, nodes.owner_scope),
+                    source = COALESCE(excluded.source, nodes.source),
+                    author = COALESCE(excluded.author, nodes.author),
+                    evidence_url = COALESCE(excluded.evidence_url, nodes.evidence_url),
+                    lifecycle_state = COALESCE(excluded.lifecycle_state, nodes.lifecycle_state),
+                    last_agent_access = COALESCE(excluded.last_agent_access, nodes.last_agent_access),
+                    reactivation_count = COALESCE(excluded.reactivation_count, nodes.reactivation_count),
+                    updated_at = CURRENT_TIMESTAMP",
+                rusqlite::params![node_id, summary, metadata, vf, content_hash],
+            )?;
+
+            // Sync FTS5 index within the same transaction
+            if let Ok(rowid) = tx.query_row("SELECT rowid FROM nodes WHERE id = ?1", rusqlite::params![node_id], |r| r.get::<_, i64>(0)) {
+                let _ = tx.execute(
+                    "INSERT INTO nodes_fts(rowid, id, content, metadata) VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![rowid, node_id, summary, metadata],
+                );
+            }
+
+            // 2. Link members to summary (fixed arg order: source, target, edge_type, weight, metadata)
+            let mut linked = 0usize;
+            {
+                let mut edge_stmt = tx.prepare(
+                    "INSERT INTO edges (source, target, type, weight, metadata, valid_from, valid_until)
+                     VALUES (?1, ?2, 'member_of', 1.0, '{}', NULL, NULL)
+                     ON CONFLICT(source, target, type) DO UPDATE SET
+                        weight = excluded.weight,
+                        metadata = excluded.metadata,
+                        valid_from = excluded.valid_from,
+                        valid_until = excluded.valid_until",
+                )?;
+
+                for member_id in &member_ids {
+                    match edge_stmt.execute(rusqlite::params![node_id, member_id]) {
+                        Ok(_) => linked += 1,
+                        Err(e) => warn!("GraphRAG: edge {}->{} failed: {}", node_id, member_id, e),
+                    }
+                }
+            }
+
+            // 3. Write to cluster_summaries table with dedup:
+            //    If cluster_id + summary content already exists, keep the original created_at
+            //    so the canary inflation alert doesn't fire for unchanged summaries.
+            tx.execute(
                 "INSERT OR REPLACE INTO cluster_summaries (cluster_id, summary, members, created_at) \
                  VALUES (?1, ?2, ?3, COALESCE( \
                      (SELECT created_at FROM cluster_summaries WHERE cluster_id = ?1 AND summary = ?2), \
@@ -191,8 +255,15 @@ impl GraphRagManager {
                  ))",
                 rusqlite::params![cluster_id, summary, members_json],
             )?;
-            Ok::<(), rusqlite::Error>(())
+
+            tx.commit()?;
+            Ok((false, linked))
         })?;
+
+        if already_exists {
+            info!("GraphRAG: cluster {} already has identical summary with same members — skipping (idempotent)", cluster_id);
+            return Ok(node_id);
+        }
 
         info!("📝 GraphRAG: summary saved for cluster {} ({} members linked)", cluster_id, linked);
         Ok(node_id)
@@ -300,5 +371,72 @@ mod tests {
 
         assert!(result.is_ok(), "a clean, non-nested cluster_id must still work: {:?}", result.err());
         assert_eq!(result.unwrap(), "graphrag_summary:cluster:some-hub-id");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn save_summary_persists_node_edges_and_cluster_summary_in_single_tx() {
+        let db = Arc::new(SilvaDB::in_memory().await.unwrap());
+        let manager = GraphRagManager::new(db.clone());
+
+        // Pre-populate two member nodes
+        db.upsert_node("member-1", "concept", "Concept 1", "{}").await.unwrap();
+        db.upsert_node("member-2", "concept", "Concept 2", "{}").await.unwrap();
+
+        let cluster_id = "cluster:member-1";
+        let summary_text = "Cluster summary for members 1 and 2";
+        let member_ids = vec!["member-1".to_string(), "member-2".to_string()];
+
+        let saved_id = manager
+            .save_summary(cluster_id, summary_text, member_ids.clone())
+            .await
+            .expect("save_summary must succeed");
+        assert_eq!(saved_id, "graphrag_summary:cluster:member-1");
+
+        // 1. Verify summary node in nodes table
+        let node = db.get_node(&saved_id).await.unwrap().expect("summary node must exist");
+        assert_eq!(node.node_type, "summary");
+        assert_eq!(node.content, summary_text);
+        assert_eq!(node.provenance, "agent_generated");
+
+        // 2. Verify edges table has member_of links for both members
+        let targets: Vec<String> = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            let mut stmt = conn.prepare("SELECT target FROM edges WHERE source = ?1 AND type = 'member_of'").unwrap();
+            stmt.query_map(rusqlite::params![saved_id], |r| r.get(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect()
+        });
+        assert_eq!(targets.len(), 2, "must have 2 member_of edges");
+        assert!(targets.contains(&"member-1".to_string()));
+        assert!(targets.contains(&"member-2".to_string()));
+
+        // 3. Verify cluster_summaries table row
+        let cs_count: i64 = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT COUNT(*) FROM cluster_summaries WHERE cluster_id = ?1 AND summary = ?2",
+                rusqlite::params![cluster_id, summary_text],
+                |r| r.get(0),
+            ).unwrap()
+        });
+        assert_eq!(cs_count, 1, "cluster_summaries row must exist");
+
+        // 4. Verify idempotency: calling save_summary again returns existing ID and does not duplicate
+        let second_id = manager
+            .save_summary(cluster_id, summary_text, member_ids)
+            .await
+            .expect("second save_summary call must succeed (idempotent)");
+        assert_eq!(second_id, saved_id);
+
+        let cs_count_after: i64 = tokio::task::block_in_place(|| {
+            let conn = db.conn.blocking_lock();
+            conn.query_row(
+                "SELECT COUNT(*) FROM cluster_summaries WHERE cluster_id = ?1",
+                rusqlite::params![cluster_id],
+                |r| r.get(0),
+            ).unwrap()
+        });
+        assert_eq!(cs_count_after, 1, "cluster_summaries count must remain 1 after second call");
     }
 }
