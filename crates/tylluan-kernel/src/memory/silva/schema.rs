@@ -466,6 +466,17 @@ impl super::SilvaDB {
             let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN model_name TEXT DEFAULT 'bge-m3'", []);
             let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN model_hash TEXT", []);
             let _ = conn.execute("ALTER TABLE node_embeddings ADD COLUMN dimensions INTEGER DEFAULT 1024", []);
+            // Pre-traceability vectors (TL decision 2026-10-05): mark them
+            // explicitly instead of inventing provenance. Idempotent — only
+            // still-NULL rows are stamped; everything written after this fix
+            // carries the real engine fingerprint. get_stale_embeddings
+            // deliberately does NOT count this sentinel as a hash mismatch,
+            // so the reindexer never re-processes history because of this
+            // migration (see the stale_embeddings regression test).
+            let _ = conn.execute(
+                "UPDATE node_embeddings SET model_hash = ?1 WHERE model_hash IS NULL",
+                rusqlite::params![crate::memory::silva::nodes::MODEL_HASH_UNKNOWN],
+            );
 
             Ok::<(), anyhow::Error>(())
         })?;
