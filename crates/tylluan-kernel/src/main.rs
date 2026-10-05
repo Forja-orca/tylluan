@@ -668,7 +668,13 @@ async fn main() -> anyhow::Result<()> {
         } else {
             let model_name = &config.memory.embedding_model;
             info!("🧠 Pre-loading embedding model: {}", model_name);
-            let _ = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device));
+            // Surface load failures instead of swallowing them: an unknown
+            // embedding_model (typo) fails explicitly here with the valid
+            // value list and the kernel continues BM25-only — no silent
+            // BGE-M3 substitution, no download (embeddings.rs resolve_model).
+            if let Err(e) = tokio::task::block_in_place(|| matcher.load_model_with_device(None, model_name, &config.inference.device)) {
+                error!("❌ Embedding model '{}' failed to load: {e:#} — continuing BM25-only (semantic search disabled)", model_name);
+            }
             false
         }
     } else {
