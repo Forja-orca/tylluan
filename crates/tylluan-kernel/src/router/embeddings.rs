@@ -595,6 +595,12 @@ impl SparseEngine {
     }
 
     /// Embed text into a learned-sparse vector (LRU-cached like the dense path).
+    ///
+    /// T925: on a cache MISS this acquires the same shared interactive
+    /// inference budget as the dense/rerank paths, BEFORE the raw model
+    /// mutex (budget → model order everywhere, no deadlock). A cache HIT
+    /// returns before the acquire — it must not consume budget (same rule
+    /// as `EmbeddingEngine::embed_batch`, Tarea Raíz 1).
     pub fn embed(&self, text: &str) -> Result<SparseVec> {
         let key = text.trim().to_lowercase();
         {
@@ -603,6 +609,7 @@ impl SparseEngine {
                 return Ok(hit.clone());
             }
         }
+        let _budget = crate::memory::inference_budget::InferenceBudget::global().acquire_sync()?;
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
         let mut out = model
             .embed(vec![text], None)
@@ -621,10 +628,18 @@ impl SparseEngine {
         Ok(sv)
     }
 
+    /// Embed multiple texts in one sparse ONNX batch call.
+    ///
+    /// T925: acquires the same shared interactive inference budget as
+    /// `EmbeddingEngine::embed_batch` and `RerankEngine::rerank` — after the
+    /// empty-input short-circuit (nothing to infer) and before the raw model
+    /// mutex. Bounded/rejection behavior identical to the dense path
+    /// (`Err(Saturated)` when `[inference.budget]` opts in).
     pub fn embed_batch(&self, texts: &[&str]) -> Result<Vec<SparseVec>> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
+        let _budget = crate::memory::inference_budget::InferenceBudget::global().acquire_sync()?;
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
         let out = model
             .embed(texts, None)
