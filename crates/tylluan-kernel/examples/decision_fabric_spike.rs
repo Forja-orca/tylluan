@@ -49,6 +49,17 @@
 //!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-c models/laya --split test
 //!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-c models/laya --split all --source confusion
 //!
+//! Variant B (ADR-018 §3 paso 3, aprobado por el TL en Coloquio): SystemOneDecisionProvider,
+//! un cliente HTTP del contrato Jev / System One `POST /v1/systemone`. Agnóstico de runtime:
+//! sirve contra llama.cpp (PR #29818, mergeado 2026-10-03: `llama-server -hf
+//! ggml-org/Clef-Flash-GGUF` en :8080, GGUF Apache-2.0 de ggml-org) o contra Ollama >= 0.35.1
+//! (:11434; la instalación local detectada es 0.30.10 — vieja para clef). Mismo dataset,
+//! mismas stats, mismo gate §3 que la variante C; la cláusula 4 (coste vs LLM sustituido)
+//! sigue abierta: B mide si un modelo decisional con calibración entrenada supera las
+//! cláusulas 1-3 donde la cabeza zero-shot de Laya no lo hizo (AUROC 0.9221).
+//!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-b --variant-b-endpoint http://127.0.0.1:8080
+//!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-b --variant-b-endpoint http://127.0.0.1:11434 --split all
+//!
 //! Flags: --split test|all (default test) · --source audit|confusion|all ·
 //! --limit N · --latency-budget-ms MS (default 500, the System-One band
 //! cited by the ADR). Default (no flags) prints the extractor profile only;
@@ -237,6 +248,9 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut export_path = None;
     let mut variant_c = None;
+    let mut variant_b = false;
+    let mut variant_b_endpoint = "http://127.0.0.1:8080".to_string();
+    let mut variant_b_model = "clef-flash".to_string();
     let mut golden = false;
     let mut split = "test".to_string();
     let mut source = "all".to_string();
@@ -250,6 +264,13 @@ fn main() {
             }
             "--variant-c" => {
                 variant_c = Some(arg_value(&args, &mut i, "--variant-c"));
+            }
+            "--variant-b" => variant_b = true,
+            "--variant-b-endpoint" => {
+                variant_b_endpoint = arg_value(&args, &mut i, "--variant-b-endpoint");
+            }
+            "--variant-b-model" => {
+                variant_b_model = arg_value(&args, &mut i, "--variant-b-model");
             }
             "--golden" => golden = true,
             "--split" => split = arg_value(&args, &mut i, "--split"),
@@ -268,6 +289,7 @@ fn main() {
             }
             other => panic!(
                 "unknown flag '{other}' (supported: --export <path>, --variant-c <dir>, --golden, \
+                 --variant-b, --variant-b-endpoint URL, --variant-b-model NAME, \
                  --split test|all, --source audit|confusion|all, --limit N, --latency-budget-ms MS)"
             ),
         }
@@ -281,7 +303,14 @@ fn main() {
         std::process::exit(if run_golden(&dir) { 0 } else { 1 });
     }
     if let Some(dir) = variant_c {
+        if variant_b {
+            panic!("--variant-b and --variant-c are mutually exclusive");
+        }
         run_variant_c(&dir, &split, &source, limit, budget_ms);
+        return;
+    }
+    if variant_b {
+        run_variant_b(&variant_b_endpoint, &variant_b_model, &split, &source, limit, budget_ms);
         return;
     }
 
@@ -1405,4 +1434,530 @@ async fn run_variant_c_inner(
             "gate_verdict": verdict,
         })
     );
+}
+
+// ─── variant B: SystemOne HTTP provider (llama.cpp #29818 / Ollama >= 0.35.1) ──
+//
+// The provider speaks the exact Jev / System One wire contract (`POST
+// /v1/systemone`), which llama.cpp merged natively for clef GGUFs (PR #29818,
+// 2026-10-03) and Ollama ships since 0.35.x. Runtime-agnostic by design: the
+// same client serves `llama-server -hf ggml-org/Clef-Flash-GGUF` (:8080) and
+// `ollama serve` (:11434) — the kernel never knows or cares which runtime is
+// behind the URL, and the model lives OUTSIDE the kernel process (contrast
+// with variant C: ort in-proc + ~1.7 GB RSS inside the kernel).
+
+#[derive(Debug, serde::Deserialize)]
+struct SystemOneAnswer {
+    #[serde(default)]
+    probabilities: HashMap<String, f64>,
+    #[serde(default)]
+    noul: Option<f64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SystemOneResponse {
+    answers: HashMap<String, SystemOneAnswer>,
+}
+
+/// Variante B del spike ADR-018: DecisionProvider sobre un server SystemOne
+/// HTTP (llama.cpp u Ollama). Sin estado propio y sin modelo in-proc.
+struct SystemOneDecisionProvider {
+    endpoint: String,
+    model: String,
+    http: reqwest::Client,
+}
+
+impl SystemOneDecisionProvider {
+    fn new(endpoint: &str, model: &str) -> Self {
+        Self {
+            endpoint: endpoint.trim_end_matches('/').to_string(),
+            model: model.to_string(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .expect("reqwest client for variant B"),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DecisionProvider for SystemOneDecisionProvider {
+    async fn decide(
+        &self,
+        req: &DecisionRequest,
+    ) -> Result<HashMap<String, DecisionAnswer>, DecisionError> {
+        // Wire mapping: Score keeps its typed "score" levels; Noul becomes a
+        // two-option choice because this harness only consumes the per-option
+        // probability distribution (the server's noul convenience field is
+        // honored when present, but never required).
+        let mut questions = serde_json::Map::new();
+        for (name, q) in &req.questions {
+            let spec = systemone_question_spec(q)
+                .map_err(|_| DecisionError::EmptyQuestion(name.clone()))?;
+            questions.insert(name.clone(), spec);
+        }
+
+        let body = json!({ "model": self.model, "state": req.state, "questions": questions });
+        let url = format!("{}/v1/systemone", self.endpoint);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| DecisionError::Provider(self.model.clone(), format!("{url}: {e}")));
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Err(e),
+        };
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(DecisionError::Provider(
+                self.model.clone(),
+                format!("{url}: HTTP {status} — {}", clip_str(&text, 300)),
+            ));
+        }
+        let parsed: SystemOneResponse = match resp.json().await {
+            Ok(p) => p,
+            Err(e) => {
+                return Err(DecisionError::Provider(
+                    self.model.clone(),
+                    format!("decode: {e}"),
+                ))
+            }
+        };
+
+        let mut out = HashMap::new();
+        for (name, q) in &req.questions {
+            let Some(ans) = parsed.answers.get(name) else {
+                return Err(DecisionError::Provider(
+                    self.model.clone(),
+                    format!(
+                        "server answered {} of {} questions; '{name}' missing",
+                        parsed.answers.len(),
+                        req.questions.len()
+                    ),
+                ));
+            };
+            let distribution = systemone_distribution(q, ans);
+            if distribution.is_empty() {
+                return Err(DecisionError::Provider(
+                    self.model.clone(),
+                    format!("'{name}' answered with no probabilities"),
+                ));
+            }
+            out.insert(
+                name.clone(),
+                DecisionAnswer { distribution, calibration: None },
+            );
+        }
+        Ok(out)
+    }
+
+    fn provider_id(&self) -> &'static str {
+        "systemone-http-v1"
+    }
+}
+
+/// Pure wire mapping DecisionQuestion -> SystemOne question spec.
+/// Score keeps its typed levels; Noul is expressed as a two-option choice so
+/// the per-option distribution is always the single source of truth.
+fn systemone_question_spec(q: &DecisionQuestion) -> Result<serde_json::Value, DecisionError> {
+    Ok(match q {
+        DecisionQuestion::Choice { options } => {
+            if options.len() < 2 {
+                return Err(DecisionError::EmptyQuestion(String::new()));
+            }
+            json!({
+                "type": "choice",
+                "criteria": options.iter()
+                    .map(|o| (o.clone(), serde_json::Value::Null))
+                    .collect::<serde_json::Map<String, serde_json::Value>>(),
+            })
+        }
+        DecisionQuestion::Score { levels } => {
+            if levels.len() < 2 {
+                return Err(DecisionError::EmptyQuestion(String::new()));
+            }
+            json!({ "type": "score", "criteria": levels })
+        }
+        DecisionQuestion::Noul => json!({
+            "type": "choice",
+            "criteria": {
+                "true": "the statement holds",
+                "false": "the statement does not hold",
+            },
+        }),
+    })
+}
+
+/// Pure response mapping SystemOne answer -> per-option distribution.
+/// For Noul the typed `noul` convenience field wins when present; otherwise
+/// (and for Choice/Score always) the per-option probabilities are taken as-is,
+/// clamped to [0,1].
+fn systemone_distribution(q: &DecisionQuestion, ans: &SystemOneAnswer) -> HashMap<String, f32> {
+    match q {
+        DecisionQuestion::Noul if ans.noul.is_some() => {
+            let p = ans.noul.unwrap().clamp(0.0, 1.0) as f32;
+            [("true".to_string(), p), ("false".to_string(), 1.0 - p)]
+                .into_iter()
+                .collect()
+        }
+        _ => ans
+            .probabilities
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clamp(0.0, 1.0) as f32))
+            .collect(),
+    }
+}
+
+fn clip_str(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let cut: String = s.chars().take(max).collect();
+        format!("{cut}…")
+    }
+}
+
+// ─── variant B runner: identical metrics + §3 gate as variant C ───────────────
+
+async fn run_variant_b_inner(
+    endpoint: &str,
+    model: &str,
+    split: &str,
+    source: &str,
+    limit: Option<usize>,
+    budget_ms: f64,
+) {
+    println!("[variant-b] probing SystemOne endpoint {endpoint} (model: {model})…");
+    let provider = SystemOneDecisionProvider::new(endpoint, model);
+    // Fail FAST with an actionable message when no server is listening —
+    // variant B requires the model server started OUTSIDE this harness
+    // (example: `llama-server -hf ggml-org/Clef-Flash-GGUF --port 8080`).
+    let probe = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("probe client")
+        .get(format!("{}/health", endpoint.trim_end_matches('/')))
+        .send()
+        .await;
+    match probe {
+        Ok(r) => println!("[variant-b] endpoint reachable (HTTP {})", r.status()),
+        Err(e) => println!(
+            "[variant-b] WARNING: endpoint probe failed ({e}). Start the model server outside this harness:\n  llama-server -hf ggml-org/Clef-Flash-GGUF --port 8080   # llama.cpp (>= PR #29818)\n  ollama serve                                            # Ollama >= 0.35.1 (la local es 0.30.10)"
+        ),
+    }
+
+    let ds = std::fs::read_to_string(DATASET_PATH)
+        .unwrap_or_else(|e| panic!("read {DATASET_PATH}: {e} (regenerate with --export first)"));
+    let items: Vec<serde_json::Value> = ds
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("dataset line parse"))
+        .filter(|it| {
+            (split == "all" || it["split"].as_str() == Some(split))
+                && match source {
+                    "audit" => it["source"].as_str() == Some("guild_audit_log"),
+                    "confusion" => it["source"].as_str() == Some("scheduler_confusion"),
+                    _ => true,
+                }
+        })
+        .take(limit.unwrap_or(usize::MAX))
+        .collect();
+    println!(
+        "[variant-b] items after filters (split={split}, source={source}, limit={limit:?}): {}",
+        items.len()
+    );
+
+    let mut hitl = BinaryDecisionStats::new();
+    let mut route = ChoiceDecisionStats::new();
+    let mut decide_errors = 0usize;
+    for it in &items {
+        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut want_route = false;
+        let mut want_hitl = false;
+        if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
+            let options: Vec<String> =
+                opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
+            if !options.is_empty() {
+                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                want_route = true;
+            }
+        }
+        if it["questions"].get("hitl_resolve").is_some() {
+            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            want_hitl = true;
+        }
+        if questions.is_empty() {
+            continue;
+        }
+        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let t0 = Instant::now();
+        let answers = match provider.decide(&req).await {
+            Ok(a) => a,
+            Err(e) => {
+                decide_errors += 1;
+                println!("  decide error ({e}) — item skipped");
+                continue;
+            }
+        };
+        let ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if want_route {
+            let dist = &answers["route_guild"].distribution;
+            let (best, conf) = argmax(dist);
+            let label = it["labels"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base_raw = it["baseline_A"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base = bucket_guild(&base_raw);
+            let brier_item: f64 = dist
+                .iter()
+                .map(|(k, v)| (f64::from(*v) - f64::from(*k == label)).powi(2))
+                .sum();
+            let correct_b = if base_raw.is_empty() { None } else { Some(base == label) };
+            route.update(best == label, correct_b, conf, brier_item, ms);
+        }
+        if want_hitl {
+            let dist = &answers["hitl_resolve"].distribution;
+            let p_true = dist.get("true").copied().unwrap_or(0.0);
+            let label = it["labels"]["hitl_resolve"].as_str() == Some("true");
+            let base_pred = it["baseline_A"]["hitl_resolve"].as_str() == Some("true");
+            hitl.update(p_true >= 0.5, p_true, base_pred, label, ms);
+        }
+    }
+
+    // sort once — every percentile read below assumes sorted latency vectors
+    hitl.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    route.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let hitl_n = hitl.n;
+    let route_n = route.n;
+    println!("\n[variant-b] NOTE degeneracies (T921): hitl labels = cascade-success (success trap); route labels by-construction. Same caveats as variant C.");
+    if hitl_n > 0 {
+        let lat = &hitl.lat;
+        println!("\n[variant-b] decision=hitl_resolve (Noul) n={hitl_n}");
+        println!(
+            "  accuracy: baseline A {:.4} -> B {:.4} (TP {} FP {} TN {} FN {})",
+            hitl.correct_b as f64 / hitl_n as f64,
+            hitl.correct_c as f64 / hitl_n as f64,
+            hitl.true_pos,
+            hitl.false_pos,
+            hitl.true_neg,
+            hitl.false_neg
+        );
+        println!(
+            "  Brier: baseline {:.4} -> B {:.4} | ECE(15): baseline {:.4} -> B {:.4} | AUROC: B {:.4}",
+            hitl.brier_b / hitl_n as f64,
+            hitl.brier_c / hitl_n as f64,
+            ece_15(&hitl.ece_b),
+            ece_15(&hitl.ece_c),
+            auroc(&hitl.pos_c, &hitl.neg_c)
+        );
+        println!(
+            "  latency (B, per item incl. HTTP): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if route_n > 0 {
+        let lat = &route.lat;
+        println!("\n[variant-b] decision=route_guild (Choice, dynamic options) n={route_n}");
+        println!(
+            "  accuracy: baseline A {:.4} (of {} items with live baseline) -> B {:.4}",
+            if route.with_baseline > 0 {
+                route.correct_b as f64 / route.with_baseline as f64
+            } else {
+                f64::NAN
+            },
+            route.with_baseline,
+            route.correct_c as f64 / route_n as f64
+        );
+        println!(
+            "  Brier (multiclass sum): baseline {:.4} -> B {:.4} | ECE(15) top-class: B {:.4}",
+            route.brier_b / route.with_baseline.max(1) as f64,
+            route.brier_c / route_n as f64,
+            ece_15(&route.ece_c)
+        );
+        println!(
+            "  latency (B, per item incl. HTTP): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if decide_errors > 0 {
+        println!("\n[variant-b] decide errors: {decide_errors} items skipped");
+    }
+
+    // ── §3 gate, clause by clause (same bar as variant C) ────────────────────
+    println!("\n[gate] ADR-018 §3 (budget {budget_ms} ms):");
+    let mut clauses_ok = true;
+    if hitl_n > 0 {
+        let acc_v = hitl.correct_c as f64 / hitl_n as f64;
+        let acc_b = hitl.correct_b as f64 / hitl_n as f64;
+        let acc_pass = acc_v > acc_b;
+        clauses_ok &= acc_pass;
+        let calib_pass =
+            hitl.brier_c < hitl.brier_b && ece_15(&hitl.ece_c) < ece_15(&hitl.ece_b);
+        clauses_ok &= calib_pass;
+        let lat_pass = pct(&hitl.lat, 99.0) <= budget_ms;
+        clauses_ok &= lat_pass;
+        println!(
+            "  1. accuracy hitl: B {acc_v:.4} vs baseline {acc_b:.4} — {}",
+            if acc_pass { "PASS" } else { "FAIL" }
+        );
+        println!(
+            "  2. calibration hitl (Brier {:.4} vs {:.4}, ECE {:.4} vs {:.4}) — {}",
+            hitl.brier_c / hitl_n as f64,
+            hitl.brier_b / hitl_n as f64,
+            ece_15(&hitl.ece_c),
+            ece_15(&hitl.ece_b),
+            if calib_pass { "PASS" } else { "FAIL" }
+        );
+        println!(
+            "  3. p99 latency hitl: {:.1} ms <= {budget_ms} — {}",
+            pct(&hitl.lat, 99.0),
+            if lat_pass { "PASS" } else { "FAIL" }
+        );
+    } else {
+        println!("  1-3. no hitl items in this slice — accuracy/calibration/latency clauses NOT EVALUATED");
+        clauses_ok = false;
+    }
+    println!(
+        "  4. cost vs substituted LLM: still open — this run supplies the inputs to compute it (server usage per call + the measured HTTP+inference latency columns)."
+    );
+    let verdict = if clauses_ok {
+        "GO-PROVISIONAL (clauses 1-3 pass on this slice; shadow-mode next)"
+    } else {
+        "NO-GO on clauses 1-3 for this slice"
+    };
+    println!("  VERDICT: {verdict}");
+    println!(
+        "\nJSON:\n{}",
+        serde_json::json!({
+            "provider": "systemone-http-v1",
+            "endpoint": endpoint,
+            "model": model,
+            "split": split,
+            "source": source,
+            "items": items.len(),
+            "decide_errors": decide_errors,
+            "hitl": {
+                "n": hitl.n,
+                "acc_variant": hitl.correct_c as f64 / hitl.n.max(1) as f64,
+                "acc_baseline": hitl.correct_b as f64 / hitl.n.max(1) as f64,
+                "brier_variant": hitl.brier_c / hitl.n.max(1) as f64,
+                "brier_baseline": hitl.brier_b / hitl.n.max(1) as f64,
+                "ece_variant": ece_15(&hitl.ece_c),
+                "ece_baseline": ece_15(&hitl.ece_b),
+                "auroc_variant": auroc(&hitl.pos_c, &hitl.neg_c),
+                "tp": hitl.true_pos,
+                "fp": hitl.false_pos,
+                "tn": hitl.true_neg,
+                "fn": hitl.false_neg,
+                "latency_p50_ms": pct(&hitl.lat, 50.0),
+                "latency_p99_ms": pct(&hitl.lat, 99.0),
+            },
+            "route": {
+                "n": route.n,
+                "acc_variant": route.correct_c as f64 / route.n.max(1) as f64,
+                "acc_baseline": route.correct_b as f64 / route.with_baseline.max(1) as f64,
+                "brier_variant": route.brier_c / route.n.max(1) as f64,
+                "brier_baseline": route.brier_b / route.with_baseline.max(1) as f64,
+                "latency_p50_ms": pct(&route.lat, 50.0),
+                "latency_p99_ms": pct(&route.lat, 99.0),
+            },
+            "gate_verdict": verdict,
+        })
+    );
+}
+
+fn run_variant_b(
+    endpoint: &str,
+    model: &str,
+    split: &str,
+    source: &str,
+    limit: Option<usize>,
+    budget_ms: f64,
+) {
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    rt.block_on(run_variant_b_inner(endpoint, model, split, source, limit, budget_ms));
+}
+
+#[cfg(test)]
+mod systemone_tests {
+    use super::*;
+
+    /// The wire mapping must produce a valid SystemOne question spec for
+    /// every DecisionQuestion variant — this is what makes the provider
+    /// runtime-agnostic (llama.cpp #29818 and Ollama >= 0.35.1 both accept it).
+    #[test]
+    fn question_spec_covers_all_variants() {
+        let choice = systemone_question_spec(&DecisionQuestion::Choice {
+            options: vec!["billing".into(), "technical".into()],
+        })
+        .unwrap();
+        assert_eq!(choice["type"], "choice");
+        assert_eq!(choice["criteria"]["billing"], serde_json::Value::Null);
+
+        let score = systemone_question_spec(&DecisionQuestion::Score {
+            levels: vec!["low".into(), "high".into()],
+        })
+        .unwrap();
+        assert_eq!(score["type"], "score");
+        assert_eq!(score["criteria"].as_array().unwrap().len(), 2);
+
+        let noul = systemone_question_spec(&DecisionQuestion::Noul).unwrap();
+        assert_eq!(noul["type"], "choice");
+        assert!(noul["criteria"].get("true").is_some());
+        assert!(noul["criteria"].get("false").is_some());
+    }
+
+    #[test]
+    fn degenerate_questions_are_rejected_before_the_wire() {
+        let one_opt = DecisionQuestion::Choice { options: vec!["only".into()] };
+        assert!(matches!(
+            systemone_question_spec(&one_opt),
+            Err(DecisionError::EmptyQuestion(..))
+        ));
+        let one_level = DecisionQuestion::Score { levels: vec!["only".into()] };
+        assert!(matches!(
+            systemone_question_spec(&one_level),
+            Err(DecisionError::EmptyQuestion(..))
+        ));
+    }
+
+    #[test]
+    fn noul_answer_prefers_the_typed_field() {
+        let ans = SystemOneAnswer { probabilities: HashMap::new(), noul: Some(0.996) };
+        let dist = systemone_distribution(&DecisionQuestion::Noul, &ans);
+        assert!((dist["true"] - 0.996).abs() < 1e-6);
+        assert!((dist["false"] - 0.004).abs() < 1e-6);
+    }
+
+    /// When the server answers via per-option probabilities (no typed noul
+    /// field), they pass through clamped — the distribution IS the contract.
+    #[test]
+    fn probabilities_pass_through_clamped() {
+        let mut probabilities = HashMap::new();
+        probabilities.insert("true".to_string(), 1.5f64);
+        probabilities.insert("false".to_string(), -0.2f64);
+        let ans = SystemOneAnswer { probabilities, noul: None };
+        let dist = systemone_distribution(&DecisionQuestion::Noul, &ans);
+        assert_eq!(dist["true"], 1.0);
+        assert_eq!(dist["false"], 0.0);
+
+        let mut probabilities = HashMap::new();
+        probabilities.insert("billing".to_string(), 0.7f64);
+        probabilities.insert("technical".to_string(), 0.3f64);
+        let ans = SystemOneAnswer { probabilities, noul: None };
+        let dist = systemone_distribution(
+            &DecisionQuestion::Choice {
+                options: vec!["billing".into(), "technical".into()],
+            },
+            &ans,
+        );
+        assert!((dist["billing"] - 0.7f32).abs() < 1e-6);
+        assert!((dist["technical"] - 0.3f32).abs() < 1e-6);
+    }
 }
