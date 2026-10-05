@@ -36,10 +36,26 @@
 //!   cargo run --release -p tylluan-kernel --example decision_fabric_spike
 //!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --export benchmarks/decision_fabric_dataset.jsonl
 //!
-//! Default prints the profile only; `--export` additionally writes the
-//! JSONL dataset (one line per item: state, questions, labels, live
-//! baseline-A prediction, split). Never touches anything outside its
-//! arguments; the DBs are opened SQLITE_OPEN_READ_ONLY.
+//! Variant C (ADR-018 §3): LayaOnnxDecisionProvider over the published ONNX
+//! bundle (receptron/laya-onnx, Apache-2.0 weights; runtime port of
+//! receptron/laya, MIT). Loads benchmarks/decision_fabric_dataset.jsonl,
+//! answers the SAME items the baseline answered, computes accuracy / ECE /
+//! Brier / TP-FP-TN-FN / AUROC per decision plus latency p50/p99, and emits
+//! the clause-by-clause GO/NO-GO verdict against the §3 gate. The `--golden`
+//! flag first checks the port against the published 4-decimal reference
+//! values of test/test_model.ts — do not trust any dataset number without
+//! a passing golden run.
+//!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-c models/laya --golden
+//!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-c models/laya --split test
+//!   cargo run --release -p tylluan-kernel --example decision_fabric_spike -- --variant-c models/laya --split all --source confusion
+//!
+//! Flags: --split test|all (default test) · --source audit|confusion|all ·
+//! --limit N · --latency-budget-ms MS (default 500, the System-One band
+//! cited by the ADR). Default (no flags) prints the extractor profile only;
+//! `--export` additionally writes the JSONL dataset (one line per item:
+//! state, questions, labels, live baseline-A prediction, split). Never
+//! touches anything outside its arguments; the DBs are opened
+//! SQLITE_OPEN_READ_ONLY and the bundle directory is read-only too.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -209,12 +225,64 @@ fn split_cut(stamps: &[String]) -> String {
 
 // ─── main ───────────────────────────────────────────────────────────────────
 
+fn arg_value(args: &[String], i: &mut usize, flag: &str) -> String {
+    *i += 1;
+    args.get(*i)
+        .filter(|v| !v.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| panic!("{flag} needs a value"))
+}
+
 fn main() {
-    let export_path = std::env::args().nth(2).filter(|_| {
-        std::env::args().nth(1).as_deref() == Some("--export")
-    });
-    if std::env::args().nth(1).as_deref() == Some("--export") && export_path.is_none() {
-        panic!("--export needs a path: --export <file.jsonl>");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut export_path = None;
+    let mut variant_c = None;
+    let mut golden = false;
+    let mut split = "test".to_string();
+    let mut source = "all".to_string();
+    let mut limit = None;
+    let mut budget_ms = 500.0f64;
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--export" => {
+                export_path = Some(arg_value(&args, &mut i, "--export"));
+            }
+            "--variant-c" => {
+                variant_c = Some(arg_value(&args, &mut i, "--variant-c"));
+            }
+            "--golden" => golden = true,
+            "--split" => split = arg_value(&args, &mut i, "--split"),
+            "--source" => source = arg_value(&args, &mut i, "--source"),
+            "--limit" => {
+                limit = Some(
+                    arg_value(&args, &mut i, "--limit")
+                        .parse()
+                        .expect("--limit expects a number"),
+                );
+            }
+            "--latency-budget-ms" => {
+                budget_ms = arg_value(&args, &mut i, "--latency-budget-ms")
+                    .parse()
+                    .expect("--latency-budget-ms expects a number");
+            }
+            other => panic!(
+                "unknown flag '{other}' (supported: --export <path>, --variant-c <dir>, --golden, \
+                 --split test|all, --source audit|confusion|all, --limit N, --latency-budget-ms MS)"
+            ),
+        }
+        i += 1;
+    }
+
+    if golden {
+        let dir = variant_c
+            .clone()
+            .unwrap_or_else(|| panic!("--golden needs the bundle dir: --variant-c models/laya --golden"));
+        std::process::exit(if run_golden(&dir) { 0 } else { 1 });
+    }
+    if let Some(dir) = variant_c {
+        run_variant_c(&dir, &split, &source, limit, budget_ms);
+        return;
     }
 
     println!("ADR-018 Fase 0 — dataset extractor + live baseline-A (decision_fabric_spike)");
@@ -427,6 +495,914 @@ fn main() {
             "hitl_baseline_accuracy": hitl_baseline_correct as f64 / confusion.len() as f64,
             "cross_route_total": cross_total,
             "cross_route_match": cross_match,
+        })
+    );
+}
+
+// ─── Variant C — LayaOnnxDecisionProvider (ADR-018 §3; Buffy, T925 lane) ────
+//
+// Faithful Rust/ort port of the reference runtime receptron/laya (MIT):
+// same sequence layout (rl_common.build_sequence), same per-cardinality
+// temperature, same softmax post-processing, same noul convention
+// (options [false, true] so p[1] is P(true)). The provider implements the
+// kernel's DecisionProvider contract (router::decision) — this spike harness
+// is its ONLY consumer (ADR-018 §2.2: zero hot-path change in Fase 0).
+
+use std::sync::Mutex;
+use std::time::Instant;
+
+use ndarray::{Array1, Array2};
+use ort::session::Session;
+use ort::value::TensorRef;
+use tylluan_kernel::router::decision::{
+    DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest,
+};
+
+const QTYPE_CHOICE: i64 = 0;
+const QTYPE_SCORE: i64 = 1;
+const QTYPE_NOUL: i64 = 2;
+const DATASET_PATH: &str = "benchmarks/decision_fabric_dataset.jsonl";
+/// Noul is always rendered [false, true] so p[1] is P(true) — exact texts of
+/// sequence.ts `renderOptions` (reference defaults).
+const NOUL_OPTIONS: [&str; 2] = [
+    "false: no, the statement does not hold",
+    "true: yes, the statement holds",
+];
+
+/// One rendered question — port of sequence.ts `InternalQ` + `renderOptions`.
+struct LayaQuestion {
+    qtype: i64,
+    instructions: String,
+    /// Rendered option texts in label-index order (noul is always [false, true]).
+    options: Vec<String>,
+    /// Answer keys, same order as `options`.
+    keys: Vec<String>,
+}
+
+impl LayaQuestion {
+    fn score(levels: &[&str], instructions: &str) -> Self {
+        LayaQuestion {
+            qtype: QTYPE_SCORE,
+            instructions: instructions.to_string(),
+            options: levels
+                .iter()
+                .enumerate()
+                .map(|(i, c)| format!("level {i}: {c}"))
+                .collect(),
+            keys: (0..levels.len()).map(|i| i.to_string()).collect(),
+        }
+    }
+
+    fn noul(instructions: &str) -> Self {
+        LayaQuestion {
+            qtype: QTYPE_NOUL,
+            instructions: instructions.to_string(),
+            options: NOUL_OPTIONS.iter().map(|s| (*s).to_string()).collect(),
+            keys: vec!["false".into(), "true".into()],
+        }
+    }
+}
+
+/// The ONNX bundle: session + tokenizer + the calibration config from
+/// laya_config.json. Mirrors `Laya.load()` in the reference runtime.
+struct LayaBundle {
+    session: Mutex<Session>,
+    tokenizer: tokenizers::Tokenizer,
+    max_len: usize,
+    head_max_len: usize,
+    temperature: Vec<f32>,
+    temperature_by_options: HashMap<String, f32>,
+    cls: u32,
+    sep: u32,
+    mask: u32,
+    pad: u32,
+}
+
+impl LayaBundle {
+    fn load(dir: &Path) -> Self {
+        let cfg: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join("laya_config.json"))
+                .unwrap_or_else(|e| panic!("read {}/laya_config.json: {e}", dir.display())),
+        )
+        .expect("parse laya_config.json");
+        let tokenizer = tokenizers::Tokenizer::from_file(dir.join("tokenizer/tokenizer.json"))
+            .expect("load tokenizer/tokenizer.json");
+        let sid = |t: &str| {
+            tokenizer
+                .token_to_id(t)
+                .unwrap_or_else(|| panic!("special token {t} missing from tokenizer"))
+        };
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .min(8);
+        let session = Session::builder()
+            .and_then(|b| {
+                b.with_intra_threads(threads)?
+                    .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
+                    .commit_from_file(dir.join("laya.onnx"))
+            })
+            .unwrap_or_else(|e| {
+                panic!(
+                    "load laya.onnx from {} ({e}) — needs the full bundle (laya.onnx + laya.onnx.data + tokenizer/) and a loadable onnxruntime dylib",
+                    dir.display()
+                )
+            });
+        let temp_map = cfg["temperature_by_options"]
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f as f32)))
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let temperature = cfg["temperature"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+            .unwrap_or_else(|| vec![1.0; 3]);
+        Self {
+            session: Mutex::new(session),
+            max_len: cfg["max_len"].as_u64().unwrap_or(512) as usize,
+            head_max_len: cfg["head_max_len"].as_u64().unwrap_or(192) as usize,
+            temperature,
+            temperature_by_options: temp_map,
+            cls: sid("[CLS]"),
+            sep: sid("[SEP]"),
+            mask: sid("[MASK]"),
+            pad: sid("[PAD]"),
+            tokenizer,
+        }
+    }
+
+    fn encode(&self, text: &str) -> Vec<u32> {
+        self.tokenizer
+            .encode(text, false)
+            .expect("tokenizer encode")
+            .get_ids()
+            .to_vec()
+    }
+
+    /// Port of sequence.ts `buildSequence`:
+    /// [CLS] <type> question: instructions [SEP] [MASK] opt0 ... [SEP] state [SEP]
+    fn build_sequence(&self, state_text: &str, q: &LayaQuestion) -> (Vec<u32>, Vec<usize>) {
+        let scrub = |s: &str| s.replace("[MASK]", " ");
+        let type_name = match q.qtype {
+            QTYPE_CHOICE => "choice",
+            QTYPE_SCORE => "score",
+            _ => "noul",
+        };
+        let head_all = self.encode(&format!("{type_name} question: {}", scrub(&q.instructions)));
+        let mut opt_ids: Vec<Vec<u32>> = q
+            .options
+            .iter()
+            .map(|o| {
+                let mut v = vec![self.mask];
+                v.extend(self.encode(&format!(" {}", scrub(o))).into_iter().take(48));
+                v
+            })
+            .collect();
+        let mut budget =
+            self.head_max_len.saturating_sub(opt_ids.iter().map(|o| o.len()).sum::<usize>());
+        if budget < 16 {
+            let per = ((self.head_max_len.saturating_sub(16)) / opt_ids.len().max(1)).max(4);
+            for o in &mut opt_ids {
+                o.truncate(per);
+            }
+            budget =
+                self.head_max_len.saturating_sub(opt_ids.iter().map(|o| o.len()).sum::<usize>());
+        }
+        let head: Vec<u32> = head_all.into_iter().take(budget.max(8)).collect();
+        let mut seq = Vec::with_capacity(self.max_len);
+        seq.push(self.cls);
+        seq.extend_from_slice(&head);
+        seq.push(self.sep);
+        let mut markers = Vec::with_capacity(opt_ids.len());
+        for o in &opt_ids {
+            markers.push(seq.len());
+            seq.extend_from_slice(o);
+        }
+        seq.push(self.sep);
+        let room = self.max_len.saturating_sub(seq.len() + 1);
+        seq.extend(self.encode(&scrub(state_text)).into_iter().take(room));
+        seq.push(self.sep);
+        seq.truncate(self.max_len);
+        markers.retain(|&m| m < self.max_len);
+        (seq, markers)
+    }
+
+    /// Per-cardinality temperature (sequence.ts `tempBucket` + laya_config.json).
+    fn temperature_for(&self, qtype: i64, k: usize) -> f32 {
+        let bucket = if k <= 2 {
+            "2"
+        } else if k <= 5 {
+            "3-5"
+        } else if k <= 10 {
+            "6-10"
+        } else {
+            "11+"
+        };
+        let name = match qtype {
+            QTYPE_CHOICE => "choice",
+            QTYPE_SCORE => "score",
+            _ => "noul",
+        };
+        self.temperature_by_options
+            .get(&format!("{name}:{bucket}"))
+            .copied()
+            .or_else(|| self.temperature.get(qtype as usize).copied())
+            .unwrap_or(1.0)
+    }
+
+    /// One forward pass over all questions about ONE state — the port of
+    /// `Laya.systemOne` up to (but not including) the 4-decimal rounding.
+    /// Returns one post-temperature probability vector per question.
+    fn system_one(
+        &self,
+        state_text: &str,
+        questions: &[LayaQuestion],
+    ) -> Result<Vec<Vec<f32>>, DecisionError> {
+        if questions.is_empty() {
+            return Err(DecisionError::Provider(
+                "laya-onnx-v1".into(),
+                "at least one question is required".into(),
+            ));
+        }
+        let items: Vec<(Vec<u32>, Vec<usize>)> =
+            questions.iter().map(|q| self.build_sequence(state_text, q)).collect();
+        for (i, (_, markers)) in items.iter().enumerate() {
+            if markers.len() != questions[i].options.len() {
+                return Err(DecisionError::Provider(
+                    "laya-onnx-v1".into(),
+                    format!(
+                        "question {i}: options do not fit in head_max_len={}",
+                        self.head_max_len
+                    ),
+                ));
+            }
+        }
+        let n = items.len();
+        let l = items.iter().map(|(ids, _)| ids.len()).max().unwrap_or(1).max(1);
+        let k = items.iter().map(|(_, m)| m.len()).max().unwrap_or(1).max(1);
+        let mut input_ids = vec![i64::from(self.pad); n * l];
+        let mut attention = vec![0i64; n * l];
+        let mut marker_pos = vec![0i64; n * k];
+        let mut marker_mask = vec![false; n * k];
+        let mut qtype = vec![0i64; n];
+        for (row, ((ids, markers), q)) in items.iter().zip(questions.iter()).enumerate() {
+            for (j, &v) in ids.iter().enumerate() {
+                input_ids[row * l + j] = i64::from(v);
+                attention[row * l + j] = 1;
+            }
+            for (j, &m) in markers.iter().enumerate() {
+                marker_pos[row * k + j] = m as i64;
+                marker_mask[row * k + j] = true;
+            }
+            qtype[row] = q.qtype;
+        }
+        let ids_arr = Array2::from_shape_vec((n, l), input_ids).expect("ids shape");
+        let att_arr = Array2::from_shape_vec((n, l), attention).expect("att shape");
+        let mp_arr = Array2::from_shape_vec((n, k), marker_pos).expect("mp shape");
+        let mm_arr = Array2::from_shape_vec((n, k), marker_mask).expect("mm shape");
+        let qt_arr = Array1::from_vec(qtype);
+        let mut session = self.session.lock().expect("laya session mutex poisoned");
+        let outputs = session
+            .run(ort::inputs![
+                "input_ids" => TensorRef::from_array_view(ids_arr.view()).expect("ids tensor"),
+                "attention_mask" => TensorRef::from_array_view(att_arr.view()).expect("att tensor"),
+                "marker_pos" => TensorRef::from_array_view(mp_arr.view()).expect("mp tensor"),
+                "marker_mask" => TensorRef::from_array_view(mm_arr.view()).expect("mm tensor"),
+                "qtype" => TensorRef::from_array_view(qt_arr.view()).expect("qt tensor"),
+            ])
+            .map_err(|e| DecisionError::Provider("laya-onnx-v1".into(), e.to_string()))?;
+        // positional access (same pattern as light_reranker.rs): [0] = logits [B,K]
+        let (_, logits) = outputs[0]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| DecisionError::Provider("laya-onnx-v1".into(), format!("logits: {e}")))?;
+        Ok(questions
+            .iter()
+            .enumerate()
+            .map(|(r, q)| {
+                let temp = self.temperature_for(q.qtype, q.options.len());
+                let z: Vec<f32> =
+                    logits[r * k..r * k + q.options.len()].iter().map(|&v| v / temp).collect();
+                softmax_f32(&z)
+            })
+            .collect())
+    }
+}
+
+/// Compact JSON with Python-style separators — port of sequence.ts
+/// `pyJsonDumps` (key order follows serde_json::Value, i.e. sorted; this is
+/// the spike's own convention, consistent for every item).
+fn py_json_compact(v: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match v {
+        Value::String(s) => serde_json::to_string(s).unwrap_or_default(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "null".into(),
+        Value::Array(a) => format!(
+            "[{}]",
+            a.iter().map(py_json_compact).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Object(o) => format!(
+            "{{{}}}",
+            o.iter()
+                .map(|(k, x)| format!(
+                    "{}: {}",
+                    serde_json::to_string(k).unwrap_or_default(),
+                    py_json_compact(x)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn softmax_f32(z: &[f32]) -> Vec<f32> {
+    let m = z.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let e: Vec<f32> = z.iter().map(|&v| (v - m).exp()).collect();
+    let s: f32 = e.iter().sum();
+    e.into_iter().map(|v| v / s).collect()
+}
+
+/// The ADR-018 contract implementation. Fase 0: consumed ONLY by this harness.
+struct LayaOnnxDecisionProvider {
+    bundle: LayaBundle,
+}
+
+#[async_trait::async_trait]
+impl DecisionProvider for LayaOnnxDecisionProvider {
+    fn provider_id(&self) -> &'static str {
+        "laya-onnx-v1"
+    }
+
+    async fn decide(
+        &self,
+        req: &DecisionRequest,
+    ) -> Result<HashMap<String, DecisionAnswer>, DecisionError> {
+        let state_text = py_json_compact(&req.state);
+        // Deterministic order regardless of HashMap iteration order.
+        let mut names: Vec<&String> = req.questions.keys().collect();
+        names.sort();
+        let qs: Vec<LayaQuestion> = names
+            .iter()
+            .map(|name| match &req.questions[*name] {
+                DecisionQuestion::Choice { options } => LayaQuestion {
+                    qtype: QTYPE_CHOICE,
+                    instructions: format!("Answer the {name} question about this state."),
+                    options: options.clone(),
+                    keys: options.clone(),
+                },
+                DecisionQuestion::Score { levels } => LayaQuestion {
+                    qtype: QTYPE_SCORE,
+                    instructions: format!("Answer the {name} question about this state."),
+                    options: levels
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| format!("level {i}: {c}"))
+                        .collect(),
+                    keys: (0..levels.len()).map(|i| i.to_string()).collect(),
+                },
+                DecisionQuestion::Noul => LayaQuestion::noul(&format!(
+                    "Evaluate whether {name} holds for this state."
+                )),
+            })
+            .collect();
+        let probs = self.bundle.system_one(&state_text, &qs)?;
+        Ok(qs
+            .iter()
+            .zip(names.iter())
+            .zip(probs)
+            .map(|((q, name), p)| {
+                (
+                    (*name).clone(),
+                    DecisionAnswer {
+                        distribution: q
+                            .keys
+                            .iter()
+                            .zip(p.iter())
+                            .map(|(k, v)| (k.clone(), *v))
+                            .collect(),
+                        calibration: None,
+                    },
+                )
+            })
+            .collect())
+    }
+}
+
+// ─── metrics ────────────────────────────────────────────────────────────────
+
+fn ece_15(pairs: &[(f64, bool)]) -> f64 {
+    if pairs.is_empty() {
+        return f64::NAN;
+    }
+    let n = pairs.len() as f64;
+    let mut conf = [0.0f64; 15];
+    let mut acc = [0.0f64; 15];
+    let mut cnt = [0.0f64; 15];
+    for &(c, ok) in pairs {
+        let b = ((c * 15.0) as usize).min(14);
+        conf[b] += c;
+        acc[b] += f64::from(ok);
+        cnt[b] += 1.0;
+    }
+    (0..15)
+        .filter(|&b| cnt[b] > 0.0)
+        .map(|b| (cnt[b] / n) * (acc[b] / cnt[b] - conf[b] / cnt[b]).abs())
+        .sum()
+}
+
+/// Rank-sum AUROC with tie averaging.
+fn auroc(pos: &[f64], neg: &[f64]) -> f64 {
+    if pos.is_empty() || neg.is_empty() {
+        return f64::NAN;
+    }
+    let mut all: Vec<(f64, u8)> = pos
+        .iter()
+        .map(|&x| (x, 1u8))
+        .chain(neg.iter().map(|&x| (x, 0u8)))
+        .collect();
+    all.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let (n1, n0) = (pos.len() as f64, neg.len() as f64);
+    let mut rank_sum = 0.0f64;
+    let mut i = 0usize;
+    while i < all.len() {
+        let mut j = i;
+        while j < all.len() && all[j].0 == all[i].0 {
+            j += 1;
+        }
+        let avg_rank = (i + j + 1) as f64 / 2.0;
+        rank_sum += all[i..j]
+            .iter()
+            .filter(|(_, is_pos)| *is_pos == 1)
+            .count() as f64
+            * avg_rank;
+        i = j;
+    }
+    (rank_sum - n1 * (n1 + 1.0) / 2.0) / (n1 * n0)
+}
+
+fn pct(sorted: &[f64], p: f64) -> f64 {
+    if sorted.is_empty() {
+        return f64::NAN;
+    }
+    let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
+    sorted[idx.min(sorted.len() - 1)]
+}
+
+fn argmax(dist: &HashMap<String, f32>) -> (String, f32) {
+    dist.iter()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(k, v)| (k.clone(), *v))
+        .unwrap_or_default()
+}
+
+struct BinaryDecisionStats {
+    n: usize,
+    true_pos: usize,
+    false_pos: usize,
+    true_neg: usize,
+    false_neg: usize,
+    correct_c: usize,
+    correct_b: usize,
+    brier_c: f64,
+    brier_b: f64,
+    ece_c: Vec<(f64, bool)>,
+    ece_b: Vec<(f64, bool)>,
+    pos_c: Vec<f64>,
+    neg_c: Vec<f64>,
+    lat: Vec<f64>,
+}
+
+impl BinaryDecisionStats {
+    fn new() -> Self {
+        Self {
+            n: 0,
+            true_pos: 0,
+            false_pos: 0,
+            true_neg: 0,
+            false_neg: 0,
+            correct_c: 0,
+            correct_b: 0,
+            brier_c: 0.0,
+            brier_b: 0.0,
+            ece_c: Vec::new(),
+            ece_b: Vec::new(),
+            pos_c: Vec::new(),
+            neg_c: Vec::new(),
+            lat: Vec::new(),
+        }
+    }
+
+    fn update(&mut self, pred: bool, p_true: f32, base_pred: bool, label: bool, ms: f64) {
+        self.n += 1;
+        match (pred, label) {
+            (true, true) => self.true_pos += 1,
+            (true, false) => self.false_pos += 1,
+            (false, true) => self.false_neg += 1,
+            (false, false) => self.true_neg += 1,
+        }
+        if pred == label {
+            self.correct_c += 1;
+        }
+        if base_pred == label {
+            self.correct_b += 1;
+        }
+        self.brier_c += (f64::from(p_true) - f64::from(label)).powi(2);
+        let base_p = f64::from(base_pred);
+        self.brier_b += (base_p - f64::from(label)).powi(2);
+        let conf = if pred { f64::from(p_true) } else { 1.0 - f64::from(p_true) };
+        self.ece_c.push((conf, pred == label));
+        self.ece_b.push((1.0, base_pred == label));
+        if label {
+            self.pos_c.push(f64::from(p_true));
+        } else {
+            self.neg_c.push(f64::from(p_true));
+        }
+        self.lat.push(ms);
+    }
+}
+
+struct ChoiceDecisionStats {
+    n: usize,
+    correct_c: usize,
+    correct_b: usize,
+    with_baseline: usize,
+    brier_c: f64,
+    brier_b: f64,
+    ece_c: Vec<(f64, bool)>,
+    lat: Vec<f64>,
+}
+
+impl ChoiceDecisionStats {
+    fn new() -> Self {
+        Self {
+            n: 0,
+            correct_c: 0,
+            correct_b: 0,
+            with_baseline: 0,
+            brier_c: 0.0,
+            brier_b: 0.0,
+            ece_c: Vec::new(),
+            lat: Vec::new(),
+        }
+    }
+
+    fn update(
+        &mut self,
+        correct_c: bool,
+        correct_b: Option<bool>,
+        conf: f32,
+        brier_item: f64,
+        ms: f64,
+    ) {
+        self.n += 1;
+        if correct_c {
+            self.correct_c += 1;
+        }
+        if let Some(cb) = correct_b {
+            self.with_baseline += 1;
+            if cb {
+                self.correct_b += 1;
+            }
+            self.brier_b += if cb { 0.0 } else { 1.0 }; // one-hot baseline
+            self.ece_c.push((f64::from(conf), correct_c));
+        }
+        self.brier_c += brier_item;
+        self.lat.push(ms);
+    }
+}
+
+// ─── golden check (receptron/laya test/test_model.ts, published values) ─────
+
+fn run_golden(dir: &str) -> bool {
+    println!("[golden] receptron/laya test_model.ts — published 4-decimal reference values");
+    let bundle = LayaBundle::load(Path::new(dir));
+    let state = "{\"subject\": \"Refund not received\", \"body\": \"I cancelled my subscription two weeks ago and I still have not received my refund. This is the third time I am writing. If this is not resolved I will dispute the charge with my bank.\"}";
+    let qs = vec![
+        LayaQuestion {
+            qtype: QTYPE_CHOICE,
+            instructions: "Which team should handle this ticket?".into(),
+            options: [
+                "billing: payments, refunds, invoices",
+                "support: product help and bugs",
+                "sales: new purchases and upgrades",
+            ]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+            keys: vec!["billing".into(), "support".into(), "sales".into()],
+        },
+        LayaQuestion::score(
+            &["not urgent", "somewhat urgent", "urgent", "critical"],
+            "How urgent is this ticket?",
+        ),
+        LayaQuestion::noul("Is the customer likely to cancel or dispute?"),
+    ];
+    match bundle.system_one(state, &qs) {
+        Err(e) => {
+            println!("[golden] FAIL: {e}");
+            false
+        }
+        Ok(rows) => {
+            let mut tokens = 0usize;
+            for q in &qs {
+                let (ids, _) = bundle.build_sequence(state, q);
+                tokens += ids.len();
+            }
+            let dep = &rows[0];
+            let urg = &rows[1];
+            let ch = &rows[2];
+            let checks: Vec<(String, bool, f64, f64)> = vec![
+                (
+                    "department.billing".into(),
+                    dep[0] > dep[1] && dep[0] > dep[2],
+                    f64::from(dep[0]),
+                    0.9415,
+                ),
+                ("department.support".into(), true, f64::from(dep[1]), 0.0310),
+                ("department.sales".into(), true, f64::from(dep[2]), 0.0275),
+                ("urgency.0".into(), true, f64::from(urg[0]), 0.1752),
+                ("urgency.1".into(), true, f64::from(urg[1]), 0.2947),
+                ("urgency.2".into(), true, f64::from(urg[2]), 0.4962),
+                ("urgency.3".into(), true, f64::from(urg[3]), 0.0338),
+                ("churn_risk.noul".into(), true, f64::from(ch[1]), 0.0988),
+            ];
+            let mut ok = true;
+            for (name, structural, got, want) in &checks {
+                let (structural, got, want) = (*structural, *got, *want);
+                let d = (got - want).abs();
+                let pass = structural && d <= 1e-4;
+                ok &= pass;
+                println!(
+                    "  {name}: got {got:.4} want {want:.4} (|d|={d:.6}) {}",
+                    if pass { "PASS" } else { "FAIL" }
+                );
+            }
+            let tok_ok = tokens == 267;
+            ok &= tok_ok;
+            println!(
+                "  usage.input_tokens: got {tokens} want 267 {}",
+                if tok_ok { "PASS" } else { "FAIL" }
+            );
+            println!(
+                "[golden] {}",
+                if ok {
+                    "PASS — port is faithful to the reference runtime"
+                } else {
+                    "FAIL — do NOT trust any dataset number below"
+                }
+            );
+            ok
+        }
+    }
+}
+
+// ─── variant C runner: dataset → metrics → §3 gate verdict ──────────────────
+
+fn run_variant_c(dir: &str, split: &str, source: &str, limit: Option<usize>, budget_ms: f64) {
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    rt.block_on(run_variant_c_inner(dir, split, source, limit, budget_ms));
+}
+
+async fn run_variant_c_inner(
+    dir: &str,
+    split: &str,
+    source: &str,
+    limit: Option<usize>,
+    budget_ms: f64,
+) {
+    println!(
+        "[variant-c] loading Laya ONNX bundle from {dir} (fp32 ~1.7 GB — first load is slow)"
+    );
+    let t0 = Instant::now();
+    let provider = LayaOnnxDecisionProvider { bundle: LayaBundle::load(Path::new(dir)) };
+    println!(
+        "[variant-c] bundle ready in {:.1}s (provider: {})",
+        t0.elapsed().as_secs_f64(),
+        provider.provider_id()
+    );
+
+    let ds = std::fs::read_to_string(DATASET_PATH)
+        .unwrap_or_else(|e| panic!("read {DATASET_PATH}: {e} (regenerate with --export first)"));
+    let items: Vec<serde_json::Value> = ds
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("dataset line parse"))
+        .filter(|it| {
+            (split == "all" || it["split"].as_str() == Some(split))
+                && match source {
+                    "audit" => it["source"].as_str() == Some("guild_audit_log"),
+                    "confusion" => it["source"].as_str() == Some("scheduler_confusion"),
+                    _ => true,
+                }
+        })
+        .take(limit.unwrap_or(usize::MAX))
+        .collect();
+    println!(
+        "[variant-c] items after filters (split={split}, source={source}, limit={limit:?}): {}",
+        items.len()
+    );
+
+    let mut hitl = BinaryDecisionStats::new();
+    let mut route = ChoiceDecisionStats::new();
+    let mut decide_errors = 0usize;
+    for it in &items {
+        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut want_route = false;
+        let mut want_hitl = false;
+        if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
+            let options: Vec<String> =
+                opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
+            if !options.is_empty() {
+                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                want_route = true;
+            }
+        }
+        if it["questions"].get("hitl_resolve").is_some() {
+            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            want_hitl = true;
+        }
+        if questions.is_empty() {
+            continue;
+        }
+        let req = DecisionRequest { state: it["state"].clone(), questions };
+        let t0 = Instant::now();
+        let answers = match provider.decide(&req).await {
+            Ok(a) => a,
+            Err(e) => {
+                decide_errors += 1;
+                println!("  decide error ({e}) — item skipped");
+                continue;
+            }
+        };
+        let ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if want_route {
+            let dist = &answers["route_guild"].distribution;
+            let (best, conf) = argmax(dist);
+            let label = it["labels"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base_raw = it["baseline_A"]["route_guild"].as_str().unwrap_or_default().to_string();
+            let base = bucket_guild(&base_raw);
+            let brier_item: f64 = dist
+                .iter()
+                .map(|(k, v)| (f64::from(*v) - f64::from(*k == label)).powi(2))
+                .sum();
+            let correct_b = if base_raw.is_empty() { None } else { Some(base == label) };
+            route.update(best == label, correct_b, conf, brier_item, ms);
+        }
+        if want_hitl {
+            let dist = &answers["hitl_resolve"].distribution;
+            let p_true = dist.get("true").copied().unwrap_or(0.0);
+            let label = it["labels"]["hitl_resolve"].as_str() == Some("true");
+            let base_pred = it["baseline_A"]["hitl_resolve"].as_str() == Some("true");
+            hitl.update(p_true >= 0.5, p_true, base_pred, label, ms);
+        }
+    }
+
+    // sort once — every percentile read below assumes sorted latency vectors
+    hitl.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    route.lat.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let hitl_n = hitl.n;
+    let route_n = route.n;
+    if hitl_n > 0 {
+        let lat = &hitl.lat;
+        println!("\n[variant-c] decision=hitl_resolve (Noul) n={hitl_n}");
+        println!(
+            "  accuracy: baseline A {:.4} -> C {:.4} (TP {} FP {} TN {} FN {})",
+            hitl.correct_b as f64 / hitl_n as f64,
+            hitl.correct_c as f64 / hitl_n as f64,
+            hitl.true_pos,
+            hitl.false_pos,
+            hitl.true_neg,
+            hitl.false_neg
+        );
+        println!(
+            "  Brier: baseline {:.4} -> C {:.4} | ECE(15): baseline {:.4} -> C {:.4} | AUROC: C {:.4}",
+            hitl.brier_b / hitl_n as f64,
+            hitl.brier_c / hitl_n as f64,
+            ece_15(&hitl.ece_b),
+            ece_15(&hitl.ece_c),
+            auroc(&hitl.pos_c, &hitl.neg_c)
+        );
+        println!(
+            "  latency (C, CPU, per item): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if route_n > 0 {
+        let lat = &route.lat;
+        println!("\n[variant-c] decision=route_guild (Choice, dynamic options) n={route_n}");
+        println!(
+            "  accuracy: baseline A {:.4} (of {} items with live baseline; confusion items are 1.000 BY CONSTRUCTION — label := routed guild) -> C {:.4}",
+            if route.with_baseline > 0 {
+                route.correct_b as f64 / route.with_baseline as f64
+            } else {
+                f64::NAN
+            },
+            route.with_baseline,
+            route.correct_c as f64 / route_n as f64
+        );
+        println!(
+            "  Brier (multiclass sum): baseline {:.4} -> C {:.4} | ECE(15) top-class: C {:.4}",
+            route.brier_b / route.with_baseline.max(1) as f64,
+            route.brier_c / route_n as f64,
+            ece_15(&route.ece_c)
+        );
+        println!(
+            "  latency (C, CPU, per item): p50 {:.1} ms / p99 {:.1} ms / max {:.1} ms",
+            pct(lat, 50.0),
+            pct(lat, 99.0),
+            lat.last().copied().unwrap_or(f64::NAN)
+        );
+    }
+    if decide_errors > 0 {
+        println!("\n[variant-c] decide errors: {decide_errors} items skipped");
+    }
+
+    // ── §3 gate, clause by clause ───────────────────────────────────────────
+    println!("\n[gate] ADR-018 §3 (budget {budget_ms} ms):");
+    let mut clauses_ok = true;
+    if hitl_n > 0 {
+        let acc_c = hitl.correct_c as f64 / hitl_n as f64;
+        let acc_b = hitl.correct_b as f64 / hitl_n as f64;
+        let acc_pass = acc_c > acc_b;
+        clauses_ok &= acc_pass;
+        let calib_pass =
+            hitl.brier_c < hitl.brier_b && ece_15(&hitl.ece_c) < ece_15(&hitl.ece_b);
+        clauses_ok &= calib_pass;
+        let lat_pass = pct(&hitl.lat, 99.0) <= budget_ms;
+        clauses_ok &= lat_pass;
+        println!(
+            "  1. accuracy hitl: C {acc_c:.4} vs baseline {acc_b:.4} — {}",
+            if acc_pass { "PASS" } else { "FAIL" }
+        );
+        println!(
+            "  2. calibration hitl (Brier {:.4} vs {:.4}, ECE {:.4} vs {:.4}) — {}",
+            hitl.brier_c / hitl_n as f64,
+            hitl.brier_b / hitl_n as f64,
+            ece_15(&hitl.ece_c),
+            ece_15(&hitl.ece_b),
+            if calib_pass { "PASS" } else { "FAIL" }
+        );
+        println!(
+            "  3. p99 latency hitl: {:.1} ms <= {budget_ms} — {}",
+            pct(&hitl.lat, 99.0),
+            if lat_pass { "PASS" } else { "FAIL" }
+        );
+    } else {
+        println!("  1-3. no hitl items in this slice — accuracy/calibration/latency clauses NOT EVALUATED");
+        clauses_ok = false;
+    }
+    println!(
+        "  4. cost vs substituted LLM: NOT MEASURABLE in variant C alone — needs variant B (small local LLM) as the substituted-cost reference. Inputs measured here: fp32 bundle 1.69 GB on disk, ~2 GB RAM expected at runtime."
+    );
+    let verdict = if clauses_ok {
+        "GO-PROVISIONAL (clauses 1-3 pass; clause 4 pending variant B)"
+    } else {
+        "NO-GO on clauses 1-3"
+    };
+    println!("  VERDICT: {verdict}");
+    println!(
+        "  CAVEAT (pinned degeneracies, T921): hitl labels = cascade-success on 1,226/1,229 rows (success trap); route labels are by-construction. Audit has NO hitl ground truth (human_intervention dead column)."
+    );
+    println!(
+        "\nJSON:\n{}",
+        serde_json::json!({
+            "provider": "laya-onnx-v1",
+            "split": split,
+            "source": source,
+            "items": items.len(),
+            "decide_errors": decide_errors,
+            "hitl": {
+                "n": hitl.n,
+                "acc_c": hitl.correct_c as f64 / hitl.n.max(1) as f64,
+                "acc_baseline": hitl.correct_b as f64 / hitl.n.max(1) as f64,
+                "brier_c": hitl.brier_c / hitl.n.max(1) as f64,
+                "brier_baseline": hitl.brier_b / hitl.n.max(1) as f64,
+                "ece_c": ece_15(&hitl.ece_c),
+                "ece_baseline": ece_15(&hitl.ece_b),
+                "auroc_c": auroc(&hitl.pos_c, &hitl.neg_c),
+                "tp": hitl.true_pos,
+                "fp": hitl.false_pos,
+                "tn": hitl.true_neg,
+                "fn": hitl.false_neg,
+                "latency_p50_ms": pct(&hitl.lat, 50.0),
+                "latency_p99_ms": pct(&hitl.lat, 99.0),
+            },
+            "route": {
+                "n": route.n,
+                "acc_c": route.correct_c as f64 / route.n.max(1) as f64,
+                "acc_baseline": route.correct_b as f64 / route.with_baseline.max(1) as f64,
+                "brier_c": route.brier_c / route.n.max(1) as f64,
+                "brier_baseline": route.brier_b / route.with_baseline.max(1) as f64,
+                "latency_p50_ms": pct(&route.lat, 50.0),
+                "latency_p99_ms": pct(&route.lat, 99.0),
+            },
+            "gate_verdict": verdict,
         })
     );
 }
