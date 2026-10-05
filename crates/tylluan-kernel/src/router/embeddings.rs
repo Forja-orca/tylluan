@@ -78,8 +78,16 @@ impl EmbedBatcher {
                     let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
                     let sizes: Vec<usize> = pending.iter().map(|it| it.texts.len()).collect();
                     let result: Result<Vec<Vec<f32>>, String> = engine.embed_batch(&refs).map_err(|e| e.to_string());
-                    match result {
-                        Ok(all) => {
+                    // Split failures (model returned the wrong number of
+                    // vectors) take the SAME path as inference failures:
+                    // every pending request gets the error and the batcher
+                    // thread keeps serving — never a panic, because this
+                    // thread runs under `panic = "abort"` in release, where
+                    // a panic here kills the whole kernel process.
+                    let split: Result<Vec<Vec<Vec<f32>>>, String> = result
+                        .and_then(|all| split_batch_results(&sizes, all).map_err(|e| e.to_string()));
+                    match split {
+                        Ok(split) => {
                             // Each pending request must receive ITS OWN slice:
                             // the merged batch returns embeddings in the same
                             // order as the merged texts. (Before this split,
@@ -87,7 +95,6 @@ impl EmbedBatcher {
                             // `embed_one` popped the last vector — the wrong
                             // embedding for every caller except the final one
                             // whenever the window merged >1 request.)
-                            let split = split_batch_results(&sizes, all);
                             for (item, slice) in pending.into_iter().zip(split) {
                                 let _ = item.resp.send(Ok(slice));
                             }
@@ -135,16 +142,35 @@ impl EmbedBatcher {
 /// Split a merged batch result back into per-request slices, in the same
 /// order the requests were merged. Pure helper so the offset arithmetic is
 /// unit-testable without an ONNX model (the wrong-slice bug lived here).
-fn split_batch_results(sizes: &[usize], merged: Vec<Vec<f32>>) -> Vec<Vec<Vec<f32>>> {
+///
+/// Returns `Err` when the model produced a different number of embeddings
+/// than the batch requested — the unchecked slice index below used to panic,
+/// and the collector runs in the `embed-batcher` thread under
+/// `panic = "abort"` (Cargo.toml:37), where a panic kills the entire kernel
+/// process, not just the affected requests (ROADMAP_O3:60; verified
+/// 2026-10-05: the 1:1 input/output invariant is enforced nowhere in
+/// fastembed 5.8.0 — the output length comes from the ONNX tensor rows,
+/// `text_embedding/output.rs`, not from the input count).
+fn split_batch_results(sizes: &[usize], merged: Vec<Vec<f32>>) -> Result<Vec<Vec<Vec<f32>>>> {
+    let expected: usize = sizes.iter().sum();
+    if merged.len() != expected {
+        return Err(anyhow!(
+            "batch split: model returned {} embeddings for {} requested ({} pending request(s))",
+            merged.len(),
+            expected,
+            sizes.len()
+        ));
+    }
+    // Length invariant holds: every intermediate `offset + n` <= expected.
     let mut offset = 0usize;
-    sizes
+    Ok(sizes
         .iter()
         .map(|&n| {
             let slice = merged[offset..offset + n].to_vec();
             offset += n;
             slice
         })
-        .collect()
+        .collect())
 }
 
 /// Embedding engine for semantic search.
@@ -164,22 +190,36 @@ pub struct EmbeddingEngine {
 }
 
 /// Resolve fastembed model enum from config string.
-pub fn resolve_model(embedding_model: &str) -> EmbeddingModel {
+///
+/// Unknown names are an `Err`, NOT a silent fallback to the BGE-M3 baseline:
+/// a typo in `embedding_model` used to download and load ~1.2GB of a
+/// different model without any warning (ROADMAP_O3:61, verified 2026-10-05 —
+/// the old `else` branch defaulted to `BGEM3` with an explicit comment).
+/// Matching stays substring-based over the same known families as before
+/// (including the `models/<name>` path form the loader passes), so every
+/// legitimate config value keeps resolving exactly as it did; only names
+/// that used to fall through to the baseline are rejected.
+pub fn resolve_model(embedding_model: &str) -> Result<EmbeddingModel> {
     let lower = embedding_model.to_lowercase();
     if lower.contains("mxbai-q") || lower.contains("mxbai-quantized") {
-        EmbeddingModel::MxbaiEmbedLargeV1Q
+        Ok(EmbeddingModel::MxbaiEmbedLargeV1Q)
     } else if lower.contains("mxbai") {
-        EmbeddingModel::MxbaiEmbedLargeV1
+        Ok(EmbeddingModel::MxbaiEmbedLargeV1)
     } else if lower.contains("nomic") {
-        EmbeddingModel::NomicEmbedTextV15
+        Ok(EmbeddingModel::NomicEmbedTextV15)
     } else if lower.contains("minilm") {
-        EmbeddingModel::AllMiniLML6V2
+        Ok(EmbeddingModel::AllMiniLML6V2)
     } else if lower.contains("bge-small") {
-        EmbeddingModel::BGESmallENV15
+        Ok(EmbeddingModel::BGESmallENV15)
+    } else if lower.contains("bge") {
+        // "bge" / "bge-m3" and friends: the project's baseline family.
+        Ok(EmbeddingModel::BGEM3)
     } else {
-        // Covers "bge" (full-size BGE-M3) and any unrecognized model name, which
-        // defaults to BGE-M3 as the project's baseline embedding model.
-        EmbeddingModel::BGEM3
+        Err(anyhow!(
+            "embedding_model '{embedding_model}' is not a recognized model — refusing to silently substitute BGE-M3. \
+             Valid values: mxbai-embed-large, mxbai-q/quantized, nomic-embed-text, minilm, bge-m3, bge-small \
+             (or 'none' to disable embeddings and run BM25-only)"
+        ))
     }
 }
 
@@ -252,7 +292,11 @@ impl EmbeddingEngine {
 
     /// Initialize with an explicit execution device (cpu / directml / cuda).
     pub fn load_with_device(model_name: &str, device: &InferenceDevice) -> Result<Self> {
-        let model = resolve_model(model_name);
+        // Unknown model names fail HERE, before TextInitOptions/try_new —
+        // fastembed auto-downloads on try_new (see ensure_provisioned), so
+        // this is the last point where a typo can be rejected without
+        // fetching 1.2GB of the wrong model first.
+        let model = resolve_model(model_name)?;
         let dimension = resolve_dimension(model_name);
         let model_label = model_display_name(model_name);
         info!("🧠 Loading {} engine (FastEmbed v5) dim:{} device:{:?}", model_label, dimension, device);
@@ -453,6 +497,17 @@ impl EmbeddingEngine {
         let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
         let mut embeddings = model.embed(texts, None)
             .map_err(|e| anyhow!("Batch inference failed: {e:?}"))?;
+        // Enforce the 1:1 input/output invariant fastembed does not check
+        // (its output length comes from the ONNX tensor rows): a short or
+        // long batch returned Ok would silently misalign every caller that
+        // pairs texts with vectors — including the batcher's split below.
+        if embeddings.len() != texts.len() {
+            return Err(anyhow!(
+                "Batch inference returned {} embeddings for {} texts — refusing to misalign callers",
+                embeddings.len(),
+                texts.len()
+            ));
+        }
 
         for vector in &mut embeddings {
             let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -761,16 +816,29 @@ mod tests {
 
     #[test]
     fn test_resolve_model() {
-        assert_eq!(resolve_model("mxbai-embed-large"), EmbeddingModel::MxbaiEmbedLargeV1);
-        assert_eq!(resolve_model("mxbai-embed-large-v1"), EmbeddingModel::MxbaiEmbedLargeV1);
-        assert_eq!(resolve_model("mxbai-q"), EmbeddingModel::MxbaiEmbedLargeV1Q);
-        assert_eq!(resolve_model("mxbai-quantized"), EmbeddingModel::MxbaiEmbedLargeV1Q);
-        assert_eq!(resolve_model("bge-m3"), EmbeddingModel::BGEM3);
-        assert_eq!(resolve_model("bge"), EmbeddingModel::BGEM3);
-        assert_eq!(resolve_model("nomic"), EmbeddingModel::NomicEmbedTextV15);
-        assert_eq!(resolve_model("minilm"), EmbeddingModel::AllMiniLML6V2);
-        assert_eq!(resolve_model("bge-small"), EmbeddingModel::BGESmallENV15);
-        assert_eq!(resolve_model("unknown-custom"), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("mxbai-embed-large").unwrap(), EmbeddingModel::MxbaiEmbedLargeV1);
+        assert_eq!(resolve_model("mxbai-embed-large-v1").unwrap(), EmbeddingModel::MxbaiEmbedLargeV1);
+        assert_eq!(resolve_model("mxbai-q").unwrap(), EmbeddingModel::MxbaiEmbedLargeV1Q);
+        assert_eq!(resolve_model("mxbai-quantized").unwrap(), EmbeddingModel::MxbaiEmbedLargeV1Q);
+        assert_eq!(resolve_model("bge-m3").unwrap(), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("bge").unwrap(), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("nomic").unwrap(), EmbeddingModel::NomicEmbedTextV15);
+        assert_eq!(resolve_model("minilm").unwrap(), EmbeddingModel::AllMiniLML6V2);
+        assert_eq!(resolve_model("bge-small").unwrap(), EmbeddingModel::BGESmallENV15);
+        // The path form the loader actually passes (matcher: "models/<cfg>").
+        assert_eq!(resolve_model("models/bge-m3").unwrap(), EmbeddingModel::BGEM3);
+        assert_eq!(resolve_model("models/mxbai-embed-large").unwrap(), EmbeddingModel::MxbaiEmbedLargeV1);
+        // ROADMAP_O3:61: unknown names are an explicit error, never a
+        // silent substitution of the BGE-M3 baseline (a typo used to
+        // trigger a ~1.2GB download of the wrong model without warning).
+        for typo in ["unknown-custom", "bert-base-uncased", "glove", ""] {
+            let err = resolve_model(typo).unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains("BGE-M3"), "error must name the substituted baseline: {msg}");
+            assert!(msg.contains("Valid values"), "error must list valid values: {msg}");
+        }
+        let msg = resolve_model("unknown-custom").unwrap_err().to_string();
+        assert!(msg.contains("unknown-custom"), "error must echo the offending value: {msg}");
     }
 
     #[test]
@@ -826,7 +894,7 @@ mod tests {
             vec![4.0, 0.0],
         ];
         let sizes = [1usize, 2, 1];
-        let split = split_batch_results(&sizes, merged.clone());
+        let split = split_batch_results(&sizes, merged.clone()).unwrap();
         assert_eq!(split.len(), 3);
         assert_eq!(split[0], vec![vec![1.0, 0.0]]);
         assert_eq!(split[1], vec![vec![2.0, 0.0], vec![3.0, 0.0]]);
@@ -838,8 +906,27 @@ mod tests {
     #[test]
     fn split_batch_results_single_caller_gets_everything() {
         let merged = vec![vec![1.0], vec![2.0]];
-        let split = split_batch_results(&[2], merged);
+        let split = split_batch_results(&[2], merged).unwrap();
         assert_eq!(split, vec![vec![vec![1.0], vec![2.0]]]);
+    }
+
+    // ROADMAP_O3:60 regression: the unchecked slice index used to panic when
+    // the model returned fewer/more vectors than requested — under
+    // `panic = "abort"` that killed the whole kernel, not just the request.
+    #[test]
+    fn split_batch_results_rejects_wrong_model_output_size() {
+        let short = vec![vec![1.0], vec![2.0]];
+        let err = split_batch_results(&[1, 1, 1], short).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("2 embeddings for 3 requested"), "must report both counts: {msg}");
+
+        let long = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let err = split_batch_results(&[1, 1], long).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("3 embeddings for 2 requested"), "must report both counts: {msg}");
+
+        // Empty sizes + empty merged stays a valid no-op.
+        assert!(split_batch_results(&[], Vec::new()).is_ok());
     }
 
     // CONTRACT-01 invariant: BGE-M3 is ALWAYS 1024 dimensions
