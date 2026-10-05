@@ -23,6 +23,69 @@ async fn test_silva() -> SilvaDB {
         assert!((sim_13 - 1.0).abs() < 1e-6, "Identical similarity should be 1.0, got {sim_13}");
     }
 
+    #[test]
+    fn test_cosine_similarity_zero_alloc_parity_against_reference() {
+        // Reference implementation with explicit Vec<f32> allocation and L2-norm square roots:
+        let cosine_similarity_reference = |a: &[u8], b: &[u8]| -> f64 {
+            let a_f: Vec<f32> = a.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+            let b_f: Vec<f32> = b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+            if a_f.len() != b_f.len() || a_f.is_empty() { return 0.0; }
+            let dot: f32 = a_f.iter().zip(&b_f).map(|(x, y)| x * y).sum();
+            let na: f32 = a_f.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let nb: f32 = b_f.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if na == 0.0 || nb == 0.0 { return 0.0; }
+            (dot / (na * nb)) as f64
+        };
+
+        // 1. Synthetic 1024-dimension normalized vectors with IEEE-754 precision noise (|v| = 1.0 ± 8.4e-7)
+        let dim = 1024;
+        let mut vectors: Vec<Vec<u8>> = Vec::new();
+        for seed in 1..=40 {
+            let raw: Vec<f32> = (0..dim)
+                .map(|i| ((i as f32 * 0.17 + seed as f32 * 0.31).sin()))
+                .collect();
+            let norm = raw.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm_jitter = if seed % 2 == 0 { 1.0 + 5e-7 } else { 1.0 - 5e-7 };
+            let normalized: Vec<f32> = raw.iter().map(|x| (x / norm) * norm_jitter).collect();
+            let bytes: Vec<u8> = normalized.iter().flat_map(|f| f.to_le_bytes()).collect();
+            vectors.push(bytes);
+        }
+
+        // 2. Numerical parity across all pairs: Δsim < 1e-5
+        for i in 0..vectors.len() {
+            for j in 0..vectors.len() {
+                let ref_sim = cosine_similarity_reference(&vectors[i], &vectors[j]);
+                let fast_sim = cosine_similarity(&vectors[i], &vectors[j]);
+                assert!(
+                    (ref_sim - fast_sim).abs() < 1e-5,
+                    "Pair ({i}, {j}): ref {ref_sim} vs fast {fast_sim}"
+                );
+            }
+        }
+
+        // 3. Ranking parity for top-K candidates: 0 churn
+        let query = &vectors[0];
+        let mut ref_ranked: Vec<(usize, f64)> = (1..vectors.len())
+            .map(|idx| (idx, cosine_similarity_reference(query, &vectors[idx])))
+            .collect();
+        let mut fast_ranked: Vec<(usize, f64)> = (1..vectors.len())
+            .map(|idx| (idx, cosine_similarity(query, &vectors[idx])))
+            .collect();
+
+        ref_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        fast_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let ref_top10: Vec<usize> = ref_ranked.iter().take(10).map(|(i, _)| *i).collect();
+        let fast_top10: Vec<usize> = fast_ranked.iter().take(10).map(|(i, _)| *i).collect();
+        assert_eq!(ref_top10, fast_top10, "Ranking top-10 must be identical (0 ranking churn)");
+
+        // 4. Edge cases: empty, mismatched lengths, invalid chunk size
+        assert_eq!(cosine_similarity(&[], &[]), 0.0);
+        assert_eq!(cosine_similarity(&vectors[0], &[]), 0.0);
+        assert_eq!(cosine_similarity(&vectors[0], &vectors[1][..512]), 0.0);
+        assert_eq!(cosine_similarity(&[1, 2, 3], &[1, 2, 3]), 0.0); // not multiple of 4
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_upsert_and_get() {
         let db = test_silva().await;

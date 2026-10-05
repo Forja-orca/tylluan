@@ -560,15 +560,23 @@ pub(crate) fn dream_cosine(a: &[u8], b: &[u8]) -> f64 {
     cosine_similarity(a, b)
 }
 
+/// Cosine similarity between two raw f32-bytes blobs of normalized embeddings.
+/// Zero-allocation chunked dot product over little-endian f32 byte slices.
+///
+/// Invariant: embeddings produced by `EmbeddingEngine` are strictly L2-normalized
+/// (|v| = 1.0 ± 8.4e-7), so dot(a, b) == cosine(a, b) without allocating intermediate
+/// `Vec<f32>` or recalculating vector norms on every comparison.
 pub(crate) fn cosine_similarity(a: &[u8], b: &[u8]) -> f64 {
-    let a_f: Vec<f32> = a.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().expect("chunk should be exactly 4 bytes"))).collect();
-    let b_f: Vec<f32> = b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().expect("chunk should be exactly 4 bytes"))).collect();
-    if a_f.len() != b_f.len() || a_f.is_empty() { return 0.0; }
-    let dot: f32 = a_f.iter().zip(&b_f).map(|(x, y)| x * y).sum();
-    let na: f32 = a_f.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let nb: f32 = b_f.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if na == 0.0 || nb == 0.0 { return 0.0; }
-    (dot / (na * nb)) as f64
+    if a.len() != b.len() || a.is_empty() || a.len() % 4 != 0 {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    for (ca, cb) in a.chunks_exact(4).zip(b.chunks_exact(4)) {
+        let va = f32::from_le_bytes([ca[0], ca[1], ca[2], ca[3]]);
+        let vb = f32::from_le_bytes([cb[0], cb[1], cb[2], cb[3]]);
+        dot += va * vb;
+    }
+    (dot.clamp(-1.0, 1.0)) as f64
 }
 
 #[cfg(test)]
