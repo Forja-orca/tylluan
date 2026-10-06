@@ -317,15 +317,15 @@ fn fastembed_cache_dirs() -> Vec<std::path::PathBuf> {
     if let Ok(cwd) = std::env::current_dir() {
         out.push(cwd.join(".fastembed_cache"));
     }
-    if let Ok(env_dir) = std::env::var("FASTEMBED_CACHE_DIR") {
-        if !env_dir.is_empty() {
-            out.push(std::path::PathBuf::from(env_dir));
-        }
+    if let Ok(env_dir) = std::env::var("FASTEMBED_CACHE_DIR")
+        && !env_dir.is_empty()
+    {
+        out.push(std::path::PathBuf::from(env_dir));
     }
-    if let Ok(hf_home) = std::env::var("HF_HOME") {
-        if !hf_home.is_empty() {
-            out.push(std::path::PathBuf::from(hf_home));
-        }
+    if let Ok(hf_home) = std::env::var("HF_HOME")
+        && !hf_home.is_empty()
+    {
+        out.push(std::path::PathBuf::from(hf_home));
     }
     if let Some(home) = dirs::home_dir() {
         out.push(home.join(".fastembed_cache"));
