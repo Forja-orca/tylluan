@@ -76,6 +76,16 @@ pub struct Document {
     pub score: f32,
 }
 
+/// Raw `documents` row for the F3 hybrid→silva one-way migration scan.
+#[derive(Debug)]
+pub struct MigrationRow {
+    pub id: i64,
+    pub content: String,
+    pub metadata: String,
+    pub embedding: Option<Vec<u8>>,
+    pub created_at: Option<String>,
+}
+
 /// Database statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbStats {
@@ -438,6 +448,28 @@ impl HybridMemory {
                 "SELECT COUNT(*) FROM documents", [], |row| row.get(0)
             )?;
             Ok(count)
+        })
+    }
+
+    /// Full scan of every document for the F3 hybrid→silva migration
+    /// (`memory::hybrid_migration`). Read-only, no side effects on FTS/vector
+    /// state — the migration is one-way: silva becomes the sole store.
+    pub(crate) async fn scan_for_migration(&self) -> Result<Vec<MigrationRow>> {
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare(
+                "SELECT id, content, metadata, embedding, created_at FROM documents ORDER BY id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(MigrationRow {
+                    id: row.get(0)?,
+                    content: row.get(1)?,
+                    metadata: row.get(2)?,
+                    embedding: row.get(3)?,
+                    created_at: row.get(4)?,
+                })
+            })?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
         })
     }
     
