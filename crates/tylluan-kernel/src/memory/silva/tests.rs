@@ -360,6 +360,49 @@ async fn test_silva() -> SilvaDB {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_search_vector_linear_parity_and_resilience() {
+        let db = test_silva().await;
+
+        let dim = 8;
+        let mut test_vectors: Vec<(String, Vec<f32>)> = Vec::new();
+        for i in 0..10 {
+            let id = format!("test_node_{i}");
+            db.upsert_node(&id, "concept", &format!("Content {i}"), "{}").await.unwrap();
+            let vec: Vec<f32> = (0..dim).map(|d| ((i * 7 + d * 13) as f32).sin()).collect();
+            db.save_embedding(&id, &vec, "test-model", None).await.unwrap();
+            test_vectors.push((id, vec));
+        }
+
+        // Add node with mismatched dimension (4 dims) to ensure it is safely skipped
+        db.upsert_node("mismatch_dim", "concept", "Mismatch", "{}").await.unwrap();
+        db.save_embedding("mismatch_dim", &[1.0, 2.0, 3.0, 4.0], "test-model", None).await.unwrap();
+
+        let query: Vec<f32> = (0..dim).map(|d| ((d * 17) as f32).cos()).collect();
+
+        // Run search_vector (hits linear search fallback)
+        let results = db.search_vector(&query, 10).await.unwrap();
+        assert!(!results.is_empty());
+
+        // Check numerical parity against verbatim cosine_similarity for every returned result
+        for (node, score) in &results {
+            assert_ne!(node.id, "mismatch_dim", "mismatched dimension node should have been skipped");
+            let (_, stored_vec) = test_vectors.iter().find(|(id, _)| id == &node.id).unwrap();
+            let expected_sim = crate::memory::cosine::cosine_similarity(&query, stored_vec);
+            let diff = (score - expected_sim).abs();
+            assert!(
+                diff < 1e-6,
+                "score mismatch for {}: got {}, expected {}, diff {}",
+                node.id, score, expected_sim, diff
+            );
+        }
+
+        // Test with empty/zero query vector: must return empty vec without panic
+        let zero_query = vec![0.0_f32; dim];
+        let zero_results = db.search_vector(&zero_query, 5).await.unwrap();
+        assert!(zero_results.is_empty(), "zero vector query must return empty results");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_get_triples_by_entity() {
         let db = test_silva().await;
         db.upsert_node("s", "entity", "Subj", "{}").await.unwrap();

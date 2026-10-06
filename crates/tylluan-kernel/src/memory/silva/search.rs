@@ -81,28 +81,42 @@ impl super::SilvaDB {
                 "SELECT node_id, embedding FROM node_embeddings ORDER BY rowid DESC LIMIT 5000"
             )?;
 
+            let q_norm_sq: f32 = query_embedding.iter().map(|&v| v * v).sum();
+            if q_norm_sq == 0.0 {
+                return Ok(vec![]);
+            }
+            let q_norm = q_norm_sq.sqrt();
+            let expected_bytes = query_embedding.len() * 4;
+
             let mut scored: Vec<(String, f32)> = Vec::new();
 
-            let rows = stmt.query_map([], |row| {
-                let id: String = row.get(0)?;
-                let blob: Vec<u8> = row.get(1)?;
-                Ok((id, blob))
-            })?;
+            let mut rows = stmt.query([])?;
+            while let Some(row) = rows.next()? {
+                let blob: &[u8] = match row.get_ref(1) {
+                    Ok(rusqlite::types::ValueRef::Blob(b)) => b,
+                    _ => continue,
+                };
+                if blob.len() != expected_bytes {
+                    continue;
+                }
 
-            for row in rows.flatten() {
-                let (id, blob) = row;
-                if blob.is_empty() { continue; }
+                // Single-pass dot product + stored norm without allocating Vec<f32>
+                let mut dot: f32 = 0.0;
+                let mut stored_norm_sq: f32 = 0.0;
+                for (chunk, &q) in blob.chunks_exact(4).zip(query_embedding.iter()) {
+                    let s = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                    dot += s * q;
+                    stored_norm_sq += s * s;
+                }
 
-                // Deserialize f32 LE blob
-                let stored: Vec<f32> = blob
-                    .chunks_exact(4)
-                    .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-                    .collect();
+                if stored_norm_sq == 0.0 {
+                    continue;
+                }
 
-                if stored.len() != query_embedding.len() { continue; }
-
-                let sim = crate::memory::cosine::cosine_similarity(query_embedding, &stored);
-                if sim > 0.05 { // Lower threshold for "light semantic search"
+                let sim = dot / (q_norm * stored_norm_sq.sqrt());
+                if sim > 0.05 {
+                    // Only allocate String if candidate exceeds threshold
+                    let id: String = row.get(0)?;
                     scored.push((id, sim));
                 }
             }
