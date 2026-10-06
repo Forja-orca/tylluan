@@ -1,0 +1,71 @@
+{
+  "dataset": {
+    "embedding_source": "real per-model (EmbeddingEngine::embed_batch, L2-normalized)",
+    "num_edges": 40,
+    "num_nodes": 44,
+    "num_queries": 10
+  },
+  "date": "2026-10-06",
+  "models": {
+    "arctic": {
+      "dims": 1024,
+      "embed_latency_ms": {
+        "p50": 366.14,
+        "p95": 487.07
+      },
+      "engine_fingerprint": "sha256:48e01036046b0535b16d4f9716675c47e90faf2d97d40f2691a11797d8d7bec1",
+      "hits_in_top5_total": 12,
+      "load_ms": 11344.9,
+      "model_str": "snowflake-arctic-embed-l",
+      "mrr_pct": 66.43,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "recall_at_10_pct": 72.5,
+      "recall_at_5_pct": 45.0,
+      "search_hybrid_latency_ms": {
+        "p50": 2.11,
+        "p95": 5.45
+      }
+    },
+    "bge-m3": {
+      "dims": 1024,
+      "embed_latency_ms": {
+        "p50": 315.0,
+        "p95": 668.14
+      },
+      "engine_fingerprint": "sha256:74f46afa79e987f5de1609cad2f20dd1f5bc7810b6d29931e79a10ded948e1a1",
+      "hits_in_top5_total": 12,
+      "load_ms": 11001.38,
+      "model_str": "bge-m3",
+      "mrr_pct": 67.36,
+      "query_prefix": null,
+      "recall_at_10_pct": 85.0,
+      "recall_at_5_pct": 45.0,
+      "search_hybrid_latency_ms": {
+        "p50": 1.87,
+        "p95": 2.69
+      }
+    },
+    "e5-large": {
+      "dims": 1024,
+      "embed_latency_ms": {
+        "p50": 322.03,
+        "p95": 381.78
+      },
+      "engine_fingerprint": "sha256:f941c83429e56504401eb1ed3d3bb5669e6574a0a9af2ba380df7e7a7e9f321c",
+      "hits_in_top5_total": 13,
+      "load_ms": 5599.73,
+      "model_str": "multilingual-e5-large",
+      "mrr_pct": 68.69,
+      "query_prefix": "query: ",
+      "recall_at_10_pct": 87.5,
+      "recall_at_5_pct": 50.0,
+      "search_hybrid_latency_ms": {
+        "p50": 1.93,
+        "p95": 2.99
+      }
+    }
+  },
+  "runtime": "fastembed 5.8.0 / ort (same runtime, model-only A/B)",
+  "verdict_criteria": "model replaces bge-m3 only if it improves recall/MRR without degrading embed latency beyond TL budget; no recall SLO, absolute deltas reported",
+  "version": "ab-embedding-models"
+}

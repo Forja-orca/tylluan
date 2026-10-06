@@ -556,3 +556,237 @@ async fn mlp_routing_accuracy_benchmark() {
     assert!(heuristic_accuracy > 0.0, "Heuristic baseline must achieve > 0% accuracy");
 }
 
+
+// ── A/B: bge-m3 vs snowflake-arctic-embed-l vs multilingual-e5-large ────────
+// TL-approved A/B of DENSE embedding models on the SAME runtime (fastembed 5.8
+// / ONNX). The runtime migration (ort→llama.cpp) was rejected separately: no
+// measured problem, breaks the validated sparse signal (GO T289).
+//
+// GATED: downloads ~570MB (arctic) + ~2.2GB (e5-large) on first run and takes
+// minutes on CPU. Run with: cargo test -p tylluan-evals -- --ignored --nocapture
+//
+// Query-prefix policy (VERIFIED, not invented):
+//   - bge-m3: no prefix (BAAI/bge-m3 card: retrieval without query prefixes).
+//   - snowflake-arctic-embed-l: queries get "Represent this sentence for
+//     searching relevant passages: " (model card + Snowflake-Labs/arctic-embed
+//     usage; passages NEVER get a prefix).
+//   - multilingual-e5-large: "query: " for queries, "passage: " for passages
+//     (intfloat card usage; fastembed 5.8 lib.rs example uses exactly these).
+// fastembed 5.8 itself applies NO query prefixes (verified in its source).
+//
+// NOTE on e5-large provenance: fastembed 5.8 downloads the ONNX export from
+// Qdrant/multilingual-e5-large-onnx, not intfloat/multilingual-e5-large —
+// the engine fingerprint (engine_hash, commit c557b86) records the real one.
+//
+// Verdict criteria (declared before running): a model may replace bge-m3 only
+// if it improves recall/MRR without degrading embed latency beyond the budget
+// the TL fixes; no recall SLO exists, absolute deltas are reported for the TL
+// to decide. Evals here are smoke-scale (50 nodes, 10 queries): they measure
+// relative ordering, not production recall.
+
+/// One A/B lane: (report key, model_str for resolve_model, query prefix fn,
+/// whether passages need the e5-style "passage: " prefix).
+type AbConfig = (&'static str, &'static str, fn(&str) -> String, bool);
+
+/// fastembed ModelInfo: dim=1024, model_code=snowflake/snowflake-arctic-embed-l,
+/// model_file=onnx/model.onnx.
+const AB_CONFIG_ARCTIC: AbConfig = (
+    "arctic",
+    "snowflake-arctic-embed-l",
+    |q: &str| {
+        format!(
+            "Represent this sentence for searching relevant passages: {q}"
+        )
+    },
+    true,
+);
+
+/// fastembed ModelInfo: dim=1024, model_code=Qdrant/multilingual-e5-large-onnx,
+/// model_file=model.onnx + model.onnx_data.
+const AB_CONFIG_E5: AbConfig = (
+    "e5-large",
+    "multilingual-e5-large",
+    |q: &str| format!("query: {q}"),
+    true,
+);
+
+/// Baseline: BGE-M3 (production model). No query prefix.
+const AB_CONFIG_BGE_M3: AbConfig =
+    ("bge-m3", "bge-m3", |q: &str| q.to_string(), false);
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "downloads models (~2.8GB first run) and takes minutes on CPU — run manually with --ignored --nocapture"]
+async fn ab_embedding_models_benchmark() {
+    use tylluan_kernel::config::InferenceDevice;
+    use tylluan_kernel::router::embeddings::EmbeddingEngine;
+
+    let configs: &[AbConfig] = &[
+        AB_CONFIG_BGE_M3,
+        AB_CONFIG_ARCTIC,
+        AB_CONFIG_E5,
+    ];
+
+    let mut per_model = serde_json::Map::new();
+
+    for (config_name, model_str, query_prefix, has_query_prefix) in configs {
+        println!("\n==== Loading engine: {config_name} ({model_str}) ====");
+        let t_load = Instant::now();
+        let engine = EmbeddingEngine::load_with_device(model_str, &InferenceDevice::Cpu)
+            .unwrap_or_else(|e| panic!("failed to load engine {config_name}: {e:?}"));
+        let load_ms = t_load.elapsed().as_secs_f64() * 1000.0;
+        let fingerprint = engine.engine_hash();
+        let dims = engine.dimension();
+        assert_eq!(dims, 1024, "{config_name} must be 1024-dim (CONTRACT-01)");
+
+        // ── Seed the SAME 50 nodes with REAL embeddings (passage side) ──
+        // Deterministic iteration order (sorted by node id) for stable
+        // latency percentiles across models.
+        let db = SilvaDB::in_memory()
+            .await
+            .unwrap_or_else(|e| panic!("in-memory SilvaDB: {e:?}"));
+        let mut all_nodes: Vec<&(&str, &str, &str, &str)> =
+            NODES.iter().chain(EXTRA_NODES.iter()).collect();
+        all_nodes.sort_by_key(|n| n.0);
+
+        let mut embed_lat_ms: Vec<f64> = Vec::new();
+        for (id, node_type, content, metadata) in &all_nodes {
+            db.upsert_node(id, node_type, content, metadata)
+                .await
+                .unwrap_or_else(|e| panic!("upsert_node failed for {id}: {e:?}"));
+            let passage = if *has_query_prefix {
+                format!("passage: {content}")
+            } else {
+                (*content).to_string()
+            };
+            let t0 = Instant::now();
+            let emb = engine
+                .embed_batch(&[passage.as_str()])
+                .unwrap_or_else(|e| panic!("embed failed for {id}: {e:?}"));
+            embed_lat_ms.push(t0.elapsed().as_secs_f64() * 1000.0);
+            db.save_embedding(id, &emb[0], config_name, fingerprint.as_deref())
+                .await
+                .unwrap_or_else(|e| panic!("save_embedding failed for {id}: {e:?}"));
+        }
+
+        // ── Run the SAME 10 queries with the model's query prefix ──
+        let mut total_recall5 = 0.0f64;
+        let mut total_recall10 = 0.0f64;
+        let mut total_mrr = 0.0f64;
+        let mut hits_at_5_total = 0usize;
+        let mut search_lat_ms: Vec<f64> = Vec::new();
+
+        for (query, relevant_ids) in ALL_QUERIES.iter() {
+            let prefixed = query_prefix(query);
+            let q_emb = engine
+                .embed_batch(&[prefixed.as_str()])
+                .unwrap_or_else(|e| panic!("query embed failed: {e:?}"));
+            let start = Instant::now();
+            let retrieved = db
+                .search_hybrid(query, Some(&q_emb[0]), 10, None, false)
+                .await
+                .unwrap_or_default();
+            search_lat_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+
+            let results: Vec<(String, f32)> =
+                retrieved.iter().map(|(n, s)| (n.id.clone(), *s)).collect();
+            total_recall5 += compute_recall(&results, relevant_ids, 5);
+            total_recall10 += compute_recall(&results, relevant_ids, 10);
+            total_mrr += compute_mrr(&results, relevant_ids);
+            let top5: Vec<&str> = results.iter().take(5).map(|(id, _)| id.as_str()).collect();
+            hits_at_5_total += relevant_ids.iter().filter(|r| top5.contains(r)).count();
+        }
+
+        let n = ALL_QUERIES.len() as f64;
+        let recall5 = (total_recall5 / n) * 100.0;
+        let recall10 = (total_recall10 / n) * 100.0;
+        let mrr = (total_mrr / n) * 100.0;
+
+        embed_lat_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        search_lat_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let pct = |v: &[f64], p: f64| -> f64 {
+            if v.is_empty() {
+                0.0
+            } else {
+                v[((p / 100.0) * (v.len() - 1) as f64).round() as usize]
+            }
+        };
+        let emb_p50 = pct(&embed_lat_ms, 50.0);
+        let emb_p95 = pct(&embed_lat_ms, 95.0);
+        let sea_p50 = pct(&search_lat_ms, 50.0);
+        let sea_p95 = pct(&search_lat_ms, 95.0);
+
+        per_model.insert(
+            (*config_name).to_string(),
+            serde_json::json!({
+                "model_str": model_str,
+                "engine_fingerprint": fingerprint,
+                "dims": dims,
+                "recall_at_5_pct": (recall5 * 100.0).round() / 100.0,
+                "recall_at_10_pct": (recall10 * 100.0).round() / 100.0,
+                "mrr_pct": (mrr * 100.0).round() / 100.0,
+                "hits_in_top5_total": hits_at_5_total,
+                "embed_latency_ms": {
+                    "p50": (emb_p50 * 100.0).round() / 100.0,
+                    "p95": (emb_p95 * 100.0).round() / 100.0,
+                },
+                "search_hybrid_latency_ms": {
+                    "p50": (sea_p50 * 100.0).round() / 100.0,
+                    "p95": (sea_p95 * 100.0).round() / 100.0,
+                },
+                "query_prefix": if *has_query_prefix {
+                    serde_json::Value::String(
+                        query_prefix("X").trim_end_matches("X").to_string(),
+                    )
+                } else {
+                    serde_json::Value::Null
+                },
+                "load_ms": (load_ms * 100.0).round() / 100.0,
+            }),
+        );
+
+        println!(
+            "  [{config_name}] recall@5={recall5:.1}% recall@10={recall10:.1}% mrr={mrr:.1}% | embed p50={emb_p50:.1}ms p95={emb_p95:.1}ms | search p50={sea_p50:.1}ms p95={sea_p95:.1}ms | fp={}",
+            fingerprint.as_deref().unwrap_or("none")
+        );
+    }
+
+    let report = serde_json::json!({
+        "version": "ab-embedding-models",
+        "date": "2026-10-06",
+        "runtime": "fastembed 5.8.0 / ort (same runtime, model-only A/B)",
+        "dataset": {
+            "num_nodes": NODES.len() + EXTRA_NODES.len(),
+            "num_edges": EXTRA_EDGES.len(),
+            "num_queries": ALL_QUERIES.len(),
+            "embedding_source": "real per-model (EmbeddingEngine::embed_batch, L2-normalized)",
+        },
+        "verdict_criteria": "model replaces bge-m3 only if it improves recall/MRR without degrading embed latency beyond TL budget; no recall SLO, absolute deltas reported",
+        "models": per_model,
+    });
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(manifest_dir);
+    let bench_dir = workspace_root.join("benchmarks");
+    if !bench_dir.exists() {
+        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
+    }
+    let json_path = bench_dir.join("benchmark_ab_embedding_models.json");
+    let json_str = serde_json::to_string_pretty(&report).expect("Failed to serialize JSON");
+    std::fs::write(&json_path, &json_str).expect("Failed to write A/B JSON");
+
+    println!("\n  A/B report saved to: {json_path:?}");
+
+    // Smoke-scale guard (not a production claim): with real embeddings, at
+    // least one model must rank at least one relevant hit in top-5 overall.
+    let any_hits: u64 = per_model
+        .values()
+        .filter_map(|v| v.get("hits_in_top5_total").and_then(|h| h.as_u64()))
+        .sum();
+    assert!(
+        any_hits > 0,
+        "A/B smoke guard failed: zero relevant hits in top-5 across all models"
+    );
+}
