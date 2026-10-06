@@ -49,27 +49,46 @@ pub struct EvalRunPayload {
 }
 
 pub async fn eval_run_handler(
-    State(state): State<Arc<HttpState>>,
+    State(_state): State<Arc<HttpState>>,
     Json(payload): Json<EvalRunPayload>,
 ) -> Json<serde_json::Value> {
     let benchmark = payload.benchmark.as_deref().unwrap_or("longmemeval-s");
 
     match benchmark {
         "longmemeval-s" => {
-            let memory = match &state.server {
-                Some(server) => {
-                    let guard = server.read().await;
-                    guard.memory.clone()
-                }
-                None => {
+            // F3: the benchmark WRITES (add_document) into an isolated
+            // HybridMemory per run. Production hybrid must stay writer-free
+            // ahead of F4, and repeated runs must not pollute each other.
+            let eval_dir = std::env::temp_dir().join(format!(
+                "tylluan_eval_{}_{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0)
+            ));
+            let eval_db = eval_dir.join("eval.db");
+            let eval_db_str = eval_db.to_string_lossy().into_owned();
+            let memory = match crate::memory::hybrid::HybridMemory::open(&eval_db_str) {
+                Ok(m) => m,
+                Err(e) => {
                     return Json(serde_json::json!({
-                        "ok": false, "error": "Kernel server not initialized"
+                        "ok": false, "error": format!("eval db open failed: {e}")
                     }));
                 }
             };
+            if let Err(e) = memory.init().await {
+                return Json(serde_json::json!({
+                    "ok": false, "error": format!("eval db init failed: {e}")
+                }));
+            }
 
-            let result = eval::run_longmemeval_s(memory, payload.num_queries, payload.seed).await;
+            let result =
+                eval::run_longmemeval_s(Arc::new(memory), payload.num_queries, payload.seed).await;
             save_result(&result);
+            // The Arc was consumed by the run and dropped with it, so DB
+            // handles are closed here — best-effort cleanup of the temp dir.
+            let _ = std::fs::remove_dir_all(&eval_dir);
 
             Json(serde_json::json!({
                 "ok": true,

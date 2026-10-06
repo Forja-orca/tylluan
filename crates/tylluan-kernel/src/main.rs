@@ -1766,6 +1766,54 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // F3 — HybridMemory → SilvaDB one-way content migration (ROADMAP_O3).
+    // First fire deferred 600s (same reasoning as the reindexer: a fresh
+    // kernel must serve first recall quietly), budget-gated, GuardedTask-
+    // protected, idempotent (silva_kv flag + per-doc `hybrid:` skip) so a
+    // pass aborted by the guard resumes on a later tick. Deliberately
+    // ONNX-free: dense BLOBs are copied byte-identically and the sparse
+    // signature backfills through the Agnostic Reindexer afterwards.
+    let silva_migrate = silva.clone();
+    let memory_migrate = memory.clone();
+    let matcher_migrate = matcher.clone();
+    let budget_migrate = background_budget.clone();
+    tokio::spawn(async move {
+        let mut migrate_interval = tokio::time::interval_at(
+            tokio::time::Instant::now() + Duration::from_secs(600),
+            Duration::from_secs(600),
+        );
+        loop {
+            migrate_interval.tick().await;
+            if tylluan_kernel::memory::hybrid_migration::migration_complete(&silva_migrate).await {
+                return;
+            }
+            let Some(_bg) = budget_migrate.acquire().await else { continue };
+            let silva_inner = silva_migrate.clone();
+            let memory_inner = memory_migrate.clone();
+            let model_name = matcher_migrate
+                .engine_arc()
+                .map(|e| e.engine_id())
+                .unwrap_or_else(|| "unknown-engine".to_string());
+            let guard = GuardedTask::new("F3 HYBRID→SILVA MIGRATION", Duration::from_secs(600));
+            let result = guard
+                .run(async move {
+                    let report = tylluan_kernel::memory::hybrid_migration::migrate_hybrid_to_silva(
+                        &silva_inner,
+                        &memory_inner,
+                        &model_name,
+                    )
+                    .await?;
+                    Ok::<_, anyhow::Error>(report)
+                })
+                .await;
+            match result {
+                Ok(report) if report.failed == 0 => return, // flag written
+                Ok(_) => {}                                 // partial pass → retry next tick
+                Err(e) => warn!("F3 hybrid→silva migration pass failed: {e:?}"),
+            }
+        }
+    });
+
     // Collective memory consensus scheduler (runs every 1 hour)
     // Optimized: Uses 60s tick instead of 1s to save CPU on toaster hardware
     let silva_consensus = silva.clone();
