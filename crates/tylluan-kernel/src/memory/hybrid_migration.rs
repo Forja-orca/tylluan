@@ -130,10 +130,10 @@ pub async fn migrate_hybrid_to_silva(
         if existing_ids.contains(&id) {
             // Resume path: node already imported. The dense row may be missing
             // if a previous pass died between the two writes — heal it here.
-            if let Some(blob) = valid_blob(&row.embedding) {
-                if let Err(e) = write_dense(silva, &id, blob, model_name).await {
-                    warn!("F3 migration: dense heal failed for {id}: {e:?}");
-                }
+            if let Some(blob) = valid_blob(&row.embedding)
+                && let Err(e) = write_dense(silva, &id, blob, model_name).await
+            {
+                warn!("F3 migration: dense heal failed for {id}: {e:?}");
             }
             report.already_present += 1;
             continue;
@@ -181,10 +181,10 @@ pub async fn migrate_hybrid_to_silva(
 
     if report.failed == 0 {
         finalize_flag(silva, &report).await?;
-        if report.migrated > 0 {
-            if let Err(e) = silva.consolidate_ivf_index().await {
-                warn!("F3 migration: IVF consolidate failed (non-fatal): {e:?}");
-            }
+        if report.migrated > 0
+            && let Err(e) = silva.consolidate_ivf_index().await
+        {
+            warn!("F3 migration: IVF consolidate failed (non-fatal): {e:?}");
         }
         info!(
             "F3 hybrid→silva migration complete: total={} migrated={} twin_skipped={} already_present={} no_embedding={} by_type={:?}",
