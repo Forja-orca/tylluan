@@ -995,9 +995,9 @@ async fn main() -> anyhow::Result<()> {
     // the process. Exposed in /health (verbose) and stamped into every
     // guild_audit_log row — benchmark/audit ambiguity about "what system
     // produced this result" resolves by citing snapshot ID, not memory.
-    let silva_schema_version = std::path::Path::new(&config.memory.db_path)
+    let silva_schema_version = std::path::Path::new(&config.silva.db_path)
         .exists()
-        .then(|| tylluan_kernel::config::open_db(std::path::Path::new(&config.memory.db_path)).ok())
+        .then(|| tylluan_kernel::config::open_db(std::path::Path::new(&config.silva.db_path)).ok())
         .flatten()
         .and_then(|conn| conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0)).ok());
     tylluan_kernel::router::system_snapshot::set_global(
