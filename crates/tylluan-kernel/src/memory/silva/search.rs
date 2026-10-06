@@ -696,12 +696,20 @@ impl super::SilvaDB {
         })
     }
 
+    /// FTS5 query sanitizer. Non-alphanumeric characters become SPACES — never
+    /// deleted — so hyphenated terms split into their real tokens
+    /// (`portability-roundtrip-marker` → "portability" AND "roundtrip" AND
+    /// "marker"). Deleting them glued words into single tokens that matched
+    /// nothing in the document side of the FTS index (unicode61 splits on the
+    /// same punctuation), silently zeroing the silva leg of recall for any
+    /// hyphenated query — masked for months by HybridMemory's dual-write, whose
+    /// sanitizer already mapped punctuation to spaces. Exposed as a CI failure
+    /// ("Portability round-trip") once F1 closed the dual-write.
     fn sanitize_fts_query(query: &str) -> String {
         let sanitized: String = query.chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '\'')
+            .map(|c| if c.is_alphanumeric() { c } else { ' ' })
             .collect();
         let terms: Vec<String> = sanitized.split_whitespace()
-            .filter(|w| !w.is_empty())
             .map(|w| format!("\"{w}\""))
             .collect();
         if terms.is_empty() { String::new() } else { terms.join(" AND ") }
@@ -1066,5 +1074,64 @@ mod cascade_tests {
             .unwrap();
 
         assert!(!results.iter().any(|(n, _)| n.id == "q0"), "quarantined node must not surface via cascade stage-1");
+    }
+}
+
+/// Regresión de CI "Portability round-trip" (run 37388000510, rojo en 2bc090a,
+/// verde en 5b731c3): el leg silva de recall no encontraba el marcador con
+/// `embedding_model="none"` porque `sanitize_fts_query` BORRABA los guiones
+/// (uniendo `portability-roundtrip-marker` en un token inexistente) mientras el
+/// sanitizador de HybridMemory los convertía en espacios. El dual-write (F1)
+/// tapaba el hueco: con la escritura híbrida retirada, el leg silva pasó a ser
+/// el único y el bug quedó expuesto.
+#[cfg(test)]
+mod ci_roundtrip_regression {
+    use super::super::SilvaDB;
+
+    #[test]
+    fn sanitize_fts_query_keeps_word_boundaries_for_hyphenated_terms() {
+        let q = SilvaDB::sanitize_fts_query("agent: ci-portability-test portability-roundtrip-marker");
+        assert_eq!(
+            q,
+            "\"agent\" AND \"ci\" AND \"portability\" AND \"test\" AND \"portability\" AND \"roundtrip\" AND \"marker\"",
+            "hyphens/colons must split words, not glue them into a single impossible token"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn recall_finds_agent_memory_marker_without_dense_embedding() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        // Exactamente lo que AgentMemoryManager::record_memory escribe
+        // (agent_memory.rs:187-201): tipo agent_memory, contenido etiquetado
+        // [agent_id], metadata con agent_id. Marcador del job de CI.
+        db.upsert_node_with_validity(
+            "agent_memory:ci-portability-test:8997ff6d398e417cae3c7ab866134cc3",
+            "agent_memory",
+            "[ci-portability-test] portability-roundtrip-marker-f6ee419a-39ef-4848-9eb7-49e401475924",
+            r#"{"agent_id":"ci-portability-test","importance":0.7}"#,
+            super::super::NodeWriteOptions::new("agent_generated"),
+        )
+        .await
+        .unwrap();
+
+        // effective_query exacto que construye handler_recall.rs:511-513 cuando
+        // viene agent_id; embedding None = modo embedding_model="none" de CI.
+        let (results, _meta) = db
+            .search_hybrid_for_recall_detailed(
+                "agent: ci-portability-test portability-roundtrip-marker",
+                None,
+                100,
+                None,
+                false,
+                false,
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            results.iter().any(|(n, _)| n.id.ends_with("8997ff6d398e417cae3c7ab866134cc3")),
+            "el leg silva solo debe encontrar el marcador sin embedding denso (F1 cerró el dual-write híbrido); resultados={}",
+            results.len()
+        );
     }
 }
