@@ -182,6 +182,10 @@ pub fn resolve_model(embedding_model: &str) -> EmbeddingModel {
         EmbeddingModel::AllMiniLML6V2
     } else if lower.contains("bge-small") {
         EmbeddingModel::BGESmallENV15
+    } else if lower.contains("arctic") {
+        EmbeddingModel::SnowflakeArcticEmbedL
+    } else if lower.contains("e5") {
+        EmbeddingModel::MultilingualE5Large
     } else {
         // Covers "bge" (full-size BGE-M3) and any unrecognized model name, which
         // defaults to BGE-M3 as the project's baseline embedding model.
@@ -202,6 +206,7 @@ pub fn resolve_dimension(embedding_model: &str) -> u32 {
     } else if lower.contains("minilm") || lower.contains("bge-small") {
         384
     } else {
+        // arctic-embed-l, e5-large and any future 1024-dim model.
         1024
     }
 }
@@ -223,6 +228,10 @@ fn model_display_name(embedding_model: &str) -> &'static str {
         "MiniLM-L6-v2"
     } else if lower.contains("nomic") {
         "Nomic-Embed-v1.5"
+    } else if lower.contains("arctic") {
+        "Snowflake-Arctic-Embed-L"
+    } else if lower.contains("e5") {
+        "Multilingual-E5-Large"
     } else {
         "BGE-M3"
     }
@@ -245,15 +254,38 @@ fn resolve_model_type(embedding_model: &str) -> String {
         "minilm"
     } else if lower.contains("nomic") {
         "nomic"
+    } else if lower.contains("arctic") {
+        "snowflake-arctic-embed-l"
+    } else if lower.contains("e5") {
+        "multilingual-e5-large"
     } else {
         "bge-m3"
     }.to_string()
 }
 
-// fastembed's default HF-hub cache locations. Observed in the wild:
-// `%HOME%\.fastembed_cache` (Windows); XDG cache dir on Linux.
+// fastembed 5.8's REAL HF-hub cache resolution (verified in its common.rs):
+// default cache dir is ".fastembed_cache" RELATIVE TO THE PROCESS CWD, overridable
+// via FASTEMBED_CACHE_DIR; pull_from_hf redirects to HF_HOME when that env var is
+// set. The home-dir and XDG variants cover older fastembed layouts and Linux
+// packaging. Order matters for find_fastembed_snapshot: cwd-relative first, then
+// explicit env overrides, then the historical per-user locations.
 fn fastembed_cache_dirs() -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
+    // fastembed default: cwd-relative ".fastembed_cache" (e.g. cargo test runs
+    // with cwd = crate dir -> crates/<crate>/.fastembed_cache).
+    if let Ok(cwd) = std::env::current_dir() {
+        out.push(cwd.join(".fastembed_cache"));
+    }
+    if let Ok(env_dir) = std::env::var("FASTEMBED_CACHE_DIR") {
+        if !env_dir.is_empty() {
+            out.push(std::path::PathBuf::from(env_dir));
+        }
+    }
+    if let Ok(hf_home) = std::env::var("HF_HOME") {
+        if !hf_home.is_empty() {
+            out.push(std::path::PathBuf::from(hf_home));
+        }
+    }
     if let Some(home) = dirs::home_dir() {
         out.push(home.join(".fastembed_cache"));
     }
@@ -272,6 +304,10 @@ fn hf_repo_for(model_type: &str) -> Option<&'static str> {
         "mxbai-embed-large" | "mxbai-embed-large-q" => Some("mixedbread-ai/mxbai-embed-large-v1"),
         "nomic" => Some("nomic-ai/nomic-embed-text-v1.5"),
         "minilm" => Some("sentence-transformers/all-MiniLM-L6-v2"),
+        "snowflake-arctic-embed-l" => Some("snowflake/snowflake-arctic-embed-l"),
+        // fastembed 5.8 downloads the ONNX export from Qdrant for e5-large
+        // (ModelInfo.model_code), NOT the intfloat original.
+        "multilingual-e5-large" => Some("Qdrant/multilingual-e5-large-onnx"),
         _ => None,
     }
 }
@@ -334,6 +370,20 @@ pub(crate) fn fingerprint_from_parts(parts: &[(&str, String)]) -> String {
     format!("sha256:{:x}", sha2::Sha256::digest(canonical.as_bytes()))
 }
 
+/// ONNX graph inside an HF snapshot. fastembed models use TWO layouts:
+/// `onnx/model.onnx` (bge-m3, arctic-embed-l, mxbai...) and `model.onnx` at
+/// the snapshot root (Qdrant/multilingual-e5-large-onnx). Returns the first
+/// that exists — `None` if the snapshot has neither (honest unknown).
+fn locate_onnx_graph(snapshot: &std::path::Path) -> Option<std::path::PathBuf> {
+    for rel in ["onnx/model.onnx", "model.onnx"] {
+        let candidate = snapshot.join(rel);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Fingerprint of the engine fastembed just loaded (TL-approved design
 /// 2026-10-05): model type + HF revision + output dims + normalization +
 /// content hashes of the ONNX graph and the tokenizer + byte size of the
@@ -342,17 +392,17 @@ pub(crate) fn fingerprint_from_parts(parts: &[(&str, String)]) -> String {
 /// the identity. `None` = cache not found (honest unknown, never guessed).
 pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Option<String> {
     let snapshot = find_fastembed_snapshot(model_type)?;
-    let onnx_dir = snapshot.join("onnx");
-    let graph = onnx_dir.join("model.onnx");
-    if !graph.is_file() {
-        return None;
-    }
+    let graph = locate_onnx_graph(&snapshot)?;
     let graph_hash = sha256_file(&graph)?;
     let tokenizer_hash = sha256_file(&snapshot.join("tokenizer.json"))
         .unwrap_or_else(|| "absent".to_string());
-    let data_size = std::fs::metadata(onnx_dir.join("model.onnx_data"))
-        .map(|m| m.len().to_string())
-        .unwrap_or_else(|_| "none".to_string());
+    let data_size = graph
+        .parent()
+        .map(|dir| dir.join("model.onnx_data"))
+        .as_deref()
+        .map(std::fs::metadata)
+        .map(|m| m.map(|meta| meta.len().to_string()).unwrap_or_else(|_| "none".to_string()))
+        .unwrap_or_else(|| "none".to_string());
     let revision = snapshot.file_name()?.to_str()?.to_string();
     let parts: Vec<(&str, String)> = vec![
         ("scheme", "v1".to_string()),
@@ -910,7 +960,43 @@ mod tests {
         assert_eq!(resolve_model("nomic"), EmbeddingModel::NomicEmbedTextV15);
         assert_eq!(resolve_model("minilm"), EmbeddingModel::AllMiniLML6V2);
         assert_eq!(resolve_model("bge-small"), EmbeddingModel::BGESmallENV15);
+        assert_eq!(resolve_model("snowflake-arctic-embed-l"), EmbeddingModel::SnowflakeArcticEmbedL);
+        assert_eq!(resolve_model("arctic"), EmbeddingModel::SnowflakeArcticEmbedL);
+        assert_eq!(resolve_model("multilingual-e5-large"), EmbeddingModel::MultilingualE5Large);
+        assert_eq!(resolve_model("e5-large"), EmbeddingModel::MultilingualE5Large);
         assert_eq!(resolve_model("unknown-custom"), EmbeddingModel::BGEM3);
+    }
+
+    #[test]
+    fn locate_onnx_graph_supports_both_fastembed_layouts() {
+        use std::fs;
+        // Unique temp dir per run — no global cwd mutation (parallel-test safe).
+        let base = std::env::temp_dir().join(format!(
+            "tylluan-graph-layout-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        // Layout A: onnx/ subdir (bge-m3, arctic-embed-l).
+        let a = base.join("a").join("snap");
+        fs::create_dir_all(a.join("onnx")).unwrap();
+        fs::write(a.join("onnx").join("model.onnx"), b"graph-a").unwrap();
+        assert_eq!(
+            locate_onnx_graph(&a),
+            Some(a.join("onnx").join("model.onnx"))
+        );
+        // Layout B: snapshot root (Qdrant e5-large-onnx).
+        let b = base.join("b").join("snap");
+        fs::create_dir_all(&b).unwrap();
+        fs::write(b.join("model.onnx"), b"graph-b").unwrap();
+        assert_eq!(locate_onnx_graph(&b), Some(b.join("model.onnx")));
+        // No graph at all -> None (honest unknown).
+        let c = base.join("c").join("snap");
+        fs::create_dir_all(&c).unwrap();
+        assert_eq!(locate_onnx_graph(&c), None);
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -934,6 +1020,8 @@ mod tests {
         assert_eq!(resolve_model_type("mxbai-embed-large"), "mxbai-embed-large");
         assert_eq!(resolve_model_type("mxbai-q"), "mxbai-embed-large-q");
         assert_eq!(resolve_model_type("bge-m3"), "bge-m3");
+        assert_eq!(resolve_model_type("arctic"), "snowflake-arctic-embed-l");
+        assert_eq!(resolve_model_type("e5-large"), "multilingual-e5-large");
     }
 
     #[test]
