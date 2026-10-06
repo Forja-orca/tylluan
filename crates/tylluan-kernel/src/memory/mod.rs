@@ -13,6 +13,7 @@
 
 pub mod backup;
 pub mod hybrid;
+pub mod hybrid_migration;
 pub mod silva;
 pub mod background_budget;
 pub mod inference_budget;
