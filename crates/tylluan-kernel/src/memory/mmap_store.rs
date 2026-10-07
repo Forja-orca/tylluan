@@ -228,20 +228,22 @@ impl MmapEmbeddingStore {
     /// measurement, 2026-10-04): 1.73x on the IVF path with identical
     /// R@10 ranking — the no-norm variant was discarded for ranking churn.
     pub fn cosine_query(&self, idx: u32, query: &[f32], query_norm: f32) -> Option<f32> {
-        if idx >= self.n_vectors || query.len() != self.dim as usize {
+        if idx >= self.n_vectors || query.len() != self.dim as usize || self.scales.len() < self.dim as usize {
             return None;
         }
         let vec_offset_start = 16 + (self.dim as usize * 4);
         let start = vec_offset_start + (idx as usize * self.dim as usize);
         let end = start + self.dim as usize;
+        if end > self.mmap.len() {
+            return None;
+        }
         let raw_i8 = &self.mmap[start..end];
 
         let mut dot = 0.0f32;
         let mut norm_sq = 0.0f32;
-        for d in 0..self.dim as usize {
-            let scale = self.scales.get(d).copied().unwrap_or(1.0);
-            let v = (raw_i8[d] as i8) as f32 * scale;
-            dot += v * query[d];
+        for ((&raw, &q), &scale) in raw_i8.iter().zip(query).zip(&self.scales) {
+            let v = (raw as i8) as f32 * scale;
+            dot += v * q;
             norm_sq += v * v;
         }
         if norm_sq == 0.0 || query_norm == 0.0 {
