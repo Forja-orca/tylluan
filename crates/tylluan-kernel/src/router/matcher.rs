@@ -991,7 +991,7 @@ mod tests {
         // Without the tiebreaker the result would be docker.
         // El tiebreak loguea al audit path: tomar el mutex global de DB de test
         // (compartido con friction_log/llm_examples) para no pisar su path.
-        let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap();
+        let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::security::friction_log::set_unique_test_db();
         let mut matcher = test_matcher();
         matcher.set_embeddings(vec![

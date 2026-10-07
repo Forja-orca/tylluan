@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_full_friction_lifecycle() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
         let agent = unique_agent();
 
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn test_empty_session_has_zero_friction() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn test_multiple_workflows() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
@@ -707,7 +707,7 @@ mod tests {
 
     #[test]
     fn test_ttfua_computed_on_record_result() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
@@ -728,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_ttfua_null_without_recorded_result() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
         let agent = unique_agent();
         let sid = start_session(&agent).expect("start_session failed");
@@ -754,7 +754,7 @@ mod tests {
     fn test_foreign_thread_write_never_reaches_unique_test_db() {
         use std::thread;
 
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unique_test_db();
 
         // Semilla: crea el fichero + schema de la DB unica de ESTE test.
