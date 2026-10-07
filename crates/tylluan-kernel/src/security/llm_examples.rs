@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_log_and_roundtrip() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::security::friction_log::set_unique_test_db();
         let id = log_decision_example(&example("node-1")).expect("insert");
         assert!(id > 0);
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_schema_idempotent() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::security::friction_log::set_unique_test_db();
         let conn = open_examples_db().expect("open #1");
         drop(conn);
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_export_jsonl_no_leak() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::security::friction_log::set_unique_test_db();
         for i in 0..40 {
             let _ = log_decision_example(&example(&format!("node-{i}")));
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_export_agreement_metric() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::security::friction_log::set_unique_test_db();
         let mut agree = example("n-agree");
         agree.llm_decision = "KEEP".to_string();

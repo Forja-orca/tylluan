@@ -610,7 +610,7 @@ mod tests {
         // guard is dropped BEFORE any await (clippy await_holding_lock); the
         // thread-local unique-DB redirect persists on this thread either way.
         let before = {
-            let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap();
+            let _guard = crate::security::friction_log::TEST_DB_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
             crate::security::friction_log::set_unique_test_db();
 
             let ex = crate::security::llm_examples::DecisionExample {
