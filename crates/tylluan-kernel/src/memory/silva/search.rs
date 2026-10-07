@@ -176,27 +176,30 @@ impl super::SilvaDB {
                     // store.cosine_query keeps the exact ranking (measured
                     // 0/400 R@10 mismatches) at ~1.73x on the IVF path.
                     let query_norm = (query_embedding.iter().map(|v| v * v).sum::<f32>()).sqrt();
-                    let mut scored: Vec<(String, f32)> = Vec::with_capacity(candidate_idxs.len());
+                    let mut scored_idxs: Vec<(u32, f32)> = Vec::with_capacity(candidate_idxs.len());
                     for &idx in &candidate_idxs {
-                        let sim = match store.cosine_query(idx, query_embedding, query_norm) {
-                            Some(s) => s,
-                            None => continue,
-                        };
-                        if let Some(nid) = store.index_to_node(idx) {
-                            scored.push((nid.to_string(), sim));
+                        if let Some(sim) = store.cosine_query(idx, query_embedding, query_norm) {
+                            scored_idxs.push((idx, sim));
                         }
                     }
+                    scored_idxs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                    scored_idxs.truncate(limit);
+
+                    let scored: Vec<(String, f32)> = scored_idxs
+                        .into_iter()
+                        .filter_map(|(idx, sim)| {
+                            store.index_to_node(idx).map(|nid| (nid.to_string(), sim))
+                        })
+                        .collect();
                     Some(scored)
                 }
                 _ => None,
             }
         };
 
-        if let Some(mut scored) = scored_opt {
+        if let Some(scored) = scored_opt {
             let result: std::result::Result<Vec<(GraphNode, f32)>, anyhow::Error> = tokio::task::block_in_place(|| {
                 let conn = self.conn_timed();
-                scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-                scored.truncate(limit);
 
                 let mut results = Vec::new();
                 for (id, score) in scored {
