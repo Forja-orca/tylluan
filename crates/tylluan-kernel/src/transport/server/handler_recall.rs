@@ -726,7 +726,9 @@ if let Some(cached) = cached_docs {
     // score_graph is a real signal instead of the fused score or 0.0.
     let mut graph_meta: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     if candidates.is_empty() {
-        // Stage 1: gather broad candidate pool from SilvaDB + HybridMemory (always)
+        // Stage 1: gather broad candidate pool from SilvaDB (always) — F2:
+        // the HybridMemory fallback leg is gone; F3 migrated its unique
+        // content into silva, so this pool is already complete without it.
         let candidate_pool = (limit * CANDIDATE_POOL_MULT.load(Ordering::Relaxed)).max(100);
         let filter = if episodic { Some("episodic") } else { None };
         if cascade {
@@ -755,33 +757,6 @@ if let Some(cached) = cached_docs {
         {
             graph_meta = meta.graph_contrib;
             candidates = std::mem::take(&mut results);
-        }
-
-        if let Ok(hybrid) = server.memory.search(&effective_query, query_embedding.as_deref(), limit.max(10)).await {
-            for doc in hybrid {
-                let is_dup = candidates.iter().any(|(n, _)| jaccard_similarity(&n.content, &doc.content) > 0.85);
-                if !is_dup {
-                    candidates.push((GraphNode {
-                        id: format!("hybrid:{}", doc.id),
-                        node_type: "memory_document".into(),
-                        content: doc.content,
-                        metadata: doc.metadata,
-                        weight: 1.0,
-                        protected: false,
-                        conflicted: false,
-                        topic_key: None,
-                        created_at: None,
-                        updated_at: None,
-                        last_touched: chrono::Utc::now(),
-                        valid_from: None,
-                        valid_until: None,
-                        shareable: false,
-                        content_hash: "".to_string(),
-                        provenance: "".to_string(),
-                    }, doc.score));
-                }
-            }
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         }
     }
 
