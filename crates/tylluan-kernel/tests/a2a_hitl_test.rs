@@ -20,7 +20,6 @@ use tylluan_kernel::transport::server::TylluanServer;
 use tylluan_kernel::registry::guild_process::GuildRegistry;
 use tylluan_kernel::registry::actor::RegistryActor;
 use tylluan_kernel::router::matcher::GuildMatcher;
-use tylluan_kernel::memory::hybrid::HybridMemory;
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::coloquio::ColoquioDb;
@@ -222,7 +221,6 @@ async fn build_minimal_state() -> Arc<HttpState> {
     let (_registry_actor, registry_handle) = RegistryActor::new(registry_arc.clone());
     // Don't spawn the actor to avoid guild startup issues
 
-    let memory = Arc::new(HybridMemory::in_memory().await.unwrap());
     let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
     silva.init().await.unwrap();
     let mailbox = Arc::new(Mailbox::in_memory().await.unwrap());
@@ -231,7 +229,7 @@ async fn build_minimal_state() -> Arc<HttpState> {
     let curriculum = Arc::new(std::sync::Mutex::new(
         tylluan_kernel::curriculum::CurriculumLearner::new_in_memory(1).unwrap()
     ));
-    let doctor = Arc::new(Doctor::new(registry_arc.clone(), memory.clone(), silva.clone(), curriculum));
+    let doctor = Arc::new(Doctor::new(registry_arc.clone(), silva.clone(), curriculum));
     let matcher = Arc::new(GuildMatcher::new(
         tylluan_kernel::router::catalog::builtin_catalog()
     ));
@@ -245,7 +243,6 @@ async fn build_minimal_state() -> Arc<HttpState> {
     let server = TylluanServer::new(
         registry_arc.clone(),
         matcher.clone(),
-        memory.clone(),
         silva.clone(),
         mailbox.clone(),
         doctor.clone(),
@@ -269,7 +266,6 @@ async fn build_minimal_state() -> Arc<HttpState> {
         server: Some(Arc::new(RwLock::new(server))),
         registry: registry_handle,
         doctor,
-        memory,
         silva: silva.clone(),
         mailbox,
         coloquio,

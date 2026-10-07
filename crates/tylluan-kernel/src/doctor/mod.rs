@@ -4,7 +4,6 @@
 //! Operates at the kernel level with access to all core subsystems.
 
 use crate::registry::guild_process::GuildRegistry;
-use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::{SilvaDB, GraphNode};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -34,11 +33,8 @@ pub struct GuildHealth {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StorageHealth {
-    pub memory_db_ok: bool,
     pub silva_db_ok: bool,
-    pub docs_count: usize,
     pub nodes_count: i64,
-    pub memory_bytes: i64,
     pub silva_bytes: i64,
     pub recent_nodes: Vec<GraphNode>, // New: Sovereign Insights
 }
@@ -61,7 +57,6 @@ pub struct SystemHealth {
 #[derive(Clone)]
 pub struct Doctor {
     registry: Arc<RwLock<GuildRegistry>>,
-    memory: Arc<HybridMemory>,
     silva: Arc<SilvaDB>,
     curriculum: Arc<std::sync::Mutex<crate::curriculum::CurriculumLearner>>,
     errors_today: Arc<std::sync::atomic::AtomicU64>,
@@ -71,13 +66,11 @@ impl Doctor {
     /// Create a new Doctor with access to core subsystems.
     pub fn new(
         registry: Arc<RwLock<GuildRegistry>>,
-        memory: Arc<HybridMemory>,
         silva: Arc<SilvaDB>,
         curriculum: Arc<std::sync::Mutex<crate::curriculum::CurriculumLearner>>,
     ) -> Self {
         Self {
             registry,
-            memory,
             silva,
             curriculum,
             errors_today: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -87,11 +80,6 @@ impl Doctor {
     /// Get reference to SilvaDB
     pub fn silva(&self) -> Arc<SilvaDB> {
         self.silva.clone()
-    }
-
-    /// Get reference to HybridMemory
-    pub fn memory(&self) -> Arc<HybridMemory> {
-        self.memory.clone()
     }
 
     /// Get reference to CurriculumLearner
@@ -212,38 +200,23 @@ impl Doctor {
 
     /// Internal logic: Health check for SQLite databases.
     async fn check_storage(&self, global_issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> StorageHealth {
-        let memory_ok = self.memory.health_check().await.is_ok();
         let silva_ok = self.silva.health_check().await.is_ok();
         
-        if !memory_ok {
-            global_issues.push("CRITICAL: HybridMemory (tylluan.db) health check failed".to_string());
-            suggestions.push("Check database file permissions or restore tylluan.db from backup".to_string());
-        }
         if !silva_ok {
             global_issues.push("CRITICAL: SilvaDB (silva.db) health check failed".to_string());
             suggestions.push("Check file locks on data/silva.db or restore silva.db".to_string());
         }
 
-        let docs_count = self.memory.document_count().await.unwrap_or(0) as usize;
         let nodes_count = self.silva.node_count().await.unwrap_or(0) as i64;
         
-        let (memory_bytes, silva_bytes) = match (
-            self.memory.stats().await,
-            self.silva.stats().await,
-        ) {
-            (Ok(mem_stats), Ok(silva_stats)) => (mem_stats.total_bytes, silva_stats.total_bytes),
-            _ => (0, 0),
-        };
+        let silva_bytes = self.silva.stats().await.map(|s| s.total_bytes).unwrap_or(0);
 
         // Fetch recent nodes for Intelligence section
         let recent_nodes = self.silva.get_recent_nodes(5).await.unwrap_or_default();
 
         StorageHealth {
-            memory_db_ok: memory_ok,
             silva_db_ok: silva_ok,
-            docs_count,
             nodes_count,
-            memory_bytes,
             silva_bytes,
             recent_nodes,
         }
@@ -339,12 +312,6 @@ impl Doctor {
                 info!("🩹 Repair: Optimizing databases (VACUUM)...");
                 let mut results = Vec::new();
                 
-                if let Err(e) = self.memory.vacuum().await {
-                    results.push(format!("Memory error: {e}"));
-                } else {
-                    results.push("Memory optimized".to_string());
-                }
-                
                 if let Err(e) = self.silva.vacuum().await {
                     results.push(format!("Silva error: {e}"));
                 } else {
@@ -372,9 +339,6 @@ impl Doctor {
                 output.push_str(&format!("HashMap insert (10k): {hashmap_time}ms\n"));
                 
                 // Storage stats
-                if let Ok(stats) = self.memory.stats().await {
-                    output.push_str(&format!("Memory DB: {} bytes\n", stats.total_bytes));
-                }
                 if let Ok(stats) = self.silva.stats().await {
                     output.push_str(&format!("Silva DB: {} bytes\n", stats.total_bytes));
                 }

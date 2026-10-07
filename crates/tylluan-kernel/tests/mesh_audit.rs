@@ -118,7 +118,6 @@ use tylluan_kernel::transport::http::api_v1::api_v1_routes;
 use tylluan_kernel::registry::guild_process::GuildRegistry;
 use tylluan_kernel::config::{TimeoutsConfig, TylluanConfig};
 use tylluan_kernel::router::matcher::GuildMatcher;
-use tylluan_kernel::memory::hybrid::HybridMemory;
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::coloquio::ColoquioDb;
@@ -140,7 +139,6 @@ async fn mesh_test_state() -> Arc<HttpState> {
     let (registry_actor, registry_handle) = RegistryActor::new(registry_arc.clone());
     tokio::spawn(async move { registry_actor.run().await; });
 
-    let memory = Arc::new(HybridMemory::in_memory().await.unwrap());
     let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
     silva.init().await.unwrap();
     let mailbox = Arc::new(Mailbox::in_memory().await.unwrap());
@@ -149,7 +147,7 @@ async fn mesh_test_state() -> Arc<HttpState> {
     let curriculum = Arc::new(std::sync::Mutex::new(
         tylluan_kernel::curriculum::CurriculumLearner::new_in_memory(1).unwrap(),
     ));
-    let doctor = Arc::new(Doctor::new(registry_arc, memory.clone(), silva.clone(), curriculum));
+    let doctor = Arc::new(Doctor::new(registry_arc, silva.clone(), curriculum));
     let matcher = Arc::new(GuildMatcher::new(vec![]));
     let node_router = tylluan_kernel::memory::agent_nodes::AgentNodeRouter::new(tokio::sync::broadcast::channel(1).0);
     let (broadcast_tx, _) = tokio::sync::broadcast::channel(10);
@@ -173,7 +171,6 @@ async fn mesh_test_state() -> Arc<HttpState> {
         server: None,
         registry: registry_handle,
         doctor,
-        memory,
         silva: silva.clone(),
         mailbox,
         coloquio,
@@ -336,7 +333,6 @@ async fn dst_test_state(
     let (registry_actor, registry_handle) = RegistryActor::new(registry_arc.clone());
     tokio::spawn(async move { registry_actor.run().await; });
 
-    let memory = Arc::new(HybridMemory::in_memory().await.unwrap());
     let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
     silva.init().await.unwrap();
     let mailbox = Arc::new(Mailbox::in_memory().await.unwrap());
@@ -345,7 +341,7 @@ async fn dst_test_state(
     let curriculum = Arc::new(std::sync::Mutex::new(
         tylluan_kernel::curriculum::CurriculumLearner::new_in_memory(1).unwrap(),
     ));
-    let doctor = Arc::new(Doctor::new(registry_arc, memory.clone(), silva.clone(), curriculum));
+    let doctor = Arc::new(Doctor::new(registry_arc, silva.clone(), curriculum));
     let matcher = Arc::new(GuildMatcher::new(vec![]));
     let node_router = tylluan_kernel::memory::agent_nodes::AgentNodeRouter::new(tokio::sync::broadcast::channel(1).0);
     let (broadcast_tx, _) = tokio::sync::broadcast::channel(10);
@@ -364,7 +360,6 @@ async fn dst_test_state(
         server: None,
         registry: registry_handle,
         doctor,
-        memory,
         silva: silva.clone(),
         mailbox,
         coloquio,

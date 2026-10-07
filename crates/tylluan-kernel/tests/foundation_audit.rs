@@ -9,7 +9,6 @@
 mod audit {
     use tylluan_kernel::transport::server::TylluanServer;
     use tylluan_kernel::registry::guild_process::GuildRegistry;
-    use tylluan_kernel::memory::hybrid::HybridMemory;
     use tylluan_kernel::memory::silva::SilvaDB;
     use tylluan_kernel::memory::mailbox::Mailbox;
     use tylluan_kernel::router::matcher::GuildMatcher;
@@ -28,7 +27,6 @@ mod audit {
             5,
         )));
         let matcher = Arc::new(GuildMatcher::new(vec![]));
-        let memory = Arc::new(HybridMemory::in_memory().await.unwrap());
         let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
         let mailbox = Arc::new(Mailbox::in_memory().await.unwrap());
         let curriculum = Arc::new(std::sync::Mutex::new(
@@ -36,7 +34,6 @@ mod audit {
         ));
         let doctor = Arc::new(tylluan_kernel::doctor::Doctor::new(
             registry.clone(), 
-            memory.clone(), 
             silva.clone(),
             curriculum,
         ));
@@ -45,7 +42,6 @@ mod audit {
         TylluanServer::new(
             registry,
             matcher,
-            memory,
             silva,
             mailbox,
             doctor,

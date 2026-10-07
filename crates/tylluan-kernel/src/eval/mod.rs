@@ -5,7 +5,7 @@ use sha2::Digest;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::memory::hybrid::HybridMemory;
+use crate::memory::silva::SilvaDB;
 
 /// A single benchmark result point.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,17 +47,21 @@ fn compute_result_hash(benchmark: &str, seed: u64, config: &serde_json::Value) -
     format!("{:x}", hasher.finalize())
 }
 
-/// Run LongMemEval-S benchmark against the kernel's memory.
+/// Run LongMemEval-S benchmark against an isolated SilvaDB.
 ///
 /// 1. Generate N test documents with a fixed seed (deterministic)
-/// 2. Store them in HybridMemory
+/// 2. Store them as `eval:{index}` nodes (BM25/FTS tier — no embeddings)
 /// 3. Query each fact, measure rank position and latency
 /// 4. Report recall@1/5/10 + latency percentiles
 /// 5. Return EvalResult with hash for cross-run reproducibility verification
 ///
 /// The same seed + config string → same result_hash on identical hardware+model.
+///
+/// F4: `expected_id` is now the deterministic document index inside the
+/// dataset (previously the autoincrement rowid of the retired HybridMemory).
+/// Node ids used for ranking are `eval:{expected_id}`.
 pub async fn run_longmemeval_s(
-    memory: Arc<HybridMemory>,
+    silva: Arc<SilvaDB>,
     num_queries: Option<usize>,
     seed: Option<u64>,
 ) -> EvalResult {
@@ -72,37 +76,45 @@ pub async fn run_longmemeval_s(
 
     let data = longmemeval_s::generate_dataset(n, effective_seed);
     let mut points = Vec::new();
-    let mut query_map: Vec<(String, i64)> = Vec::new();
+    let mut query_map: Vec<(String, String, i64)> = Vec::new();
 
-    // Phase 1: Write all documents, capture their DB IDs
-    for doc in &data.documents {
+    // Phase 1: Write all documents as deterministic eval nodes, capture their ids
+    for (idx, doc) in data.documents.iter().enumerate() {
+        let node_id = format!("eval:{}", idx);
         let meta = serde_json::json!({
             "source": "longmemeval-s",
             "category": doc.category,
             "eval_seed": effective_seed,
             "eval_id": doc.id,
         });
-        if let Ok(doc_id) = memory.add_document(&doc.content, &meta.to_string(), None).await {
+        if silva
+            .upsert_node(&node_id, "document", &doc.content, &meta.to_string())
+            .await
+            .is_ok()
+        {
             // Find matching query for this document
             if let Some(q) = data.queries.iter().find(|q| q.expected_content == doc.content) {
-                query_map.push((q.text.clone(), doc_id));
+                query_map.push((q.text.clone(), node_id, idx as i64));
             }
         }
     }
 
     // Phase 2: Query each fact and measure recall
     let mut latencies = Vec::new();
-    for (query_text, expected_id) in &query_map {
+    for (query_text, expected_node_id, expected_idx) in &query_map {
         let t0 = Instant::now();
-        let results = memory.search(query_text, None, 10).await.unwrap_or_default();
+        let results = silva
+            .search_hybrid(query_text, None, 10, None, false)
+            .await
+            .unwrap_or_default();
         let elapsed = t0.elapsed();
         latencies.push(elapsed.as_secs_f64() * 1000.0);
 
-        let rank = results.iter().position(|r| r.id == *expected_id);
-        let score = rank.map(|i| results[i].score as f64);
+        let rank = results.iter().position(|(node, _)| node.id == *expected_node_id);
+        let score = rank.map(|i| results[i].1 as f64);
         points.push(EvalPoint {
             query: query_text.clone(),
-            expected_id: *expected_id,
+            expected_id: *expected_idx,
             rank: rank.map(|r| r + 1),
             score,
             latency_ms: elapsed.as_secs_f64() * 1000.0,

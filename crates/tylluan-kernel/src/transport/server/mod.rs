@@ -15,7 +15,6 @@ pub mod bootstrap;
 
 use types::*;
 use crate::registry::guild_process::GuildRegistry;
-use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::SilvaDB;
 use crate::memory::mailbox::Mailbox;
 use crate::memory::coloquio::ColoquioDb;
@@ -51,7 +50,6 @@ pub struct TylluanServer {
     pub info: ServerInfo,
     pub registry: Arc<RwLock<GuildRegistry>>,
     pub matcher: Arc<GuildMatcher>,
-    pub memory: Arc<HybridMemory>,
     pub silva: Arc<SilvaDB>,
     pub mailbox: Arc<Mailbox>,
     pub rate_limiter: Arc<RateLimiter>,
@@ -122,7 +120,6 @@ impl TylluanServer {
     pub fn new(
         registry: Arc<RwLock<GuildRegistry>>,
         matcher: Arc<GuildMatcher>,
-        memory: Arc<HybridMemory>,
         silva: Arc<SilvaDB>,
         mailbox: Arc<Mailbox>,
         doctor: Arc<Doctor>,
@@ -147,7 +144,6 @@ impl TylluanServer {
             info,
             registry,
             matcher,
-            memory,
             silva,
             mailbox,
             rate_limiter: Arc::new(RateLimiter::new(Some(60))),
@@ -215,7 +211,6 @@ impl TylluanServer {
 
     pub fn silva(&self) -> Arc<SilvaDB> { self.silva.clone() }
     pub fn doctor(&self) -> Arc<Doctor> { self.doctor.clone() }
-    pub fn memory(&self) -> Arc<HybridMemory> { self.memory.clone() }
 
     pub fn set_notifier(&mut self, tx: tokio::sync::broadcast::Sender<serde_json::Value>) {
         self.notifier = Some(tx);

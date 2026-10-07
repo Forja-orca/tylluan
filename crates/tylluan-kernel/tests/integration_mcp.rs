@@ -10,7 +10,6 @@
 
 use tylluan_kernel::config::TimeoutsConfig;
 use tylluan_kernel::doctor::Doctor;
-use tylluan_kernel::memory::hybrid::HybridMemory;
 use tylluan_kernel::memory::mailbox::Mailbox;
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::registry::guild_process::GuildRegistry;
@@ -34,10 +33,6 @@ async fn create_server(label: &str) -> TylluanServer {
         pb.clone(), 300, TimeoutsConfig::default(), 5,
     )));
     let matcher = Arc::new(GuildMatcher::new(builtin_catalog()));
-    let memory = Arc::new(
-        HybridMemory::open(&pb.join("mem.db").to_string_lossy()).unwrap(),
-    );
-    memory.init().await.unwrap();
     let silva = Arc::new(
         SilvaDB::open(":memory:").unwrap(),
     );
@@ -50,10 +45,10 @@ async fn create_server(label: &str) -> TylluanServer {
         tylluan_kernel::curriculum::CurriculumLearner::new_in_memory(1).unwrap(),
     ));
     let doctor = Arc::new(Doctor::new(
-        registry.clone(), memory.clone(), silva.clone(), curriculum,
+        registry.clone(), silva.clone(), curriculum,
     ));
     let node_router = tylluan_kernel::memory::agent_nodes::AgentNodeRouter::new(tokio::sync::broadcast::channel(1).0);
-    TylluanServer::new(registry, matcher, memory, silva, mailbox, doctor, node_router)
+    TylluanServer::new(registry, matcher, silva, mailbox, doctor, node_router)
 }
 
 /// Server boots and reports exactly 5 sovereign tools.

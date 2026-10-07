@@ -168,7 +168,6 @@ mod tests {
         );
         let doctor = std::sync::Arc::new(crate::doctor::Doctor::new(
             std::sync::Arc::new(RwLock::new(reg)),
-            std::sync::Arc::new(crate::memory::hybrid::HybridMemory::in_memory().await.unwrap()),
             std::sync::Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
             std::sync::Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
         ));
@@ -179,7 +178,6 @@ mod tests {
                 ),
             )),
             std::sync::Arc::new(matcher),
-            std::sync::Arc::new(crate::memory::hybrid::HybridMemory::in_memory().await.unwrap()),
             std::sync::Arc::new(crate::memory::silva::SilvaDB::in_memory().await.unwrap()),
             std::sync::Arc::new(crate::memory::mailbox::Mailbox::in_memory().await.unwrap()),
             doctor,

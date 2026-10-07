@@ -103,7 +103,7 @@ async fn test_frontend_backend_contracts_match() {
     // test documents the expected contract rather than validating live JSON.
     let _golden_signals_fields = ["latency", "traffic", "errors", "saturation", "uptime_seconds", "slo_target"];
     let _guilds_util_fields = ["total", "active", "idle", "offline", "utilization_percent"];
-    let _memory_ret_fields = ["silva", "hybrid_memory"];
+    let _memory_ret_fields = ["silva"];
     let _slo_fields = ["slo_target", "current_availability", "status"];
 }
 

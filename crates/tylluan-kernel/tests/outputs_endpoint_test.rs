@@ -24,7 +24,7 @@ fn unix_now() -> u64 {
 }
 
 // multi_thread flavor: the shared harness touches blocking-capable code
-// (HybridMemory) — same requirement as the other integration tests.
+// — same requirement as the other integration tests.
 #[tokio::test(flavor = "multi_thread")]
 async fn outputs_ledger_http_roundtrip_and_hostile_ids() {
     // Seam: point the store at a fresh temp dir for the whole test.
