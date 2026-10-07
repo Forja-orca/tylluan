@@ -293,7 +293,7 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
         "guilds_online": online,
         "guilds_total": statuses.len(),
         "silva_healthy": diag.storage.silva_db_ok,
-        "mailbox_healthy": diag.storage.memory_db_ok,
+        "mailbox_healthy": state.mailbox.health_check().await.is_ok(),
         "curriculum_entries": curr_count,
         "embeddings_loaded": true,
         "score": if diag.status == "healthy" { 100u32 } else if diag.status == "degraded" { 65 } else { 30 },

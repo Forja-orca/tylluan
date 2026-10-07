@@ -1440,7 +1440,6 @@ pub(crate) async fn base_test_server(silva: std::sync::Arc<crate::memory::silva:
     use tokio::sync::broadcast;
     use crate::router::matcher::GuildMatcher;
     use crate::router::catalog::builtin_catalog;
-    use crate::memory::hybrid::HybridMemory;
     use crate::memory::mailbox::Mailbox;
     use crate::memory::agent_nodes::AgentNodeRouter;
     use crate::registry::guild_process::GuildRegistry;
@@ -1455,14 +1454,12 @@ pub(crate) async fn base_test_server(silva: std::sync::Arc<crate::memory::silva:
     let node_router = AgentNodeRouter::new(tx.clone());
     let doctor = Arc::new(crate::doctor::Doctor::new(
         registry.clone(),
-        Arc::new(HybridMemory::in_memory().await.unwrap()),
         silva.clone(),
         Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
     ));
     let mut server = TylluanServer::new(
         registry,
         Arc::new(matcher),
-        Arc::new(HybridMemory::in_memory().await.unwrap()),
         silva,
         Arc::new(Mailbox::in_memory().await.unwrap()),
         doctor,
@@ -1479,7 +1476,6 @@ mod tests {
     use tokio::sync::RwLock;
     use std::path::PathBuf;
     use crate::registry::guild_process::GuildRegistry;
-    use crate::memory::hybrid::HybridMemory;
     use crate::memory::silva::SilvaDB;
     use crate::memory::mailbox::Mailbox;
     use crate::router::matcher::GuildMatcher;
@@ -1498,14 +1494,12 @@ mod tests {
         let node_router = AgentNodeRouter::new(tx);
         let doctor = Arc::new(crate::doctor::Doctor::new(
             test_registry(),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
         ));
         TylluanServer::new(
             test_registry(),
             Arc::new(matcher),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(Mailbox::in_memory().await.unwrap()),
             doctor,

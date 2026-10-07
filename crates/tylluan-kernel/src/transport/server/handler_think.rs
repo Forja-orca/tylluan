@@ -458,7 +458,6 @@ mod tests {
     use super::*;
     use crate::memory::agent_memory::AgentMemoryManager;
     use crate::memory::agent_nodes::AgentNodeRouter;
-    use crate::memory::hybrid::HybridMemory;
     use crate::memory::mailbox::Mailbox;
     use crate::memory::silva::SilvaDB;
     use crate::registry::guild_process::GuildRegistry;
@@ -477,14 +476,12 @@ mod tests {
         let node_router = AgentNodeRouter::new(tx);
         let doctor = Arc::new(crate::doctor::Doctor::new(
             test_reg.clone(),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(std::sync::Mutex::new(crate::curriculum::CurriculumLearner::new_in_memory(5).unwrap())),
         ));
         TylluanServer::new(
             test_reg,
             Arc::new(matcher),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(Mailbox::in_memory().await.unwrap()),
             doctor,

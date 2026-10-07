@@ -1,7 +1,8 @@
 //! # Memory Module
 //!
 //! Persistent memory layer for TylluanNexus:
-//! - **HybridMemory**: FTS5 keyword + vector cosine hybrid search (RRF fusion)
+//! - **HybridMemory**: legacy migrator (FTS5 + cosine RRF) — no longer wired into
+//!   the kernel; kept only to migrate old `tylluan.db` data (F4)
 //! - **SilvaDB**: Knowledge graph with nodes, edges, BFS traversal, and decay
 //! - **ConsensusEngine**: Sovereign conflict resolution for multi-agent truth
 //! - **Mailbox**: Agent-to-agent async messaging

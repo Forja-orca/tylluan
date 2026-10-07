@@ -82,7 +82,6 @@ pub(crate) async fn gossip_decrypt_plaintext(
 #[derive(rust_embed::Embed)]
 #[folder = "../../dashboard/dist/"]
 struct DashboardAssets;
-use crate::memory::hybrid::HybridMemory;
 use crate::memory::silva::SilvaDB;
 use crate::transport::server::TylluanServer;
 use rmcp::model::{CallToolRequestParam, Content};
@@ -100,7 +99,6 @@ pub struct HttpState {
     pub server: Option<Arc<RwLock<TylluanServer>>>,
     pub registry: RegistryHandle,
     pub doctor: Arc<Doctor>,
-    pub memory: Arc<HybridMemory>,
     pub silva: Arc<SilvaDB>,
     pub mailbox: Arc<crate::memory::mailbox::Mailbox>,
     pub coloquio: Arc<crate::memory::coloquio::ColoquioDb>,
@@ -415,9 +413,9 @@ pub async fn start_http_server_with_download(
 
     let (broadcast_tx, _rx) = broadcast::channel(100);
 
-    let (silva, doctor, memory, mailbox, matcher) = if let Some(s) = &server {
+    let (silva, doctor, mailbox, matcher) = if let Some(s) = &server {
         let s_read = s.read().await;
-        (s_read.silva(), s_read.doctor(), s_read.memory(), s_read.mailbox.clone(), s_read.matcher.clone())
+        (s_read.silva(), s_read.doctor(), s_read.mailbox.clone(), s_read.matcher.clone())
     } else {
         return Err(anyhow::anyhow!(
             "Cannot initialize HTTP Gateway: Sovereign Server is not available"
@@ -494,7 +492,6 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         server: server.clone(),
         registry: registry_handle.clone(),
         silva: silva.clone(),
-        memory,
         doctor,
         mailbox,
         coloquio,

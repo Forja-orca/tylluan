@@ -140,7 +140,6 @@ mod tests {
     use super::*;
     use crate::curriculum::CurriculumLearner;
     use crate::memory::agent_nodes::AgentNodeRouter;
-    use crate::memory::hybrid::HybridMemory;
     use crate::memory::mailbox::Mailbox;
     use crate::memory::silva::SilvaDB;
     use crate::registry::guild_process::GuildRegistry;
@@ -160,14 +159,12 @@ mod tests {
         let node_router = AgentNodeRouter::new(tx);
         let doctor = Arc::new(crate::doctor::Doctor::new(
             test_reg.clone(),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(Mutex::new(CurriculumLearner::new_in_memory(5).unwrap())),
         ));
         TylluanServer::new(
             test_reg,
             Arc::new(matcher),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             Arc::new(SilvaDB::in_memory().await.unwrap()),
             Arc::new(Mailbox::in_memory().await.unwrap()),
             doctor,
@@ -530,7 +527,6 @@ mod tests {
         use crate::router::catalog::builtin_catalog;
         use crate::router::matcher::GuildMatcher;
         use crate::memory::agent_nodes::AgentNodeRouter;
-        use crate::memory::hybrid::HybridMemory;
         use crate::memory::mailbox::Mailbox;
         use crate::transport::server::TylluanServer;
 
@@ -541,14 +537,12 @@ mod tests {
         let node_router = AgentNodeRouter::new(tx);
         let doctor = Arc::new(crate::doctor::Doctor::new(
             test_reg.clone(),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             silva.clone(),
             Arc::new(Mutex::new(CurriculumLearner::new_in_memory(5).unwrap())),
         ));
         let mut server = TylluanServer::new(
             test_reg,
             matcher.clone(),
-            Arc::new(HybridMemory::in_memory().await.unwrap()),
             silva.clone(),
             Arc::new(Mailbox::in_memory().await.unwrap()),
             doctor,

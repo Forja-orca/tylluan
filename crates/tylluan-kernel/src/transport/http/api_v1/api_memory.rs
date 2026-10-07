@@ -52,10 +52,8 @@ pub async fn memory_search_handler(State(state): State<Arc<HttpState>>, Query(p)
 
 pub async fn memory_retention_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let silva = state.silva.clone();
-    let memory = state.memory.clone();
     let node_count = silva.node_count().await.unwrap_or(0) as i64;
     let edge_count = silva.edge_count().await.unwrap_or(0);
-    let memory_stats = memory.stats().await.ok();
     let conn_guard = silva.conn_lock();
     let conn = conn_guard.lock().await;
     let fresh_24h: i64 = conn.query_row("SELECT COUNT(*) FROM nodes WHERE created_at > datetime('now', '-24 hours')", [], |r| r.get(0)).unwrap_or(0);
@@ -69,10 +67,6 @@ pub async fn memory_retention_handler(State(state): State<Arc<HttpState>>) -> im
             "fresh_24h": fresh_24h, "stale_7d": stale_7d, "cold_30d": cold_30d,
             "protected": protected_count,
             "retention_rate_percent": if node_count > 0 { ((fresh_24h as f64 / node_count as f64) * 100.0).round() as i64 } else { 0 }
-        },
-        "hybrid_memory": {
-            "documents": memory_stats.as_ref().map(|s| s.document_count).unwrap_or(0),
-            "disk_bytes": memory_stats.as_ref().map(|s| s.total_bytes).unwrap_or(0)
         }
     }))).into_response()
 }

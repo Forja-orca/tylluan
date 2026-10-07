@@ -31,7 +31,7 @@ impl super::TylluanServer {
         RiskLevel::Medium
     }
 
-    /// Synthesize context from SilvaDB and HybridMemory.
+    /// Synthesize context from SilvaDB.
     pub async fn synthesize_context(&self, query: &str) -> String {
         let mut synthesis = String::from("SINTESIS DE CONCURRENCIA SOBERANA (v3.1)\n");
         synthesis.push_str("-------------------------------------------\n");
@@ -48,8 +48,11 @@ impl super::TylluanServer {
         }
 
         synthesis.push_str("\nTRAYECTORIA ACTUAL:\n");
-        if let Ok(lessons) = self.memory.search(query, embedding.as_deref(), 3).await {
-            for lesson in lessons { synthesis.push_str(&format!("  ~ {}\n", lesson.content)); }
+        // F4: this section used to query the retired HybridMemory. Recent
+        // trajectory now comes from SilvaDB's own recency order — the same
+        // source the rest of the kernel reads.
+        if let Ok(nodes) = self.silva.get_recent_nodes(3).await {
+            for node in nodes { synthesis.push_str(&format!("  ~ {}\n", node.content)); }
         }
         synthesis.push_str("\n-------------------------------------------");
         synthesis

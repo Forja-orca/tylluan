@@ -56,9 +56,10 @@ pub async fn eval_run_handler(
 
     match benchmark {
         "longmemeval-s" => {
-            // F3: the benchmark WRITES (add_document) into an isolated
-            // HybridMemory per run. Production hybrid must stay writer-free
-            // ahead of F4, and repeated runs must not pollute each other.
+            // F4: the benchmark WRITES (upsert_node) into an isolated temp
+            // SilvaDB per run — the production SilvaDB stays writer-free and
+            // repeated runs must not pollute each other. Same isolation
+            // pattern the F3 migration dry-run harness uses for its copies.
             let eval_dir = std::env::temp_dir().join(format!(
                 "tylluan_eval_{}_{}",
                 std::process::id(),
@@ -69,22 +70,17 @@ pub async fn eval_run_handler(
             ));
             let eval_db = eval_dir.join("eval.db");
             let eval_db_str = eval_db.to_string_lossy().into_owned();
-            let memory = match crate::memory::hybrid::HybridMemory::open(&eval_db_str) {
-                Ok(m) => m,
+            let silva = match crate::memory::silva::SilvaDB::open(&eval_db_str) {
+                Ok(s) => s,
                 Err(e) => {
                     return Json(serde_json::json!({
                         "ok": false, "error": format!("eval db open failed: {e}")
                     }));
                 }
             };
-            if let Err(e) = memory.init().await {
-                return Json(serde_json::json!({
-                    "ok": false, "error": format!("eval db init failed: {e}")
-                }));
-            }
 
             let result =
-                eval::run_longmemeval_s(Arc::new(memory), payload.num_queries, payload.seed).await;
+                eval::run_longmemeval_s(Arc::new(silva), payload.num_queries, payload.seed).await;
             save_result(&result);
             // The Arc was consumed by the run and dropped with it, so DB
             // handles are closed here — best-effort cleanup of the temp dir.

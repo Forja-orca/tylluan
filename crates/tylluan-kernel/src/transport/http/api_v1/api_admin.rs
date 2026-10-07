@@ -783,7 +783,7 @@ pub async fn system_status_handler(
 
     let status_json = serde_json::json!({
         "silva_healthy": report.storage.silva_db_ok,
-        "mailbox_healthy": report.storage.memory_db_ok,
+        "mailbox_healthy": state.mailbox.health_check().await.is_ok(),
         "curriculum_entries": curr_count,
         "uptime_secs": state.start_time.elapsed().as_secs(),
         "embeddings_loaded": true,

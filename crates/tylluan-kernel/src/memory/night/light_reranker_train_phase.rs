@@ -343,7 +343,6 @@ mod tests {
                     ),
                 )),
                 Arc::new(crate::router::matcher::GuildMatcher::new(crate::router::catalog::builtin_catalog())),
-                Arc::new(crate::memory::hybrid::HybridMemory::in_memory().await.unwrap()),
                 silva.clone(),
                 Arc::new(crate::memory::mailbox::Mailbox::in_memory().await.unwrap()),
                 Arc::new(crate::doctor::Doctor::new(
@@ -352,7 +351,6 @@ mod tests {
                             std::path::PathBuf::from("."), 300, Default::default(), 3,
                         ),
                     )),
-                    Arc::new(crate::memory::hybrid::HybridMemory::in_memory().await.unwrap()),
                     silva.clone(),
                     Arc::clone(&curriculum),
                 )),

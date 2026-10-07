@@ -88,7 +88,6 @@ async fn test_memory_retention_structure() {
     // Expected from nexus-bridge.ts MemoryRetention interface
     let expected_sections = vec![
         "silva",    // { total_nodes, total_edges, fresh_24h, stale_7d, cold_30d, retention_rate_percent }
-        "hybrid_memory",  // { documents, disk_bytes }
     ];
     
     for section in &expected_sections {

@@ -532,13 +532,11 @@ async fn main() -> anyhow::Result<()> {
     info!("🌲 SilvaDB path: {}", silva_path.display());
     info!("📬 Mailbox path: {}", mailbox_path.display());
 
-    let memory = Arc::new(HybridMemory::open(&config.memory.db_path)?);
     let silva = Arc::new(SilvaDB::open(&silva_path.to_string_lossy())?);
     let mailbox = Arc::new(Mailbox::open(&mailbox_path.to_string_lossy())?);
     let coloquio = Arc::new(ColoquioDb::new(&mailbox_path.to_string_lossy())?);
     let coloquio_for_shutdown = coloquio.clone();
 
-    memory.init().await?;
     silva.init().await?;
     // No direct test coverage for this call site — main()'s boot sequence
     // isn't unit-testable in this codebase's existing patterns. A future
@@ -1037,7 +1035,6 @@ async fn main() -> anyhow::Result<()> {
     // ─── Initialize Kernel Doctor ───────────────────────────────────
     let doctor = Arc::new(Doctor::new(
         registry_arc.clone(),
-        memory.clone(),
         silva.clone(),
         curriculum.clone(),
     ));
@@ -1115,7 +1112,6 @@ async fn main() -> anyhow::Result<()> {
     let mut server = TylluanServer::new(
         registry_arc.clone(),
         matcher.clone(),
-        memory.clone(),
         silva.clone(),
         mailbox.clone(),
         doctor.clone(),
@@ -1773,8 +1769,12 @@ async fn main() -> anyhow::Result<()> {
     // pass aborted by the guard resumes on a later tick. Deliberately
     // ONNX-free: dense BLOBs are copied byte-identically and the sparse
     // signature backfills through the Agnostic Reindexer afterwards.
+    // F4: HybridMemory is no longer a kernel-wide handle — the job reopens
+    // the legacy DB itself, and only when one actually exists on disk
+    // (fresh installs must not get a brand-new empty tylluan.db created
+    // just to migrate nothing).
     let silva_migrate = silva.clone();
-    let memory_migrate = memory.clone();
+    let hybrid_db_path = config.memory.db_path.clone();
     let matcher_migrate = matcher.clone();
     let budget_migrate = background_budget.clone();
     tokio::spawn(async move {
@@ -1787,9 +1787,23 @@ async fn main() -> anyhow::Result<()> {
             if tylluan_kernel::memory::hybrid_migration::migration_complete(&silva_migrate).await {
                 return;
             }
+            if !std::path::Path::new(&hybrid_db_path).exists() {
+                return; // no legacy DB → nothing to migrate (stay idempotent)
+            }
+            let legacy = match HybridMemory::open(&hybrid_db_path) {
+                Ok(m) => Arc::new(m),
+                Err(e) => {
+                    warn!("F3 legacy HybridMemory open failed ({}): {e:?}", hybrid_db_path);
+                    return; // corrupt/locked legacy DB: don't spam every tick
+                }
+            };
+            if let Err(e) = legacy.init().await {
+                warn!("F3 legacy HybridMemory init failed: {e:?}");
+                return;
+            }
             let Some(_bg) = budget_migrate.acquire().await else { continue };
             let silva_inner = silva_migrate.clone();
-            let memory_inner = memory_migrate.clone();
+            let memory_inner = legacy.clone();
             let model_name = matcher_migrate
                 .engine_arc()
                 .map(|e| e.engine_id())
@@ -1871,7 +1885,6 @@ async fn main() -> anyhow::Result<()> {
     // ─── P1: Periodic SQLite Maintenance ───────────────────────────
     // Performs PRAGMA wal_checkpoint(TRUNCATE) every 5 minutes for lean storage.
     let maint_silva = silva.clone();
-    let maint_memory = memory.clone();
     let maint_mailbox = mailbox.clone();
     let budget_maint = background_budget.clone();
     tokio::spawn(async move {
@@ -1887,9 +1900,6 @@ async fn main() -> anyhow::Result<()> {
             
             if let Err(e) = maint_silva.checkpoint().await {
                 warn!("⚠️ SilvaDB checkpoint failed: {}", e);
-            }
-            if let Err(e) = maint_memory.checkpoint().await {
-                warn!("⚠️ HybridMemory checkpoint failed: {}", e);
             }
             if let Err(e) = maint_mailbox.checkpoint().await {
                 warn!("⚠️ Mailbox checkpoint failed: {}", e);
