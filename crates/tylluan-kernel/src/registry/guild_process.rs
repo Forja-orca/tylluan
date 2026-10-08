@@ -853,6 +853,16 @@ pub struct GuildRegistry {
     db_conn: Option<Arc<tokio::sync::Mutex<Connection>>>,
 }
 
+/// Outcome of `GuildRegistry::kill_guild_if_idle` (registry/actor.rs retry
+/// loop): distinguishes "killed", "skipped because a call is in flight", and
+/// "no such guild" so the caller can log each case truthfully.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardedKill {
+    Killed,
+    InFlight,
+    Missing,
+}
+
 impl GuildRegistry {
     /// Create a new registry with the given guilds directory and timeout.
     pub fn new(guilds_dir: PathBuf, timeout_secs: u64, timeouts: TimeoutsConfig, max_concurrent: usize) -> Self {
@@ -865,6 +875,36 @@ impl GuildRegistry {
             guild_timeouts: None,
             max_concurrent,
             db_conn: None,
+        }
+    }
+
+    /// Kill `name`'s process only when no tool call is in flight (T981).
+    ///
+    /// `kill()` takes the proxy out from under every concurrent caller of the
+    /// same guild, so the actor retry loop must not fire it while another
+    /// client's call is mid-execution. Acquiring the FULL permit set is the
+    /// atomic test: if every permit is free nobody holds one (callers drop
+    /// their permit the moment their call returns, and nothing else in this
+    /// async fn holds one), so the kill is safe; if any permit is held we
+    /// return `InFlight` and the caller decides again on a later attempt.
+    /// New callers arriving during the kill block on the permits held here
+    /// and wake against a fresh (or absent) proxy — a state the retry loop
+    /// already recovers from.
+    pub async fn kill_guild_if_idle(&mut self, name: &str) -> GuardedKill {
+        let Some(semaphore) = self.guilds.get(name).map(|g| g.get_semaphore()) else {
+            return GuardedKill::Missing;
+        };
+        match semaphore.try_acquire_many(self.max_concurrent as u32) {
+            Ok(_all_permits) => {
+                let Some(guild) = self.guilds.get_mut(name) else {
+                    return GuardedKill::Missing;
+                };
+                if let Err(e) = guild.kill().await {
+                    tracing::warn!("⚠️ kill_guild_if_idle('{name}') failed: {e}");
+                }
+                GuardedKill::Killed
+            }
+            Err(_) => GuardedKill::InFlight,
         }
     }
 
@@ -1628,6 +1668,36 @@ mod tests {
         assert_eq!(guild.crash_count, 0);
         assert!(guild.last_crash_at.is_none());
         assert!(!guild.is_running());
+    }
+
+    #[tokio::test]
+    async fn kill_guild_if_idle_skips_while_a_call_holds_a_permit() {
+        // T981: the actor retry loop must not kill a guild whose semaphore has
+        // a permit in flight — kill() would yank the proxy out from under that
+        // concurrent call. The full-permit acquisition is the atomic test.
+        let mut registry = GuildRegistry::new(
+            PathBuf::from("."),
+            300,
+            TimeoutsConfig { handshake_secs: 120, tool_call_secs: 3600 },
+            3,
+        );
+        let launcher = GuildLauncher::Python { module_path: "test.module".to_string() };
+        registry
+            .guilds
+            .insert("test".to_string(), GuildProcess::new("test", launcher, false, None, 3));
+
+        // Nobody in flight → kill proceeds (never-started guild: proxy is
+        // None, but kill() still resets backoff and reports Killed).
+        assert_eq!(registry.kill_guild_if_idle("test").await, GuardedKill::Killed);
+        // Unknown guild is reported truthfully, not as "killed".
+        assert_eq!(registry.kill_guild_if_idle("ghost").await, GuardedKill::Missing);
+
+        // One permit held by a "caller" → the kill must be skipped.
+        let semaphore = registry.guilds["test"].get_semaphore();
+        let in_flight = semaphore.acquire().await.expect("semaphore is open");
+        assert_eq!(registry.kill_guild_if_idle("test").await, GuardedKill::InFlight);
+        drop(in_flight);
+        assert_eq!(registry.kill_guild_if_idle("test").await, GuardedKill::Killed);
     }
 
     #[test]
