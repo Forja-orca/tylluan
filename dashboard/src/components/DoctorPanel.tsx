@@ -71,7 +71,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     // Iterate over everything broken
     const promises: Promise<any>[] = [];
     
-    if (!report.storage.memory_db_ok || !report.storage.silva_db_ok) {
+    if (!report.storage.silva_db_ok) {
       promises.push(handleRepair('storage'));
     }
     
@@ -246,24 +246,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
               <div>
                 <p className="text-sm font-mono text-slate-200 flex items-center gap-2">
                   <Server className="w-4 h-4 text-slate-400" />
-                  MemoryDB (Episodic)
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {report.storage.docs_count.toLocaleString()} docs • {formatBytes(report.storage.memory_bytes)}
-                </p>
-              </div>
-              {report.storage.memory_db_ok ? (
-                <span className="text-emerald-500 text-xs font-bold px-2 py-1 bg-emerald-500/10 rounded">OK</span>
-              ) : (
-                <span className="text-red-500 text-xs font-bold px-2 py-1 bg-red-500/10 rounded">CORRUPT</span>
-              )}
-            </div>
-            
-            <div className="p-3 bg-slate-900/60 rounded-lg flex items-center justify-between">
-              <div>
-                <p className="text-sm font-mono text-slate-200 flex items-center gap-2">
-                  <Server className="w-4 h-4 text-slate-400" />
-                  SilvaDB (Graph)
+                  SilvaDB (Unified Knowledge Graph)
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
                   {report.storage.nodes_count.toLocaleString()} nodes • {formatBytes(report.storage.silva_bytes)}
@@ -276,7 +259,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
               )}
             </div>
 
-            {(!report.storage.memory_db_ok || !report.storage.silva_db_ok) && (
+            {!report.storage.silva_db_ok && (
               <button
                 onClick={() => handleRepair('storage')}
                 disabled={repairing}

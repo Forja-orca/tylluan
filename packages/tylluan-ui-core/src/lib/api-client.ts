@@ -270,13 +270,14 @@ export interface DiagnosticReport {
     issues: string[];
   }>;
   storage: {
-    memory_db_ok: boolean;
     silva_db_ok: boolean;
-    docs_count: number;
     nodes_count: number;
-    memory_bytes: number;
     silva_bytes: number;
     recent_nodes: string[];
+    // Deprecated fields from prior HybridMemory architecture (optional for backward compat)
+    memory_db_ok?: boolean;
+    docs_count?: number;
+    memory_bytes?: number;
   };
   system: {
     total_memory_mb: number;
