@@ -74,11 +74,24 @@ if ($PathEntries -notcontains $BinDir) {
     Write-Host "   Open a NEW terminal for PATH to take effect in other apps." -ForegroundColor Yellow
 }
 
-Write-Step "Starting Tylluan..."
-try {
-    $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start --profile portable" -NoNewWindow -PassThru -ErrorAction Stop
-} catch {
-    Write-Err "Failed to start Tylluan: $_"
+# `install --profile portable` writes tylluan.toml AND boots the kernel
+# itself (chdir's to the config dir first so the kernel finds it). If a
+# config already exists it refuses without --force, so start directly --
+# from the config dir, otherwise the kernel would not discover the file.
+$ConfigPath = Join-Path $DataDir "tylluan.toml"
+if (Test-Path $ConfigPath) {
+    Write-Step "Existing tylluan.toml found — keeping it. Starting kernel..."
+    try {
+        $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
+    } catch {
+        Write-Err "Failed to start Tylluan: $_"
+    }
+} else {
+    Write-Step "Installing portable profile (writes tylluan.toml + starts kernel)..."
+    & "$BinDir\tylluan-cli" install --profile portable
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "tylluan-cli install failed (exit code $LASTEXITCODE)"
+    }
 }
 
 Write-Step "Waiting for kernel to be ready..."
@@ -109,7 +122,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
     Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
-    Write-Host "  Config:    $DataDir\config.toml" -ForegroundColor Cyan
+    Write-Host "  Config:    $ConfigPath" -ForegroundColor Cyan
     Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
 } else {
     Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
