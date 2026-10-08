@@ -737,12 +737,18 @@ pub struct InferenceConfig {
     #[serde(default = "auto_select_device")]
     pub device: InferenceDevice,
     #[serde(default)]
-    pub llama: InferenceLlamaConfig,    /// Tarea Raíz 1 (2026-09-28): bounded queue + explicit rejection for the
+    pub llama: InferenceLlamaConfig,
+    /// Tarea Raíz 1 (2026-09-28): bounded queue + explicit rejection for the
     /// interactive inference path (embeddings + reranker). DEFAULT = legacy
     /// (unbounded wait, zero rejections) — backpressure is an explicit
     /// operator opt-in via `[inference.budget] max_queue_wait_secs > 0`.
     #[serde(default)]
     pub budget: crate::memory::inference_budget::InferenceBudgetConfig,
+    /// Maximum thread count for ONNX Runtime inference sessions and global pool.
+    /// When None, resolved from env vars (TYLLUAN_ORT_THREADS, ORT_NUM_THREADS)
+    /// or defaults to system parallelism.
+    #[serde(default)]
+    pub max_threads: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -833,6 +839,7 @@ impl Default for InferenceConfig {
             device: auto_select_device(),
             llama: InferenceLlamaConfig::default(),
             budget: crate::memory::inference_budget::InferenceBudgetConfig::default(),
+            max_threads: None,
         }
     }
 }
@@ -1910,6 +1917,14 @@ impl TylluanConfig {
                 "CRITICAL_SECURITY_TRIGGER: dev_mode is enabled but host is set to '{}'. Forcing host to '127.0.0.1' for safety.",
                 self.nexus.host
             );
+            eprintln!("\n==================================================================");
+            eprintln!("⚠️  CRITICAL_SECURITY_TRIGGER — INSECURE CONFIG AUTO-CORRECTED");
+            eprintln!(
+                "dev_mode=true + host='{}' → forcing host to '127.0.0.1'.",
+                self.nexus.host
+            );
+            eprintln!("Fix: set [nexus] host to \"127.0.0.1\" in tylluan.toml — dev_mode must stay local.");
+            eprintln!("==================================================================\n");
             self.nexus.host = "127.0.0.1".to_string();
         }
         // SSRF + env-var exfiltration guard for external providers

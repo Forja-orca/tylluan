@@ -38,6 +38,10 @@
 #
 # Verification / Run:
 #   cargo run --release -p tylluan-evals -- --suite longmemeval --limit 50
+#   # With thread cap (cafetera-friendly, prevents saturating all CPU cores):
+#   cargo run --release -p tylluan-evals -- --suite longmemeval --limit 50 --threads 4
+#   # Or via environment variable override:
+#   TYLLUAN_ORT_THREADS=4 cargo run --release -p tylluan-evals -- --suite longmemeval --limit 50
 
 set -euo pipefail
 

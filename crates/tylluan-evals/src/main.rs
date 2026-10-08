@@ -1,3 +1,5 @@
+#![allow(clippy::uninlined_format_args)]
+
 mod corpus;
 mod longmemeval;
 mod metrics;
@@ -25,7 +27,7 @@ enum CliMode {
     GenerateOracle { db_path: String, output: String },
 }
 
-fn parse_args() -> (CliMode, Option<String>) {
+fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
     let args: Vec<String> = std::env::args().collect();
     let mut suite = "synthetic".to_string();
     let mut limit: usize = 50;
@@ -36,6 +38,7 @@ fn parse_args() -> (CliMode, Option<String>) {
     let mut oracle_path = "data/idle_lab_oracle.json".to_string();
     let mut experiments: usize = 8;
     let mut save_path: Option<String> = None;
+    let mut threads: Option<usize> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -49,6 +52,12 @@ fn parse_args() -> (CliMode, Option<String>) {
             "--limit" | "-l" => {
                 if i + 1 < args.len() {
                     limit = args[i + 1].parse().unwrap_or(50);
+                    i += 1;
+                }
+            }
+            "--threads" | "-t" => {
+                if i + 1 < args.len() {
+                    threads = args[i + 1].parse().ok();
                     i += 1;
                 }
             }
@@ -93,7 +102,7 @@ fn parse_args() -> (CliMode, Option<String>) {
     }
 
     if generate_oracle {
-        return (CliMode::GenerateOracle { db_path, output: oracle_output }, save_path);
+        return (CliMode::GenerateOracle { db_path, output: oracle_output }, save_path, threads);
     }
 
     let suite = match suite.as_str() {
@@ -112,7 +121,7 @@ fn parse_args() -> (CliMode, Option<String>) {
         "coordinator" | "coord" => Suite::Coordinator,
         _ => Suite::Synthetic,
     };
-    (CliMode::Suite(suite), save_path)
+    (CliMode::Suite(suite), save_path, threads)
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -124,13 +133,18 @@ async fn main() {
     println!("  ╚═══════════════════════════════════════════╝");
     println!();
 
-    let (mode, save_path) = parse_args();
+    let (mode, save_path, threads) = parse_args();
 
     if let CliMode::GenerateOracle { db_path, output } = &mode {
         println!("  Mode: GENERATE IDLELAB ORACLE");
         println!();
         runner::generate_oracle(db_path, std::path::Path::new(output)).await;
         return;
+    }
+
+    // Configure ONNX thread cap before loading embedding or rerank engines
+    if let Some(applied) = tylluan_kernel::router::embeddings::apply_onnx_thread_cap(threads) {
+        println!("  ONNX thread pool capped to {applied} intra-threads (inter=1)");
     }
 
     println!("  Loading embedding engine (fastembed BGE-M3)...");

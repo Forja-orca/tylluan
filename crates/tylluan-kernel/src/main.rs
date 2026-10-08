@@ -258,46 +258,8 @@ fn enforce_security_guard(config: &TylluanConfig, cli_token: &Option<String>) {
     }
 }
 
-/// Checks whether the ONNX Runtime shared library is actually loadable,
-/// WITHOUT ever calling into `ort` -- see the long comment at this
-/// function's call site for why this exists (catch_unwind cannot save us
-/// under `panic = "abort"`, confirmed live 2026-08-23 via G2's CI job).
-///
-/// Mirrors `ort`'s own load-dynamic resolution order: `ORT_DYLIB_PATH` env
-/// var first if set (same variable `ort` and this project's docs already
-/// reference for CUDA/custom builds), otherwise the platform-default shared
-/// library name resolved through the OS's normal dynamic-linker search path
-/// (LD_LIBRARY_PATH on Linux, PATH on Windows, DYLD_LIBRARY_PATH on macOS --
-/// all handled by `libloading`/`dlopen`/`LoadLibrary` themselves, nothing
-/// this function needs to reimplement).
-fn onnx_runtime_available() -> bool {
-    let candidate = std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "onnxruntime.dll".to_string()
-        } else if cfg!(target_os = "macos") {
-            "libonnxruntime.dylib".to_string()
-        } else {
-            "libonnxruntime.so".to_string()
-        }
-    });
-    // Safety: we only probe loadability and immediately drop the handle --
-    // no symbols are looked up, no code from the library is executed beyond
-    // whatever the dynamic linker itself runs on load (identical to what
-    // `ort` would trigger anyway if this check passes and it loads for
-    // real). `libloading::Library::new` is unsafe because arbitrary
-    // dynamic-library load/init code is inherently unsafe in general, not
-    // because of anything specific to this call.
-    match unsafe { libloading::Library::new(&candidate) } {
-        Ok(lib) => {
-            drop(lib);
-            true
-        }
-        Err(e) => {
-            info!("🔍 ONNX Runtime probe: '{}' not loadable ({}) -- will skip ort entirely, BM25-only", candidate, e);
-            false
-        }
-    }
-}
+// Re-exported from tylluan_kernel::router::embeddings for local callers and probe tests
+use tylluan_kernel::router::embeddings::onnx_runtime_available;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -391,6 +353,9 @@ async fn main() -> anyhow::Result<()> {
     
     // Always validate security after all possible overrides (CLI, ENV, File)
     config.validate_security();
+
+    // ─── ONNX Thread Pool Cap ──────────────────────────────────────────
+    tylluan_kernel::router::embeddings::apply_onnx_thread_cap(config.inference.max_threads);
 
     // ─── Low Memory Detection ──────────────────────────────────────────
     let low_memory_mode = detect_low_memory_mode(config.low_memory_mode);
