@@ -1244,16 +1244,25 @@ mod tests {
         assert_eq!(resolve_model_type("e5-large"), "multilingual-e5-large");
     }
 
+    // WHY #[ignore] (hallazgo #11, arqueologia git): el ignore original viene
+    // del commit inicial (6de098d, v0.1.0) — EmbeddingEngine::load usa fastembed,
+    // que AUTO-DESCARGA el modelo al cache local en el primer run (bge-m3 = 1.2GB),
+    // y la inferencia CPU tarda ~50s. No es que esten rotos: ambos PASAN
+    // (verificado 2026-10-08, 2/2 ok en 50.69s con el cache del kernel ya
+    // provisionado). Ejecutar manualmente: cargo test -p tylluan-kernel --lib
+    // test_real_inference -- --ignored --test-threads=1
     #[test]
-    #[ignore]
+    #[ignore = "real ONNX inference: fastembed auto-downloads 1.2GB (bge-m3) on first run and takes ~50s CPU — run with `-- --ignored` (see comment above)"]
     fn test_real_inference_bge_m3() {
         let engine = EmbeddingEngine::load("bge-m3").expect("Failed to load engine");
         let vector = engine.embed("Hello, TylluanNexus sovereignty").expect("Inference failed");
         assert_eq!(vector.len(), 1024, "BGE-M3 should produce 1024-dim vectors");
     }
 
+    // Mismo motivo que test_real_inference_bge_m3 (hallazgo #11): auto-descarga
+    // + latencia CPU real, no rotura. Pasan verificados con -- --ignored.
     #[test]
-    #[ignore]
+    #[ignore = "real ONNX inference: model auto-download + ~50s CPU — run with `-- --ignored` (see test_real_inference_bge_m3 comment)"]
     fn test_real_inference_minilm() {
         let engine = EmbeddingEngine::load("minilm").expect("Failed to load engine");
         let vector = engine.embed("Hello from portable mode").expect("Inference failed");
