@@ -1,4 +1,4 @@
-use crate::registry::guild_process::{GuildRegistry, GuildStatus, GuildCallStats};
+use crate::registry::guild_process::{GuildRegistry, GuildStatus, GuildCallStats, GuardedKill};
 use anyhow::Result;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -67,6 +67,44 @@ fn is_transport_failure(call_str: &str) -> bool {
     call_str.contains("Transport") || call_str.contains("disconnected")
 }
 
+/// Structured classification of one retry-loop attempt, captured where the
+/// result is constructed instead of re-parsed from the serialized JSON.
+/// T981: sniffing `call_str.contains("GUILD_TIMEOUT" | "disconnected")` let a
+/// legitimate tool output that happened to contain those literals steer the
+/// loop into killing + re-running a call that had already succeeded (double
+/// side effects), or into treating a business error as a dead transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AttemptOutcome {
+    /// `Ok` result with `is_error` unset/false — the attempt is done.
+    Success,
+    /// Our own deadline fired (GUILD_TIMEOUT built below) — respawn + retry.
+    Timeout,
+    /// Proxy reported a dead transport — kill (if idle) + retry.
+    TransportFailure,
+    /// Business/other error — return immediately, no retry.
+    TerminalError,
+}
+
+/// Classify a raw tool result BEFORE any marker string is formatted from it:
+/// only `is_error` is authoritative for a result the guild actually returned.
+fn classify_ok(res: &rmcp::model::CallToolResult) -> AttemptOutcome {
+    if res.is_error.unwrap_or(false) {
+        AttemptOutcome::TerminalError
+    } else {
+        AttemptOutcome::Success
+    }
+}
+
+/// Classify a proxy-level error, scoped to the error text itself — the only
+/// text that can legitimately describe the transport.
+fn classify_err(err_text: &str) -> AttemptOutcome {
+    if is_transport_failure(err_text) {
+        AttemptOutcome::TransportFailure
+    } else {
+        AttemptOutcome::TerminalError
+    }
+}
+
 impl RegistryActor {
     /// Create the actor + handle pair. The Arc<RwLock<GuildRegistry>> is shared:
     /// the actor serializes mutations through messages, but the same Arc can
@@ -112,11 +150,22 @@ impl RegistryActor {
                                     let _ = resp.send(Err(anyhow::anyhow!("Guild '{guild_name}' not found")));
                                     return;
                                 }
-                                if attempt > 0
-                                    && let Some(guild) = reg.guilds.get_mut(&guild_name) {
-                                        tracing::warn!("🛑 [Retry] Killing guild '{}' for fresh spawn", guild_name);
-                                        let _ = guild.kill().await;
+                                if attempt > 0 {
+                                    // Fresh spawn for this retry — but only when no
+                                    // other caller is mid-call: kill() yanks the
+                                    // proxy out from under concurrent callers (T981).
+                                    match reg.kill_guild_if_idle(&guild_name).await {
+                                        GuardedKill::Killed => tracing::warn!(
+                                            "🛑 [Retry] Killing guild '{}' for fresh spawn",
+                                            guild_name
+                                        ),
+                                        GuardedKill::InFlight => tracing::warn!(
+                                            "⚠️ [Retry] Guild '{}' has callers in flight — kill skipped, retrying same process",
+                                            guild_name
+                                        ),
+                                        GuardedKill::Missing => {}
                                     }
+                                }
                                 let needs_start = reg.guilds.get(&guild_name).map(|g| !g.is_running()).unwrap_or(false);
                                 if needs_start {
                                     let ao = reg.guilds.get(&guild_name).map(|g| g.always_on).unwrap_or(false);
@@ -166,16 +215,25 @@ impl RegistryActor {
                                 .map_err(|_| anyhow::anyhow!("Guild '{guild_name}' semaphore closed"));
 
                             let call_start = std::time::Instant::now();
+                            // Outcome is assigned on EVERY arm below — the
+                            // compiler enforces it, so no arm can forget to
+                            // classify its own result.
+                            let outcome;
                             let call_result = match permit {
                                 Ok(_permit) => {
                                     let call_fut = proxy.call_tool(params.clone());
                                     if tool_timeout.is_some() {
                                         match tokio::time::timeout(timeout_dur, call_fut).await {
-                                            Ok(Ok(res)) => res,
+                                            Ok(Ok(res)) => {
+                                                outcome = classify_ok(&res);
+                                                res
+                                            }
                                             Ok(Err(e)) => {
+                                                outcome = classify_err(&e.to_string());
                                                 crate::registry::proxy::error_result(&format!("GUILD_ERROR|{guild_name}|{e}"))
                                             }
                                             Err(_) => {
+                                                outcome = AttemptOutcome::Timeout;
                                                 crate::registry::proxy::error_result(&format!("GUILD_TIMEOUT|{guild_name}|{timeout_secs}s"))
                                             }
                                         }
@@ -185,14 +243,19 @@ impl RegistryActor {
                                             guild_name, params.name
                                         );
                                         match call_fut.await {
-                                            Ok(res) => res,
+                                            Ok(res) => {
+                                                outcome = classify_ok(&res);
+                                                res
+                                            }
                                             Err(e) => {
+                                                outcome = classify_err(&e.to_string());
                                                 crate::registry::proxy::error_result(&format!("GUILD_ERROR|{guild_name}|{e}"))
                                             }
                                         }
                                     }
                                 }
                                 Err(e) => {
+                                    outcome = AttemptOutcome::TerminalError;
                                     crate::registry::proxy::error_result(&format!("Guild '{guild_name}' semaphore error: {e}"))
                                 }
                             };
@@ -218,23 +281,20 @@ impl RegistryActor {
                                 }
                             }
 
-                            // Step 5: Success or decide whether to retry.
-                            // Only retry on TIMEOUT (process alive but slow) — a genuine
-                            // transport error (disconnected/crash) won't improve with a
-                            // kill+respawn at the caller level; let the supervisor handle it.
-                            let call_str = serde_json::to_string(&call_result).unwrap_or_default();
-                            let is_success = !call_result.is_error.unwrap_or(false)
-                                && !call_str.contains("GUILD_TIMEOUT")
-                                && !call_str.contains("GUILD_ERROR");
-                            let is_timeout = call_str.contains("GUILD_TIMEOUT");
-
-                            if is_success {
-                                final_result = Some(Ok(call_result));
-                                break;
-                            }
-
-                            if !is_timeout {
-                                if is_transport_failure(&call_str) {
+                            // Step 5: Success or decide whether to retry. The
+                            // decision comes from the structured `outcome`
+                            // captured while building the result — never from
+                            // re-parsing the result's text (T981: substring
+                            // sniffing over the serialized JSON let tool output
+                            // containing "GUILD_TIMEOUT"/"disconnected" fake a
+                            // timeout or a dead transport and re-run a call
+                            // that had already succeeded).
+                            match outcome {
+                                AttemptOutcome::Success => {
+                                    final_result = Some(Ok(call_result));
+                                    break;
+                                }
+                                AttemptOutcome::TransportFailure => {
                                     // The child process died behind the kernel's back (external
                                     // kill, OOM, stdio closed): the proxy slot stays Some(dead),
                                     // is_running() keeps reporting true, and ensure_guild_running
@@ -243,35 +303,44 @@ impl RegistryActor {
                                     // so for LAZY guilds this cleanup + retry is the only recovery
                                     // path. kill() also resets the T13 backoff since the death was
                                     // not a spawn crash. Lifecycle bug observed live 2026-09-13.
+                                    // Guarded kill: never fire while another caller is mid-call.
                                     tracing::warn!(
                                         "🛑 [Actor] Guild '{}' transport failure — killing dead proxy so the next attempt respawns it fresh",
                                         guild_name
                                     );
                                     {
                                         let mut reg = registry.write().await;
-                                        if let Some(guild) = reg.guilds.get_mut(&guild_name) {
-                                            let _ = guild.kill().await;
+                                        if let GuardedKill::InFlight = reg.kill_guild_if_idle(&guild_name).await {
+                                            tracing::warn!(
+                                                "⚠️ [Actor] Guild '{}' has a call in flight — kill skipped this attempt",
+                                                guild_name
+                                            );
                                         }
                                     }
                                     attempt += 1;
                                     continue;
                                 }
-                                // Crash / business error — return immediately, no retry.
-                                tracing::warn!(
-                                    "⚠️ [Actor] Guild '{}' tool call returned error on attempt {} — not retrying crash: {:?}",
-                                    guild_name, attempt + 1, call_result
-                                );
-                                final_result = Some(Ok(call_result));
-                                break;
+                                AttemptOutcome::TerminalError => {
+                                    // Crash / business error — return immediately, no retry.
+                                    tracing::warn!(
+                                        "⚠️ [Actor] Guild '{}' tool call returned error on attempt {} — not retrying crash: {:?}",
+                                        guild_name, attempt + 1, call_result
+                                    );
+                                    final_result = Some(Ok(call_result));
+                                    break;
+                                }
+                                AttemptOutcome::Timeout => {
+                                    // Timeout — kill+respawn and retry with more patience.
+                                    // The kill itself happens in Step 1 of the next
+                                    // iteration, also behind the in-flight guard.
+                                    tracing::warn!(
+                                        "⏳ [Actor] Guild '{}' timed out on attempt {}/{} ({}s) — respawning and retrying",
+                                        guild_name, attempt + 1, timeouts_secs.len(), timeout_secs
+                                    );
+                                    final_result = Some(Ok(call_result));
+                                    attempt += 1;
+                                }
                             }
-
-                            // Timeout — kill+respawn and retry with more patience.
-                            tracing::warn!(
-                                "⏳ [Actor] Guild '{}' timed out on attempt {}/{} ({}s) — respawning and retrying",
-                                guild_name, attempt + 1, timeouts_secs.len(), timeout_secs
-                            );
-                            final_result = Some(Ok(call_result));
-                            attempt += 1;
                         }
 
                         // bwc-d0fb0812: index guild outputs (if any) after the
@@ -538,7 +607,8 @@ impl RegistryHandle {
 
 #[cfg(test)]
 mod tests {
-    use super::is_transport_failure;
+    use super::{classify_err, classify_ok, is_transport_failure, AttemptOutcome};
+    use rmcp::model::{CallToolResult, Content};
 
     #[test]
     fn transport_failure_detection() {
@@ -554,5 +624,40 @@ mod tests {
         ));
         // Timeouts are handled by a different branch.
         assert!(!is_transport_failure("GUILD_TIMEOUT|coloquio|30s"));
+    }
+
+    #[test]
+    fn classification_ignores_marker_substrings_in_tool_output() {
+        // T981 regression: the retry loop used to re-parse the serialized
+        // result for "GUILD_TIMEOUT"/"disconnected" — a successful tool output
+        // containing those literals was classified as a timeout, killing and
+        // re-running a call that had actually succeeded (double side effects).
+        let echo = CallToolResult {
+            content: vec![Content::text("GUILD_TIMEOUT|bash|30s — peer disconnected")],
+            is_error: Some(false),
+        };
+        assert_eq!(classify_ok(&echo), AttemptOutcome::Success);
+
+        // A genuine tool error stays terminal even if its text mentions the
+        // transport — only proxy-level errors describe the transport.
+        let business = CallToolResult {
+            content: vec![Content::text(
+                "GUILD_ERROR|bash|Transport probe ok, but requires argument(s): task",
+            )],
+            is_error: Some(true),
+        };
+        assert_eq!(classify_ok(&business), AttemptOutcome::TerminalError);
+    }
+
+    #[test]
+    fn classification_scopes_transport_check_to_proxy_error_text() {
+        assert_eq!(
+            classify_err("Transport(Custom { kind: Other, error: \"disconnected\" })"),
+            AttemptOutcome::TransportFailure
+        );
+        assert_eq!(
+            classify_err("requires argument(s): task"),
+            AttemptOutcome::TerminalError
+        );
     }
 }
