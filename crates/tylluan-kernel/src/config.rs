@@ -1785,7 +1785,9 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn default_host() -> String { "0.0.0.0".into() }
+// Invariant: localhost-only by default (README / ARCHITECTURE.md / Security Claims).
+// Binding 0.0.0.0 is only permitted via explicit profile/config (e.g. tylluan.docker.toml) or CLI flag.
+fn default_host() -> String { "127.0.0.1".into() }
 fn default_port() -> u16 { 3030 }
 fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
@@ -2061,6 +2063,38 @@ mod tests {
         // is what actually governs a tylluan.toml that omits [p2p] entirely.
         let parsed: TylluanConfig = toml::from_str("").unwrap();
         assert!(!parsed.p2p.enabled, "serde default for p2p.enabled must also be false");
+    }
+
+    /// Audit Finding #2: default_host() must be "127.0.0.1" to uphold the
+    /// declared "localhost-only by default" security invariant (README / ARCHITECTURE.md).
+    /// Any 0.0.0.0 binding must be explicitly configured (e.g., Docker profile).
+    #[test]
+    fn test_default_host_is_localhost() {
+        let config = TylluanConfig::default();
+        assert_eq!(
+            config.nexus.host, "127.0.0.1",
+            "TylluanConfig::default().nexus.host must be 127.0.0.1"
+        );
+
+        let nexus_default = NexusConfig::default();
+        assert_eq!(
+            nexus_default.host, "127.0.0.1",
+            "NexusConfig::default().host must be 127.0.0.1"
+        );
+
+        // Deserializing an empty TOML string must default host to 127.0.0.1
+        let parsed_empty: TylluanConfig = toml::from_str("").unwrap();
+        assert_eq!(
+            parsed_empty.nexus.host, "127.0.0.1",
+            "Serde default for empty TOML must resolve host to 127.0.0.1"
+        );
+
+        // Deserializing [nexus] without host must also default to 127.0.0.1
+        let parsed_nexus: TylluanConfig = toml::from_str("[nexus]\nport = 47004\n").unwrap();
+        assert_eq!(
+            parsed_nexus.nexus.host, "127.0.0.1",
+            "Serde default for [nexus] without host must resolve to 127.0.0.1"
+        );
     }
 
     #[test]
