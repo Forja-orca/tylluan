@@ -83,6 +83,49 @@ pub fn get_model_registry() -> Vec<ModelMeta> {
             url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/config.json".to_string(),
             size_expected: 1_000,
         },
+        // --- Core Embeddings: BGE-M3 (BAAI, MIT) ---
+        ModelMeta {
+            name: "BGE-M3-ONNX-Model".to_string(),
+            path: "bge-m3/onnx/model.onnx".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/model.onnx".to_string(),
+            size_expected: 1_140_000_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-ONNX-Data".to_string(),
+            path: "bge-m3/onnx/model.onnx_data".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/model.onnx_data".to_string(),
+            size_expected: 2_200_000_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-ONNX-Constant".to_string(),
+            path: "bge-m3/onnx/Constant_7_attr__value".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/Constant_7_attr__value".to_string(),
+            size_expected: 1_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-Tokenizer".to_string(),
+            path: "bge-m3/tokenizer.json".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/tokenizer.json".to_string(),
+            size_expected: 17_100_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-Config".to_string(),
+            path: "bge-m3/config.json".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/config.json".to_string(),
+            size_expected: 1_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-SpecialTokens".to_string(),
+            path: "bge-m3/special_tokens_map.json".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/special_tokens_map.json".to_string(),
+            size_expected: 1_000,
+        },
+        ModelMeta {
+            name: "BGE-M3-TokenizerConfig".to_string(),
+            path: "bge-m3/tokenizer_config.json".to_string(),
+            url: "https://huggingface.co/BAAI/bge-m3/resolve/main/tokenizer_config.json".to_string(),
+            size_expected: 1_500,
+        },
     ]
 }
 
@@ -289,4 +332,55 @@ pub fn import_state(input_path: &Path, target_dir: &Path) -> Result<()> {
     info!("✅ Import complete. Sovereign state restored at {:?}", target_dir);
     info!("💡 Restart the kernel to apply changes.");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_contains_bge_m3_onnx_and_tokenizer() {
+        let registry = get_model_registry();
+        let paths: Vec<String> = registry.iter().map(|m| m.path.clone()).collect();
+
+        assert!(
+            paths.contains(&"bge-m3/onnx/model.onnx".to_string()),
+            "BGE-M3 ONNX graph missing from registry: {paths:?}"
+        );
+        assert!(
+            paths.contains(&"bge-m3/onnx/model.onnx_data".to_string()),
+            "BGE-M3 ONNX external tensor missing from registry: {paths:?}"
+        );
+        assert!(
+            paths.contains(&"bge-m3/tokenizer.json".to_string()),
+            "BGE-M3 tokenizer missing from registry: {paths:?}"
+        );
+    }
+
+    #[test]
+    fn registry_entries_have_valid_metadata_and_unique_paths() {
+        let registry = get_model_registry();
+        let mut seen_paths = std::collections::HashSet::new();
+
+        for meta in &registry {
+            assert!(!meta.name.is_empty(), "ModelMeta name cannot be empty");
+            assert!(!meta.path.is_empty(), "ModelMeta path cannot be empty");
+            assert!(
+                meta.url.starts_with("https://"),
+                "ModelMeta URL must be https, got: {}",
+                meta.url
+            );
+            assert!(
+                meta.size_expected > 0,
+                "ModelMeta size_expected must be > 0, got {} for {}",
+                meta.size_expected,
+                meta.name
+            );
+            assert!(
+                seen_paths.insert(&meta.path),
+                "Duplicate path in registry: {}",
+                meta.path
+            );
+        }
+    }
 }

@@ -88,6 +88,23 @@ fn load_memory_db_path(toml_path: &Path) -> Result<Option<PathBuf>> {
         .map(PathBuf::from))
 }
 
+/// Read `[silva].db_path` from tylluan.toml. `Ok(None)` when the file or the
+/// key is absent (then the caller falls back to `./data/silva.db`).
+fn load_silva_db_path(toml_path: &Path) -> Result<Option<PathBuf>> {
+    let text = match fs::read_to_string(toml_path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", toml_path.display())),
+    };
+    let parsed: toml::Value =
+        toml::from_str(&text).with_context(|| format!("parsing {}", toml_path.display()))?;
+    Ok(parsed
+        .get("silva")
+        .and_then(|m| m.get("db_path"))
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from))
+}
+
 fn data_dir_of(memory_db: &Path) -> PathBuf {
     memory_db
         .parent()
@@ -96,16 +113,25 @@ fn data_dir_of(memory_db: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("./data"))
 }
 
-/// Default sources: `[memory].db_path` from tylluan.toml (fallback
-/// `./data/tylluan.db`) plus `peers.db` next to it — mirrors where the kernel
-/// keeps them (config.rs `[memory].db_path`, http/mod.rs `./data/peers.db`).
+/// Default sources: `[silva].db_path` from tylluan.toml (fallback `./data/silva.db`),
+/// `[memory].db_path` from tylluan.toml (fallback `./data/tylluan.db`) plus `peers.db`,
+/// `mailbox.db` and `audit.db` next to them — mirrors where the kernel keeps them.
 /// Extras (`--db`) are names relative to that data dir, or full paths.
 fn resolve_sources(extras: &[String]) -> Result<Vec<PathBuf>> {
-    let memory = load_memory_db_path(Path::new("tylluan.toml"))?
+    let toml = Path::new("tylluan.toml");
+    let silva = load_silva_db_path(toml)?
+        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+    let memory = load_memory_db_path(toml)?
         .unwrap_or_else(|| PathBuf::from("./data/tylluan.db"));
-    let data_dir = data_dir_of(&memory);
+    let data_dir = data_dir_of(&silva);
     let mut sources: Vec<PathBuf> = Vec::new();
-    for candidate in [memory, data_dir.join("peers.db")] {
+    for candidate in [
+        silva,
+        memory,
+        data_dir.join("peers.db"),
+        data_dir.join("mailbox.db"),
+        data_dir.join("audit.db"),
+    ] {
         if !sources.contains(&candidate) {
             sources.push(candidate);
         }
@@ -272,10 +298,10 @@ pub(crate) fn plan_restore(dir: &Path) -> Result<RestorePlan> {
     }
 
     let ts = Local::now().format("%Y%m%d_%H%M%S");
-    let data_dir = data_dir_of(
-        &load_memory_db_path(Path::new("tylluan.toml"))?
-            .unwrap_or_else(|| PathBuf::from("./data/tylluan.db")),
-    );
+    let toml = Path::new("tylluan.toml");
+    let silva = load_silva_db_path(toml)?
+        .unwrap_or_else(|| PathBuf::from("./data/silva.db"));
+    let data_dir = data_dir_of(&silva);
     Ok(RestorePlan { steps, pre_dir: data_dir.join(format!("pre_restore_{ts}")) })
 }
 
@@ -288,10 +314,10 @@ pub(crate) async fn kernel_running(port: u16) -> Result<Option<String>> {
         .build()
         .context("building HTTP client")?;
     let url = format!("http://127.0.0.1:{port}/health");
-    if let Ok(resp) = client.get(&url).send().await {
-        if resp.status().is_success() {
-            return Ok(Some(format!("health endpoint {url} is responding")));
-        }
+    if let Ok(resp) = client.get(&url).send().await
+        && resp.status().is_success()
+    {
+        return Ok(Some(format!("health endpoint {url} is responding")));
     }
 
     let mut sys = System::new();
@@ -497,7 +523,7 @@ mod tests {
         let src = dir.path().join("tylluan.db");
         make_db(&src, "payload");
         let out = dir.path().join("out");
-        backup_files(&out, &[src.clone()]).unwrap();
+        backup_files(&out, std::slice::from_ref(&src)).unwrap();
 
         let db = out.join("tylluan.db");
         let full_len = fs::metadata(&db).unwrap().len();
@@ -528,7 +554,7 @@ mod tests {
         make_db(&src, "old-state");
 
         let out = dir.path().join("out");
-        backup_files(&out, &[src.clone()]).unwrap();
+        backup_files(&out, std::slice::from_ref(&src)).unwrap();
 
         // Simulate live state diverging after the backup + a stale WAL pair.
         make_db(&src, "new-state");
@@ -570,5 +596,22 @@ mod tests {
         if let Some(reason) = found {
             assert!(reason.contains("kernel process"), "unexpected: {reason}");
         }
+    }
+
+    #[test]
+    fn resolve_sources_includes_silva_db_by_default() {
+        let sources = resolve_sources(&[]).unwrap();
+        let file_names: Vec<String> = sources
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        assert!(
+            file_names.contains(&"silva.db".to_string()),
+            "default sources must include silva.db, got: {file_names:?}"
+        );
+        assert!(
+            file_names.contains(&"peers.db".to_string()),
+            "default sources must include peers.db, got: {file_names:?}"
+        );
     }
 }
