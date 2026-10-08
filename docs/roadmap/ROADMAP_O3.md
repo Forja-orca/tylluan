@@ -528,9 +528,9 @@ M14-F Phase 3, M18, M21 (P0-P4), M22, M23-P1, M25, M26, M27, M28, M29, M30, M31 
 | `tylluan doctor` | `tylluan-cli` | No implementado | M19-P1 |
 | Profile wizard | `tylluan-cli` | No implementado | M19-P2 |
 | Comparative benchmarks | `benchmarks/` | Solo internos, sin comparativa vs Letta/Mem0/Zep | M28-P0 |
-| Backup/restore de SilvaDB | `memory/backup.rs` existe, no expuesto | Sin comando CLI; hoy solo vía parar kernel + copiar `.db`/`.db-wal`, o `sqlite3 .backup` en caliente. Riesgo real de backup inconsistente si se copia en caliente sin `.backup`. Hallazgo de informe externo verificado 2026-10-04, confirmado contra código real. | Sin asignar |
-| Pre-check de config insegura al arranque | — (no existe) | `host=0.0.0.0` + `dev_mode=true` solo está documentado como invariante (CLAUDE.md regla 5), sin guard automático que lo bloquee antes de arrancar. Script trivial (~10 líneas) propuesto por informe externo 2026-10-04. | Sin asignar |
-| BGE-M3 ausente de `get_model_registry()` | `maintenance.rs:41-87` | `tylluan-cli download-models` descarga SmolLM2-135M/Qwen2.5-1.5B/Qwen2.5-0.5B/Nomic-Embed-v2, pero NUNCA incluyó BGE-M3 -- causa raíz confirmada del bloqueo de re-run de LongMemEval (Antigravity, 2026-10-04, T916, cita `maintenance.rs:41-87` + `fastembed-5.8.0/src/models/text_embedding.rs:282-294`). Mientras no se añada al registro, el aprovisionamiento es manual vía `huggingface-cli download BAAI/bge-m3` (receta completa en T916, script en `scripts/download_longmemeval.sh`). | Sin asignar |
+| ~~Backup/restore de SilvaDB~~ | `tylluan-cli backup/restore` + `BackupManager::backup_all()` | ✅ **CERRADO 2026-10-08** (Antigravity, verificado por TL): `resolve_sources()` incluye `silva.db` por defecto (leído de `[silva].db_path`); `backup_all()` usa `VACUUM INTO` para backups atómicos en caliente con WAL, fallback a copia simple. | 2026-10-08 |
+| Pre-check de config insegura al arranque | — (no existe) | `host=0.0.0.0` + `dev_mode=true` solo está documentado como invariante (CLAUDE.md regla 5), sin guard automático que lo bloquee antes de arrancar. Script trivial (~10 líneas) propuesto por informe externo 2026-10-04. Asignado a Deep (T981). | Asignado |
+| ~~BGE-M3 ausente de `get_model_registry()`~~ | `maintenance.rs` | ✅ **CERRADO 2026-10-08** (Antigravity, verificado por TL): 7 entradas canónicas de `BAAI/bge-m3` añadidas al registro (onnx/model.onnx, onnx/model.onnx_data, tokenizer, config, etc.), con tests de validación de metadata. | 2026-10-08 |
 
 ## Investigación pendiente (backlog, sin fecha)
 
