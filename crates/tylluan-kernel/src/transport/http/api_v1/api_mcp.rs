@@ -284,7 +284,7 @@ pub async fn update_mcp_server_handler(
 /// POST /api/v1/mcp/external/discover
 /// Scans known MCP config files on this system and registers new servers as inactive.
 /// Sources: Claude Desktop (claude_desktop_config.json), Claude Code (~/.claude/settings.json).
-/// Self-references (any server pointing to tylluan-nexus.exe or localhost:3030) are skipped.
+/// Self-references (any server pointing to tylluan-nexus.exe or localhost:47004/3030) are skipped.
 pub async fn discover_mcp_servers_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let mut discovered: Vec<String> = Vec::new();
     let mut skipped_existing: Vec<String> = Vec::new();
@@ -321,10 +321,11 @@ pub async fn discover_mcp_servers_handler(State(state): State<Arc<HttpState>>) -
         let servers_obj = json.get("mcpServers").and_then(|v| v.as_object());
         if let Some(servers) = servers_obj {
             for (name, def) in servers {
-                // Skip self-references: any command containing tylluan-nexus or url pointing to :3030
+                // Skip self-references: any command containing tylluan-nexus or url pointing to :47004/:3030
                 let cmd = def.get("command").and_then(|v| v.as_str()).unwrap_or("");
                 let url = def.get("url").and_then(|v| v.as_str()).unwrap_or("");
                 let is_self = cmd.to_lowercase().contains("tylluan-nexus")
+                    || url.contains(":47004")
                     || url.contains(":3030")
                     || name == "tylluannexus-o3";
                 if is_self {
