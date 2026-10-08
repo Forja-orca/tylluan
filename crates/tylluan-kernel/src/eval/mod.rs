@@ -80,7 +80,7 @@ pub async fn run_longmemeval_s(
 
     // Phase 1: Write all documents as deterministic eval nodes, capture their ids
     for (idx, doc) in data.documents.iter().enumerate() {
-        let node_id = format!("eval:{}", idx);
+        let node_id = format!("eval:{idx}");
         let meta = serde_json::json!({
             "source": "longmemeval-s",
             "category": doc.category,
