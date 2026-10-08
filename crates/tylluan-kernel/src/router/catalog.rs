@@ -140,7 +140,12 @@ fn guild_overrides() -> HashMap<&'static str, (GuildWeight, Vec<&'static str>)> 
     m.insert("cron_scheduler", (GuildWeight::Light, vec!["command"]));
     m.insert("sequential_thinking", (GuildWeight::Medium, vec!["prompt"]));
     m.insert("coloquio_digest", (GuildWeight::Medium, vec!["channel_id"]));
-    m.insert("whats_new", (GuildWeight::Light, vec!["channel_id"]));
+    // Fixed 2026-10-08: whats_new(agent_id, query, intent, command, limit) in
+    // coloquio.py has no channel_id param at all -- it operates across every
+    // channel for the caller's own unread cursor. The previous entry here
+    // demanded an argument the tool doesn't accept, found while auditing this
+    // table for the handler_do required_args gate removal.
+    m.insert("whats_new", (GuildWeight::Light, vec![]));
     m.insert("council", (GuildWeight::Medium, vec!["query"]));
     m.insert("mcp_bridge", (GuildWeight::Light, vec![]));
     m.insert("monitor", (GuildWeight::Light, vec![]));

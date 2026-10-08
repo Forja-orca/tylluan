@@ -968,28 +968,47 @@ async fn resolve_and_prepare_tool_call(
         }
     }
 
+    // Pre-execution required_args hard-fail gate REMOVED for text-backfilled args
+    // (2026-10-08, architectural fix for simple-harness MCP clients -- Hermes/Qwen
+    // Desktop could not recover from this; see Coloquio thread of that date).
+    //
+    // Root cause: the old gate used ITS OWN rigid prefix-matching (coloquio_utils's
+    // READ_PREFIXES et al.) to decide whether an arg was "provided" -- far more
+    // rigid than the natural-language fallback parsing each guild's own Python
+    // tool already has (confirmed: bash.py `command or intent`, coloquio.py
+    // `_extract_channel_and_rest`, websearch.py, deep_web_research.py,
+    // code_reviewer.py). A client phrasing a request in a way the gate's narrow
+    // prefix list didn't recognize got a hard MISSING_ARGS failure even though the
+    // guild tool it never reached would have handled it fine.
+    //
+    // Audited before removal: of the ~30 guilds declaring required_args, every
+    // value EXCEPT `path` and `channel_id` is unconditionally backfilled above
+    // with the raw intent text (`"command": intent, "query": intent, "prompt":
+    // intent, "url": url_hint, ...`) -- never empty, so the old gate was already
+    // a near-no-op for those. `channel_id` guilds (coloquio family) return a
+    // clean in-band error on empty input (confirmed in coloquio.py), so no gate
+    // is needed there either.
+    //
+    // `path` is different and kept gated below: when `extract_path_from_intent`
+    // finds nothing, `path_hint == "."` and the block above DELIBERATELY skips
+    // setting "path"/"directory"/"cwd" at all -- which would let several guilds'
+    // OWN Python defaults (`path: str = "."`, confirmed in git.py/code.py) silently
+    // execute against the kernel's own working directory instead of failing loudly.
+    // That silent-wrong-location risk is real (git_add, code_graph, audit, ingest,
+    // etc. all require "path"), so it keeps an explicit, narrow refusal.
     if let Some(guild_desc) = server.matcher.available_guilds()
         .iter().find(|g| g.name == guild_name)
-        && !guild_desc.required_args.is_empty()
-        && let Some(obj) = tool_args.as_object() {
-            let missing: Vec<&str> = guild_desc.required_args.iter()
-                .filter(|arg| {
-                    let val = obj.get(*arg).and_then(|v| v.as_str()).unwrap_or("");
-                    val.is_empty()
-                })
-                .map(|s| s.as_str())
-                .collect();
-            if !missing.is_empty() {
-                let missing_list = missing.join(", ");
-                let example = format!("tylluan_do(intent='...', {}<value>)", missing[0]);
-                return Err(error_result(&format!(
-                    "{} Error: guild '{guild_name}' requires argument(s): {missing_list}. \
-                     Provide them explicitly: {example}. \
-                     Check guild documentation for required fields.",
-                    error_prefixes::MISSING_ARGS
-                )));
-            }
-        }
+        && guild_desc.required_args.iter().any(|a| a == "path")
+        && path_hint == "."
+    {
+        return Err(error_result(&format!(
+            "{} Error: guild '{guild_name}' needs a file/directory path, and none could be \
+             extracted from the intent text. Provide one explicitly: \
+             tylluan_do(intent='...', path='<path>'). Refusing rather than silently \
+             operating on the kernel's own working directory.",
+            error_prefixes::MISSING_ARGS
+        )));
+    }
 
     let call_params = CallToolRequestParam {
         name: tool_name.clone().into(),
