@@ -458,6 +458,135 @@ pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Op
     Some(fingerprint_from_parts(&parts))
 }
 
+/// Checks whether the ONNX Runtime shared library is actually loadable,
+/// WITHOUT ever calling into `ort` -- see the long comment at this
+/// function's call site in main.rs (catch_unwind cannot save us under
+/// `panic = "abort"`, confirmed live 2026-08-23 via G2's CI job).
+///
+/// Mirrors `ort`'s own load-dynamic resolution order: `ORT_DYLIB_PATH` env
+/// var first if set (same variable `ort` and this project's docs already
+/// reference for CUDA/custom builds), otherwise the platform-default shared
+/// library name resolved through the OS's normal dynamic-linker search path
+/// (LD_LIBRARY_PATH on Linux, PATH on Windows, DYLD_LIBRARY_PATH on macOS --
+/// all handled by `libloading`/`dlopen`/`LoadLibrary` themselves, nothing
+/// this function needs to reimplement).
+pub fn onnx_runtime_available() -> bool {
+    let candidate = std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
+        if cfg!(target_os = "windows") {
+            "onnxruntime.dll".to_string()
+        } else if cfg!(target_os = "macos") {
+            "libonnxruntime.dylib".to_string()
+        } else {
+            "libonnxruntime.so".to_string()
+        }
+    });
+    // Safety: we only probe loadability and immediately drop the handle --
+    // no symbols are looked up, no code from the library is executed beyond
+    // whatever the dynamic linker itself runs on load (identical to what
+    // `ort` would trigger anyway if this check passes and it loads for
+    // real). `libloading::Library::new` is unsafe because arbitrary
+    // dynamic-library load/init code is inherently unsafe in general, not
+    // because of anything specific to this call.
+    match unsafe { libloading::Library::new(&candidate) } {
+        Ok(lib) => {
+            drop(lib);
+            true
+        }
+        Err(e) => {
+            info!("🔍 ONNX Runtime probe: '{}' not loadable ({}) -- will skip ort entirely", candidate, e);
+            false
+        }
+    }
+}
+
+/// Resolves the effective ONNX thread cap considering:
+/// 1. `TYLLUAN_ORT_THREADS` environment variable (highest priority override).
+/// 2. `ORT_NUM_THREADS` environment variable.
+/// 3. `configured`: programmatic/config value (e.g. `[inference] max_threads` in `tylluan.toml` or `--threads` CLI).
+///
+/// Any parsed or configured thread count is clamped to a minimum of 1.
+/// Returns `None` if no thread cap is specified (allowing the engine/runtime to use its default parallelism).
+pub fn resolve_onnx_thread_cap(configured: Option<usize>) -> Option<usize> {
+    if let Ok(val) = std::env::var("TYLLUAN_ORT_THREADS") {
+        if let Ok(n) = val.trim().parse::<usize>() {
+            return Some(n.max(1));
+        } else {
+            warn!("⚠️ Invalid TYLLUAN_ORT_THREADS value '{}', ignoring", val);
+        }
+    }
+
+    if let Ok(val) = std::env::var("ORT_NUM_THREADS") {
+        if let Ok(n) = val.trim().parse::<usize>() {
+            return Some(n.max(1));
+        } else {
+            warn!("⚠️ Invalid ORT_NUM_THREADS value '{}', ignoring", val);
+        }
+    }
+
+    configured.map(|n| n.max(1))
+}
+
+/// Applies the resolved thread cap to the process environment variables and,
+/// if the ONNX Runtime dynamic library is available, initializes the global
+/// ONNX Runtime thread pool with the specified intra-op threads and 1 inter-op thread.
+///
+/// Calling this multiple times is safe:
+/// - Environment variables (`ORT_NUM_THREADS`, `OMP_NUM_THREADS`, `RAYON_NUM_THREADS`) are set/updated.
+/// - The global ONNX Runtime thread pool is committed once via `ort::init().commit()`.
+///   Subsequent calls will detect that the environment is already committed.
+///
+/// Safety guard: If `onnx_runtime_available()` is false, `ort::init()` is NEVER called,
+/// preventing uncatchable aborts under `panic = "abort"`.
+pub fn apply_onnx_thread_cap(cap: Option<usize>) -> Option<usize> {
+    let resolved = resolve_onnx_thread_cap(cap);
+    if let Some(threads) = resolved {
+        let threads_str = threads.to_string();
+        // Propagate to standard multi-threading env vars for child libraries / OpenMP / Rayon.
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("ORT_NUM_THREADS", &threads_str);
+            std::env::set_var("OMP_NUM_THREADS", &threads_str);
+            std::env::set_var("RAYON_NUM_THREADS", &threads_str);
+        }
+
+        if onnx_runtime_available() {
+            match ort::environment::GlobalThreadPoolOptions::default()
+                .with_intra_threads(threads)
+                .and_then(|opts| opts.with_inter_threads(1))
+            {
+                Ok(pool_opts) => {
+                    match ort::init().with_global_thread_pool(pool_opts).commit() {
+                        Ok(true) => {
+                            info!(
+                                "🧵 ONNX Runtime: configured global thread pool with {} intra-threads (inter=1)",
+                                threads
+                            );
+                        }
+                        Ok(false) => {
+                            tracing::debug!(
+                                "ONNX Runtime environment already committed; retaining existing thread pool (requested {})",
+                                threads
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to commit global ONNX thread pool (threads={}): {}",
+                                threads, e
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to build GlobalThreadPoolOptions (threads={}): {}", threads, e);
+                }
+            }
+        } else {
+            tracing::debug!("ONNX Runtime dynamic library not available, skipping ort::init global thread pool");
+        }
+    }
+    resolved
+}
+
 impl EmbeddingEngine {
     /// Initialize the embedding engine using fastembed.
     pub fn load(model_name: &str) -> Result<Self> {
@@ -466,6 +595,9 @@ impl EmbeddingEngine {
 
     /// Initialize with an explicit execution device (cpu / directml / cuda).
     pub fn load_with_device(model_name: &str, device: &InferenceDevice) -> Result<Self> {
+        // Fallback: apply thread cap from env vars if not already configured at startup
+        apply_onnx_thread_cap(None);
+
         // Unknown model names fail HERE, before TextInitOptions/try_new —
         // fastembed auto-downloads on try_new (see ensure_provisioned), so
         // this is the last point where a typo can be rejected without
@@ -846,6 +978,7 @@ impl SparseEngine {
     pub const MODEL_ID: &'static str = "bge-m3-sparse";
 
     pub fn try_new(device: &InferenceDevice) -> Result<Self> {
+        apply_onnx_thread_cap(None);
         let eps = build_execution_providers(device);
         let options = SparseInitOptions::new(SparseModel::BGEM3).with_execution_providers(eps);
         let model = SparseTextEmbedding::try_new(options)
@@ -978,6 +1111,7 @@ impl RerankEngine {
     /// M25-A: the cross-encoder is the real latency bottleneck of recall
     /// (40-50 pairs/query) — it needs the GPU even more than the bi-encoder.
     pub fn load_with_device(device: &InferenceDevice) -> Result<Self> {
+        apply_onnx_thread_cap(None);
         // R22-1: Jina Turbo replaces BGERerankerBase (~278M→~37M params)
         info!("🔀 Loading Jina Turbo reranker (ONNX) — device: {:?}", device);
         let eps = build_execution_providers(device);
@@ -1290,6 +1424,93 @@ mod tests {
             assert_eq!(fp.len(), "sha256:".len() + 64, "full hex digest: {fp}");
             let again = compute_engine_fingerprint("bge-m3", 1024);
             assert_eq!(Some(fp), again, "deterministic across calls");
+        }
+    }
+
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn test_resolve_onnx_thread_cap_precedence() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // Ensure clean state
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::remove_var("TYLLUAN_ORT_THREADS");
+            std::env::remove_var("ORT_NUM_THREADS");
+        }
+
+        // 1. Neither env var nor config
+        assert_eq!(resolve_onnx_thread_cap(None), None);
+
+        // 2. Config only
+        assert_eq!(resolve_onnx_thread_cap(Some(4)), Some(4));
+
+        // 3. Config with 0 is clamped to 1
+        assert_eq!(resolve_onnx_thread_cap(Some(0)), Some(1));
+
+        // 4. ORT_NUM_THREADS overrides config
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("ORT_NUM_THREADS", "8");
+        }
+        assert_eq!(resolve_onnx_thread_cap(Some(4)), Some(8));
+        assert_eq!(resolve_onnx_thread_cap(None), Some(8));
+
+        // 5. TYLLUAN_ORT_THREADS overrides ORT_NUM_THREADS and config
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("TYLLUAN_ORT_THREADS", "2");
+        }
+        assert_eq!(resolve_onnx_thread_cap(Some(4)), Some(2));
+        assert_eq!(resolve_onnx_thread_cap(None), Some(2));
+
+        // 6. Zero in env var is clamped to 1
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("TYLLUAN_ORT_THREADS", "0");
+        }
+        assert_eq!(resolve_onnx_thread_cap(Some(4)), Some(1));
+
+        // 7. Invalid string in env var falls through
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::set_var("TYLLUAN_ORT_THREADS", "not-a-number");
+        }
+        // Falls through to ORT_NUM_THREADS which is "8"
+        assert_eq!(resolve_onnx_thread_cap(Some(4)), Some(8));
+
+        // Clean up
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::remove_var("TYLLUAN_ORT_THREADS");
+            std::env::remove_var("ORT_NUM_THREADS");
+        }
+    }
+
+    #[test]
+    fn test_apply_onnx_thread_cap_sets_env_vars() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::remove_var("TYLLUAN_ORT_THREADS");
+            std::env::remove_var("ORT_NUM_THREADS");
+            std::env::remove_var("OMP_NUM_THREADS");
+            std::env::remove_var("RAYON_NUM_THREADS");
+        }
+
+        let cap = apply_onnx_thread_cap(Some(3));
+        assert_eq!(cap, Some(3));
+        assert_eq!(std::env::var("ORT_NUM_THREADS").ok(), Some("3".to_string()));
+        assert_eq!(std::env::var("OMP_NUM_THREADS").ok(), Some("3".to_string()));
+        assert_eq!(std::env::var("RAYON_NUM_THREADS").ok(), Some("3".to_string()));
+
+        #[allow(unused_unsafe)]
+        unsafe {
+            std::env::remove_var("ORT_NUM_THREADS");
+            std::env::remove_var("OMP_NUM_THREADS");
+            std::env::remove_var("RAYON_NUM_THREADS");
         }
     }
 }
