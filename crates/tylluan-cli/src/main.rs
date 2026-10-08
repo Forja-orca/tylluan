@@ -5,6 +5,9 @@ use std::path::PathBuf;
 use sysinfo::System;
 
 mod backup;
+mod stop;
+
+use stop::StopAction;
 
 const DEFAULT_PORT: u16 = 47004;
 
@@ -57,8 +60,19 @@ enum Commands {
         #[arg(long)]
         setup: bool,
     },
-    /// Stop the TylluanNexus kernel
-    Stop,
+    /// Stop the TylluanNexus kernel (resolves the exact instance via PID file;
+    /// never kills by process-name sweep)
+    Stop {
+        /// Port of the instance to stop (matches the kernel's --port)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Data directory of the instance to stop (matches TYLLUAN_DATA_DIR)
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        /// Bearer token for authenticated instances (graceful shutdown)
+        #[arg(long, short)]
+        token: Option<String>,
+    },
     /// Check the status of the hub
     Status,
     /// Run a full diagnostic scan (guilds, storage, system resources, config)
@@ -234,23 +248,8 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Stop => {
-            let mut sys = System::new();
-            sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-            
-            let mut found = false;
-            for (pid, process) in sys.processes() {
-                if process.name().to_string_lossy().contains("tylluan-nexus") {
-                    println!("🛑 Stopping kernel process (PID {pid})...");
-                    process.kill();
-                    found = true;
-                }
-            }
-            if !found {
-                println!("⚠️ No running TylluanNexus kernel found.");
-            } else {
-                println!("✅ Cleanup completed.");
-            }
+        Commands::Stop { port, data_dir, token } => {
+            run_stop(port, data_dir.as_deref(), token).await?;
         }
         Commands::Status => {
             println!("🔍 Checking hub status...");
@@ -1161,6 +1160,142 @@ enum EvalAction {
     },
     /// List past benchmark results with hashes for reproducibility verification
     List,
+}
+
+async fn run_stop(
+    port: Option<u16>,
+    data_dir: Option<&std::path::Path>,
+    token: Option<String>,
+) -> Result<()> {
+    // Hallazgo #3 fix: resolve the EXACT instance instead of sweeping every
+    // process whose name contains "tylluan-nexus". The PID file here is the
+    // same one the kernel writes at boot (anti_orphan_protection_and_gc) and
+    // removes at shutdown, resolved with the same precedence the kernel uses.
+    let data_dir_resolved = stop::resolve_pid_data_dir(data_dir, port);
+    let pid_file = data_dir_resolved.join(stop::PID_FILE_NAME);
+    let pid_from_file = stop::read_pid_file(&pid_file);
+
+    let mut sys = System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let mut candidates: Vec<u32> = Vec::new();
+    for (pid, process) in sys.processes() {
+        if stop::is_kernel_process_name(&process.name().to_string_lossy()) {
+            candidates.push(pid.as_u32());
+        }
+    }
+
+    let pid_alive = |pid: u32| sys.process(sysinfo::Pid::from_u32(pid)).is_some();
+    let pid_is_kernel = |pid: u32| {
+        sys.process(sysinfo::Pid::from_u32(pid))
+            .map(|p| stop::is_kernel_process_name(&p.name().to_string_lossy()))
+            .unwrap_or(false)
+    };
+
+    match stop::resolve_stop_target(pid_from_file, pid_alive, pid_is_kernel, &candidates)? {
+        StopAction::Nothing => {
+            println!("⚠️ No running TylluanNexus kernel found.");
+            if pid_from_file.is_some() {
+                println!(
+                    "   (PID file {} is stale — the kernel it described is already gone)",
+                    pid_file.display()
+                );
+            }
+        }
+        StopAction::Ambiguous(ids) => {
+            return Err(anyhow::anyhow!(
+                "Multiple TylluanNexus kernels are running (PIDs: {ids:?}) and none was specified. Refusing to kill blindly. Disambiguate with: tylluan-cli stop --port <port> (matches the kernel's --port), or tylluan-cli stop --data-dir <dir> (matches that instance's TYLLUAN_DATA_DIR)."
+            ));
+        }
+        StopAction::Target(pid) => {
+            // Graceful shutdown (HTTP) is only attempted when we can be sure the
+            // target listens on the port we hit: an explicit --port, or the
+            // single-candidate case where any kernel answering on the default
+            // port IS that candidate.
+            let graceful_port = if port.is_some() || candidates.len() == 1 {
+                Some(port.unwrap_or(DEFAULT_PORT))
+            } else {
+                None
+            };
+            stop_instance(pid, graceful_port, token, &pid_file, &mut sys).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn stop_instance(
+    pid: u32,
+    graceful_port: Option<u16>,
+    token: Option<String>,
+    pid_file: &std::path::Path,
+    sys: &mut System,
+) -> Result<()> {
+    println!("🛑 Stopping TylluanNexus kernel (PID {pid})...");
+
+    // 1. Graceful shutdown via the kernel's localhost-only admin endpoint so
+    //    guilds and auxiliary services shut down cleanly (same endpoint the
+    //    kernel's own hot-swap path uses).
+    if let Some(p) = graceful_port {
+        let url = format!("http://127.0.0.1:{p}/api/v1/admin/shutdown");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()?;
+        let mut req = client.post(&url).header("host", "127.0.0.1");
+        if let Some(t) = token.as_deref().filter(|t| !t.is_empty()) {
+            req = req.bearer_auth(t);
+        }
+        match req.send().await {
+            Ok(resp) if resp.status().is_success() => {
+                println!("   ✅ graceful shutdown accepted on port {p} — waiting for exit...");
+                // The kernel's graceful path announces to coloquio, tears down
+                // tunnels/guilds/services — measured live it can take >15s, so
+                // wait up to 30s before falling back to a hard kill.
+                for _ in 0..30 {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    sys.refresh_processes(
+                        sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+                        true,
+                    );
+                    if sys.process(sysinfo::Pid::from_u32(pid)).is_none() {
+                        println!("✅ Kernel exited cleanly.");
+                        let _ = std::fs::remove_file(pid_file);
+                        return Ok(());
+                    }
+                }
+                println!("   ⚠️ still running after graceful shutdown — falling back to hard kill.");
+            }
+            Ok(resp)
+                if resp.status() == reqwest::StatusCode::UNAUTHORIZED
+                    || resp.status() == reqwest::StatusCode::FORBIDDEN =>
+            {
+                println!(
+                    "   ⚠️ graceful shutdown refused ({}) — this instance requires a bearer token; pass --token.",
+                    resp.status()
+                );
+            }
+            _ => {
+                println!("   (no kernel answered on port {p} — stopping PID directly)");
+            }
+        }
+    }
+
+    // 2. Hard kill of the VERIFIED PID only — never a name sweep.
+    if let Some(process) = sys.process(sysinfo::Pid::from_u32(pid)) {
+        process.kill();
+        for _ in 0..10 {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            sys.refresh_processes(
+                sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+                true,
+            );
+            if sys.process(sysinfo::Pid::from_u32(pid)).is_none() {
+                break;
+            }
+        }
+    }
+    let _ = std::fs::remove_file(pid_file);
+    println!("✅ Kernel stopped (PID {pid}).");
+    Ok(())
 }
 
 fn resolve_url(url: Option<String>, host: Option<String>) -> Result<String> {
