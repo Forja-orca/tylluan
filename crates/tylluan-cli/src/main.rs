@@ -1399,3 +1399,110 @@ fn detect_update_target() -> String {
         _ => format!("{arch}-{os}"),
     }
 }
+
+#[cfg(test)]
+mod installer_flag_tests {
+    use super::*;
+    use clap::CommandFactory;
+    use std::collections::BTreeSet;
+
+    const INSTALL_SH: &str = include_str!("../../../install.sh");
+    const INSTALL_PS1: &str = include_str!("../../../install.ps1");
+
+    fn accepted_flags(subcommand: &str) -> BTreeSet<String> {
+        // No cmd.build(): building the root walks every subcommand, and the
+        // pre-existing `connect -h`/auto-help conflict debug-asserts panic
+        // (separate latent bug, reported, not #1's scope). find_subcommand
+        // only materializes the requested subcommand's derive-defined args.
+        let cmd = Cli::command();
+        cmd.find_subcommand(subcommand)
+            .unwrap_or_else(|| panic!("CLI lost its `{subcommand}` subcommand"))
+            .get_arguments()
+            .filter_map(|a| a.get_long().map(|l| l.to_string()))
+            .collect()
+    }
+
+    /// Every `<cli-binary> <subcommand> [--flag ...]` invocation found in an
+    /// installer script, as (1-based line number, flags used). Covers both
+    /// shapes present in the repo:
+    ///   `"${BIN_DIR}/tylluan" start --profile portable &`   (install.sh)
+    ///   `-ArgumentList "start --profile portable"`          (install.ps1)
+    fn invocations_with_flags(script: &str, subcommand: &str) -> Vec<(usize, Vec<String>)> {
+        let mut found = Vec::new();
+        for (idx, line) in script.lines().enumerate() {
+            if !line.contains("tylluan") {
+                continue;
+            }
+            let mut search_from = 0;
+            while let Some(rel) = line[search_from..].find(subcommand) {
+                let start = search_from + rel;
+                let end = start + subcommand.len();
+                let before_ok = matches!(
+                    line[..start].chars().next_back(),
+                    None | Some(' ') | Some('\t') | Some('"') | Some('\'') | Some('(')
+                );
+                let after_ok = matches!(
+                    line[end..].chars().next(),
+                    None | Some(' ')
+                        | Some('\t')
+                        | Some('"')
+                        | Some('\'')
+                        | Some(')')
+                        | Some('&')
+                        | Some(';')
+                        | Some('|')
+                );
+                if before_ok && after_ok {
+                    let rest = &line[end..];
+                    let stop = rest
+                        .find(['&', ';', '|', '`'])
+                        .unwrap_or(rest.len());
+                    let flags: Vec<String> = rest[..stop]
+                        .split_whitespace()
+                        .filter_map(|tok| tok.strip_prefix("--"))
+                        .map(|flag| {
+                            // Strip trailing shell/paren/quote noise so a
+                            // token like `--flag)` still compares as `--flag`.
+                            flag.trim_end_matches(|c: char| {
+                                !(c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                            })
+                                .split('=')
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                        .filter(|f| !f.is_empty())
+                        .collect();
+                    found.push((idx + 1, flags));
+                    break;
+                }
+                search_from = end;
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn installer_scripts_only_use_flags_the_cli_actually_accepts() {
+        for (name, script) in [("install.sh", INSTALL_SH), ("install.ps1", INSTALL_PS1)] {
+            for subcommand in ["start", "install"] {
+                let accepted = accepted_flags(subcommand);
+                let invocations = invocations_with_flags(script, subcommand);
+                assert!(
+                    !invocations.is_empty(),
+                    "{name}: no `{subcommand}` invocation found — installer changed shape; \
+                     update this test to match"
+                );
+                for (line_no, flags) in invocations {
+                    for flag in flags {
+                        assert!(
+                            accepted.contains(&flag),
+                            "{name}:{line_no}: `{subcommand} --{flag}` — clap rejects --{flag} \
+                             on `tylluan {subcommand}` (accepted flags: {accepted:?})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

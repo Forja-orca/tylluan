@@ -82,9 +82,17 @@ if ! echo ":$PATH:" | grep -qF ":$BIN_DIR:"; then
 fi
 
 say ""
-say "Starting Tylluan..."
-"${BIN_DIR}/tylluan" start --profile portable &
-PID=$!
+# `install --profile portable` writes tylluan.toml AND boots the kernel
+# itself (chdir's to the config dir first so the kernel finds it). If a
+# config already exists it refuses without --force, so boot directly --
+# from the config dir, otherwise the kernel would not discover the file.
+if [ -f "${DATA_DIR}/tylluan.toml" ]; then
+  say "Existing tylluan.toml found — keeping it. Starting kernel..."
+  (cd "${DATA_DIR}" && "${BIN_DIR}/tylluan" start) &
+else
+  say "Installing portable profile (writes tylluan.toml + starts kernel)..."
+  "${BIN_DIR}/tylluan" install --profile portable
+fi
 
 say "Waiting for kernel to be ready..."
 for i in $(seq 1 30); do
