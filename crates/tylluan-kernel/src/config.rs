@@ -1788,7 +1788,9 @@ pub async fn persist_guild_override(guild_name: &str) -> Result<(), String> {
 // Invariant: localhost-only by default (README / ARCHITECTURE.md / Security Claims).
 // Binding 0.0.0.0 is only permitted via explicit profile/config (e.g. tylluan.docker.toml) or CLI flag.
 fn default_host() -> String { "127.0.0.1".into() }
-fn default_port() -> u16 { 3030 }
+// Canonical port: 47004 (CONTRACT-01, tylluan-cli DEFAULT_PORT, tylluan-mcp, install scripts).
+// Migrated 2026-09-12 by José to prevent collisions with common dev ports (3000, 3030, 4000, 8080).
+fn default_port() -> u16 { 47004 }
 fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
 fn default_embedding_model() -> String { "mxbai-embed-large".into() }
@@ -2037,7 +2039,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = TylluanConfig::default();
-        assert_eq!(config.nexus.port, 3030);
+        assert_eq!(config.nexus.port, 47004);
         assert_eq!(config.memory.vector_dimensions, 1024); // BGE-M3 nativo
         assert_eq!(config.guilds.core.always_on, vec!["bash", "memory", "filesystem"]);
         assert_eq!(config.guilds.core.lazy_load_timeout_secs, 300);
@@ -2094,6 +2096,29 @@ mod tests {
         assert_eq!(
             parsed_nexus.nexus.host, "127.0.0.1",
             "Serde default for [nexus] without host must resolve to 127.0.0.1"
+        );
+    }
+
+    /// Audit Finding #6: default_port() must be 47004 to uphold CONTRACT-01
+    /// and match DEFAULT_PORT in tylluan-cli, install scripts, and client configs.
+    #[test]
+    fn test_default_port_is_47004() {
+        let config = TylluanConfig::default();
+        assert_eq!(
+            config.nexus.port, 47004,
+            "TylluanConfig::default().nexus.port must be 47004"
+        );
+
+        let nexus_default = NexusConfig::default();
+        assert_eq!(
+            nexus_default.port, 47004,
+            "NexusConfig::default().port must be 47004"
+        );
+
+        let parsed_empty: TylluanConfig = toml::from_str("").unwrap();
+        assert_eq!(
+            parsed_empty.nexus.port, 47004,
+            "Serde default for empty TOML must resolve port to 47004"
         );
     }
 

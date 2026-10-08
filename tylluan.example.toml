@@ -3,7 +3,7 @@
 
 [nexus]
 host = "127.0.0.1"
-port = 47004
+port = 47004  # canonical default (CONTRACT-01) -- matches config.rs's default_port(), kept in sync 2026-10-09
 transport = ["stdio", "http"]
 
 # Security timeouts for tool execution and handshakes

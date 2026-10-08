@@ -1114,7 +1114,7 @@ async fn setup_hint_handler(
 ) -> impl IntoResponse {
     let host = headers.get("host")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("127.0.0.1:3030");
+        .unwrap_or("127.0.0.1:47004");
     let base_url = format!("http://{host}");
     let dev_mode = state.dev_mode.unwrap_or(false);
     let token_query = if !dev_mode {
@@ -1196,7 +1196,7 @@ async fn setup_hint_apply_handler(
 ) -> impl IntoResponse {
     let host = headers.get("host")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("127.0.0.1:3030");
+        .unwrap_or("127.0.0.1:47004");
     let base_url = format!("http://{host}");
     let dev_mode = state.dev_mode.unwrap_or(false);
     let token_query = if !dev_mode {
@@ -1379,7 +1379,7 @@ pub async fn probe_handler(
         "http_streamable_json"
     };
 
-    let port = 3030; 
+    let port = state.config.read().await.nexus.port; 
     
     Json(serde_json::json!({
         "detected_dialect": detected_dialect,

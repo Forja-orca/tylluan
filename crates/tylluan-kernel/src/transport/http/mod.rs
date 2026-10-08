@@ -363,10 +363,10 @@ pub async fn start_http_server(
     // other port (e.g. another local service, or anything else on the host).
     //
     // This is deliberately derived from `port` (the configured value) rather
-    // than a hardcoded range: Tylluan's real shipped default is :3030 (see
+    // than a hardcoded range: Tylluan's real shipped default is :47004 (see
     // tylluan.example.toml) -- a fixed "Tylluan always uses 4000-4099" range was wrong and
     // would have silently broken zero-downtime restarts for any user running
-    // the default config, since :3030 fell outside that hardcoded window.
+    // the default config, since :47004 fell outside that hardcoded window.
     let own_port_range = port..=(port.saturating_add(100));
     if let Some(op) = old_port
         && op != bound_port
@@ -1087,9 +1087,11 @@ fn is_static_path_contained(file_path: &std::path::Path, base: &std::path::Path)
 /// battery) can drive the real middleware stack — handlers-only tests on
 /// `api_v1_routes()` bypass auth entirely by construction.
 pub fn build_router(state: Arc<HttpState>) -> Router {
-    // CORS: Only known localhost origins (dashboard dev:5173, prod:3030, kernel:3030)
+    // CORS: Only known localhost origins (dashboard dev:5173, prod:3030, kernel:47004/3030)
     let cors = CorsLayer::new()
         .allow_origin([
+            "http://127.0.0.1:47004".parse::<HeaderValue>().unwrap(),
+            "http://localhost:47004".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:3030".parse::<HeaderValue>().unwrap(),
             "http://localhost:3030".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:5173".parse::<HeaderValue>().unwrap(),
