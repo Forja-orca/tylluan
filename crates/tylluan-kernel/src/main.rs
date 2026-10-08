@@ -1139,6 +1139,8 @@ async fn main() -> anyhow::Result<()> {
     let coloquio_for_fly = coloquio.clone(); // reserve clone for coloquio→SilvaDB flywheel
 
     // ─── HTTP Server FIRST — before guilds — for <2s /health ─────────
+    // T999: reserved before the use_http block, which moves `coloquio`.
+    let coloquio_for_version_check = coloquio.clone();
     let use_http = config.nexus.transport.contains(&"http".to_string())
         || config.nexus.transport.contains(&"sse".to_string());
     if use_http {
@@ -1157,6 +1159,15 @@ async fn main() -> anyhow::Result<()> {
                 error!("❌ Universal Gateway: HTTP server error: {}", e);
             }
         });
+    }
+
+    // ─── Startup version check (T999) — fire-and-forget, after HTTP ────
+    // Checks the llama.cpp pin against the latest GitHub release and posts
+    // to Coloquio ONLY on mismatch. Non-blocking, 10s timeout, silent on
+    // any failure (no network / rate-limit / missing marker). Never
+    // auto-updates — pin changes are a human decision.
+    {
+        tokio::spawn(tylluan_kernel::version_check::run_version_check(coloquio_for_version_check));
     }
 
     // ─── Core Guild Spawning (after HTTP) ────────────────────────────

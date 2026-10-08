@@ -456,7 +456,16 @@ def _install_llama_server():
                 continue
             if not sys_name.startswith("win"):
                 binary.chmod(0o755)
-            sys.stderr.write(f"[llama_backend] Extracted: {binary}\n")
+            # T999: persist which release tag this binary came from so the
+            # kernel's startup version check (version_check.rs) can compare it
+            # against the latest GitHub release. Marker must match the tag in
+            # the URL above; keep them in sync when bumping the pin.
+            tag = asset_name.split("-bin-")[0].replace("llama-", "", 1)
+            try:
+                (dest_dir / ".llama-server-version").write_text(tag + "\n", encoding="utf-8")
+            except OSError as marker_err:
+                sys.stderr.write(f"[llama_backend] Could not write version marker: {marker_err}\n")
+            sys.stderr.write(f"[llama_backend] Extracted: {binary} (tag {tag})\n")
             return str(binary)
         except Exception as e:
             sys.stderr.write(f"[llama_backend] Precompiled download failed: {e}\n")
