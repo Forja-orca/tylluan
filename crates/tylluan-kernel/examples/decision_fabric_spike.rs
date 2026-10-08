@@ -1501,11 +1501,28 @@ impl DecisionProvider for SystemOneDecisionProvider {
         // two-option choice because this harness only consumes the per-option
         // probability distribution (the server's noul convenience field is
         // honored when present, but never required).
+        //
+        // T1004: a request can bundle several independent questions (e.g.
+        // route_guild + hitl_resolve). One question failing its spec (a
+        // degenerate route_guild with <2 candidate guilds -- a real,
+        // acknowledged data characteristic, not a bug) used to abort the
+        // WHOLE call via `?`, silently discarding every other question in
+        // the same item -- hitl_resolve never got evaluated even though it
+        // had nothing wrong with it. Skip only the invalid question instead;
+        // fail the call only if EVERY question in it turned out invalid.
         let mut questions = serde_json::Map::new();
         for (name, q) in &req.questions {
-            let spec = systemone_question_spec(q)
-                .map_err(|_| DecisionError::EmptyQuestion(name.clone()))?;
-            questions.insert(name.clone(), spec);
+            match systemone_question_spec(name, q) {
+                Ok(spec) => {
+                    questions.insert(name.clone(), spec);
+                }
+                Err(_) => {
+                    tracing::debug!("[variant-b] question '{name}' has no valid options/levels — skipping it, not the whole item");
+                }
+            }
+        }
+        if questions.is_empty() {
+            return Err(DecisionError::EmptyQuestion("all questions in item".to_string()));
         }
 
         let body = json!({ "model": self.model, "state": req.state, "questions": questions });
@@ -1539,29 +1556,37 @@ impl DecisionProvider for SystemOneDecisionProvider {
             }
         };
 
+        // T1004: same principle as the request-building skip above -- the
+        // server can decline or drop an individual question (observed live:
+        // clef-flash answers hitl_resolve but omits route_guild for some
+        // items) without that invalidating the OTHER questions it did
+        // answer. Skip only the missing/empty one; fail the whole call only
+        // if the server answered nothing usable at all.
         let mut out = HashMap::new();
         for (name, q) in &req.questions {
             let Some(ans) = parsed.answers.get(name) else {
-                return Err(DecisionError::Provider(
-                    self.model.clone(),
-                    format!(
-                        "server answered {} of {} questions; '{name}' missing",
-                        parsed.answers.len(),
-                        req.questions.len()
-                    ),
-                ));
+                tracing::debug!(
+                    "[variant-b] server answered {} of {} questions; '{name}' missing — skipping it, not the whole item",
+                    parsed.answers.len(),
+                    req.questions.len()
+                );
+                continue;
             };
             let distribution = systemone_distribution(q, ans);
             if distribution.is_empty() {
-                return Err(DecisionError::Provider(
-                    self.model.clone(),
-                    format!("'{name}' answered with no probabilities"),
-                ));
+                tracing::debug!("[variant-b] '{name}' answered with no probabilities — skipping it");
+                continue;
             }
             out.insert(
                 name.clone(),
                 DecisionAnswer { distribution, calibration: None },
             );
+        }
+        if out.is_empty() {
+            return Err(DecisionError::Provider(
+                self.model.clone(),
+                "server answered none of the requested questions usably".to_string(),
+            ));
         }
         Ok(out)
     }
@@ -1574,7 +1599,17 @@ impl DecisionProvider for SystemOneDecisionProvider {
 /// Pure wire mapping DecisionQuestion -> SystemOne question spec.
 /// Score keeps its typed levels; Noul is expressed as a two-option choice so
 /// the per-option distribution is always the single source of truth.
-fn systemone_question_spec(q: &DecisionQuestion) -> Result<serde_json::Value, DecisionError> {
+///
+/// T1004: the real `/v1/systemone` endpoint (found only once a real server
+/// was up, 2026-10-08 -- the smoke test never exercised a live server)
+/// rejects any question missing `"instructions"` with HTTP 400. The shared
+/// `DecisionQuestion` contract carries no instructions field (it's generic
+/// across providers), so SystemOne's own requirement is synthesized here
+/// from the question name, same generic pattern already used for variant
+/// D's local question encoding (`"Answer the {name} question about this
+/// state."`).
+fn systemone_question_spec(name: &str, q: &DecisionQuestion) -> Result<serde_json::Value, DecisionError> {
+    let instructions = format!("Answer the {name} question about this state.");
     Ok(match q {
         DecisionQuestion::Choice { options } => {
             if options.len() < 2 {
@@ -1582,6 +1617,7 @@ fn systemone_question_spec(q: &DecisionQuestion) -> Result<serde_json::Value, De
             }
             json!({
                 "type": "choice",
+                "instructions": instructions,
                 "criteria": options.iter()
                     .map(|o| (o.clone(), serde_json::Value::Null))
                     .collect::<serde_json::Map<String, serde_json::Value>>(),
@@ -1591,10 +1627,11 @@ fn systemone_question_spec(q: &DecisionQuestion) -> Result<serde_json::Value, De
             if levels.len() < 2 {
                 return Err(DecisionError::EmptyQuestion(String::new()));
             }
-            json!({ "type": "score", "criteria": levels })
+            json!({ "type": "score", "instructions": instructions, "criteria": levels })
         }
         DecisionQuestion::Noul => json!({
             "type": "choice",
+            "instructions": instructions,
             "criteria": {
                 "true": "the statement holds",
                 "false": "the statement does not hold",
@@ -1715,8 +1752,15 @@ async fn run_variant_b_inner(
             }
         };
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
-        if want_route {
-            let dist = &answers["route_guild"].distribution;
+        // T1004: the provider may have skipped a question whose spec was
+        // invalid (e.g. route_guild with <2 candidates) while still
+        // answering the others in the same call -- answers.get(), never
+        // answers[..], or a degenerate route_guild silently drops the
+        // hitl_resolve signal for every item in the dataset.
+        if want_route
+            && let Some(answer) = answers.get("route_guild")
+        {
+            let dist = &answer.distribution;
             let (best, conf) = argmax(dist);
             let label = it["labels"]["route_guild"].as_str().unwrap_or_default().to_string();
             let base_raw = it["baseline_A"]["route_guild"].as_str().unwrap_or_default().to_string();
@@ -1728,8 +1772,10 @@ async fn run_variant_b_inner(
             let correct_b = if base_raw.is_empty() { None } else { Some(base == label) };
             route.update(best == label, correct_b, conf, brier_item, ms);
         }
-        if want_hitl {
-            let dist = &answers["hitl_resolve"].distribution;
+        if want_hitl
+            && let Some(answer) = answers.get("hitl_resolve")
+        {
+            let dist = &answer.distribution;
             let p_true = dist.get("true").copied().unwrap_or(0.0);
             let label = it["labels"]["hitl_resolve"].as_str() == Some("true");
             let base_pred = it["baseline_A"]["hitl_resolve"].as_str() == Some("true");
