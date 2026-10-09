@@ -1,7 +1,7 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-10-09 · HEAD `c60a085` · v0.17.0 (Cargo.toml)
+> Last updated: 2026-10-09 · HEAD `2006055` · v0.17.0 (Cargo.toml)
 
 ## Informe externo verificado (2026-10-04)
 
@@ -37,7 +37,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Docker smoke | ✅ pass (local validated by Antigravity) |
 | Security — claims gate | ✅ pass |
 
-**HEAD:** `c60a085` · **1032 total** lib green (951 kernel lib + 69 link lib + 12 fsrs), verificado 2026-10-04 vía `cargo test -p tylluan-kernel --lib` + `scripts/check_test_count.sh --fix` (tech lead). **Ciclo 2026-10-01/04 (dos auditorías de concurrencia + seguridad, cerrado) — el ciclo de mayor volumen de hallazgos reales verificados de este proyecto hasta ahora.** Dos auditorías paralelas el 2026-09-30/10-01 (interna de arquitectura, agente `architect`; externa de concurrencia, verificada línea por línea con `rust-reviewer` antes de aceptar nada — 7/8 hallazgos P0/P1 confirmados exactos) sintetizadas en un checklist de prioridades (`docs/roadmap/ROADMAP_O3.md`). Cerrado con verificación independiente del tech lead en cada merge:
+**HEAD:** `2006055` · **1032 total** lib green (951 kernel lib + 69 link lib + 12 fsrs), verificado 2026-10-04 vía `cargo test -p tylluan-kernel --lib` + `scripts/check_test_count.sh --fix` (tech lead). **Ciclo 2026-10-01/04 (dos auditorías de concurrencia + seguridad, cerrado) — el ciclo de mayor volumen de hallazgos reales verificados de este proyecto hasta ahora.** Dos auditorías paralelas el 2026-09-30/10-01 (interna de arquitectura, agente `architect`; externa de concurrencia, verificada línea por línea con `rust-reviewer` antes de aceptar nada — 7/8 hallazgos P0/P1 confirmados exactos) sintetizadas en un checklist de prioridades (`docs/roadmap/ROADMAP_O3.md`). Cerrado con verificación independiente del tech lead en cada merge:
   - **Seguridad**: path traversal no autenticado en el fallback de estáticos del dashboard (`transport/http/mod.rs`, `c8b44f5`) — encontrado, no explotado, cerrado el mismo día.
   - **P0 (serialización artificial)**: `QueryEmbeddingCache` ya no retiene el lock durante 2-8s de inferencia ONNX + single-flight para queries idénticas (`e351081`); `InferenceBudget` reemplaza busy-wait (`sleep` cada 2-5ms) por `Condvar` real, cero CPU en espera (`e2794be`); `EmbedBatcher` pasa de cola sin cota real a `sync_channel` acotado (`d52f2c0`). **El pool de lectura SQLite (el cuello de botella que ambas auditorías señalaban como el más grande) se cerró como NO-GO con dato**: Fase 0 de instrumentación (Deep, `b2a5b89`) midió la espera real del mutex en `<0.1%` del p50 de recall bajo C=8 — el cuello real es el Mutex del modelo ONNX (~5s/embed), no SQLite. El pool no se construyó; el diseño queda documentado para si el embed deja de dominar.
   - **P1 (N+1, código muerto)**: batch de embeddings en `CoherenceGate` (fin del N+1 por candidato, `fecf45a`); tier `RetrievalTier::Fast` (BM25-only) activado — código muerto desde su creación, ninguna rama del match lo devolvía nunca (`d039e8f`); N+1 de `get_confidence`/`get_source_info` en recall fusionado a 1 consulta batch; `apply_cleanup` ya limpia `node_embeddings` huérfanos (no solo sparse), mismo patrón que `prune_dead_nodes`.
