@@ -32,6 +32,10 @@
 //! BWC-4 additions: `DispatchState::Executed`, the executor's claim CAS,
 //! `list_approved` (the executor's work queue) and `enqueue_once`
 //! (exactly-once enqueue per Coloquio message, broadcast-replay-proof).
+//! Audit finding #10 adds `DispatchState::ExecutionFailed` and the
+//! executor-only `mark_execution_failed` CAS (`Executed → ExecutionFailed`)
+//! so a failed spawn no longer masquerades as a successful one (the
+//! T684/T685 incident documented in WORK_PROTOCOL §7).
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -52,8 +56,11 @@ pub fn dispatch_db_path() -> std::path::PathBuf {
 }
 
 /// Lifecycle of a queued dispatch. Transitions: `Pending →
-/// Approved/Rejected/Expired` (human decision, BWC-2) and `Approved →
-/// Executed` (executor claim, BWC-4). Nothing else transitions.
+/// Approved/Rejected/Expired` (human decision, BWC-2), `Approved →
+/// Executed` (executor claim, BWC-4) and `Executed → ExecutionFailed`
+/// (executor marks a spawn failure, audit finding #10 — a failed spawn
+/// must be distinguishable from a successful one in the persisted state).
+/// Nothing else transitions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DispatchState {
     Pending,
@@ -61,6 +68,10 @@ pub enum DispatchState {
     Rejected,
     Expired,
     Executed,
+    /// The claim won but the fixed argv could not be spawned (or argv was
+    /// empty). Persisted so "failed to even start" is queryable without
+    /// grepping kernel.log; retry stays a human decision.
+    ExecutionFailed,
 }
 
 impl DispatchState {
@@ -71,6 +82,7 @@ impl DispatchState {
             DispatchState::Rejected => "Rejected",
             DispatchState::Expired => "Expired",
             DispatchState::Executed => "Executed",
+            DispatchState::ExecutionFailed => "ExecutionFailed",
         }
     }
 
@@ -81,6 +93,7 @@ impl DispatchState {
             "Rejected" => Some(DispatchState::Rejected),
             "Expired" => Some(DispatchState::Expired),
             "Executed" => Some(DispatchState::Executed),
+            "ExecutionFailed" => Some(DispatchState::ExecutionFailed),
             _ => None,
         }
     }
@@ -109,10 +122,10 @@ pub struct PendingDispatch {
 #[error("hash mismatch: approval was bound to a different content snapshot")]
 pub struct HashMismatch;
 
-/// Outcome of an approval/rejection attempt: either this writer won the CAS,
-/// the dispatch was already resolved (by a concurrent approval or another
-/// transition), or the id never existed. Exactly one writer ever sees
-/// `Transitioned`.
+/// Outcome of an approval/rejection/spawn-failure-mark attempt: either this
+/// writer won the CAS, the dispatch was already resolved (by a concurrent
+/// approval or another transition), or the id never existed. Exactly one
+/// writer ever sees `Transitioned`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalOutcome {
     Transitioned,
@@ -135,10 +148,11 @@ pub enum ClaimOutcome {
 /// The dispatch queue: SQLite-backed, CAS on every transition.
 ///
 /// INVARIANT (single writer): every state transition flows through
-/// [`approve`](Self::approve), [`reject`](Self::reject), [`expire`](Self::expire)
-/// or [`claim_approved`](Self::claim_approved) — all serialized by the one
-/// `Mutex<Connection>`, and each uses `UPDATE ... WHERE state=...` as its
-/// CAS. Nothing else in this module writes `state`; keep it that way as
+/// [`approve`](Self::approve), [`reject`](Self::reject), [`expire`](Self::expire),
+/// [`claim_approved`](Self::claim_approved) or
+/// [`mark_execution_failed`](Self::mark_execution_failed) — all serialized by
+/// the one `Mutex<Connection>`, and each uses `UPDATE ... WHERE state=...` as
+/// its CAS. Nothing else in this module writes `state`; keep it that way as
 /// BWC-2/3 grow read-only consumers around this queue.
 pub struct DispatchQueue {
     conn: Mutex<Connection>,
@@ -446,9 +460,10 @@ impl DispatchQueue {
 
     /// CAS claim for the executor (BWC-4): `Approved → Executed`, returning
     /// the dispatch row to the single winner. The transition lands BEFORE
-    /// the process spawns: a spawn failure is logged loudly by the executor
-    /// and the row stays `Executed` — retry is a human decision, not an
-    /// automatic loop hammering the store every poll interval.
+    /// the process spawns: on spawn failure the executor then moves the row
+    /// to `ExecutionFailed` via [`mark_execution_failed`](Self::mark_execution_failed)
+    /// (audit finding #10) — retry is a human decision, not an automatic
+    /// loop hammering the store every poll interval.
     pub fn claim_approved(&self, id: &str) -> Result<ClaimOutcome> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let current: Option<String> = conn
@@ -484,6 +499,39 @@ impl DispatchQueue {
             DispatchState::from_str(&now)
                 .ok_or_else(|| anyhow!("corrupt state '{now}' for dispatch {id}"))?,
         ))
+    }
+
+    /// CAS spawn-failure mark (audit finding #10): `Executed →
+    /// ExecutionFailed`, called by the executor ONLY when the fixed argv it
+    /// just claimed failed to spawn. Without it a failed spawn and a
+    /// successful one both persisted as `Executed` and only kernel.log
+    /// told them apart (T684/T685 incident).
+    ///
+    /// The guard `AND state='Executed'` keeps it CAS-style like every other
+    /// transition here, and `claim_approved`'s exactly-once semantics are
+    /// untouched: this runs strictly AFTER a winning claim, never as part
+    /// of it, so a second claim still sees `AlreadyResolved`. A crash
+    /// between claim and mark degrades to `Executed` (the pre-fix
+    /// behavior) — never to an automatic retry.
+    pub fn mark_execution_failed(&self, id: &str) -> Result<ApprovalOutcome> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let affected = conn.execute(
+            "UPDATE pending_dispatches SET state = 'ExecutionFailed' WHERE id = ?1 AND state = 'Executed'",
+            params![id],
+        )?;
+        if affected == 1 {
+            return Ok(ApprovalOutcome::Transitioned);
+        }
+        let now: Option<String> = conn
+            .query_row("SELECT state FROM pending_dispatches WHERE id = ?1", params![id], |r| r.get(0))
+            .optional()?;
+        Ok(match now {
+            Some(s) => ApprovalOutcome::AlreadyResolved(
+                DispatchState::from_str(&s)
+                    .ok_or_else(|| anyhow!("corrupt state '{s}' for dispatch {id}"))?,
+            ),
+            None => ApprovalOutcome::NotFound,
+        })
     }
 }
 
@@ -743,6 +791,59 @@ mod tests {
         assert_eq!(claimed.id, d.id);
         assert_eq!(q.list_approved().unwrap().len(), 0);
         assert_eq!(q.get(&d.id).unwrap().unwrap().state, DispatchState::Executed);
+    }
+
+    #[test]
+    fn mark_execution_failed_transitions_only_from_executed() {
+        // Audit finding #10: only the executor, only after its own winning
+        // claim, can land a row in ExecutionFailed — and once there, neither
+        // a re-claim nor a re-mark can touch it again (claim idempotency).
+        let q = queue();
+        let d = q
+            .enqueue("deep", "claude-code", "general", 16, "spawn me", vec!["c".into()])
+            .unwrap();
+
+        // Pending: CAS refuses, reports the real state.
+        assert_eq!(
+            q.mark_execution_failed(&d.id).unwrap(),
+            ApprovalOutcome::AlreadyResolved(DispatchState::Pending)
+        );
+        // Approved but unclaimed: still refused — the executor marks only
+        // the row IT just claimed.
+        q.approve(&d.id, &d.content_hash).unwrap();
+        assert_eq!(
+            q.mark_execution_failed(&d.id).unwrap(),
+            ApprovalOutcome::AlreadyResolved(DispatchState::Approved)
+        );
+        // Claimed, spawn failed → the mark wins exactly once.
+        assert!(matches!(
+            q.claim_approved(&d.id).unwrap(),
+            ClaimOutcome::Claimed(_)
+        ));
+        assert_eq!(
+            q.mark_execution_failed(&d.id).unwrap(),
+            ApprovalOutcome::Transitioned
+        );
+        assert_eq!(
+            q.get(&d.id).unwrap().unwrap().state,
+            DispatchState::ExecutionFailed
+        );
+        // Idempotent in both directions: re-mark and re-claim are no-ops.
+        assert_eq!(
+            q.mark_execution_failed(&d.id).unwrap(),
+            ApprovalOutcome::AlreadyResolved(DispatchState::ExecutionFailed)
+        );
+        assert_eq!(
+            q.claim_approved(&d.id).unwrap(),
+            ClaimOutcome::AlreadyResolved(DispatchState::ExecutionFailed)
+        );
+        // The failed row never reappears as executor work.
+        assert!(q.list_approved().unwrap().iter().all(|x| x.id != d.id));
+        // Nonexistent id.
+        assert_eq!(
+            q.mark_execution_failed("no-such-id").unwrap(),
+            ApprovalOutcome::NotFound
+        );
     }
 
     #[test]

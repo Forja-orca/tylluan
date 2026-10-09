@@ -27,9 +27,9 @@
 //! Command construction is deliberately rigid: `argv[0]` is the program,
 //! the rest are literal args, no shell is ever involved, stdio is null,
 //! and the child inherits the kernel's working directory (the repo root in
-//! production). Spawn failures are logged loudly and the row STAYS
-//! `Executed` — automatic retry would be an unattended loop hammering the
-//! store, so retry is a human decision.
+//! production). Spawn failures are logged loudly and the row is then moved
+//! to `ExecutionFailed` (audit finding #10) — automatic retry would be an
+//! unattended loop hammering the store, so retry is a human decision.
 //!
 //! CONTRACT-01 note: this module is a kernel-internal security primitive,
 //! not an MCP tool — `all_tools()` still exposes exactly the 5 sovereign
@@ -66,19 +66,37 @@ pub enum ExecutionReport {
     /// The row existed but was not `Approved` — no spawn (idempotency:
     /// second claim, already executed, still pending, rejected, expired).
     NotClaimed(&'static str),
-    /// Claim won but the spawn failed. The row stays `Executed`.
+    /// Claim won but the spawn failed. The row transitions to
+    /// `ExecutionFailed` (audit finding #10) — distinct from `Spawned`'s
+    /// persisted `Executed`.
     SpawnFailed(String),
     /// The id does not exist in the queue.
     NotFound,
 }
 
 /// Claim one dispatch CAS-style and, when the claim wins, spawn its fixed
-/// argv. The transition lands BEFORE the process spawns.
+/// argv. The transition lands BEFORE the process spawns; a failed spawn is
+/// then persisted as `ExecutionFailed` so it never masquerades as a
+/// successful `Executed` row (audit finding #10).
 pub fn execute_one(queue: &DispatchQueue, id: &str) -> anyhow::Result<ExecutionReport> {
     match queue.claim_approved(id)? {
         ClaimOutcome::NotFound => Ok(ExecutionReport::NotFound),
         ClaimOutcome::AlreadyResolved(state) => Ok(ExecutionReport::NotClaimed(state.as_str())),
-        ClaimOutcome::Claimed(dispatch) => Ok(spawn_fixed_argv(&dispatch)),
+        ClaimOutcome::Claimed(dispatch) => {
+            let report = spawn_fixed_argv(&dispatch);
+            if let ExecutionReport::SpawnFailed(_) = &report {
+                // Persist the failure. If this itself errors the report
+                // still stands (degraded to the pre-fix `Executed` row);
+                // never mask the spawn error behind a bookkeeping error.
+                if let Err(e) = queue.mark_execution_failed(&dispatch.id) {
+                    error!(
+                        "[dispatch-executor] failed to mark dispatch={} as ExecutionFailed: {e:#} — row degrades to Executed (pre-fix behavior)",
+                        dispatch.id
+                    );
+                }
+            }
+            Ok(report)
+        }
     }
 }
 
@@ -87,7 +105,7 @@ fn spawn_fixed_argv(dispatch: &PendingDispatch) -> ExecutionReport {
         // enqueue() cannot produce an empty argv, but a security primitive
         // never trusts "cannot happen": fail loudly, row stays Executed.
         error!(
-            "[dispatch-executor] dispatch={} has EMPTY argv — refusing to spawn (row stays Executed)",
+            "[dispatch-executor] dispatch={} has EMPTY argv — refusing to spawn (row marked ExecutionFailed)",
             dispatch.id
         );
         return ExecutionReport::SpawnFailed("empty argv".to_string());
@@ -117,7 +135,7 @@ fn spawn_fixed_argv(dispatch: &PendingDispatch) -> ExecutionReport {
         }
         Err(e) => {
             error!(
-                "[dispatch-executor] spawn FAILED dispatch={} agent={} argv={:?}: {e} — row stays Executed; retry is a human decision",
+                "[dispatch-executor] spawn FAILED dispatch={} agent={} argv={:?}: {e} — row marked ExecutionFailed; retry is a human decision",
                 dispatch.id, dispatch.agent_id, dispatch.command
             );
             ExecutionReport::SpawnFailed(e.to_string())
@@ -221,13 +239,20 @@ mod tests {
     }
 
     #[test]
-    fn spawn_failure_keeps_row_executed_and_reports() {
+    fn spawn_failure_marks_row_execution_failed_and_reports() {
         // A claim that wins but cannot spawn must NOT roll back to Approved
-        // (no automatic retry loop): row stays Executed, error is reported.
+        // (no automatic retry loop) and must NOT persist as `Executed`
+        // (audit finding #10): the row lands in `ExecutionFailed`, and a
+        // second attempt reports exactly that — distinguishable from the
+        // `NotClaimed("Executed")` of a successful spawn.
         let q = queue();
         let d = approved(&q, "deep", vec!["definitely-not-a-real-binary-4f8a2c".into()]);
         let report = execute_one(&q, &d.id).unwrap();
         assert!(matches!(report, ExecutionReport::SpawnFailed(_)), "got {report:?}");
-        assert_eq!(q.get(&d.id).unwrap().unwrap().state, DispatchState::Executed);
+        assert_eq!(q.get(&d.id).unwrap().unwrap().state, DispatchState::ExecutionFailed);
+        assert_eq!(
+            execute_one(&q, &d.id).unwrap(),
+            ExecutionReport::NotClaimed("ExecutionFailed")
+        );
     }
 }
