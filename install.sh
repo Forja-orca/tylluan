@@ -136,4 +136,35 @@ say ""
 say "For better retrieval (BGE-M3):"
 info "  tylluan download-models"
 say ""
+
+# ── Python guilds (optional — the 46 Python tool plugins) ──────────────
+# Detection only: NEVER pip-install into the user's system Python from an
+# installer (PEP 668 blocks it on Debian/Ubuntu/Fedora and it mutates the
+# user's environment without consent). Print the exact command instead.
+say "Python guilds (46 tools, optional):"
+GUILD_PY=""
+for c in python3 python; do
+  if command -v "$c" >/dev/null 2>&1; then
+    GUILD_PY="$c"
+    break
+  fi
+done
+if [ -z "$GUILD_PY" ]; then
+  info "  Python 3.12+ not found — Python guilds won't run (kernel + MCP memory unaffected)."
+  info "  Install Python 3.12+: https://www.python.org/downloads/"
+elif ! "$GUILD_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+  info "  $("$GUILD_PY" --version 2>&1) found — guilds need Python 3.12+."
+  info "  Upgrade: https://www.python.org/downloads/"
+elif "$GUILD_PY" -c 'import mcp, fastmcp, psutil' >/dev/null 2>&1; then
+  say "  $("$GUILD_PY" --version 2>&1) + guild deps OK"
+else
+  REQ_DIR="https://raw.githubusercontent.com/Forja-orca/tylluan/main/guilds"
+  if [ -f guilds/requirements.txt ]; then
+    REQ_DIR="guilds"
+  fi
+  info "  $("$GUILD_PY" --version 2>&1) found, guild deps missing. Install them with:"
+  info "    $GUILD_PY -m pip install -r ${REQ_DIR}/requirements.txt"
+fi
+say ""
+
 say "Tylluan v${LATEST} installed to ${BIN_DIR}/"

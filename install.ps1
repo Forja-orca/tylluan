@@ -152,3 +152,43 @@ Write-Host ""
 Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"
 Write-Host ""
+
+# ── Python guilds (optional — the 46 Python tool plugins) ──────────────
+# Detection only: NEVER pip-install into the user's system Python from an
+# installer (it mutates the user's environment without consent, and PEP 668
+# blocks it on major Linux distros anyway). Print the exact command instead.
+Write-Host "Python guilds (46 tools, optional):" -ForegroundColor White
+$GuildPy = $null
+foreach ($Cand in @("python", "python3")) {
+    $Cmd = Get-Command $Cand -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($Cmd) { $GuildPy = $Cmd.Source; break }
+}
+if (-not $GuildPy) {
+    Write-Host "  Python 3.12+ not found — Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
+    Write-Host "  Install Python 3.12+: https://www.python.org/downloads/" -ForegroundColor Yellow
+} else {
+    $VerOk = $false
+    $Ver = ""
+    try {
+        & $GuildPy -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" 2>$null | Out-Null
+        $VerOk = ($LASTEXITCODE -eq 0)
+        $Ver = ((& $GuildPy --version 2>&1) | Out-String).Trim()
+    } catch {
+        $Ver = ""
+    }
+    if (-not $VerOk) {
+        if ($Ver -notmatch '^Python \d') { $Ver = "Python not usable" }
+        Write-Host "  $Ver — guilds need Python 3.12+. Upgrade: https://www.python.org/downloads/" -ForegroundColor Yellow
+    } else {
+        & $GuildPy -c "import mcp, fastmcp, psutil" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  $Ver + guild deps OK" -ForegroundColor Green
+        } else {
+            $ReqDir = "https://raw.githubusercontent.com/Forja-orca/tylluan/main/guilds"
+            if (Test-Path "guilds\requirements.txt") { $ReqDir = "guilds" }
+            Write-Host "  $Ver found, guild deps missing. Install them with:" -ForegroundColor Yellow
+            Write-Host "    $GuildPy -m pip install -r $ReqDir/requirements.txt" -ForegroundColor Yellow
+        }
+    }
+}
+Write-Host ""
