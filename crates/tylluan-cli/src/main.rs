@@ -18,7 +18,7 @@ enum InstallProfile {
     Portable,
     /// BGE-Small embedding (67MB, 384-dim). Good for ~200K docs on 8GB RAM.
     Clinic,
-    /// BGE-M3 embedding (1.2GB, 1024-dim). Full semantic search, production grade.
+    /// mxbai-embed-large embedding (1024-dim native). Full semantic search, production grade.
     Server,
 }
 
@@ -623,7 +623,7 @@ async fn main() -> Result<()> {
             if profile != InstallProfile::Portable {
                 let model_name = match profile {
                     InstallProfile::Clinic => "BGE-Small (67MB)",
-                    _ => "BGE-M3 (1.2GB)",
+                    _ => "mxbai-embed-large (1024d)",
                 };
                 println!("📥 Downloading {model_name} embedding model...");
                 let exe_path = find_kernel_exe()?;
@@ -1018,7 +1018,7 @@ def test_{snake}_tool_registered():
 /// bottom tier, matching its own doc comment "runs on a potato"):
 ///   RAM < 8GB            -> Portable (BM25-only, zero downloads)
 ///   RAM >= 8GB, no GPU   -> Clinic   (BGE-Small, light semantic)
-///   RAM >= 8GB, GPU seen -> Server   (BGE-M3, full semantic)
+///   RAM >= 8GB, GPU seen -> Server   (mxbai-embed-large, full semantic)
 fn detect_recommended_profile() -> (InstallProfile, String) {
     let mut sys = System::new();
     sys.refresh_memory();
@@ -1082,7 +1082,7 @@ fn generate_config(profile: InstallProfile) -> String {
     let (embedding_model, vector_dimensions) = match profile {
         InstallProfile::Portable => ("none", 0),
         InstallProfile::Clinic => ("bge-small", 384),
-        InstallProfile::Server => ("bge-m3", 1024),
+        InstallProfile::Server => ("mxbai-embed-large", 1024),
     };
 
     format!(
@@ -1110,11 +1110,11 @@ transport = ["stdio", "http"]
 db_path = "./data/tylluan.db"
 
 # ── Embedding model ─────────────────────────────────────────────────
-# | profile  | model      | dim  | use case                  |
-# |----------|------------|------|---------------------------|
-# | portable | none       | 0    | BM25-only, offline-first  |
-# | clinic   | bge-small  | 384  | light semantic (~67MB)    |
-# | server   | bge-m3     | 1024 | full semantic (~1.2GB)   |
+# | profile  | model             | dim  | use case                  |
+# |----------|-------------------|------|---------------------------|
+# | portable | none              | 0    | BM25-only, offline-first  |
+# | clinic   | bge-small         | 384  | light semantic (~67MB)    |
+# | server   | mxbai-embed-large | 1024 | full semantic (1024d)     |
 embedding_model = "{embedding_model}"
 vector_dimensions = {vector_dimensions}
 
@@ -1505,4 +1505,20 @@ mod installer_flag_tests {
             }
         }
     }
+
+    #[test]
+    fn test_generate_config_profiles() {
+        let portable = generate_config(InstallProfile::Portable);
+        assert!(portable.contains(r#"embedding_model = "none""#));
+        assert!(portable.contains("vector_dimensions = 0"));
+
+        let clinic = generate_config(InstallProfile::Clinic);
+        assert!(clinic.contains(r#"embedding_model = "bge-small""#));
+        assert!(clinic.contains("vector_dimensions = 384"));
+
+        let server = generate_config(InstallProfile::Server);
+        assert!(server.contains(r#"embedding_model = "mxbai-embed-large""#));
+        assert!(server.contains("vector_dimensions = 1024"));
+    }
 }
+
