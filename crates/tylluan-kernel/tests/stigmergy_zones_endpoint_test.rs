@@ -206,3 +206,45 @@ async fn test_zones_fallback_for_non_default_uri_without_duplicates() {
     // Fresh single trace → the fallback (heat ~1.0) sorts first.
     assert_eq!(zones[0]["zone_id"], novel);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_post_stigmergy_trace_endpoint_records_and_diffuses() {
+    let state = support::test_state("stg-post").await;
+    let app = support::build_test_app(state);
+
+    // 1. Post a direct trace on a default zone
+    let body = serde_json::json!({
+        "target_uri": "crates/tylluan-kernel/transport",
+        "target_kind": "zone",
+        "agent_id": "test-writer",
+        "trace_type": "direct",
+        "weight": 1.0
+    });
+    let req = Request::builder()
+        .uri("/api/v1/stigmergy/traces")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // 2. Query zones through GET /api/v1/stigmergy/zones
+    let zones_resp = get_zones(app).await;
+    let zones = zones_resp["zones"].as_array().unwrap();
+
+    let transport_zone = zones
+        .iter()
+        .find(|z| z["zone_id"] == "crates/tylluan-kernel/transport")
+        .expect("transport zone present");
+    assert!(transport_zone["heat"].as_f64().unwrap() > 0.9);
+    assert_eq!(transport_zone["total_traces"].as_u64().unwrap(), 1);
+
+    // 3. Neighbor zone (e.g. router) must receive diffuse trace
+    let router_zone = zones
+        .iter()
+        .find(|z| z["zone_id"] == "crates/tylluan-kernel/router")
+        .expect("router neighbor zone present");
+    assert!(router_zone["heat"].as_f64().unwrap() > 0.25);
+}

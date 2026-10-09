@@ -585,6 +585,126 @@ async fn test_silva() -> SilvaDB {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_record_work_trace_and_spatial_diffusion() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+
+        // Record trace on transport zone directly
+        db.record_work_trace_at(
+            "crates/tylluan-kernel/transport",
+            "zone",
+            "agent-alpha",
+            "direct",
+            1.0,
+            now,
+        )
+        .await
+        .unwrap();
+
+        // Target zone has heat = 1.0 (weight 1.0 at t=0)
+        let heat_target = db
+            .work_traces_heat_exact("crates/tylluan-kernel/transport", Some(now))
+            .await
+            .unwrap();
+        assert!((heat_target - 1.0).abs() < 1e-4, "target heat should be ~1.0, got {heat_target}");
+
+        // Neighbor zones (router and p2p) receive diffuse traces with weight 0.3
+        let heat_router = db
+            .work_traces_heat_exact("crates/tylluan-kernel/router", Some(now))
+            .await
+            .unwrap();
+        assert!((heat_router - 0.3).abs() < 1e-4, "router neighbor heat should be ~0.3, got {heat_router}");
+
+        let heat_p2p = db
+            .work_traces_heat_exact("crates/tylluan-link/p2p", Some(now))
+            .await
+            .unwrap();
+        assert!((heat_p2p - 0.3).abs() < 1e-4, "p2p neighbor heat should be ~0.3, got {heat_p2p}");
+
+        // Non-neighbor zone (e.g. docs/reference/adr) has zero heat
+        let heat_adr = db
+            .work_traces_heat_exact("docs/reference/adr", Some(now))
+            .await
+            .unwrap();
+        assert_eq!(heat_adr, 0.0, "non-neighbor zone should have 0.0 heat");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_record_work_trace_resolves_path_to_zone() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+
+        // Touch a concrete file inside the transport crate module
+        let file_path = "crates/tylluan-kernel/src/transport/server/handler_do/mod.rs";
+        db.record_work_trace_at(
+            file_path,
+            "file",
+            "agent-beta",
+            "tool_call",
+            1.0,
+            now,
+        )
+        .await
+        .unwrap();
+
+        // 1. File itself gets heat
+        let heat_file = db.work_traces_heat_exact(file_path, Some(now)).await.unwrap();
+        assert!((heat_file - 1.0).abs() < 1e-4);
+
+        // 2. Resolved zone gets heat
+        let heat_zone = db
+            .work_traces_heat_exact("crates/tylluan-kernel/transport", Some(now))
+            .await
+            .unwrap();
+        assert!((heat_zone - 1.0).abs() < 1e-4);
+
+        // 3. Zone's neighbors get diffuse heat
+        let heat_router = db
+            .work_traces_heat_exact("crates/tylluan-kernel/router", Some(now))
+            .await
+            .unwrap();
+        assert!((heat_router - 0.3).abs() < 1e-4);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_prune_old_traces_covers_both_node_and_work_traces() {
+        let db = test_silva().await;
+        let now = 1_800_000_000i64;
+        let ten_days_ago = now - (10 * 86400);
+        let one_day_ago = now - 86400;
+
+        // Seed node_traces: 1 old, 1 fresh
+        {
+            let conn = db.conn.lock().await;
+            conn.execute(
+                "INSERT INTO node_traces (node_id, agent_id, touched_at, trace_type) VALUES ('old-node', 'a1', ?1, 'direct')",
+                params![ten_days_ago],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO node_traces (node_id, agent_id, touched_at, trace_type) VALUES ('fresh-node', 'a1', ?1, 'direct')",
+                params![one_day_ago],
+            ).unwrap();
+        }
+
+        // Seed work_traces: 1 old, 1 fresh
+        db.record_work_trace_at("task:old", "task", "a1", "direct", 1.0, ten_days_ago).await.unwrap();
+        db.record_work_trace_at("task:fresh", "task", "a1", "direct", 1.0, one_day_ago).await.unwrap();
+
+        // Cutoff: 7 days ago
+        let cutoff = now - (7 * 86400);
+        let pruned = db.prune_traces_before(cutoff).await.unwrap();
+        assert_eq!(pruned, 2, "must prune 1 old node_trace and 1 old work_trace");
+
+        // Verify remaining rows
+        let conn = db.conn.lock().await;
+        let node_count: i64 = conn.query_row("SELECT COUNT(*) FROM node_traces", [], |r| r.get(0)).unwrap();
+        assert_eq!(node_count, 1, "only fresh node_trace must remain");
+
+        let work_count: i64 = conn.query_row("SELECT COUNT(*) FROM work_traces", [], |r| r.get(0)).unwrap();
+        assert_eq!(work_count, 1, "only fresh work_trace must remain");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_prune_cold_nodes() {
         let db = test_silva().await;
         db.upsert_node("hot", "concept", "Hot", "{}").await.unwrap();

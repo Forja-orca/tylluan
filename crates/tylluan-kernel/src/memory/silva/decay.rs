@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -6,6 +6,129 @@ use tracing::info;
 use tylluan_fsrs::FsrsItem;
 
 use super::DURABLE_SUMMARY_EXCLUSION;
+
+/// Default zone metadata definition per ADR-015 §4.1.
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultZone {
+    pub id: &'static str,
+    pub subsystem: &'static str,
+    pub description: &'static str,
+    pub neighbors: &'static [&'static str],
+}
+
+pub const DEFAULT_ZONES: &[DefaultZone] = &[
+    DefaultZone {
+        id: "crates/tylluan-kernel/transport",
+        subsystem: "kernel",
+        description: "Sovereign MCP transport handlers, SSE event loop, HTTP router & rate limiter",
+        neighbors: &["crates/tylluan-kernel/router", "crates/tylluan-link/p2p"],
+    },
+    DefaultZone {
+        id: "dashboard/src/components",
+        subsystem: "dashboard",
+        description: "React dashboard UI, consolidated tab suites, metric primitives, and observability panels",
+        neighbors: &["dashboard/src/hooks", "packages/tylluan-ui-core"],
+    },
+    DefaultZone {
+        id: "docs/reference/adr",
+        subsystem: "docs",
+        description: "Architecture Decision Records (ADR-001..015), declarative contracts, and specifications",
+        neighbors: &["docs/roadmap", "docs/internal"],
+    },
+    DefaultZone {
+        id: "crates/tylluan-kernel/memory",
+        subsystem: "kernel",
+        description: "SilvaDB semantic graph, FSRS-5 spaced consolidation, decay.rs stigmergy math, and agent profiles",
+        neighbors: &["crates/tylluan-kernel/router"],
+    },
+    DefaultZone {
+        id: "crates/tylluan-link/gossip",
+        subsystem: "link",
+        description: "Gossip protocol anti-entropy sync, LRU vector stores, and peer capability registry",
+        neighbors: &["crates/tylluan-link/p2p"],
+    },
+    DefaultZone {
+        id: "guilds/core",
+        subsystem: "guilds",
+        description: "Python ecosystem tools, vision moondream, check_coloquio, and worker coordinators",
+        neighbors: &["guilds/vision"],
+    },
+    DefaultZone {
+        id: "crates/tylluan-link/p2p",
+        subsystem: "link",
+        description: "Noise XK session pools, direct TCP socket dispatch, and NAT traversal handlers",
+        neighbors: &["crates/tylluan-kernel/transport"],
+    },
+    DefaultZone {
+        id: "docs-site/src",
+        subsystem: "docs",
+        description: "Next.js 3010 interactive architecture visualizer, 3D maps, and interactive graphs",
+        neighbors: &["docs/reference/adr"],
+    },
+    DefaultZone {
+        id: "crates/tylluan-kernel/config",
+        subsystem: "kernel",
+        description: "tylluan.toml declarative configuration parser, identity keys, and environment guards",
+        neighbors: &[],
+    },
+    DefaultZone {
+        id: "crates/tylluan-kernel/router",
+        subsystem: "kernel",
+        description: "Intent router, embeddings batching, catalog scoring, and capability discovery",
+        neighbors: &["crates/tylluan-kernel/memory"],
+    },
+    DefaultZone {
+        id: "guilds/vision",
+        subsystem: "guilds",
+        description: "Local OCR, screenshot capture, and visual reasoning pipeline",
+        neighbors: &["guilds/core"],
+    },
+    DefaultZone {
+        id: "docs/roadmap",
+        subsystem: "docs",
+        description: "Technical roadmaps (ROADMAP_O3), milestone trackers, and specification drafts",
+        neighbors: &["docs/reference/adr"],
+    },
+];
+
+/// Returns the neighbor zones for a given zone ID if known.
+pub fn zone_neighbors(zone_id: &str) -> Option<&'static [&'static str]> {
+    DEFAULT_ZONES.iter().find(|z| z.id == zone_id).map(|z| z.neighbors)
+}
+
+/// Resolves a file path or URI prefix to its matching default zone ID, if any.
+pub fn resolve_zone_for_path(path: &str) -> Option<&'static str> {
+    let clean = path.replace('\\', "/");
+    let norm = clean.trim_start_matches("./");
+
+    // 1. Direct match or subpath of zone id
+    for zone in DEFAULT_ZONES {
+        if norm == zone.id || norm.starts_with(&format!("{}/", zone.id)) {
+            return Some(zone.id);
+        }
+    }
+
+    // 2. Crate src module mapping: crates/<crate>/src/<module> -> crates/<crate>/<module>
+    for zone in DEFAULT_ZONES {
+        if let Some(rest) = zone.id.strip_prefix("crates/")
+            && let Some((crate_name, module)) = rest.split_once('/') {
+                let src_prefix = format!("crates/{crate_name}/src/{module}");
+                if norm == src_prefix || norm.starts_with(&format!("{src_prefix}/")) {
+                    return Some(zone.id);
+                }
+            }
+    }
+
+    // 3. Guilds: guilds/vision -> guilds/vision, guilds/* -> guilds/core
+    if norm.starts_with("guilds/vision") {
+        return Some("guilds/vision");
+    }
+    if norm.starts_with("guilds/") {
+        return Some("guilds/core");
+    }
+
+    None
+}
 
 impl super::SilvaDB {
     /// Apply FSRS-based retrievability decay to nodes, then prune dead memories.
@@ -173,27 +296,36 @@ impl super::SilvaDB {
         })
     }
 
-    /// Remove node_traces older than `keep_days` days. Returns count of deleted rows.
+    /// Remove node_traces and work_traces older than `keep_days` days. Returns count of deleted rows.
     pub async fn prune_old_traces(&self, keep_days: i64) -> Result<usize> {
+        let cutoff = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64 - (keep_days * 86400);
+        self.prune_traces_before(cutoff).await
+    }
+
+    /// Delete traces from both `node_traces` and `work_traces` older than `cutoff_unix`.
+    pub async fn prune_traces_before(&self, cutoff_unix: i64) -> Result<usize> {
         let conn = Arc::clone(&self.conn);
         let result = tokio::task::spawn_blocking(move || {
             let conn = conn.blocking_lock();
-            let deleted = conn.execute(
-                "DELETE FROM node_traces WHERE touched_at < (strftime('%s', 'now') - ?1)",
-                rusqlite::params![keep_days * 86400],
-            );
-            match deleted {
-                Ok(count) => {
-                    if count > 0 {
-                        info!("🧹 pruned {} old node_traces (>{} days)", count, keep_days);
-                    }
-                    Ok::<usize, anyhow::Error>(count)
-                }
-                Err(e) => Err(anyhow::anyhow!("prune_old_traces failed: {e}")),
+            let deleted_nodes = conn.execute(
+                "DELETE FROM node_traces WHERE touched_at < ?1",
+                rusqlite::params![cutoff_unix],
+            )?;
+            let deleted_work = conn.execute(
+                "DELETE FROM work_traces WHERE touched_at < ?1",
+                rusqlite::params![cutoff_unix],
+            )?;
+            let total = deleted_nodes + deleted_work;
+            if total > 0 {
+                info!("🧹 pruned {} old traces ({} node_traces, {} work_traces, cutoff={})", total, deleted_nodes, deleted_work, cutoff_unix);
             }
+            Ok::<usize, anyhow::Error>(total)
         })
         .await
-        .map_err(|e| anyhow::anyhow!("prune_old_traces spawn failed: {e}"))??;
+        .map_err(|e| anyhow::anyhow!("prune_traces spawn failed: {e}"))??;
         Ok(result)
     }
 
@@ -388,6 +520,101 @@ impl super::SilvaDB {
             out.insert(uri.clone(), heat);
         }
         Ok(out)
+    }
+
+    /// Record a work trace for an agent touching a target resource (file, zone, task, etc.).
+    /// Applies spatial diffusion to neighbor zones when the target is or belongs to a known zone.
+    pub async fn record_work_trace(
+        &self,
+        target_uri: &str,
+        target_kind: &str,
+        agent_id: &str,
+        trace_type: &str,
+        weight: f64,
+    ) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        self.record_work_trace_at(target_uri, target_kind, agent_id, trace_type, weight, now).await
+    }
+
+    /// Like `record_work_trace`, but accepts an explicit `touched_at` timestamp.
+    /// Useful for testing and deterministic time scenarios.
+    pub async fn record_work_trace_at(
+        &self,
+        target_uri: &str,
+        target_kind: &str,
+        agent_id: &str,
+        trace_type: &str,
+        weight: f64,
+        touched_at: i64,
+    ) -> Result<()> {
+        if target_uri.trim().is_empty() {
+            bail!("target_uri cannot be empty");
+        }
+        let target_uri = target_uri.to_string();
+        let target_kind = if target_kind.trim().is_empty() { "zone".to_string() } else { target_kind.to_string() };
+        let agent_id = if agent_id.trim().is_empty() { "unknown".to_string() } else { agent_id.to_string() };
+        let trace_type = if trace_type.trim().is_empty() { "direct".to_string() } else { trace_type.to_string() };
+        let weight = if weight <= 0.0 { 1.0 } else { weight };
+
+        let resolved_zone = resolve_zone_for_path(&target_uri).map(|s| s.to_string());
+        let neighbors: Vec<String> = if let Some(ref rz) = resolved_zone {
+            zone_neighbors(rz).map(|arr| arr.iter().map(|s| s.to_string()).collect()).unwrap_or_default()
+        } else if let Some(arr) = zone_neighbors(&target_uri) {
+            arr.iter().map(|s| s.to_string()).collect()
+        } else {
+            Vec::new()
+        };
+
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = conn.prepare_cached(
+                "INSERT INTO work_traces (target_uri, target_kind, agent_id, trace_type, weight, touched_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )?;
+
+            // 1. Primary trace
+            stmt.execute(params![
+                target_uri,
+                target_kind,
+                agent_id,
+                trace_type,
+                weight,
+                touched_at,
+            ])?;
+
+            // 2. If target_uri resolved to a zone and is not identical to that zone, record on the zone itself
+            if let Some(ref rz) = resolved_zone
+                && *rz != target_uri {
+                    stmt.execute(params![
+                        rz,
+                        "zone",
+                        agent_id,
+                        trace_type,
+                        weight,
+                        touched_at,
+                    ])?;
+                }
+
+            // 3. Spatial diffusion (ADR-015 §4.1): propagate diffuse traces (weight=0.3) to neighbor zones
+            const DIFFUSE_WEIGHT: f64 = 0.3;
+            for neighbor in neighbors {
+                stmt.execute(params![
+                    neighbor,
+                    "zone",
+                    agent_id,
+                    "diffuse",
+                    DIFFUSE_WEIGHT,
+                    touched_at,
+                ])?;
+            }
+
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        Ok(())
     }
 
     /// Batch heat calculation for multiple nodes.

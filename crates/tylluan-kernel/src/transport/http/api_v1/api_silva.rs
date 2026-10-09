@@ -89,22 +89,9 @@ use crate::memory::silva::SilvaDB;
 /// math, contention_risk matrix) is testable against a real SilvaDB with
 /// deterministic time -- mirrors the work_traces tests in silva/tests.rs.
 pub async fn stigmergy_zones_core(db: &SilvaDB, now_unix: i64) -> serde_json::Value {
-    let default_zones: Vec<(&str, &str, &str, Vec<&str>)> = vec![
-        ("crates/tylluan-kernel/transport", "kernel", "Sovereign MCP transport handlers, SSE event loop, HTTP router & rate limiter", vec!["crates/tylluan-kernel/router", "crates/tylluan-link/p2p"]),
-        ("dashboard/src/components", "dashboard", "React dashboard UI, consolidated tab suites, metric primitives, and observability panels", vec!["dashboard/src/hooks", "packages/tylluan-ui-core"]),
-        ("docs/reference/adr", "docs", "Architecture Decision Records (ADR-001..015), declarative contracts, and specifications", vec!["docs/roadmap", "docs/internal"]),
-        ("crates/tylluan-kernel/memory", "kernel", "SilvaDB semantic graph, FSRS-5 spaced consolidation, decay.rs stigmergy math, and agent profiles", vec!["crates/tylluan-kernel/router"]),
-        ("crates/tylluan-link/gossip", "link", "Gossip protocol anti-entropy sync, LRU vector stores, and peer capability registry", vec!["crates/tylluan-link/p2p"]),
-        ("guilds/core", "guilds", "Python ecosystem tools, vision moondream, check_coloquio, and worker coordinators", vec!["guilds/vision"]),
-        ("crates/tylluan-link/p2p", "link", "Noise XK session pools, direct TCP socket dispatch, and NAT traversal handlers", vec!["crates/tylluan-kernel/transport"]),
-        ("docs-site/src", "docs", "Next.js 3010 interactive architecture visualizer, 3D maps, and interactive graphs", vec!["docs/reference/adr"]),
-        ("crates/tylluan-kernel/config", "kernel", "tylluan.toml declarative configuration parser, identity keys, and environment guards", vec![]),
-        ("crates/tylluan-kernel/router", "kernel", "Intent router, embeddings batching, catalog scoring, and capability discovery", vec!["crates/tylluan-kernel/memory"]),
-        ("guilds/vision", "guilds", "Local OCR, screenshot capture, and visual reasoning pipeline", vec!["guilds/core"]),
-        ("docs/roadmap", "docs", "Technical roadmaps (ROADMAP_O3), milestone trackers, and specification drafts", vec!["docs/reference/adr"]),
-    ];
+    let default_zones = crate::memory::silva::decay::DEFAULT_ZONES;
 
-    let mut uris_set: std::collections::HashSet<String> = default_zones.iter().map(|(id, _, _, _)| (*id).to_string()).collect();
+    let mut uris_set: std::collections::HashSet<String> = default_zones.iter().map(|z| z.id.to_string()).collect();
 
     let cutoff = now_unix - (16 * 3600);
     let extra_uris = tokio::task::block_in_place(|| {
@@ -175,8 +162,8 @@ pub async fn stigmergy_zones_core(db: &SilvaDB, now_unix: i64) -> serde_json::Va
     });
 
     let default_desc_map: std::collections::HashMap<&str, (&str, &str, Vec<&str>)> = default_zones
-        .into_iter()
-        .map(|(id, sub, desc, neigh)| (id, (sub, desc, neigh)))
+        .iter()
+        .map(|z| (z.id, (z.subsystem, z.description, z.neighbors.to_vec())))
         .collect();
 
     let mut zones_list: Vec<serde_json::Value> = Vec::new();
@@ -249,6 +236,61 @@ pub async fn stigmergy_zones_handler(State(state): State<Arc<HttpState>>) -> imp
         .as_secs() as i64;
     let body = stigmergy_zones_core(&state.silva, now_unix).await;
     (StatusCode::OK, Json(body)).into_response()
+}
+
+#[derive(serde::Deserialize)]
+pub struct StigmergyRecordTraceRequest {
+    pub target_uri: String,
+    #[serde(default = "default_target_kind")]
+    pub target_kind: String,
+    pub agent_id: String,
+    #[serde(default = "default_trace_type")]
+    pub trace_type: String,
+    #[serde(default = "default_trace_weight")]
+    pub weight: f64,
+}
+
+fn default_target_kind() -> String { "zone".to_string() }
+fn default_trace_type() -> String { "direct".to_string() }
+fn default_trace_weight() -> f64 { 1.0 }
+
+/// `POST /api/v1/stigmergy/traces` — record a work trace with spatial diffusion.
+pub async fn stigmergy_record_trace_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(req): Json<StigmergyRecordTraceRequest>,
+) -> impl IntoResponse {
+    if req.target_uri.trim().is_empty() || req.agent_id.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "target_uri and agent_id must not be empty"
+            })),
+        ).into_response();
+    }
+
+    match state.silva.record_work_trace(
+        &req.target_uri,
+        &req.target_kind,
+        &req.agent_id,
+        &req.trace_type,
+        req.weight,
+    ).await {
+        Ok(()) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "status": "recorded",
+                "target_uri": req.target_uri,
+                "target_kind": req.target_kind,
+                "agent_id": req.agent_id,
+                "trace_type": req.trace_type,
+                "weight": req.weight,
+            })),
+        ).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ).into_response(),
+    }
 }
 
 #[cfg(test)]

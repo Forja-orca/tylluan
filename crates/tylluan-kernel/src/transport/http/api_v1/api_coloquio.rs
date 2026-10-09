@@ -268,6 +268,13 @@ pub async fn coloquio_post_message(
                 warn!("coloquio: failed to enqueue episodic_index for msg {}: {}", msg.msg_id, e);
             }
 
+            let task_target = format!("task:{id}");
+            let silva_coloquio = state.silva.clone();
+            let author_coloquio = req.author_id.clone();
+            tokio::spawn(async move {
+                let _ = silva_coloquio.record_work_trace(&task_target, "task", &author_coloquio, "write", 1.0).await;
+            });
+
             // Broadcast message via SSE for real-time dashboard update (M17-4)
             // content is included so watchers can detect @mentions without polling
             let _ = state.broadcast_tx.send(serde_json::json!({
