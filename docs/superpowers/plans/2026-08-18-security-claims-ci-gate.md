@@ -6,7 +6,7 @@
 
 **Architecture:** A TOML manifest (`docs/reference/security-claims.toml`) lists claims; a Python runner (`scripts/ci/claims/run_claims.py`) parses it, executes each claim's check (static = ripgrep pattern scoped to files with test/comment exclusion; dynamic = shell out to a per-claim script that talks to a live kernel instance over real HTTP/TCP), and exits non-zero with a printed table if any claim fails. A new CI job wires this into `.github/workflows/ci.yml` after the existing build step, reusing the compiled binary.
 
-**Tech Stack:** Python 3.11+ (`tomllib`, stdlib only -- no new dependency), `ripgrep` (already a CI dependency per the roadmap's "ARM64 portability" job), bash for dynamic-claim scripts, existing `tylluan-nexus` binary.
+**Tech Stack:** Python 3.12+ (`tomllib`, stdlib only -- no new dependency), `ripgrep` (already a CI dependency per the roadmap's "ARM64 portability" job), bash for dynamic-claim scripts, existing `tylluan-nexus` binary.
 
 **Spec:** `docs/superpowers/specs/2026-08-18-security-claims-ci-gate-design.md`
 

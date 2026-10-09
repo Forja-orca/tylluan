@@ -1593,7 +1593,7 @@ pub async fn find_python() -> Result<String> {
 
     bail!(
         "Python 3 not found. Tried: {candidates:?}. \
-         Please install Python 3.10+ and ensure it's in your PATH."
+         Please install Python 3.12+ and ensure it's in your PATH."
     )
 }
 
