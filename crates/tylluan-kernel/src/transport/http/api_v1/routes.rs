@@ -290,8 +290,9 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/outputs", get(outputs_list_handler))
         .route("/api/v1/outputs/{run_id}/manifest", get(outputs_manifest_handler))
 
-        // ADR-015 Stigmergic Fleet Coordination — read-only workprints heatmap
+        // ADR-015 Stigmergic Fleet Coordination — workprints heatmap & production traces
         .route("/api/v1/stigmergy/zones", get(stigmergy_zones_handler))
+        .route("/api/v1/stigmergy/traces", post(stigmergy_record_trace_handler))
 
         // Tarea Raíz 2 (2026-09-28): Capability Registry MVP — static
         // read-only index over TOOL_METADATA + guild catalog. Distinct from

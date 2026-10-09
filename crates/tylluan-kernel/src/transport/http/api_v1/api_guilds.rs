@@ -81,6 +81,15 @@ pub async fn guild_tool_call_handler(State(state): State<Arc<HttpState>>, Path((
     let req = CallToolRequestParam { name: tool.into(), arguments: args.as_object().cloned() };
     let agent_id = args.get("agent_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let _ = state.silva.touch_node(&format!("agent:{agent_id}"), agent_id, &format!("tool_call:{guild}")).await;
+    // Fire-and-forget, matching record_activity_trace/coloquio_post_message's pattern
+    // elsewhere in this ADR-015 §4.1 wiring -- a stigmergy trace write must never add
+    // SQLite-write latency to a guild tool call's HTTP response.
+    let target_guild_zone = if guild == "vision" { "guilds/vision" } else { "guilds/core" };
+    let silva_gw = state.silva.clone();
+    let agent_id_gw = agent_id.to_string();
+    tokio::spawn(async move {
+        let _ = silva_gw.record_work_trace(target_guild_zone, "guild", &agent_id_gw, "tool_call", 1.0).await;
+    });
     // bwc-d0fb0812: attribute this call in the outputs ledger when the
     // caller identifies itself. The actor keeps indexing best-effort and
     // observation-only either way.

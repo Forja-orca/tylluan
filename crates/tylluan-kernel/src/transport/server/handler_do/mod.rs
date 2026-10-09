@@ -1287,6 +1287,15 @@ async fn post_process_outcome(
     });
 
     if is_success && !intent.trim().is_empty() {
+        let path = extract_path_from_intent(intent);
+        if path != "." {
+            let silva_p = server.silva.clone();
+            let aid_p = agent_id.as_deref().unwrap_or("unknown").to_string();
+            tokio::spawn(async move {
+                let _ = silva_p.record_work_trace(&path, "file", &aid_p, "tool_call", 1.0).await;
+            });
+        }
+
         let silva_anchor = server.silva.clone();
         let engine_anchor = server.matcher.engine_arc();
         let intent_anchor = intent.to_string();

@@ -278,6 +278,18 @@ pub(super) async fn run_agent_handshake(server: &TylluanServer, aid: &str) {
 }
 
 pub(crate) fn record_activity_trace(server: &TylluanServer, aid: &str, guild_name: &str, tool_name: &str, result_text_len: usize) {
+    let silva_wt = server.silva.clone();
+    let aid_wt = aid.to_string();
+    let gn_wt = guild_name.to_string();
+    tokio::spawn(async move {
+        let target_zone = if gn_wt == "vision" {
+            "guilds/vision"
+        } else {
+            "guilds/core"
+        };
+        let _ = silva_wt.record_work_trace(target_zone, "guild", &aid_wt, "tool_call", 1.0).await;
+    });
+
     if result_text_len <= 100 { return; }
     let edge_meta = serde_json::json!({
         "tool": tool_name,
