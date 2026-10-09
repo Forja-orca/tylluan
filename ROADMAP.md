@@ -272,6 +272,19 @@ Delivered (85 commits since v0.15.0):
 
 ---
 
+## v0.17.0 — in progress (tagged 2026-08-24, 591+ commits of drift since)
+
+**Status:** `v0.17.0` was tagged on 2026-08-24 (170 commits since v0.16.0), but `Cargo.toml` has stayed at `0.17.0` through 591 further commits — this roadmap entry is necessarily partial. A full item-by-item reconciliation of everything shipped since the tag has not been done; what follows is only what's been independently verified recently, not the complete changelog. Closing that gap (either a proper v0.18.0 cut or a full backfill of this section) is itself open work.
+
+Verified recently (2026-09/10):
+- [x] **Default embedding model moved to `mxbai-embed-large`** (2026-09-30, 1024-dim native) from BGE-M3 — lower compute cost at equal dimensionality. LongMemEval-S has not been re-run against the new default yet (tracked above, README §Quick Start).
+- [x] **External audit cycle (2026-10-08/09), 11 findings closed** — all independently verified against real code before any fix, each with its own tests: broken installer flag combo that would have double-booted the kernel, insecure `host="0.0.0.0"` default, `tylluan-cli stop` killing every process by name instead of the exact instance, wrong default port (`3030` vs the real `47004` everywhere else), a dispatch-queue state (`SpawnFailed`) that silently persisted as `Executed`, two undocumented `#[ignore]`d tests, stale "49 guilds" doc claims (real: 46), a Python version requirement that disagreed with itself in 3 places (3.10/3.11/3.12), and release tarballs that shipped the Rust binaries but no Python guilds at all (so a binary-only install's own `pip install` instructions had nothing to point at).
+- [x] **ADR-015 §4.1 stigmergic heat — production writer shipped.** The heatmap endpoint existed and was tested, but the only `INSERT` into `work_traces` lived inside `#[cfg(test)]` — in production the table was always empty. Now wired into 4 real call sites (every `tylluan_do` tool call, guild REST calls, Coloquio posts, successful file-path intents), fire-and-forget, with spatial diffusion to neighbor zones and a matching prune.
+- [x] **Decision Fabric (ADR-018 §3) — 3 of 4 variants measured with real data, not simulated.** Variant D (Decima-ONNX) is GO-PROVISIONAL; variants B (SystemOne/clef-flash, real HTTP server) and C (Laya-ONNX) are both honest NO-GO — B passes accuracy/calibration but fails latency by 27x; C failed on measurement data months earlier. Only D remains a live candidate.
+- [ ] Full backfill of the other ~750 commits into this section — not done, flagged honestly rather than guessed.
+
+---
+
 ## v1.0.0 — Production Ready
 
 **Goal:** Safe to deploy in real environments.
