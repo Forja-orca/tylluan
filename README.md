@@ -28,7 +28,7 @@ Most AI memory systems ask you to trust someone else's server with your data: an
 
 Concretely, that means:
 
-- **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (mxbai-embed-large by default, BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
+- **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (full semantic search with `mxbai-embed-large` in `server` profile; BM25-only zero-download in `portable` profile; BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
 - **It works without an internet connection.** We've run it on a Raspberry Pi 4 with 12,000 stored memories, federated with three peers over encrypted Noise XK, on a network with no internet access at all.
 - **Nothing here can be taken away from you.** MIT licensed, no vendor lock-in, no feature gated behind a subscription.
 
@@ -48,7 +48,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 | Capability | Details |
 |------------|---------|
-| **Memory** | BM25 + FTS5 + local vector search (mxbai-embed-large, 1024-dim), fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
+| **Memory** | BM25 + FTS5 + local vector search (1024-dim native `mxbai-embed-large` in server profile / BM25 in portable), fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) — role assignment per `agent_id`, no manual wiring |
 | **Tools** | 46 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
@@ -135,11 +135,11 @@ Three profiles trade retrieval quality for footprint — pick based on what you'
 |---------|-------|----------|-----|-----|------|--------------|
 | `portable` | BM25 only | 0 MB | ~30 MB | 38% | 42% | 0.4 ms |
 | `clinic` | BGE-Small (384d) | ~100 MB | ~300 MB | 61% | 68% | 3.2 ms |
-| `server` | mxbai-embed-large (1024d, default) | unverified | unverified | 82% | 90% | 12.9 ms |
+| `server` | mxbai-embed-large (1024d) | unverified | unverified | 82% | 90% | 12.9 ms |
 
 *\*`server` row's R@5/R@10/latency are the BGE-M3 numbers above, not yet re-measured against the current default (`mxbai-embed-large`) — see the note above. `portable`/`clinic` are unaffected by the default-model change.*
 
-`portable` is the right call for a Raspberry Pi Zero or a fully offline deployment; `clinic` suits a RAM-constrained laptop; `server` is for a desktop or server where retrieval quality is the priority.
+`portable` is the default profile installed by `install.sh`/`install.ps1` (zero downloads, instant boot, ideal for Raspberry Pi or offline deployments); `clinic` suits a RAM-constrained laptop; `server` is for a desktop or server where full semantic retrieval quality is the priority.
 
 ### Agent skills
 
@@ -160,7 +160,7 @@ Once connected, an agent can call any guild through `tylluan_do` just by describ
 
 No — routing is 100% local, and no LLM sits in that path.
 
-When you call `tylluan_do("search for Rust async patterns")`, the kernel embeds the intent with the local embedding model (mxbai-embed-large by default, local ONNX, CPU — or falls back to keyword scoring if you've set `embedding_model = "none"`), scores it against every guild's description, escalates to a coordinator if the intent looks multi-step or ambiguous, and returns the best match with structured arguments. No HTTP call leaves your machine, no API key required — the escalation logic is pure heuristics running in-process on your CPU.
+When you call `tylluan_do("search for Rust async patterns")`, the kernel embeds the intent with the local embedding model (`mxbai-embed-large` in `server` profile, local ONNX, CPU — or falls back to keyword scoring in `portable` profile where `embedding_model = "none"`), scores it against every guild's description, escalates to a coordinator if the intent looks multi-step or ambiguous, and returns the best match with structured arguments. No HTTP call leaves your machine, no API key required — the escalation logic is pure heuristics running in-process on your CPU.
 
 Two things worth not conflating here:
 
@@ -179,7 +179,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ## Quick Start
 
-> **Setup takes about 10 minutes**, most of it spent downloading the embedding model (mxbai-embed-large by default) on first boot, one-time. Set `embedding_model = "none"` in `tylluan.toml` to skip that download. The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
+> **Setup takes under a minute.** The automated installer configures the `portable` profile by default (BM25-only, zero downloads, instant boot on any hardware). You can upgrade to full semantic search (`mxbai-embed-large`) at any time with `tylluan-cli install --profile server` or `tylluan start --setup` (which auto-detects your RAM and GPU). The kernel probes whether ONNX Runtime is actually loadable *before* ever calling into it (fixed 2026-08-23, verified live in CI via a dedicated no-ONNX boot smoke test) — if it isn't present, the reranker is skipped and the kernel falls back to BM25-only, rather than panicking.
 
 **Supported platforms:**
 
@@ -206,14 +206,15 @@ This drops `tylluan-nexus` and `tylluan-cli` into `~/.tylluan/bin/` and adds the
 
 ### 2 — Start
 
+The installer starts the kernel automatically. If you need to start it manually:
+
 ```bash
 tylluan-cli start
 ```
 
-On the very first run, the embedding model downloads with a progress bar (one-time only, size and time depend on your connection):
+It boots instantly in portable mode (BM25-only, zero downloads):
 
 ```
-Downloading mxbai-embed-large embedding model... [##########]
 ✅ Tylluan v0.17.0 running at http://127.0.0.1:47004
 ```
 
@@ -224,9 +225,10 @@ curl -s http://127.0.0.1:47004/health
 ```
 
 > [!TIP]
-> **On something smaller than a typical dev machine?**
-> * Zero-download, BM25-only: `tylluan-cli install --profile=portable`
-> * ~100 MB, BGE-Small: `tylluan-cli install --profile=clinic`
+> **Upgrading to semantic search (vector embeddings):**
+> * **Auto-detect hardware:** `tylluan start --setup` (probes RAM/GPU and writes optimal profile to `tylluan.toml`)
+> * **Full semantic (1024d):** `tylluan-cli install --profile server` (downloads `mxbai-embed-large`, ~670 MB)
+> * **Lightweight semantic (384d):** `tylluan-cli install --profile clinic` (downloads `bge-small`, ~67 MB)
 
 > **Auth:** a bearer token is generated automatically at `.tylluan-token` on first boot. Dev mode (`--dev`) skips auth entirely — only use that on a network you fully control.
 
