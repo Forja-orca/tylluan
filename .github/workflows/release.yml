@@ -63,6 +63,19 @@ jobs:
           cp target/${{ matrix.target }}/release/tylluan-cli$SUFFIX dist/
           cp README.md dist/
           cp LICENSE dist/
+          # Ship the Python guilds inside every release tarball (audit
+          # finding B, 2026-10-09): without guilds/ on disk, a release-only
+          # install has nothing for the `pip install -r guilds/requirements.txt`
+          # command the installers print, and every Python guild spawn fails
+          # (kernel spawn cwd + PYTHONPATH assume guilds/ exists next to the
+          # kernel's working directory — guild_process.rs:362-374; the same
+          # guilds/ dir bootstraps the router catalog, catalog.rs:579-600).
+          # Measured payload: 185 KB compressed / 821 KB plain (73 .py files).
+          cp -r guilds dist/guilds
+          # Bytecode caches: clean AFTER the copy so a stale or regenerated
+          # `__pycache__`/`*.pyc` can never leak into the shipped artifact.
+          find dist/guilds -name '__pycache__' -type d -prune -exec rm -rf {} +
+          find dist/guilds -name '*.pyc' -delete
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -99,6 +112,26 @@ jobs:
             sha256sum tylluan-nexus* tylluan-cli* > checksums.txt
             tar czf "../$archive" .
             cd ..
+            # Anti-relapse gate (audit finding B): every release tarball MUST
+            # contain guilds/ with the requirements file and core python guilds.
+            # A regression here silently ships a CI-green release whose Python
+            # guilds all fail at spawn "guilds/ not found" — invisible to the
+            # boot smoke (it only checks /health). Fail the release job, not
+            # the user. NOTE: members print with a `./` prefix because tar ran
+            # over `.` — verified live against a real tar czf of dist/.
+            if ! tar tzf "$archive" | grep -Eq '^\./?guilds/requirements.txt$'; then
+              echo "::error::$archive is missing guilds/requirements.txt (audit finding B regression)"
+              exit 1
+            fi
+            if ! tar tzf "$archive" | grep -Eq '^\./?guilds/core/(bash|coloquio|code_graph)\.py$'; then
+              echo "::error::$archive is missing guilds/core python guilds (audit finding B regression)"
+              exit 1
+            fi
+            if tar tzf "$archive" | grep -q '__pycache__'; then
+              echo "::error::$archive contains __pycache__ (must not ship bytecode caches)"
+              exit 1
+            fi
+            echo "::notice::$archive packaging OK: guilds/ requirements + core guilds present"
           done
 
       - name: Create Release
