@@ -133,7 +133,7 @@ def _format_result(result: dict, image: str, container_name: str) -> str:
 @mcp.tool()
 async def sandbox_run(
     command: str,
-    image: str = "python:3.11-slim",
+    image: str = "python:3.12-slim",
     timeout_secs: int = 30,
 ) -> str:
     """
@@ -146,7 +146,7 @@ async def sandbox_run(
     Args:
         command: Shell command string (e.g. "ls /tmp", "python --version")
         image: Docker image name. Must exist locally or be pullable.
-               Default: python:3.11-slim. Use 'alpine' for lightweight shell tasks.
+               Default: python:3.12-slim. Use 'alpine' for lightweight shell tasks.
         timeout_secs: Hard time limit 1–120 seconds (default 30).
     """
     if not command.strip():
@@ -168,7 +168,7 @@ async def sandbox_run(
 @mcp.tool()
 async def sandbox_python(
     script: str = "",
-    image: str = "python:3.11-slim",
+    image: str = "python:3.12-slim",
     timeout_secs: int = 30,
     intent: str = "",
     query: str = "",
@@ -181,7 +181,7 @@ async def sandbox_python(
 
     Args:
         script: Python source code to execute.
-        image: Docker image with Python. Default: python:3.11-slim.
+        image: Docker image with Python. Default: python:3.12-slim.
         timeout_secs: Hard time limit 1–120 seconds (default 30).
     """
     if not script:
@@ -364,7 +364,7 @@ print(json.dumps(result))
         "--no-new-privileges",
         "-v", f"{repo}:/workspace:ro",  # mount repo read-only
         "-i",
-        "python:3.11-slim",
+        "python:3.12-slim",
         "python", "-",
     ]
 

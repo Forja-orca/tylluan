@@ -4,7 +4,7 @@ version = "3.0.0a1"
 description = "Python tool guilds for the TylluanNexus Sovereign Agentic Hub"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "TylluanMCP Contributors" }
 ]

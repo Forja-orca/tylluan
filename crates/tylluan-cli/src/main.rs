@@ -313,19 +313,21 @@ async fn main() -> Result<()> {
             };
             match python_check() {
                 Some(v) => {
-                    // Check major.minor >= 3.11
+                    // Check major.minor >= 3.12 (matches README/guilds/requirements.txt's
+                    // published requirement -- was stale at 3.11, found during audit
+                    // finding scope "unify Python version requirement", 2026-10-09).
                     let major_minor = v.split_whitespace().nth(1).unwrap_or("0.0")
                         .split('.').take(2).map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>();
-                    if major_minor.len() == 2 && major_minor[0] >= 3 && major_minor[1] >= 11 {
+                    if major_minor.len() == 2 && major_minor[0] >= 3 && major_minor[1] >= 12 {
                         println!("[3/7] Python: {v} ... ✅");
                     } else {
-                        println!("[3/7] Python: {v} ... ❌ (need 3.11+)");
+                        println!("[3/7] Python: {v} ... ❌ (need 3.12+)");
                         all_ok = false;
                     }
                 }
                 None => {
                     println!("[3/7] Python: not found ... ❌");
-                    println!("       Install Python 3.11+: https://python.org/downloads");
+                    println!("       Install Python 3.12+: https://python.org/downloads");
                     all_ok = false;
                 }
             }
