@@ -2,6 +2,10 @@
   <img src="assets/branding/logo.jpg" alt="Tylluan" width="160">
 </p>
 
+<p align="center">
+  <strong>English</strong> · <a href="README.es.md">Español</a> · <sub>中文 (pending native review — see <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
+</p>
+
 <h1 align="center">Tylluan</h1>
 
 <p align="center">
