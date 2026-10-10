@@ -244,7 +244,8 @@ async def research_topic(
     """Research a topic: search + fetch top pages + return structured summary.
     Use for: research topic, investigar tema, deep research, multi-source research,
     gather information about, recopilar información sobre, investigate, analizar tema,
-    understand topic, comprehensive research.
+    understand topic, comprehensive research, estado del arte, compila un reporte,
+    investiga
 
     Returns structured JSON with sources and combined text ready for LLM synthesis.
 
