@@ -61,7 +61,7 @@ cargo run -p tylluan-cli -- start
 
 ## Estado actual — v0.17.0 (tagged 2026-08-23; 166 commits desde v0.16.0 `5900e97`)
 
-**Tests:** 709 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 790 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo.
+**Tests:** 998 lib tests (kernel) + 69 (tylluan-link) + 12 (tylluan-fsrs) = 1079 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo (y `scripts/check_test_count.sh` ya valida esta cifra en CI).
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:47004/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
 ### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14, sin tag de versión todavía): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md` sección `[Unreleased]` para el detalle completo.
@@ -126,7 +126,7 @@ cargo run -p tylluan-cli -- start
 ## Arquitectura invariante (CONTRACT-01)
 
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
-2. **BGE-M3 a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768.
+2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. Default actual `mxbai-embed-large` (1024d, desde 2026-09-30; BGE-M3 sigue soportado, verificado 2026-10-10 contra `config.rs:1796`). NUNCA reducir a 768.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:47004` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
@@ -158,7 +158,7 @@ cargo run -p tylluan-cli -- start
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 685+ lib tests passing
+# Esperado: 998+ lib tests passing (cifra exacta: scripts/check_test_count.sh)
 
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
 # Esperado: 69+ link tests passing
@@ -175,7 +175,7 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 - NUNCA `host = "0.0.0.0"` + `dev_mode = true` juntos (LAN RCE)
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (gitignored)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
-- NUNCA reducir timeouts para guilds de inferencia (BGE-M3 en CPU tarda 2-8s/embedding)
+- NUNCA reducir timeouts para guilds de inferencia (embeddings en CPU tardan 2-8s — BGE-M3 o mxbai-embed-large)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
 
 ---
