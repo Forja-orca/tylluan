@@ -224,9 +224,9 @@ if [ "$RUN_DOCS" = "1" ]; then
     fi
 
     if bash scripts/check_test_count.sh; then
-        ok "README.md test count"
+        ok "README/AGENTS test counts"
     else
-        fail "README.md test count — run 'scripts/check_test_count.sh --fix'"
+        fail "README/AGENTS test counts — run 'scripts/check_test_count.sh --fix'"
     fi
 
     # BOM gate (blocking): the UTF-8-BOM bug class broke CI/builds four

@@ -1,13 +1,13 @@
 {
   "protocol": "MD-3 decomposed accuracy v1",
-  "timestamp": "2026-09-30 04:07:09",
+  "timestamp": "2026-10-10 17:10:50",
   "kernel_test": {
     "url": "http://127.0.0.1:47007",
-    "commit": "844c105",
+    "commit": "afc9533",
     "version": "0.17.0"
   },
-  "git_head": "f00d293",
-  "kernel_git_lag": "2",
+  "git_head": "afc9533",
+  "kernel_git_lag": "0",
   "v3_manual_triage_reference": {
     "args_missing": 17,
     "sovereign_subtool": 11,
@@ -21,14 +21,14 @@
       "n_excluded_no_routing_cases": 9,
       "n_excluded_infra": 0,
       "n_evaluable": 68,
-      "correct": 31,
-      "accuracy": 0.4559
+      "correct": 34,
+      "accuracy": 0.5
     },
     "args_axis": {
       "n_guilds_resolved": 60,
       "n_evaluable": 60,
-      "args_complete": 40,
-      "rate": 0.6667
+      "args_complete": 48,
+      "rate": 0.8
     },
     "validity_axis": {
       "breakdown_intrinsic": {
@@ -37,23 +37,22 @@
         "sovereign_subtool": 8
       },
       "outcomes_dynamic": {
-        "args_missing": 23,
-        "plan_ok": 46,
+        "args_missing": 13,
+        "plan_ok": 56,
         "fractal_candidates": 8
       },
       "cross_tab_static_vs_dynamic": {
         "coordinator_hijack|args_missing": 1,
-        "routing_case|args_missing": 20,
-        "sovereign_subtool|args_missing": 2,
-        "routing_case|plan_ok": 40,
-        "sovereign_subtool|plan_ok": 6,
+        "routing_case|args_missing": 12,
+        "sovereign_subtool|plan_ok": 8,
+        "routing_case|plan_ok": 48,
         "routing_case|fractal_candidates": 8
       }
     },
     "legacy_end_to_end": {
       "n": 73,
-      "correct": 32,
-      "accuracy": 0.4384,
+      "correct": 35,
+      "accuracy": 0.4795,
       "v3_reference": {
         "n": 77,
         "live_accuracy": 0.3636,
@@ -64,17 +63,17 @@
   "per_ambiguity": {
     "cross_guild_ambiguity": {
       "total": 11,
-      "correct": 2,
+      "correct": 3,
       "evaluable": 11
     },
     "clear_keyword": {
       "total": 25,
-      "correct": 13,
+      "correct": 14,
       "evaluable": 25
     },
     "historical_real": {
       "total": 27,
-      "correct": 14,
+      "correct": 15,
       "evaluable": 27
     },
     "semantic_paraphrase": {
@@ -92,7 +91,7 @@
       "static_validity": "coordinator_hijack",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code_graph' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code_graph' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "code_graph",
       "is_infra": false,
       "routing_correct": false,
@@ -106,7 +105,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'pdf' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'pdf' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "pdf",
       "is_infra": false,
       "routing_correct": false,
@@ -118,13 +117,13 @@
       "target_guild": "llama_backend",
       "intent": "query_model",
       "static_validity": "sovereign_subtool",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'database' requires argument(s): url. Provide them explicitly: tylluan_do(intent='...', url<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "database",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": false,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_curated_0090",
@@ -162,7 +161,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'pdf' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'pdf' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "pdf",
       "is_infra": false,
       "routing_correct": true,
@@ -204,7 +203,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audio_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audio_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "audio_tools",
       "is_infra": false,
       "routing_correct": false,
@@ -233,7 +232,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audio_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audio_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "audio_tools",
       "is_infra": false,
       "routing_correct": true,
@@ -313,13 +312,13 @@
       "target_guild": "database",
       "intent": "inspecciona el esquema de la tabla node_embeddings en data/silva.db",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'database' requires argument(s): url. Provide them explicitly: tylluan_do(intent='...', url<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "database",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": true,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_audit_0183",
@@ -400,7 +399,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "code",
       "is_infra": false,
       "routing_correct": false,
@@ -414,7 +413,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'screenshot_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'screenshot_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "screenshot_tools",
       "is_infra": false,
       "routing_correct": true,
@@ -468,13 +467,13 @@
       "target_guild": "deep_web_research",
       "intent": "Publicar en canal general de Coloquio el informe de investigación científica del Ciclo 3 sobre el gap de retrieval: [Antigravity] Informe Científico — Análisis del Gap de Retrieval (LongMemEval-S, RRF y Métricas 2026). 1) Desmitificación matemática de Precision@5 (16.4% es el 82% del techo teórico de 20% con R=1 único needle; la métrica adecuada es R-Precision/MRR). 2) Fenómeno 'Weakest Link' y RRF k=60 según arXiv:2508.01405 (Balancing the Blend) y DBSF. 3) Benchmarks modernos 2026 (LongMemEval-V2 arXiv:2605.12493, AgentMemoryBench arXiv:2602.04562, survey arXiv:2603.07670). 4) Propuesta de arquitectura de 2 fases (tuning k=10-20 o DBSF + reranker ligero ONNX INT8 para top-20).",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'coloquio_digest' requires argument(s): channel_id. Provide them explicitly: tylluan_do(intent='...', channel_id<value>). Check guild documentation for required fields.",
-      "extracted_guild": "coloquio_digest",
+      "outcome": "plan_ok",
+      "error_prefix": null,
+      "extracted_guild": "deep_web_research",
       "is_infra": false,
-      "routing_correct": false,
-      "args_complete": false
+      "is_error": false,
+      "routing_correct": true,
+      "args_complete": true
     },
     {
       "id": "i7_curated_0032",
@@ -537,13 +536,13 @@
       "target_guild": "coloquio",
       "intent": "post a message to channel #mision-activa informing team that CI is green",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'coloquio' requires argument(s): channel_id. Provide them explicitly: tylluan_do(intent='...', channel_id<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "coloquio",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": true,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_curated_0089",
@@ -553,7 +552,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'screenshot_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'screenshot_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "screenshot_tools",
       "is_infra": false,
       "routing_correct": false,
@@ -648,13 +647,13 @@
       "target_guild": "comfy_ui",
       "intent": "**UI Primitives Compartidos (#2)**:\n   - Creados y probados `ProvenanceBadge.tsx`, `StatusPill.tsx` y `ConfirmModal.tsx` en `dashboard/src/components/ui/`.\n   - `NodesTab` actualizado utilizando los nuevos componentes compartidos.",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'browser' requires argument(s): url. Provide them explicitly: tylluan_do(intent='...', url<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "browser",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": false,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_curated_0040",
@@ -664,7 +663,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'data_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'data_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "data_tools",
       "is_infra": false,
       "routing_correct": true,
@@ -790,7 +789,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audit' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'audit' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "audit",
       "is_infra": false,
       "routing_correct": true,
@@ -845,7 +844,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'clipboard_tools' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'clipboard_tools' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "clipboard_tools",
       "is_infra": false,
       "routing_correct": true,
@@ -885,13 +884,13 @@
       "target_guild": "knowledge",
       "intent": "tylluan_remember: UI/UX Dashboard Mastery - Principle 5: Real-time Cockpit Architecture & Re-stating. WebSockets/SSE for live streams. Re-state prompt understanding to eliminate hallucinations. Surface confidence scores and actionable error states directly in context.",
       "static_validity": "sovereign_subtool",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'browser' requires argument(s): url. Provide them explicitly: tylluan_do(intent='...', url<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "browser",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": false,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_audit_0130",
@@ -913,13 +912,13 @@
       "target_guild": "coloquio",
       "intent": "check if there are any unread messages or notifications in channels",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'coloquio_digest' requires argument(s): channel_id. Provide them explicitly: tylluan_do(intent='...', channel_id<value>). Check guild documentation for required fields.",
-      "extracted_guild": "coloquio_digest",
+      "outcome": "plan_ok",
+      "error_prefix": null,
+      "extracted_guild": "coloquio",
       "is_infra": false,
-      "routing_correct": false,
-      "args_complete": false
+      "is_error": false,
+      "routing_correct": true,
+      "args_complete": true
     },
     {
       "id": "i7_curated_0056",
@@ -969,13 +968,13 @@
       "target_guild": "git",
       "intent": "¿cuál fue el último commit que tocó el archivo schema.rs?",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'database' requires argument(s): url. Provide them explicitly: tylluan_do(intent='...', url<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "database",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": false,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_audit_0109",
@@ -1041,7 +1040,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code_graph' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'code_graph' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "code_graph",
       "is_infra": false,
       "routing_correct": false,
@@ -1067,13 +1066,13 @@
       "target_guild": "deep_web_research",
       "intent": "investiga a fondo el estado del arte de la memoria de agentes en arXiv y compila un reporte",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'coloquio' requires argument(s): channel_id. Provide them explicitly: tylluan_do(intent='...', channel_id<value>). Check guild documentation for required fields.",
-      "extracted_guild": "coloquio",
+      "outcome": "plan_ok",
+      "error_prefix": null,
+      "extracted_guild": "deep_web_research",
       "is_infra": false,
-      "routing_correct": false,
-      "args_complete": false
+      "is_error": false,
+      "routing_correct": true,
+      "args_complete": true
     },
     {
       "id": "i7_curated_0058",
@@ -1097,7 +1096,7 @@
       "static_validity": "routing_case",
       "outcome": "args_missing",
       "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'ingest' requires argument(s): path. Provide them explicitly: tylluan_do(intent='...', path<value>). Check guild documentation for required fields.",
+      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'ingest' needs a file/directory path, and none could be extracted from the intent text. Provide one explicitly: tylluan_do(intent='...', path='<path>'). Refusing rather than silently operating on the kernel's own working directory.",
       "extracted_guild": "ingest",
       "is_infra": false,
       "routing_correct": false,
@@ -1109,13 +1108,13 @@
       "target_guild": "coloquio_digest",
       "intent": "resume las decisiones tomadas en el canal mision-activa en los últimos 20 turnos",
       "static_validity": "routing_case",
-      "outcome": "args_missing",
-      "error_prefix": "MISSING_ARGS:",
-      "error_text": "❌ Error: MISSING_ARGS: Error: guild 'coloquio_digest' requires argument(s): channel_id. Provide them explicitly: tylluan_do(intent='...', channel_id<value>). Check guild documentation for required fields.",
+      "outcome": "plan_ok",
+      "error_prefix": null,
       "extracted_guild": "coloquio_digest",
       "is_infra": false,
+      "is_error": false,
       "routing_correct": true,
-      "args_complete": false
+      "args_complete": true
     },
     {
       "id": "i7_curated_0007",

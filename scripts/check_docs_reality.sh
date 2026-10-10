@@ -14,7 +14,7 @@
 # cite -- the same gap check_head_sync.sh (HEAD) and check_test_count.sh
 # (tests) already close for their two dimensions. This is that same pattern.
 #
-# Three checks:
+# Five checks:
 #   1. Every backtick-cited path in STATUS.md, README.md, AGENTS.md,
 #      CLAUDE.md and docs/**/*.md that looks like a repo path (contains '/'
 #      or a known source extension) must exist on disk.
@@ -26,6 +26,14 @@
 #      we skip it rather than risk a hard false positive.
 #   3. The "## Estado actual" version in AGENTS.md must match the one in
 #      CLAUDE.md (different audiences, same current milestone).
+#   4. STATUS.md's canonical HEAD/test-count line must sum correctly
+#      (MD-6 arithmetic-drift class).
+#   5. AGENTS.md's test-count line must sum correctly AND match
+#      STATUS.md's canonical total (2026-10-10, José: extend the gates to
+#      AGENTS.md -- it had drifted to "790 en verde" while reality was
+#      1079, and only README had a real-count gate). Real-count validation
+#      lives in check_test_count.sh; this check is the grep-only layer that
+#      also runs in jobs that don't execute cargo.
 #
 # Usage: scripts/check_docs_reality.sh
 # Exit 0 if no findings, exit 1 if any. This script only REPORTS -- it never
@@ -203,6 +211,42 @@ if [ -f STATUS.md ]; then
             fi
         else
             echo "⚠️  low-confidence: no se pudieron extraer los 4 números (total/kernel/link/fsrs) de la línea canónica de STATUS.md — formato cambió, revisar a mano"
+            low_conf=$((low_conf+1))
+        fi
+    fi
+fi
+
+# ── Check 5: AGENTS.md test-count arithmetic + AGENTS vs STATUS ───────────
+# check_test_count.sh validates the numbers against REAL cargo runs. This
+# check is the cargo-free layer (grep only): AGENTS.md's own four-number
+# sum, plus cross-doc consistency with STATUS.md's canonical line (both
+# claim the same three suites, so they must claim the same total). Added
+# 2026-10-10 (José: gate AGENTS.md -- closed via the cross-check what
+# check 4 alone could not see: STATUS said 1032 total while AGENTS said
+# 790 and reality was 1079, each internally "consistent").
+if [ -f AGENTS.md ]; then
+    agents_tline=$(grep -m1 -E '^\*\*Tests:\*\* [0-9]+ lib tests \(kernel\)' AGENTS.md || true)
+    if [ -n "$agents_tline" ]; then
+        a_kernel=$(echo "$agents_tline" | grep -oE '[0-9]+ lib tests' | grep -oE '[0-9]+' | head -1)
+        a_link=$(echo "$agents_tline" | grep -oE '\+ [0-9]+ \(tylluan-link\)' | grep -oE '[0-9]+' | head -1)
+        a_fsrs=$(echo "$agents_tline" | grep -oE '\+ [0-9]+ \(tylluan-fsrs\)' | grep -oE '[0-9]+' | head -1)
+        a_total=$(echo "$agents_tline" | grep -oE '= [0-9]+ en verde' | grep -oE '[0-9]+' | head -1)
+        if [ -n "$a_kernel" ] && [ -n "$a_link" ] && [ -n "$a_fsrs" ] && [ -n "$a_total" ]; then
+            agents_sum=$((a_kernel + a_link + a_fsrs))
+            if [ "$agents_sum" != "$a_total" ]; then
+                echo "❌ AGENTS.md: la línea **Tests:** dice '$a_total' pero $a_kernel kernel + $a_link link + $a_fsrs fsrs = $agents_sum — inconsistencia aritmética en la propia cita"
+                problems=1
+            fi
+            if [ -f STATUS.md ]; then
+                status_tline_no=$(grep -n -m1 -E '^\*\*HEAD:\*\*' STATUS.md | cut -d: -f1 || true)
+                status_total=$(grep -m1 -E '^\*\*HEAD:\*\*' STATUS.md | grep -oE '\*\*[0-9]+ total\*\*' | grep -oE '[0-9]+' | head -1 || true)
+                if [ -n "$status_total" ] && [ "$status_total" != "$a_total" ]; then
+                    echo "❌ STATUS.md:${status_tline_no:-?}: la línea canónica dice '$status_total total' pero AGENTS.md dice '$a_total' — los dos reivindican los mismos 3 suites (kernel+link+fsrs) y no coinciden"
+                    problems=1
+                fi
+            fi
+        else
+            echo "⚠️  low-confidence: no se pudieron extraer los 4 números (kernel/link/fsrs/total) de la línea **Tests:** de AGENTS.md — formato cambió, revisar a mano"
             low_conf=$((low_conf+1))
         fi
     fi
