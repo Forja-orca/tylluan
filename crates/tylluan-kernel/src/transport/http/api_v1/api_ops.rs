@@ -35,7 +35,17 @@ pub async fn scheduler_confusion_handler() -> impl IntoResponse {
 }
 
 pub async fn bash_execute_handler(State(state): State<Arc<HttpState>>, Json(req): Json<BashExecuteRequest>) -> Response {
-    // Redirigir al gremio bash de forma segura a travÃ©s de tylluan_do
+    if !state.dev_mode.unwrap_or(false) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "POST /api/v1/bash is deprecated and only available in dev_mode. Use tylluan_do in production."
+            })),
+        )
+            .into_response();
+    }
+
+    // Redirigir al gremio bash de forma segura a través de tylluan_do
     let server_arc = require_server!(state);
     let server = server_arc.read().await;
 

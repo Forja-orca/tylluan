@@ -25,7 +25,8 @@ import {
   Link2,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Key
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -37,6 +38,7 @@ import { useSSEBridgeEvents } from './hooks/useSSEBridgeEvents'
 import { useAppStore } from './stores/useAppStore'
 import { cn } from './lib/utils'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AuthModal } from './components/ui/AuthModal'
 
 import React, { lazy, Suspense } from 'react'
 import { OverviewConsolidated } from './components/OverviewConsolidated'
@@ -80,17 +82,31 @@ function App() {
     window.addEventListener('nexus_switch_tab', onSwitchTab);
     return () => window.removeEventListener('nexus_switch_tab', onSwitchTab);
   }, [handleTabChange]);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  const formatUptime = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return `${h}h ${m}m ${s}s`;
-  };
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setAuthModalOpen(true);
+    };
+    window.addEventListener('nexus_unauthorized', onUnauthorized);
+    return () => window.removeEventListener('nexus_unauthorized', onUnauthorized);
+  }, []);
+
   const notify = useCallback((msg: string, type: 'info' | 'error' = 'info', guild?: string) => {
     addToast(msg, type, guild);
   }, [addToast]);
+
+  const handleSaveToken = useCallback((token: string) => {
+    if (bridge) {
+      bridge.setToken(token);
+    } else {
+      localStorage.setItem('tylluan_token', token);
+    }
+    setAuthModalOpen(false);
+    notify('Token de autenticación guardado correctamente', 'info');
+    refreshData();
+  }, [bridge, notify, refreshData]);
 
   const { pendingGrant, setPendingGrant, handleApproveGrant } = useHitlGrants({ bridge, notify })
   useColoquioMentions({ notify })
@@ -103,6 +119,15 @@ function App() {
     }, [notify]),
     maxEvents: 200,
   });
+
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+
+  const formatUptime = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h}h ${m}m ${s}s`;
+  };
 
   useEffect(() => {
     if (online) {
@@ -324,6 +349,15 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* Bearer Token Config Button */}
+          <button
+            onClick={() => setAuthModalOpen(true)}
+            className="p-2 rounded-full border bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all cursor-pointer"
+            title="Configurar Bearer Token"
+          >
+            <Key className="w-4 h-4" />
+          </button>
 
           {online && healthDetailed && (
             <div 
@@ -551,6 +585,14 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Sovereign Auth Modal for Bearer Token input on 401 */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSave={handleSaveToken}
+        initialToken={bridge?.getToken()}
+      />
 
       {/* Notifications Layer */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3">

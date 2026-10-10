@@ -19,7 +19,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post, any},
 };
-use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
+use axum::http::header::{CONTENT_TYPE, AUTHORIZATION, HeaderName};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1107,7 +1107,11 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
             Method::OPTIONS,
             Method::PATCH,
         ])
-        .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
+        .allow_headers([
+            CONTENT_TYPE,
+            AUTHORIZATION,
+            HeaderName::from_static("x-agent-id"),
+        ]);
 
     // 1. Public Routes
     let oauth_state = state.oauth.clone();

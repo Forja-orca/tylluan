@@ -190,19 +190,27 @@ async fn resolve_acl_role(
 /// `gossip_handler` having zero signature/identity check) gets caught by a
 /// test instead of only by manual audit.
 pub fn is_public_bypass_path(uri: &str) -> bool {
-    uri == "/health" || uri == "/discovery" || uri == "/ui" || uri == "/" || uri == "/dashboard" ||
-    uri.starts_with("/js/") || uri.starts_with("/css/") || uri.starts_with("/img/") || uri.starts_with("/fonts/") ||
-    uri.ends_with(".js") || uri.ends_with(".css") || uri.ends_with(".html") || uri.ends_with(".png") || uri.ends_with(".svg") ||
-    // sync/receive and sync/export do their own bearer-token check against the
-    // approved-peers list internally -- exempting them here just moves the
-    // check to the right place, it doesn't remove it.
-    uri == "/api/v1/federation/sync/receive" || uri == "/api/v1/federation/sync/export" || uri == "/api/v1/federation/ping"
-    // /api/v1/gossip must NOT be added here: gossip_handler has zero internal
-    // verification (no signature/identity check on GossipEntry). Exempting it
-    // would leave it completely open in production (dev_mode=false) -- anyone
-    // reaching the port could inject arbitrary DHT routing entries. If gossip
-    // ever needs to bypass bearer auth, it needs its own verification first
-    // (e.g. Noise-signed envelopes, matching the federation sync pattern).
+    // Fail-closed for /api/ routes: only explicitly designated endpoints with internal verification qualify
+    if uri.starts_with("/api/") {
+        return uri == "/api/v1/federation/sync/receive"
+            || uri == "/api/v1/federation/sync/export"
+            || uri == "/api/v1/federation/ping"
+            || uri == "/api/v1/mcp/probe";
+    }
+
+    uri == "/health"
+        || uri == "/discovery"
+        || uri == "/ui"
+        || uri == "/"
+        || uri == "/dashboard"
+        || uri == "/index.html"
+        || uri == "/favicon.ico"
+        || uri == "/favicon.svg"
+        || uri.starts_with("/assets/")
+        || uri.starts_with("/js/")
+        || uri.starts_with("/css/")
+        || uri.starts_with("/img/")
+        || uri.starts_with("/fonts/")
 }
 
 /// Bearer token authentication middleware.
@@ -448,6 +456,31 @@ mod tests {
         assert!(is_public_bypass_path("/api/v1/federation/sync/receive"));
         assert!(is_public_bypass_path("/api/v1/federation/sync/export"));
         assert!(is_public_bypass_path("/api/v1/federation/ping"));
+    }
+
+    #[test]
+    fn test_static_assets_and_prefixes_bypass_auth() {
+        assert!(is_public_bypass_path("/assets/index-D7b39a.js"));
+        assert!(is_public_bypass_path("/assets/vendor.css"));
+        assert!(is_public_bypass_path("/js/main.js"));
+        assert!(is_public_bypass_path("/css/app.css"));
+        assert!(is_public_bypass_path("/index.html"));
+        assert!(is_public_bypass_path("/favicon.ico"));
+        assert!(is_public_bypass_path("/favicon.svg"));
+        assert!(is_public_bypass_path("/health"));
+        assert!(is_public_bypass_path("/ui"));
+        assert!(is_public_bypass_path("/dashboard"));
+        assert!(is_public_bypass_path("/"));
+    }
+
+    #[test]
+    fn test_api_routes_never_bypass_by_file_extension() {
+        // Anti-regression: arbitrary API routes ending in .js/.html/.css must never bypass auth
+        assert!(!is_public_bypass_path("/api/v1/bash.html"));
+        assert!(!is_public_bypass_path("/api/v1/export.js"));
+        assert!(!is_public_bypass_path("/api/v1/user.css"));
+        assert!(!is_public_bypass_path("/api/v1/image.png"));
+        assert!(!is_public_bypass_path("/api/v1/data.svg"));
     }
 
     #[test]

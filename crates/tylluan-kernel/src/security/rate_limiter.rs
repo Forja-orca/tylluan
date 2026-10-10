@@ -45,9 +45,14 @@ impl RateLimiter {
 
         timestamps.push(now);
 
-        // Prune empty session keys to prevent memory leak on long uptime
+        // Prune stale timestamps and empty session keys across all entries
+        // when the map exceeds threshold to prevent unbounded memory growth.
         if windows.len() > 100 {
-            windows.retain(|_, v| !v.is_empty());
+            let window_duration = self.window_duration;
+            windows.retain(|_, timestamps| {
+                timestamps.retain(|t| now.duration_since(*t) < window_duration);
+                !timestamps.is_empty()
+            });
         }
 
         Ok(())
@@ -86,5 +91,39 @@ mod tests {
         assert!(limiter.check_and_record("session-a").is_err());
         // session-b should still work
         assert!(limiter.check_and_record("session-b").is_ok());
+    }
+
+    #[test]
+    fn test_prune_stale_sessions_across_all_keys() {
+        let limiter = RateLimiter::new(Some(10));
+        // Fill 105 distinct sessions
+        for i in 0..105 {
+            limiter.check_and_record(&format!("session-{i}")).unwrap();
+        }
+        assert_eq!(limiter.windows.lock().unwrap().len(), 105);
+
+        // Age timestamps for the first 50 sessions beyond window_duration
+        {
+            let mut windows = limiter.windows.lock().unwrap();
+            let ancient = Instant::now() - Duration::from_secs(120);
+            for i in 0..50 {
+                if let Some(ts) = windows.get_mut(&format!("session-{i}")) {
+                    ts.clear();
+                    ts.push(ancient);
+                }
+            }
+        }
+
+        // Recording a new session triggers prune (len > 100)
+        limiter.check_and_record("trigger-session").unwrap();
+
+        // The 50 aged sessions must be evicted by the global prune
+        let windows = limiter.windows.lock().unwrap();
+        let pruned_len = windows.len();
+        assert!(pruned_len <= 56, "Expected pruned size <= 56, got {pruned_len}");
+        for i in 0..50 {
+            let key = format!("session-{i}");
+            assert!(!windows.contains_key(&key), "{key} was not pruned");
+        }
     }
 }
