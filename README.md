@@ -106,6 +106,10 @@ Tylluan ships with a React dashboard for watching the kernel work.
   <img src="assets/screenshots/knowledge_graph.png" alt="Knowledge Graph — SilvaDB visualizer" width="45%">
   <img src="assets/screenshots/coloquio.png" alt="Coloquio — multi-agent communication" width="45%">
 </p>
+<p align="center">
+  <img src="assets/screenshots/trust_console.png" alt="Trust Console — runtime commit drift detection and self-documented guild contracts" width="90%">
+</p>
+<p align="center"><sub>Trust Console (M40-P6): detects live drift between the running kernel's loaded commit and what's actually on disk — the same class of staleness this project has hit for real more than once.</sub></p>
 
 ### Five tools, nothing hidden behind them
 
