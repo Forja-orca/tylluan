@@ -78,6 +78,15 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 
 </details>
 
+### Architecture at a glance
+
+<p align="center">
+  <a href="docs/assets/architecture.svg" target="_blank">
+    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
+  </a>
+</p>
+<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom. For an interactive version (pan/zoom, click a component to see its real source file:line) download <a href="docs/assets/architecture_interactive.html">architecture_interactive.html</a> and open it locally.</i></sub></p>
+
 ### Dashboard
 
 Tylluan ships with a React dashboard for watching the kernel work.
@@ -397,15 +406,7 @@ flowchart LR
   linkStyle 12,13 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
 
-### Detailed Layered Topology & Circuits
-
-<p align="center">
-  <a href="docs/assets/architecture.svg" target="_blank">
-    <img src="docs/assets/architecture.svg" alt="TylluanNexus Detailed Architecture & Circuits" width="100%" />
-  </a>
-</p>
-<p align="right"><sub>💡 <i>Click the diagram to open full-resolution SVG in a new tab for infinite zoom. For an interactive version (pan/zoom, click a component to see its real source file:line) download <a href="docs/assets/architecture_interactive.html">architecture_interactive.html</a> and open it locally.</i></sub></p>
-
+> The detailed layered topology & circuits diagram is up top in [Architecture at a glance](#architecture-at-a-glance) — this flowchart is the quick technical read; the SVG is the full zoomable deep dive.
 
 ## Stack
 
