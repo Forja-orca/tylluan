@@ -255,78 +255,55 @@ fn name_to_description(name: &str) -> String {
 /// "Use for:" lines in module docstrings, including continuation lines.
 fn extract_trigger_phrases(content: &str) -> Vec<String> {
     let mut phrases = Vec::new();
-    let mut in_docstring = false;
+    // Lexer-lite over triple-quoted strings: every `"""`/`'''` delimiter toggles
+    // open/close state (Python semantics), including mid-line closes
+    // (`('full', ...)."""`) and SQL-style strings (`execute("""...""", (args))`).
+    // A line-based toggle desyncs on the SQL cases and silences whole guilds
+    // (audit.py: 17 triggers -> 0 with a naive mid-line-close rule).
+    let mut open_quote: Option<&'static str> = None;
     let mut collecting = false;
     let mut pending = String::new();
 
-        for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''") {
-            let after_quotes = trimmed[3..].to_string();
-            // Detect single-line docstring: opens and closes on same line
-            let closing = if trimmed.starts_with("\"\"\"") {
-                after_quotes.rfind("\"\"\"")
-            } else {
-                after_quotes.rfind("'''")
+    for line in content.lines() {
+        let mut pos = 0usize;
+        // `loop` (not `while`) so empty lines still reach the terminator-flush
+        // in feed_trigger_content — a blank line ends a Use-for list.
+        loop {
+            let slice = &line[pos..];
+            let next = match (slice.find("\"\"\""), slice.find("'''")) {
+                (Some(a), Some(b)) if a <= b => Some((a, "\"\"\"")),
+                (Some(_), Some(b)) => Some((b, "'''")),
+                (Some(a), None) => Some((a, "\"\"\"")),
+                (None, Some(b)) => Some((b, "'''")),
+                (None, None) => None,
             };
-            if let Some(close_pos) = closing {
-                // Single-line docstring: """content"""
-                let middle = after_quotes[..close_pos].trim().to_string();
-                if let Some(use_for_pos) = middle.find("Use for:") {
-                    let use_for = middle[use_for_pos + 8..].trim();
-                    pending.push_str(use_for);
-                    for phrase in pending.split(',') {
-                        let p = phrase.trim().to_string();
-                        if !p.is_empty() { phrases.push(p); }
+            match next {
+                Some((p, d)) => {
+                    if open_quote.is_some() {
+                        feed_trigger_content(&slice[..p], &mut collecting, &mut pending, &mut phrases);
                     }
-                    pending.clear();
-                }
-                continue;
-            }
-            if in_docstring {
-                // Closing multi-line docstring
-                let after = after_quotes.trim().to_string();
-                if collecting && !after.is_empty() {
-                    pending.push(' ');
-                    pending.push_str(&after);
-                }
-            } else {
-                // Opening multi-line docstring
-                let after = after_quotes.trim().to_string();
-                if let Some(use_for_pos) = after.find("Use for:") {
-                    let use_for = after[use_for_pos + 8..].trim();
-                    pending.push_str(use_for);
-                    collecting = true;
-                }
-            }
-            in_docstring = !in_docstring;
-            if !in_docstring && collecting {
-                for phrase in pending.split(',') {
-                    let p = phrase.trim().to_string();
-                    if !p.is_empty() { phrases.push(p); }
-                }
-                pending.clear();
-                collecting = false;
-            }
-            continue;
-        }
-        if in_docstring {
-            if let Some(use_for_pos) = trimmed.find("Use for:") {
-                let use_for = trimmed[use_for_pos + 8..].trim();
-                pending.push_str(use_for);
-                collecting = true;
-            } else if collecting {
-                if trimmed.is_empty() || trimmed.starts_with("Args:") || trimmed.starts_with("Returns:") || trimmed.starts_with("Raises:") {
-                    for phrase in pending.split(',') {
-                        let p = phrase.trim().to_string();
-                        if !p.is_empty() { phrases.push(p); }
+                    if open_quote == Some(d) {
+                        open_quote = None;
+                        if collecting {
+                            for phrase in pending.split(',') {
+                                let p = phrase.trim().to_string();
+                                if !p.is_empty() { phrases.push(p); }
+                            }
+                            pending.clear();
+                            collecting = false;
+                        }
+                    } else if open_quote.is_none() {
+                        open_quote = Some(d);
                     }
-                    pending.clear();
-                    collecting = false;
-                } else {
-                    let clean = trimmed;
-                    pending.push(' ');
-                    pending.push_str(clean);
+                    // else: foreign delimiter inside an open string -> literal
+                    // text, no toggle.
+                    pos += p + d.len();
+                }
+                None => {
+                    if open_quote.is_some() {
+                        feed_trigger_content(slice, &mut collecting, &mut pending, &mut phrases);
+                    }
+                    break;
                 }
             }
         }
@@ -339,6 +316,37 @@ fn extract_trigger_phrases(content: &str) -> Vec<String> {
         }
     }
     phrases
+}
+
+/// Feed one stretch of open-string text into the Use-for collector.
+fn feed_trigger_content(
+    text: &str,
+    collecting: &mut bool,
+    pending: &mut String,
+    phrases: &mut Vec<String>,
+) {
+    let trimmed = text.trim();
+    if let Some(use_for_pos) = trimmed.find("Use for:") {
+        let use_for = trimmed[use_for_pos + 8..].trim();
+        pending.push_str(use_for);
+        *collecting = true;
+    } else if *collecting {
+        if trimmed.is_empty()
+            || trimmed.starts_with("Args:")
+            || trimmed.starts_with("Returns:")
+            || trimmed.starts_with("Raises:")
+        {
+            for phrase in pending.split(',') {
+                let p = phrase.trim().to_string();
+                if !p.is_empty() { phrases.push(p); }
+            }
+            pending.clear();
+            *collecting = false;
+        } else {
+            pending.push(' ');
+            pending.push_str(trimmed);
+        }
+    }
 }
 
 /// Extract guild name from `mcp = FastMCP("name")` or similar pattern.
@@ -723,6 +731,94 @@ mod tests {
         let result = extract_trigger_phrases(&content);
         eprintln!("knowledge file result: {result:?}");
         assert!(!result.is_empty(), "Should extract phrases from knowledge.py");
+    }
+
+    #[test]
+    fn test_extract_trigger_phrases_midline_docstring_close() {
+        // Regression: a docstring closing mid-line (`('full', ...)."""`) must end
+        // the docstring, or every subsequent open/close flips parity and later
+        // Use-for blocks fall "outside" (this silenced coloquio.py and comfy_ui.py).
+        let content = r#"
+def _parse_full(text: str) -> bool:
+    """Detect an explicit request for untruncated message bodies
+    ('full', 'completo', 'sin truncar')."""
+    return bool(text)
+
+@mcp.tool()
+def read_channel(channel_id: str = "") -> str:
+    """Read messages from a Coloquio channel.
+    Use for: lee el canal coloquio, unread messages
+    """
+    return ""
+"#;
+        let result = extract_trigger_phrases(content);
+        assert!(result.contains(&"lee el canal coloquio".to_string()), "got {result:?}");
+        assert!(result.contains(&"unread messages".to_string()), "got {result:?}");
+        assert_eq!(result.len(), 2, "got {result:?}");
+    }
+
+    #[test]
+    fn test_extract_trigger_phrases_sql_strings_preserve_parity() {
+        // audit.py pattern: SQL triple-quoted strings with code after the closing
+        // quotes (`""", (` / `""")`) must not desync docstring parity — the naive
+        // mid-line-close rule zeroed audit's 17 triggers.
+        let content = r#"
+def log_call() -> str:
+    """Log a tool call.
+    Use for: log audit, registrar auditoria.
+    """
+    cursor.execute("""
+        INSERT INTO t VALUES (1)
+    """, (
+        1,
+    ))
+    return ""
+
+@mcp.tool()
+def stats() -> str:
+    """Get audit statistics.
+    Use for: audit stats, estadisticas auditoria.
+    """
+    return ""
+"#;
+        let result = extract_trigger_phrases(content);
+        assert!(result.contains(&"log audit".to_string()), "got {result:?}");
+        assert!(result.contains(&"registrar auditoria.".to_string()), "got {result:?}");
+        assert!(result.contains(&"audit stats".to_string()), "got {result:?}");
+        assert!(result.contains(&"estadisticas auditoria.".to_string()), "got {result:?}");
+        assert_eq!(result.len(), 4, "got {result:?}");
+    }
+
+    #[test]
+    fn test_coloquio_and_comfy_ui_have_trigger_phrases() {
+        // Anti-relapse: both files close docstrings mid-line and used to parse
+        // to ZERO triggers while the other 16 trigger-bearing guilds were fine.
+        let catalog = builtin_catalog();
+        for name in ["coloquio", "comfy_ui"] {
+            let g = catalog
+                .iter()
+                .find(|g| g.name == name)
+                .unwrap_or_else(|| panic!("{name} guild missing from catalog"));
+            assert!(
+                !g.trigger_phrases.is_empty(),
+                "{name} should have trigger phrases, got {:?}",
+                g.trigger_phrases
+            );
+        }
+        let coloquio = catalog.iter().find(|g| g.name == "coloquio").unwrap();
+        assert!(
+            coloquio.trigger_phrases.iter().any(|p| p.contains("unread messages")),
+            "coloquio must expose its 'unread messages' Use-for phrase, got {:?}",
+            coloquio.trigger_phrases
+        );
+        let dwr = catalog.iter().find(|g| g.name == "deep_web_research").unwrap();
+        for phrase in ["estado del arte", "compila un reporte", "investiga"] {
+            assert!(
+                dwr.trigger_phrases.iter().any(|p| p == phrase),
+                "deep_web_research must expose the Spanish Use-for phrase {phrase:?}, got {:?}",
+                dwr.trigger_phrases
+            );
+        }
     }
 
     #[test]
