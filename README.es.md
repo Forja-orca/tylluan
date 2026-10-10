@@ -192,7 +192,7 @@ Así que "sin nube requerida" es el invariante real aquí. "Sin LLM en absoluto"
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-1076 tests en el kernel de Rust (lib), `tylluan-link`, y `tylluan-fsrs` — todos en verde. Cada push corre build + test de Rust, clippy, `cargo-deny` (bans, licencias, advisories), lint + test de Python, un build del dashboard, y la suite de auditoría de seguridad. Detalles en [STATUS.md](STATUS.md) y [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+1079 tests en el kernel de Rust (lib), `tylluan-link`, y `tylluan-fsrs` — todos en verde. Cada push corre build + test de Rust, clippy, `cargo-deny` (bans, licencias, advisories), lint + test de Python, un build del dashboard, y la suite de auditoría de seguridad. Detalles en [STATUS.md](STATUS.md) y [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 

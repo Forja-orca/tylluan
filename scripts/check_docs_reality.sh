@@ -58,7 +58,7 @@ if [ ! -f "$port_source" ]; then
     echo "❌ check_docs_reality.sh: neither tylluan.toml nor tylluan.example.toml found -- cannot determine the real kernel port. Run from the repo root."
     exit 1
 fi
-real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{gsub(/[^0-9]/,"",$0); print; exit}' "$port_source" | head -1)
+real_port=$(awk '/^\[nexus\]/{f=1} f&&/^port[[:space:]]*=/{ if (match($0, /port[[:space:]]*=[[:space:]]*[0-9]+/)) { v=substr($0, RSTART, RLENGTH); gsub(/[^0-9]/,"",v); print v; exit } }' "$port_source" | head -1)
 echo "Real port ($port_source [nexus]): ${real_port:-<none>}"
 echo "Docs scanned: ${#DOCS[@]} (STATUS.md, README.md, AGENTS.md, CLAUDE.md, docs/**/*.md)"
 echo ""
