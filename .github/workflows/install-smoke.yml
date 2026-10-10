@@ -1,16 +1,39 @@
 name: Install Smoke Test
 
-# Manual only. `release: types: [published]` never fired here in ~4 releases
-# (v0.14-v0.17): GitHub does not deliver that event for releases created by
-# the default GITHUB_TOKEN (anti-loop behavior, confirmed 2026-08-29). The
-# real per-release boot-smoke now lives as a job inside release.yml, which
-# can't have that failure mode (same-workflow `needs:`, not a cross-workflow
-# event). This workflow still tests something that one doesn't: the actual
-# install.sh/install.ps1 user-facing script against whatever is currently
-# the latest published release. Run it by hand after a release if you want
-# that specific path re-checked.
+# Manual + push-gated. Two trigger reasons:
+#
+# 1. `release: types: [published]` never fired here in ~4 releases (v0.14-v0.17):
+#    GitHub does not deliver that event for releases created by the default
+#    GITHUB_TOKEN (anti-loop behavior, confirmed 2026-08-29). The real
+#    per-release boot-smoke now lives as a job inside release.yml, which can't
+#    have that failure mode (same-workflow `needs:`, not a cross-workflow
+#    event).
+# 2. Manual-only was a real audit gap (buffy, T1064 finding #4 → confirmed
+#    in TL T1071): the installers test the user-facing install.sh/install.ps1
+#    against the latest RELEASED binary — exactly the path that breaks
+#    silently when someone edits the installers or the CLI's `install
+#    --profile` contract. That change path is now push-gated: a push to main that
+#    touches the installers, the CLI, or the release workflow runs the smoke
+#    against the current latest release. The path filter keeps the cost
+#    bounded: edits to kernel internals, dashboard, docs, etc. don't re-run
+#    it (they're covered by ci.yml / docker-smoke, which test artifacts,
+#    not installers). Windows installer behavior can't be validated from
+#    the Linux-only jobs already in ci.yml — this is the only guard for it.
+#
+# NOTE ON THE PATH TRIGGER: this tests HEAD installers against the LATEST
+# PUBLISHED RELEASE binary. A fresh release first-contains-its-own-installer
+# is covered by release.yml's boot-smoke job instead. The two checks test
+# different failure surfaces (installed scripts vs released artifacts).
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'install.ps1'
+      - 'crates/tylluan-cli/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/install-smoke.yml'
 
 permissions:
   contents: read
