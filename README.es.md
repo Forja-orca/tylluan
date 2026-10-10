@@ -108,6 +108,10 @@ Tylluan viene con un dashboard en React para observar al kernel trabajar.
   <img src="assets/screenshots/knowledge_graph.png" alt="Grafo de conocimiento — visualizador de SilvaDB" width="45%">
   <img src="assets/screenshots/coloquio.png" alt="Coloquio — comunicación multiagente" width="45%">
 </p>
+<p align="center">
+  <img src="assets/screenshots/trust_console.png" alt="Trust Console — detección de deriva de commit en runtime y contratos de guild autodocumentados" width="90%">
+</p>
+<p align="center"><sub>Trust Console (M40-P6): detecta en vivo la deriva entre el commit cargado del kernel en ejecución y lo que realmente hay en disco — la misma clase de obsolescencia que este proyecto ha sufrido de verdad más de una vez.</sub></p>
 
 ### Cinco herramientas, nada escondido detrás
 
