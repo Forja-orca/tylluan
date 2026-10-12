@@ -463,6 +463,12 @@ pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Op
 /// function's call site in main.rs (catch_unwind cannot save us under
 /// `panic = "abort"`, confirmed live 2026-08-23 via G2's CI job).
 ///
+/// LOADABILITY only: a library that loads can still be far too old for the
+/// pinned `ort` (ONNX Runtime 1.5.2 reproduced this 2026-10-12 -- loadable,
+/// then `ort::api()` aborts the process on the version check). Every gate
+/// that precedes an actual `ort` call must use
+/// [`onnx_runtime_ort_compatible`] below, not this function.
+///
 /// Mirrors `ort`'s own load-dynamic resolution order: `ORT_DYLIB_PATH` env
 /// var first if set (same variable `ort` and this project's docs already
 /// reference for CUDA/custom builds), otherwise the platform-default shared
@@ -471,15 +477,7 @@ pub(crate) fn compute_engine_fingerprint(model_type: &str, dimension: u32) -> Op
 /// all handled by `libloading`/`dlopen`/`LoadLibrary` themselves, nothing
 /// this function needs to reimplement).
 pub fn onnx_runtime_available() -> bool {
-    let candidate = std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "onnxruntime.dll".to_string()
-        } else if cfg!(target_os = "macos") {
-            "libonnxruntime.dylib".to_string()
-        } else {
-            "libonnxruntime.so".to_string()
-        }
-    });
+    let candidate = onnx_dylib_candidate();
     // Safety: we only probe loadability and immediately drop the handle --
     // no symbols are looked up, no code from the library is executed beyond
     // whatever the dynamic linker itself runs on load (identical to what
@@ -497,6 +495,113 @@ pub fn onnx_runtime_available() -> bool {
             false
         }
     }
+}
+
+/// The dylib name both probes below check: `ORT_DYLIB_PATH` if set, else the
+/// platform default — the exact resolution order `ort`'s `dylib_path()`
+/// (ort-2.0.0-rc.10/src/lib.rs:80) uses. Shared so the loadability probe and
+/// the compatibility probe can never disagree about WHICH library they mean.
+fn onnx_dylib_candidate() -> String {
+    std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
+        if cfg!(target_os = "windows") {
+            "onnxruntime.dll".to_string()
+        } else if cfg!(target_os = "macos") {
+            "libonnxruntime.dylib".to_string()
+        } else {
+            "libonnxruntime.so".to_string()
+        }
+    })
+}
+
+/// Pure version gate mirroring `ort-2.0.0-rc.10/src/lib.rs:166-179`: `ort`
+/// reads the MINOR component of `GetVersionString()` ("1.{minor}.{patch}")
+/// and **panics** when it is `< ort::MINOR_VERSION` — a panic that under this
+/// workspace's release profile (`panic = "abort"`) is a hard process abort,
+/// not an unwind anyone can catch. Unparseable/absent minor counts as 0 →
+/// incompatible (fail closed), matching ort's `.unwrap_or(0)`. A NEWER minor
+/// than `ort::MINOR_VERSION` is only a warning inside ort, so it stays
+/// compatible here too.
+pub fn ort_version_compatible(version: &str) -> bool {
+    let minor = version.split('.').nth(1).and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+    minor >= ort::MINOR_VERSION
+}
+
+/// Checks whether the loadable ONNX Runtime dylib is actually COMPATIBLE with
+/// the pinned `ort` — i.e. it will survive every check `ort::api()` performs
+/// (ort-2.0.0-rc.10/src/lib.rs:155-181), which all panic instead of
+/// returning `Err`. Under `panic = "abort"` those panics are hard aborts
+/// (`catch_unwind` is a documented no-op: unwinding itself is compiled out —
+/// confirmed live 2026-08-23 via G2's CI job, and the failure mode was
+/// reproduced again 2026-10-12 with a Windows runner whose PATH had ONNX
+/// Runtime 1.5.2: loadable, so the old gate let `ort` run, and `ort` aborted
+/// the boot smoke at the version check).
+///
+/// Check-for-check mirror of `ort::api()` — EVERY failure returns `false`,
+/// never a panic (no unwrap/expect anywhere below: this runs on the boot path
+/// of a `panic = "abort"` binary, where an unwrap is an unrecoverable crash):
+///   1. dylib loads (same resolution as [`onnx_runtime_available`])
+///   2. `OrtGetApiBase` symbol present   (ort: `.expect(...)`)
+///   3. base pointer non-null            (ort: `assert!`)
+///   4. `GetVersionString` non-null and minor ≥ `ort::MINOR_VERSION` (ort panics on `Ordering::Less`)
+///   5. `GetApi(ORT_API_VERSION)` non-null (ort: `NonNull::new().expect`)
+///
+/// ⚠️ Accepted risk, documented on purpose (TL ruling T1105, 2026-10-12):
+/// steps 2-5 execute code from whatever library `ORT_DYLIB_PATH` points at.
+/// A broken/malicious dylib can crash the process in ways no version check
+/// can prevent. That risk is inherent to `ort`'s load-dynamic model and
+/// strictly no worse than letting `ort` load the same library itself — which
+/// is exactly what this gate decides.
+pub fn onnx_runtime_ort_compatible() -> bool {
+    let candidate = onnx_dylib_candidate();
+    let lib = match unsafe { libloading::Library::new(&candidate) } {
+        Ok(lib) => lib,
+        Err(e) => {
+            info!("🔍 ONNX Runtime compat probe: '{}' not loadable ({}) -- skipping ort entirely", candidate, e);
+            return false;
+        }
+    };
+    let base_getter: libloading::Symbol<unsafe extern "system" fn() -> *const ort_sys::OrtApiBase> =
+        match unsafe { lib.get(b"OrtGetApiBase") } {
+            Ok(sym) => sym,
+            Err(e) => {
+                info!(
+                    "🔍 ONNX Runtime compat probe: '{}' lacks the OrtGetApiBase symbol ({}) -- incompatible",
+                    candidate, e
+                );
+                return false;
+            }
+        };
+    let base = unsafe { base_getter() };
+    if base.is_null() {
+        warn!("🔍 ONNX Runtime compat probe: '{}' OrtGetApiBase() returned null -- incompatible", candidate);
+        return false;
+    }
+    let version_ptr = unsafe { ((*base).GetVersionString)() };
+    if version_ptr.is_null() {
+        warn!("🔍 ONNX Runtime compat probe: '{}' GetVersionString() returned null -- incompatible", candidate);
+        return false;
+    }
+    let version = unsafe { std::ffi::CStr::from_ptr(version_ptr) }.to_string_lossy();
+    if !ort_version_compatible(&version) {
+        warn!(
+            "🔍 ONNX Runtime compat probe: '{}' reports version '{}' -- the pinned ort needs 1.{}.x, incompatible (fallbacks engage)",
+            candidate, version, ort::MINOR_VERSION
+        );
+        return false;
+    }
+    let api = unsafe { ((*base).GetApi)(ort_sys::ORT_API_VERSION) };
+    if api.is_null() {
+        warn!(
+            "🔍 ONNX Runtime compat probe: '{}' GetApi({}) returned null -- incompatible",
+            candidate, ort_sys::ORT_API_VERSION
+        );
+        return false;
+    }
+    info!(
+        "🔍 ONNX Runtime compat probe: '{}' version '{}' OK (pinned ort requires 1.{}.x)",
+        candidate, version, ort::MINOR_VERSION
+    );
+    true
 }
 
 /// Resolves the effective ONNX thread cap considering:
@@ -535,8 +640,10 @@ pub fn resolve_onnx_thread_cap(configured: Option<usize>) -> Option<usize> {
 /// - The global ONNX Runtime thread pool is committed once via `ort::init().commit()`.
 ///   Subsequent calls will detect that the environment is already committed.
 ///
-/// Safety guard: If `onnx_runtime_available()` is false, `ort::init()` is NEVER called,
-/// preventing uncatchable aborts under `panic = "abort"`.
+/// Safety guard: If `onnx_runtime_ort_compatible()` is false, `ort::init()` is NEVER called,
+/// preventing uncatchable aborts under `panic = "abort"` (loadable alone is
+/// NOT enough — a too-old dylib passes the loadability probe and then aborts
+/// inside `ort::api()`'s version check; 2026-10-12).
 pub fn apply_onnx_thread_cap(cap: Option<usize>) -> Option<usize> {
     let resolved = resolve_onnx_thread_cap(cap);
     if let Some(threads) = resolved {
@@ -549,7 +656,7 @@ pub fn apply_onnx_thread_cap(cap: Option<usize>) -> Option<usize> {
             std::env::set_var("RAYON_NUM_THREADS", &threads_str);
         }
 
-        if onnx_runtime_available() {
+        if onnx_runtime_ort_compatible() {
             match ort::environment::GlobalThreadPoolOptions::default()
                 .with_intra_threads(threads)
                 .and_then(|opts| opts.with_inter_threads(1))
@@ -595,6 +702,19 @@ impl EmbeddingEngine {
 
     /// Initialize with an explicit execution device (cpu / directml / cuda).
     pub fn load_with_device(model_name: &str, device: &InferenceDevice) -> Result<Self> {
+        // Fail closed BEFORE fastembed/ort touch the dylib: TextEmbedding::try_new
+        // goes through ort::api(), which PANICS on a missing or too-old ONNX
+        // Runtime — a hard abort under release panic="abort" (reproduced with
+        // 1.5.2 on PATH, 2026-10-12; a plain loadability check waves it through).
+        // Returning Err degrades cleanly: main.rs logs it and continues
+        // BM25-only (engine pre-load AND background hot-swap paths).
+        if !onnx_runtime_ort_compatible() {
+            return Err(anyhow!(
+                "ONNX Runtime dylib missing or incompatible with the pinned ort (needs GetVersionString 1.{}.x) — \
+                 install a current onnxruntime or point ORT_DYLIB_PATH at one; continuing without this engine",
+                ort::MINOR_VERSION
+            ));
+        }
         // Fallback: apply thread cap from env vars if not already configured at startup
         apply_onnx_thread_cap(None);
 
@@ -1111,6 +1231,17 @@ impl RerankEngine {
     /// M25-A: the cross-encoder is the real latency bottleneck of recall
     /// (40-50 pairs/query) — it needs the GPU even more than the bi-encoder.
     pub fn load_with_device(device: &InferenceDevice) -> Result<Self> {
+        // Defense in depth behind main.rs's boot gate (which already checks
+        // onnx_runtime_ort_compatible before reaching here): under release
+        // panic="abort" the catch_unwind wrapper around this call is a no-op,
+        // so this Err is the only fallback that holds on ANY profile.
+        if !onnx_runtime_ort_compatible() {
+            return Err(anyhow!(
+                "ONNX Runtime dylib missing or incompatible with the pinned ort (needs GetVersionString 1.{}.x) — \
+                 reranker unavailable, falling back to pure RRF",
+                ort::MINOR_VERSION
+            ));
+        }
         apply_onnx_thread_cap(None);
         // R22-1: Jina Turbo replaces BGERerankerBase (~278M→~37M params)
         info!("🔀 Loading Jina Turbo reranker (ONNX) — device: {:?}", device);
@@ -1521,5 +1652,24 @@ mod tests {
             std::env::remove_var("OMP_NUM_THREADS");
             std::env::remove_var("RAYON_NUM_THREADS");
         }
+    }
+
+    #[test]
+    fn ort_version_compatible_mirrors_ort_minor_gate() {
+        // Rejected cases: ort::api() would PANIC (hard abort under
+        // panic="abort") on these — the probe must return false instead.
+        assert!(!ort_version_compatible("1.5.2")); // the runner that broke the 2026-10-12 smoke
+        assert!(!ort_version_compatible("1.8.1"));
+        assert!(!ort_version_compatible("1")); // no minor component
+        assert!(!ort_version_compatible("1.x.0")); // unparseable minor → 0, fail closed
+        assert!(!ort_version_compatible("abc"));
+        assert!(!ort_version_compatible(""));
+        // One below and exactly the pinned requirement (derived, not hardcoded,
+        // so a future ort-sys ORT_API_VERSION bump moves the boundary with us).
+        assert!(!ort_version_compatible(&format!("1.{}.0", ort::MINOR_VERSION.saturating_sub(1))));
+        assert!(ort_version_compatible(&format!("1.{}.0", ort::MINOR_VERSION)));
+        // Newer minor: ort only WARNS (Ordering::Greater), never panics → compatible.
+        assert!(ort_version_compatible(&format!("1.{}.0", ort::MINOR_VERSION + 1)));
+        assert!(ort_version_compatible("1.99.9"));
     }
 }

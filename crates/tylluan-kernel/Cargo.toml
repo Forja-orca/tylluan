@@ -70,6 +70,14 @@ tokio-util = "0.7"
 # Semantic embeddings — Sovereign Inference (FastEmbed / ONNX)
 fastembed = { version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls", "image-models"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "directml", "coreml"] }
+# Direct exact pin (TL T1105, 2026-10-12): `ort`'s own manifest uses a
+# caret on its ort-sys dependency, so a future `2.0.0-rc.11` could resolve
+# while `ort` stays at rc.10 — drifting ORT_API_VERSION/ABI away from the
+# `ort` we actually call. This pin forces one ort-sys everywhere.
+# Consumed by the compatibility probe in router/embeddings.rs
+# (`onnx_runtime_ort_compatible`, OrtApiBase/ORT_API_VERSION) — same
+# default-features=false + load-dynamic shape `ort` itself uses.
+ort-sys = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic"] }
 
 # High-performance vector math
 ndarray = "0.16"

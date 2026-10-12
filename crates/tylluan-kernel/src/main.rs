@@ -418,7 +418,7 @@ fn enforce_security_guard(config: &TylluanConfig, cli_token: &Option<String>) {
 }
 
 // Re-exported from tylluan_kernel::router::embeddings for local callers and probe tests
-use tylluan_kernel::router::embeddings::onnx_runtime_available;
+use tylluan_kernel::router::embeddings::onnx_runtime_ort_compatible;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -832,17 +832,23 @@ async fn main() -> anyhow::Result<()> {
     // users.rust-lang.org "Catching panic at FFI boundary, iff unwinding
     // enabled"; ort's own linking docs on ORT_DYLIB_PATH): the only reliable
     // fix under panic=abort is to never let `ort` panic in the first place --
-    // probe whether the library is actually loadable via a real Result
-    // (onnx_runtime_available(), below) before ever calling into `ort`.
-    let reranker = if !onnx_runtime_available() || !config.silva.reranker_enabled {
-        warn!("⚠️ Reranker: ONNX Runtime library not loadable (checked before calling into ort) -- fallback a RRF puro");
+    // probe with a real Result before ever calling into `ort`. The first
+    // version only checked LOADABILITY (onnx_runtime_available), which proved
+    // insufficient on 2026-10-12: a runner's PATH carried a loadable but
+    // ancient ONNX Runtime 1.5.2, which passes the loadability probe and
+    // then aborts inside ort::api()'s version check. The gate is now
+    // onnx_runtime_ort_compatible(), which mirrors every check ort::api()
+    // makes (symbol → version → GetApi) and returns false instead of
+    // panicking -- check-by-check mirror in router/embeddings.rs.
+    let reranker = if !onnx_runtime_ort_compatible() || !config.silva.reranker_enabled {
+        warn!("⚠️ Reranker: ONNX Runtime dylib missing or incompatible with the pinned ort (checked before calling into ort) -- fallback a RRF puro");
         None
     } else {
         // catch_unwind kept as defense-in-depth for panics inside `ort` that
-        // aren't the missing-library case this session found (e.g. a present
-        // but incompatible/corrupt library) -- it still works whenever this
+        // slip past the compatibility probe (e.g. a dylib that passes every
+        // version check but is corrupt) -- it still works whenever this
         // binary happens to run under panic=unwind (tests, a debug build),
-        // and costs nothing when it doesn't.
+        // and is a no-op (costs nothing) when it doesn't.
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             tokio::task::block_in_place(|| RerankEngine::load_with_device(&config.inference.device))
         })) {
@@ -2324,24 +2330,47 @@ mod anti_orphan_tests {
 
 #[cfg(test)]
 mod onnx_probe_tests {
-    use super::onnx_runtime_available;
-    use std::sync::Mutex;
+    use tylluan_kernel::router::embeddings::{onnx_runtime_available, onnx_runtime_ort_compatible};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
 
-    // ORT_DYLIB_PATH is process-global env state -- serialize these two
-    // tests so they can't interleave and clobber each other's override.
+    // ORT_DYLIB_PATH is process-global env state -- serialize these tests
+    // so they can't interleave and clobber each other's override.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    // The ORT_DYLIB_PATH this test PROCESS inherited (User/Machine env --
+    // on a dev box that's the machine's real onnxruntime, e.g. an
+    // ORT_DYLIB_PATH pointing at a current build; on CI it's absent).
+    // Captured ONCE, before any mutation, by the first test to take ENV_LOCK,
+    // and restored after every mutating test below: otherwise test ORDER
+    // would leak state (a mutator ending in remove_var strips the inherited
+    // value for every test that runs after it, including the machine-truth
+    // positive test at the bottom, which must see EXACTLY what prod sees).
+    static INHERITED: OnceLock<Option<String>> = OnceLock::new();
+
+    fn lock() -> MutexGuard<'static, ()> {
+        let guard = ENV_LOCK.lock().unwrap();
+        let _ = INHERITED.get_or_init(|| std::env::var("ORT_DYLIB_PATH").ok());
+        guard
+    }
+
+    fn restore() {
+        match INHERITED.get().expect("lock() snapshots INHERITED on first acquisition").as_ref() {
+            Some(v) => unsafe { std::env::set_var("ORT_DYLIB_PATH", v) },
+            None => unsafe { std::env::remove_var("ORT_DYLIB_PATH") },
+        }
+    }
 
     #[test]
     fn missing_library_path_is_reported_unavailable() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = lock();
         unsafe { std::env::set_var("ORT_DYLIB_PATH", "/definitely/does/not/exist/libonnxruntime.so"); }
         assert!(!onnx_runtime_available(), "a nonexistent ORT_DYLIB_PATH must report unavailable, never panic");
-        unsafe { std::env::remove_var("ORT_DYLIB_PATH"); }
+        restore();
     }
 
     #[test]
     fn loadable_system_library_is_reported_available() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = lock();
         // A real, always-present shared library on every platform this
         // project targets, used only to prove the *positive* path of the
         // probe (a real loadable library) without depending on ONNX
@@ -2357,6 +2386,66 @@ mod onnx_probe_tests {
         };
         unsafe { std::env::set_var("ORT_DYLIB_PATH", real_lib); }
         assert!(onnx_runtime_available(), "a real, always-present system library must report available");
-        unsafe { std::env::remove_var("ORT_DYLIB_PATH"); }
+        restore();
+    }
+
+    #[test]
+    fn loadable_but_not_onnx_library_is_incompatible_never_panics() {
+        let _guard = lock();
+        // The exact shape of the 2026-10-12 failure (ONNX Runtime 1.5.2 on
+        // PATH): the dylib LOADS, so a loadability-only gate waves it through,
+        // but it has no usable OrtGetApiBase for the pinned ort -- ort::api()
+        // would then panic, which release panic="abort" turns into a hard
+        // process abort. The compat probe must return false instead, without
+        // ever panicking itself. kernel32/libSystem/libc are loadable and
+        // definitively NOT ONNX Runtime, on every platform we target.
+        let real_lib = if cfg!(target_os = "windows") {
+            "kernel32.dll"
+        } else if cfg!(target_os = "macos") {
+            "libSystem.dylib"
+        } else {
+            "libc.so.6"
+        };
+        unsafe { std::env::set_var("ORT_DYLIB_PATH", real_lib); }
+        assert!(onnx_runtime_available(), "sanity: this library IS loadable");
+        assert!(
+            !onnx_runtime_ort_compatible(),
+            "a loadable library without a valid ONNX Runtime API must be rejected by the compat probe"
+        );
+        restore();
+    }
+
+    #[test]
+    fn missing_library_is_incompatible_never_panics() {
+        let _guard = lock();
+        unsafe { std::env::set_var("ORT_DYLIB_PATH", "/definitely/does/not/exist/libonnxruntime.so"); }
+        assert!(!onnx_runtime_ort_compatible(), "a nonexistent path must be incompatible, never panic");
+        restore();
+    }
+
+    #[test]
+    #[ignore = "needs a REAL, current ONNX Runtime (CI has none by design) — run: cargo test -p tylluan-kernel --bin tylluan-nexus ort_compatible_with_real_ort -- --ignored"]
+    fn ort_compatible_with_real_ort() {
+        let _guard = lock();
+        // Proves the positive path against THIS machine's real ONNX Runtime,
+        // resolved exactly the way prod resolves it (ORT_DYLIB_PATH honored,
+        // NOT stripped -- a first version of this test stripped it and failed
+        // for that reason alone: System32's 1.17 got correctly rejected, the
+        // probe verdict was intact, nothing panicked). Loadable AND passing
+        // every ort::api() check (symbol, version >= ort::MINOR_VERSION, GetApi).
+        // If this fails locally: either the machine's ONNX Runtime is older
+        // than ort::MINOR_VERSION (the probe is RIGHT to reject it -- install
+        // a current one or point ORT_DYLIB_PATH at it), or ORT_DYLIB_PATH is
+        // unset and PATH has no usable ONNX Runtime, or the probe itself is
+        // broken (the 2026-10-12 class bug).
+        assert!(
+            onnx_runtime_available(),
+            "expected this machine to have a loadable ONNX Runtime (check ORT_DYLIB_PATH / PATH)"
+        );
+        assert!(
+            onnx_runtime_ort_compatible(),
+            "this machine's ONNX Runtime must pass the compat probe (verdict is logged via the 🔍 tracing lines)"
+        );
+        restore();
     }
 }

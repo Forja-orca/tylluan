@@ -4514,6 +4514,7 @@ dependencies = [
  "ndarray",
  "notify",
  "ort",
+ "ort-sys",
  "parking_lot",
  "proptest",
  "rand 0.8.6",

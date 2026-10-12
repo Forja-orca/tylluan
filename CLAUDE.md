@@ -214,6 +214,8 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
 - NUNCA reducir timeouts para guilds de inferencia (BGE-M3 en CPU tarda 2-8s/embedding)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
+- En release este workspace compila con `panic="abort"`: `catch_unwind` es ahí un **no-op documentado** (el unwind está compilado fuera, verificado en vivo 2026-08-23 y 2026-10-12). NUNCA envuelvas una llamada a `ort`/FFI en `catch_unwind` como si fuera protección — el gate correcto es comprobar ANTES con `onnx_runtime_ort_compatible()` (`crates/tylluan-kernel/src/router/embeddings.rs`), que replica check-a-check lo que `ort::api()` verifica (símbolo → versión ≥ 1.22.x = `ort::MINOR_VERSION` → GetApi) y devuelve `false` en vez de paniquear. "La lib ONNX **carga**" NO implica "es usable": ONNX Runtime 1.5.2 cargaba y abortaba el boot igual (2026-10-12). `onnx_runtime_available()` (solo cargabilidad) queda para diagnóstico, nunca como gate previo a `ort`.
+- El perfil portable de `generate_config` (crates/tylluan-cli/src/main.rs) emite `[silva] reranker_enabled = false` — no quitarlo: portable promete boot sin dependencias externas y el reranker necesita ONNX Runtime ≥ 1.22 para el `ort` pineado.
 - Dashboard: `pnpm`, nunca `npm` (dos lockfiles divergentes rompieron dependencias en producción)
 - Todo commit responde la pregunta de no-depredación (ADR-013): `scripts/check_no_predation.sh` tras commitear; tocar `transport/`, `guilds/`, `integrations/` o `tylluan*.toml` exige `## Impact` en el mensaje
 
