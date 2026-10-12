@@ -369,7 +369,7 @@ def test_search_channel_mentions_lee_flag_no_unwanted_turn(monkeypatch):
         return {"messages": []}
 
     monkeypatch.setattr(mod, "_get", fake_get)
-    out = mod.search_channel(query="busca T1093 en general")
+    mod.search_channel(query="busca T1093 en general")
     joined = " ".join(calls)
     assert "/turn/" not in joined, calls
     assert "T1093" in joined, calls
