@@ -4,7 +4,7 @@ All notable changes to Tylluan are documented here.
 
 ---
 
-## [0.17.1] — 2026-10-12
+## [0.17.1] — 2026-10-13
 
 **609 commits since v0.17.0 (`git rev-list --count v0.17.0..HEAD`).** This entry lists the user-visible fixes found and verified in the 2026-10-05/12 window; it does not itemise the other commits in that range, so use `git log v0.17.0..v0.17.1` for the full list.
 
@@ -21,11 +21,17 @@ All notable changes to Tylluan are documented here.
 - Starting any `tylluan-nexus` invocation (even `--version`) could read another instance's PID file and kill the live kernel. The anti-orphan routine now runs only when the server actually boots, kills a live peer only when its listening port equals ours, and never overwrites a live peer's PID file (`7f3d783`).
 - `stop` resolves the exact instance from its PID file instead of sweeping by process name (`c476bee`); the default port is 47004 everywhere (`ad13ec6`).
 - Router: trigger phrases were silently dropped for `coloquio` and `comfy_ui`; the extractor is now a proper lexer (`7a49cd5`). Live routing accuracy on the 77-item MD-3 set went from 45.6% to 50.0% (31/68 to 34/68) with no regressions. Valid natural-language requests are no longer rejected by the `required_args` gate (`7fca2f2`).
+- A loadable but too-old ONNX Runtime (1.5.2 on a Windows runner `PATH`) passed the loadability probe and then aborted the boot inside `ort` (release builds use `panic = "abort"`, so no `catch_unwind` can help). `onnx_runtime_ort_compatible()` now mirrors every check `ort` makes (symbol, version, `GetApi`) and returns false instead of panicking; every entry into `ort` (embeddings, reranker, sparse engine, MLP scorer, light reranker, thread cap) is gated by it and degrades to BM25 / pure RRF. A structural test fails if a new `ort` entry appears without the probe. Verified by booting the release binary against ONNX Runtime 1.22 (full) and 1.17.1 (degraded, zero panics) on Windows (`ce2cf4d`, `de5b31a`).
+- The `portable` install profile now writes `[silva] reranker_enabled = false`, matching its "boots offline with no external dependencies" promise (`ce2cf4d`).
+- `CapabilityRegistry::prune_expired` no longer panics (`Instant - Duration`) on a machine whose uptime is shorter than the TTL (`3a7768a`).
+- Coloquio: a single message can be read in full by turn (`turno 1093`, `T1093`, `mensaje 1093`); reading or search verbs (`lee`, `read`, `busca`...) are no longer parsed as a channel name; truncation markers say how to read the rest; responses are bounded to 12000 characters; a nonexistent channel lists the real ones (`7775625`, `633be0d`).
 - `work_traces` now has a production writer and a prune (`afc9533`); hybrid memory is fully retired (`c796353`, `23391c9`, `9b22717`); backup and restore use `VACUUM INTO` (`a5ca7da`).
 
 **Install and release**
 - `install.ps1` started with a UTF-8 BOM glued to the shebang, so the documented `irm ... | iex` failed on every Windows machine. It is now BOM-free and ASCII (`14962ee`).
 - Linux release binaries were built on Ubuntu 24.04 and required `GLIBC_2.39`, so they did not start on Ubuntu 22.04 or Debian 12. They are now built on `ubuntu-22.04` (`d8aa218`).
+- The release workflow is draft-first: the release is created as a draft, then a version gate (Cargo = tag = `/health` version, run in an isolated data directory on its own port) and an install smoke of the draft artifacts on Linux (Ubuntu 22.04), macOS and Windows must pass before it is promoted to Latest. A failed gate leaves the draft and never deletes the tag (`73bb6bb`).
+- `install.sh` / `install.ps1` resolve "latest" from the `/releases/latest` redirect instead of `api.github.com` (anonymous API rate limits broke the Windows smoke), accept `TYLLUAN_DOWNLOAD_URL` / `TYLLUAN_VERSION`, and send an optional `GITHUB_TOKEN` only to GitHub hosts (`1365a8f`).
 - Release tarballs now include `guilds/` (`5993a25`); the installer detects Python 3.12+ (`c3dee95`) and no longer boots the kernel twice (`2d382ba`).
 
 **Process**
