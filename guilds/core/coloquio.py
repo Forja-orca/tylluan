@@ -54,6 +54,22 @@ def _post(path: str, body: dict) -> dict:
 
 # ── Channel-ID extraction helpers ────────────────────────────────────────────
 
+# Words that can NEVER be a channel slug: read/search verbs (+ parameters-ish
+# filler words) that used to fall through the slug regex and get adopted as a
+# channel name ('lee el mensaje completo del turno 1093 del canal general' ->
+# channel "lee" -> "Channel lee exists but has no messages yet"). Approved in
+# the coloquio design (T1110) as a closed list: if the parsed channel
+# candidate lands here, the guild must not silently re-route to another
+# channel (T1113 adjustment #4) -- it must refuse with the real channel list
+# so the caller can re-state the request unambiguously.
+_VERB_CHANNEL_BLACKLIST = frozenset({
+    "lee", "leer", "read", "ver", "muestra", "mostrar",
+    "busca", "buscar", "search", "find", "completo", "completa",
+    "full", "turno", "turn", "mensaje", "message",
+    "ultimos", "últimos", "last", "limit", "offset",
+    "desde", "author", "autor", "hilo", "thread", "coloquio",
+})
+
 # Prefixes to strip before extracting channel name from natural language
 _CHANNEL_PREFIXES = re.compile(
     r'^(?:lee\s+el\s+(?:canal\s+)?coloquio|leer\s+(?:canal\s+)?coloquio|'
@@ -83,23 +99,78 @@ def _extract_channel_and_rest(raw: str) -> tuple[str, str]:
     1. Strip known action prefixes.
     2. The channel slug is the first token(s) matching [a-z0-9_-]+ (slug-safe).
     3. Everything after the first non-slug token is 'rest'.
+
+    Ordering inside this function matters for the read-by-turn path: the
+    'del canal X' / ' in X' mentions and the stop-word cutoff are tried
+    BEFORE the leading-slug regex, so that 'el turno 1093' (whose only
+    slug-safe token is the verb 'lee') resolves to '' channel + the turn in
+    rest, never to channel='lee'.
     """
     s = _CHANNEL_PREFIXES.sub("", raw).strip()
     if not s:
         return "", ""
-    # Stop at first stop-word
+    # Turn-scoped reads name their channel AFTER the turn phrase: 'lee el
+    # turno 1093 del canal general'. The leftover leading token may be a
+    # verb ('lee') + 'el' — both unusable as a channel. Detect and strip
+    # leading 'el/la/the' + STALE verb remnants so the explicit channel
+    # mention below can win; if the leftover leading slug is still a verb,
+    # the ordinary read path refuses with the verb-channel guard anyway.
+    s = re.sub(r'^(?:el|la|los|las|the)\s+', "", s, flags=re.IGNORECASE)
+    # Explicit channel mention anywhere in the tail: 'del canal X', 'en el
+    # canal X', 'del channel X', 'in channel X'. Wins over leading-token
+    # extraction so verb-led phrasings ('lee el mensaje completo del turno
+    # 1093 del canal general') resolve to the named channel, never to the
+    # verb.
+    m_canal = re.search(r'(?:\bdel\s+|\bde\s+|\ben\s+\bel\s+|\bin\s+|\bfrom\s+)?\b(?:canal|channel)\s+([\w][\w\-]*)', s, re.IGNORECASE)
+    if m_canal:
+        channel = _guard_verb_channel(m_canal.group(1))
+        if channel == "__verb_channel__":
+            return channel, s
+        s_without = (s[:m_canal.start()] + " " + s[m_canal.end():]).strip()
+        return channel, s_without.strip(" ,:;")
+    # 'busca T1093 en general' / 'search foo in mision-activa': trailing
+    # ' en X' / ' in X' names the channel while the keyword sits before it.
+    m_en = re.search(r'\s+(?:en|in)\s+([\w][\w\-]*)\s*$', s, re.IGNORECASE)
+    if m_en:
+        channel = _guard_verb_channel(m_en.group(1))
+        if channel == "__verb_channel__":
+            return channel, s
+        s_without = s[:m_en.start()].strip()
+        return channel, s_without
     m = _STOP_WORDS.search(s)
     if m:
-        return s[:m.start()].strip(), s[m.start():].strip()
+        return _guard_verb_channel(s[:m.start()].strip()), s[m.start():].strip()
     # Otherwise take only slug-safe leading tokens
     # Delimiters: whitespace+non-ws, OR any non-slug char (:, ., !, etc.), OR end-of-string
     slug_match = re.match(r'^([\w][\w\-]*(?:\s+[\w][\w\-]*)*?)(?=\s+\S|[^\w\-]|$)', s)
     if slug_match:
         candidate = slug_match.group(1).strip()
         rest = s[len(candidate):].strip()
-        return candidate, rest
+        return _guard_verb_channel(candidate), rest
     # Fallback: everything is the channel
-    return s.strip(), ""
+    return _guard_verb_channel(s.strip()), ""
+
+
+import unicodedata
+
+
+def _normalize_candidate_slug(word: str) -> str:
+    """Lowercase NFKD-fold a candidate channel token so that 'Léeme' / 'LEE' /
+    'léeme' all collapse to blacklist members ('leeme' not itself listed, but
+    folded accents let 'Últimos' match 'ultimos' etc.). Spanish user phrasings
+    arrive with accents; the slug regex accepts them; the blacklist must too."""
+    return unicodedata.normalize("NFKD", word).encode("ascii", "ignore").decode("ascii").lower()
+
+
+def _guard_verb_channel(candidate: str) -> str:
+    """Return a poisoning marker if the channel candidate is a verb parameter
+    word (closed list), else the candidate unchanged. Callers compare against
+    this marker ('__verb_channel__') and refuse the read with the real list of
+    channels instead of silently re-routing (T1113 adjustment #4)."""
+    if not candidate:
+        return candidate
+    lowered = _normalize_candidate_slug(candidate)
+    return "__verb_channel__" if lowered in _VERB_CHANNEL_BLACKLIST else candidate
 
 
 def _parse_limit(text: str, default: int) -> int:
@@ -125,6 +196,143 @@ def _parse_author(text: str) -> str:
     return m.group(1) if m else "agent"
 
 
+# Global output budget for read_channel / search_channel (approved design):
+# the FULL tool response must fit in this many characters, distributing per-
+# message space proportionally and telling the caller exactly how to recover
+# each cut message (its turn number is always in the row header).
+_GLOBAL_OUTPUT_BUDGET = 12000
+
+
+def _fit_messages_to_budget(msgs: list, budget: int, channel_id: str = "",
+                            per_message_default_cap: int = 300) -> list:
+    """Render body lines for `msgs` within `budget` total chars.
+
+    Contract:
+    - The most RECENT messages are kept in full first; older ones get less.
+    - Bodies are truncated with a marker pointing at the exact recovery
+      action: '…[+2057c: lee el turno 1048 en general]'.
+    - When even the trimmed rendering doesn't fit, the OLDEST lines are
+      dropped and counted in a tail hint with the REAL number dropped.
+    - Joined output fits within `budget` (asserted by tests). Always
+      terminates: each iteration of the shave loop strictly shrinks a body
+      slice or removes a line.
+    """
+    if budget <= 0 or not msgs:
+        return []
+    ch = channel_id or "general"
+
+    MARKER = "…"
+    DROP_HINT_TPL = ("  " + MARKER + "{n} mensajes más antiguos omitidos por presupuesto;"
+                     " recupéralos uno a uno con 'lee el turno N en " + ch + "'.")
+
+    def render(m):
+        role_icon = "👤" if m.get("role") == "human" else "🤖"
+        header = f"[T{m['turn']}] {role_icon} {m.get('author_id', '?')}: "
+        body = m.get("content", "") or ""
+        return header, body
+
+    def line(header, body_show, full_len, turn):
+        if len(body_show) < full_len:
+            return f"{header}{body_show}{MARKER}[+{full_len - len(body_show)}c: lee el turno {turn} en {ch}]"
+        return header + body_show
+
+    def hint_cost(n):
+        return (len(DROP_HINT_TPL.format(n=n)) + 1) if n else 0
+
+    rendered = [render(m) for m in msgs]
+    n = len(rendered)
+
+    # Phase 1: drop the oldest messages until the GUARANTEED minimum
+    # rendering (header + floor body + marker + newline x keep_n + hint) fits.
+    dropped = 0
+    while n - dropped > 1:
+        keep_n = n - dropped
+        tail = rendered[dropped:]
+        headers_len = sum(len(h) for h, _ in tail)
+        need = headers_len + keep_n + hint_cost(dropped) + keep_n * 105  # 60 body + 45 marker
+        if need <= budget:
+            break
+        dropped += 1
+
+    keep_n = n - dropped
+    tail = rendered[dropped:]
+    turns_kept = [m["turn"] for m in msgs[dropped:]]
+    headers_len = sum(len(h) for h, _ in tail)
+    available = budget - headers_len - keep_n - hint_cost(dropped)
+
+    def cost(lines):
+        return sum(len(l) for l in lines) + len(lines) - 1
+
+    # Phase 2: distribute body budget proportionally, but never below 30 and
+    # never above what's actually there.
+    shares = []
+    for h, b in tail:
+        cap = min(per_message_default_cap, len(b))
+        shares.append(cap)
+    total_bodies = sum(shares)
+    if cost([h + b[:s] for (h, b), s in zip(tail, shares)]) + len(tail) - 1 > available:
+        scale = max(available, 0) / max(total_bodies, 1)
+        # Cautiously RESHARE from a copy of the current shares; the previous
+        # version reassigned inside the comprehension source list, which made
+        # `zip(shares, tail)` consume an already-empties list (real bug
+        # caught by the TL review T1119 cycle).
+        reshares = []
+        for s, (h, b) in zip(shares, tail):
+            new_s = max(min(int(s * scale), len(b)), min(30, len(b)))
+            reshares.append(new_s)
+        shares = reshares
+    out = []
+    for (h, b), t, s in zip(tail, turns_kept, shares):
+        out.append(line(h, b[:s], len(b), t))
+
+    # Phase 3: exact-fit shave. Each iteration either strictly reduces a
+    # line's body slice or drops the oldest line entirely, so the loop
+    # always terminates.
+    while cost(out) > available and out:
+        overshoot = cost(out) - available
+        h, b = tail[0]
+        t = turns_kept[0]
+        shown_now = len(out[0]) - len(h)
+        # Body slice actually visible in line[0]:
+        marker_idx = out[0].find(MARKER)
+        body_now = (marker_idx - len(h)) if marker_idx >= 0 else shown_now
+        new_show = max(0, body_now - overshoot)
+        if new_show <= 0 or new_show >= len(b):
+            out.pop(0)
+            tail.pop(0)
+            turns_kept.pop(0)
+            dropped += 1
+            available = budget - sum(len(h) for h, _ in tail) - len(tail) - hint_cost(dropped)
+        else:
+            out[0] = line(h, b[:new_show], len(b), t)
+
+    if dropped:
+        out.append(DROP_HINT_TPL.format(n=dropped))
+    return out
+
+
+def _list_channel_ids() -> list:
+    """Best-effort live list of existing Coloquio channel ids, for error hints.
+    Never raises: on any failure returns []."""
+    try:
+        data = _get("/api/v1/coloquio/channels")
+        channels = data if isinstance(data, list) else data.get("channels", [])
+        return [c["channel_id"] for c in channels]
+    except Exception:
+        return []
+
+
+def _verb_channel_refusal(raw: str) -> str:
+    """Refuse a read whose parsed channel is a verb (closed list), telling the
+    caller the real channel list so they can restate the request (T1113
+    adjustment #4: no silent re-route to 'general')."""
+    chans = _list_channel_ids()
+    listing = ", ".join(chans) if chans else "(no channels found)"
+    return ("❌ A channel name can never be a reading/search verb like "
+            f"'lee'/'read'/'busca'/'search'. Restate with an explicit channel. "
+            f"Available channels: {listing}")
+
+
 def _truncate(text: str, max_chars: int = 400) -> str:
     if len(text) <= max_chars:
         return text
@@ -132,9 +340,59 @@ def _truncate(text: str, max_chars: int = 400) -> str:
 
 
 def _parse_full(text: str) -> bool:
-    """Detect an explicit request for untruncated message bodies
-    ('full', 'completo', 'sin truncar', 'sin resumir')."""
+    """Detect an explicit request for untruncated message bodies    ('full', 'completo', 'sin truncar', 'sin resumir')."""
     return bool(re.search(r'\b(full|completo|sin\s+truncar|sin\s+resumir|untruncated)\b', text, re.IGNORECASE))
+
+
+# ── Turn-number parsing (read-only lexing, approved T1113 adjustment #2) ────────────────────────
+
+# Valid READ-intent anchors used to gate _parse_turn: turn-number lexing only
+# applies in reading phrasings, never in search ones ('busca T1093 en general'
+# must stay a keyword search for the literal string 'T1093', not silently become
+# a turn read).
+_READ_INTENT_RE = re.compile(
+    r"\b(?:lee|leer|read|ver|muestra|mostrar|dame|dime|get|show)\b",
+    re.IGNORECASE,
+)
+
+# Explicit word forms: 'turno N', 'turn N', 'mensaje N', optional '#', with
+# word boundaries so 'ventana 10' / 'rotundo 3' never match.
+_TURN_EXPLICIT_RE = re.compile(
+    r"\b(?:turno|turn|mensaje|message)\s+#?(\d+)\b",
+    re.IGNORECASE,
+)
+
+# 'T1093' compact form. T1113 adjustment #1: the word boundaries are REAL \b
+# metacharacters inside this raw string (backslash + b). The previous design
+# post reached the reviewer with \x08 backspace control characters in place of
+# \b; guarded against here + explicitly asserted in test_coloquio_nlp.py so any
+# future corrupt paste fails loudly in the test battery.
+_TURN_HASH_RE = re.compile(r"\bT(\d{1,6})\b", re.IGNORECASE)
+
+# Corruption canaries: a literal backspace control char must never appear
+# inside any compiled turn pattern.
+assert chr(0x08) not in _TURN_EXPLICIT_RE.pattern, "corrupted paste: literal backspace in _TURN_EXPLICIT_RE"
+assert chr(0x08) not in _TURN_HASH_RE.pattern, "corrupted paste: literal backspace in _TURN_HASH_RE"
+assert r"\b" in _TURN_HASH_RE.pattern and r"\b" in _TURN_EXPLICIT_RE.pattern
+
+
+def _parse_turn(text: str) -> int:
+    """Extract a turn number from a natural-language READ phrase:
+    'turno N', 'turn N', 'T1234', 'mensaje N', optionally suffixed with
+    modifiers ('turno 1071 completo', 'translate turn 1093', 'T1093 completo').
+    Returns the turn number, or 0 when nothing matches (real kernel turn
+    numbering is 1-indexed, so 0 is a safe 'no turn requested' sentinel).
+
+    T1113 adjustment #2: callers apply this ONLY on read intents; search
+    keyword phrasings ('busca T1093') pass through untouched.
+    """
+    m = _TURN_EXPLICIT_RE.search(text)
+    if m:
+        return int(m.group(1))
+    m = _TURN_HASH_RE.search(text)
+    if m:
+        return int(m.group(1))
+    return 0
 
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
@@ -169,6 +427,21 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
     # every default read return the OLDEST 50 messages in the channel
     # instead, no matter how many turns the channel had accumulated).
     offset_explicit = offset != 0
+    # Turn lexing is a READ-only feature (T1113 adjustment #2): parse the turn
+    # number BEFORE _extract_channel_and_rest, straight off the original raw
+    # string, so that 'turno'/'T...' tokens can never contaminate the channel
+    # slug extraction (and the slug extraction can never eat the turn number).
+    natural_turn = _parse_turn(raw) if raw else 0
+    if turn == 0 and natural_turn:
+        turn = natural_turn
+    # A turn read without a named channel defaults to 'general' (approved
+    # design; reads never create channels, so this cannot fragment
+    # anything). Covers BOTH the explicit turn= kwarg and the NL-parsed
+    # turn; resolved BEFORE the verb-refusal so the read routes cleanly.
+    if turn and not channel_id:
+        channel_id = "general"
+        rest = ""
+
     if not channel_id:
         channel_id, rest = _extract_channel_and_rest(raw)
         if limit == 0:
@@ -186,27 +459,47 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         full = _parse_full(raw)
 
     if not channel_id:
-        return "❌ Specify a channel name: 'read the coloquio <channel-name>'"
+        # T1113 adjustment #4: a channel that IS a reading/search verb is not a
+        # channel. NO silent defaulting to 'general' here -- refuse with the
+        # actual channel list so the caller can restate unambiguously.
+        chans = _list_channel_ids()
+        return ("❌ Specify a channel name: 'read the coloquio <channel-name>'. "
+                f"Available channels: {', '.join(chans) if chans else '(none)'}")
+    if channel_id == "__verb_channel__":
+        return _verb_channel_refusal(raw)
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
-        # A turn-scoped read fetches a wide-enough window and filters client-side --
-        # the REST API paginates by position, not by turn number, so there's no
-        # direct "get turn N" endpoint to call yet.
-        effective_limit = 500 if turn else limit
-        effective_offset = 0 if turn else offset
-        # Only send `offset=` when it was genuinely requested (or this is a
-        # turn-scoped read, which needs its own explicit 0). Omitting it
-        # otherwise lets the REST API's own offset=None branch compute
-        # "give me the most recent `limit` messages" instead of always
-        # defaulting to the oldest ones -- see the comment above.
-        offset_param = f"&offset={effective_offset}" if (turn or offset_explicit) else ""
-        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={effective_limit}{offset_param}"
+        # Turn-scoped read: call the dedicated REST endpoint instead of
+        # downloading a 500-message window and filtering client-side (the
+        # endpoint existed all along: /api/v1/coloquio/channels/{id}/turn/{turn}).
+        # One exact row, no truncation, no window guessing, no 404-because-it-
+        # was-older-than-the-window. Turn default channel is 'general' --
+        # confirmed with the kernel (T1113): reads never create channels.
+        if turn:
+            turn_channel = channel_id or "general"
+            quoted_turn_channel = urllib.parse.quote(turn_channel, safe="")
+            try:
+                data = _get(f"/api/v1/coloquio/channels/{quoted_turn_channel}/turn/{turn}")
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    chans = _list_channel_ids()
+                    return (f"Turn {turn} not found in channel '{turn_channel}'. "
+                            f"Available channels: {', '.join(chans) if chans else '(none)'}")
+                raise
+            msg = data.get("message") or data
+            if not msg:
+                return f"Turn {turn} not found in channel '{turn_channel}'."
+            role_icon = "👤" if msg.get("role") == "human" else "🤖"
+            return (f"=== Coloquio: {turn_channel} — turn {msg['turn']} ===\n"
+                    f"[T{msg['turn']}] {role_icon} {msg['author_id']}: {msg['content']}")
+        # Non-turn read: normal thread listing (up to 20000 chars), no
+        # pagination games. The turn/no-turn split means 'turn=N' is never
+        # silently defeated by the REST offset default.
+        url = f"/api/v1/coloquio/channels/{quoted_id}?limit={limit}"
+        if offset_explicit:
+            url += f"&offset={offset}"
         data = _get(url)
         msgs = data.get("messages", [])
-        if turn:
-            msgs = [m for m in msgs if m.get("turn") == turn]
-            if not msgs:
-                return f"Turn {turn} not found in channel '{channel_id}' (searched last {effective_limit} messages)."
         # Show the offset the SERVER actually used, not the local variable --
         # when offset_param was omitted above, the server computed its own
         # (the "most recent N" default), and echoing our stale local value
@@ -214,18 +507,33 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         real_offset = data.get("offset", offset)
         if not msgs:
             return f"Channel '{channel_id}' exists but has no messages yet (offset={real_offset})."
-        max_chars = 20000 if (full or turn) else 400
-        lines = [f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={real_offset}) ==="]
-        for m in msgs:
-            role_icon = "👤" if m.get("role") == "human" else "🤖"
-            lines.append(
-                f"[T{m['turn']}] {role_icon} {m['author_id']}: {_truncate(m['content'], max_chars)}"
-            )
+        header = f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={real_offset}) ==="
+        lines = [header]
+        # Global budget applies in BOTH modes (T1110 point 7, re-asserted in
+        # T1119): 'full' is an untruncated-per-message mode, not an exempt
+        # tool call. Older messages overflow the budget and get the same
+        # recovery marker/hint as normal mode; each individual body is also
+        # capped at 20000 chars (DoS guard).
+        body = _fit_messages_to_budget(
+            msgs,
+            _GLOBAL_OUTPUT_BUDGET - len(header) - 1,
+            channel_id=channel_id,
+            per_message_default_cap=20000 if full else 300,
+        )
+        lines.extend(body)
         return "\n".join(lines)
     except urllib.error.HTTPError as e:
         if e.code == 401:
             return ("❌ Kernel auth failed (HTTP 401): no valid bearer token. "
                     "The kernel injects TYLLUAN_TOKEN into guild envs; check that .tylluan-token exists and matches.")
+        if e.code == 404:
+            # T1113 adjustment #3: channel names that don't exist are genuinely
+            # typo'd beg -- refuse with the REAL channel list, never create one
+            # (reads never create: verified against coloquio.rs -- only
+            # post_message and create_channel write INSERT INTO coloquio*).
+            chans = _list_channel_ids()
+            return (f"❌ Channel '{channel_id}' not found (HTTP 404). Available: "
+                    f"{', '.join(chans) if chans else '(none)'}")
         return f"❌ Channel '{channel_id}' not found (HTTP {e.code}). Create it first from the dashboard."
     except Exception as e:
         return f"❌ Error reading channel: {e}"
@@ -297,8 +605,12 @@ def search_channel(channel_id: str = "", query: str = "", intent: str = "",
     find message in channel, busca '...' en canal.
     """
     raw = query or intent or command or ""
+    # T1113 adjustment #2: a search intent is a SEARCH, never a turn read even
+    # if the keyword looks like 'T1093'. No _parse_turn here by design.
     if not channel_id:
         channel_id, rest = _extract_channel_and_rest(raw)
+        if channel_id == "__verb_channel__":
+            return _verb_channel_refusal(raw)
         if not keyword:
             # Extract quoted keyword or last significant token
             m = re.search(r'["\'](.+?)["\']', rest or raw)
@@ -312,6 +624,8 @@ def search_channel(channel_id: str = "", query: str = "", intent: str = "",
 
     if not channel_id or not keyword:
         return "❌ Specify channel and keyword: 'search coloquio <channel>: <keyword>'"
+    if channel_id == "__verb_channel__":
+        return _verb_channel_refusal(raw)
     try:
         quoted_id = urllib.parse.quote(channel_id, safe="")
         quoted_q = urllib.parse.quote(keyword)
@@ -319,9 +633,22 @@ def search_channel(channel_id: str = "", query: str = "", intent: str = "",
         msgs = data.get("messages", [])
         if not msgs:
             return f"No results for '{keyword}' in channel '{channel_id}'."
+        # Global output budget (approved design): whole response fits in 12000
+        # chars. Chars are distributed proportionally to need, and each cut
+        # message carries an exact recovery hint in its marker.
         lines = [f"=== Search '{keyword}' in {channel_id} ({len(msgs)} hits) ==="]
-        for m in msgs:
-            lines.append(f"[T{m['turn']}] {m['author_id']}: {_truncate(m['content'], 300)}")
+        budget = _GLOBAL_OUTPUT_BUDGET - len(lines[0])
+        body = _fit_messages_to_budget(msgs, budget, channel_id=channel_id,
+                                       per_message_default_cap=300)
+        lines.extend(body)
+        total = sum(len(l) for l in lines)
+        if total > _GLOBAL_OUTPUT_BUDGET:
+            # Header + hint fit is guaranteed by the _fit_messages_to_budget
+            # contract nested-budget check; this branch is reachable only if
+            # the number of cut messages outgrows the tail hint, in which case
+            # drop the oldest lines until it fits.
+            while len(lines) > 2 and sum(len(l) for l in lines) > _GLOBAL_OUTPUT_BUDGET:
+                lines.pop(1)
         return "\n".join(lines)
     except urllib.error.HTTPError as e:
         return f"❌ Search error (HTTP {e.code}): {e.read().decode()}"
