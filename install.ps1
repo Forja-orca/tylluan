@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 # Tylluan Windows Installer
 # Usage: irm https://raw.githubusercontent.com/Forja-orca/tylluan/main/install.ps1 | iex
 
@@ -6,7 +6,7 @@ param(
     [string]$Version = "latest"
 )
 
-# Execution Policy guard — detect Restricted/AllSigned before anything else
+# Execution Policy guard - detect Restricted/AllSigned before anything else
 $execPolicy = Get-ExecutionPolicy -Scope CurrentUser 2>$null
 if ($execPolicy -in 'Restricted', 'AllSigned') {
     Write-Host "WARNING: Your PowerShell execution policy is '$execPolicy'." -ForegroundColor Yellow
@@ -80,7 +80,7 @@ if ($PathEntries -notcontains $BinDir) {
 # from the config dir, otherwise the kernel would not discover the file.
 $ConfigPath = Join-Path $DataDir "tylluan.toml"
 if (Test-Path $ConfigPath) {
-    Write-Step "Existing tylluan.toml found — keeping it. Starting kernel..."
+    Write-Step "Existing tylluan.toml found - keeping it. Starting kernel..."
     try {
         $null = Start-Process -FilePath "$BinDir\tylluan-cli" -ArgumentList "start" -WorkingDirectory $DataDir -NoNewWindow -PassThru -ErrorAction Stop
     } catch {
@@ -153,7 +153,7 @@ Write-Host "For better retrieval (BGE-M3):" -ForegroundColor Yellow
 Write-Host "  tylluan-cli download-models"
 Write-Host ""
 
-# ── Python guilds (optional — the 46 Python tool plugins) ──────────────
+# -- Python guilds (optional - the 46 Python tool plugins) --------------
 # Detection only: NEVER pip-install into the user's system Python from an
 # installer (it mutates the user's environment without consent, and PEP 668
 # blocks it on major Linux distros anyway). Print the exact command instead.
@@ -164,7 +164,7 @@ foreach ($Cand in @("python", "python3")) {
     if ($Cmd) { $GuildPy = $Cmd.Source; break }
 }
 if (-not $GuildPy) {
-    Write-Host "  Python 3.12+ not found — Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
+    Write-Host "  Python 3.12+ not found - Python guilds won't run (kernel + MCP memory unaffected)." -ForegroundColor Yellow
     Write-Host "  Install Python 3.12+: https://www.python.org/downloads/" -ForegroundColor Yellow
 } else {
     $VerOk = $false
@@ -178,7 +178,7 @@ if (-not $GuildPy) {
     }
     if (-not $VerOk) {
         if ($Ver -notmatch '^Python \d') { $Ver = "Python not usable" }
-        Write-Host "  $Ver — guilds need Python 3.12+. Upgrade: https://www.python.org/downloads/" -ForegroundColor Yellow
+        Write-Host "  $Ver - guilds need Python 3.12+. Upgrade: https://www.python.org/downloads/" -ForegroundColor Yellow
     } else {
         & $GuildPy -c "import mcp, fastmcp, psutil" 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
