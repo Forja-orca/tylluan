@@ -36,6 +36,21 @@ Write-Step "Detected: Windows ($Target)"
 
 $Archive = "tylluan-${Target}.tar.gz"
 
+function Is-GitHubUrl($TestUrl) {
+    if (-not $TestUrl) { return $false }
+    try {
+        $uri = [System.Uri]$TestUrl
+        return ($uri.Host -eq "github.com" -or $uri.Host.EndsWith(".github.com") -or $uri.Host.EndsWith(".githubusercontent.com"))
+    } catch {
+        return $false
+    }
+}
+
+$GitHubHeaders = @{}
+if ($env:GITHUB_TOKEN) {
+    $GitHubHeaders["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+}
+
 if ($env:TYLLUAN_DOWNLOAD_URL) {
     $Url = $env:TYLLUAN_DOWNLOAD_URL
     Write-Step "Using explicit download URL: $Url"
@@ -52,14 +67,50 @@ if ($env:TYLLUAN_DOWNLOAD_URL) {
     Write-Step "Downloading Tylluan v$Version ($Target)..."
 } else {
     Write-Step "Detecting latest release..."
+    # Resolve latest release tag without api.github.com to avoid anonymous API rate limits (T1128).
+    # Inspect the redirect Location header from HEAD https://github.com/<repo>/releases/latest
+    $ResolvedVersion = $null
+    $LatestUrl = "https://github.com/$Repo/releases/latest"
     try {
-        $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -ErrorAction Stop
-        $Version = $Release.tag_name -replace '^v'
+        $Req = [System.Net.HttpWebRequest]::Create($LatestUrl)
+        $Req.Method = "HEAD"
+        $Req.AllowAutoRedirect = $false
+        if ($env:GITHUB_TOKEN) {
+            $Req.Headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+        }
+        $Resp = $Req.GetResponse()
+        $Loc = $Resp.GetResponseHeader("Location")
+        $Resp.Close()
+        if ($Loc -match '/tag/v?([^/]+)$') {
+            $ResolvedVersion = $Matches[1]
+        }
     } catch {
-        Write-Err "Could not detect latest version: $_"
+        # Fallback via Invoke-WebRequest HEAD
+        try {
+            $HeadParams = @{
+                Uri = $LatestUrl
+                Method = "Head"
+                UseBasicParsing = $true
+                ErrorAction = "Stop"
+            }
+            if ($GitHubHeaders.Count -gt 0) { $HeadParams["Headers"] = $GitHubHeaders }
+            $HeadResp = Invoke-WebRequest @HeadParams
+            $FinalUri = $HeadResp.BaseResponse.ResponseUri.AbsoluteUri
+            if ($FinalUri -match '/tag/v?([^/]+)$') {
+                $ResolvedVersion = $Matches[1]
+            }
+        } catch {}
     }
-    $Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
-    Write-Step "Downloading Tylluan v$Version ($Target)..."
+
+    if ($ResolvedVersion) {
+        $Version = $ResolvedVersion
+        $Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
+        Write-Step "Downloading Tylluan v$Version ($Target)..."
+    } else {
+        # Direct download redirect fallback
+        $Url = "https://github.com/$Repo/releases/latest/download/$Archive"
+        Write-Step "Downloading Tylluan latest ($Target)..."
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -68,7 +119,16 @@ try {
     if (Test-Path $Url) {
         Copy-Item -Path $Url -Destination $OutFile -Force
     } else {
-        Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
+        $WebParams = @{
+            Uri = $Url
+            OutFile = $OutFile
+            UseBasicParsing = $true
+            ErrorAction = "Stop"
+        }
+        if ($GitHubHeaders.Count -gt 0 -and (Is-GitHubUrl $Url)) {
+            $WebParams["Headers"] = $GitHubHeaders
+        }
+        Invoke-WebRequest @WebParams
     }
 } catch {
     Write-Err "Download failed: $_"
@@ -135,8 +195,9 @@ if (-not $Ready) {
 
 # Verify the binary responds
 $Status = & "$BinDir\tylluan-cli" status 2>&1
+$DisplayVer = if ($Version -eq "latest" -or -not $Version) { "latest" } else { "v$Version" }
 if ($LASTEXITCODE -eq 0) {
-    Write-OK "Tylluan v$Version is running at http://127.0.0.1:47004"
+    Write-OK "Tylluan $DisplayVer is running at http://127.0.0.1:47004"
     Write-Host ""
     Write-Host "  Binary:    $BinDir\tylluan-nexus.exe" -ForegroundColor Cyan
     Write-Host "  CLI:       $BinDir\tylluan-cli.exe" -ForegroundColor Cyan
@@ -144,7 +205,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "  Logs:      $DataDir\logs\" -ForegroundColor Cyan
 } else {
     Write-Warning "'tylluan-cli status' returned error (try in a new terminal): $Status"
-    Write-OK "Tylluan v$Version installed to $BinDir (kernel may need manual start)"
+    Write-OK "Tylluan $DisplayVer installed to $BinDir (kernel may need manual start)"
 }
 
 Write-Host ""
