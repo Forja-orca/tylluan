@@ -342,8 +342,17 @@ mod tests {
         let (tx1, _rx1) = oneshot::channel();
         let (tx2, _rx2) = oneshot::channel();
 
-        let expired = tokio::time::Instant::now() - tokio::time::Duration::from_secs(1);
-        let future = tokio::time::Instant::now() + tokio::time::Duration::from_secs(3600);
+        // checked_sub instead of `-`: `Instant::now() - 1s` panics if the
+        // machine has been up for less than 1s (CI runners / cold boots;
+        // incident 2026-10-12: same pattern killed a kernel maintenance task
+        // in production). If it saturates, fall back to `now` — an expires_at
+        // equal to (or before) the reaper's own `now` is still reaped by the
+        // `expires_at > now` retain, so the test's invariant is preserved.
+        let now_test = tokio::time::Instant::now();
+        let expired = now_test
+            .checked_sub(tokio::time::Duration::from_secs(1))
+            .unwrap_or(now_test);
+        let future = now_test + tokio::time::Duration::from_secs(3600);
 
         let id1 = register(GrantRequest {
             guild: "bash".into(),
