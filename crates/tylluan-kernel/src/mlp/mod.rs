@@ -30,6 +30,14 @@ impl MlpScorer {
     }
 
     fn load_from(path: &Path) -> Self {
+        // T1116: probe BEFORE Session::builder — creating an ort session calls
+        // ort::api(), which panics (panic="abort" → hard boot abort) when the
+        // loaded dylib is older than the pinned ort (System32 1.17.1, boot
+        // smoke phase B, 2026-10-12). Degrade to MLP-disabled, never abort.
+        if !crate::router::embeddings::onnx_runtime_ort_compatible() {
+            info!("MLP scorer skipped: ONNX Runtime dylib missing or incompatible with the pinned ort (probe) — MLP scoring disabled");
+            return Self { session: None };
+        }
         match Session::builder()
             .and_then(|b| b.commit_from_file(path))
         {

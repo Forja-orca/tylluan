@@ -1098,6 +1098,18 @@ impl SparseEngine {
     pub const MODEL_ID: &'static str = "bge-m3-sparse";
 
     pub fn try_new(device: &InferenceDevice) -> Result<Self> {
+        // T1116/T1122: probe BEFORE fastembed. fastembed resolves the model
+        // through hf_hub first (boot smoke phase B logged `hf_hub: Using
+        // token file` and THEN panicked inside ort::api()'s version check
+        // against the System32 1.17.1 dylib), so this entry runs BEFORE the
+        // reranker gate and every load_with_device guard — with
+        // panic="abort" that panic is a hard boot abort. Err is non-fatal at
+        // the main.rs call site ("sparse source disabled").
+        if !onnx_runtime_ort_compatible() {
+            return Err(anyhow!(
+                "SparseEngine disabled: ONNX Runtime dylib missing or incompatible with the pinned ort (probe before fastembed) -- dense+BM25+RRF keep working"
+            ));
+        }
         apply_onnx_thread_cap(None);
         let eps = build_execution_providers(device);
         let options = SparseInitOptions::new(SparseModel::BGEM3).with_execution_providers(eps);

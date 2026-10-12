@@ -70,7 +70,16 @@ impl LightReranker {
 
     pub fn new(models_dir: &Path) -> Self {
         let path = models_dir.join("light_reranker.onnx");
-        if path.exists() {
+        if path.exists() && !crate::router::embeddings::onnx_runtime_ort_compatible() {
+            // T1116: probe BEFORE Session::builder — creating an ort session
+            // calls ort::api(), which panics (panic="abort" → hard boot abort)
+            // on a dylib older than the pinned ort (System32 1.17.1, boot
+            // smoke phase B, 2026-10-12). Degrade to the native-weights
+            // backend below instead of aborting.
+            tracing::warn!(
+                "LightReranker ONNX backend skipped: ONNX Runtime dylib missing or incompatible with the pinned ort (probe) — trying native weights"
+            );
+        } else if path.exists() {
             match Session::builder().and_then(|b| b.commit_from_file(&path)) {
                 Ok(session) => {
                     tracing::info!("LightReranker loaded from {:?}", path);

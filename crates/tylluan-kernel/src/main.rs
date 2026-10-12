@@ -2449,3 +2449,117 @@ mod onnx_probe_tests {
         restore();
     }
 }
+
+#[cfg(test)]
+mod ort_entry_contract_tests {
+    // T1116/T1122 structural gate, checked PER LINE. The first version was
+    // per-file and passed while SparseEngine::try_new sat unguarded, because
+    // embeddings.rs defines/uses the probe elsewhere in the same file —
+    // exactly the miss T1122 caught (a botched `git reset` had silently
+    // dropped that guard from the diff while the report still claimed it).
+    // Rule: any code line that ENTERS ort (`Session::builder` / `ort::init`
+    // / the fastembed engine constructors) must have
+    // `onnx_runtime_ort_compatible` somewhere between the start of its
+    // enclosing `fn` and that line. `use ort::` import lines require the
+    // probe somewhere in the file. Comment and string-literal lines are
+    // skipped (they only mention the markers in prose/data).
+    // Rationale: the 2026-10-12 phase-B boot smoke proved unit tests alone
+    // miss entries — SparseEngine::try_new panicked after hf_hub and
+    // panic="abort" turned it into a hard boot abort. If this fails, gate
+    // the new entry (return Err/None and degrade), never weaken the check.
+    use std::path::{Path, PathBuf};
+
+    const ENTRY_MARKERS: &[&str] = &[
+        "Session::builder",
+        "ort::init",
+        "TextEmbedding::try_new",
+        "TextRerank::try_new",
+        "SparseTextEmbedding::try_new",
+    ];
+    const FILE_MARKERS: &[&str] = &["use ort::"];
+
+    fn collect_rs(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_rs(&path, out);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    fn starts_fn(line: &str) -> bool {
+        let t = line.trim_start();
+        t.starts_with("fn ")
+            || t.starts_with("pub fn ")
+            || t.starts_with("async fn ")
+            || t.starts_with("pub async fn ")
+            || t.starts_with("pub(crate) fn ")
+            || t.starts_with("unsafe fn ")
+            || t.starts_with("pub unsafe fn ")
+    }
+
+    fn skipped_line(line: &str) -> bool {
+        let t = line.trim_start();
+        t.starts_with("//") || t.starts_with("\"") || t.starts_with("r#\"")
+    }
+
+    #[test]
+    fn every_ort_entry_line_is_gated_by_the_compat_probe() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        collect_rs(&root, &mut files);
+        assert!(
+            files.len() > 50,
+            "scan looks broken: only {} .rs files under src/",
+            files.len()
+        );
+        let mut violations = Vec::new();
+        for file in &files {
+            let Ok(src) = std::fs::read_to_string(file) else {
+                continue;
+            };
+            let rel = file.strip_prefix(&root).unwrap_or(file).display().to_string();
+            let file_has_probe = src.contains("onnx_runtime_ort_compatible");
+            let lines: Vec<&str> = src.split('\n').collect();
+            for (i, line) in lines.iter().enumerate() {
+                if skipped_line(line) {
+                    continue;
+                }
+                if FILE_MARKERS.iter().any(|m| line.contains(*m)) {
+                    if !file_has_probe {
+                        violations.push(format!(
+                            "{rel}:{} `use ort::` import but no onnx_runtime_ort_compatible anywhere in the file",
+                            i + 1
+                        ));
+                    }
+                    continue;
+                }
+                if let Some(marker) = ENTRY_MARKERS.iter().find(|m| line.contains(**m)) {
+                    let boundary = (0..i).rev().find(|&j| starts_fn(lines[j]));
+                    let gated = match boundary {
+                        Some(j) => lines[j..=i]
+                            .iter()
+                            .any(|l| l.contains("onnx_runtime_ort_compatible")),
+                        None => file_has_probe,
+                    };
+                    if !gated {
+                        violations.push(format!(
+                            "{rel}:{} enters ort via `{marker}` without onnx_runtime_ort_compatible between the enclosing fn start and this line",
+                            i + 1
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "ort entries NOT gated by the compat probe (gate them: return Err/None and degrade, never panic):\n{}",
+            violations.join("\n")
+        );
+    }
+}
