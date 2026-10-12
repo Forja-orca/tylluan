@@ -34,24 +34,42 @@ switch ($Arch) {
 Write-Host "=== Tylluan Installer ===" -ForegroundColor White
 Write-Step "Detected: Windows ($Target)"
 
-Write-Step "Detecting latest release..."
-if ($Version -eq "latest") {
+$Archive = "tylluan-${Target}.tar.gz"
+
+if ($env:TYLLUAN_DOWNLOAD_URL) {
+    $Url = $env:TYLLUAN_DOWNLOAD_URL
+    Write-Step "Using explicit download URL: $Url"
+    Write-Step "Fetching Tylluan ($Target)..."
+} elseif ($env:TYLLUAN_VERSION) {
+    $Version = $env:TYLLUAN_VERSION -replace '^v'
+    $Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
+    Write-Step "Using explicit version: v$Version ($Target)..."
+    Write-Step "Downloading Tylluan v$Version ($Target)..."
+} elseif ($Version -ne "latest") {
+    $Version = $Version -replace '^v'
+    $Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
+    Write-Step "Using specified version: v$Version ($Target)..."
+    Write-Step "Downloading Tylluan v$Version ($Target)..."
+} else {
+    Write-Step "Detecting latest release..."
     try {
         $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -ErrorAction Stop
         $Version = $Release.tag_name -replace '^v'
     } catch {
         Write-Err "Could not detect latest version: $_"
     }
+    $Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
+    Write-Step "Downloading Tylluan v$Version ($Target)..."
 }
 
-$Archive = "tylluan-${Target}.tar.gz"
-$Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
-
-Write-Step "Downloading Tylluan v$Version ($Target)..."
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 $OutFile = Join-Path $BinDir $Archive
 try {
-    Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
+    if (Test-Path $Url) {
+        Copy-Item -Path $Url -Destination $OutFile -Force
+    } else {
+        Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
+    }
 } catch {
     Write-Err "Download failed: $_"
 }
