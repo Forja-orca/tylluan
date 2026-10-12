@@ -37,6 +37,28 @@ say ""
 
 ARCHIVE="tylluan-${TARGET}.tar.gz"
 
+is_github_url() {
+  # Compare the HOST only: a glob over the whole URL lets '*' cross a '/'
+  # (https://evil.example/x.github.com/f would match) and leak GITHUB_TOKEN.
+  case "$1" in https://*) ;; *) return 1 ;; esac
+  _host="${1#https://}"
+  _host="${_host%%/*}"
+  case "$_host" in
+    *@*|*:*) return 1 ;;
+    github.com|*.github.com|*.githubusercontent.com) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+curl_github() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+  else
+    curl "$@"
+  fi
+}
+
+LATEST=""
 if [ -n "${TYLLUAN_DOWNLOAD_URL:-}" ]; then
   URL="${TYLLUAN_DOWNLOAD_URL}"
   say "Using explicit download URL: ${URL}"
@@ -48,11 +70,19 @@ elif [ -n "${TYLLUAN_VERSION:-}" ]; then
   say "Downloading Tylluan v${LATEST} (${TARGET})..."
 else
   say "Detecting latest release..."
-  LATEST=$(curl -fsL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
-  [ -n "$LATEST" ] || err "Could not detect latest version from GitHub. Check your internet connection."
-  URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
-  say "Downloading Tylluan v${LATEST} (${TARGET})..."
+  # Resolve latest release tag without api.github.com to avoid anonymous API rate limits (T1128).
+  # Following the HEAD redirect of /releases/latest yields Location: .../releases/tag/vX.Y.Z
+  LATEST=$( (curl_github -sI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+    | tr -d '\r' | grep -i '^location:' | head -1 | sed -E 's|.*/tag/v?||') || true )
+
+  if [ -n "$LATEST" ]; then
+    URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
+    say "Downloading Tylluan v${LATEST} (${TARGET})..."
+  else
+    # Fallback to direct latest download redirect
+    URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE}"
+    say "Downloading Tylluan latest (${TARGET})..."
+  fi
 fi
 
 mkdir -p "$BIN_DIR"
@@ -60,9 +90,16 @@ TMP_ARCHIVE=$(mktemp) || err "Failed to create temp file"
 trap 'rm -f "$TMP_ARCHIVE"' EXIT
 if [ -f "$URL" ]; then
   cp "$URL" "$TMP_ARCHIVE"
-elif ! curl -fsL "$URL" -o "$TMP_ARCHIVE"; then
-  rm -f "$TMP_ARCHIVE"
-  err "Download failed. Check your internet: $URL"
+elif is_github_url "$URL"; then
+  if ! curl_github -fsL "$URL" -o "$TMP_ARCHIVE"; then
+    rm -f "$TMP_ARCHIVE"
+    err "Download failed. Check your internet: $URL"
+  fi
+else
+  if ! curl -fsL "$URL" -o "$TMP_ARCHIVE"; then
+    rm -f "$TMP_ARCHIVE"
+    err "Download failed. Check your internet: $URL"
+  fi
 fi
 if ! tar tzf "$TMP_ARCHIVE" >/dev/null 2>&1; then
   rm -f "$TMP_ARCHIVE"
@@ -180,4 +217,8 @@ else
 fi
 say ""
 
-say "Tylluan v${LATEST} installed to ${BIN_DIR}/"
+if [ -n "$LATEST" ]; then
+  say "Tylluan v${LATEST} installed to ${BIN_DIR}/"
+else
+  say "Tylluan installed to ${BIN_DIR}/"
+fi
