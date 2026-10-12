@@ -506,6 +506,17 @@ def read_channel(channel_id: str = "", query: str = "", intent: str = "",
         # here would misreport it.
         real_offset = data.get("offset", offset)
         if not msgs:
+            # T1110 point 5 / T1126: the REST GET for a nonexistent channel
+            # returns 200 + empty list, NOT 404 -- so without this check the
+            # guild answered "exists but has no messages yet" for channel
+            # names that were pure typos. Cross-check against the live
+            # channel list: if the id is not there, refuse with the real
+            # list (reads never create anything, kernel evidence in
+            # coloquio.rs -- only post_message/create_channel INSERT).
+            existing = _list_channel_ids()
+            if existing and channel_id not in existing:
+                return (f"❌ Channel '{channel_id}' does not exist. "
+                        f"Available channels: {', '.join(existing) if existing else '(none)'}")
             return f"Channel '{channel_id}' exists but has no messages yet (offset={real_offset})."
         header = f"=== Coloquio: {channel_id} ({len(msgs)} messages, offset={real_offset}) ==="
         lines = [header]

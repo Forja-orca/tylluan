@@ -452,3 +452,81 @@ def test_no_reachable_dead_branch_or_alias(guild):
     src = (REPO_ROOT / "guilds" / "core" / "coloquio.py").read_text(encoding="utf-8")
     assert "if not channel_id and turn:" not in src
     assert "_channel_names_hint" not in src
+
+
+# ── T1126: nonexistent channel read refuses with the real channel list ───────
+
+def test_nonexistent_channel_returns_does_not_exist_not_empty(guild, monkeypatch):
+    """T1110 point 5 gap found in live verification (T1126): a GET to a
+    nonexistent channel returns 200 + empty list, so the guild must NOT say
+    'exists but has no messages yet'. It must cross-check the live channel
+    list and refuse with it."""
+    mod = guild
+    def fake_get(path):
+        if path == "/api/v1/coloquio/channels":
+            return {"channels": [{"channel_id": "general"}, {"channel_id": "dev"}]}
+        if path.startswith("/api/v1/coloquio/channels/zzz-no-existe?limit"):
+            return {"channel_id": "zzz-no-existe", "messages": [], "count": 0, "offset": 0}
+        raise AssertionError(f"unexpected GET {path}")
+
+    monkeypatch.setattr(mod, "_get", fake_get)
+    out = mod.read_channel(channel_id="zzz-no-existe")
+    assert "does not exist" in out
+    assert "general" in out and "dev" in out  # real channel list in the answer
+    assert "exists but has no messages" not in out
+    # and nothing was created (fake_get only serves GET; a POST would raise)
+
+
+def test_real_empty_channel_keeps_exists_but_empty_message(guild, monkeypatch):
+    """A channel that REALLY exists (in the live list) but has zero messages
+    still gets the accurate 'exists but has no messages yet' wording."""
+    mod = guild
+    def fake_get(path):
+        if path == "/api/v1/coloquio/channels":
+            return {"channels": [{"channel_id": "new-empty-channel"}, {"channel_id": "general"}]}
+        if path.startswith("/api/v1/coloquio/channels/new-empty-channel?limit"):
+            return {"channel_id": "new-empty-channel", "messages": [], "count": 0, "offset": 0}
+        raise AssertionError(f"unexpected GET {path}")
+
+    monkeypatch.setattr(mod, "_get", fake_get)
+    out = mod.read_channel(channel_id="new-empty-channel")
+    assert "exists but has no messages yet" in out
+
+
+def test_channel_list_unavailable_does_not_claim_nonexistence(guild, monkeypatch):
+    """If the channel list cannot be fetched we must not say the channel does
+    not exist: we simply could not check, so keep the neutral empty wording."""
+    mod = guild
+    def fake_get(path):
+        if path == "/api/v1/coloquio/channels":
+            raise OSError("kernel list unavailable")
+        if path.startswith("/api/v1/coloquio/channels/maybe-real?limit"):
+            return {"channel_id": "maybe-real", "messages": [], "count": 0, "offset": 0}
+        raise AssertionError(f"unexpected GET {path}")
+
+    monkeypatch.setattr(mod, "_get", fake_get)
+    out = mod.read_channel(channel_id="maybe-real")
+    assert "does not exist" not in out
+    assert "exists but has no messages yet" in out
+
+
+def test_nonexistent_channel_read_creates_nothing_t1126(monkeypatch):
+    """Same no-POST property as the T1113 mock test, extended to the
+    T1126 cross-check path: a nonexistent-channel read must never write."""
+    mod = _load_guild_module()
+    calls = []
+    def fake_get(path):
+        calls.append(("GET", path))
+        if path == "/api/v1/coloquio/channels":
+            return {"channels": [{"channel_id": "general"}]}
+        if path.startswith("/api/v1/coloquio/channels/nope-channel?limit"):
+            return {"channel_id": "nope-channel", "messages": [], "count": 0, "offset": 0}
+        raise AssertionError(f"unexpected GET {path}")
+    def fake_post(path, body):
+        calls.append(("POST", path))
+        raise AssertionError(f"POST attempted during a READ: {path} {body}")
+    monkeypatch.setattr(mod, "_get", fake_get)
+    monkeypatch.setattr(mod, "_post", fake_post)
+    out = mod.read_channel(channel_id="nope-channel")
+    assert "does not exist" in out
+    assert not any(method == "POST" for method, _ in calls), calls
