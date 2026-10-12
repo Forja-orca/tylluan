@@ -59,7 +59,7 @@ cargo run -p tylluan-cli -- start
 
 ---
 
-## Estado actual — v0.17.0 (tagged 2026-08-23; 166 commits desde v0.16.0 `5900e97`)
+## Estado actual — v0.17.1 (v0.17.0 tagged 2026-08-23; v0.17.1 corta los fixes de seguridad e instalador del 2026-10-05/12)
 
 **Tests:** 1001 lib tests (kernel) + 72 (tylluan-link) + 12 (tylluan-fsrs) = 1085 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo (y `scripts/check_test_count.sh` ya valida esta cifra en CI).
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:47004/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).

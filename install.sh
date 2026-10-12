@@ -31,7 +31,7 @@ case "$OS" in
   *) err "Unsupported OS: $OS. Tylluan supports Linux, macOS, and Windows." ;;
 esac
 
-info "Tylluan Installer — v0.12.0"
+info "Tylluan Installer"
 info "Detected: ${OS} (${TARGET})"
 say ""
 

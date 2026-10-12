@@ -272,6 +272,10 @@ Delivered (85 commits since v0.15.0):
 
 ---
 
+## v0.17.1 — cut 2026-10-12
+
+Security and installer fixes found by the October audits, plus the anti-orphan guard that stops a test instance from killing production. Itemised in `CHANGELOG.md`. The Linux install-smoke job stays red until this tag is published, because it installs the latest release.
+
 ## v0.17.0 — in progress (tagged 2026-08-24, 591+ commits of drift since)
 
 **Status:** `v0.17.0` was tagged on 2026-08-24 (170 commits since v0.16.0), but `Cargo.toml` has stayed at `0.17.0` through 591 further commits — this roadmap entry is necessarily partial. A full item-by-item reconciliation of everything shipped since the tag has not been done; what follows is only what's been independently verified recently, not the complete changelog. Closing that gap (either a proper v0.18.0 cut or a full backfill of this section) is itself open work.

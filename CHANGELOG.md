@@ -4,6 +4,39 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [0.17.1] — 2026-10-12
+
+**609 commits since v0.17.0 (`git rev-list --count v0.17.0..HEAD`).** This entry lists the user-visible fixes found and verified in the 2026-10-05/12 window; it does not itemise the other commits in that range, so use `git log v0.17.0..v0.17.1` for the full list.
+
+**Upgrade note — federation.** The Noise NK mesh payload now carries an Ed25519 signature of the plaintext inside the AEAD (`[signature(64) || plaintext]`). By construction, a 0.17.0 peer and a 0.17.1 peer cannot exchange Noise-NK-encrypted payloads, so upgrade peers together. This has not been tested across versions.
+
+**Security**
+- `/api/*` no longer bypasses bearer auth by file extension: `is_public_bypass_path` now fails closed under `/api/` with four explicit exemptions (`192fbcf`).
+- The per-session rate limiter pruned only empty entries and leaked memory across idle sessions; it now ages out every key (`192fbcf`).
+- `POST /api/v1/bash` is refused unless `dev_mode = true` (`192fbcf`).
+- Noise NK payloads authenticate their sender with an Ed25519 signature and fail closed on an empty or invalid sender key (`e2bc9f7`).
+- `default_host` is `127.0.0.1`, not `0.0.0.0` (`68c5971`); the dispatch state distinguishes a failed spawn from a success (`8e91470`).
+
+**Reliability**
+- Starting any `tylluan-nexus` invocation (even `--version`) could read another instance's PID file and kill the live kernel. The anti-orphan routine now runs only when the server actually boots, kills a live peer only when its listening port equals ours, and never overwrites a live peer's PID file (`7f3d783`).
+- `stop` resolves the exact instance from its PID file instead of sweeping by process name (`c476bee`); the default port is 47004 everywhere (`ad13ec6`).
+- Router: trigger phrases were silently dropped for `coloquio` and `comfy_ui`; the extractor is now a proper lexer (`7a49cd5`). Live routing accuracy on the 77-item MD-3 set went from 45.6% to 50.0% (31/68 to 34/68) with no regressions. Valid natural-language requests are no longer rejected by the `required_args` gate (`7fca2f2`).
+- `work_traces` now has a production writer and a prune (`afc9533`); hybrid memory is fully retired (`c796353`, `23391c9`, `9b22717`); backup and restore use `VACUUM INTO` (`a5ca7da`).
+
+**Install and release**
+- `install.ps1` started with a UTF-8 BOM glued to the shebang, so the documented `irm ... | iex` failed on every Windows machine. It is now BOM-free and ASCII (`14962ee`).
+- Linux release binaries were built on Ubuntu 24.04 and required `GLIBC_2.39`, so they did not start on Ubuntu 22.04 or Debian 12. They are now built on `ubuntu-22.04` (`d8aa218`).
+- Release tarballs now include `guilds/` (`5993a25`); the installer detects Python 3.12+ (`c3dee95`) and no longer boots the kernel twice (`2d382ba`).
+
+**Process**
+- `AGENTS.md` is covered by the same test-count and docs-reality gates as the README (`b43ebfa`).
+
+**Known issues**
+- The OAuth metadata advertises `http://localhost:47004` URLs, and `/.well-known/oauth-protected-resource` returns the dashboard HTML. Some MCP clients ask for a token even though a `dev_mode` kernel does not require one.
+- The matcher still compares trigger phrases by substring (`matcher.rs:751`), with known false positives.
+
+---
+
 ## [0.17.0] — 2026-08-24
 
 **166 commits since v0.16.0 (`5900e97`).** This entry's detailed narrative below only covers the first 34 (through 2026-08-14, closing real gaps found by two rounds of external multi-model audit, plus completing A2A interop with arbitrary external agents). The remaining ~130 commits since then — ADR-012 memory lifecycle in production, a second real RCE/ACL hardening round, MCP spec compliance, the RRF matcher spike, the 5-pillars repo-governance work (SHA-pinning, CODEOWNERS, CI reality gates), and the 2 global fleet skills — are **not individually itemized here**; retroactively itemizing 130 commits from memory risks inventing detail this project's own discipline exists to prevent. `STATUS.md` is the verified source of truth for that window; read it alongside this entry, not instead of it.
