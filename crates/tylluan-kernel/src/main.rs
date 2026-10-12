@@ -152,17 +152,17 @@ async fn handle_maintenance_commands(args: &[String]) -> anyhow::Result<bool> {
 /// (anti_orphan_protection_and_gc) and at shutdown, so a test instance's
 /// cleanup always targets the exact directory its own boot used.
 ///
-/// Real incident (2026-09-19), RECURRED (2026-09-20): a José-approved
-/// isolated test instance (different --port) killed the live production
-/// kernel TWICE. The first fix (27e2141) scoped the PID file to
-/// TYLLUAN_DATA_DIR when set — correct, but it recurred the very next day
-/// because the operator launched the test instance without setting the env
-/// var. A fix that depends on a human remembering an env var every single
-/// time is not a fix; it just narrowed the window. This version
-/// additionally disambiguates by port whenever TYLLUAN_DATA_DIR is unset
-/// and the port differs from the config default (47004) — a same-CWD
-/// instance bound to a different port can never again read another
-/// instance's PID file by accident, with zero operator action required.
+/// Real incident (2026-09-19), RECURRED (2026-09-20 and 2026-10-11):
+/// isolated instances kept killing the live production kernel. 27e2141 scoped
+/// the PID file to TYLLUAN_DATA_DIR when set; the 09-20 recurrence added the
+/// port-scoped dir for non-default --port. Both failed whenever an operator
+/// launched without either var (2026-10-11: `--config test.toml` + no --port
+/// shared prod's `./data`), and the 10-11 incident also showed a plain
+/// `--version` invocation reaching the PID-file logic at all. This version
+/// (1) runs only for server-booting invocations (S0), and (2) is fail-closed
+/// on peers: a live sibling kernel is killed only when its listening port
+/// equals ours, never when the port is undeterminable (S1/S2), typed as
+/// [`PeerDecision`].
 fn resolve_pid_data_dir(port_override: Option<u16>) -> PathBuf {
     if let Ok(dir) = std::env::var("TYLLUAN_DATA_DIR") {
         return PathBuf::from(dir);
@@ -173,29 +173,189 @@ fn resolve_pid_data_dir(port_override: Option<u16>) -> PathBuf {
     }
 }
 
-fn anti_orphan_protection_and_gc(args: &[String]) {
+/// How to treat the kernel referenced by a pre-existing PID file.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum PeerDecision {
+    /// File missing, unreadable, empty, or garbage → nothing to do.
+    NoFile,
+    /// PID dead or alive-but-not-a-kernel → stale, run orphan cleanup.
+    Stale,
+    /// Live OTHER kernel with a different port → do NOT touch it or the file.
+    OtherPort,
+    /// Live OTHER kernel whose port we cannot determine → do NOT touch it or
+    /// the file (fail-closed: unknown must not kill).
+    UnknownPeer,
+    /// Live kernel whose port equals ours → previous crashed instance of our
+    /// own port, safe to kill (legacy behavior).
+    SamePort,
+}
+
+/// Does a live process have a kernel HTTP port, and what is it?
+///
+/// `sysinfo` does not expose a TCP table, so use the OS listing tool:
+/// `netstat -ano` on Windows, `ss -tlnp` on unix when available. Returns
+/// `None` when the process is not listening on any TCP port, when the port
+/// cannot be attributed (common when netstat lacks parseable columns) —
+/// callers must treat `None` as fail-closed (S1).
+fn peer_listen_port(pid: u32) -> Option<u16> {
+    if pid == 0 {
+        return None;
+    }
+    let output = if cfg!(target_os = "windows") {
+        std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output()
+            .ok()? // netstat missing/nonzero exit → cannot determine
+    } else {
+        // `ss` may not exist on some unix; try `netstat` fallback there too.
+        std::process::Command::new("ss")
+            .args(["-tlnp"])
+            .output()
+            .ok()
+            .or_else(|| {
+                std::process::Command::new("netstat")
+                    .args(["-tlnp"])
+                    .output()
+                    .ok()
+            })?
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_listen_port_from_listing(&text, pid)
+}
+
+/// Extract the first listening-on-127.0.0.1-or-any port owned by `pid` from
+/// pre-formatted `netstat -ano` / `ss -tlnp` output (tests feed synthetic text).
+fn parse_listen_port_from_listing(text: &str, pid: u32) -> Option<u16> {
+    let pid = pid.to_string();
+    for line in text.lines() {
+        let lower = line.to_lowercase();
+        // Listen-state markers common to netstat(-ano) and ss(-tlnp).
+        if !(lower.contains("listen") || lower.contains("listenin")) {
+            continue;
+        }
+        // The PID is the LAST token on both tools' output lines.
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        if toks.is_empty() || *toks.last()? != pid.as_str() {
+            continue;
+        }
+        // netstat: `[::]:8080` / `127.0.0.1:47004` in the 'Local Address' col;
+        // ss uses `*:47004` / `127.0.0.1:47004` too. Take the LAST token that
+        // looks like `addr:port` and parse the port strictly.
+        for tok in toks.iter().rev() {
+            if let Some((_addr, port)) = tok.rsplit_once(':') {
+                if let Ok(p) = port.parse::<u16>() {
+                    if p != 0 {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Live sybl kernel probe: PID exists AND its executable looks like a kernel.
+fn process_is_kernel_alive(pid: u32) -> bool {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]), true);
+    sys.process(sysinfo::Pid::from_u32(pid))
+        .map(|p| {
+            let name = p.name().to_string_lossy().to_lowercase();
+            name.contains("tylluan-nexus") || name.contains("tylluan_nexus")
+        })
+        .unwrap_or(false)
+}
+
+/// Decide how to treat the kernel behind the PID file given our effective
+/// port. Real-world effects are injected so the full decision table can be
+/// unit-tested without spawning or touching real processes:
+/// - `read_pid` returns the PID-file contents (None = missing/empty/garbage handling stays upstream)
+/// - `peer_alive` reports whether the PID exists and is a tylluan-nexus process
+/// - `peer_port` reports the peer's listening TCP port (None = alive but undeterminable)
+fn decide_pid_action(
+    my_port: Option<u16>,
+    read_pid: impl Fn() -> Option<String>,
+    peer_alive: impl Fn(u32) -> bool,
+    peer_port: impl Fn(u32) -> Option<u16>,
+) -> (PeerDecision, Option<u32>) {
+    let Some(old_pid_str) = read_pid() else {
+        return (PeerDecision::NoFile, None); // missing / unreadable / empty
+    };
+    let Ok(old_pid) = old_pid_str.trim().parse::<u32>() else {
+        return (PeerDecision::NoFile, None); // garbage → nothing sane to act on
+    };
+    if !peer_alive(old_pid) {
+        return (PeerDecision::Stale, Some(old_pid)); // dead PID → real stale
+    }
+    // Live sibling kernel. Fail-closed: only kill when we are SURE it is
+    // "our port left behind by a crash", i.e. its port == ours.
+    match (my_port, peer_port(old_pid)) {
+        (Some(mine), Some(theirs)) if mine == theirs => (PeerDecision::SamePort, Some(old_pid)),
+        (Some(_), Some(_)) => (PeerDecision::OtherPort, None),
+        (Some(_), None) => (PeerDecision::UnknownPeer, None), // fail-closed
+        (None, _) => (PeerDecision::UnknownPeer, None),       // our own port unknown → don't risk it
+    }
+}
+
+/// S0: should this invocation be treated as a server boot for anti-orphan
+/// purposes? Help/version/maintenance/stdio invocations never bind the port,
+/// so they must never touch the PID file or kill anything (incident of
+/// 2026-10-11: a bare `--version` from prod's CWD killed the live kernel).
+fn invocations_boot_server(args: &[String]) -> bool {
+    if args.len() <= 1 {
+        return true; // bare `tylluan-nexus` → boot
+    }
+    if args.iter().any(|a| a == "--version" || a == "--help" || a == "-h" || a == "-V"
+        || a == "--export" || a == "--import" || a == "--download-models"
+        || a == "--stdio") {
+        return false;
+    }
+    true
+}
+
+fn anti_orphan_protection_and_gc(args: &[String], effective_port: Option<u16>) {
+    // S0: only server-booting invocations may touch PID files / kill peers.
+    if !invocations_boot_server(args) {
+        info!("🧹 Non-server invocation (--version/--help/maintenance/stdio): skipping anti-orphan entirely");
+        return;
+    }
     let port_override = args.iter().position(|r| r == "--port")
         .and_then(|pos| args.get(pos + 1))
         .and_then(|p| p.parse::<u16>().ok());
-    if let Some(port) = port_override
-        && port != 47004
-        && std::env::var("TYLLUAN_DATA_DIR").is_err() {
-            info!("🧹 --port {} differs from default 47004 -- using a port-scoped PID file to avoid killing a sibling instance", port);
-        }
-    let data_dir = resolve_pid_data_dir(port_override);
+    let data_dir = resolve_pid_data_dir(port_override.or(effective_port));
     let pid_file = data_dir.join("tylluan-nexus.pid");
     let _ = std::fs::create_dir_all(&data_dir);
 
-    // Check for stale PID file (previous crash)
-    if pid_file.exists()
-        && let Ok(old_pid_str) = std::fs::read_to_string(&pid_file)
-            && let Ok(old_pid) = old_pid_str.trim().parse::<u32>() {
-                info!("🧹 Found stale PID file ({}). Cleaning up orphan processes...", old_pid);
-                cleanup::cleanup_orphan_guilds(old_pid);
-            }
+    // S1/S2: decide what to do with any pre-existing PID file BEFORE writing.
+    let pid_file_for_decide = pid_file.clone();
+    let (decision, stale_pid) = decide_pid_action(
+        effective_port,
+        move || std::fs::read_to_string(&pid_file_for_decide).ok().filter(|s| !s.trim().is_empty()),
+        process_is_kernel_alive,
+        peer_listen_port,
+    );
+    match (decision, stale_pid) {
+        (PeerDecision::Stale, Some(old)) | (PeerDecision::SamePort, Some(old)) => {
+            info!("🧹 PID file for our own port is stale/crashed (PID {}). Cleaning up orphan processes...", old);
+            cleanup::cleanup_orphan_guilds(old);
+        }
+        (PeerDecision::OtherPort, _) => {
+            warn!("🛡️ PID file {} belongs to a LIVE kernel listening on a DIFFERENT port — not touching it, not overwriting (fail-closed anti-orphan; use the launcher / TYLLUAN_DATA_DIR for test instances)", pid_file.display());
+        }
+        (PeerDecision::UnknownPeer, _) => {
+            warn!("🛡️ PID file {} belongs to a LIVE tylluan-nexus whose listening port could not be determined — not touching it (fail-closed anti-orphan)", pid_file.display());
+        }
+        (PeerDecision::NoFile, _) | (PeerDecision::Stale, None) | (PeerDecision::SamePort, None) => {}
+    }
 
-    // Write current PID
-    let _ = std::fs::write(&pid_file, std::process::id().to_string());
+    // S2: write our own PID only when the file is not owned by a live sibling.
+    let may_write = matches!(decision, PeerDecision::NoFile | PeerDecision::Stale | PeerDecision::SamePort);
+    if may_write {
+        let _ = std::fs::write(&pid_file, std::process::id().to_string());
+    }
 
     cleanup::cleanup_residual_data();
 }
@@ -303,8 +463,6 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    anti_orphan_protection_and_gc(&args);
-
     // 1. Initial configuration (load once at startup)
     let mut config = TylluanConfig::load()
         .unwrap_or_else(|e| {
@@ -350,7 +508,13 @@ async fn main() -> anyhow::Result<()> {
         }
 
     let use_stdio = config.nexus.transport.contains(&"stdio".to_string());
-    
+
+    // ─── Anti-orphan protection + GC (after config so the effective port is known).
+    // Q2 fail-closed: skip the whole PID/peer logic when the kernel won't bind a
+    // real HTTP port (stdio-only) or the port cannot be determined.
+    let anti_orphan_port = if use_stdio { None } else { Some(config.nexus.port) };
+    anti_orphan_protection_and_gc(&args, anti_orphan_port);
+
     // Always validate security after all possible overrides (CLI, ENV, File)
     config.validate_security();
 
@@ -1951,13 +2115,12 @@ async fn main() -> anyhow::Result<()> {
     // 2. Shut down auxiliary services 
     service_manager.shutdown_all().await;
 
-    // 3. Clean up PID file (anti-orphan) — resolve_pid_data_dir() is the
-    // single owner of this resolution, shared with boot, so a test instance
-    // always removes its own PID file, never a sibling's.
-    let port_override = args.iter().position(|r| r == "--port")
-        .and_then(|pos| args.get(pos + 1))
-        .and_then(|p| p.parse::<u16>().ok());
-    let pid_file = resolve_pid_data_dir(port_override).join("tylluan-nexus.pid");
+    // 3. Clean up PID file (anti-orphan) — resolve_pid_data_dir() is the single
+    // owner of this resolution, shared with boot (which now sees the FINAL
+    // effective port incl. --config/--port/stdio), so a test instance always
+    // removes its own PID file, never a sibling's.
+    let pid_file = resolve_pid_data_dir(if use_stdio { None } else { Some(config.nexus.port) })
+        .join("tylluan-nexus.pid");
     let _ = std::fs::remove_file(&pid_file);
 
     info!("👋 TylluanNexus stopped. No orphan processes left.");
@@ -2050,6 +2213,115 @@ fn fastembed_model_cached(model_name: &str) -> bool {
     cached
 }
 
+
+#[cfg(test)]
+mod anti_orphan_tests {
+    use super::*;
+
+    fn decide_with(
+        my_port: Option<u16>,
+        file: Option<&str>,
+        alive: &[u32],
+        ports: &[(u32, Option<u16>)],
+    ) -> (PeerDecision, Option<u32>) {
+        decide_pid_action(
+            my_port,
+            move || file.map(|s| s.to_string()),
+            move |pid| alive.contains(&pid),
+            move |pid| ports.iter().find(|(p, _)| *p == pid).and_then(|(_, port)| *port),
+        )
+    }
+
+    #[test]
+    fn missing_file_is_noop() {
+        assert_eq!(decide_with(Some(47004), None, &[], &[]), (PeerDecision::NoFile, None));
+    }
+
+    #[test]
+    fn empty_and_garbage_files_are_noop() {
+        assert_eq!(decide_with(Some(47004), Some("   "), &[], &[]), (PeerDecision::NoFile, None));
+        assert_eq!(decide_with(Some(47004), Some("not-a-pid"), &[], &[]), (PeerDecision::NoFile, None));
+    }
+
+    #[test]
+    fn dead_pid_is_stale_and_cleanup_runs() {
+        assert_eq!(
+            decide_with(Some(47004), Some("1234"), &[], &[]),
+            (PeerDecision::Stale, Some(1234))
+        );
+    }
+
+    #[test]
+    fn live_sibling_same_port_is_sameport_kill() {
+        assert_eq!(
+            decide_with(Some(47004), Some("1111"), &[1111], &[(1111, Some(47004))]),
+            (PeerDecision::SamePort, Some(1111))
+        );
+    }
+
+    #[test]
+    fn incident_t1089_other_port_peer_is_untouched() {
+        // Exact T1089 shape: test kernel with port 47009 sees prod's PID file
+        // pointing at prod (47004) -> peer is live on a different port, so it
+        // must not be killed and the file must not be overwritten.
+        assert_eq!(
+            decide_with(Some(47009), Some("37052"), &[37052], &[(37052, Some(47004))]),
+            (PeerDecision::OtherPort, None)
+        );
+    }
+
+    #[test]
+    fn incident_t1089_live_peer_undeterminable_port_is_fail_closed() {
+        // The 2026-10-11 --version case shape: we cannot read the peer's port.
+        assert_eq!(
+            decide_with(Some(47009), Some("37052"), &[37052], &[(37052, None)]),
+            (PeerDecision::UnknownPeer, None)
+        );
+    }
+
+    #[test]
+    fn our_port_unknown_is_fail_closed() {
+        assert_eq!(
+            decide_with(None, Some("37052"), &[37052], &[(37052, Some(47004))]),
+            (PeerDecision::UnknownPeer, None)
+        );
+    }
+
+    #[test]
+    fn invocations_that_never_bind_the_port_are_gated_off() {
+        let yes = |argv: &[&str]| invocations_boot_server(
+            &argv.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert!(yes(&["tylluan-nexus"]));
+        assert!(!yes(&["tylluan-nexus", "--version"]));
+        assert!(!yes(&["tylluan-nexus", "--help"]));
+        assert!(!yes(&["tylluan-nexus", "-h"]));
+        assert!(!yes(&["tylluan-nexus", "--stdio"]));
+        assert!(!yes(&["tylluan-nexus", "--export", "out.tar.gz"]));
+        assert!(!yes(&["tylluan-nexus", "--import", "in.tar.gz"]));
+        assert!(!yes(&["tylluan-nexus", "--download-models"]));
+    }
+
+    #[test]
+    fn netstat_listen_lines_parse_ports_per_pid() {
+        let netstat_out = concat!(
+            "  Proto  Local Address          Foreign Address        State           PID\n",
+            "  TCP    127.0.0.1:47004        0.0.0.0:0              LISTENING       37052\n",
+            "  TCP    127.0.0.1:47009        0.0.0.0:0              LISTENING       43760\n",
+            "  TCP    127.0.0.1:50000        127.0.0.1:47004        ESTABLISHED     43760\n",
+        );
+        assert_eq!(parse_listen_port_from_listing(netstat_out, 37052), Some(47004));
+        assert_eq!(parse_listen_port_from_listing(netstat_out, 43760), Some(47009));
+        // Established (non-LISTEN) lines must never attribute a port.
+        assert_eq!(
+            parse_listen_port_from_listing(
+                "  TCP    127.0.0.1:50000        127.0.0.1:47004        ESTABLISHED     43760\n",
+                43760,
+            ),
+            None,
+        );
+        assert_eq!(parse_listen_port_from_listing(netstat_out, 99999), None);
+    }
+}
 
 #[cfg(test)]
 mod onnx_probe_tests {
