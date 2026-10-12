@@ -20,9 +20,17 @@
 #                         edits cannot alter them).
 #
 # Scope notes:
-#   - *.ps1 files are EXCLUDED: PowerShell 5.1 reads BOM-less UTF-8 as
-#     ANSI, so with non-ASCII content a BOM there is CORRECT (install.ps1
-#     has one such line). Revisit only if the encoding story changes.
+#   - *.ps1 files are EXCLUDED: PowerShell 5.1 reads BOM-less UTF-8 from
+#     disk as ANSI, so with non-ASCII content a BOM there is CORRECT for
+#     on-disk scripts. Two hard rules for scripts distributed via
+#     `irm <url> | iex`: (1) `iex` parses the downloaded STRING, where a
+#     BOM survives as U+FEFF glued to the first token and breaks parsing
+#     ("The term #!/usr/bin/env is not recognized" -- install smoke CI
+#     38078807924, 2026-10-12, root-caused in install.ps1); (2) keep such
+#     scripts pure ASCII (install.ps1 is: 0 non-ASCII bytes) so no BOM is
+#     ever needed. The exclusion below only protects local .ps1 files with
+#     non-ASCII content read from disk. Revisit if the encoding story
+#     changes.
 #   - UTF-16 files (FF FE / FE FF) are out of scope: different encodings,
 #     different BOMs; scan at 2e257d8 found zero tracked.
 #   - Untracked files are out of scope: the gate checks what git ships.
@@ -49,7 +57,7 @@ errors=0
 
 while IFS= read -r -d '' f; do
     case "$f" in
-        *.ps1) continue ;;   # PS 5.1 legitimately needs BOM (see header)
+        *.ps1) continue ;;   # on-disk PS 5.1 + non-ASCII case (see header); irm|iex scripts must stay BOM-free ASCII
     esac
     [ -f "$f" ] || continue
     sig=''
