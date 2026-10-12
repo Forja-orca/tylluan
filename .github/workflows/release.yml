@@ -19,10 +19,10 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             suffix: ""
           - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             suffix: ""
             cross: true
           - target: aarch64-apple-darwin
@@ -158,7 +158,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
           - target: aarch64-apple-darwin
             runner: macos-latest
           - target: x86_64-pc-windows-msvc
