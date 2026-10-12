@@ -245,12 +245,11 @@ fn parse_listen_port_from_listing(text: &str, pid: u32) -> Option<u16> {
         // ss uses `*:47004` / `127.0.0.1:47004` too. Take the LAST token that
         // looks like `addr:port` and parse the port strictly.
         for tok in toks.iter().rev() {
-            if let Some((_addr, port)) = tok.rsplit_once(':') {
-                if let Ok(p) = port.parse::<u16>() {
-                    if p != 0 {
-                        return Some(p);
-                    }
-                }
+            if let Some((_addr, port)) = tok.rsplit_once(':')
+                && let Ok(p) = port.parse::<u16>()
+                && p != 0
+            {
+                return Some(p);
             }
         }
     }
