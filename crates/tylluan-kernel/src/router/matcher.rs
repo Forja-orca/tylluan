@@ -364,7 +364,15 @@ impl GuildMatcher {
                 guild.embedding.as_ref().map(|ge| cosine_similarity(qe, ge))
             }).unwrap_or(0.0);
 
-            // Keyword score with trigger bonus, verb bonus, negative penalty
+            // Keyword score with trigger bonus, verb bonus, negative penalty.
+            // The trigger check is a raw substring (`q.contains(t)`), same
+            // semantics as the 0.95 path in trigger_phrases_and_verbs: it
+            // acts as a crude stemmer (beneficial — "investiga" ⊂
+            // "investigación" routes to deep_web_research, scored CORRECT by
+            // the MD-3 corpus) and also fires inside unrelated words (known
+            // cost — "code" ⊂ "decode"). Pinned by the characterization
+            // tests at the bottom of this file (Option A, T1085); switching
+            // to word boundaries needs an MD-3/MD-4 benchmark decision.
             let kw_score = keyword_score(&query_tokens, &guild.description, &guild.name);
             let trigger_bonus = if guild.trigger_phrases.iter().any(|t| query_lower.contains(t)) {
                 0.5
@@ -747,7 +755,18 @@ impl GuildMatcher {
 
         for guild in &self.catalog {
             let mut score = 0.0_f32;
-            // Trigger phrase bonus
+            // Trigger phrase bonus — raw substring (`q.contains(t)`), same
+            // semantics as the 0.5 bonus in match_guild's hybrid loop
+            // (matcher.rs:369): a crude stemmer ("investiga" ⊂
+            // "investigación" → deep_web_research, counted as CORRECT by the
+            // MD-3 corpus, T1061/T1081) that also matches inside unrelated
+            // words (known costs: "code" ⊂ "decode", "audit code" ⊂
+            // "audit codebase"). Both faces are pinned by the characterization
+            // tests at the bottom of this file (Option A, T1085) — do not add
+            // word boundaries without a benchmark-backed decision. The strict
+            // `score > best_score` below gives ties to the FIRST guild in
+            // catalog order; production builtin_catalog() sorts by name, so
+            // equal-0.95 ties resolve to the alphabetically-first guild.
             if guild.trigger_phrases.iter().any(|t| q.contains(t)) {
                 score = 0.95;
             }
@@ -1304,5 +1323,115 @@ mod tests {
             "Security intent with warden context should route to audit or system_metrics, got: {}",
             r.guild_name
         );
+    }
+
+    // ── Characterization tests: substring trigger matching (Option A, T1085) ──
+    // Pin the CURRENT `q.contains(t)` contract at both sites: the 0.95 trigger
+    // path (trigger_match_pub → trigger_phrases_and_verbs) and the 0.5 bonus
+    // in match_guild's hybrid loop. The substring acts as a crude stemmer —
+    // beneficial ("investiga" ⊂ "investigación" → deep_web_research, counted as
+    // CORRECT routing by the MD-3 corpus, T1061/T1081) — and also matches
+    // inside unrelated words (known costs: "code" ⊂ "decode", "audit code" ⊂
+    // "audit codebase", equal-0.95 ties won by catalog order). Do NOT "fix"
+    // these tests by adding word boundaries without a benchmark-backed
+    // decision; this is the pinned contract, not an endorsement.
+
+    fn fixture_desc(name: &str, triggers: &[&str]) -> GuildDescriptor {
+        GuildDescriptor {
+            name: name.to_string(),
+            description: format!("fixture guild {name} for characterization tests"),
+            module_path: format!("guilds.test.{name}"),
+            category: GuildCategory::Core,
+            trigger_phrases: triggers.iter().map(|s| s.to_string()).collect(),
+            embedding: None,
+            negative_keywords: vec![],
+            required_args: vec![],
+            weight: crate::config::GuildWeight::Light,
+            capabilities: None,
+            permissions: vec![],
+            estimated_cost: None,
+            side_effects: vec![],
+            examples: vec![],
+            preconditions: vec![],
+            verification: None,
+            rollback: None,
+            subtools: vec![],
+        }
+    }
+
+    #[test]
+    fn characterization_trigger_substring_stems_inside_word() {
+        // Beneficial face: "investiga" is not a token of the query; it fires
+        // as a stem inside "investigación" — pinned on BOTH entry paths.
+        let m = GuildMatcher::new(vec![fixture_desc("deep_web_research", &["investiga"])]);
+        let q = "Informe de investigación científica";
+
+        let t = m.trigger_match_pub(q).expect("stem hit must fire the 0.95 trigger path");
+        assert_eq!(t.guild_name, "deep_web_research");
+        assert!((t.score - 0.95).abs() < 1e-4, "trigger path must stay 0.95, got {}", t.score);
+
+        let k = m.match_guild(q, None, 0.3, None)
+            .expect("stem hit must add the 0.5 hybrid-loop bonus");
+        assert_eq!(k.guild_name, "deep_web_research");
+    }
+
+    #[test]
+    fn characterization_trigger_substring_matches_inside_unrelated_word() {
+        // Known cost: "code" fires inside "decode" — no word boundary.
+        let m = GuildMatcher::new(vec![fixture_desc("codeguard", &["code"])]);
+        let q = "decode the payload";
+
+        let t = m.trigger_match_pub(q).expect("'code' ⊂ 'decode' must fire (known cost)");
+        assert_eq!(t.guild_name, "codeguard");
+
+        let k = m.match_guild(q, None, 0.3, None)
+            .expect("'code' ⊂ 'decode' must add the 0.5 bonus (known cost)");
+        assert_eq!(k.guild_name, "codeguard");
+    }
+
+    #[test]
+    fn characterization_multiword_trigger_cuts_no_right_boundary() {
+        // Known cost: multi-word trigger "audit code" matches the prefix of
+        // "audit codebase" — the trailing "base" is not a boundary.
+        let m = GuildMatcher::new(vec![fixture_desc("auditor", &["audit code"])]);
+        let q = "audit codebase for hardcoded keys";
+
+        let t = m.trigger_match_pub(q)
+            .expect("'audit code' ⊂ 'audit codebase…' must fire (known cost)");
+        assert_eq!(t.guild_name, "auditor");
+    }
+
+    #[test]
+    fn characterization_equal_trigger_tie_goes_to_first_catalog_entry() {
+        // Two guilds fire at the same 0.95: the strict `score > best_score`
+        // keeps the FIRST in catalog order. Production builtin_catalog()
+        // sorts by guild name, so equal-0.95 ties resolve to the
+        // alphabetically-first guild; here we pin the order dependence itself.
+        let q = "alpha beta";
+
+        let forward = vec![
+            fixture_desc("aaa_first", &["alpha"]),
+            fixture_desc("zzz_last", &["beta"]),
+        ];
+        let t = GuildMatcher::new(forward).trigger_match_pub(q).unwrap();
+        assert_eq!(t.guild_name, "aaa_first", "tie must go to the first catalog entry");
+
+        let reversed = vec![
+            fixture_desc("zzz_last", &["beta"]),
+            fixture_desc("aaa_first", &["alpha"]),
+        ];
+        let t = GuildMatcher::new(reversed).trigger_match_pub(q).unwrap();
+        assert_eq!(t.guild_name, "zzz_last", "tie follows catalog order, not name order");
+    }
+
+    #[test]
+    fn characterization_beneficial_stem_routes_via_real_catalog() {
+        // End-to-end against the real builtin_catalog(): the stem hit
+        // "investiga" ⊂ "investigación" routes to deep_web_research — the
+        // beneficial face the MD-3 corpus counted as correct (T1081).
+        let m = test_matcher();
+        let t = m.trigger_match_pub("informe de investigación científica")
+            .expect("real catalog must contain a trigger stemming into 'investigación'");
+        assert_eq!(t.guild_name, "deep_web_research");
     }
 }
