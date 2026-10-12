@@ -102,14 +102,22 @@ mod tests {
         }
         assert_eq!(limiter.windows.lock().unwrap().len(), 105);
 
-        // Age timestamps for the first 50 sessions beyond window_duration
+        // Age timestamps for the first 50 sessions beyond window_duration.
+        // checked_sub instead of `-`: CI runners / cold boots can have less
+        // than 120s uptime, where `Instant::now() - 120s` panics (incident
+        // 2026-10-12: same pattern killed a kernel maintenance task in
+        // production). Saturating pushes no timestamp at all — the affected
+        // per-session windows become EMPTY vectors, which is exactly what
+        // this test needs (they are then evicted by the global prune).
         {
             let mut windows = limiter.windows.lock().unwrap();
-            let ancient = Instant::now() - Duration::from_secs(120);
+            let ancient = Instant::now().checked_sub(Duration::from_secs(120));
             for i in 0..50 {
                 if let Some(ts) = windows.get_mut(&format!("session-{i}")) {
                     ts.clear();
-                    ts.push(ancient);
+                    if let Some(t) = ancient {
+                        ts.push(t);
+                    }
                 }
             }
         }

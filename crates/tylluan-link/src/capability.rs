@@ -105,8 +105,20 @@ impl CapabilityRegistry {
 
     /// Remove all peers whose last update is older than TTL.
     /// Returns the number of pruned peers.
+    ///
+    /// Fail-closed on uptime: `Instant::now() - ttl` would panic if the
+    /// machine has been up for less than `ttl` (Instant is uptime-based), and
+    /// a would-be cutoff in the future would wipe EVERY ingested peer from a
+    /// freshly booted mesh node (incident 2026-10-12: TTL=3600s test, TTL=300s
+    /// production; kernel maintenance task died in cold boots). Correct
+    /// semantics for uptime < ttl: nothing can have expired yet, so prune
+    /// nothing this tick — the next tick (with enough uptime) expires
+    /// normally.
     pub fn prune_expired(&mut self) -> usize {
-        let cutoff = Instant::now() - self.ttl;
+        // Machine uptime < ttl: no peer can be expired yet; skip this tick.
+        let Some(cutoff) = Instant::now().checked_sub(self.ttl) else {
+            return 0;
+        };
         let before = self.peers.len();
         self.peers.retain(|_, (_, last_seen)| *last_seen >= cutoff);
         before - self.peers.len()
@@ -137,6 +149,36 @@ impl CapabilityRegistry {
 mod tests {
     use super::*;
     use crate::gossip::{GossipConfig, GossipEngine};
+
+    /// Incident 2026-10-12: `Instant::now() - ttl` overflows before the
+    /// machine has been up for ttl, killing the kernel maintenance task in
+    /// cold boots and wiping every freshly ingested peer. Behavior fix:
+    /// with uptime < ttl, prune_expired must be a no-op (prune 0), never
+    /// panic and never purge anything.
+    #[test]
+    fn test_prune_expired_before_ttl_uptime_is_noop() {
+        let mut reg = CapabilityRegistry::new(Duration::from_secs(3600));
+        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5, supports_p2p: false, tcp_port: None };
+        reg.ingest("node-cold-boot", "10.0.0.1:9000", &hw, &["bash".into()], 1);
+
+        // CI runners and freshly booted dedicated nodes have < 3600s uptime;
+        // on such hosts the old `Instant::now() - ttl` panicked here. On a
+        // long-uptime machine the peer was just ingested (last_seen = now),
+        // so it survives the cutoff either way; asserting 0 covers both.
+        assert_eq!(reg.prune_expired(), 0, "fresh peer must survive prune_expired");
+        assert_eq!(reg.len(), 1);
+    }
+
+    /// Deterministic on any machine: no `Instant` can be `Duration::MAX` old,
+    /// so `checked_sub` is always `None` here, whatever the uptime.
+    #[test]
+    fn test_prune_expired_with_unrepresentable_cutoff_is_noop() {
+        let mut reg = CapabilityRegistry::new(Duration::MAX);
+        let hw = HardwareCaps { ram_mb: 4096, has_gpu: false, load_avg: 0.5, supports_p2p: false, tcp_port: None };
+        reg.ingest("node-a", "10.0.0.1:9000", &hw, &["bash".into()], 1);
+        assert_eq!(reg.prune_expired(), 0);
+        assert_eq!(reg.len(), 1);
+    }
 
     #[test]
     fn test_capability_registry_new_is_empty() {
