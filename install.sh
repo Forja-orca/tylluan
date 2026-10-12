@@ -35,19 +35,32 @@ info "Tylluan Installer"
 info "Detected: ${OS} (${TARGET})"
 say ""
 
-say "Detecting latest release..."
-LATEST=$(curl -fsL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
-[ -n "$LATEST" ] || err "Could not detect latest version from GitHub. Check your internet connection."
-
 ARCHIVE="tylluan-${TARGET}.tar.gz"
-URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
 
-say "Downloading Tylluan v${LATEST} (${TARGET})..."
+if [ -n "${TYLLUAN_DOWNLOAD_URL:-}" ]; then
+  URL="${TYLLUAN_DOWNLOAD_URL}"
+  say "Using explicit download URL: ${URL}"
+  say "Fetching Tylluan (${TARGET})..."
+elif [ -n "${TYLLUAN_VERSION:-}" ]; then
+  LATEST="${TYLLUAN_VERSION#v}"
+  URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
+  say "Using explicit version: v${LATEST} (${TARGET})..."
+  say "Downloading Tylluan v${LATEST} (${TARGET})..."
+else
+  say "Detecting latest release..."
+  LATEST=$(curl -fsL "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+  [ -n "$LATEST" ] || err "Could not detect latest version from GitHub. Check your internet connection."
+  URL="https://github.com/${REPO}/releases/download/v${LATEST}/${ARCHIVE}"
+  say "Downloading Tylluan v${LATEST} (${TARGET})..."
+fi
+
 mkdir -p "$BIN_DIR"
 TMP_ARCHIVE=$(mktemp) || err "Failed to create temp file"
 trap 'rm -f "$TMP_ARCHIVE"' EXIT
-if ! curl -fsL "$URL" -o "$TMP_ARCHIVE"; then
+if [ -f "$URL" ]; then
+  cp "$URL" "$TMP_ARCHIVE"
+elif ! curl -fsL "$URL" -o "$TMP_ARCHIVE"; then
   rm -f "$TMP_ARCHIVE"
   err "Download failed. Check your internet: $URL"
 fi
