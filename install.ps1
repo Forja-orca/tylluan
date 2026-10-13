@@ -271,3 +271,6 @@ if (-not $GuildPy) {
     }
 }
 Write-Host ""
+# A handled "guild deps missing" probe above leaves $LASTEXITCODE = 1. The install itself
+# succeeded, so do not leak that code to callers (CI wrappers treat it as failure).
+$global:LASTEXITCODE = 0

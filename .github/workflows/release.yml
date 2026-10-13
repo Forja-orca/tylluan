@@ -368,6 +368,12 @@ jobs:
             exit 1
           }
 
+          # Success must be explicit: install.ps1 probes for the Python guild deps,
+          # a handled "missing" result leaves $LASTEXITCODE = 1, and the pwsh step
+          # wrapper turns that stale code into a failure (v0.17.1 Windows smoke:
+          # kernel verified healthy, step still failed).
+          exit 0
+
   # Promote the draft release to public and latest ONLY when all smoke tests and gates pass.
   # Published by numeric release ID because GitHub CLI (`gh release edit <tag>`) cannot locate drafts by tag.
   # If any test fails, this job does not run, leaving the draft intact for log inspection.
