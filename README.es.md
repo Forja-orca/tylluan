@@ -42,6 +42,8 @@ La memoria de agentes es un espacio concurrido ahora mismo — Mem0, Letta, Zep,
 
 **Air-gapped por defecto (arreglado 2026-08-23):** el kernel solía intentar una petición STUN a `stun.l.google.com:19302` en cada arranque sin importar si la federación/malla estaba siquiera habilitada — tráfico saliente real en un host pensado para quedarse completamente offline. El descubrimiento STUN ahora es opt-in: `[nat] enabled = false` por defecto, bloqueando todo el bloque de descubrimiento. Pon `enabled = true` explícitamente si quieres NAT traversal para la malla.
 
+**Malla criptográfica local, no una red global auto-conectada:** La misión esencial de Tylluan es dar a los agentes de IA continuidad real y duradera — memorias y episodios acumulativos que el paso del tiempo no borre, operando en tiempo casi real y sin depender de la nube. Pero la continuidad nunca debe comprometer la soberanía: la sincronización entre pares está diseñada estrictamente para redes internas y pares explícitamente aprobados por el operador mediante una malla criptográfica cifrada (Noise NK/XK, Ed25519, ChaCha20-Poly1305, mDNS opcional en LAN). No es una red mundial descontrolada donde las memorias se conecten solas a nodos desconocidos por internet.
+
 La contrapartida honesta: varios de esos otros proyectos tienen años de historia comunitaria y endurecimiento en producción que Tylluan todavía no tiene. [ROADMAP.md](ROADMAP.md) es donde rastreamos qué está realmente enviado frente a lo que sigue planeado — preferimos que te enteres de que algo no está listo por nosotros, no por un despliegue roto.
 
 ---
@@ -59,7 +61,7 @@ En su núcleo, Tylluan es un kernel local en Rust con el que tu agente habla ví
 | **Herramientas** | 45 guilds — bash, git, filesystem, docker, análisis de código, visión, búsqueda web, y más — autodescubiertas al arrancar |
 | **Colaboración** | Canales multiagente (Coloquio), documentos compartidos, Bounded Work Contracts |
 | **Federación** | Sincronización de conocimiento peer-to-peer, cifrada con Noise NK / ChaCha20-Poly1305, con trazabilidad de procedencia, a prueba de bucles eco |
-| **Malla** | Kademlia DHT + difusión Gossip — cifrado con Noise NK una vez que los pares conocen la clave pública del otro; existe una ruta legacy sin discriminador para compatibilidad con pares antiguos que sí lleva texto plano, ver [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
+| **Malla** | Malla criptográfica local: tabla de enrutamiento Kademlia + difusión Gossip (cifrado con Noise NK, mDNS opcional en LAN / pares aprobados por operador; bootstrap WAN desactivado por defecto, sin conexiones globales autónomas) — la ruta legacy sin discriminador solo existe para compatibilidad con pares antiguos, ver [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **Protocolo A2A** | Descubrimiento de Agent Card + servidor JSON-RPC 2.0 — interopera con cualquier cliente compatible con Agent2Agent (LangGraph, CrewAI, etc.), no solo otras instancias de Tylluan |
 | **MCP nativo** | SSE + HTTP Streamable — funciona con Claude, Cursor, VS Code, LM Studio, cualquier cliente MCP |
 | **Aceleración GPU** | DirectML opcional (Windows, cualquier fabricante de GPU) o CUDA como proveedor de ejecución para inferencia ONNX local — la CPU sigue siendo el default sin configuración |
@@ -345,11 +347,11 @@ flowchart LR
   CLIENTS["Clientes e IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Núcleo Soberano"]
-    TOOLS["5 Herramientas Soberanas<br/>tylluan_do · remember · recall · think · graph"]
+    TOOLS["5 Herramientas Soberanas (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
 
     subgraph GOVERN["Gobernanza Cognitiva y Enrutamiento"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · System One"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · Decima ONNX / Reglas"]
       CGATE["CoherenceGate (ADR-011)<br/>Firewall L1-L4 · Signal Loop"]
     end
   end
@@ -370,12 +372,12 @@ flowchart LR
     WAKE["Stigmergy y Wake-Up (ADR-015)<br/>Cron Insession · Disparadores Proactivos"]
   end
 
-  subgraph MESH["Malla Distribuida tylluan-link"]
-    P2P["Pool de Sesiones P2P y Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305"]
-    GOSSIP["Motor Gossip y DHT<br/>Anti-Entropía · 256 K-Buckets · STUN"]
+  subgraph MESH["Malla Criptográfica tylluan-link"]
+    P2P["Pool de Sesiones P2P y Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opcional)"]
+    GOSSIP["Motor Gossip y Malla Local<br/>Anti-Entropía · Noise NK · mDNS LAN"]
   end
 
-  PEERS["Pares Remotos<br/>LAN (mDNS, opcional) · pares que añades"]
+  PEERS["Pares Aprobados (Internos / Privados)<br/>LAN (mDNS, opcional) · Claves aprobadas por operador"]
 
   SPARSE["Investigación: Léxico Disperso (SPLADE)"]:::future
   POSTCARD["Roadmap: Postcard zero-copy Serde"]:::future

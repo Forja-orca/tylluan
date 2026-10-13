@@ -205,7 +205,7 @@ export function FederationMesh() {
 
             {/* Discovery label */}
             <text x={100} y={720} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              Discovery: mDNS (LAN) · DHT (WAN)
+              Discovery: mDNS (LAN, opt-in) · Explicit approved peers
             </text>
             <text x={350} y={720} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               Encryption: Noise Protocol (authenticated, encrypted, zero-knowledge)

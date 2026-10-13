@@ -40,6 +40,8 @@ Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti
 
 **Air-gapped by default (fixed 2026-08-23):** the kernel used to attempt a STUN request to `stun.l.google.com:19302` on every boot regardless of whether federation/mesh was even enabled — real outbound traffic on a host meant to stay fully offline. STUN discovery is now opt-in: `[nat] enabled = false` by default, gating the whole discovery block. Set `enabled = true` explicitly if you want NAT traversal for the mesh.
 
+**Local cryptographic mesh, not an autonomous global web:** Tylluan's core mission is to give AI agents authentic persistent continuity — cumulative memories and episodes that time does not wash away, operating in near real-time without cloud dependencies. But continuity must never compromise sovereignty: peer synchronization is strictly designed for internal networks and explicit, operator-approved peers over an encrypted cryptographic mesh (Noise NK/XK, Ed25519, ChaCha20-Poly1305, opt-in LAN mDNS). It is never an uncontrolled global DHT connecting memories automatically across the public internet.
+
 The honest trade-off: several of those other projects have years of community history and production hardening that Tylluan doesn't have yet. [ROADMAP.md](ROADMAP.md) is where we track what's actually shipped versus what's still planned — we'd rather you find out something isn't ready from us than from a broken deploy.
 
 ---
@@ -57,7 +59,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Tools** | 45 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | Kademlia routing table + Gossip dissemination (WAN bootstrap through the BitTorrent mainline DHT is an optional build feature that no release enables) — encrypted with Noise NK once peers know each other's pubkey; a legacy no-discriminator wire path exists for backward compat with older peers and does carry plaintext, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
+| **Mesh** | Cryptographic local mesh: Kademlia routing table + Gossip dissemination (Noise NK encrypted, opt-in LAN mDNS / operator-approved keys; WAN bootstrap disabled by default, no autonomous global connections) — legacy plaintext wire path exists only for backward compat with older peers, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **A2A Protocol** | Agent Card discovery + JSON-RPC 2.0 server — interoperates with any Agent2Agent-compliant client (LangGraph, CrewAI, etc.), not just other Tylluan instances |
 | **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
 | **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
@@ -343,11 +345,11 @@ flowchart LR
   CLIENTS["Clients & IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Sovereign Core"]
-    TOOLS["5 Sovereign Tools<br/>tylluan_do · remember · recall · think · graph"]
+    TOOLS["5 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
 
     subgraph GOVERN["Cognitive Governance & Routing"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · System One"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · Decima ONNX / Rules"]
       CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
     end
   end
@@ -368,12 +370,12 @@ flowchart LR
     WAKE["Stigmergy & Wake-Up (ADR-015)<br/>Insession Cron · Proactive Triggers"]
   end
 
-  subgraph MESH["tylluan-link Distributed Mesh"]
-    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305"]
-    GOSSIP["Gossip Engine & DHT<br/>Anti-Entropy · 256 K-Buckets · STUN"]
+  subgraph MESH["tylluan-link Cryptographic Mesh"]
+    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opt-in)"]
+    GOSSIP["Gossip Engine & Local Mesh<br/>Anti-Entropy · Noise NK · LAN mDNS"]
   end
 
-  PEERS["Remote Peers<br/>LAN (mDNS, opt-in) · peers you add"]
+  PEERS["Approved Peers (Internal / Private)<br/>LAN (mDNS, opt-in) · Operator-approved keys"]
 
   SPARSE["Research: Sparse Lexical (SPLADE)"]:::future
   POSTCARD["Roadmap: Postcard zero-copy Serde"]:::future
