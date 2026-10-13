@@ -252,6 +252,40 @@ if [ -f AGENTS.md ]; then
     fi
 fi
 
+# ── 6. Guild-count claims (2026-10-14) ───────────────────────────────────
+# Public docs claimed "46 guilds" while the default routable catalog has 45
+# (46 FastMCP modules minus the EXCLUDED_GUILDS spikes in router/catalog.rs);
+# the 2026-09-11 incident ("49" vs 46) was the same drift and nothing gated it.
+# Real count = Python files exposing FastMCP under guilds/ (not _x / test_x)
+# minus EXCLUDED_GUILDS. Only totals >= 30 are judged: smaller numbers in the
+# docs are other counts (always-on guilds, categories).
+if [ -d guilds ] && [ -f crates/tylluan-kernel/src/router/catalog.rs ]; then
+    guild_files=$(grep -rlE 'FastMCP\(' guilds --include='*.py' 2>/dev/null \
+        | sed -E 's#.*/##; s#\.py$##' | grep -vE '^(_|test_)' | sort -u | wc -l | tr -d ' ')
+    guild_excluded=$(grep -E '^[[:space:]]*const EXCLUDED_GUILDS' crates/tylluan-kernel/src/router/catalog.rs \
+        | grep -oE '"[a-z0-9_]+"' | wc -l | tr -d ' ')
+    guild_real=$((guild_files - guild_excluded))
+    for gdoc in README.md README.es.md STATUS.md docs/assets/architecture.svg; do
+        [ -f "$gdoc" ] || continue
+        while IFS=: read -r gline gclaim; do
+            [ -n "$gclaim" ] || continue
+            gnum=$(echo "$gclaim" | grep -oE '[0-9]+' | head -1)
+            if [ "$gnum" -ge 30 ] && [ "$gnum" != "$guild_real" ]; then
+                echo "❌ $gdoc:$gline: dice '$gclaim' pero el catálogo enrutable real tiene $guild_real guilds ($guild_files módulos FastMCP − $guild_excluded excluidos)"
+                problems=1
+            fi
+        done < <(
+            # STATUS.md carries dated history ("claimed 49 guilds when the real
+            # catalog had 46"): only judge its current-state bullets there.
+            if [ "$gdoc" = "STATUS.md" ]; then
+                grep -noE '^- (\*\*)?[0-9]+ guilds' "$gdoc" || true
+            else
+                grep -noE '[0-9]+ (Python )?[Gg]uilds( de Python)?|\([0-9]+ (tools|herramientas)\)' "$gdoc" || true
+            fi
+        )
+    done
+fi
+
 echo ""
 if [ "$problems" -eq 0 ]; then
     echo "✅ No doc-path, doc-port or version drift found ($low_conf low-confidence findings suppressed)."

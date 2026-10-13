@@ -191,7 +191,7 @@ def generate_svg():
 
       <rect x="770" y="465" width="430" height="85" rx="8" fill="#1e1b4b" stroke="#9333ea" stroke-width="1"/>
       <text x="785" y="488" fill="#ffffff" font-size="13" font-weight="700">ONNX Runtime Embedded (ort)</text>
-      <text x="785" y="506" fill="#d8b4fe" font-size="11">• BGE-M3 (1024-dim dense vector embeddings)</text>
+      <text x="785" y="506" fill="#d8b4fe" font-size="11">• mxbai-embed-large (1024-dim dense vector embeddings)</text>
       <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo / v2 (cross-encoder)</text>
       <text x="785" y="538" fill="#d8b4fe" font-size="11">• llama_backend (llama-server GGUF) · Ollama / LM Studio</text>
 
@@ -208,7 +208,7 @@ def generate_svg():
       <text x="80" y="655" fill="#93c5fd" font-size="11" font-weight="700" letter-spacing="1">5. TASK EXECUTION &amp; AGENTIC COLLABORATION</text>
 
       <rect x="80" y="665" width="310" height="85" rx="8" fill="#0f172a" stroke="#2563eb" stroke-width="1"/>
-      <text x="95" y="688" fill="#ffffff" font-size="13" font-weight="700">46 Python Guilds</text>
+      <text x="95" y="688" fill="#ffffff" font-size="13" font-weight="700">45 Python Guilds</text>
       <text x="95" y="706" fill="#93c5fd" font-size="11">• FastMCP stdio child processes</text>
       <text x="95" y="722" fill="#93c5fd" font-size="11">• Dynamic execution on-demand &amp; IPC :47004</text>
       <text x="95" y="738" fill="#93c5fd" font-size="11">• Tools: code, bash, docker, websearch, etc.</text>
@@ -248,7 +248,7 @@ def generate_svg():
   <g id="peers-group" filter="url(#shadow)">
     <rect x="240" y="910" width="800" height="75" rx="12" fill="#082f49" stroke="#38bdf8" stroke-width="2"/>
     <text x="260" y="934" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1.5">REMOTE TYLLUAN MESH PEERS</text>
-    <text x="260" y="955" fill="#ffffff" font-size="14" font-weight="700">Peer Nodes on LAN (mDNS Discovery) / WAN (BitTorrent DHT Bootstrap)</text>
+    <text x="260" y="955" fill="#ffffff" font-size="14" font-weight="700">Peer Nodes on LAN (mDNS Discovery, opt-in) / Remote peers you add</text>
     <text x="260" y="972" fill="#bae6fd" font-size="11">ChaCha20-Poly1305 &amp; Noise NK/XK Authenticated Sync · Shared Memory Knowledge</text>
   </g>
 
