@@ -33,7 +33,7 @@ Most AI memory systems ask you to trust someone else's server with your data: an
 Concretely, that means:
 
 - **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (full semantic search with `mxbai-embed-large` in `server` profile; BM25-only zero-download in `portable` profile; BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
-- **It works without an internet connection.** We've run it on a Raspberry Pi 4 with 12,000 stored memories, federated with three peers over encrypted Noise NK, on a network with no internet access at all.
+- **It works without an internet connection.** The `portable` profile (BM25-only) needs no downloads. We have exercised it on a simulated Raspberry Pi-class machine (Linux, 8 GB of memory, NVMe storage); it has not been run on physical Pi hardware yet, and CI checks the ARM64 build by compiling it, not by booting it.
 - **Nothing here can be taken away from you.** MIT licensed, no vendor lock-in, no feature gated behind a subscription.
 
 Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
