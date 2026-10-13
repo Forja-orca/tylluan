@@ -116,15 +116,20 @@ jobs:
             # boot smoke (it only checks /health). Fail the release job, not
             # the user. NOTE: members print with a `./` prefix because tar ran
             # over `.` — verified live against a real tar czf of dist/.
-            if ! tar tzf "$archive" | grep -Eq '^\./?guilds/requirements.txt$'; then
+            # List once into a variable: `tar | grep -q` under `-o pipefail`
+            # fails whenever grep exits early (tar gets SIGPIPE), which made
+            # this gate report a present file as missing (v0.17.1 first run)
+            # and would equally hide a real __pycache__ match below.
+            listing="$(tar tzf "$archive")"
+            if ! grep -Eq '^\./?guilds/requirements.txt$' <<<"$listing"; then
               echo "::error::$archive is missing guilds/requirements.txt (audit finding B regression)"
               exit 1
             fi
-            if ! tar tzf "$archive" | grep -Eq '^\./?guilds/core/(bash|coloquio|code_graph)\.py$'; then
+            if ! grep -Eq '^\./?guilds/core/(bash|coloquio|code_graph)\.py$' <<<"$listing"; then
               echo "::error::$archive is missing guilds/core python guilds (audit finding B regression)"
               exit 1
             fi
-            if tar tzf "$archive" | grep -q '__pycache__'; then
+            if grep -q '__pycache__' <<<"$listing"; then
               echo "::error::$archive contains __pycache__ (must not ship bytecode caches)"
               exit 1
             fi
