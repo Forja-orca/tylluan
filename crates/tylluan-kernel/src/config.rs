@@ -345,13 +345,16 @@ pub struct MeshConfig {
     pub gossip: GossipConfig,
 }
 fn default_mesh_bootstrap_enabled() -> bool { true }
-fn default_mainline_dht_enabled() -> bool { true }
+/// Opt-in: the BitTorrent mainline DHT is global peer discovery, which is not
+/// the local-first default (2026-10-13). Only effective in builds that enable
+/// the `tylluan-link/mainline-dht` feature, which no release does.
+fn default_mainline_dht_enabled() -> bool { false }
 
 impl Default for MeshConfig {
     fn default() -> Self {
         Self {
             bootstrap_enabled: true,
-            mainline_dht_enabled: true,
+            mainline_dht_enabled: false,
             seed_nodes: Vec::new(),
             gossip: GossipConfig::default(),
         }
@@ -2040,6 +2043,15 @@ mod tests {
 
     #[test]
     fn test_default_config() {
+        // Global DHT discovery is opt-in: the struct default and a config that
+        // omits the key leave it off; only an explicit `true` turns it on.
+        assert!(!MeshConfig::default().mainline_dht_enabled);
+        let omitted: MeshConfig = toml::from_str("").expect("empty [mesh] parses");
+        assert!(!omitted.mainline_dht_enabled);
+        let explicit: MeshConfig =
+            toml::from_str("mainline_dht_enabled = true").expect("explicit opt-in parses");
+        assert!(explicit.mainline_dht_enabled);
+
         let config = TylluanConfig::default();
         assert_eq!(config.nexus.port, 47004);
         assert_eq!(config.memory.vector_dimensions, 1024); // BGE-M3 nativo

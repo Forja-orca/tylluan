@@ -330,7 +330,7 @@ This release adopts the MCP 2026-07-28 spec end to end (stateless core, Tasks, r
 | **Mesh — DHT, Gossip, Noise (M14)** | Kademlia routing, epidemic dissemination, Noise XK/NK transport encryption | ✅ |
 | **Federation (M11)** | Peer sync — push/pull/auto-sync, encrypted, provenance-tracked, echo-loop safe | ✅ |
 | **Single binary (M7)** | `--features bundled-dashboard` embeds the React dashboard at compile time | ✅ |
-| **v1.0.0** | External security audit, community validation, stable API, Docker smoke CI | 🔜 |
+| **v1.0.0** | Community validation (6+ months of use), stable API, Docker smoke CI — an external security audit is an unfunded stretch goal deferred to v1.x, see [ROADMAP.md](ROADMAP.md) | 🔜 |
 
 For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely still open — including a few things this release found and deliberately chose *not* to rush — see [ROADMAP.md](ROADMAP.md).
 
