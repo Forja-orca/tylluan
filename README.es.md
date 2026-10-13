@@ -332,7 +332,7 @@ Este release adopta el spec MCP 2026-07-28 de punta a punta (núcleo stateless, 
 | **Malla — DHT, Gossip, Noise (M14)** | Enrutamiento Kademlia, difusión epidémica, cifrado de transporte Noise XK/NK | ✅ |
 | **Federación (M11)** | Sincronización de pares — push/pull/auto-sync, cifrado, con trazabilidad de procedencia, a prueba de bucles eco | ✅ |
 | **Binario único (M7)** | `--features bundled-dashboard` incrusta el dashboard de React en tiempo de compilación | ✅ |
-| **v1.0.0** | Auditoría de seguridad externa, validación comunitaria, API estable, CI de smoke de Docker | 🔜 |
+| **v1.0.0** | Validación comunitaria (6+ meses de uso), API estable, CI de smoke de Docker — la auditoría de seguridad externa es una meta sin financiar aplazada a v1.x, ver [ROADMAP.md](ROADMAP.md) | 🔜 |
 
 Para el historial completo, ver [CHANGELOG.md](CHANGELOG.md). Para lo que genuinamente sigue abierto — incluyendo algunas cosas que este release encontró y deliberadamente eligió *no* apresurar — ver [ROADMAP.md](ROADMAP.md).
 

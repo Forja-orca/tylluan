@@ -308,14 +308,14 @@ Stretch goals (not funded yet; deferred to v1.x):
 
 ---
 
-## Horizon — Planetary Sovereign Mesh & Dual A2A Architecture
+## Horizon — Team-scoped Networks & Dual A2A Architecture
 
-**Vision:** Scaling Tylluan to 1 Million sovereign nodes without cloud lock-in, combining standard open-source Agent-to-Agent (A2A) protocols with Tylluan's local-first P2P mesh fabric.
+**Direction (set by the project owner, 2026-10-13):** Tylluan does not pursue a global, auto-connecting memory mesh. Each instance joins only a network that its operator or team chooses, with its own authentication — on a LAN or through a link between sites — and pairing must be simple while an unauthorised connection stays rejected. This is a direction, not a shipped feature: the architecture decision record is still being written, and nothing below is implemented yet. What exists today is approved-peer sync (see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md)); invitation pairing, per-peer and per-space sharing permissions, a shared Coloquio and revocation of already-synced memories do not exist.
 
 Requirements & Insertion Points:
 - [ ] **Dual A2A Standard Integration**: Support industry open-source Agent-to-Agent protocols (e.g. OpenClaw / A2A specs) alongside Tylluan's native Noise XK / BWC protocol, allowing any client or external agent to interact seamlessly.
 - [ ] **SLLM Flow Coordinator (1.5B–3B)**: Deploy SOTA small models (e.g. Qwen2.5-Coder-1.5B / Gemma-4-E2B) over ONNX DirectML as active flow coordinators for `matcher.rs` / `route_intent`, reserving ~100M models (SmolLM2-135M / GLiNER) as fast filters (PII, CoherenceGate).
-- [ ] **Planetary Mesh Fabric (1M Nodes)**: Decentralized peer discovery (Kademlia DHT + mDNS + STUN) ensuring privacy-preserving SilvaDB knowledge graph synchronization without central servers or token costs.
+- [ ] **Team-scoped networks** (replaces the retired "Planetary Mesh Fabric, 1M nodes" goal): invitation-based pairing, per-peer and per-space sharing permissions, a Coloquio shared across paired nodes, and revocation. Global peer discovery (BitTorrent mainline DHT) is not a goal; it ships in no release and is off by default in configuration.
 - [ ] **Zero Self-Destructive Entropy**: Enforce kernel-level safety, isolation, and ethical guardrails that protect both host machine and user context without restricting agent autonomy.
 
 ---
