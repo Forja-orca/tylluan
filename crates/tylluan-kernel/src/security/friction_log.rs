@@ -111,11 +111,25 @@ static TEST_COUNTER: std::sync::atomic::AtomicUsize =
 #[cfg(test)]
 pub(crate) fn set_unique_test_db() {
     let n = TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // pid+counter alone is NOT unique across runs: Windows reuses PIDs and
+    // nothing deleted the files, so a later process inherited an earlier
+    // run's rows (exact-count asserts saw 43 vs 3, 4 vs 1). Add a wall-clock
+    // nonce and clear any leftover file (+ WAL/SHM) before the test uses it.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     let path = std::env::temp_dir().join(format!(
-        "tylluan_friction_test_{}_{}.db",
+        "tylluan_friction_test_{}_{}_{}.db",
         std::process::id(),
-        n
+        n,
+        nonce
     ));
+    for suffix in ["", "-wal", "-shm"] {
+        let mut p = path.clone().into_os_string();
+        p.push(suffix);
+        let _ = std::fs::remove_file(std::path::PathBuf::from(p));
+    }
     TEST_DB_PATH.with(|c| *c.borrow_mut() = Some(path));
 }
 
