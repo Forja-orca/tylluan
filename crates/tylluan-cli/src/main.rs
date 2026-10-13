@@ -1123,7 +1123,12 @@ reranker_enabled = false
 host = "127.0.0.1"       # Listen address (localhost-only for security)
 port = 47004               # HTTP/MCP gateway port (architecture invariant)
 dev_mode = false          # NEVER enable in production — disables auth
-transport = ["stdio", "http"]
+# http+sse only: `tylluan install`/`tylluan start` spawn the kernel detached from
+# any terminal. With "stdio" in this list the kernel reads EOF on its closed stdin
+# and shuts down (HTTP included) a millisecond after "operational" -- seen on every
+# fresh install in the v0.17.1 release smoke. Stdio is for MCP clients that launch
+# the kernel themselves (--stdio).
+transport = ["http", "sse"]
 
 # ── Security ─────────────────────────────────────────────────────────
 [security]
@@ -1531,6 +1536,28 @@ mod installer_flag_tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_generated_config_never_enables_stdio_transport() {
+        // A kernel spawned by the installer has no usable stdin: stdio in the
+        // transport list makes it exit on EOF and take HTTP down with it.
+        for profile in [
+            InstallProfile::Portable,
+            InstallProfile::Clinic,
+            InstallProfile::Server,
+        ] {
+            let cfg = generate_config(profile);
+            let line = cfg
+                .lines()
+                .find(|l| l.trim_start().starts_with("transport"))
+                .expect("generated config must declare a transport");
+            assert!(
+                !line.contains("stdio"),
+                "generated config must not enable stdio, got: {line}"
+            );
+            assert!(line.contains("http"), "generated config must serve http, got: {line}");
         }
     }
 
