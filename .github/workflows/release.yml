@@ -207,15 +207,38 @@ jobs:
           # Isolated boot: dedicated data directory + dedicated non-default port 47008
           export TYLLUAN_DATA_DIR="$DATA_DIR"
           cd "$GATE_DIR"
-          ./tylluan-nexus --port 47008 > kernel.log 2>&1 &
+          # Without a config the default transport includes stdio, and a
+          # backgrounded step has a closed stdin: the kernel reads EOF and shuts
+          # down ("Shutting down gracefully" 1ms after "operational", v0.17.1
+          # third run). Same http-only config the CI boot smoke uses.
+          cat > gate.toml <<EOF
+          [nexus]
+          host = "127.0.0.1"
+          port = 47008
+          transport = ["http"]
+          dev_mode = true
+
+          [memory]
+          db_path = "$DATA_DIR/tylluan.db"
+          embedding_model = "none"
+          vector_dimensions = 0
+          vector_limit = 100
+
+          [silva]
+          db_path = "$DATA_DIR/silva.db"
+          EOF
+          ./tylluan-nexus --config gate.toml > kernel.log 2>&1 &
           KERNEL_PID=$!
 
           READY=0
           HEALTH_RESP=""
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:47008/health >/dev/null 2>&1; then
-              HEALTH_RESP=$(curl -s http://127.0.0.1:47008/health)
-              echo "Kernel answered /health: $HEALTH_RESP"
+          # /health answers {"status":"warming_up"} first and flips to "ok" a few
+          # seconds later (measured: ~5s on the linux artifact); wait for "ok",
+          # do not accept the first 200 (v0.17.1 dry-run in WSL).
+          for i in $(seq 1 60); do
+            HEALTH_RESP=$(curl -s http://127.0.0.1:47008/health 2>/dev/null || true)
+            if echo "$HEALTH_RESP" | grep -q '"status":"ok"'; then
+              echo "Kernel answered /health ok after ${i}s: $HEALTH_RESP"
               READY=1
               break
             fi
@@ -225,7 +248,7 @@ jobs:
           kill "$KERNEL_PID" 2>/dev/null || true
 
           if [ "$READY" -ne 1 ]; then
-            echo "::error::Kernel did not answer /health within 30s"
+            echo "::error::Kernel did not report health ok within 60s (last: $HEALTH_RESP)"
             cat kernel.log
             exit 1
           fi
