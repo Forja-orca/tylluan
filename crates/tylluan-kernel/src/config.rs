@@ -422,15 +422,17 @@ pub struct P2pConfig {
     /// multi-model security audit of the public repo, verified line-by-line
     /// before this fix.
     ///
-    /// This flag flip is the safe stopgap, not the real fix. The real fix
-    /// needs the responder to check the initiator's handshake static key
-    /// (X25519, captured in `NoisedPipe::peer_id`) against `peers.db`'s
-    /// approved list (Ed25519) before ever calling the dispatch handler --
-    /// and `noise.rs` documents that Ed25519 cannot be reconstructed from
-    /// the X25519 conversion, so that check needs its own careful design
-    /// (e.g. storing the derived X25519 pubkey alongside Ed25519 in
-    /// peers.db at approval time), not a rushed hotfix. Until that lands,
-    /// P2P dispatch stays opt-in and documented as such.
+    /// The peer check has since landed: the listener compares the
+    /// initiator's handshake static key (X25519, `NoisedPipe::peer_id`)
+    /// against the X25519 form of every approved peer's Ed25519 key in
+    /// `peers.db` and rejects everyone else before the dispatch handler runs
+    /// (`tylluan_link::p2p::peer_is_approved`, wired in
+    /// `transport/http/mod.rs`); an empty approved set is fail-closed.
+    ///
+    /// It stays opt-in because approval is all-or-nothing: an approved peer
+    /// can call ANY guild tool (bash, filesystem, ...) on this node -- there
+    /// is no per-peer or per-guild allow-list yet. Do not enable it for peers
+    /// you would not give a shell.
     #[serde(default = "default_p2p_enabled")]
     pub enabled: bool,
     /// TCP port for the P2P dispatch listener.

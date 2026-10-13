@@ -33,7 +33,7 @@ Most AI memory systems ask you to trust someone else's server with your data: an
 Concretely, that means:
 
 - **Your data stays yours.** Memory lives in a local SQLite database with local embeddings (full semantic search with `mxbai-embed-large` in `server` profile; BM25-only zero-download in `portable` profile; BGE-M3 also supported). There's no cloud round-trip in the critical path, and no proprietary format underneath — you can open the database with any standard SQLite tool.
-- **It works without an internet connection.** We've run it on a Raspberry Pi 4 with 12,000 stored memories, federated with three peers over encrypted Noise XK, on a network with no internet access at all.
+- **It works without an internet connection.** We've run it on a Raspberry Pi 4 with 12,000 stored memories, federated with three peers over encrypted Noise NK, on a network with no internet access at all.
 - **Nothing here can be taken away from you.** MIT licensed, no vendor lock-in, no feature gated behind a subscription.
 
 Agent memory is a crowded space right now — Mem0, Letta, Zep, Cognee, Graphiti, A-MEM, and others all take real, different approaches, and are worth evaluating on their own terms depending on what you need. What Tylluan specifically bets on is running well on modest, offline, or air-gapped hardware, with a compiled binary instead of a Python service you have to keep alive, and a mesh where peers share knowledge directly without a coordinator node in the middle.
@@ -54,10 +54,10 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 |------------|---------|
 | **Memory** | BM25 + FTS5 + local vector search (1024-dim native `mxbai-embed-large` in server profile / BM25 in portable), fused with RRF, plus LightRAG-style graph traversal (PageRank + degree penalty) |
 | **Agent Identity** | Declarative agent contracts (`.tylluan/agents.toml`) — role assignment per `agent_id`, no manual wiring |
-| **Tools** | 46 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
+| **Tools** | 45 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | Kademlia DHT + Gossip dissemination — encrypted with Noise NK once peers know each other's pubkey; a legacy no-discriminator wire path exists for backward compat with older peers and does carry plaintext, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
+| **Mesh** | Kademlia routing table + Gossip dissemination (WAN bootstrap through the BitTorrent mainline DHT is an optional build feature that no release enables) — encrypted with Noise NK once peers know each other's pubkey; a legacy no-discriminator wire path exists for backward compat with older peers and does carry plaintext, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **A2A Protocol** | Agent Card discovery + JSON-RPC 2.0 server — interoperates with any Agent2Agent-compliant client (LangGraph, CrewAI, etc.), not just other Tylluan instances |
 | **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
 | **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
@@ -209,7 +209,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 ### 1 — Install
 
-No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 46 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
+No Rust, Python, or Node needed to run the kernel binary and use it as MCP memory. Running the 45 guilds via `tylluan_do` (bash, filesystem, scheduler, etc.) requires Python 3.12 + FastMCP separately — without them, those guilds crash-loop and `/api/v1/doctor` reports `degraded` (verified 2026-08-22).
 
 ```bash
 # Linux / macOS
@@ -232,7 +232,10 @@ tylluan-cli start
 It boots instantly in portable mode (BM25-only, zero downloads):
 
 ```
-✅ Tylluan v0.17.1 running at http://127.0.0.1:47004
+🚀 Starting TylluanNexus kernel...
+✅ Kernel started with PID: 12345
+✅ Kernel is ready at http://127.0.0.1:47004
+🌐 Connect your MCP client to http://127.0.0.1:47004/sse
 ```
 
 Check it's actually up:
@@ -297,14 +300,16 @@ $env:TYLLUAN_TOKEN = Get-Content .tylluan-token
 | Topic | Guide |
 |-------|-------|
 | Configuration, auth, troubleshooting | [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) |
-| Python guilds (46 tools) | [guilds/README.md](guilds/README.md) |
+| Python guilds (45 tools) | [guilds/README.md](guilds/README.md) |
 | Build from source | [docs/getting-started/QUICKSTART.md#build-from-source](docs/getting-started/QUICKSTART.md#build-from-source) |
 | CLI reference | `tylluan-cli --help` |
 | Installation profiles | `tylluan-cli install --profile=portable` |
 
 ---
 
-## Where things stand — v0.17.0
+## Where things stand — v0.17.1
+
+v0.17.1 (2026-10-13) is a fix release: security hardening, installer and release-pipeline fixes, and an ONNX Runtime compatibility guard — see [CHANGELOG.md](CHANGELOG.md). The milestones below shipped in v0.17.0.
 
 This release adopts the MCP 2026-07-28 spec end to end (stateless core, Tasks, real MCP Apps manifests) and closes an 8-phase push to make Tylluan itself an agent's continuity, trust, and action layer — self-documenting guild contracts, unified bootstrap/resume, evidence-backed memory, a Trust Console for runtime/code drift, and a first real dataset circuit turning CoherenceGate's LLM judge decisions into structured, ground-truth-labeled examples. Three real bugs were found live and fixed the same way as always: root cause first, then a regression test, then verified against the live kernel — including a long-standing SSE-mode hang traced to a header-forwarding bug and confirmed fixed by the affected client itself.
 
@@ -353,12 +358,12 @@ flowchart LR
   end
 
   subgraph INFER["Local Inference (Zero Cloud)"]
-    ONNX["ONNX Runtime Embedded<br/>BGE-M3 (1024d) · Jina Reranker"]
+    ONNX["ONNX Runtime Embedded<br/>mxbai-embed-large (1024d) · Jina Reranker"]
     LLAMA["Local LLM Backend<br/>llama-server GGUF · Ollama"]
   end
 
   subgraph EXEC["Execution & Agent Collaboration"]
-    GUILDS["46 Python Guilds<br/>FastMCP stdio child processes"]
+    GUILDS["45 Python Guilds<br/>FastMCP stdio child processes"]
     COLOQUIO["Coloquio & Contracts<br/>Multi-Agent Channels · BWC"]
     WAKE["Stigmergy & Wake-Up (ADR-015)<br/>Insession Cron · Proactive Triggers"]
   end
@@ -368,7 +373,7 @@ flowchart LR
     GOSSIP["Gossip Engine & DHT<br/>Anti-Entropy · 256 K-Buckets · STUN"]
   end
 
-  PEERS["Remote Peers<br/>LAN (mDNS) · WAN (DHT)"]
+  PEERS["Remote Peers<br/>LAN (mDNS, opt-in) · peers you add"]
 
   SPARSE["Research: Sparse Lexical (SPLADE)"]:::future
   POSTCARD["Roadmap: Postcard zero-copy Serde"]:::future
@@ -421,7 +426,7 @@ flowchart LR
 | Component | Technology |
 |-----------|------------|
 | Kernel | Rust (tokio + axum) |
-| Embeddings | mxbai-embed-large (local ONNX, CPU, default) — configurable: bge-m3, bge-small, nomic, none |
+| Embeddings | mxbai-embed-large (local ONNX, CPU, default) — configurable: bge-m3, bge-small, minilm, nomic, none |
 | Reranker | Jina v1 Turbo (local ONNX) |
 | Generative inference | `llama.cpp` (`llama-server`, auto-downloaded), agnostic to an external Ollama/LM Studio if one's already running |
 | Search | BM25 + FTS5 + local vector + RRF hybrid fusion + entity boost |
@@ -440,7 +445,9 @@ tylluan/
 │   ├── tylluan-common/    Shared types and errors
 │   ├── tylluan-link/      Federation networking — mesh identity, DHT, NAT, mDNS, Gossip, Noise
 │   ├── tylluan-cli/       CLI management binary — start / stop / status / install
-│   └── tylluan-evals/     Benchmarks — Recall@N, Precision@N, latency percentiles
+│   ├── tylluan-evals/     Benchmarks — Recall@N, Precision@N, latency percentiles
+│   ├── tylluan-fsrs/      FSRS-5 spaced-repetition scheduler (per-item stability, difficulty, retrievability)
+│   └── tylluan-gui/       Placeholder for a future desktop shell (no functionality yet)
 ├── guilds/                Python tool plugins (fastmcp), auto-discovered at startup
 ├── dashboard/             React dashboard (Vite + Tailwind), embedded in the binary
 ├── docs/                  Architecture and guides
@@ -454,11 +461,12 @@ Point two or more Tylluan instances at each other and they'll share knowledge se
 
 ```toml
 # tylluan.toml
-[silva]
-sync_interval_ms = 3600000      # the key the auto-sync loop actually reads; 0 = disabled
+[federation]
+auto_sync_mode = "push"         # "push", "pull" or "both"
+sync_interval_ms = 30000        # default 30 s; 0 = auto-sync disabled
 ```
 
-> `[federation] auto_sync_interval_secs`/`auto_sync_mode` are read by the federation API handler but **not** by any background sync loop — `[silva] sync_interval_ms` is the key the auto-sync loop actually reads. Don't rely on `auto_sync_*` for automatic sync scheduling (tracked in ROADMAP_O3.md).
+> The auto-sync loop reads both keys from `[federation]`. `[silva] sync_interval_ms` is the deprecated old location: it is only honoured when `[federation] sync_interval_ms` is left at its default.
 
 ```bash
 # Add a peer
