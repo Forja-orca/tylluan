@@ -33,6 +33,7 @@ All notable changes to Tylluan are documented here.
 - The release workflow is draft-first: the release is created as a draft, then a version gate (Cargo = tag = `/health` version, run in an isolated data directory on its own port) and an install smoke of the draft artifacts on Linux (Ubuntu 22.04), macOS and Windows must pass before it is promoted to Latest. A failed gate leaves the draft and never deletes the tag (`73bb6bb`).
 - `install.sh` / `install.ps1` resolve "latest" from the `/releases/latest` redirect instead of `api.github.com` (anonymous API rate limits broke the Windows smoke), accept `TYLLUAN_DOWNLOAD_URL` / `TYLLUAN_VERSION`, and send an optional `GITHUB_TOKEN` only to GitHub hosts (`1365a8f`).
 - Release tarballs now include `guilds/` (`5993a25`); the installer detects Python 3.12+ (`c3dee95`) and no longer boots the kernel twice (`2d382ba`).
+- A fresh install could never keep its kernel running: `tylluan install` wrote `transport = ["stdio", "http"]`, and a kernel started without a terminal (`curl | sh`, a service, CI) reads end-of-input on stdin and shuts down, HTTP included, a millisecond after reporting "operational". Found by the first end-to-end run of the release smoke on Linux and Windows. The generated config now serves `http` and `sse` only (`108b082`). Configs written by 0.17.0 keep the old line; edit `transport` in `tylluan.toml` if your kernel exits right after starting.
 
 **Process**
 - `AGENTS.md` is covered by the same test-count and docs-reality gates as the README (`b43ebfa`).
