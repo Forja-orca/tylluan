@@ -241,14 +241,14 @@ export function ArchitectureMap() {
               Per-memory stability model + CoherenceGate L1-L4 hybrid memory firewall (ADR-011).
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,038 tests passing (957+69+12)
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,093 tests passing (1007+74+12)
             </text>
           </g>
 
           <g>
             <rect x={600} y="710" width={580} height={60} rx={6} fill="#1A1510" stroke="#F59E0B" strokeWidth={0.8} opacity={0.8} />
             <text x={616} y={730} fill="#F59E0B" fontSize="10" fontFamily="ui-monospace, monospace" fontWeight={600}>
-              ⬡ Project Status — Oct 2026 (v0.17.0+)
+              ⬡ Project Status — Oct 2026 (v0.17.1)
             </text>
             <text x={616} y={746} fill="#94A3B8" fontSize="10" fontFamily="system-ui, sans-serif">
               ACTIVE: Decision Fabric (ADR-018) · Cognitive Scheduler · CoherenceGate L1-L4 · Stigmergy (ADR-015) · Noise NK/XK
