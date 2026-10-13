@@ -36,6 +36,16 @@ codegen-units = 4   # parallel codegen — faster than 1, better than default 16
 strip = true        # strip debug symbols → ~12-15 MB final binary
 panic = "abort"     # smaller binary, faster startup — no unwinding in production
 
+# proptest 1.11.0's float sampler may overshoot a range bound on its first split
+# and then clamps it ("not a problem for testing data", float_samplers.rs), but it
+# first runs debug_assert!(self.low - result < self.intervals.step) (line 128).
+# In dev builds that assert rarely fires and aborts the test from INSIDE the
+# library: prop_cosine_self_is_one (0.01f32..1e3f32) failed the pre-push twice
+# (2026-10-06, 2026-10-14) on a seed-dependent path no 200k-case run reproduced.
+# Keep the clamp, drop the library's own debug assertions.
+[profile.dev.package.proptest]
+debug-assertions = false
+
 [profile.release-debug]
 inherits = "release"
 strip = false       # keep symbols for profiling — `cargo build --profile release-debug`
