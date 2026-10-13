@@ -107,7 +107,7 @@ cargo run -p tylluan-cli -- start
 | **M14-F Phase 1** | `p2p.rs` — `P2pSessionPool` + `execute_remote_tcp()` + `HardwareCaps.supports_p2p/tcp_port` | ✅ |
 | **M14-F Phase 2** | `start_p2p_listener_noise()` + `DispatchDecision::RemoteTcp` + score-first routing + `p2p_dst.rs` (3 tests) | ✅ |
 | **M14-F Phase 3** | `P2pHandlerFn` (BoxFuture) · `P2pConfig` `[p2p]` in `config.rs` · `p2p_pool` in `HttpState` · P2P listener spawn (conditional) · `api_mesh.rs` native `RemoteTcp` via `execute_remote_tcp` · `guild_peers_handler` exposes `supports_p2p/tcp_port` | ✅ |
-| **Portability CI** | `portability-check` job — `cargo check` para `aarch64-unknown-linux-gnu` en cada push · ARM64 (RPi4) portability garantizada | ✅ |
+| **Portability CI** | `portability-check` job — `cargo check` para `aarch64-unknown-linux-gnu` en cada push · compila para ARM64 (RPi4); el CI no arranca el binario en ARM | ✅ |
 
 ### Completado en v0.12.0
 
