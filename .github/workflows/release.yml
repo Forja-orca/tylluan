@@ -170,8 +170,15 @@ jobs:
           TAG_VERSION="${TAG#v}"
           echo "Verifying tag: $TAG (expected version: $TAG_VERSION)"
 
-          KERNEL_VER=$(grep -m1 '^version = ' crates/tylluan-kernel/Cargo.toml | cut -d'"' -f2)
-          CLI_VER=$(grep -m1 '^version = ' crates/tylluan-cli/Cargo.toml | cut -d'"' -f2)
+          # Both crates use `version.workspace = true`, so grepping their
+          # Cargo.toml for `^version = ` matched nothing and `set -e` aborted
+          # the gate (v0.17.1 second run). cargo metadata resolves inheritance.
+          META="$(cargo metadata --no-deps --format-version 1)"
+          pkg_version() {
+            python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]==sys.argv[1]))' "$1" <<<"$META"
+          }
+          KERNEL_VER="$(pkg_version tylluan-kernel)"
+          CLI_VER="$(pkg_version tylluan-cli)"
 
           if [ "$KERNEL_VER" != "$TAG_VERSION" ]; then
             echo "::error::tylluan-kernel Cargo.toml version ($KERNEL_VER) does not match tag ($TAG_VERSION)"
@@ -296,7 +303,7 @@ jobs:
           done
 
           # Cleanly stop the background kernel
-          pkill -f tylluan || true
+          pkill -x tylluan-nexus || true
 
           if [ "$READY" -ne 1 ]; then
             echo "::error::Kernel did not answer /health on :47004 within 30s"
