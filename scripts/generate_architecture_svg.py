@@ -112,7 +112,7 @@ def generate_svg():
     
     <!-- Badges -->
     <rect x="910" y="183" width="170" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-    <text x="925" y="199" fill="#34d399" font-size="11" font-weight="700">1,038 TESTS GREEN</text>
+    <text x="925" y="199" fill="#34d399" font-size="11" font-weight="700">1,093 TESTS GREEN</text>
     
     <rect x="1090" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
     <text x="1105" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
@@ -159,7 +159,7 @@ def generate_svg():
       <rect x="830" y="348" width="370" height="55" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
       <text x="845" y="368" fill="#ffffff" font-size="13" font-weight="700">Decision Fabric (ADR-018)</text>
       <text x="845" y="384" fill="#6ee7b7" font-size="10">DecisionProvider trait · Deterministic rules baseline</text>
-      <text x="845" y="396" fill="#6ee7b7" font-size="10">System One (Laya ONNX): choice · score · noul</text>
+      <text x="845" y="396" fill="#6ee7b7" font-size="10">Deterministic rules provider: choice · score</text>
     </g>
 
     <!-- SECTION 3: SILVADB (LEFT) & INFERENCE (RIGHT) -->
@@ -227,7 +227,7 @@ def generate_svg():
 
       <!-- Federation Mesh -->
       <rect x="755" y="635" width="460" height="215" rx="10" fill="url(#mesh-grad)" stroke="#38bdf8" stroke-width="1.5"/>
-      <text x="770" y="655" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1">6. TYLLUAN-LINK (DISTRIBUTED MESH)</text>
+      <text x="770" y="655" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1">6. TYLLUAN-LINK (CRYPTOGRAPHIC LOCAL MESH)</text>
 
       <rect x="770" y="665" width="430" height="85" rx="8" fill="#082f49" stroke="#0284c7" stroke-width="1"/>
       <text x="785" y="688" fill="#ffffff" font-size="13" font-weight="700">Cryptographic P2P Session Pool</text>
@@ -236,9 +236,9 @@ def generate_svg():
       <text x="785" y="738" fill="#7dd3fc" font-size="11">• Transparent TCP Connection Pool &amp; DispatchRouter</text>
 
       <rect x="770" y="760" width="430" height="75" rx="8" fill="#082f49" stroke="#0284c7" stroke-width="1"/>
-      <text x="785" y="784" fill="#ffffff" font-size="13" font-weight="700">Gossip &amp; DHT Kademlia</text>
-      <text x="785" y="802" fill="#7dd3fc" font-size="11">• Anti-entropy push-pull gossip synchronization</text>
-      <text x="785" y="818" fill="#7dd3fc" font-size="11">• 256 K-buckets DHT · Hardware capabilities exchange</text>
+      <text x="785" y="784" fill="#ffffff" font-size="13" font-weight="700">Gossip &amp; Kademlia Routing</text>
+      <text x="785" y="802" fill="#7dd3fc" font-size="11">• Anti-entropy push-pull gossip (Noise NK once the peer key is known)</text>
+      <text x="785" y="818" fill="#7dd3fc" font-size="11">• 256 K-buckets routing table · Hardware capabilities exchange</text>
     </g>
   </g>
 
@@ -247,9 +247,9 @@ def generate_svg():
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <g id="peers-group" filter="url(#shadow)">
     <rect x="240" y="910" width="800" height="75" rx="12" fill="#082f49" stroke="#38bdf8" stroke-width="2"/>
-    <text x="260" y="934" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1.5">REMOTE TYLLUAN MESH PEERS</text>
+    <text x="260" y="934" fill="#7dd3fc" font-size="11" font-weight="700" letter-spacing="1.5">APPROVED PEERS</text>
     <text x="260" y="955" fill="#ffffff" font-size="14" font-weight="700">Peer Nodes on LAN (mDNS Discovery, opt-in) / Remote peers you add</text>
-    <text x="260" y="972" fill="#bae6fd" font-size="11">ChaCha20-Poly1305 &amp; Noise NK/XK Authenticated Sync · Shared Memory Knowledge</text>
+    <text x="260" y="972" fill="#bae6fd" font-size="11">Ed25519 identities · Noise NK/XK · sync only with approved peers · no global discovery</text>
   </g>
 
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
