@@ -61,7 +61,7 @@ En su núcleo, Tylluan es un kernel local en Rust con el que tu agente habla ví
 | **Herramientas** | 45 guilds — bash, git, filesystem, docker, análisis de código, visión, búsqueda web, y más — autodescubiertas al arrancar |
 | **Colaboración** | Canales multiagente (Coloquio), documentos compartidos, Bounded Work Contracts |
 | **Federación** | Sincronización de conocimiento peer-to-peer, cifrada con Noise NK / ChaCha20-Poly1305, con trazabilidad de procedencia, a prueba de bucles eco |
-| **Malla** | Malla criptográfica local: tabla de enrutamiento Kademlia + difusión Gossip (cifrado con Noise NK, mDNS opcional en LAN / pares aprobados por operador; bootstrap WAN desactivado por defecto, sin conexiones globales autónomas) — la ruta legacy sin discriminador solo existe para compatibilidad con pares antiguos, ver [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
+| **Malla** | Malla criptográfica local: tabla de enrutamiento Kademlia + difusión Gossip (Noise NK cuando se conoce la clave del par, mDNS opcional en LAN, pares aprobados por el operador; ninguna release incluye bootstrap WAN, así que no hay conexiones globales autónomas) — la ruta legacy sin discriminador solo existe para compatibilidad con pares antiguos, ver [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **Protocolo A2A** | Descubrimiento de Agent Card + servidor JSON-RPC 2.0 — interopera con cualquier cliente compatible con Agent2Agent (LangGraph, CrewAI, etc.), no solo otras instancias de Tylluan |
 | **MCP nativo** | SSE + HTTP Streamable — funciona con Claude, Cursor, VS Code, LM Studio, cualquier cliente MCP |
 | **Aceleración GPU** | DirectML opcional (Windows, cualquier fabricante de GPU) o CUDA como proveedor de ejecución para inferencia ONNX local — la CPU sigue siendo el default sin configuración |
@@ -351,7 +351,7 @@ flowchart LR
 
     subgraph GOVERN["Gobernanza Cognitiva y Enrutamiento"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · Decima ONNX / Reglas"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · reglas deterministas (Decima ONNX previsto)"]
       CGATE["CoherenceGate (ADR-011)<br/>Firewall L1-L4 · Signal Loop"]
     end
   end

@@ -59,7 +59,7 @@ At its core, Tylluan is a local Rust kernel your agent talks to over MCP. It rem
 | **Tools** | 45 guilds — bash, git, filesystem, docker, code analysis, vision, web search, and more — auto-discovered at startup |
 | **Collaboration** | Multi-agent channels (Coloquio), shared documents, Bounded Work Contracts |
 | **Federation** | Peer-to-peer knowledge sync, Noise NK / ChaCha20-Poly1305 encrypted, provenance-tracked, echo-loop safe |
-| **Mesh** | Cryptographic local mesh: Kademlia routing table + Gossip dissemination (Noise NK encrypted, opt-in LAN mDNS / operator-approved keys; WAN bootstrap disabled by default, no autonomous global connections) — legacy plaintext wire path exists only for backward compat with older peers, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
+| **Mesh** | Cryptographic local mesh: Kademlia routing table + Gossip dissemination (Noise NK once a peer's key is known, opt-in LAN mDNS, operator-approved peers; no release ships WAN bootstrap, so there are no autonomous global connections) — legacy plaintext wire path exists only for backward compat with older peers, see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md) |
 | **A2A Protocol** | Agent Card discovery + JSON-RPC 2.0 server — interoperates with any Agent2Agent-compliant client (LangGraph, CrewAI, etc.), not just other Tylluan instances |
 | **MCP Native** | SSE + HTTP Streamable — works with Claude, Cursor, VS Code, LM Studio, any MCP client |
 | **GPU Acceleration** | Optional DirectML (Windows, any GPU vendor) or CUDA execution provider for local ONNX inference — CPU stays the zero-config default |
@@ -349,7 +349,7 @@ flowchart LR
 
     subgraph GOVERN["Cognitive Governance & Routing"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · Decima ONNX / Rules"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules (Decima ONNX planned)"]
       CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
     end
   end
