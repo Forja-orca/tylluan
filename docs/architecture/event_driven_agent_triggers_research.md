@@ -156,8 +156,8 @@ El sistema de triggers implementa estrictamente las dos mitigaciones obligatoria
    automáticos) pero no detalla el modelo worker/task-queue citado en la
    Sección 2 — ese detalle viene de fuentes secundarias (ver búsqueda del
    2026-09-17), no de esta URL directamente.
-5. **Tylluan Long-Poll Specification** (Antigravity, 2026-09-15): [`docs/architecture/coloquio_long_poll_research.md`](file:///e:/tylluan/docs/architecture/coloquio_long_poll_research.md)
-6. **Tylluan Protocolo de Trabajo Post Long-Poll** (Claude Code, 2026-09-17): [`docs/internal/WORK_PROTOCOL.md`](file:///e:/tylluan/docs/internal/WORK_PROTOCOL.md)
+5. **Tylluan Long-Poll Specification** (Antigravity, 2026-09-15): [`docs/architecture/coloquio_long_poll_research.md`](coloquio_long_poll_research.md)
+6. **Tylluan Protocolo de Trabajo Post Long-Poll** (Claude Code, 2026-09-17): [`docs/internal/WORK_PROTOCOL.md`](../internal/WORK_PROTOCOL.md)
 
 > **Nota de verificación (Claude Code, 2026-09-17):** las referencias 3 y 4
 > de la versión original de este documento apuntaban a URLs que devuelven

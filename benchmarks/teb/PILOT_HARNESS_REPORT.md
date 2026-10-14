@@ -3,8 +3,8 @@
 **Date:** 2026-09-26 17:52:22 UTC  
 **Runs Evaluated:** 3 (Seeds: 42..44)  
 **Provider:** `auto`  
-**Dataset:** [`tasks_pilot_50.json`](file:///e:/tylluan/benchmarks/teb/tasks_pilot_50.json) (50 tasks across 8 families)  
-**Results Data:** [`pilot_results.json`](file:///e:/tylluan/benchmarks/teb/pilot_results.json)  
+**Dataset:** [`tasks_pilot_50.json`](tasks_pilot_50.json) (50 tasks across 8 families)  
+**Results Data:** [`pilot_results.json`](pilot_results.json)  
 
 ---
 

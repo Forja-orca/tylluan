@@ -184,6 +184,21 @@ if [ "$RUN_DOCS" = "1" ]; then
         fail "doc-path/doc-port/version drift — see scripts/check_docs_reality.sh output above"
     fi
 
+    # Markdown link gate (2026-10-14 documentation audit): 20 relative links
+    # were broken or pointed at one machine's absolute paths (file:///E:/...);
+    # check_docs_reality.sh only judges backtick-cited paths.
+    DOC_LINK_PY=""
+    for cand in python3 python; do
+        if command -v "$cand" >/dev/null 2>&1; then DOC_LINK_PY="$cand"; break; fi
+    done
+    if [ -z "$DOC_LINK_PY" ]; then
+        fail "doc link check needs python (python3 or python) on PATH"
+    elif "$DOC_LINK_PY" scripts/check_doc_links.py; then
+        ok "Markdown relative links resolve (check_doc_links.py)"
+    else
+        fail "broken Markdown links — see scripts/check_doc_links.py output above"
+    fi
+
     # Pilar 2 (repo-pillars) contract gate: JSON schemas under schemas/ are
     # valid, and if a kernel happens to be live on :47004 its real endpoints
     # get checked against them too. Degrades gracefully with no live kernel

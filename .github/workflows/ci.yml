@@ -210,6 +210,11 @@ jobs:
       # were false-positiving as port drift.
       - name: Verify docs cite real paths, the real port, and a consistent version
         run: bash scripts/check_docs_reality.sh
+      # Added in the 2026-10-14 documentation audit: 20 Markdown links were
+      # broken or pointed at one developer's machine (file:///E:/...); no gate
+      # looked at real Markdown links. Standard library only.
+      - name: Verify Markdown relative links resolve to tracked paths
+        run: python3 scripts/check_doc_links.py
 
   contracts-check:
     name: Pilar 2 — schemas valid, live endpoints checked if reachable
