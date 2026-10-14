@@ -4,6 +4,8 @@ Oficio Real: **Ingeniería de Software Soberana**
 
 ---
 
+> **Nota (2026-10-14).** Este documento se corrigió contra el árbol real de `guilds/`. Lo que aquí figura como existente existe; lo que falta está marcado como "no existe". Los *agentes/roles* son ficheros de texto para cargar en un cliente IDE, no procesos del kernel; los procesos que el kernel arranca son los plugins Python.
+
 ## Identidad del Gremio
 
 Los Constructores son el gremio central de TylluanNexus. Su oficio es **crear, mantener y evolucionar software** con criterios de soberanía: sin dependencias externas innecesarias, sin cajas negras, sin lock-in.
@@ -26,25 +28,18 @@ builders/
 ├── agents/
 │   ├── architect.md            ← Agente: Arquitecto de Sistemas
 │   ├── backend-dev.md          ← Agente: Desarrollador Backend
-│   ├── frontend-dev.md         ← Agente: Desarrollador Frontend
-│   └── devops.md               ← Agente: Ingeniero DevOps
+│   └── frontend-dev.md         ← Agente: Desarrollador Frontend   (devops.md: no existe)
 ├── sub-agents/
-│   ├── rust-specialist.skill.md
-│   ├── python-specialist.skill.md
-│   └── api-designer.skill.md
+│   └── rust-specialist.skill.md   (python-specialist y api-designer: no existen)
 ├── workflows/
 │   ├── new-feature.md          ← Workflow: Nueva Feature Completa
-│   ├── debug-session.md        ← Workflow: Sesión de Debugging
-│   └── release.md              ← Workflow: Release + Deploy
-├── plugins/                    ← MCP tools del gremio (Python FastMCP)
-│   ├── → code.py               ← (symlink/alias a guilds/core/code.py)
-│   ├── → git.py
-│   ├── → docker.py
-│   ├── → bash.py
-│   └── → filesystem.py
+│   └── debug-session.md        ← Workflow: Sesión de Debugging   (release.md: no existe)
+├── plugins/                    ← MCP tools del gremio: ficheros reales (no son symlinks)
+│   ├── code.py, code_analysis.py, git.py, docker.py, bash.py, filesystem.py, database.py
+│   └── sandbox.py, formatter.py, audio_tools.py, ffmpeg_tools.py, screenshot_tools.py,
+│       clipboard_tools.py, local_llm_proxy.py, utils.py
 └── sandbox/
-    ├── README.md               ← Cómo usar el sandbox lab
-    └── experiments/            ← Experimentos activos de agentes
+    └── README.md               ← Cómo usar el sandbox lab (no hay subdirectorio experiments/)
 ```
 
 ---
@@ -56,7 +51,7 @@ builders/
 | `architect` | Arquitecto de Sistemas | Diseño de APIs, schemas, ADRs, revisión técnica |
 | `backend-dev` | Desarrollador Backend | Rust/Python, kernel, guilds, performance |
 | `frontend-dev` | Desarrollador Frontend | React/TS, dashboards, UX soberana |
-| `devops` | Ingeniero DevOps | Docker, CI/CD, monitoreo, deployments |
+| `devops` | Ingeniero DevOps (rol previsto; **no existe** `agents/devops.md`) | Docker, CI/CD, monitoreo, deployments |
 
 **Nota**: Los agentes son **roles universales** — no están ligados a un modelo LLM específico. Cursor, Claude, Qwen o cualquier cliente puede adoptar estos roles cargando el `agent.md` correspondiente.
 
@@ -109,13 +104,13 @@ Workflows de ejemplo que los agentes pueden usar directamente o como base para c
 |----------|--------------|
 | `new-feature.md` | Implementar una feature completa desde diseño hasta tests |
 | `debug-session.md` | Debugging estructurado de bugs en producción |
-| `release.md` | Proceso de release con validación y deployment |
+| `release.md` | (no existe todavía) |
 
 Para crear un nuevo workflow basado en los existentes, un agente puede:
 ```
 tylluan_recall("builders:workflow")  # Recupera patrones de workflow del gremio
 # → Adapta el template al nuevo caso
-# → Guarda en sandbox/experiments/ para validar
+# → Valídalo en el sandbox del gremio
 # → Si funciona, propone como nuevo workflow al gremio
 ```
 

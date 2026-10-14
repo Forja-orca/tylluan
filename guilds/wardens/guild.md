@@ -4,6 +4,8 @@ Oficio Real: **Integridad, Seguridad y Observabilidad del Sistema**
 
 ---
 
+> **Nota (2026-10-14).** Este documento se corrigió contra el árbol real de `guilds/`. Lo que aquí figura como existente existe; lo que falta está marcado como "no existe". Los *agentes/roles* son ficheros de texto para cargar en un cliente IDE, no procesos del kernel; los procesos que el kernel arranca son los plugins Python.
+
 ## Identidad del Gremio
 
 Los Guardianes son el gremio de la salud sistémica en TylluanNexus. Su oficio es **observar, auditar y proteger** el ecosistema — desde métricas de CPU hasta integridad de guilds, desde logs de errores hasta cumplimiento de seguridad.
@@ -23,18 +25,13 @@ Un Guardián nunca cierra los ojos. Ve todo, registra todo, alerta a tiempo.
 ```
 wardens/
 ├── guild.md
-├── agents/
-│   └── guardian.md             ← Agente: Guardián del Sistema
-├── sub-agents/
-│   └── security-scanner.skill.md
+├── (agents/ y sub-agents/: no existen; guardian es un rol previsto)
 ├── workflows/
 │   └── health-audit.md         ← Workflow: Auditoría de Salud Completa
-├── plugins/
-│   ├── → monitor.py
-│   ├── → audit.py
-│   └── → system_metrics.py
-└── sandbox/
-    └── experiments/
+└── plugins/
+    ├── audit.py
+    └── biome_warden.py
+        (monitor.py y system_metrics.py viven en guilds/watchers/plugins/; no hay sandbox/)
 ```
 
 ---
@@ -43,7 +40,7 @@ wardens/
 
 | Agente | Rol | Especialidad Principal |
 |--------|-----|----------------------|
-| `guardian` | Guardián | Monitoreo continuo, auditorías, alertas de seguridad |
+| `guardian` | Guardián (rol previsto, sin fichero) | Monitoreo continuo, auditorías, alertas de seguridad |
 
 ---
 
@@ -51,9 +48,9 @@ wardens/
 
 | Plugin | Descripción |
 |--------|-------------|
-| `monitor` | Observación de procesos, logs y recursos en tiempo real |
+| `monitor` | Observación de procesos, logs y recursos en tiempo real — en `guilds/watchers/plugins/` |
 | `audit` | Auditoría de integridad de guilds y herramientas |
-| `system_metrics` | Métricas de CPU, RAM, disco y red |
+| `system_metrics` | Métricas de CPU, RAM, disco y red — en `guilds/watchers/plugins/` |
 
 ---
 
