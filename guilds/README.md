@@ -3,6 +3,8 @@ Version: 2.0.0
 
 ---
 
+> **Nota (2026-10-14).** Este documento se corrigió contra el árbol real de `guilds/`. Lo que aquí figura como existente existe; lo que falta está marcado como "no existe". Los *agentes/roles* son ficheros de texto para cargar en un cliente IDE, no procesos del kernel; los procesos que el kernel arranca son los plugins Python.
+
 ## ¿Qué es un Gremio?
 
 Un **Gremio** (Guild) en TylluanNexus es un **ecosistema vivo de agentes** organizado por oficio real. No es una colección de herramientas — es una comunidad con identidad, jerarquía, sinergias y memoria compartida.
@@ -13,22 +15,26 @@ La analogía es un gremio medieval: un grupo de profesionales con el mismo ofici
 
 ## Arquitectura de un Gremio
 
+Esta es la forma *prevista*; no todos los gremios la completan (ver "Estado real" más abajo).
+
 ```
 guild-name/
 ├── guild.md              ← Identidad: misión, estructura, reglas de colaboración
 ├── agents/               ← Roles universales (cualquier modelo puede adoptarlos)
-│   ├── role-1.md         ← Protocolo + competencias + reglas del rol
-│   └── role-2.md
-├── sub-agents/           ← Skills especializadas (activadas por agentes del gremio)
-│   └── specialist.skill.md
+├── sub-agents/           ← Skills especializadas
 ├── workflows/            ← Workflows pre-baked de ejemplo
-│   └── example.md
-├── plugins/              ← MCP tools Python del gremio (FastMCP)
-│   └── tool.py           ← (referencias a guilds/core/)
-└── sandbox/              ← Lab de experimentación aislado
-    ├── README.md
-    └── experiments/
+├── plugins/              ← MCP tools Python del gremio (FastMCP), ficheros reales
+└── sandbox/              ← Lab de experimentación (solo README en builders)
 ```
+
+### Estado real (2026-10-14)
+
+| Gremio | `agents/` | `sub-agents/` | `workflows/` | `plugins/` | `sandbox/` |
+|--------|-----------|---------------|--------------|------------|------------|
+| `builders/` | architect, backend-dev, frontend-dev | solo `rust-specialist.skill.md` | `new-feature.md`, `debug-session.md` | 15 ficheros (ver abajo) | solo `README.md` |
+| `scholars/` | no existe | no existe | `deep-research.md` | 11 ficheros (ver abajo) | no existe |
+| `wardens/` | no existe | no existe | `health-audit.md` | `audit.py`, `biome_warden.py` | no existe |
+| `watchers/` | no existe | no existe | no existe | `cron_scheduler.py`, `monitor.py`, `system_metrics.py` | no existe |
 
 ---
 
@@ -36,24 +42,23 @@ guild-name/
 
 | Gremio | Oficio | Agentes | Plugins |
 |--------|--------|---------|---------|
-| [`builders/`](builders/guild.md) | Ingeniería de Software | architect, backend-dev, frontend-dev, devops | code, git, docker, bash, filesystem |
-| [`scholars/`](scholars/guild.md) | Investigación y Análisis | researcher, analyst | search, browser, pdf, vision, code_analysis, knowledge |
-| [`wardens/`](wardens/guild.md) | Integridad y Observabilidad | guardian | monitor, audit, system_metrics |
+| [`builders/`](builders/guild.md) | Ingeniería de Software | architect, backend-dev, frontend-dev | code, git, docker, bash, filesystem |
+| [`scholars/`](scholars/guild.md) | Investigación y Análisis | (ninguno todavía) | search, pdf, deep_analysis, knowledge, data_tools, sequential_thinking |
+| [`wardens/`](wardens/guild.md) | Integridad y Observabilidad | (ninguno todavía) | audit, biome_warden |
 
 ---
 
-## Plugins Core (Compartidos por Todos los Gremios)
+## Dónde viven realmente los plugins
 
-Los siguientes plugins están disponibles para cualquier gremio:
+No hay un directorio de plugins "compartidos" con esos nombres. Cada fichero está en un sitio concreto:
 
-```
-core/
-├── bash.py              ← Shell commands
-├── filesystem.py        ← Operaciones de archivos
-├── memory.py            ← Acceso directo a SilvaDB
-├── sequential_thinking.py  ← Razonamiento estructurado
-└── ingest.py            ← Ingesta de datos externos
-```
+| Plugin | Ruta real |
+|--------|-----------|
+| `bash`, `filesystem`, `code`, `git`, `docker`, `code_analysis` | `guilds/builders/plugins/` |
+| `memory`, `sequential_thinking`, `ingest`, `search`, `pdf`, `knowledge`, `data_tools`, `deep_analysis` | `guilds/scholars/plugins/` |
+| `audit`, `biome_warden` | `guilds/wardens/plugins/` |
+| `monitor`, `system_metrics`, `cron_scheduler` | `guilds/watchers/plugins/` |
+| `browser`, `vision`, `coloquio`, `scheduler`, `websearch` y otros | `guilds/core/*.py` |
 
 ---
 
@@ -121,9 +126,8 @@ El Blackboard es el sistema de mensajería entre gremios. No se hablan directame
 
 1. Crear carpeta: `guilds/nuevo-gremio/`
 2. Crear `guild.md` con identidad y estructura
-3. Crear al menos 1 agente en `agents/`
-4. Crear al menos 1 workflow en `workflows/`
-5. Crear `sandbox/README.md`
+3. (Opcional) crear agentes en `agents/` y al menos 1 workflow en `workflows/`
+4. (Opcional) crear `sandbox/README.md`
 6. Registrar el gremio en este README
 7. (Opcional) Actualizar `catalog.rs` si el gremio tiene plugins Python propios
 
@@ -132,8 +136,8 @@ El Blackboard es el sistema de mensajería entre gremios. No se hablan directame
 ## Cómo Crear un Nuevo Workflow
 
 1. Inspirarse en los workflows existentes (ver `builders/workflows/`)
-2. Crear el borrador en `sandbox/experiments/`
-3. Probar el workflow en el sandbox
+2. Crear el borrador en el sandbox del gremio (hoy solo `builders/sandbox/` existe)
+3. Probarlo ahí
 4. Si funciona: mover a `workflows/` del gremio
 5. Documentar en SilvaDB: `tylluan_remember("builders:workflow — nuevo workflow creado")`
 

@@ -4,6 +4,8 @@ Oficio Real: **Investigación, Análisis y Gestión del Conocimiento**
 
 ---
 
+> **Nota (2026-10-14).** Este documento se corrigió contra el árbol real de `guilds/`. Lo que aquí figura como existente existe; lo que falta está marcado como "no existe". Los *agentes/roles* son ficheros de texto para cargar en un cliente IDE, no procesos del kernel; los procesos que el kernel arranca son los plugins Python.
+
 ## Identidad del Gremio
 
 Los Eruditos son el gremio del conocimiento en TylluanNexus. Su oficio es **investigar, analizar, comprender y sintetizar** información — desde código fuente hasta la web, desde PDFs hasta grafos de conocimiento.
@@ -23,26 +25,13 @@ Un Erudito no asume. Verifica. No opina sin datos. No sintetiza sin haber leído
 ```
 scholars/
 ├── guild.md                    ← Este archivo
-├── agents/
-│   ├── researcher.md           ← Agente: Investigador Web y de Documentación
-│   └── analyst.md              ← Agente: Analista de Código y Datos
-├── sub-agents/
-│   ├── web-analyst.skill.md
-│   └── code-reader.skill.md
+├── (agents/ y sub-agents/: no existen; researcher y analyst son roles previstos)
 ├── workflows/
 │   └── deep-research.md        ← Workflow: Investigación Profunda
-├── plugins/
-│   ├── → search.py
-│   ├── → browser.py
-│   ├── → pdf.py
-│   ├── → vision.py
-│   ├── → code_analysis.py
-│   ├── → deep_analysis.py
-│   ├── → knowledge.py
-│   ├── → data_tools.py
-│   └── → sequential_thinking.py
-└── sandbox/
-    └── experiments/
+└── plugins/                    ← ficheros reales: search, pdf, deep_analysis, knowledge, data_tools,
+                                  sequential_thinking, memory, memory_bridge, ingest, ast_surgeon, silva_utils
+                                  (browser y vision viven en guilds/core/; code_analysis en builders/plugins/;
+                                   no hay sandbox/)
 ```
 
 ---
@@ -51,8 +40,8 @@ scholars/
 
 | Agente | Rol | Especialidad Principal |
 |--------|-----|----------------------|
-| `researcher` | Investigador | Búsqueda web, análisis de documentación, fact-checking |
-| `analyst` | Analista | Análisis de código, patrones, métricas, síntesis de datos |
+| `researcher` | Investigador (rol previsto, sin fichero) | Búsqueda web, análisis de documentación, fact-checking |
+| `analyst` | Analista (rol previsto, sin fichero) | Análisis de código, patrones, métricas, síntesis de datos |
 
 ---
 
@@ -61,10 +50,10 @@ scholars/
 | Plugin | Descripción |
 |--------|-------------|
 | `search` | Búsqueda DuckDuckGo + Wikipedia |
-| `browser` | Navegación web automatizada (CDP) |
+| `browser` | Navegación web automatizada (CDP) — en `guilds/core/browser.py` |
 | `pdf` | Extracción y parsing de PDFs |
-| `vision` | Análisis de imágenes y OCR |
-| `code_analysis` | Análisis estático de código |
+| `vision` | Análisis de imágenes y OCR — en `guilds/core/vision.py` |
+| `code_analysis` | Análisis estático de código — en `guilds/builders/plugins/` |
 | `deep_analysis` | Mapeo arquitectural profundo |
 | `knowledge` | Extracción de tripletas NER (GLiNER) |
 | `data_tools` | Transformación de JSON/YAML/CSV |
