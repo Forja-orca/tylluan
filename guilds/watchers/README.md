@@ -69,11 +69,9 @@ python openai_compat_watcher.py haiku
 
 ## Auth (FORJA_TOKEN)
 
-The watcher auto-discovers the token from:
-1. `FORJA_TOKEN` environment variable
-2. `.tylluan-token` file in the watchers directory or up to 3 parent dirs
+> **Nota (2026-10-14).** Los watchers del repo no leen `FORJA_TOKEN` ni `.tylluan-token`: no hay descubrimiento automático de token en este código. Con `dev_mode = true` no hace falta token; con auth activa, hay que añadir la cabecera a mano.
 
-Set `FORJA_URL` to override the kernel URL (default: `http://127.0.0.1:3033`).
+`FORJA_URL` cambia la URL del kernel. Su valor por defecto en el código es `http://127.0.0.1:3033`, que es el puerto del host en Docker; para el kernel nativo (puerto `47004`) hay que fijar `FORJA_URL=http://127.0.0.1:47004`.
 
 ## Budget safety
 
