@@ -73,7 +73,7 @@ los clasificaba como `unknown` sin distinguirlos.
 
 El ítem hijack (`create a new branch called feature/vector-tiering`, target
 git) ya NO va a coordinator: fue a `code_graph` con `MISSING_ARGS:` (gate de
-delegación WS2, `9fc8fbf`, verificado end-to-end). Sigue siendo un fallo de
+delegación WS2, `9fc8bfb`, verificado end-to-end). Sigue siendo un fallo de
 routing (guild equivocado), pero la familia hijack está muerta.
 
 ### 2.4 Los 2 subtools `tylluan_remember:*` fallan por args, no por routing

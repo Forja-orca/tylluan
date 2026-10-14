@@ -358,7 +358,7 @@ No breaking changes — drop-in upgrade from v0.12.0.
   - `api_mesh.rs`: arm `RemoteTcp` nativo — llama `execute_remote_tcp` directamente (no HTTP fallback).
   - `guild_peers_handler` expone `supports_p2p` y `tcp_port` en la respuesta de peers.
 
-- **M14-F Phase 2 — start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests** (`commits 41b6194, f06fa0e`)
+- **M14-F Phase 2 — start_p2p_listener_noise + RemoteTcp routing + p2p_dst tests** (`commits 41b6194, f06fa0e`) — *hash no presente en el historial actual del repositorio*
   - `p2p.rs` bug fix: `pool.remove()` antes de usar la sesión; reinserta solo en éxito — sesión rota se droppea, nunca vuelve al pool.
   - `start_p2p_listener_noise(addr, identity, handler) -> (JoinHandle, SocketAddr)` — Noise XK responder: `TcpListener::bind` → `noise_accept` → `async_decrypt_read` → `handler(req)` → `async_encrypt_write`. Puerto 0 → OS asigna dirección real.
   - `DispatchDecision::RemoteTcp { node_id, addr, tcp_port: u16 }` — nueva variante; `route()` la devuelve cuando `peer.supports_p2p=true && peer.tcp_port.is_some() && best_score > local_score * 1.2` (score evaluado primero, P2P elegido post-loop).
@@ -370,12 +370,12 @@ No breaking changes — drop-in upgrade from v0.12.0.
     - `test_route_prefers_tcp` — `route()` con `supports_p2p=true + tcp_port=9001` → `RemoteTcp { tcp_port: 9001 }`.
   - **88 link tests** (61 lib + 27 integration), 273 kernel tests, 2 evals = **363 total** · 0 failures.
 
-- **M14-F Phase 1 — P2pSessionPool + execute_remote_tcp** (`commit 022b0e1`)
+- **M14-F Phase 1 — P2pSessionPool + execute_remote_tcp** (`commit 022b0e1`) — *hash no presente en el historial actual del repositorio*
   - `p2p.rs`: `P2pSessionPool` (HashMap, LRU evict, TTL prune) + `execute_remote_tcp()` (Noise XK initiator, length-prefixed framing, 30/120s timeouts).
   - `HardwareCaps` gains `supports_p2p: bool` + `tcp_port: Option<u16>` (both `#[serde(default)]`, backwards-compatible).
   - 4 unit tests: pool empty, prune noop, error display.
 
-- **Moondream guild** (`commit 6a1906e`) — `guilds/core/vision_moondream.py`: `analyze_image` + `caption_image` via `moondream` pip package (0.5B local vision model).
+- **Moondream guild** (`commit 6a1906e`) — *hash no presente en el historial actual del repositorio* — `guilds/core/vision_moondream.py`: `analyze_image` + `caption_image` via `moondream` pip package (0.5B local vision model).
 
 - **ADR-005 M14-F spec** (`commit 6979795`) — `docs/architecture/M14F_p2p_dispatch_spec.md`: Noise XK session pool, Option A transparent routing, 6-phase plan.
 

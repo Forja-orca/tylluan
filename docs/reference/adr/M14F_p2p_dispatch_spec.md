@@ -1,7 +1,9 @@
 # ADR-005: M14-F — Real P2P Guild Dispatch over Noise XK
 
 ## Status
-**Proposed** — 2026-07-02
+**Implemented** — propuesto 2026-07-02. El listener y el pool de sesiones están en `crates/tylluan-link/src/p2p.rs` (kernel wiring en `538afcc`). El listener está apagado por defecto (`[p2p] enabled = false`) y desde 2026-08-12 solo atiende a pares aprobados (`peer_is_approved`); un par aprobado puede llamar a cualquier guild, no hay lista de permitidos.
+
+> Nota de numeración: el encabezado de este fichero dice "ADR-005", número que también usa `ADR-005-governance.md`. Se conserva para no romper citas; es la especificación M14-F, no un ADR-005 distinto.
 
 ## Context
 

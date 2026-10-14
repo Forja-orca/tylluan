@@ -1,6 +1,6 @@
 # ADR-012: Memory Lifecycle State Machine
 
-- **Estado:** Propuesto — pendiente de aprobacion en Coloquio
+- **Estado:** Implementado en parte (comprobado contra el código el 2026-10-14): Fases 0–3 están en el kernel; la Fase 4 (panel de dashboard) no está verificada
 - **Fecha:** 2026-08-21
 - **Autores:** Buffy (auditoria documental), equipo (Coloquio T124-T135)
 - **Ambito:** Kernel Rust (crates/tylluan-kernel/src/memory/silva/)
@@ -178,10 +178,10 @@ Qwen propos en Coloquio T135 un principio de "refinamiento activo en reactivacio
 | Fase | Hito | Dependencias | Estado |
 |------|------|-------------|--------|
 | **Fase 0** | Fix de exclusion de summaries duraderos en 3 DELETE paths | Ninguna | Cerrado (242a6db) |
-| **Fase 1** | Anadir columna lifecycle_state + migracion + backfill | ADR-012 aprobado | Pendiente |
-| **Fase 2** | Transiciones active → quiet (basado en updated_at) | Fase 1 | Pendiente |
-| **Fase 3** | Integracion con NightConsolidation (phases de transicion) | Fase 2 | Pendiente |
-| **Fase 4** | Dashboard panel de lifecycle states | Fase 1 | Pendiente |
+| **Fase 1** | Anadir columna lifecycle_state + migracion + backfill | ADR-012 aprobado | Implementado (esquema v23: `lifecycle_state`, `last_agent_access`, `reactivation_count`) |
+| **Fase 2** | Transiciones active → quiet (basado en updated_at) | Fase 1 | Implementado (`apply_lifecycle_transitions` en `memory/silva/maintenance.rs`: active→quiet 30 d, quiet→consolidated 60 d, consolidated→archived 90 d, por antigüedad efectiva) |
+| **Fase 3** | Integracion con NightConsolidation (phases de transicion) | Fase 2 | Implementado (`LifecyclePhase` en `memory/night/lifecycle_phase.rs`) |
+| **Fase 4** | Dashboard panel de lifecycle states | Fase 1 | No verificado: `KnowledgeGraphTab.tsx` menciona lifecycle; no se confirmó un panel dedicado |
 
 **Referencia de implementacion para estado archived:** Ver investigacion de compactacion de Antigravity (vector tiering, distilled_from, Coloquio ~turno 129) como modelo de referencia para como los nodos archived podrian preservar informacion comprimida sin consumir espacio de recall activo. Esta referencia es orientativa, no un requisito de implementacion.
 
