@@ -4,6 +4,23 @@
 **Ejecutado por:** Buffy (verificación propia, no confiando en reportes de otros agentes)
 **Scripts ejecutados:** `check_dead_config.sh`, `check_dead_code_tests.sh`
 
+## Estado a 2026-10-14 (comprobado contra el código)
+
+Este informe es del 2026-08-24; casi todo lo que marcaba como abierto se cerró ese mismo día en `6e3cee1` y `6d605df`.
+
+| # | Hallazgo | Estado |
+|---|----------|--------|
+| 1 | `InferenceProvider.capability` nunca leído | **Cerrado**: el campo se eliminó de `config.rs` |
+| 2 | `decay_half_life_hours` zombi | **Cerrado en parte**: el parámetro de `apply_decay()` se eliminó; la clave de config se mantiene obsoleta y el arranque avisa de que se ignora |
+| 3 | `vision_moondream` en la lista HEAVY | **Cerrado**: ya no aparece en `guild_process.rs` |
+| 4 | `vision_moondream` en el dataset | **Cerrado**: 0 apariciones en `dataset_i7_routing_curated.json` |
+| 5 | `vision_moondream` en `benchmark_i7_j13_eval.py` | **Cerrado**: 0 apariciones |
+| 6 | `vision_moondream` en `build_i7_dataset.py` | **Cerrado**: queda un comentario que explica que se omite |
+| 7 | test `dump_catalog` sin aserciones | **Cerrado**: ahora tiene aserciones (`6d605df`) |
+| 8 | `check_dead_config.sh` no bloquea CI | **Abierto, a propósito**: sigue siendo report-only (`ci.yml` y `verify.sh` piden no añadir `--strict` hasta triar la lista) |
+
+Las ubicaciones `archivo:línea` del cuerpo describen el código tal como estaba el 2026-08-24.
+
 ---
 
 ## RESUMEN EJECUTIVO
