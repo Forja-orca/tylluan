@@ -196,6 +196,10 @@ make_sandbox() {
     # doesn't exist there. This gate isn't part of what T1-T5 test (they
     # validate OTHER gates' wiring), so it always gets a neutral pass stub.
     printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_async_guild_io.py"
+    # Same situation for check_doc_links.py (2026-10-14): a blocking .py gate
+    # that the "check_*.sh" discovery never stubs; without this T1-T5 fail
+    # because the sandbox has no such file. Neutral pass stub, same reason.
+    printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$sbx/scripts/check_doc_links.py"
 }
 
 # run_case <sandbox> <case-tag> -> sets RUN_OUT and RUN_RC
