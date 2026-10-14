@@ -1,6 +1,6 @@
 # Tylluan — Roadmap Estratégico
 
-> **Última actualización:** 2026-08-23 · HEAD `6e3cee1`. v0.16.0 lanzado (2026-08-11); 165 commits desde entonces sin tag de versión nueva todavía — ver `STATUS.md` para el resumen completo del ciclo más reciente (RRF en producción, Pilares 2/4 de gobernanza de repo, 2 skills globales de la flota, limpieza de deuda real). **M39 (P0-P2) y M40 (P1-P8) completos, sin huecos restantes** — condición de José del 2026-08-09 para v0.16.0 cumplida. MCP Apps (`f3e74ea`, Codex) cerró el último hueco honesto de M39-P1: manifiestos reales (`ui://tylluan/knowledge-graph-canvas`) en vez de un capability flag vacío. Cierre de ciclo 2026-08-10/11: 3 bugs reales encontrados en vivo y corregidos end-to-end (root-cause → fix → test de regresión → CI verde → kernel vivo → cliente real) — `explore_actionable_tools` no matcheaba dominios multi-palabra; `doctor_diagnose`/`doctor_repair` sin routing determinista (hallado por Qwen Desktop); y el hallazgo mayor del ciclo: `sse_handler` descartaba todos los headers reales del cliente en `POST /sse`, forzando siempre el dialecto `HttpStreamableJson` sin importar qué pidiera el cliente real — causa raíz confirmada del cuelgue histórico de Qwen Desktop en modo SSE, verificado con curl antes/después del fix y confirmado por el propio Qwen Desktop operando con éxito tras `1bd7dfd`. M39-P2 (núcleo stateless) verificado en vivo contra el kernel real con 4 pruebas curl (legacy sin regresión, rechazo de `sessionId`, `_meta` completo funcionando, header requerido). M40-P7 (suite de concurrencia, Deep) y M40-P8 (setup casi invisible, Antigravity) cerrados. M40-P4 segundo corte (source/author/evidence_url) cerrado con QA verificado (Freebuff). Anterior: M39-P0 cerrado (negociación real de `protocolVersion`), M39-P1 implementado por Antigravity (`57d72cd`) y corregido por Claude (`962dffd`) tras un audit externo. Un cliente MCP real conectado en vivo detectó que el kernel corriendo (`3e81661`) estaba desactualizado respecto al código — hallazgo que se convirtió en M40-P6 (Trust Console).
+> **Última actualización:** 2026-10-14 (solo esta cabecera; el detalle por milestone llega hasta v0.16.0 — para v0.17.x mira `ROADMAP.md` y `CHANGELOG.md`) · HEAD `35658af`. v0.17.1 publicado el 2026-10-13 — ver `STATUS.md` para el resumen completo del ciclo más reciente (RRF en producción, Pilares 2/4 de gobernanza de repo, 2 skills globales de la flota, limpieza de deuda real). **M39 (P0-P2) y M40 (P1-P8) completos, sin huecos restantes** — condición de José del 2026-08-09 para v0.16.0 cumplida. MCP Apps (`f3e74ea`, Codex) cerró el último hueco honesto de M39-P1: manifiestos reales (`ui://tylluan/knowledge-graph-canvas`) en vez de un capability flag vacío. Cierre de ciclo 2026-08-10/11: 3 bugs reales encontrados en vivo y corregidos end-to-end (root-cause → fix → test de regresión → CI verde → kernel vivo → cliente real) — `explore_actionable_tools` no matcheaba dominios multi-palabra; `doctor_diagnose`/`doctor_repair` sin routing determinista (hallado por Qwen Desktop); y el hallazgo mayor del ciclo: `sse_handler` descartaba todos los headers reales del cliente en `POST /sse`, forzando siempre el dialecto `HttpStreamableJson` sin importar qué pidiera el cliente real — causa raíz confirmada del cuelgue histórico de Qwen Desktop en modo SSE, verificado con curl antes/después del fix y confirmado por el propio Qwen Desktop operando con éxito tras `1bd7dfd`. M39-P2 (núcleo stateless) verificado en vivo contra el kernel real con 4 pruebas curl (legacy sin regresión, rechazo de `sessionId`, `_meta` completo funcionando, header requerido). M40-P7 (suite de concurrencia, Deep) y M40-P8 (setup casi invisible, Antigravity) cerrados. M40-P4 segundo corte (source/author/evidence_url) cerrado con QA verificado (Freebuff). Anterior: M39-P0 cerrado (negociación real de `protocolVersion`), M39-P1 implementado por Antigravity (`57d72cd`) y corregido por Claude (`962dffd`) tras un audit externo. Un cliente MCP real conectado en vivo detectó que el kernel corriendo (`3e81661`) estaba desactualizado respecto al código — hallazgo que se convirtió en M40-P6 (Trust Console).
 > **Fuente de verdad:** STATUS.md · Decisiones en ADRs bajo `docs/reference/adr/`
 > **Norte permanente:** Rufus test — funciona en frío, sin docs, sin Rust, en < 5 min.
 
@@ -166,7 +166,7 @@ Lo que ya tenemos (verificado 2026-07-25):
 - NightConsolidation: 10 fases corriendo en paralelo (semáforo dimensionado por `available_parallelism()`, no secuencial) — Dream, Ouroboros, AutoLink, GraphRAG, Decay, Agent, Curriculum, IdleLab, FeedbackSignal (ADR-011), Lifecycle (ADR-012). (Corregido 2026-09-07: esta lista incluía LightRerankerTrain, que está implementado y probado pero deliberadamente NO registrado en el orquestador de producción — ver línea LightReranker más abajo y `main.rs` registro real.)
 - ADR-011 Signal Loop: `recall_feedback` (schema v18) + Coherence Gate 3 capas en `tylluan_recall` (ambos caminos, incl. cache-hit) + LightReranker (ONNX y pesos nativos) — Fase 3-4 en scaffold, cutover real bloqueado por datos (≥5.000 filas resueltas), no por diseño
 - Node pruning: DreamCycle + decay `prune_by_salience(threshold)` operativo
-- Federation P2P completa: DHT Kademlia + Gossip + Noise XK + TCP dispatch — M14-F Phase 3 **cerrado** (test DST real)
+- Federation P2P completa: Gossip con Noise NK + TCP dispatch con Noise XK + DHT Kademlia (código y tests; bootstrap mainline apagado por defecto) — M14-F Phase 3 **cerrado** (test DST real)
 - Security: capabilities como allowlist estructurada (M30), grants escalados (M30-P3), Coherence Gate (ADR-011), 30+ tests de seguridad
 - `tylluan-cli start/stop/status/logs/connect/download-models/install` + `tylluan doctor`/`update` (M19)
 - CI: build + test + clippy -D warnings + deny + security audit + Python lint + ARM64 portability + Docker smoke
@@ -186,7 +186,7 @@ HEAD `945838c`. 4 fases entregadas (P0 install scripts, P1 setup-hint, P2 Docker
 
 ### M16 — Benchmark Real BGE-M3 (v0.12.1) ✅ CERRADO
 
-HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, BGE-M3 + BM25). ADR-007: IdleLab INNECESARIO — defaults son óptimo local (0.0pp delta en 8 experimentos). P2 degree bias movido a backlog de investigación (no bloqueante).
+HEAD `f8bad9f`. R@5 82% LongMemEval-S (50 queries reales, medido con BGE-M3 + BM25; el modelo por defecto hoy es `mxbai-embed-large`). ADR-007: IdleLab INNECESARIO — defaults son óptimo local (0.0pp delta en 8 experimentos). P2 degree bias movido a backlog de investigación (no bloqueante).
 
 - ✅ P0: `benchmarks/benchmark_v0.12.0_bge.json` — R@5 82%, R@10 90%, p50 12.9ms
 - ✅ P1: ADR-007 `docs/reference/adr/ADR007_idle_lab_verdict.md` — INNECESARIO
@@ -458,7 +458,7 @@ Ver [ADR-011](../reference/adr/ADR011_learned_reranker_coherence_gate.md). Corre
 ## Hoja de ruta visual
 
 ```
-v0.13.0 ── HEAD 0b094ab ──────────────────────────────────────── ACTUAL
+v0.13.0 ── HEAD 0b094ab ──────────────────────────────────────── (mapa detenido en v0.13.0; hoy v0.17.1)
    │        M15✅ M16✅ M17✅ M18✅ M19✅(P0-P4, P5 spec✅/kernel⬜) M20✅ M21✅
    │        M22✅ M23-P1✅ M25✅ M26✅ M27✅ M28✅ M29✅ M30✅ M31✅(P0-P7)
    │        M32✅ M34✅ M35✅ M36✅ M37✅ M14-F Phase 3✅
@@ -734,7 +734,7 @@ No es un milestone con fecha — es el marco que debe informar cómo se prioriza
 
 **Decisión explícita de doble vía (no una a costa de la otra):**
 - **A2A (M38, protocolo abierto Linux Foundation)** debe llegar a producción real siguiendo las metodologías que ya funcionan en la comunidad — interoperar con CUALQUIER agente externo (LangGraph, CrewAI, etc.), no solo peers de confianza.
-- **La federación P2P propietaria (M14, Noise XK + Kademlia DHT + Gossip)** sigue mejorando en paralelo — es la capa de confianza mutua entre instancias Tylluan soberanas.
+- **La federación P2P propietaria (M14, Gossip con Noise NK + dispatch con Noise XK + DHT Kademlia opt-in)** sigue mejorando en paralelo — es la capa de confianza mutua entre instancias Tylluan soberanas.
 - Ninguna de las dos se sacrifica por la otra. Ambas deben funcionar perfectamente en sus respectivos cometidos: A2A abre Tylluan al ecosistema externo; el mesh propio da soberanía real entre instancias que se conocen y confían.
 
 **Cómo aplicar esto en decisiones futuras:** al evaluar cualquier feature nueva, preguntar (1) ¿evoluciona sobre algo que ya existe o reinventa sin necesidad? (2) ¿protege sin encerrar? (3) ¿favorece la topología distribuida/soberana sobre la centralización, incluso cuando centralizar sería más simple a corto plazo?
@@ -788,8 +788,8 @@ Tras el spike de razonamiento/tool-calling de Gemma-4 (gibberish incluso con sam
 - **Estado:** M38 cerrado (Agent Card + servidor JSON-RPC 2.0 real, HITL grants, anti-spoofing). En producción.
 - **Interop real verificada 2026-07-27:** probado contra el SDK oficial `a2a-sdk` (Linux Foundation, no nuestro código) en un venv desechable — encontró y arregló un bug real: `securitySchemes` se serializaba como lista, el spec y el SDK oficial esperan un mapa (commit `e4586c2`). Card resolution confirmada con cliente externo real; pendiente confirmar el round-trip completo de `message/send` tras el siguiente reinicio del kernel.
 
-### Vía 2 — Mesh propietario (M14, Noise XK + Kademlia DHT + Gossip)
-- **Qué es:** Federación P2P con identidad criptográfica (Ed25519), encriptación Noise XK, DHT Kademlia para descubrimiento, Gossip para sincronización de estado, TCP dispatch para ejecución remota.
+### Vía 2 — Mesh propietario (M14, Gossip con Noise NK + dispatch con Noise XK + DHT Kademlia opt-in)
+- **Qué es:** Federación P2P con identidad criptográfica (Ed25519), encriptación Noise (NK en la sincronización de federación, XK en el dispatch P2P), DHT Kademlia para descubrimiento (apagado por defecto), Gossip para sincronización de estado, TCP dispatch para ejecución remota.
 - **Para qué:** Soberanía real entre instancias Tylluan que se conocen y confían. Sincronización de memoria, dispatch cross-instance, identidad verificable.
 - **Estado:** M14-A/B/C/D/E/F cerrados. En producción.
 - **Lo que falta:** simulación de escala (100+ nodos), stress test de topología.
@@ -893,7 +893,7 @@ Antigravity realizó una autoauditoría del `dashboard/src/components/` buscando
 
 ## Estilos UI/GUI a investigar e implementar a futuro (backlog, sin urgencia, 2026-09-02)
 
-Antigravity construyó un prototipo interactivo explorando una dirección visual "Titanium Industrial" para el dashboard (bahías modulares tipo rack, diales mecánicos de instrumentación, tipografía técnica aeroespacial) — trabajo no solicitado en el ciclo en que se hizo, vive fuera del repo (`C:\Users\FoRJa\.gemini\antigravity\brain\7f88a3b8-c6df-4079-bb5b-d198fc6b7efb\titanium_industrial_lab.html`, local a esa máquina/sesión, no versionado).
+Antigravity construyó un prototipo interactivo explorando una dirección visual "Titanium Industrial" para el dashboard (bahías modulares tipo rack, diales mecánicos de instrumentación, tipografía técnica aeroespacial) — trabajo no solicitado en el ciclo en que se hizo, vive fuera del repo (en la máquina de ese agente, no versionado).
 
 José: dejarlo como backlog de investigación de estilo, sin prioridad — no convertir en tarea hasta que se decida explícitamente adoptar esa dirección visual (o cualquier otra) para el dashboard real.
 

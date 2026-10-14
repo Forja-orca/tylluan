@@ -1,6 +1,6 @@
 # Federation Threat Model
 
-> **Status:** Draft — reflects current implementation as of v0.13.0.
+> **Status:** Reviewed 2026-10-14 against v0.17.1.
 
 ## Scope
 
@@ -54,7 +54,7 @@ If two peers have the same `shared_secret` (misconfiguration) and both have auto
 
 ### T4: DHT poisoning / Sybil attack
 
-The Kademlia DHT is currently used for WAN peer discovery only — it does NOT store knowledge content. A Sybil attacker could inject fake peer entries, but those peers still need explicit approval before syncing.
+The Kademlia DHT is opt-in and disabled in every shipped release (`mesh.mainline_dht_enabled = false`); when enabled it only carries peer discovery — it does NOT store knowledge content. A Sybil attacker could inject fake peer entries, but those peers still need explicit approval before syncing.
 
 **Mitigations:**
 - DHT stores node IDs and addresses only, not knowledge

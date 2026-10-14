@@ -1,3 +1,5 @@
+> **HISTÓRICO (2026-10-14).** Guía de prueba del 2026-07-11, anterior a `docker-compose.yml`: sus puertos (4040) y el fichero `docker-compose.secondary.yml` no están en el repo (este último está en `.gitignore`). El endpoint `POST /api/v1/memory/remember` que cita no existe; el real es `POST /api/v1/memory/write`. Se conserva como registro de diseño.
+
 # Federación Tylluan — Dos instancias reales (nativo ↔ Docker)
 
 > Creado 2026-07-11 durante el ciclo de reflexión: se detectó que este setup de
@@ -62,7 +64,7 @@ curl -X POST http://127.0.0.1:47004/api/v1/federation/peers `
 
 ```powershell
 # 1. Crear un nodo de prueba en el nativo y marcarlo shareable
-curl -X POST http://127.0.0.1:47004/api/v1/memory/remember -H "Content-Type: application/json" `
+curl -X POST http://127.0.0.1:47004/api/v1/memory/write -H "Content-Type: application/json" `
   -d '{\"content\":\"federation smoke test node\",\"type\":\"fact\",\"metadata\":{\"shareable\":true}}'
 
 # 2. Habilitar sharing y empujar

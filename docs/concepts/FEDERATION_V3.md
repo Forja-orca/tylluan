@@ -24,7 +24,7 @@ The ROADMAP listed NAT traversal, Ed25519 asymmetric signing, and DHT peer disco
 - **v0.4.0 (M12):** Ed25519 node identity + signing, STUN NAT traversal, mDNS LAN autodiscovery
 - **v0.5.0 (M14-A):** DHT Kademlia routing table, mainline BitTorrent DHT bootstrap
 
-v0.3.0 made federation **work reliably on LAN/VPN**. v0.4.0+ made it work on the internet.
+v0.3.0 made federation **work reliably on LAN/VPN**. v0.4.0+ was meant to make it work on the internet; that path (STUN, mainline DHT) never shipped enabled, see `ROADMAP.md`.
 
 ---
 

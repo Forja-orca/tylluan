@@ -1,3 +1,5 @@
+> **OBSOLETO (2026-10-14).** Propuesta que no se ejecutó. Cita `crabs.md` y `target_tmp/`, que ya no existen. Se conserva solo como registro.
+
 # Tylluan — Estructura de Proyecto (Propuesta)
 
 > Estado: PROPUESTA, no ejecutada. Tylluan ya está bien organizado (benchmarks/, docs/, scripts/ ya existen y se usan correctamente) — el hallazgo aquí es menor.

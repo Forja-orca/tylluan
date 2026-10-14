@@ -1,3 +1,5 @@
+> **OBSOLETO (2026-10-14).** Esquemas de 2026-07-02 que ya no reflejan el sistema: hablan de un proxy en otro puerto, de 42 guilds, de `tylluan.exe` y de BGE-M3 como defecto. Vale `docs/concepts/ARCHITECTURE.md`; no te fíes de cifras, puertos ni flujos de aquí.
+
 # Tylluan — Architecture Blueprints
 
 > Technical schematics only. No prose. Updated 2026-07-02.

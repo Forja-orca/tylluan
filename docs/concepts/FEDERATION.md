@@ -1,3 +1,5 @@
+> **Aviso (2026-10-14).** Esta guía no funciona tal cual en un clon limpio: usa `docker-compose.secondary.yml`, que está en `.gitignore` y no se versiona. Para federar dos instancias, usa los ajustes `[federation]` de `tylluan.example.toml` y los endpoints `/api/v1/federation/*`.
+
 # Federación Tylluan — Dos instancias locales
 
 ## Arquitectura
@@ -21,7 +23,7 @@
 El token compartido entre instancias está en `tylluan.docker.toml`:
 
 ```
-token = "YOUR_SHARED_SECRET_HERE"
+auth_token = "YOUR_SHARED_SECRET_HERE"
 ```
 
 Usa este mismo valor al registrar la instancia Docker en el nativo (ver paso 4).
@@ -57,10 +59,10 @@ Esperar hasta 3 minutos (start_period del healthcheck).
 ```powershell
 curl -X POST http://127.0.0.1:47004/api/v1/federation/peers `
   -H "Content-Type: application/json" `
-  -d '{"name":"docker-secondary","url":"http://127.0.0.1:3040","token":"YOUR_SHARED_SECRET_HERE"}'
+  -d '{"name":"docker-secondary","url":"http://127.0.0.1:3040","auth_token":"YOUR_SHARED_SECRET_HERE"}'
 ```
 
-Esto **no modifica `tylluan.toml`** — el kernel lo persiste en memoria y en el toml automáticamente.
+Esto **no modifica `tylluan.toml`**: el par se guarda en `data/peers.db`.
 
 ---
 
@@ -114,4 +116,4 @@ docker logs tylluan-kernel-secondary -f
 
 - **Sync unidireccional**: cada instancia debe hacer push por separado para sync bidireccional.
 - **Sin replay protection**: no hay timestamp en el body cifrado — solo para uso local.
-- **Token = clave auth + cifrado**: el shared secret sirve para ambos. Aceptable en LAN.
+- **`auth_token` (bearer) y `shared_secret` (ChaCha20) son campos separados**; si omites `shared_secret`, ambos usan el mismo valor. Aceptable en LAN.

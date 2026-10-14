@@ -1,6 +1,6 @@
 # FSRS Integration Design
 
-## Status: Active (v0.13.0)
+## Status: Active (reviewed 2026-10-14 against v0.17.1, schema v27)
 
 ## Scope
 Integration of FSRS-5 (Free Spaced Repetition Scheduler) into SilvaDB's memory decay model, replacing the fixed half-life (`weight *= 0.5^(t/14d)`) with per-memory stability.
@@ -97,7 +97,7 @@ FSRS review). The first access to each node triggers an FSRS review and sets
 
 | Parameter | Location | Default |
 |-----------|----------|---------|
-| Stability floor | `decay.rs` / `tylluan_fsrs::MIN_STABILITY_DAYS` | 0.05 days |
+| Stability floor | `decay.rs` / `tylluan_fsrs::MIN_STABILITY_DAYS` | 0.1 days |
 | Erosion factor | `apply_stability_erosion(factor)` | 0.01 |
 | Erosion threshold | `decay.rs` hardcoded | 60 days |
 | Default stability | schema.sql `/ FSRS_DESIGN.md` | 14.0 days |
