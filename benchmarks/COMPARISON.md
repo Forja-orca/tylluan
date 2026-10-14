@@ -1,6 +1,8 @@
 # Tylluan vs. Other Agent Memory Systems — Honest Comparison
 
-**Last updated:** 2026-07-13
+**Last updated:** 2026-07-13 · **Reviewed against the repo:** 2026-10-14 (numbers below are the 2026-07-05 run, not re-measured)
+
+> The run used `bge-m3`, which was the default then. The default today is `mxbai-embed-large`; this document has not been re-run with it.
 
 ## Tylluan's own number (verified, reproducible)
 
@@ -8,7 +10,7 @@
 |--------|-------|---------|-------|
 | Recall@5 | **82.0%** | LongMemEval-S (50 human-authored questions) | Real BGE-M3 1024-dim ONNX embeddings on CPU, BM25 + vector RRF hybrid |
 | Recall@10 | 90.0% | LongMemEval-S | |
-| Latency p50 | 12.9ms | LongMemEval-S | Per-query, warm cache |
+| Latency p50 | 12.9ms | LongMemEval-S | Reported by the run, but the raw result's own notes say per-question time was dominated by cold-start embedding (~30-60 s on CPU), so treat this figure as search time only, not end-to-end |
 
 Reproduce it yourself:
 ```bash
