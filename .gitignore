@@ -245,3 +245,6 @@ benchmarks/teb/judge_blind_mapping.json
 # binary, needs Git LFS or external hosting before it can be tracked. The
 # generator script and its README are tracked; the .db itself is not.
 benchmarks/datasets/*.db
+
+# Latency campaign outputs (back BASELINE_REPORT.md; regenerable with benchmarks/latency/cpu_baseline.py)
+benchmarks/latency/results_*.json
