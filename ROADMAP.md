@@ -2,7 +2,7 @@
 
 ## v0.1.0 — Alpha Release
 
-**Status:** Published. Historical baseline.
+**Status:** Published. Historical baseline: this describes v0.1.0 as released (47 guilds, BGE-M3, the reranker of that time); today there are 46 guild files, 45 routed by default, and the default embedding model is `mxbai-embed-large`.
 
 What was included:
 - Rust kernel (tokio + axum) with 5 sovereign MCP tools
@@ -48,7 +48,7 @@ Delivered:
 - [x] Node provenance: `federation_source TEXT` column in `silva_nodes` — local vs. received nodes distinguishable at SQL level (M11-C)
 - [x] Echo-loop prevention: `get_shareable_nodes()` filters `federation_source IS NULL` — received nodes are never re-exported by default (M11-C)
 - [x] Provenance query: `GET /api/v1/federation/nodes?source={peer|local}` (M11-C)
-- [x] Scheduled auto-sync: background `tokio::spawn` loop driven by `[federation] auto_sync_interval_secs` and `auto_sync_mode` (M11-D)
+- [x] Scheduled auto-sync: background `tokio::spawn` loop driven by `[federation] sync_interval_ms` (default 30000 ms, 0 disables) and `auto_sync_mode` (M11-D). The first version of this item cited `auto_sync_interval_secs`; that field never worked and was removed in `a750098`
 - [x] Integration test suite: `crates/tylluan-kernel/tests/federation_audit.rs` — 6 tests covering DB, approval gate, token isolation, provenance, echo-loop, auto-sync disable (M11-E)
 
 Out of scope (v0.4.0):
@@ -65,7 +65,7 @@ Out of scope (v0.4.0):
 Delivered:
 - [x] M12-A — Ed25519 keypair per node: generated on first boot, stored in `data/identity.key`; `GET /api/v1/federation/identity` returns node_id + public_key
 - [x] M12-B — Node signing: every federated node carries an Ed25519 signature; receiver verifies before accepting. Auto-fetch peer pubkey on approval. Backwards compat: skip verify if pubkey not yet stored
-- [x] M12-C — NAT traversal: hole-punching via STUN + relay fallback (no WireGuard dependency)
+- [x] M12-C — NAT traversal: a STUN client in `tylluan-link/src/nat.rs`, with unit tests. **Not functional end to end (checked 2026-10-14):** the STUN query returns the mapped port of an ephemeral UDP socket, not the kernel's TCP port, and its result is not used when the kernel starts; there is no relay and no hole punching in the code
 - [x] M12-D — mDNS LAN autodiscovery: zero-config peer discovery on local networks (external_address populated on approval via M12-C auto-fetch)
 - [x] M12-F — Integration tests: `crates/tylluan-kernel/tests/mesh_audit.rs` (10 tests) + `crates/tylluan-kernel/tests/federation_audit.rs` (6 tests) + `crates/tylluan-link/src/nat.rs` (8 tests). Covers keypair, signature, envelope, STUN RFC 5389 (CRC32, txid mismatch, missing attribute, IPv4 XOR), NAT HTTP endpoint, mDNS startup, federation sync
 - [x] M13 — Onboarding: pre-compiled binaries via GitHub Actions (linux-x64, mac-arm64, win-x64), `install.sh` + `install.ps1` one-line installers, `tylluan-cli` management binary, README rewritten to 3-step Quick Start
@@ -75,7 +75,7 @@ Delivered:
 **Goal:** True WAN peer discovery and resilient multi-node knowledge fabric without central coordination.
 
 Planned:
-- [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests.
+- [x] M14-A — DHT peer discovery: Kademlia-style DHT for WAN peer lookup without a central registry. K-bucket routing table over Ed25519 node IDs (XOR metric), FIND_NODE/STORE/PING RPCs, mainline BitTorrent DHT bootstrap, 23 tests. The DHT code and tests exist, but mainline bootstrap is off by default (`mesh.mainline_dht_enabled = false`) and no build enables the `mainline-dht` feature, so no node does global discovery.
 - [x] M14-B — Gossip protocol: epidemic dissemination of knowledge updates across the mesh. Eventual consistency without requiring all peers to be online simultaneously.
 - [x] M14-C — Encrypted transport overlay: Noise Protocol XK (TCP sessions) + NK (HTTP payloads) wired to federation sync endpoints. Ed25519→X25519 key conversion, ChaCha20-Poly1305 AEAD, async length-prefixed framing.
 - [x] M14-E — Mesh integration test harness: `mesh_simulation.rs` (full-mesh, star, split-brain) + `dispatch_dst.rs` (multi-peer routing, DispatchQueue TTL). 81 link tests.
@@ -97,8 +97,8 @@ Out of scope (v1.0.0):
 
 ## v0.6.1 — Model Portability (backlog)
 
-- [x] P5 — Config-driven embedding model: `bge-m3` (1024), `nomic-embed-text` (768), `bge-small`/`minilm` (384), `none` (BM25-only). `resolve_model()` / `resolve_dimension()` in embeddings.rs. `vector_dimensions` is now derived dynamically from the model.
-- [x] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile). Dashboard shows active profile chip (Portable·BM25 / Clinic·BGE-Small / Server·BGE-M3).
+- [x] P5 — Config-driven embedding model: `mxbai-embed-large` (1024, the default since 2026-09-30), `bge-m3` (1024), `nomic-embed-text` (768), `bge-small`/`minilm` (384), `none` (BM25-only). `resolve_model()` / `resolve_dimension()` in embeddings.rs. `vector_dimensions` is now derived dynamically from the model.
+- [x] P6 — Installation profiles: `tylluan-cli install --profile=clinic|server|portable` writes the correct `tylluan.toml` at install time (different embedding_model, fanout, timeouts per profile). Dashboard shows active profile chip (Portable·BM25 / Clinic·BGE-Small / Server·mxbai-embed-large).
 - [x] P7 — Reindex endpoint + dashboard progress: `POST /api/v1/memory/reindex` triggers immediate background reindex when switching models. Dashboard shows reindex progress bar (stale/total nodes). Context: the system already reindexes stale nodes automatically every 10 min in `main.rs:1235` via `get_stale_embeddings()` — P7 adds manual trigger + visibility.
 
 ## v0.7.0 — Intelligence Foundation
@@ -213,7 +213,7 @@ Scope exclusions honored: no real TCP/UDP (in-process only), no Byzantine fault 
 Delivered:
 - [x] `--features bundled-dashboard` embeds React build into the binary via rust-embed (disk fallback preserved for dev)
 - [x] `tylluan install --profile portable|clinic|server` generates config, resolves embedding model per profile
-- [x] Automated installer profiles: `portable` (BM25-only, zero deps), `clinic` (BGE-Small), `server` (BGE-M3)
+- [x] Automated installer profiles: `portable` (BM25-only, zero deps), `clinic` (BGE-Small), `server` (mxbai-embed-large; BGE-M3 when the milestone shipped)
 - [x] Release binaries published for 4 platforms (v0.13.0 tag)
 
 ## v0.13.0 — Junior Onboarding + First Minute + Security Hardening (complete)
@@ -221,7 +221,7 @@ Delivered:
 **Goal:** A junior engineer or first-time user gets from zero to a working, understood instance without help — and the base is provably secure, not just "probably fine."
 
 Delivered:
-- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification 4000→4000, repo root cleanup)
+- [x] **M22 "Para los Torpes y Cansados"** — junior-onboarding audit closed 5/5 BLOQUEAs (rust-toolchain 1.85→1.88, install.sh BSD sed fix, README/QUICKSTART accuracy, port unification (the port later moved to 47004, 2026-09-12), repo root cleanup)
 - [x] **M23-P1 "El Primer Minuto"** — `tylluan install` auto-downloads the embedding model + auto-starts the kernel + polls `/health` (`910f15f`); dashboard shows a designed Empty State (hero + 3 action cards + progress checklist) instead of a blank screen when SilvaDB is empty (`bad7015`)
 - [x] **M26 Sprint 1** — Coloquio Canvas Workspace: modular tabs, collaborative DOCS with CRUD+SSE
 - [x] **M26 Sprint 2** — tldraw interactive whiteboard embedded in the canvas, per-channel persistence (`50da092`)
@@ -274,17 +274,17 @@ Delivered (85 commits since v0.15.0):
 
 ## v0.17.1 — cut 2026-10-12
 
-Security and installer fixes found by the October audits, plus the anti-orphan guard that stops a test instance from killing production. Itemised in `CHANGELOG.md`. The Linux install-smoke job stays red until this tag is published, because it installs the latest release.
+Security and installer fixes found by the October audits, plus the anti-orphan guard that stops a test instance from killing production. Itemised in `CHANGELOG.md`. Cut 2026-10-12, published as Latest on 2026-10-13 after five tag moves that each fixed a real pipeline bug; the Install Smoke job then passed on Linux and Windows against it.
 
-## v0.17.0 — in progress (tagged 2026-08-24, 591+ commits of drift since)
+## v0.17.0 — tagged 2026-08-24 (section only partly backfilled)
 
-**Status:** `v0.17.0` was tagged on 2026-08-24 (170 commits since v0.16.0), but `Cargo.toml` has stayed at `0.17.0` through 591 further commits — this roadmap entry is necessarily partial. A full item-by-item reconciliation of everything shipped since the tag has not been done; what follows is only what's been independently verified recently, not the complete changelog. Closing that gap (either a proper v0.18.0 cut or a full backfill of this section) is itself open work.
+**Status:** `v0.17.0` was tagged on 2026-08-24 (170 commits since v0.16.0); `Cargo.toml` stayed at `0.17.0` through many further commits until v0.17.1 — this roadmap entry is necessarily partial. A full item-by-item reconciliation of everything shipped since the tag has not been done; what follows is only what's been independently verified recently, not the complete changelog. Closing that gap (either a proper v0.18.0 cut or a full backfill of this section) is itself open work.
 
 Verified recently (2026-09/10):
 - [x] **Default embedding model moved to `mxbai-embed-large`** (2026-09-30, 1024-dim native) from BGE-M3 — lower compute cost at equal dimensionality. LongMemEval-S has not been re-run against the new default yet (tracked above, README §Quick Start).
-- [x] **External audit cycle (2026-10-08/09), 11 findings closed** — all independently verified against real code before any fix, each with its own tests: broken installer flag combo that would have double-booted the kernel, insecure `host="0.0.0.0"` default, `tylluan-cli stop` killing every process by name instead of the exact instance, wrong default port (`3030` vs the real `47004` everywhere else), a dispatch-queue state (`SpawnFailed`) that silently persisted as `Executed`, two undocumented `#[ignore]`d tests, stale "49 guilds" doc claims (real: 46), a Python version requirement that disagreed with itself in 3 places (3.10/3.11/3.12), and release tarballs that shipped the Rust binaries but no Python guilds at all (so a binary-only install's own `pip install` instructions had nothing to point at).
+- [x] **External audit cycle (2026-10-08/09), 11 findings closed** — all independently verified against real code before any fix, each with its own tests: broken installer flag combo that would have double-booted the kernel, insecure `host="0.0.0.0"` default, `tylluan-cli stop` killing every process by name instead of the exact instance, wrong default port (`3030` vs the real `47004` everywhere else), a dispatch-queue state (`SpawnFailed`) that silently persisted as `Executed`, two undocumented `#[ignore]`d tests, stale "49 guilds" doc claims (the count was later settled as 46 files, 45 routed by default), a Python version requirement that disagreed with itself in 3 places (3.10/3.11/3.12), and release tarballs that shipped the Rust binaries but no Python guilds at all (so a binary-only install's own `pip install` instructions had nothing to point at).
 - [x] **ADR-015 §4.1 stigmergic heat — production writer shipped.** The heatmap endpoint existed and was tested, but the only `INSERT` into `work_traces` lived inside `#[cfg(test)]` — in production the table was always empty. Now wired into 4 real call sites (every `tylluan_do` tool call, guild REST calls, Coloquio posts, successful file-path intents), fire-and-forget, with spatial diffusion to neighbor zones and a matching prune.
-- [x] **Decision Fabric (ADR-018 §3) — 3 of 4 variants measured with real data, not simulated.** Variant D (Decima-ONNX) is GO-PROVISIONAL; variants B (SystemOne/clef-flash, real HTTP server) and C (Laya-ONNX) are both honest NO-GO — B passes accuracy/calibration but fails latency by 27x; C failed on measurement data months earlier. Only D remains a live candidate.
+- [x] **Decision Fabric (ADR-018 §3) — 3 of 4 variants measured with real data, not simulated.** Variant D (Decima-ONNX) is GO-PROVISIONAL; variants B (SystemOne/clef-flash, real HTTP server) and C (Laya-ONNX) are both honest NO-GO — B passes accuracy/calibration but fails latency by 27x; C failed on measurement data months earlier. Only D remains a live candidate. Nothing of this is wired into the kernel: it only has `RulesDecisionProvider`, and ADR-018 approved the measurement spike, not integration.
 - [ ] Full backfill of the other ~750 commits into this section — not done, flagged honestly rather than guessed.
 - [ ] **i18n: Chinese (ZH) README translation.** English (source of truth) and Spanish ([README.es.md](README.es.md)) exist; a ~520-line technical document machine-translated to Chinese without native review risks silently shipping incorrect technical claims nobody on the team can verify. Needs a native-speaking reviewer before publishing, not a quick MT pass.
 - [ ] **GitHub discoverability.** 4 months post-launch with ~0 organic traffic — root cause found 2026-10-10: the repo had zero `repositoryTopics` set (GitHub's primary discovery surface) and no `homepageUrl`. Topics added (`mcp`, `model-context-protocol`, `ai-agents`, `agent-memory`, `rust`, `local-first`, `privacy`, `knowledge-graph`, `llm-tools`, `self-hosted`, `rag`, `on-device-ai`, `sovereign-ai`, `fastmcp`, `multi-agent-systems`) — effect on actual traffic not yet measurable, revisit in a few weeks.

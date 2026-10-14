@@ -135,8 +135,10 @@ GET /api/v1/federation/nodes?source=local        → list local-origin nodes onl
 
 ```toml
 [federation]
-auto_sync_interval_secs = 3600  # 0 = disabled
+sync_interval_ms = 3600000      # 0 = disabled (default 30000)
 auto_sync_mode = "push"         # "push" | "pull" | "both"
+# Correction 2026-10-14: this design first used `auto_sync_interval_secs`, which never existed in the
+# config structs (removed in a750098). `sync_interval_ms` is the real key.
 ```
 
 ### Implementation
