@@ -12,7 +12,7 @@ device = "directml"
 ```
 ```bat
 cargo build -p tylluan-kernel
-.\tylluan.bat
+.\tylluan-mcp.bat
 ```
 Requisitos: Windows 10 1903+ (DirectML.dll viene con el sistema). Funciona con NVIDIA, AMD e Intel.
 Verificación: el log de arranque debe decir `🚀 Inference device: DirectML (GPU accelerated)`.
