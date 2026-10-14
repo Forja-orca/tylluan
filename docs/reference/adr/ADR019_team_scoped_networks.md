@@ -109,3 +109,15 @@ Los umbrales S1-S5 siguen siendo propuestos por el TL y no medidos; el spike los
 
 **Spike de `iroh` — S1, S5 y la parte de tamaño de S4 medidas; S2 y S3 pendientes.** S1 y S5 pasan; el binario crece +1,03 %. Precondiciones: iroh 1.x exige rustc 1.91 (el repo fija 1.88) y `cargo deny` falla por 24 versiones duplicadas (requiere `skip` razonados). Decisión pendiente de José. No se adopta nada hasta medir S2 (dos redes distintas) y S3 (relay sin ver contenido).
 
+### Cierre del spike de `iroh`: NO-GO por ahora (2026-10-15, José)
+
+José respondió a la pregunta que decidía el valor de `iroh`: el uso real es **misma red, LAN o su propia VPN**, y el camino base basta. `iroh` solo aporta el caso de equipos en redes distintas con NAT, que hoy no existe. Se cierra el spike sin medir S2 ni S3 y no se cambia la toolchain ni `deny.toml`.
+
+Datos que quedan como registro (medidos por Deep, rama local `spike/iroh`, nada en `main`): S1 pasa, S5 pasa, binario +1,03 % con rustc 1.91.
+
+Coste que se evita: subir rustc 1.88 a 1.91 en repo y CI, 24 versiones duplicadas en `cargo deny` (entre ellas `ed25519-dalek` 3.0 en pre-lanzamiento), código nativo nuevo (`ring`, `blake3`) sin comprobar en `aarch64`, y una segunda pila de transporte (QUIC) junto a Noise.
+
+**Se reabre solo si** aparece un equipo que deba conectarse desde una red distinta sin VPN. Antes habría que resolver: que S5 desactive los relays y el descubrimiento públicos por defecto de iroh, medir el tamaño con el uso real del endpoint y compilar en `aarch64` en CI.
+
+El paso 5 del orden de trabajo queda cerrado. Los pasos 2, 3 y 4 siguen adelante sobre el camino base.
+
