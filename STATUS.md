@@ -1,7 +1,17 @@
 # Tylluan — Status
 
 > Source of truth for the verified technical state. Updated on each release.
-> Last updated: 2026-10-09 · HEAD `1b44b7c` · v0.17.1 (Cargo.toml)
+> Last updated: 2026-10-14 · HEAD `1b44b7c` · v0.17.1 (Cargo.toml)
+
+## Estado verificado — 2026-10-14
+
+- **Release:** v0.17.1 publicada como Latest el 2026-10-13 (tag sobre `ccdd509`, 4 archivos). Comprobado: el Install Smoke contra esa release instala v0.17.1 en Linux y Windows y el kernel responde `ok`; el binario Linux exige como máximo `GLIBC_2.34`.
+- **Kernel en ejecución de José:** `/health` devuelve v0.17.1, commit `5222644` (leído el 2026-10-14). `main` va por delante; reiniciarlo con una build nueva es decisión de José.
+- **Tests:** 1093 (1007 kernel + 74 link + 12 fsrs), vigilado por `scripts/check_test_count.sh`.
+- **Guilds:** 46 módulos FastMCP, 45 enrutables por defecto (`vision_moondream` está excluido en `router/catalog.rs`). El kernel de José expone 50 porque suma 5 guilds externos de su configuración. Vigilado por `scripts/check_docs_reality.sh`.
+- **Puertas de documentación:** `check_docs_reality.sh` (rutas citadas, puerto, versión, recuento de tests y de guilds) y `scripts/check_doc_links.py` (enlaces Markdown relativos).
+- **Pendientes abiertos, no resueltos:** `tylluan start` sin `tylluan.toml` (o con un `[nexus]` sin `transport`) arranca con transporte por defecto `stdio,http,sse` y se apaga al leer fin de entrada si no hay terminal; los binarios del `.tar.gz` de la release no llevan permiso de ejecución (los instaladores lo arreglan); `tylluan-nexus --version` arranca un kernel en vez de imprimir la versión; test intermitente `FleetHealthPanel.test.tsx` ("opens and closes turn history"); el smoke de la release no arranca el binario ARM64; el listener P2P (`p2p.enabled`, apagado por defecto) ejecuta cualquier guild para un par aprobado, sin lista de permitidos.
+- **Dirección de red (2026-10-13, decisión del propietario):** sin malla global autoconectada; redes que elige cada equipo. Falta el ADR y no hay nada implementado más allá de la sincronización con pares aprobados.
 
 ## Informe externo verificado (2026-10-04)
 
@@ -15,7 +25,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 - ~~STUN fires unconditionally at boot~~ **FIXED (T206)**: `NatConfig.enabled` defaults to `false`; the whole discovery block in `main.rs` is gated behind it. Set `[nat] enabled = true` explicitly to opt in.
 - ~~CI Python tests are non-blocking by construction~~ **FIXED**: `.github/workflows/ci.yml:110` no longer has the `|| echo` swallow, installs `guilds/requirements.txt` (the real cause `mcp`/FastMCP was missing), and explicitly `--ignore`s one test confirmed to hardcode a different project's port. The main CI job still doesn't run `tylluan-link`/`tylluan-fsrs` in the same job as `tylluan-kernel` (they're separate, real jobs though -- `docs-test-count-check` exercises all three).
 - ~~`serverInfo.version` hardcoded to `"3.0.0"`~~ **FIXED**: replaced with `env!(CARGO_PKG_VERSION)` in all 4 places it was found (`api_monitor.rs`, `mcp.rs`'s `serverInfo`, and 2 `clientInfo` call sites in `registry/proxy.rs` found while fixing this).
-- ~~`[federation] auto_sync_interval_secs` is dead config~~ **REMOVED** (a750098): the field itself is gone from `FederationConfig` now, not just documented as unread. The real auto-sync loop (`api_federation.rs`) uses `[silva] sync_interval_ms`, unchanged.
+- ~~`[federation] auto_sync_interval_secs` is dead config~~ **REMOVED** (a750098): the field itself is gone from `FederationConfig` now, not just documented as unread. The real auto-sync loop (`api_federation.rs`) uses `[silva] sync_interval_ms`, unchanged. **Superado (2026-08-31):** el intervalo vive ahora en `[federation] sync_interval_ms` (con `auto_sync_mode`, que el bucle relee en cada ciclo); `[silva] sync_interval_ms` es un respaldo obsoleto que solo se respeta si el de `[federation]` queda en su valor por defecto (`effective_sync_interval_ms`).
 - **`.unwrap()` calls across all crates**: **31 production** + 27 test-only = 58 total (verified 2026-09-07 via `tools/count_production_unwraps.py`, brace-counting methodology). Breakdown: `transport/http/mod.rs` 13 (all literal parses / response builders, cat. a), `tylluan-link/src/lib.rs` 8 (7 `serde_json::to_string` + 1 nonce, cat. a), `router/embeddings.rs` 2 (`NonZeroUsize::new(512).unwrap()`, cat. a), rest 8 files ×1 each (all cat. a). **Cat. b (lock-poison) risk: 0 — fully closed** (dispatch.rs 5, transport.rs 4, silva/mod.rs 4, graph.rs 2, coloquio.rs 20 — all fixed via `unwrap_or_else(|poisoned| poisoned.into_inner())`). Cat. c (externally-exploitable): 0. Previous estimate of "46 production" was the pre-coloquio count; all 31 remaining are safe by construction. Script: `tools/count_production_unwraps.py --summary`.
 - **45 guilds require Python 3.12 + FastMCP separately** from the Rust kernel binary — without them, guilds crash-loop and `/api/v1/doctor` reports `degraded`. The README's "no Rust/Python/Node needed" line was true only for the kernel-as-MCP-memory use case, not for `tylluan_do` guild execution; corrected in README 2026-08-22.
 - **Retrieval quality context (LongMemEval-S)**: the previously flagged "gap" between an 82.0% Recall@5 and a 16.4% Precision@5 was confirmed on mathematical audit (2026-09-03) to be an artifact of evaluating single-needle queries ($R=1$ relevant session/turn per question) with unnormalized $\text{Precision@K} = \text{hits@K} / K$. For $R=1$, the theoretical maximum possible Precision@5 for any retriever is $\frac{1}{5} = 20.0\%$; at 82.0% Recall@5 (41/50 questions found in top-5), the expected Precision@5 is exactly $0.82 \times 0.20 = 16.4\%$, matching the stored result in `benchmarks/longmemeval_v0.12.0.json` to the digit. Citing unnormalized Precision@5 without context created the false impression that the remaining 83.6% was retrieval noise, when 4 out of 5 returned slots could not mathematically be relevant. The proper metrics for single-target memory retrieval are **Recall@1 (46.0%)**, **Recall@5 (82.0%)**, **Recall@10 (90.0%)**, and **MRR / R-Precision (46.0%)**. Live routing accuracy on that external benchmark run was ~41% (hybrid), vs 56-64% on the internal curated dataset (I-7/J-13), reflecting task difficulty rather than retrieval degradation.
@@ -33,8 +43,8 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 | Dashboard — lint | ✅ pass |
 | Rust — security audit tests | ✅ pass |
 | Rust — ARM64 portability (aarch64-unknown-linux-gnu) | ✅ pass |
-| Install smoke (Linux + Windows) | ✅ pass (triggers on release publish) |
-| Docker smoke | ✅ pass (local validated by Antigravity) |
+| Install smoke (Linux + Windows) | ✅ pass contra v0.17.1 (se dispara al tocar `install.*`, `tylluan-cli`, `release.yml` o a mano; instala la última release publicada) |
+| Docker smoke | ✅ pass (job `Docker Smoke` del CI) |
 | Security — claims gate | ✅ pass |
 
 **HEAD:** `1b44b7c` · **1093 total** lib green (1007 kernel lib + 74 link lib + 12 fsrs), verificado 2026-10-12 vía `cargo test -p tylluan-kernel --lib` + `scripts/check_test_count.sh` (Deep, T1071 — gate extendido a AGENTS.md). **Ciclo 2026-10-01/04 (dos auditorías de concurrencia + seguridad, cerrado) — el ciclo de mayor volumen de hallazgos reales verificados de este proyecto hasta ahora.** Dos auditorías paralelas el 2026-09-30/10-01 (interna de arquitectura, agente `architect`; externa de concurrencia, verificada línea por línea con `rust-reviewer` antes de aceptar nada — 7/8 hallazgos P0/P1 confirmados exactos) sintetizadas en un checklist de prioridades (`docs/roadmap/ROADMAP_O3.md`). Cerrado con verificación independiente del tech lead en cada merge:
@@ -66,7 +76,7 @@ An external reviewer cloned `d68fa5a`, built it, and ran the live kernel — not
 
 **Ciclo 2026-09-07/08 — rendimiento CPU (primer baseline real)**: `benchmarks/results/latency_baseline_20260907.json` midió por primera vez latencia real de `tylluan_recall`/`tylluan_do` en CPU pura contra el kernel vivo. Hallazgo real: los primeros ~24 recalls tras un arranque en frío tenían mediana >10s (run 0/1), cayendo a 639ms una vez pasada esa ventana (run 2) — no era "guilds fríos" (recall ni pasa por guilds), sino el "Agnostic Reindexer" disparando su primer tick inmediatamente al arrancar (comportamiento por defecto de `tokio::time::interval`) y compitiendo por el modelo ONNX compartido con el tráfico real de recall justo cuando un operador es más probable que esté probando el kernel recién levantado. Corregido (`2890d35`): `interval_at` retrasa el primer disparo 600s, mismo patrón que Retrolink Orphans (10s de espera) unas líneas más abajo. Cache de embeddings de query cableado en el choke point de `search_hybrid` (`ff205b1`, Deep) con invalidación en hot-swap de modelo (`a1290c7`) — limitación de diseño conocida y documentada en el propio código (`search.rs`): el cache se consulta después de que el caller ya computó el embedding, así que hoy no ahorra el coste de ONNX; para que aporte de verdad falta que los callers directos (`api_memory.rs`, `handler_think.rs`, `autolink.rs`) consulten el cache antes de llamar a `embed()`.
 
-**Kernel vivo:** verificado en vivo 2026-09-03, `commit 7112e1e` (confirmado en `/health`, ciclo 3 en ejecución con fixes de embed síncrono, lock-poison y normalización de dashboard) — canary en 87.5% (7/8), `silva_db` pasa, `drift_guard` en 1.22 tras los últimos fixes. Comando de rebuild de referencia:
+**Kernel vivo:** ver "Estado verificado — 2026-10-14" arriba (la lectura de 2026-09-03, commit `7112e1e`, ya no es vigente).
 ```
 taskkill /IM tylluan-nexus.exe /F
 cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
@@ -128,7 +138,7 @@ cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 **Deps y kernel**
 - `h2` 0.4.16 (RUSTSEC-2026-0258) + `spin` 0.9.9 (yanked) (`56f4364`)
 - NAT/STUN discovery ya no bloquea bind HTTP (`8a6ec8c`)
-- `NexusConfig.transport` default a empty, no stdio+http+sse (`7cd024b`)
+- `NexusConfig.transport` default a empty, no stdio+http+sse (`7cd024b`) — **superado**: desde el arreglo de 2026-08-19 el valor por defecto vuelve a ser `stdio, http, sse` (`default_transports()` en `config.rs`), también cuando el `[nexus]` omite la clave
 - `llama_backend` port conflict fix (`a70d3ca`)
 - Tauri UI: Vite entry point real commitiado (`61479bc`)
 
@@ -140,7 +150,8 @@ cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 
 ## Version
 
-**v0.17.0** (Cargo.toml, current) — federation auto-sync robustness (concurrent per-peer JoinSet + overlap guard + timeout), SQL interpolation whitelisting, drift_guard/silva_db canary fixes, unwrap() production audit (2026-09). **v0.16.0** — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
+**v0.17.1** (Cargo.toml, current; publicada 2026-10-13) — arreglos de seguridad e instaladores y de la tubería de release, ver `CHANGELOG.md`.
+**v0.17.0** (taggeada 2026-08-23) — federation auto-sync robustness (concurrent per-peer JoinSet + overlap guard + timeout), SQL interpolation whitelisting, drift_guard/silva_db canary fixes, unwrap() production audit (2026-09). **v0.16.0** — MCP 2026-07-28 adoption (M39) + continuity/trust/action layer (M40), CoherenceGate→dataset circuit phase 1+2; **v0.15.0** — Full connection audit, mandatory mesh gossip encryption, CoherenceGate Layer 4 hybrid live in observation mode; **v0.14.0** — A2A protocol, Signal Loop + Coherence Gate, Sovereign Substrate dashboard; **v0.13.0** — Coordinator Cascade, query cache, modular canvas (M26), junior onboarding (M22) and first minute autostart (M23-P1).
 **v0.12.0** (tag) — Single binary target release and automated installer profiles.
 **v0.11.0** — Saga mesh P2P completa + M18-P3 Coordinator Synthesis y M20 Complexity Cascade integrados nativamente.
 
@@ -239,8 +250,10 @@ cd E:\tylluan && cargo build --release -p tylluan-kernel && .\tylluan-mcp.bat
 | `tylluan-kernel` | Core binary + library: MCP, memory, federation, security |
 | `tylluan-common` | Shared types, error types, constants |
 | `tylluan-link` | Federation networking: mesh identity, DHT, NAT, mDNS |
-| `tylluan-cli` | `start / stop / status / logs / connect / download-models / install` |
+| `tylluan-cli` | CLI de gestión: 17 comandos (`tylluan-cli --help`): start, stop, status, doctor, logs, install, update, backup, restore, audit, connect, download-models, new, sandbox, resume, eval, export-examples |
 | `tylluan-evals` | Benchmark harness: Recall@N, Precision@N, latency percentiles |
+| `tylluan-fsrs` | Planificador de repaso espaciado FSRS-5 |
+| `tylluan-gui` | Marcador de posición para un futuro shell de escritorio (sin funcionalidad) |
 
 ---
 
