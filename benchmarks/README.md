@@ -39,6 +39,10 @@ Results are saved to `benchmarks/results/<timestamp>.json`.
 - **Depends on your configuration**: the embedding model, profile and hardware change every number. No per-model latency figure is published here because none has been measured on a fixed reference setup.
 - **Percentiles reported**: p50, p95, p99 across N samples.
 
+## About the other documents in this folder
+
+The `.md` reports here (`BENCHMARK_*`, `RESEARCH_*`, `DEEP_RESEARCH_*`, `AUDIT_*`, `COMPARISON`) are dated records. Each one's numbers belong to the kernel commit and date it cites, and none has been re-run against v0.17.1 unless it says so. Read them as what was measured then, not as the current behaviour of the router or the retrieval.
+
 ## Reference numbers
 
 No pre-published numbers. Hardware varies too much to be meaningful.
