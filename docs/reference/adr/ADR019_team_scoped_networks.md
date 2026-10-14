@@ -1,6 +1,6 @@
 # ADR-019: Redes por equipo — emparejamiento por invitación, permisos por par y por espacio
 
-- **Estado:** 📐 **PROPUESTA para revisión de José.** No implementada. Nada de lo que describe la sección 3 existe todavía en el código, salvo lo marcado como existente.
+- **Estado:** ✅ **APROBADA por José el 2026-10-14** (las tres decisiones de la sección 7, abajo). **No implementada**: nada de lo que describe la sección 3 existe todavía en el código, salvo lo marcado como existente.
 - **Fecha:** 2026-10-14
 - **Origen:** decisión de José (2026-10-13): la malla global queda fuera; Tylluan se conecta en redes **por equipo**, con un emparejamiento simple y muy seguro (LAN o enlace de invitación). Antes de borrar nada, se analiza.
 - **Sustituye en la práctica a:** `PROPOSAL_distributed_inference_credit_mesh.md` (mercado de créditos) y a la ambición de descubrimiento global por DHT mainline. No se borran; se marcan como registro.
@@ -90,3 +90,11 @@ Los umbrales son propuestos por el TL, no medidos; José puede cambiarlos antes 
 1. ¿Apruebas el modelo de 3.2 (todo vacío por defecto, despacho denegado)?
 2. ¿Apruebas lanzar el spike de `iroh` con los umbrales de la sección 4?
 3. ¿Coloquio federado entra en este ciclo o se aparca hasta cerrar 2 y 4?
+
+### Resolución (2026-10-14, José)
+
+1. **Modelo de permisos de 3.2: aprobado** (todo vacío por defecto, despacho denegado). El paso 1 del orden de trabajo (auditar qué puede hacer hoy un par aprobado) es lo primero, antes de cualquier código.
+2. **Spike de `iroh`: se lanza**, con los umbrales de la sección 4, sin tocar `main`.
+3. **Coloquio federado: aparcado** hasta cerrar los pasos 2 y 4.
+
+Los umbrales S1-S5 siguen siendo propuestos por el TL y no medidos; el spike los mide.
