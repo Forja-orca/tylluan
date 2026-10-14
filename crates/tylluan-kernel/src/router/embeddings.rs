@@ -4,12 +4,21 @@
 //!
 //! ## Supported Models
 //!
-//! | Config value       | Model                          | Dim  | Size  |
-//! |--------------------|--------------------------------|------|-------|
-//! | `bge-m3` (default) | BAAI/bge-m3                    | 1024 | ~1.2G |
-//! | `bge-small`        | BAAI/bge-small-en-v1.5         | 384  | ~67M  |
-//! | `minilm`           | all-MiniLM-L6-v2               | 384  | ~90M  |
-//! | `nomic-embed-text` | nomic-ai/nomic-embed-text-v1.5 | 768  | ~274M |
+//! | Config value                              | Model                            | Dim  |
+//! |-------------------------------------------|----------------------------------|------|
+//! | `mxbai-embed-large` (built-in default)    | mxbai-embed-large-v1             | 1024 |
+//! | `mxbai-q` / `mxbai-quantized`             | mxbai-embed-large-v1, quantized  | 1024 |
+//! | `bge-m3`                                  | BAAI/bge-m3                      | 1024 |
+//! | `bge-small` (profile `clinic`)            | BAAI/bge-small-en-v1.5           | 384  |
+//! | `minilm`                                  | all-MiniLM-L6-v2                 | 384  |
+//! | `nomic-embed-text`                        | nomic-embed-text-v1.5            | 768  |
+//! | `snowflake-arctic-embed-l` (`arctic`)     | Snowflake Arctic Embed L         | 1024 |
+//! | `multilingual-e5-large` (`e5`)            | Multilingual-E5-Large            | 1024 |
+//! | `none`                                    | no embeddings (BM25-only)        | 0    |
+//!
+//! The authoritative mapping is [`resolve_model`] and [`resolve_dimension`] below;
+//! this table only mirrors them. Download sizes are deliberately not listed: they
+//! were never measured here.
 
 use anyhow::{Result, Context, anyhow};
 use fastembed::{TextEmbedding, TextInitOptions, EmbeddingModel, TextRerank, RerankInitOptions, RerankerModel, ExecutionProviderDispatch, SparseTextEmbedding, SparseInitOptions, SparseModel};
