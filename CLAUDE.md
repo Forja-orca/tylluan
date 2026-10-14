@@ -1,6 +1,6 @@
-# Tylluan v0.16.0+ — Claude Code Instructions
+# Tylluan v0.17.1 — Claude Code Instructions
 
-> **Last sync: 2026-09-21.** This file is the human-readable context for Claude Code.
+> **Last sync: 2026-10-14** (revisado línea a línea contra el código; las notas con fecha 2026-10-14 son correcciones). This file is the human-readable context for Claude Code.
 > For machine-readable contracts, see `.tylluan/agents.toml` (ADR-009).
 > If this file is outdated, every new agent inherits wrong context from the first second.
 
@@ -69,7 +69,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 ## Arquitectura Invariante (CONTRACT-01)
 
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
-2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768. El invariante es la dimensión, no un modelo concreto: BGE-M3 (default hasta 2026-09-29) y mxbai-embed-large (default desde 2026-09-30) son ambos nativos 1024-dim — cambiar de modelo está permitido, cambiar la dimensión sin migrar cada vector existente no.
+2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768. El invariante es la dimensión, no un modelo concreto: BGE-M3 (default hasta 2026-09-29) y mxbai-embed-large (default desde 2026-09-30) son ambos nativos 1024-dim — cambiar de modelo está permitido, cambiar la dimensión sin migrar cada vector existente no. Nota (2026-10-14): `router/embeddings.rs` también acepta `bge-small`/`minilm` (384d) y `nomic-embed-text` (768d) y el perfil `clinic` usa 384d; si esa flexibilidad debe existir es una decisión de arquitectura pendiente, no un detalle de configuración.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:47004` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
@@ -79,7 +79,9 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ---
 
-## ✅ RESUELTO — Autonomía real del equipo: mención→ejecución cerrada, patrón correcto encontrado (2026-09-21)
+## HISTÓRICO — Autonomía real del equipo: mención→ejecución y el patrón de loop (2026-09-21)
+
+> **Actualización 2026-10-14:** el loop de Deep descrito abajo (`scripts/agent_loop_deep.ps1` + tarea programada `Tylluan-Deep-Loop`) fue **eliminado el 2026-09-22** (`abd42b8`, decisión de José). El script ya no existe en el repo. Esta sección conserva el razonamiento y los bugs que se cazaron, no el estado actual.
 
 Día largo, con dos correcciones de rumbo reales de José, ambas registradas para no repetirlas:
 
@@ -99,14 +101,16 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 
 **Cerrado por Buffy + verificado/completado por Claude Code** (`crates/tylluan-kernel/src/memory/graph_rag.rs`): `find_clusters()` excluye `type='summary'` e ids `graphrag_summary:%` del pool de candidatos a hub; `save_summary()` tiene un guard duro que rechaza cualquier `cluster_id` que ya contenga `graphrag_summary:`; nueva comprobación de idempotencia evita reprocesar clusters sin cambios. **Bug separado encontrado al escribir el test de regresión** (el archivo tenía CERO tests antes de esto): `cluster_summaries` no existía en ninguna base de datos nueva — `migrations.rs` v2 la crea, pero el runner de migraciones sella una DB nueva como "ya migrada hasta la última versión" sin ejecutar el SQL real, así que cualquier instalación nueva de Tylluan tenía GraphRAG roto desde el primer arranque; solo funcionaba en la DB real de José porque es anterior a esa migración. Añadida a `schema.rs::init_schema()` con el tipo correcto (`TEXT`, no el `INTEGER` obsoleto de la migración). 2 tests de regresión nuevos, 715/715 en verde, clippy limpio.
 
+**Segunda causa, cerrada el 2026-09-26** (~2000% CPU sostenido): `flag_contradiction_nodes` trataba como contradicción las aristas `member_of` de un resumen (`graphrag_summary:%`) y las `remembers` de un nodo de identidad (`agent_memory:%`), que por diseño tienen muchos destinos (`d949298`), y NightConsolidation lanzaba todas sus fases a la vez; ahora `[night] max_parallel_phases` tiene un tope por defecto de 2 (`e4b16b8`, `68a0e35`). Ambos arreglos están en la build `5222644` del kernel de José. No verificado: que los nodos `graphrag_summary:` ya anidados antes de `7648a7a` estén limpios en su base de datos.
+
 ---
 
 ## Estado actual — v0.17.1 (v0.17.0 tagged 2026-08-23; v0.17.1 corta los fixes de seguridad e instalador del 2026-10-05/12)
 
-**Tests:** 685 kernel lib + 69 link lib + 12 fsrs = 766+ en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
-**Cargo.toml:** `version = "0.16.0"`, Rust edition 2024, toolchain 1.88.
+**Tests:** 1007 kernel lib + 74 link lib + 12 fsrs = 1093 en verde (vigilado por `scripts/check_test_count.sh`) — verifica con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
+**Cargo.toml:** `version = "0.17.1"`, Rust edition 2024, toolchain 1.88 (`rust-toolchain.toml`).
 
-### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14):
+### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14):
 - **A2A F1-F4 completo** — cliente outbound real, exposición REST + intent con ACL, streaming SSE, hardening (Deep)
 - **P2P peer authorization real** — Ed25519↔X25519 verificación (Deep)
 - **ACL rediseñado fail-closed** — `AclContext` explícito por transporte (Codex)
@@ -134,9 +138,9 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 | **M1-M7** | Memoria, embeddings, retrievals, kernel, single binary | ✅ |
 | **M10/M11** | Work Contracts + Federación completa | ✅ |
 | **Encryption** | SQLCipher AES-256 en reposo | ✅ |
-| **M12** | Ed25519 identity · STUN NAT · mDNS LAN | ✅ |
+| **M12** | Ed25519 identity · STUN NAT · mDNS LAN | ✅ identidad Ed25519 y mDNS (opt-in); **STUN no funciona** (`nat.rs` devuelve el puerto de un socket UDP efímero, verificado 2026-10-14) |
 | **M13** | Binary releases (4 targets) · install scripts · `tylluan-cli` | ✅ |
-| **M14-A** | DHT Kademlia · 256 K-buckets · mainline bootstrap | ✅ |
+| **M14-A** | DHT Kademlia · 256 K-buckets · mainline bootstrap | ✅ código y tests; mainline apagado por defecto y sin build que lo habilite |
 | **M14-B** | Gossip push-pull · LRU store · anti-entropy cursors | ✅ |
 | **M14-C** | Noise Protocol XK/NK · Ed25519→X25519 · ChaCha20 AEAD | ✅ |
 | **M14-D** | Guild Execution Channels — 4 fases completas | ✅ |
@@ -152,6 +156,8 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 | **v0.14.0** | A2A Interop · Signal Loop + CoherenceGate · Dashboard Substrate | ✅ |
 | **v0.15.0** | Connection Audit · Mandatory Mesh Encryption | ✅ |
 | **v0.16.0** | MCP 2026-07-28 · Continuity/Trust/Action · CoherenceGate Dataset | ✅ |
+| **v0.17.0** | A2A F1-F4 · P2P con verificación de pares · ACL fail-closed · ASI06 | ✅ (2026-08-24) |
+| **v0.17.1** | Arreglos de seguridad e instaladores · primera release con el pipeline completo verde | ✅ (2026-10-13) |
 
 ---
 
@@ -162,7 +168,9 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 | **Claude Code (Sonnet 5)** | CLI / IDE | Tech lead — planes, briefings, síntesis, docs, memoria, verificación cruzada |
 | **Deep** | OpenCode | Backend Rust + guilds Python — features complejas, cierre de bugs de fondo |
 | **Mimo** | OpenCode | Auditorías/refactor de dashboard — tareas acotadas y verificadas |
-| **Antigravity** | Gemini + MCP | UI/UX dashboard — tareas YA cerradas y acotadas por tech lead |
+| **Antigravity** | Gemini + MCP | UI/UX dashboard e instaladores — tareas YA cerradas y acotadas por tech lead |
+| **Buffy** | Agente en worktree propio | Higiene del repo, refactor y verificación independiente (perfil en `.tylluan/agents.toml`) |
+| **Hermes** | App de escritorio | Informes con historial de afirmaciones sin verificar: contrastar cada dato contra el código |
 | **Qwen Desktop** | App escritorio | Research web + deep research — vía SSE MCP |
 
 **Reglas de asignación:**
@@ -170,6 +178,11 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 - Dashboard / UI → Mimo o Antigravity, en pasos pequeños
 - Research web → Qwen Desktop
 - Orquestación / docs / arbitraje → Claude Code
+
+**Reglas de proceso (2026-10-14):**
+- Cada agente trabaja SOLO en su propio worktree; nunca edita ni comitea en el checkout compartido (es lo que dispara la puerta anti-depredación, ADR-013, y ya costó incidentes repetidos).
+- Solo Claude Code comitea y empuja a `origin/main`; el resto entrega diff sin commitear más un informe.
+- Nada se da por publicado hasta que `git fetch origin` muestre `origin/main` igual al HEAD local.
 
 ---
 
@@ -199,7 +212,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 **Filtro de decisión para cualquier feature:** ¿Puede el mismo componente servir a un usuario modesto (5-10 peers, CPU sin internet) Y a uno con servidor (100+ peers, datacenter) **sin bifurcar el código** — solo diferente `tylluan.toml`?
 
 **Invariantes derivados:**
-- **Toaster-friendly:** Raspberry Pi 4 (4GB RAM) y hardware de 10 años
+- **Toaster-friendly:** Raspberry Pi 4 (4GB RAM) y hardware de 10 años — objetivo de diseño, **no verificado**: el CI solo compila `aarch64` y nadie ha ejecutado el binario en ARM (las únicas medidas reales están en el README y son de x86_64)
 - **USB-portable:** bundle completo cabe y arranca desde un USB
 - **Offline-first:** kernel arranca y opera sin internet
 - **Sin bifurcación de código:** un solo binario, configuración distinta por entorno
@@ -212,7 +225,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 - NUNCA `host = "0.0.0.0"` + `dev_mode = true` juntos (LAN RCE)
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (gitignored)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
-- NUNCA reducir timeouts para guilds de inferencia (BGE-M3 en CPU tarda 2-8s/embedding)
+- NUNCA reducir timeouts para guilds de inferencia (los embeddings en CPU pueden tardar segundos; no hay medida publicada por modelo)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
 - En release este workspace compila con `panic="abort"`: `catch_unwind` es ahí un **no-op documentado** (el unwind está compilado fuera, verificado en vivo 2026-08-23 y 2026-10-12). NUNCA envuelvas una llamada a `ort`/FFI en `catch_unwind` como si fuera protección — el gate correcto es comprobar ANTES con `onnx_runtime_ort_compatible()` (`crates/tylluan-kernel/src/router/embeddings.rs`), que replica check-a-check lo que `ort::api()` verifica (símbolo → versión ≥ 1.22.x = `ort::MINOR_VERSION` → GetApi) y devuelve `false` en vez de paniquear. "La lib ONNX **carga**" NO implica "es usable": ONNX Runtime 1.5.2 cargaba y abortaba el boot igual (2026-10-12). `onnx_runtime_available()` (solo cargabilidad) queda para diagnóstico, nunca como gate previo a `ort`.
 - El perfil portable de `generate_config` (crates/tylluan-cli/src/main.rs) emite `[silva] reranker_enabled = false` — no quitarlo: portable promete boot sin dependencias externas y el reranker necesita ONNX Runtime ≥ 1.22 para el `ort` pineado.
@@ -241,8 +254,7 @@ bash scripts/verify.sh --docs       # solo drift de STATUS.md/README.md (segundo
 ```
 
 Instala también el hook de pre-push, una vez por checkout, para que esto se
-ejecute solo antes de cada `git push` (usa `git push --no-verify` para saltarlo
-deliberadamente, solo si sabes por qué):
+ejecute solo antes de cada `git push` (el equipo no se lo salta: nada de `--no-verify`):
 
 ```bash
 bash scripts/install_hooks.sh
@@ -262,17 +274,38 @@ ha producido falsos positivos reales más de una vez.
 | `tylluan-kernel` | Core binary (`tylluan-nexus`) + library: MCP, memory, federation, security |
 | `tylluan-common` | Shared types, error types, constants |
 | `tylluan-link` | Federation networking: mesh identity, DHT, NAT, mDNS, Noise Protocol |
-| `tylluan-cli` | `start / stop / status / logs / connect / download-models / install` |
+| `tylluan-cli` | CLI de gestión, 17 comandos (`tylluan-cli --help`): start, stop, status, doctor, logs, install, update, backup, restore, audit, connect, download-models, new, sandbox, resume, eval, export-examples |
 | `tylluan-evals` | Benchmark harness: Recall@N, Precision@N, latency percentiles |
 | `tylluan-fsrs` | Spaced repetition scheduling for memory decay |
-| `tylluan-gui` | Tauri-based desktop GUI (experimental) |
+| `tylluan-gui` | Esqueleto de un futuro shell de escritorio Tauri; sin funcionalidad (el kernel aún no está enlazado) |
 
 ---
 
 ## CI Pipeline
 
-| Job | Status |
-|-----|--------|
+Jobs definidos en `.github/workflows/ci.yml` (a 2026-10-14, commit `8bdd67e`, el workflow completo terminó en verde; los marcados "report" no bloquean):
+
+| Job | Qué comprueba |
+|-----|---------------|
+| Rust — build + test | compilación y tests de los crates |
+| Rust — cargo-deny | licencias, avisos y bans |
+| Security — claims gate | `scripts/ci/claims/run_claims.py` contra binarios compilados, con una sonda de par no aprobado |
+| Python — lint + test | ruff + pytest de los guilds |
+| Dashboard — lint | pnpm lint + build + tests de hooks |
+| Rust — ARM64 portability | `cargo check` para `aarch64-unknown-linux-gnu` (compila, no ejecuta) |
+| Docs — test count / HEAD sync / BOM / mojibake | cifras y citas de la documentación |
+| Docs — path/port/version citations | `scripts/check_docs_reality.sh` (incluye el recuento de guilds) y `scripts/check_doc_links.py` |
+| Docs — gate semantics | `scripts/test_verify_semantics.sh`: los gates "report" siguen sin bloquear |
+| Docs — dead-code, no-predation, dead-config (report) | heurísticas que informan, no bloquean |
+| Pilar 2 — contracts | esquemas válidos; endpoints en vivo solo si hay kernel |
+| Portability — absolute paths | ninguna ruta de una máquina concreta |
+| Boot smoke — no ONNX | un config solo-BM25 llega a `/health` |
+| Rust — security audit tests | suites de seguridad end-to-end |
+| Desktop — Tauri shell check | el esqueleto de escritorio compila |
+
+Otros workflows: `release.yml`, `install-smoke.yml`, `docker-smoke.yml`, `codeql-analysis.yml`, `guild-python-portable.yml`, `portability-roundtrip.yml`.
+
+-----|--------|
 | Rust — build + test | ✅ |
 | Rust — cargo-deny (licenses + advisories + bans) | ✅ |
 | Rust — clippy -D warnings | ✅ |

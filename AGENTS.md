@@ -1,4 +1,4 @@
-# Tylluan v0.16.0+ (unreleased) — Agent Instructions (Codex / OpenCode)
+# Tylluan v0.17.1 — Agent Instructions (Codex / OpenCode)
 
 > Este archivo es leído automáticamente por agentes OpenCode/Codex al conectar (Deep,
 > Mimo, cualquier futuro agente en ese runtime). Si está desactualizado, TODO agente
@@ -64,7 +64,7 @@ cargo run -p tylluan-cli -- start
 **Tests:** 1007 lib tests (kernel) + 74 (tylluan-link) + 12 (tylluan-fsrs) = 1093 en verde — verificar con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí, el número real cambia cada ciclo (y `scripts/check_test_count.sh` ya valida esta cifra en CI).
 **HEAD commit real:** consultar `git log --oneline -1`, o `curl http://127.0.0.1:47004/health` para el commit que el kernel EN EJECUCIÓN tiene cargado (puede ir por detrás de main si nadie ha reconstruido tras el último cambio en `.rs`).
 
-### Cerrado desde v0.16.0 (2026-08-11 a 2026-08-14, sin tag de versión todavía): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md` sección `[Unreleased]` para el detalle completo.
+### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14): dos rondas de auditoría externa cerradas el mismo día cada una — RCE crítico de P2P (`4674f84`) con verificación real de peer añadida después (`ebbc998`, Ed25519↔X25519), ACL rediseñado fail-closed (`09b9668`), ASI06 cerrado con gate de escritura de 2 capas para `tylluan_remember` (`2bd0416`). `FrictionStore` con path inyectable, split de `api_v1.rs` (3114→3 archivos). A2A F1-F4 completo: cliente outbound real verificado contra el SDK oficial, exposición REST/intent con ACL, streaming SSE, hardening (`3f4ce1e`). Dashboard: identidad visual soberana en 4 fases verificadas (paleta con nombre propio, tipografía self-hosted, WCAG AA real, piloto de foco de teclado). Ver `CHANGELOG.md`, sección `[0.17.0]`, para el detalle completo.
 
 ### Cerrado en v0.16.0 (2026-08-11): M39 (adopción MCP 2026-07-28: stateless core verificado en vivo, Tasks con guards reales, MCP Apps con manifiestos reales) y M40 (Tylluan como capa de continuidad/confianza/acción, 8 fases) ambos completos — condición explícita de José para el release. 3 bugs reales encontrados en vivo y cerrados end-to-end, incluido el cuelgue histórico de Qwen Desktop en modo SSE (causa raíz: `sse_handler` descartaba los headers reales del cliente). Circuito CoherenceGate→dataset fase 1+2: ejemplos estructurados A/B con ground truth real vía el Signal Loop de ADR-011, nada entrenado todavía.
 
@@ -72,20 +72,22 @@ cargo run -p tylluan-cli -- start
 
 ### Milestones completados
 
+> ✅ significa implementado y con tests. No significa activo por defecto ni útil en producción: las filas con nota entre paréntesis se corrigieron el 2026-10-14 contra el código.
+
 | Milestone | Descripción | Estado |
 |-----------|-------------|--------|
 | **M1** | Memory decay — half-life T½=14d, type-specific rates | ✅ |
-| **M2** | Hybrid Search v2 — BM25 + FTS5 + BGE-M3 + RRF | ✅ |
+| **M2** | Hybrid Search v2 — BM25 + FTS5 + embeddings + RRF (BGE-M3 en su momento; hoy el defecto es `mxbai-embed-large`) | ✅ |
 | **M3** | Guild auto-discovery — scan `guilds/` at startup | ✅ |
 | **M7** | Single binary — `--features bundled-dashboard` | ✅ |
 | **M10** | Bounded Work Contracts — finite multi-agent protocol | ✅ |
 | **M11** | Federation — SQLite peers · push/pull/auto-sync · ChaCha20 | ✅ |
-| **M12** | Mesh identity — Ed25519 · STUN NAT · mDNS LAN | ✅ |
+| **M12** | Mesh identity — Ed25519 · STUN NAT · mDNS LAN | ✅ identidad Ed25519 y mDNS (opt-in, apagado por defecto); **STUN no funciona**: `nat.rs` devuelve el puerto de un socket UDP efímero, no el del kernel (verificado 2026-10-14) |
 | **M13** | Binary releases (4 targets) · install scripts · `tylluan-cli` | ✅ |
 | **Security CI** | 30 automated security tests | ✅ |
 | **Encryption** | SQLCipher AES-256 at rest (`--features encryption`) | ✅ |
 | **v0.6–v0.9** | Core Memory · HNSW · LinearRAG · Episodic search · Batch embeddings | ✅ |
-| **M14-A** | DHT Kademlia · 256 K-buckets · mainline BitTorrent bootstrap | ✅ |
+| **M14-A** | DHT Kademlia · 256 K-buckets · mainline BitTorrent bootstrap | ✅ código y tests; el bootstrap mainline está apagado por defecto (`mesh.mainline_dht_enabled = false`) y ninguna build lo habilita |
 | **M14-B** | Gossip push-pull · LRU store · anti-entropy cursors · HardwareCaps | ✅ |
 | **M14-C** | Noise XK/NK · Ed25519→X25519 · wired to federation sync | ✅ |
 | **M6-full** | `PartitionableTransport<T>` (5 modes) + `fault_dst.rs` (4 DST scenarios) | ✅ |
@@ -115,7 +117,7 @@ cargo run -p tylluan-cli -- start
 |-----------|-------------|--------|
 | **M15-P0** | `install.sh` / `install.ps1` — descarga binario, arranca `--profile portable`, health check 30s, imprime config MCP | ✅ `2df8f73` |
 | **M15-P1** | `GET /api/v1/setup-hint` — JSON con configs Claude Desktop / Code / Cursor. BM25 como default | ✅ `2df8f73` |
-| **M15-P2** | Docker imagen `ghcr.io/forja-orca/tylluan:latest` — `debian:bookworm-slim` + ONNX 1.22.0 + bundled-dashboard + `always_on=[]` + docker-smoke CI auth | ✅ `a2642da`→`945838c` |
+| **M15-P2** | `Dockerfile` — `debian:bookworm-slim` + ONNX 1.22.0 + bundled-dashboard + `always_on=[]`; el job `Docker Smoke` lo construye y arranca en CI | ✅ `a2642da`→`945838c`. La imagen `ghcr.io/forja-orca/tylluan` que citan CHANGELOG y ADR-006 **no se pudo verificar**: ningún workflow la publica y el registro anónimo deniega el acceso (2026-10-14) |
 | **M15-P3** | OpenClaw 368k stars verificados · Hermes Agent compatible · M17 Rama A decidida | ✅ `5c9b32d` |
 | **ADR-006** | Spec Rufus Release — `docs/reference/adr/ADR006_rufus_release.md` | ✅ |
 | **Roadmap** | M15-M19 planificados — `docs/roadmap/ROADMAP_O3.md` | ✅ |
@@ -126,7 +128,7 @@ cargo run -p tylluan-cli -- start
 ## Arquitectura invariante (CONTRACT-01)
 
 1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
-2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. Default actual `mxbai-embed-large` (1024d, desde 2026-09-30; BGE-M3 sigue soportado, verificado 2026-10-10 contra `config.rs:1796`). NUNCA reducir a 768.
+2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. Default actual `mxbai-embed-large` (1024d, desde 2026-09-30; `default_embedding_model()` en `config.rs`). BGE-M3 sigue soportado. NUNCA reducir a 768. Nota (2026-10-14): `embeddings.rs` también acepta `bge-small`/`minilm` (384d) y `nomic-embed-text` (768d) y el perfil `clinic` usa 384d; mezclar dimensiones en una misma base rompe la búsqueda vectorial. Si esa flexibilidad debe existir es una decisión de arquitectura pendiente, no un detalle de configuración.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:47004` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.
 5. **MIT soberanía:** sin dependencias cloud en el critical path.
@@ -158,13 +160,12 @@ cargo run -p tylluan-cli -- start
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 998+ lib tests passing (cifra exacta: scripts/check_test_count.sh)
+# Esperado: 1007 lib tests passing (cifra exacta: scripts/check_test_count.sh)
 
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
-# Esperado: 69+ link tests passing
+# Esperado: 74 link tests passing
 
-cargo test -p tylluan-evals 2>&1 | tail -3
-# Esperado: 2 evals tests passing
+# tylluan-evals es un harness de benchmark: no tiene #[test] propios, no cuenta en el total de 1093.
 ```
 
 ---
@@ -175,7 +176,7 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 - NUNCA `host = "0.0.0.0"` + `dev_mode = true` juntos (LAN RCE)
 - NUNCA tokens en archivos trackeados — solo en `.tylluan-token` (gitignored)
 - NUNCA iniciar procesos vía Bash (AV bloquea spawning en Windows)
-- NUNCA reducir timeouts para guilds de inferencia (embeddings en CPU tardan 2-8s — BGE-M3 o mxbai-embed-large)
+- NUNCA reducir timeouts para guilds de inferencia (los embeddings en CPU pueden tardar segundos; no hay medida publicada por modelo)
 - NUNCA cambiar el degree bias de vuelta a multiplicación — el `/ (1 + deg * 0.1)` es correcto
 
 ---
@@ -187,7 +188,9 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 | **Claude Code (Sonnet 5)** | CLI / IDE | Tech lead — planes, briefings, síntesis, docs, memoria, verificación cruzada |
 | **Deep** | OpenCode | Backend Rust + guilds Python — features complejas, cierre de bugs de fondo |
 | **Mimo** | OpenCode | Auditorías/refactor de dashboard — tareas acotadas y verificadas, no diseño abierto de una vez |
-| **Antigravity** | Gemini + MCP | UI/UX dashboard — tareas YA cerradas y acotadas por el tech lead (historial de datos simulados presentados como reales, verificar siempre antes de aceptar) |
+| **Antigravity** | Gemini + MCP | UI/UX dashboard e instaladores — tareas YA cerradas y acotadas por el tech lead (historial de datos simulados presentados como reales, verificar siempre antes de aceptar) |
+| **Buffy** | Agente en worktree propio | Higiene del repo, refactor y verificación independiente — tareas acotadas y contrastadas (perfil en `.tylluan/agents.toml`) |
+| **Hermes** | App de escritorio | Informes con historial de afirmaciones sin verificar: contrastar cada dato contra el código antes de usarlo |
 | **Qwen Desktop** | App escritorio | Investigación web + deep research — vía SSE MCP, sin acceso a disco |
 
 **Reglas de asignación:**
@@ -198,12 +201,14 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 
 **Disciplina no negociable para cualquier agente de esta flota (aprendida a base de incidentes reales, 2026-07-28):**
 1. Nunca afirmar "cerrado"/"funciona" sin verificar tú mismo (leer el código, correr el build/test real, probar en vivo). `cargo check`/`cargo test` NO corren `clippy -D warnings` — CI sí; corre `cargo clippy -p tylluan-kernel -- -D warnings` tú mismo antes de dar un cambio Rust por listo.
-2. Un guild Python nuevo necesita registrarse en 3 sitios (`main.rs` lista `lazy_guilds`, `router/catalog.rs` weight+descripción+lista de nombres) o falla con "Unknown guild" en runtime — `discover_guilds()` no escanea subcarpetas, no basta con crear el `.py`.
-3. Dashboard: `pnpm`, nunca `npm` (dos lockfiles divergentes rompieron dependencias en producción, 2026-07-28).
+2. Un guild Python nuevo necesita un descriptor en `router/catalog.rs` y estar registrado: en `LAZY_GUILDS` (`registry/guild_list.rs`) o en `always_on` de `tylluan.toml`. Si falta el segundo paso, `tylluan_do` responde "Unknown guild" en runtime; los tests `test_every_guild_file_is_in_catalog` y `test_lazy_or_always_on_guilds_are_registered` lo vigilan. No basta con crear el `.py`.
+3. Dashboard: `pnpm`, nunca `npm` (dos lockfiles divergentes rompieron dependencias en producción, 2026-07-28); solo `dashboard/pnpm-lock.yaml` está versionado. Excepción: el paquete compartido `packages/tylluan-ui-core` se construye con npm en CI.
 4. Si dos agentes tocan piezas complementarias (un endpoint + quien lo consume), acordar el esquema EXACTO (nombres de tabla/campo, puertos) en Coloquio antes de escribir código — pasó 2 veces el mismo día no hacerlo y hubo que arreglar el desajuste después.
 5. Nunca dejar trabajo sin commitear acumulándose — commits pequeños y verificados, no todo junto al final.
 6. Nunca atribuir una decisión a José que no diera — si actúas por iniciativa propia, dilo así.
 7. Todo commit lleva la pregunta de no-depredación respondida (ADR-013): corre `scripts/check_no_predation.sh` tras commitear y antes de reportar el cambio como verificado; tocar `transport/`, `guilds/`, `integrations/` o `tylluan*.toml` exige sección `## Impact` en el mensaje del commit.
+8. Cada agente trabaja SOLO en su propio worktree. Nunca edites ni comitees en el checkout compartido: es lo que activa la puerta anti-depredación (ADR-013, "WIP ajeno") y ya costó incidentes repetidos.
+9. Solo Claude Code comitea y empuja a `origin/main`. El resto entrega diff sin commitear más un informe; el pre-push ejecuta `scripts/verify.sh` (unos 10 minutos) y nunca se salta con `--no-verify`.
 
 **Perfiles declarativos (M19-P5):** ver [ADR-009](docs/reference/adr/ADR009_agents_declarative_contract.md) — `.tylluan/agents.toml` es el contrato máquina-legible que el kernel carga al arrancar (agent_id → rol ACL). Este archivo (AGENTS.md) sigue siendo la documentación humana; no se parsea.
 
@@ -215,6 +220,7 @@ cargo test -p tylluan-evals 2>&1 | tail -3
 
 Al cerrar cualquier milestone, el agente que lo cierra ejecuta este checklist antes de anunciar "cerrado" en Coloquio:
 
+0. **Puertas de documentación** — `scripts/check_docs_reality.sh` (rutas, puerto, versión, recuento de tests y de guilds) y `scripts/check_doc_links.py` (enlaces relativos) corren en `verify.sh` y en CI; si fallan, la documentación miente.
 1. **`STATUS.md`** — actualizar versión, tabla de tests, "What works" con lo que el milestone entregó. Fuente de verdad técnica: lo obsoleto se borra, no se acumula.
 2. **`ROADMAP.md`** — mover el milestone a cerrado con fecha y commit hash.
 3. **`docs/internal/PROJECT.map` / `OPERATIONS.map`** — solo si el milestone cambió arquitectura o invariantes.
