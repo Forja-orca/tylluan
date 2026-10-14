@@ -430,7 +430,7 @@ flowchart LR
 | Componente | Tecnología |
 |-----------|------------|
 | Kernel | Rust (tokio + axum) |
-| Embeddings | mxbai-embed-large (ONNX local, CPU, default) — configurable: bge-m3, bge-small, minilm, nomic, none |
+| Embeddings | mxbai-embed-large (ONNX local, CPU, default) — configurable: mxbai-q, bge-m3, bge-small, minilm, nomic, arctic, e5, none |
 | Reranker | Jina v1 Turbo (ONNX local) |
 | Inferencia generativa | `llama.cpp` (`llama-server`, autodescargado), agnóstico a un Ollama/LM Studio externo si ya está corriendo |
 | Búsqueda | BM25 + FTS5 + vector local + fusión híbrida RRF + boost de entidad |

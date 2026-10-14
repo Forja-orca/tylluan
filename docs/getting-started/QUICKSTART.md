@@ -70,7 +70,7 @@ tylluan-cli install --profile clinic
 tylluan-cli install --profile server
 ```
 
-Profiles can be changed later in `tylluan.toml` by setting `embedding_model` (and the matching `vector_dimensions`) to one of `"none"`, `"minilm"`, `"bge-small"`, `"nomic"`, `"bge-m3"` or `"mxbai-embed-large"`.
+Profiles can be changed later in `tylluan.toml` by setting `embedding_model` (and the matching `vector_dimensions`) to one of `"none"`, `"mxbai-embed-large"`, `"mxbai-q"`, `"bge-m3"`, `"bge-small"`, `"minilm"`, `"nomic-embed-text"`, `"snowflake-arctic-embed-l"` or `"multilingual-e5-large"` (the list the kernel prints when it rejects an unknown value). Dimensions: mxbai, bge-m3, arctic and e5 are 1024, nomic is 768, bge-small and minilm are 384.
 
 For reference, a measured data point on the `portable` profile (published v0.17.1 Linux x86_64 binary, empty database, WSL2 with 6 CPUs and 8 GB RAM): healthy in 0.9–3.7 s and about 34 MB resident at idle. Other profiles were not measured.
 
@@ -96,7 +96,7 @@ Pass the token as `?token=...` on the SSE URL or as an `Authorization: Bearer ..
 
 ## Python Guilds
 
-The kernel auto-discovers guilds in `guilds/` on startup (45 are routable by default). Install dependencies:
+The kernel auto-discovers guilds in `guilds/` on startup (45 are routable by default; `sandbox` is experimental). Install dependencies:
 
 ```bash
 # Linux / macOS
