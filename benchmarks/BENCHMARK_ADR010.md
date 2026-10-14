@@ -9,7 +9,7 @@
 
 ## 1. Mediciones Empíricas Reales
 
-### Model: `bge_m3` (0.69 MB en disco)
+### Model: `bge_m3` (0.69 MB en disco: solo el fichero del grafo `model.onnx`; los pesos viven en un fichero de datos externo que esta medición no suma, así que no es el tamaño real del modelo)
 - **Estado:** 🟢 `Medido en Vivo (Real)`
 - **Ruta:** `.fastembed_cache/models--BAAI--bge-m3/snapshots\5617a9f61b028005a4858fdac845db406aefb181\onnx\model.onnx`
 - **Tiempo de Carga:** `4215.52 ms`

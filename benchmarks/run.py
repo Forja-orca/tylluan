@@ -5,14 +5,18 @@ Tylluan benchmark suite — reproducible latency and throughput measurements.
 Measures four things any deployment can reproduce:
   1. HTTP baseline  — GET /health, pure network overhead
   2. Coloquio post  — POST message end-to-end (persist + broadcast)
-  3. Memory write   — POST /api/v1/memory/store (embed + store, CPU-bound)
+  3. Memory write   — POST /api/v1/memory/write, then POST /api/v1/memory/search
   4. Kernel RSS     — idle memory footprint in MB
 
 Results saved to benchmarks/results/<timestamp>.json
 
+WARNING: this script WRITES to the kernel it targets (nodes tagged agent_id=benchmark,
+messages in the Coloquio channel "bench-coloquio"). Run it against a throwaway kernel with its
+own data directory, never against a kernel whose memory you care about.
+
 Usage:
     python benchmarks/run.py
-    python benchmarks/run.py --kernel http://127.0.0.1:3033 --out results/my_run.json
+    python benchmarks/run.py --kernel http://127.0.0.1:47004 --out results/my_run.json
     python benchmarks/run.py --skip-memory   # skip slow embedding benchmark
 """
 
@@ -67,25 +71,29 @@ def percentiles(samples: list) -> dict:
     }
 
 
-def kernel_rss_mb(kernel: str, token=None) -> float:
-    """Read kernel RSS from /api/v1/system/metrics if available."""
-    _, data, _ = _req(f"{kernel}/api/v1/system/metrics", token=token, timeout=5)
-    rss = data.get("memory_rss_bytes") or data.get("rss_bytes")
-    if rss:
-        return round(rss / 1024 / 1024, 1)
-    # fallback: ask the OS about any process named tylluan-nexus
+def kernel_rss_mb():
+    """RSS in MB of the local `tylluan-nexus` process, or None when it cannot be read.
+
+    The kernel exposes no per-process memory endpoint (GET /api/v1/system/status only reports
+    machine-wide usage), so this asks the OS. It therefore measures the local process, not
+    whatever --kernel points at, and refuses to guess when several kernels are running.
+    """
+    import subprocess
     try:
-        import subprocess
-        out = subprocess.check_output(
-            ["powershell", "-Command",
-             "(Get-Process tylluan-nexus -ErrorAction SilentlyContinue | Measure-Object WorkingSet -Sum).Sum"],
-            timeout=5
-        ).decode().strip()
-        if out and out.isdigit():
-            return round(int(out) / 1024 / 1024, 1)
+        if platform.system() == "Windows":
+            out = subprocess.check_output(
+                ["powershell", "-Command",
+                 "(Get-Process tylluan-nexus -ErrorAction SilentlyContinue | ForEach-Object { $_.WorkingSet64 }) -join ','"],
+                timeout=5).decode().strip()
+            sizes = [int(x) for x in out.split(",") if x.strip().isdigit()]
+        else:
+            out = subprocess.check_output(["ps", "-C", "tylluan-nexus", "-o", "rss="], timeout=5).decode()
+            sizes = [int(x) * 1024 for x in out.split() if x.isdigit()]
     except Exception:
-        pass
-    return -1
+        return None
+    if len(sizes) != 1:
+        return None
+    return round(sizes[0] / 1024 / 1024, 1)
 
 
 # -- benchmark functions -----------------------------------------------------
@@ -132,9 +140,9 @@ def bench_memory_write(kernel: str, token, n: int) -> dict:
     errors = 0
     for i in range(n):
         status, _, ms = _req(
-            f"{kernel}/api/v1/memory/store", "POST",
+            f"{kernel}/api/v1/memory/write", "POST",
             {"content": f"benchmark fact number {i}: the sky is blue and models are large",
-             "tags": ["bench"], "source": "benchmark"},
+             "agent_id": "benchmark"},
             token=token, timeout=60,
         )
         if status in (200, 201):
@@ -144,8 +152,8 @@ def bench_memory_write(kernel: str, token, n: int) -> dict:
     if not samples:
         print("skipped (endpoint unavailable)")
         return {"skipped": True, "errors": errors}
-    print(f"p50={statistics.median(samples):.1f}ms  (includes BGE-M3 embedding on CPU)")
-    return {**percentiles(samples), "errors": errors, "note": "includes BGE-M3 CPU embedding"}
+    print(f"p50={statistics.median(samples):.1f}ms")
+    return {**percentiles(samples), "errors": errors, "note": "node upsert via /api/v1/memory/write; includes embedding cost if the write path embeds"}
 
 
 def bench_memory_recall(kernel: str, token, n: int) -> dict:
@@ -173,7 +181,7 @@ def bench_memory_recall(kernel: str, token, n: int) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Tylluan benchmark suite")
-    parser.add_argument("--kernel", default="http://127.0.0.1:3000")
+    parser.add_argument("--kernel", default="http://127.0.0.1:47004")
     parser.add_argument("--token", default=None)
     parser.add_argument("--http-n", type=int, default=100, help="HTTP baseline requests")
     parser.add_argument("--post-n", type=int, default=50, help="Coloquio post samples")
@@ -215,13 +223,15 @@ def main():
             args.kernel, args.token, args.mem_n)
         results["benchmarks"]["memory_recall_ms"] = bench_memory_recall(
             args.kernel, args.token, args.mem_n)
+        if results["benchmarks"]["memory_write_ms"].get("skipped"):
+            results["benchmarks"]["memory_recall_ms"]["note"] = "no write succeeded: this measured a search over whatever the DB already held"
     else:
         print("  [3/4] Memory benchmarks skipped (--skip-memory)")
 
     print(f"  [4/4] Kernel RSS ...", end=" ", flush=True)
-    rss = kernel_rss_mb(args.kernel, args.token)
+    rss = kernel_rss_mb()
     results["benchmarks"]["kernel_rss_mb"] = rss
-    print(f"{rss} MB" if rss >= 0 else "unavailable")
+    print(f"{rss} MB" if rss is not None else "unavailable (no single local tylluan-nexus process)")
 
     # Save results
     out_dir = Path(__file__).parent / "results"
@@ -243,7 +253,7 @@ def main():
             unit = " MB" if "rss" in name else " ms"
             print(f"  {name:<28} {data['p50']:>5.1f}{unit} {data['p95']:>5.1f}{unit} {data['p99']:>5.1f}{unit}")
         elif name == "kernel_rss_mb":
-            print(f"  {'kernel_rss_mb':<28} {data:>5.1f} MB")
+            print(f"  {'kernel_rss_mb':<28} " + (f"{data:>5.1f} MB" if data is not None else "unavailable"))
     print(f"{'─' * 52}")
     print(f"\n  Results saved to {out_path}")
     print(f"\n  To reproduce: python benchmarks/run.py --kernel {args.kernel}")

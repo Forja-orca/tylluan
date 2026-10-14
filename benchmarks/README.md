@@ -4,10 +4,11 @@ Reproducible latency and throughput measurements against a running kernel.
 
 ## Quick start
 
+> **This suite writes to the kernel it targets** (nodes with `agent_id=benchmark`, and messages in the Coloquio channel `bench-coloquio`). Point it at a throwaway kernel with its own directory, config, `TYLLUAN_DATA_DIR` and `--port`, never at a kernel whose memory you care about. On Windows + WSL2, `127.0.0.1` inside WSL is forwarded to Windows, so an omitted `--kernel` can reach your real kernel: always pass it explicitly.
+
 ```bash
-# Start the kernel first
-tylluan.bat         # Windows
-./tylluan.sh        # Linux/Mac
+# Start a separate kernel first (see docs/getting-started/QUICKSTART.md)
+tylluan-cli start
 
 # Run benchmarks (echo mode, no LLM needed)
 python benchmarks/run.py
@@ -16,7 +17,7 @@ python benchmarks/run.py
 python benchmarks/run.py --skip-memory
 
 # Custom kernel URL
-python benchmarks/run.py --kernel http://127.0.0.1:3033
+python benchmarks/run.py --kernel http://127.0.0.1:47019
 ```
 
 Results are saved to `benchmarks/results/<timestamp>.json`.
@@ -27,15 +28,15 @@ Results are saved to `benchmarks/results/<timestamp>.json`.
 |---|---|---|---|
 | `http_baseline_ms` | GET /health | 100 | Raw HTTP overhead |
 | `coloquio_post_ms` | POST /coloquio/.../post | 50 | Message persistence + SSE broadcast |
-| `memory_write_ms` | POST /memory/store | 10 | BGE-M3 embedding + SQLite write (CPU-bound) |
-| `memory_recall_ms` | POST /memory/search | 10 | Vector search + BM25 + Jina reranker |
-| `kernel_rss_mb` | — | — | Process RSS at idle |
+| `memory_write_ms` | POST /api/v1/memory/write | 10 | Node upsert into SQLite (includes embedding cost if the write path embeds) |
+| `memory_recall_ms` | POST /api/v1/memory/search | 10 | Search over whatever the database holds, after the writes above |
+| `kernel_rss_mb` | OS process table | — | RSS of the single local `tylluan-nexus` process (`unavailable` if there are none or several; it does not read the process behind `--kernel`) |
 
 ## Methodology
 
 - **No warmup skipped**: first request counted, reflects cold cache behavior.
 - **Sequential requests**: no parallelism, measures single-client latency not throughput.
-- **CPU-only**: BGE-M3 and Jina run on CPU. Expect 2-8s for memory_write on typical hardware.
+- **Depends on your configuration**: the embedding model, profile and hardware change every number. No per-model latency figure is published here because none has been measured on a fixed reference setup.
 - **Percentiles reported**: p50, p95, p99 across N samples.
 
 ## Reference numbers
