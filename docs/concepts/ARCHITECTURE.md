@@ -65,7 +65,7 @@ Peer-to-peer knowledge sync:
 - Push / pull / bidirectional sync endpoints
 - `federation_source` provenance on all received nodes
 - Echo-loop prevention: received nodes never re-exported by default
-- Background auto-sync driven by `[federation] auto_sync_interval_secs`
+- Background auto-sync driven by `[federation] sync_interval_ms` (default 30000, 0 disables) and `auto_sync_mode` (push | pull | both)
 
 ### Mesh Layer (tylluan-link crate)
 P2P discovery and transport:
