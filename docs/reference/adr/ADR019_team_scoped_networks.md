@@ -26,7 +26,7 @@ Decidido por José: sin malla global; redes de equipo; emparejamiento simple y u
 | Atravesar NAT | **No funciona.** El cliente STUN de `nat.rs` no se usa y no hay relay. |
 | Emparejamiento por invitación | **No existe.** Hoy se añade un par a mano con URL y secreto compartido. |
 | Permisos por par y por espacio | **No existe.** Un par aprobado sincroniza según la configuración global de federación. |
-| Lista de comandos permitidos para despacho remoto | **No verificada.** Antes de implementar hay que auditar qué puede ejecutar hoy un par aprobado. |
+| Lista de comandos permitidos para despacho remoto | **No existe (verificado 2026-10-14, paso 1).** El handler P2P (`transport/http/mod.rs:1005-1037`) pasa `req.guild` y `req.tool` directo a `registry.call_tool`, sin allow-list ni ACL; un par aprobado puede invocar cualquier gremio, incluido `bash`. El propio código lo admite (`config.rs:435-438`). El listener P2P está apagado por defecto (`config.rs:445`). |
 | Federación de Coloquio | **No existe.** |
 
 ## 3. Propuesta
@@ -98,3 +98,14 @@ Los umbrales son propuestos por el TL, no medidos; José puede cambiarlos antes 
 3. **Coloquio federado: aparcado** hasta cerrar los pasos 2 y 4.
 
 Los umbrales S1-S5 siguen siendo propuestos por el TL y no medidos; el spike los mide.
+
+### Resultados parciales (2026-10-14)
+
+**Paso 1 (auditoría de capacidades de un par aprobado) — hecho, verificado por el TL.** Hallazgos con `fichero:línea` sobre `a6f45e3`:
+- La aprobación es un booleano (`federation_peers.approved`, `federation/mod.rs:64`); no hay permisos por par.
+- La exportación entrega todo nodo con `shareable = 1` (`memory/silva/anchors.rs:166-169`) y la recepción inserta en la tabla `nodes` sin partición (`api_federation.rs:365`).
+- El despacho P2P entrega `req.guild` y `req.tool` a `registry.call_tool` sin lista de permitidos (`transport/http/mod.rs:1005-1037`); el código lo admite en `config.rs:435-438`. `bash` admite `python` y `node` (`guilds/builders/plugins/bash.py:77-95`) y el sandbox está apagado por defecto (`config.rs:1560-1563`).
+- Estado de producción en el momento de la auditoría: `[p2p] enabled = true` (puerto 9123, escuchando) con **cero pares aprobados**, por lo que el conjunto aprobado está vacío y el listener rechaza a todos (falla cerrado). El riesgo aparece en cuanto se aprueba un par.
+
+**Spike de `iroh` — S1, S5 y la parte de tamaño de S4 medidas; S2 y S3 pendientes.** S1 y S5 pasan; el binario crece +1,03 %. Precondiciones: iroh 1.x exige rustc 1.91 (el repo fija 1.88) y `cargo deny` falla por 24 versiones duplicadas (requiere `skip` razonados). Decisión pendiente de José. No se adopta nada hasta medir S2 (dos redes distintas) y S3 (relay sin ver contenido).
+
