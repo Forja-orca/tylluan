@@ -25,3 +25,7 @@
 - [ADR-017 - Batchers de embeddings por clase de call-site](ADR017_embedding_batcher_classes.md) - 2026-10-01. DISENO (no implementado): 3 clases (RECALL/ROUTING/BACKGROUND) en vez del batcher global unico que midio peor en 5 de 8 celdas; + LRU warm-start de anchors al boot; gates de medicion por fase; read-pool SQLite descartado con dato (Phase 0).
 
 > Indice actualizado 2026-10-01 con ADR-017.
+- [ADR-018 — Decision Fabric](ADR018_decision_fabric.md). Diseño aprobado para la Fase 0 (spike de medición), no para integración; ver el propio ADR y `docs/roadmap/ROADMAP_O3.md`.
+- [M14-F — P2P Guild Dispatch (especificación)](M14F_p2p_dispatch_spec.md). Su encabezado dice "ADR-005" (colisión con Governance); implementado.
+
+> Índice actualizado 2026-10-14 con ADR-018 y la especificación M14-F.
