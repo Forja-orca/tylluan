@@ -84,5 +84,5 @@ All memory in `~/.tylluan/` (SQLite). No cloud, no telemetry.
 ## See also
 
 - [OpenClaw integration](openclaw.md)
-- [MCP client configs](../../integrations/) — Claude Desktop, Claude Code, Cursor
+- [MCP client configs](../../../integrations/) — Claude Desktop, Claude Code, Cursor
 - [NousResearch/hermes-agent official docs](https://github.com/NousResearch/hermes-agent)

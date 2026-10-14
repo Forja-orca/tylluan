@@ -4,7 +4,7 @@
 **Kernel Target:** `http://127.0.0.1:47005`  
 **Kernel Build:** Version `0.17.0` | Commit `9d86156`  
 **Execution Environment:** CPU-only (`AMD64`, `Windows 11`) — No GPU offloading  
-**Raw Telemetry Artifact:** [`benchmarks/latency/results_concurrent_20261004_141115.json`](file:///E:/tylluan/benchmarks/latency/results_concurrent_20261004_141115.json)  
+**Raw Telemetry Artifact:** [`benchmarks/latency/results_concurrent_20261004_141115.json`](results_concurrent_20261004_141115.json)  
 
 ---
 

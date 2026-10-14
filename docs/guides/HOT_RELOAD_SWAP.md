@@ -1,10 +1,12 @@
 # Zero-Downtime Hot-Reload Swap — ARCHIVED DESIGN
 
-> **⚠️ ARCHIVED — NOT IMPLEMENTED.** This document describes a proxy-based zero-downtime restart design that was considered but not built. Tylluan does **not** have a `tylluan-proxy` binary or `active_port.json`. The kernel (`tylluan-nexus`) binds directly to `:47004`. Clients reconnect via SSE retry on restart. This file is kept for historical context only.
-
+> **⚠️ PARTIALLY IMPLEMENTED — the proxy half was never built.**
+> **What exists** (kernel side, read from `crates/tylluan-kernel/src/transport/http/mod.rs`, `start_http_server`; not exercised in this audit): if the configured port is already taken, the kernel binds the next free port in `port+1..=port+100`; it writes the bound port to `data/active_port.json` (relative to its working directory); and it sends `POST /api/v1/admin/shutdown` to the previous kernel when that kernel's port is recorded in that file and lies in `port..=port+100`.
+> **What does not exist:** the `tylluan-proxy` binary/crate meant to keep `:47004` stable and forward to the active port. Without it, clients keep using whatever port they were configured with. Do not start a second kernel in the same working directory as a running one expecting a seamless swap: it takes the next free port and tells the running kernel to shut down, so it replaces it and clients must reconnect to the new port.
+> The rest of this file is the original design, kept for context.
 ---
 
-Este documento contiene la especificación y diseño del sistema de **recarga en caliente sin caídas (Zero-Downtime Hot-Reload)** — un diseño alternativo que no se implementó.
+Este documento contiene la especificación y diseño del sistema de **recarga en caliente sin caídas (Zero-Downtime Hot-Reload)** — un diseño del que solo se construyó la parte del kernel (ver el aviso de arriba).
 
 ---
 
@@ -34,13 +36,13 @@ La arquitectura de recarga en caliente permite actualizar el núcleo Rust de Tyl
 ```
 
 ### 1. El Proxy Inverso (`tylluan-proxy`)
-* **Ubicación:** [crates/tylluan-proxy](file:///E:/TylluanMCPo3/crates/tylluan-proxy)
+* **Ubicación:** `crates/tylluan-proxy` (never created)
 * **Puerto Estable:** Escucha en `127.0.0.1:47004`. Todos los clientes de la red y frontend se conectan aquí.
 * **Mapeo Dinámico:** Lee el puerto activo desde `data/active_port.json` (por ejemplo, `{"port": 3031}`).
 * **Watcher Pasivo:** Vigila el archivo cada 250ms. Al cambiar el puerto, desvía el nuevo tráfico HTTP y hereda la gestión del túnel de WebSocket de forma transparente.
 
 ### 2. Arranque del Kernel con Puertos Dinámicos
-* **Fallback de Enlace:** En [crates/tylluan-kernel/src/transport/http/mod.rs](file:///E:/TylluanMCPo3/crates/tylluan-kernel/src/transport/http/mod.rs), si el puerto solicitado (`47004`) está ocupado (lo cual ocurre siempre que el proxy esté arriba), el kernel busca el primer puerto libre en el rango `3031..=3130`.
+* **Fallback de Enlace:** En `crates/tylluan-kernel/src/transport/http/mod.rs` (the kernel does not do this fallback today), si el puerto solicitado (`47004`) está ocupado (lo cual ocurre siempre que el proxy esté arriba), el kernel busca el primer puerto libre en el rango `3031..=3130`.
 * **Registro de Puerto:** Una vez que el kernel está listo e inicializado, escribe su puerto activo en `data/active_port.json`.
 
 ### 3. Graceful Shutdown & Protección SQLite
@@ -50,16 +52,16 @@ La arquitectura de recarga en caliente permite actualizar el núcleo Rust de Tyl
 
 ---
 
-## 🛠️ Archivos del Sistema
+## 🛠️ Archivos del sistema (del diseño; no existen)
 
-* **Proxy Binary:** [main.rs](file:///E:/TylluanMCPo3/crates/tylluan-proxy/src/main.rs)
-* **Proxy Configuration:** [Cargo.toml](file:///E:/TylluanMCPo3/crates/tylluan-proxy/Cargo.toml)
-* **Kernel Dynamic Bind & Broadcast & Shutdown:** [mod.rs](file:///E:/TylluanMCPo3/crates/tylluan-kernel/src/transport/http/mod.rs#L204-L260)
-* **Kernel Entry point:** [main.rs](file:///E:/TylluanMCPo3/crates/tylluan-kernel/src/main.rs)
+* **Proxy Binary:** `crates/tylluan-proxy/src/main.rs` (never created)
+* **Proxy Configuration:** `crates/tylluan-proxy/Cargo.toml` (never created)
+* **Kernel Dynamic Bind & Broadcast & Shutdown:** `crates/tylluan-kernel/src/transport/http/mod.rs` (the dynamic-port bind described here was not built)
+* **Kernel Entry point:** `crates/tylluan-kernel/src/main.rs`
 
 ---
 
-## 🧪 Instrucciones de Compilación y Ejecución
+## 🧪 Instrucciones del diseño (no ejecutables: el proxy y el kernel con puerto dinámico no existen)
 
 Para iniciar el sistema de recarga en caliente de forma limpia:
 

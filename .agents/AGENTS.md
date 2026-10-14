@@ -5,13 +5,13 @@ Tylluan cuenta con un visualizador técnico standalone construido en Next.js en 
 
 ### Reglas de Sincronización Obligatorias para Agentes:
 1.  **Sincronización de Cambios:** Cualquier modificación a la arquitectura cognitiva (ej. añadir/renombrar MCP tools, cambiar el modelo de base de datos SilvaDB, alterar la federación P2P, o re-estructurar los ciclos de consolidación) **DEBE** verse reflejada inmediatamente en los componentes React de `E:\tylluan\docs-site\src\components\architecture/`.
-    *   **Mapa General:** [architecture-map.tsx](file:///E:/tylluan/docs-site/src/components/architecture/architecture-map.tsx)
-    *   **FSRS Model:** [fsrs-model.tsx](file:///E:/tylluan/docs-site/src/components/architecture/fsrs-model.tsx)
-    *   **Retrieval Pipeline:** [retrieval-pipeline.tsx](file:///E:/tylluan/docs-site/src/components/architecture/retrieval-pipeline.tsx)
-    *   **Federation Mesh:** [federation-mesh.tsx](file:///E:/tylluan/docs-site/src/components/architecture/federation-mesh.tsx)
-    *   **Sleep/Dream Cycle:** [sleep-cycle.tsx](file:///E:/tylluan/docs-site/src/components/architecture/sleep-cycle.tsx)
-    *   **Dispatch Flow:** [dispatch-flow.tsx](file:///E:/tylluan/docs-site/src/components/architecture/dispatch-flow.tsx)
-    *   **Roadmap:** [roadmap.tsx](file:///E:/tylluan/docs-site/src/components/architecture/roadmap.tsx)
+    *   **Mapa General:** [architecture-map.tsx](../docs-site/src/components/architecture/architecture-map.tsx)
+    *   **FSRS Model:** [fsrs-model.tsx](../docs-site/src/components/architecture/fsrs-model.tsx)
+    *   **Retrieval Pipeline:** [retrieval-pipeline.tsx](../docs-site/src/components/architecture/retrieval-pipeline.tsx)
+    *   **Federation Mesh:** [federation-mesh.tsx](../docs-site/src/components/architecture/federation-mesh.tsx)
+    *   **Sleep/Dream Cycle:** [sleep-cycle.tsx](../docs-site/src/components/architecture/sleep-cycle.tsx)
+    *   **Dispatch Flow:** [dispatch-flow.tsx](../docs-site/src/components/architecture/dispatch-flow.tsx)
+    *   **Roadmap:** [roadmap.tsx](../docs-site/src/components/architecture/roadmap.tsx)
 2.  **Veracidad de Métricas:** Nunca inventar números de tests ni benchmarks en el visualizador o en `STATUS.md`. El conteo de tests real actual es **`388`** (315 kernel + 61 link + 12 fsrs, verificado 2026-07-12). Ante cualquier cambio, corre la suite de pruebas para reportar la cifra exacta.
 3.  **Verificación de Compilación:** Antes de finalizar cualquier turno que modifique el docs-site, debes ejecutar el build de producción para certificar que compila limpio y sin advertencias:
     ```bash
