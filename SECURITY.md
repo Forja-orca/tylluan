@@ -29,6 +29,6 @@ For a detailed analysis of Tylluan's security posture, including its mapping aga
 
 Tylluan is experimental research software. Key security gaps are documented in [DISCLAIMER.md](DISCLAIMER.md). The most significant:
 
-1. No code execution sandbox (bash/code guilds run with user privileges)
-2. No per-agent access control (bearer token grants full access)
-3. No automatic kill switch for rogue agents
+1. No sandbox by default: bash/code guilds run with user privileges unless the opt-in Docker sandbox is enabled (`[security.sandbox]`, off by default)
+2. The bearer token grants full access by default; an opt-in role ACL exists (`[security.acl]`, `default_role = "admin"` means no restriction until configured)
+3. No automatic detection of rogue agents; a manual local kill switch exists (`POST /api/v1/admin/emergency-kill`)

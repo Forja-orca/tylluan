@@ -30,7 +30,7 @@ behavior and would need its own change.
 - Bearer token lives in `.tylluan-token` at the project root (`.gitignore`d) for source builds; `~/.tylluan/.tylluan-token` for binary installs
 - Backup: copy manually to a secure location outside the repo (e.g. `~/.tylluan/secrets`)
 - Never write the token value in tracked files
-- Rotate via `POST /api/v1/admin/rotate-token`
+- To rotate: replace the token and restart the kernel (there is no online-rotation endpoint)
 
 ### Federation Security
 
@@ -85,13 +85,13 @@ executed), but nothing stopped that content from being fed unfiltered into a
 future generative model's context window. The **Coherence Gate**
 (`security::coherence_gate::CoherenceGate`, in production) sits between
 `search_hybrid` and the response on every recall — both the normal path and
-the cache-hit path — and applies three layers, cheapest first:
+the cache-hit path — and applies four layers, cheapest first (the table below lists the three deterministic ones; layer 4 is a hybrid LLM judge through the `llama_backend` guild for candidates flagged by layers 1-3, see `docs/architecture/coherence_gate_layer4_hybrid.md`):
 
 | Layer | Detects | Action | Cost |
 |-------|---------|--------|------|
 | 1. Known injection patterns | Static regex list (`security/poison_patterns.rs`, 10 patterns — e.g. `[SYSTEM:`, `<\|im_start\|>`, `IGNORE ALL PREVIOUS`) | Eliminated silently | Sub-μs |
 | 2. Untrusted provenance | Federation-sourced nodes with low trust weight | Penalized ×0.1, not removed | Sub-ms |
-| 3. Semantic drift | Query/content cosine similarity below 0.85, reusing the already-stored BGE-M3 embedding — zero extra inference | Penalized ×0.1, not removed | ~0ms (no re-embedding) |
+| 3. Semantic drift | Query/content cosine similarity below 0.85, reusing the query embedding already computed by the active embedding model — zero extra inference | Penalized ×0.1, not removed | ~0ms (no re-embedding) |
 
 If more than 50% of results are eliminated or penalized in a single recall,
 the response surfaces an explicit warning to the caller. Cumulative counters

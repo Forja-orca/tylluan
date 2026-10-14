@@ -51,15 +51,15 @@ tylluan_recall: "test memory"
 
 | Tool | What it does |
 |------|-------------|
-| `tylluan_remember` | Store information with BGE-M3 embeddings + auto contradiction detection |
-| `tylluan_recall` | Hybrid search (vector + BM25) — R@5 82% on real queries |
+| `tylluan_remember` | Store information with local embeddings + auto contradiction detection |
+| `tylluan_recall` | Hybrid search (vector + BM25) — Recall@5 82% on LongMemEval-S (50 questions, measured with BGE-M3 — see `benchmarks/COMPARISON.md`) |
 | `tylluan_think` | Graph analysis: paths, hub nodes, contradictions |
 | `tylluan_graph` | Knowledge graph operations: add triples, query relationships |
 | `tylluan_do` | Route any natural-language task to a guild (bash, git, web search, etc.) |
 
 ## Authentication
 
-By default Tylluan runs with `dev_mode = true` (no auth required). To enable auth:
+With a local dev config (`dev_mode = true`) no auth is required; the code default is `dev_mode = false` (bearer token required). To enable auth:
 
 1. Edit `tylluan.toml`: set `dev_mode = false`
 2. Restart: `tylluan-cli stop && tylluan-cli start`
@@ -82,14 +82,14 @@ By default Tylluan runs with `dev_mode = true` (no auth required). To enable aut
 Tylluan starts in `portable` mode (BM25 only, no download required). For better recall quality:
 
 ```bash
-# Download BGE-M3 model (~400MB, one-time)
+# Download the default embedding model (mxbai-embed-large, one-time; the CLI prints the real size)
 tylluan-cli download-models
 
 # Restart with full hybrid search
 tylluan-cli stop && tylluan-cli start
 ```
 
-After this, retrieval uses BGE-M3 1024-dim embeddings + BM25 fusion (R@5 82% on LongMemEval-S).
+After this, retrieval uses 1024-dim embeddings (default: mxbai-embed-large) + BM25 fusion (the 82% R@5 on LongMemEval-S was measured with BGE-M3; see `benchmarks/COMPARISON.md`).
 
 ## Troubleshooting
 

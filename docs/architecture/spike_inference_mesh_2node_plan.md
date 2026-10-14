@@ -1,3 +1,5 @@
+> **Nota (2026-10-14).** Plan de ejecución que no llegó a ejecutarse tal cual. Los puertos 4000 y 4010 son puertos de laboratorio de este plan; el puerto de Tylluan es 47004.
+
 # Spike: Inference Mesh — 2 nodos reales (localhost)
 
 **Estado:** PLAN DE EJECUCIÓN — no ejecutado todavía.

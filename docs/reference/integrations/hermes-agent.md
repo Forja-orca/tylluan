@@ -53,8 +53,8 @@ Read token with: `cat ~/.tylluan/.tylluan-token`
 
 | Tool | What it does |
 |------|-------------|
-| `tylluan_remember` | Store information with BGE-M3 embeddings + auto contradiction detection |
-| `tylluan_recall` | Hybrid search (vector + BM25) — R@5 82% on real queries |
+| `tylluan_remember` | Store information with local embeddings + auto contradiction detection |
+| `tylluan_recall` | Hybrid search (vector + BM25) — Recall@5 82% on LongMemEval-S (50 questions, measured with BGE-M3 — see `benchmarks/COMPARISON.md`) |
 | `tylluan_think` | Graph analysis: paths, hub nodes, contradictions |
 | `tylluan_graph` | Knowledge graph operations: add triples, query relationships |
 | `tylluan_do` | Route any natural-language task to a guild (bash, git, web search, etc.) |
@@ -64,7 +64,7 @@ Read token with: `cat ~/.tylluan/.tylluan-token`
 Default mode is `portable` (BM25 only). For better recall:
 
 ```bash
-tylluan-cli download-models   # ~400MB BGE-M3, one-time
+tylluan-cli download-models   # default embedding model (mxbai-embed-large), one-time
 tylluan-cli stop && tylluan-cli start
 ```
 

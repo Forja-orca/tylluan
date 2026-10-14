@@ -6,7 +6,7 @@ Thank you for your interest in contributing. Tylluan is built by humans and AI a
 
 - Rust 1.88+ (`rustup` recommended — see `rust-toolchain.toml`)
 - Python 3.12+ with pip
-- Node.js 18+ (for dashboard development only)
+- Node.js 20+ (for dashboard development only)
 - Git
 
 ## How to contribute
@@ -49,7 +49,7 @@ If your PR touches security-sensitive code (auth, guild execution, token handlin
 Follow the complete [Adding a Guild guide](docs/guides/ADDING_A_GUILD.md) for a copy-paste scaffold, registration details, tests, and a manual `tylluan_do` invocation.
 
 1. Create a Python file in `guilds/` using `FastMCP`, `@mcp.tool()`, and `utils.safe_mcp_run(mcp)`.
-2. Add its runtime module path to `LAZY_GUILDS` or configure it as always-on; update `catalog.rs` overrides only when automatic discovery is insufficient.
+2. Register it: add its descriptor to `router/catalog.rs` and its module path to `LAZY_GUILDS` (or configure it as always-on). Auto-discovery alone leaves it unroutable ("Unknown guild").
 3. Add useful `Use for:` trigger phrases and a short description.
 4. Test: `cargo test -p tylluan-kernel --lib`.
 

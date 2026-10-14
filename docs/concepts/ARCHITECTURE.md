@@ -11,13 +11,13 @@ MCP Client (Claude, Cursor, VS Code, LM Studio, any SSE client)
   tylluan-nexus (:47004)            ← single process, no proxy
         │
         ├── MCP Transport          (SSE + HTTP Streamable)
-        ├── Intent Router          (BGE-M3 embeddings → guild selection + keyword scoring)
-        ├── Guild Registry         (47+ Python fastmcp processes, auto-discovered from guilds/)
-        ├── SilvaDB                (SQLite WAL · BGE-M3 vectors · FTS5 BM25 · knowledge graph)
+        ├── Intent Router          (embeddings → guild selection + keyword scoring)
+        ├── Guild Registry         (45 routable Python fastmcp guilds, auto-discovered from guilds/)
+        ├── SilvaDB                (SQLite WAL · embedding vectors · FTS5 BM25 · knowledge graph)
         ├── Core Memory            (agent persona + preferences — always available, never retrieved)
         ├── Coloquio               (multi-agent channels, episodic flywheel)
         ├── Federation Layer       (peers.db · ChaCha20-Poly1305 · provenance · echo-loop safe)
-        └── Mesh Layer             (DHT Kademlia · Gossip push-pull · Noise Protocol XK)
+        └── Mesh Layer             (DHT Kademlia · Gossip push-pull · Noise NK sync / XK dispatch)
 ```
 
 **There is no proxy.** `tylluan-nexus` binds directly to `:47004`. Zero-downtime restarts are handled by the OS — clients reconnect on the SSE retry loop.
@@ -29,7 +29,7 @@ Every MCP client sees exactly these 5 tools — nothing more, nothing less:
 | Tool | Purpose |
 |------|---------|
 | `tylluan_do` | Universal intent router — natural language → guild → tool |
-| `tylluan_remember` | Store content in SilvaDB with BGE-M3 embedding |
+| `tylluan_remember` | Store content in SilvaDB with an embedding (default mxbai-embed-large) |
 | `tylluan_recall` | Hybrid search (BM25 + FTS5 + vector + LinearRAG graph) over SilvaDB |
 | `tylluan_think` | Sequential reasoning chains via `sequential_thinking` guild |
 | `tylluan_graph` | Graph operations — add nodes/edges, query relationships, PageRank |
@@ -39,7 +39,7 @@ CONTRACT-01 is inviolable. New capabilities route through `tylluan_do`, never as
 ## Key Components
 
 ### Intent Router (Semantic Guild Dispatcher)
-BGE-M3 (local ONNX, CPU) embeds the user intent. Cosine similarity against guild descriptors selects the target guild. 34 `description_override()` entries in the catalog preserve routing quality for ambiguous patterns. Keyword scoring provides a fast-path for deterministic intents.
+The embedding model (local ONNX, CPU; default `mxbai-embed-large`, BGE-M3 supported) embeds the user intent. Cosine similarity against guild descriptors selects the target guild. about 46 `description_override()` entries (see `catalog.rs`) in the catalog preserve routing quality for ambiguous patterns. Keyword scoring provides a fast-path for deterministic intents.
 
 ### Guild System
 Python subprocesses using `fastmcp` stdio protocol. Auto-discovered from `guilds/` at startup — zero manual registration. Guild catalog cached via `OnceLock` (startup ~5s). Always-on guilds: `bash`, `filesystem`, `monitor`, `coloquio`, `knowledge`, `websearch`, and more. On-demand guilds spawn on first call.
@@ -47,10 +47,10 @@ Python subprocesses using `fastmcp` stdio protocol. Auto-discovered from `guilds
 ### SilvaDB (Memory Engine)
 SQLite WAL database with:
 - **Node types:** `episodic`, `lesson`, `concept`, `entity`, `decision`, `document`, `agent_memory`, and more
-- **Hybrid search pipeline:** FTS5 BM25 → IVF ANN (BGE-M3 1024d) → LinearRAG graph traversal (Personalized PageRank + degree penalty) → RRF fusion (k=60) → entity boost ×1.25
+- **Hybrid search pipeline:** FTS5 BM25 → IVF ANN (1024d by default) → LinearRAG graph traversal (Personalized PageRank + degree penalty) → RRF fusion (k=60) → entity boost ×1.25
 - **HNSW fast path:** `instant-distance` index for datasets ≥12k nodes; falls back to IVF, then linear
 - **Salience decay:** FSRS-based retrievability `2^(-elapsed_days / fsrs_stability)` mapped to weight — replaced the old exponential half-life formula; see ADR-012 for the `active/quiet/consolidated/archived` lifecycle states this feeds into. (Corrected 2026-08-22, was describing the pre-FSRS formula — found stale during the full-project audit, Coloquio T197.)
-- **Schema:** v23 (FTS5 at v11, HNSW BLOB at v12, memory lifecycle columns at v23 — see ADR-012; this line was last bumped 2026-08-22, verify against `schema.rs` before trusting it long-term)
+- **Schema:** v27 (`SCHEMA_VERSION` in `schema.rs`; FTS5 at v11, HNSW BLOB at v12, memory lifecycle columns at v23 — see ADR-012)
 
 ### Core Memory
 `AgentProfile` stores `persona: String` + `preferences: serde_json::Value` — always loaded, never retrieved on demand. Accessible via `tylluan_recall` and `tylluan_remember` subtool routing without adding new sovereign tools.
@@ -69,7 +69,7 @@ Peer-to-peer knowledge sync:
 
 ### Mesh Layer (tylluan-link crate)
 P2P discovery and transport:
-- **DHT Kademlia (M14-A):** 256 K-buckets, Ed25519 XOR metric, mainline BitTorrent DHT bootstrap
+- **DHT Kademlia (M14-A):** 256 K-buckets, Ed25519 XOR metric, mainline BitTorrent DHT bootstrap (off by default and not enabled in any shipped build)
 - **Gossip (M14-B):** Symmetric push-pull, LRU entry store, anti-entropy cursor tracking, hardware capability fields (`ram_mb`, `has_gpu`, `load_avg`) in `GossipEntry`
 - **Noise Protocol XK (M14-C):** 3-message handshake, Ed25519→X25519 key conversion, ChaCha20-Poly1305 AEAD, length-prefixed async framing — wired to federation sync endpoints
 - **CapabilityRegistry:** In-memory TTL store of peer hardware capabilities, pruned via background task — foundation for M14-D guild dispatch
@@ -99,7 +99,7 @@ crates/
         embeddings.rs         — embed_batch (ONNX, single mutex, L2-norm)
     router/
       catalog.rs              — guild catalog (OnceLock cached)
-      embeddings.rs           — BGE-M3 intent embedding
+      embeddings.rs           — intent embedding (default mxbai-embed-large)
     security/
       guard.rs                — execution guard, secure_compare
       auth.rs                 — bearer auth, sanitize_query, extract_token
@@ -112,7 +112,7 @@ crates/
   tylluan-cli/                — start / stop / status / install --profile=...
   tylluan-evals/              — Recall@N, MRR, latency benchmark harness
   tylluan-common/             — Shared types and error types
-guilds/core/                  — 47+ Python fastmcp guild scripts
+guilds/core/                  — 45 routable Python fastmcp guild scripts
 dashboard/                    — React + Vite dashboard (embedded in binary via rust-embed)
 ```
 
@@ -122,4 +122,4 @@ dashboard/                    — React + Vite dashboard (embedded in binary via
 - `dev_mode = false` — bearer auth required by default
 - **Never** `host = "0.0.0.0"` + `dev_mode = true` (LAN RCE)
 - Tokens never in tracked files — only `.tylluan-token` (gitignored)
-- `vector_dimensions = 1024` — BGE-M3 is 1024d; never set to 768
+- `vector_dimensions = 1024` — the default embedding model is 1024d; never set to 768

@@ -23,7 +23,7 @@ Casos de uso:
 
 ### 2. Agentes usuarios (clientes MCP de terceros que conectan a un Tylluan instalado)
 Casos de uso:
-- Instalar con `tylluan install --profile portable|clinic|server` y conectar vía `:47004/sse`
+- Instalar con `tylluan-cli install --profile portable|clinic|server` y conectar vía `:47004/sse`
 - Usar las 5 sovereign tools (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) para dar memoria persistente a cualquier agente sin tooling nativo
 - Casos reales: un médico en zona sin internet que necesita memoria clínica offline-first (perfil `clinic`); un desarrollador que quiere que su agente de código recuerde contexto entre sesiones (perfil `portable`); un equipo que necesita mesh compartido entre varias instancias (perfil `server`)
 
@@ -39,7 +39,7 @@ Casos de uso:
 |-------|-----------|-----------|
 | Casos de uso reales documentados con ejemplos (el "médico offline", "dev con memoria persistente", "equipo con mesh") — hoy dispersos en Coloquio, no en un doc público | Humanos, agentes usuarios | Alta |
 | Guía "Tylluan vs Letta/Mem0/Zep" — comparativa honesta para credibilidad externa (M23 roadmap viejo lo pedía, nunca se escribió) | Humanos evaluando adopción | Alta |
-| `CONTRIBUTING.md` con good-first-issues reales etiquetados (mencionado en roadmap, no verificado que exista en disco) | Agentes constructores nuevos/externos | Media |
+| `CONTRIBUTING.md` con good-first-issues reales etiquetados (el fichero existe en la raíz; las etiquetas de issues en GitHub no se han comprobado) | Agentes constructores nuevos/externos | Media |
 | Documentación de perfiles de instalación (`portable`/`clinic`/`server`) con criterio claro de cuál elegir | Humanos, agentes usuarios | Media |
 
 ---
@@ -51,9 +51,9 @@ Tylluan sigue estas 7 propiedades como principios de diseño explícitos:
 1. **Localidad de Datos Física:** Toda la base de conocimiento (SilvaDB) reside localmente en archivos SQLite bajo el directorio del usuario. Cero dependencias de APIs en la nube en la ruta crítica.
 2. **Ejecución Hardware-Bound:** Optimizado específicamente para hardware con recursos limitados (Raspberry Pi 4 / ARM64). El motor híbrido (BM25 + fastembed ONNX) corre local sin requerir GPUs comerciales pesadas.
 3. **Ausencia de Telemetría Externa:** Sin llamadas ocultas de diagnóstico ni recolección de estadísticas fuera del host.
-4. **Criptografía Soberana:** Identidad del nodo gestionada localmente mediante firmas criptográficas Ed25519 y transporte cifrado a través de Noise Protocol XK.
+4. **Criptografía Soberana:** Identidad del nodo gestionada localmente mediante firmas criptográficas Ed25519 y transporte cifrado con Noise: NK en la sincronización de federación y XK en el despacho P2P entre pares.
 5. **Decaimiento Adaptativo (FSRS-5):** La memoria humana olvida de forma selectiva. FSRS-5 permite que cada nodo mantenga su propia estabilidad y retrievabilidad a nivel de base de datos, optimizando el contexto de forma biológica sin depender de LLMs para ponderar frescura.
-6. **Federación en Red P2P:** Redundancia distribuida sin servidores centrales. Sincronización push/pull directa y anti-bucles mediante Kademlia DHT.
+6. **Federación en Red P2P:** Redundancia distribuida sin servidores centrales. Sincronización push/pull directa y anti-bucles por procedencia (`federation_source`); la DHT Kademlia no participa en eso.
 7. **Código Soberano (Licencia MIT):** Libre de licencias corporativas restrictivas o gatekeeping comercial.
 
 ---

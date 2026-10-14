@@ -76,12 +76,12 @@ Tylluan is designed with security defaults, but no software is completely secure
 - Provides a localhost-only emergency kill switch endpoint (`POST /api/v1/admin/emergency-kill`)
 
 ### What Tylluan does NOT do by default:
-- It does NOT encrypt data at rest
+- It does NOT encrypt data at rest on the default build (opt-in: build with `--features encryption` and set `[security] encrypt_at_rest`)
 - It does NOT sandbox code execution by default (opt-in Docker sandbox is available)
 - It does NOT verify the identity of calling agents (only the bearer token)
 - It has basic rate limiting (60 calls/min per session) but no advanced throttling
 - It does NOT have per-guild access control enabled by default (opt-in role-based ACL is available)
-- It does NOT enable the natural language intent safety filter by default (opt-in intent_filter is available)
+- It is not a complete safety net: the basic intent safety filter is ON by default (`intent_filter = true`) and only catches a small list of dangerous patterns
 
 ### You are responsible for:
 - Protecting the bearer token as you would protect any high-value secret
@@ -103,7 +103,7 @@ Tylluan has documented security gaps. These are not bugs — they are known limi
 
 3. **Optional Docker sandbox (opt-in):** Bash and code guilds can be sandboxed in Docker (cross-platform Windows/Linux support). Note that appropriate dependencies must be present in the target container image.
 
-4. **Optional intent safety filter (opt-in):** Basic intent filtering (blocking dangerous commands like `rm -rf`, `DROP TABLE`, `format C:`) is available but must be enabled in `tylluan.toml`.
+4. **Basic intent safety filter (on by default):** Basic intent filtering (blocking dangerous commands like `rm -rf`, `DROP TABLE`, `format C:`) is enabled by default (`intent_filter = true`); you can disable it in `tylluan.toml`.
 
 5. **Encryption at Rest (opt-in):** SQLCipher AES-256 is available via `--features encryption` and `encrypt_at_rest = true`. All 4 database modules (silva, mailbox, audit, federation) are wired with `PRAGMA hexkey`. Default builds use plain SQLite (no encryption).
 
