@@ -79,15 +79,40 @@ thread_local! {
 /// `./data/audit.db` (the live kernel holds it — the original cross-process
 /// flake) and never another test's unique DB. Every writer to it is
 /// best-effort (`let _ = log_*`), so contention on it is harmless.
+///
+/// Keyed on the process INSTANCE, not on the PID alone (2026-10-15): the
+/// path used to be `tylluan_friction_scratch_<pid>.db` and was never
+/// deleted, so it outlived the process that created it. Windows reuses
+/// PIDs, so a later suite run could inherit an earlier one's file — and its
+/// rows — which is the "expected N telemetry rows, saw M" symptom of this
+/// flake family: every write/read that resolves here (any thread that did
+/// not opt into the per-test DB: `tokio::spawn`ed tasks, `spawn_blocking`,
+/// production friction writers on foreign threads) silently saw foreign
+/// rows. `scratch_db_never_inherits_a_previous_process_file` pins it.
 #[cfg(test)]
 fn test_scratch_db_path() -> std::path::PathBuf {
     static SCRATCH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     SCRATCH
         .get_or_init(|| {
-            std::env::temp_dir().join(format!(
-                "tylluan_friction_scratch_{}.db",
-                std::process::id()
-            ))
+            // Wall-clock nonce + PID: unique per process instance, exactly
+            // like `set_unique_test_db` (pid+counter alone is not unique
+            // across runs — that was the earlier 43-vs-3 / 4-vs-1 sighting).
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let path = std::env::temp_dir().join(format!(
+                "tylluan_friction_scratch_{}_{}.db",
+                std::process::id(),
+                nonce
+            ));
+            // Never inherit: start from a file that cannot already hold rows.
+            for suffix in ["", "-wal", "-shm"] {
+                let mut p = path.clone().into_os_string();
+                p.push(suffix);
+                let _ = std::fs::remove_file(std::path::PathBuf::from(p));
+            }
+            path
         })
         .clone()
 }
@@ -817,6 +842,77 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM friction_events", [], |r| r.get(0))
             .expect("count events #2");
         assert_eq!(count, 2, "the owning thread's writes must land in its unique DB");
+    }
+
+    /// (2026-10-15) El scratch DB de los builds de test se resolvia SOLO por
+    /// `process::id()` y nunca se borraba: un proceso posterior que reutilizara
+    /// ese PID heredaba el fichero -- y sus filas -- del anterior. %TEMP% ya
+    /// acumulaba 299 scratch + 3566 unicos el 2026-10-15, y toda escritura o
+    /// lectura que resuelve ahi (cualquier hilo que no opted al protocolo:
+    /// tareas `tokio::spawn`, `spawn_blocking`, escritores de produccion en
+    /// hilos ajenos) podia ver filas de OTRO proceso: el sintoma "esperaba N
+    /// filas de telemetria y vio M" de esta familia.
+    ///
+    /// Determinista: planta el fichero heredado exacto que el esquema antiguo
+    /// habria reutilizado y exige que el escritor ajeno parta de cero.
+    #[test]
+    fn scratch_db_never_inherits_a_previous_process_file() {
+        use std::thread;
+
+        let legacy = std::env::temp_dir().join(format!(
+            "tylluan_friction_scratch_{}.db",
+            std::process::id()
+        ));
+        // "Un proceso anterior con este mismo PID dejo 6 eventos aqui".
+        {
+            let conn = rusqlite::Connection::open(&legacy).expect("open legacy scratch db");
+            ensure_schema(&conn).expect("legacy schema");
+            for i in 0..6 {
+                conn.execute(
+                    "INSERT INTO friction_events (workflow_id, event_type, timestamp, description, resolved)
+                     VALUES (0, ?1, '2026-10-01T00:00:00Z', 'inherited from an earlier process', 0)",
+                    params![format!("stale_event_{i}")],
+                )
+                .expect("plant inherited row");
+            }
+        }
+
+        // Hilo ajeno: nunca llamo a set_unique_test_db(), asi que resuelve al
+        // scratch DB de ESTE proceso. Escribe una sola vez.
+        let (resolved, stale_rows) = thread::spawn(|| {
+            log_friction_event_standalone("probe_after_pid_reuse", "this process's own write")
+                .expect("foreign write");
+            let path = friction_db_path();
+            let conn = rusqlite::Connection::open(&path).expect("open resolved scratch db");
+            let stale: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM friction_events WHERE event_type LIKE 'stale_event%'",
+                    [],
+                    |r| r.get(0),
+                )
+                .expect("count inherited events");
+            (path, stale)
+        })
+        .join()
+        .expect("probe thread panicked");
+
+        assert_ne!(
+            resolved, legacy,
+            "the test-build scratch DB is keyed on process::id() alone, so a later process \
+             with this reused PID inherits the previous process's rows ({})",
+            legacy.display()
+        );
+        assert_eq!(
+            stale_rows, 0,
+            "a foreign-thread write must land in this process's OWN fresh scratch DB, \
+             not in a file inherited from an earlier process (saw {stale_rows} inherited \
+             rows at {})",
+            resolved.display()
+        );
+
+        // Solo se limpia el fichero plantado: el scratch resuelto es el que usan
+        // los demas tests del proceso y lo gestiona la politica de %TEMP%.
+        let _ = std::fs::remove_file(&legacy);
     }
 
     // -----------------------------------------------------------------------
