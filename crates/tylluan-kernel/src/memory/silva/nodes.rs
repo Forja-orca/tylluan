@@ -47,11 +47,15 @@ pub struct NodeWriteOptions<'a> {
     pub author: Option<&'a str>,
     /// M40-P4: link to original evidence (URL, file path, commit hash).
     pub evidence_url: Option<&'a str>,
+    /// ADR-019 step 2: this write came from a federation peer. On conflict the
+    /// upsert must NEVER change `protected` nor the weight of the existing
+    /// node (a peer-approved node cannot unprotect or boost local rows).
+    pub federation_ingest: bool,
 }
 
 impl<'a> NodeWriteOptions<'a> {
     pub fn new(provenance: &'a str) -> Self {
-        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None, source: None, author: None, evidence_url: None }
+        Self { valid_from: None, valid_until: None, allow_drift: false, provenance, owner_scope: None, source: None, author: None, evidence_url: None, federation_ingest: false }
     }
     pub fn drift_allowed(mut self, yes: bool) -> Self {
         self.allow_drift = yes;
@@ -83,6 +87,11 @@ impl<'a> NodeWriteOptions<'a> {
     /// M40-P4: set evidence URL (link to original evidence).
     pub fn evidence_url(mut self, url: Option<&'a str>) -> Self {
         self.evidence_url = url;
+        self
+    }
+    /// ADR-019 step 2: mark this write as federation peer ingestion.
+    pub fn federation_ingest(mut self) -> Self {
+        self.federation_ingest = true;
         self
     }
 }
@@ -148,7 +157,7 @@ impl super::SilvaDB {
         metadata: &str,
         opts: NodeWriteOptions<'_>,
     ) -> Result<()> {
-        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope, source, author, evidence_url } = opts;
+        let NodeWriteOptions { valid_from, valid_until, allow_drift, provenance, owner_scope, source, author, evidence_url, federation_ingest } = opts;
         if !allow_drift && DRIFT_SENSITIVE_TYPES.contains(&node_type) {
             anyhow::bail!(
                 "DRIFT GUARD: node type '{node_type}' is drift-sensitive and cannot be created through the public API. \
@@ -182,17 +191,25 @@ impl super::SilvaDB {
             // execute() calls with no transaction -- a crash between them left
             // the FTS index permanently out of sync with the real node content.
             let tx = conn.transaction()?;
-            tx.execute(
+            // ADR-019 step 2 hardening: a peer-ingested write must never change
+            // `protected` nor the weight of an EXISTING node. All other callers
+            // keep the standard semantics (weight floor raise / excluded.protected).
+            let (weight_set, protected_set) = if federation_ingest {
+                ("nodes.weight", "nodes.protected")
+            } else {
+                (
+                    "CASE WHEN nodes.type = 'identity' OR nodes.protected = 1 THEN nodes.weight ELSE MAX(nodes.weight, excluded.weight) END",
+                    "excluded.protected",
+                )
+            };
+            let upsert_sql = format!(
                 "INSERT INTO nodes (id, type, content, metadata, weight, protected, conflicted, topic_key, updated_at, valid_from, valid_until, shareable, federation_source, content_hash, provenance, owner_scope, source, author, evidence_url)
                  VALUES (?1, ?2, ?3, ?4, 1.0, 0, 0, ?5, CURRENT_TIMESTAMP, ?6, ?7, 0, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(id) DO UPDATE SET
                     content = excluded.content,
                     metadata = excluded.metadata,
-                    weight = CASE
-                        WHEN nodes.type = 'identity' OR nodes.protected = 1 THEN nodes.weight
-                        ELSE MAX(nodes.weight, excluded.weight)
-                    END,
-                    protected = excluded.protected,
+                    weight = {weight_set},
+                    protected = {protected_set},
                     topic_key = COALESCE(excluded.topic_key, nodes.topic_key),
                     valid_from = COALESCE(excluded.valid_from, nodes.valid_from),
                     valid_until = COALESCE(excluded.valid_until, nodes.valid_until),
@@ -208,6 +225,9 @@ impl super::SilvaDB {
                     last_agent_access = COALESCE(excluded.last_agent_access, nodes.last_agent_access),
                     reactivation_count = COALESCE(excluded.reactivation_count, nodes.reactivation_count),
                     updated_at = CURRENT_TIMESTAMP",
+            );
+            tx.execute(
+                &upsert_sql,
                 // ADR-012 Fase 1: lifecycle columns intentionally OMITTED from INSERT.
                 // New nodes → SQL DEFAULTs kick in (lifecycle_state='active', last_agent_access=0, reactivation_count=0).
                 // Existing nodes → ON CONFLICT: excluded.lifecycle_state is NULL (column omitted) →

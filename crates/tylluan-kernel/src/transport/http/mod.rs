@@ -1002,40 +1002,78 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         };
         let identity = p2p_state.node_identity.clone();
         let registry = p2p_state.registry.clone();
-        let handler: P2pHandlerFn = Arc::new(move |req: tylluan_link::dispatch::GuildDispatchRequest| {
-            let reg = registry.clone();
-            Box::pin(async move {
-                let tool_req = CallToolRequestParam {
-                    name: req.tool.clone().into(),
-                    arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
-                };
-                let start = std::time::Instant::now();
-                match reg.call_tool(&req.guild, tool_req).await {
-                    Ok(res) => {
-                        let dur = start.elapsed().as_millis() as u64;
-                        tylluan_link::dispatch::GuildDispatchResponse {
-                            request_id: req.request_id,
-                            success: !res.is_error.unwrap_or(false),
-                            result: serde_json::json!(res.content),
-                            error: None,
-                            executor_id: "local".to_string(),
-                            duration_ms: dur,
+        // ADR-019 step 2: the handler receives the caller's X25519 static key
+        // (revealed by the Noise handshake and already approval-checked in
+        // tylluan-link) and enforces the peer's dispatch allow-list
+        // (deny-by-default; denials are audited).
+        let gate_peers = p2p_state.peer_db.clone();
+        let handler: P2pHandlerFn = {
+            let gate_peers = gate_peers.clone();
+            Arc::new(move |req: tylluan_link::dispatch::GuildDispatchRequest, caller_x25519: String| {
+                let reg = registry.clone();
+                let gate_peers = gate_peers.clone();
+                Box::pin(async move {
+                    let (peer_label, allowed) = {
+                        let peers = gate_peers.load_all().unwrap_or_default();
+                        match crate::federation::permissions::peer_by_x25519(&peers, &caller_x25519) {
+                            Some(p) => (
+                                p.name.clone(),
+                                p.permissions.may_dispatch(&req.guild, &req.tool),
+                            ),
+                            // Fail-closed: approved at handshake but not
+                            // resolvable now (e.g. revoked mid-flight).
+                            None => (format!("x25519:{caller_x25519}"), false),
                         }
-                    }
-                    Err(e) => {
-                        let dur = start.elapsed().as_millis() as u64;
-                        tylluan_link::dispatch::GuildDispatchResponse {
+                    };
+                    if !allowed {
+                        crate::federation::permissions::audit_permission_denied(
+                            &peer_label,
+                            "dispatch",
+                            &req.guild,
+                            &req.tool,
+                            "tool not allowed by peer policy",
+                        );
+                        return tylluan_link::dispatch::GuildDispatchResponse {
                             request_id: req.request_id,
                             success: false,
                             result: serde_json::Value::Null,
-                            error: Some(e.to_string()),
+                            error: Some("tool not allowed by peer policy".to_string()),
                             executor_id: "local".to_string(),
-                            duration_ms: dur,
+                            duration_ms: 0,
+                        };
+                    }
+                    let tool_req = CallToolRequestParam {
+                        name: req.tool.clone().into(),
+                        arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
+                    };
+                    let start = std::time::Instant::now();
+                    match reg.call_tool(&req.guild, tool_req).await {
+                        Ok(res) => {
+                            let dur = start.elapsed().as_millis() as u64;
+                            tylluan_link::dispatch::GuildDispatchResponse {
+                                request_id: req.request_id,
+                                success: !res.is_error.unwrap_or(false),
+                                result: serde_json::json!(res.content),
+                                error: None,
+                                executor_id: "local".to_string(),
+                                duration_ms: dur,
+                            }
+                        }
+                        Err(e) => {
+                            let dur = start.elapsed().as_millis() as u64;
+                            tylluan_link::dispatch::GuildDispatchResponse {
+                                request_id: req.request_id,
+                                success: false,
+                                result: serde_json::Value::Null,
+                                error: Some(e.to_string()),
+                                executor_id: "local".to_string(),
+                                duration_ms: dur,
+                            }
                         }
                     }
-                }
+                })
             })
-        });
+        };
         // M14-F Phase 3: P2P dispatch listener. Peer authorization (fix of the
         // 2026-08-12 RCE audit): only peers whose Ed25519 pubkey is stored AND
         // approved in peers.db can execute guilds. The Noise XK handshake

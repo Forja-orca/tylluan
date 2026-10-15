@@ -38,7 +38,7 @@ async fn test_p2p_noise_roundtrip() {
     let identity_arc = Arc::new(identity);
 
     // Handler stub: always returns success
-    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest, _caller_x25519: String| {
         Box::pin(async move {
             GuildDispatchResponse {
                 request_id: req.request_id,
@@ -104,7 +104,7 @@ async fn test_p2p_error_response() {
     let identity_arc = Arc::new(identity);
 
     // Handler stub: always returns error
-    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest, _caller_x25519: String| {
         Box::pin(async move {
             GuildDispatchResponse {
                 request_id: req.request_id,

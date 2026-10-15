@@ -47,6 +47,18 @@ async fn test_state() -> Arc<HttpState> {
 
     let config = Arc::new(RwLock::new(TylluanConfig::default()));
 
+    // ADR-019 step 2: permission denials are audited via log_audit_entry ->
+    // guild_audit_log. Keep those rows in a per-process temp file instead of
+    // polluting the repo tree (./data/audit.db relative to the crate dir).
+    if std::env::var("TYLLUAN_AUDIT_DB").is_err() {
+        let p = std::env::temp_dir().join(format!(
+            "tylluan_audit_fed_{}.db",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        // Safety: set once, before any audit write in this test process.
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", p); }
+    }
+
     // Build default repo map for test
     let cwd = std::env::current_dir().unwrap_or_default();
     let repo_map = tylluan_kernel::repo_map::RepoMap::build(&cwd);
@@ -118,7 +130,7 @@ async fn test_peer_db_roundtrip() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
-        external_address: String::new(),
+            external_address: String::new(), permissions: tylluan_kernel::federation::PeerPermissions::default(),
     };
 
     peer_db.insert(&peer).unwrap();
@@ -144,7 +156,7 @@ async fn test_peer_approval_required() {
         approved: false, // NOT approved
         added_at: 0,
         ed25519_pubkey: String::new(),
-        external_address: String::new(),
+            external_address: String::new(), permissions: tylluan_kernel::federation::PeerPermissions::default(),
     };
     state.peer_db.insert(&unapproved).unwrap();
     state.config.write().await.federation_peers.push(unapproved);
@@ -174,7 +186,7 @@ async fn test_shared_secret_separate_from_auth() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
-        external_address: String::new(),
+            external_address: String::new(), permissions: tylluan_kernel::federation::PeerPermissions::default(),
     };
 
     let data = b"confidential payload";
@@ -200,6 +212,9 @@ async fn test_provenance_tagged_on_receive() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        // ADR-019 step 2: receive is deny-by-default; grant the space this
+        // test pushes. (Was permissions: default before step 2.)
+        permissions: serde_json::from_str(r#"{"sync_spaces":[{"space":"tests-receive","direction":"pull"}]}"#).unwrap(),
         external_address: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
@@ -209,7 +224,7 @@ async fn test_provenance_tagged_on_receive() {
         "id": "provenance-node",
         "node_type": "document",
         "content": "federated content",
-        "metadata": "{}",
+        "metadata": "{\"space\":\"tests-receive\"}",
         "weight": 1.0,
         "protected": false,
         "conflicted": false,
@@ -250,8 +265,8 @@ async fn test_provenance_tagged_on_receive() {
 async fn test_no_echo_loop() {
     let state = test_state().await;
     
-    // Add a local node
-    state.silva.upsert_node("local-node", "entity", "local info", "{}").await.unwrap();
+    // Add a local node (ADR-019 step 2: tag it so the peer's push grant covers it)
+    state.silva.upsert_node("local-node", "entity", "local info", "{\"space\":\"tests-export\"}").await.unwrap();
     state.silva.set_shareable("local-node", true).await.unwrap();
 
     // Add a received node (simulating federated provenance)
@@ -267,6 +282,9 @@ async fn test_no_echo_loop() {
         approved: true,
         added_at: 0,
         ed25519_pubkey: String::new(),
+        // ADR-019 step 2: export is deny-by-default; grant the space of the
+        // local node this test exports. (Was permissions: default before step 2.)
+        permissions: serde_json::from_str(r#"{"sync_spaces":[{"space":"tests-export","direction":"push"}]}"#).unwrap(),
         external_address: String::new(),
     };
     state.peer_db.insert(&peer).unwrap();
@@ -312,4 +330,255 @@ async fn test_auto_sync_config_zero_disables() {
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     // Just a sanity check that the system is stable and alive.
     assert_eq!(state.config.read().await.silva.sync_interval_ms, 0);
+}
+
+// ═════════════════ ADR-019 step 2 — permissions tests (T1–T15) ═════════════════
+//
+// Coverage map: T7/T9/T10/T11/T12/T13 live in the unit tests of
+// federation/permissions.rs and api_v1/api_federation.rs (pure gates);
+// T16 lives in memory/silva/tests.rs (upsert hardening). The flows here are
+// the end-to-end ones: export filtering, ingestion gating (receive/pull/both
+// share ONE helper), per-peer push bodies, denial auditing and legacy
+// migration.
+
+use tylluan_kernel::transport::http::api_v1::api_federation::{
+    ingest_from_peer, push_body_for_peer, IngestOutcome,
+};
+
+async fn register_peer_with_perms(state: &Arc<HttpState>, name: &str, token: &str, perms_json: &str) {
+    let permissions: tylluan_kernel::federation::PeerPermissions =
+        serde_json::from_str(perms_json).expect("test permissions json");
+    let peer = FederationPeer {
+        name: name.to_string(),
+        url: "http://127.0.0.1:5999".to_string(),
+        auth_token: token.to_string(),
+        shared_secret: "sec".to_string(),
+        last_sync: None,
+        approved: true,
+        added_at: 0,
+        ed25519_pubkey: String::new(),
+        external_address: String::new(),
+        permissions,
+    };
+    state.peer_db.insert(&peer).unwrap();
+    let mut cfg = state.config.write().await;
+    cfg.federation_peers.retain(|p| p.name != name);
+    cfg.federation_peers.push(peer);
+}
+
+async fn peer_named(state: &Arc<HttpState>, name: &str) -> FederationPeer {
+    state
+        .config
+        .read()
+        .await
+        .federation_peers
+        .iter()
+        .find(|p| p.name == name)
+        .cloned()
+        .expect("registered test peer")
+}
+
+async fn add_shareable_node(state: &Arc<HttpState>, id: &str, space: Option<&str>) {
+    let meta = match space {
+        Some(s) => serde_json::json!({ "space": s }).to_string(),
+        None => "{}".to_string(),
+    };
+    state
+        .silva
+        .upsert_node_with_provenance(id, "lesson", &format!("content {id}"), &meta, "agent_generated")
+        .await
+        .unwrap();
+    let g = state.silva.conn_lock();
+    let c = g.lock().await;
+    c.execute(&format!("UPDATE nodes SET shareable = 1 WHERE id = '{id}'"), [])
+        .unwrap();
+}
+
+fn envelope_for(state: &Arc<HttpState>, id: &str, space: &str) -> tylluan_link::identity::SignedEnvelope {
+    let node = serde_json::json!({
+        "id": id,
+        "node_type": "lesson",
+        "content": format!("peer content {id}"),
+        "metadata": serde_json::json!({ "space": space }).to_string(),
+    });
+    tylluan_link::identity::sign_node(&state.node_identity, &node).unwrap()
+}
+
+/// T1: an approved peer with NO permissions gets nothing and can give nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn t1_default_deny_new_peer() {
+    let state = test_state().await;
+    register_peer_with_perms(&state, "newpeer", "tok1", "{}").await;
+    add_shareable_node(&state, "t1:local", None).await;
+    let peer = peer_named(&state, "newpeer").await;
+
+    let envs = push_body_for_peer(&state, &peer).await;
+    assert!(envs.is_empty(), "default (empty) permissions must push/export NOTHING");
+
+    let out = ingest_from_peer(&state, &peer, &envelope_for(&state, "t1:incoming", "whatever"), "receive").await;
+    assert!(matches!(out, IngestOutcome::Denied(_)), "receive denied by default");
+    assert!(!peer.permissions.may_dispatch("git", "status"), "dispatch denied by default");
+}
+
+/// T3 + T4: export contains ONLY spaces the peer may send to (direction push),
+/// never pull-only or unlisted spaces. End-to-end through the HTTP endpoint.
+#[tokio::test(flavor = "multi_thread")]
+async fn t3_t4_export_filters_by_space_and_direction() {
+    let state = test_state().await;
+    register_peer_with_perms(
+        &state,
+        "p34",
+        "tok34",
+        r#"{"sync_spaces":[{"space":"proj","direction":"push"},{"space":"pin","direction":"pull"}]}"#,
+    )
+    .await;
+    add_shareable_node(&state, "t3:proj", Some("proj")).await;
+    add_shareable_node(&state, "t3:pin", Some("pin")).await;
+    add_shareable_node(&state, "t3:other", Some("other")).await;
+
+    let app = api_v1_routes().with_state(state.clone());
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/federation/sync/export")
+        .header(header::AUTHORIZATION, "Bearer tok34")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 10 * 1024 * 1024).await.unwrap();
+
+    let peer = peer_named(&state, "p34").await;
+    let plain = tylluan_kernel::federation::decrypt_from_peer(&bytes, &state.node_identity, &peer).unwrap();
+    let envs: Vec<tylluan_link::identity::SignedEnvelope> = serde_json::from_slice(&plain).unwrap();
+    let ids: Vec<String> = envs
+        .iter()
+        .map(|e| e.node["id"].as_str().unwrap_or("").to_string())
+        .collect();
+
+    assert!(ids.contains(&"t3:proj".to_string()), "T3: push space must be exported");
+    assert!(!ids.contains(&"t3:pin".to_string()), "T4: pull-only space must NOT be exported");
+    assert!(!ids.contains(&"t3:other".to_string()), "T3: unlisted space must NOT be exported");
+}
+
+/// T5/T6/T7 + T14: the single ingestion gate across receive/pull/both flows.
+#[tokio::test(flavor = "multi_thread")]
+async fn t5_t6_t7_ingestion_gates_and_both_flow() {
+    let state = test_state().await;
+    register_peer_with_perms(&state, "p56", "tok56", r#"{"sync_spaces":[{"space":"in","direction":"pull"}]}"#).await;
+    let peer = peer_named(&state, "p56").await;
+
+    // T6 positive control: pull space ingests with provenance intact.
+    let ok = ingest_from_peer(&state, &peer, &envelope_for(&state, "t6:node", "in"), "receive").await;
+    assert_eq!(ok, IngestOutcome::Received, "pull space must be ingested");
+    {
+        let g = state.silva.conn_lock();
+        let c = g.lock().await;
+        let src: String = c
+            .query_row("SELECT federation_source FROM nodes WHERE id = 't6:node'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(src, "p56", "provenance intact after gate");
+    }
+
+    // T5: unlisted space denied AND not stored.
+    let out = ingest_from_peer(&state, &peer, &envelope_for(&state, "t5:node", "out"), "receive").await;
+    assert!(matches!(out, IngestOutcome::Denied(_)), "unlisted space denied");
+    {
+        let g = state.silva.conn_lock();
+        let c = g.lock().await;
+        let n: i64 = c
+            .query_row("SELECT COUNT(*) FROM nodes WHERE id = 't5:node'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "denied node must NOT be stored");
+    }
+
+    // T7: push-only direction rejects inbound delivery.
+    register_peer_with_perms(&state, "p7", "tok7", r#"{"sync_spaces":[{"space":"in","direction":"push"}]}"#).await;
+    let peer7 = peer_named(&state, "p7").await;
+    let out7 = ingest_from_peer(&state, &peer7, &envelope_for(&state, "t7:node", "in"), "receive").await;
+    assert!(matches!(out7, IngestOutcome::Denied(_)), "push-only space must reject receive");
+
+    // T14: sync_both consumes the SAME helper with flow "both".
+    let out14 = ingest_from_peer(&state, &peer, &envelope_for(&state, "t14:node", "in"), "both").await;
+    assert_eq!(out14, IngestOutcome::Received, "both-flow path shares the gate");
+}
+
+/// T8: push bodies are built PER PEER — each peer receives only its own spaces.
+#[tokio::test(flavor = "multi_thread")]
+async fn t8_push_body_is_per_peer() {
+    let state = test_state().await;
+    register_peer_with_perms(&state, "pa", "tokA", r#"{"sync_spaces":[{"space":"a","direction":"push"}]}"#).await;
+    register_peer_with_perms(&state, "pb", "tokB", r#"{"sync_spaces":[{"space":"b","direction":"push"}]}"#).await;
+    add_shareable_node(&state, "t8:a", Some("a")).await;
+    add_shareable_node(&state, "t8:b", Some("b")).await;
+    add_shareable_node(&state, "t8:c", Some("c")).await;
+
+    let pa = peer_named(&state, "pa").await;
+    let pb = peer_named(&state, "pb").await;
+    let ids = |es: &[tylluan_link::identity::SignedEnvelope]| -> Vec<String> {
+        es.iter().map(|e| e.node["id"].as_str().unwrap_or("").to_string()).collect()
+    };
+    assert_eq!(ids(&push_body_for_peer(&state, &pa).await), vec!["t8:a".to_string()], "peer A gets only space a");
+    assert_eq!(ids(&push_body_for_peer(&state, &pb).await), vec!["t8:b".to_string()], "peer B gets only space b");
+}
+
+/// T15: a permission denial leaves a hash-chained row in guild_audit_log.
+#[tokio::test(flavor = "multi_thread")]
+async fn t15_denials_are_audited() {
+    let state = test_state().await;
+    let audit_path = std::env::var("TYLLUAN_AUDIT_DB").expect("test_state installs the audit seam");
+    register_peer_with_perms(&state, "paudit", "tokaudit", "{}").await;
+    let peer = peer_named(&state, "paudit").await;
+    let out = ingest_from_peer(&state, &peer, &envelope_for(&state, "t15:node", "x"), "receive").await;
+    assert!(matches!(out, IngestOutcome::Denied(_)));
+
+    let conn = tylluan_kernel::config::open_db(std::path::Path::new(&audit_path)).unwrap();
+    let (cnt, hash): (i64, String) = conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(MAX(hash), '') FROM guild_audit_log WHERE intent LIKE 'peer paudit:%'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(cnt >= 1, "a permission denial must leave a guild_audit_log row (got {cnt})");
+    assert!(!hash.is_empty(), "audited denial carries the hash-chain value");
+}
+
+/// T2: a pre-migration peers.db (no permissions column) loads as deny-all.
+#[tokio::test]
+async fn t2_legacy_peers_db_migration_defaults_deny_all() {
+    let path = std::env::temp_dir().join(format!(
+        "tylluan_legacy_peers_{}.db",
+        TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&path);
+    {
+        let conn = tylluan_kernel::config::open_db(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE federation_peers (
+                name TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                auth_token TEXT NOT NULL,
+                shared_secret TEXT NOT NULL DEFAULT '',
+                approved INTEGER NOT NULL DEFAULT 0,
+                last_sync INTEGER,
+                added_at INTEGER NOT NULL,
+                ed25519_pubkey TEXT NOT NULL DEFAULT '',
+                external_address TEXT NOT NULL DEFAULT ''
+            );
+            INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,added_at)
+            VALUES('legacy','http://x','tok','',1,0);",
+        )
+        .unwrap();
+    }
+    let db = PeerDb::open(path.to_str().unwrap()).unwrap();
+    let peers = db.load_all().unwrap();
+    assert_eq!(peers.len(), 1);
+    let p = &peers[0];
+    assert_eq!(
+        p.permissions,
+        tylluan_kernel::federation::PeerPermissions::default(),
+        "legacy rows migrate to deny-all"
+    );
+    assert!(!p.permissions.may_send_space("default"));
+    assert!(!p.permissions.may_dispatch("git", "status"));
 }

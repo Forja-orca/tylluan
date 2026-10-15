@@ -3,7 +3,7 @@
 use axum::{
     Router,
     extract::DefaultBodyLimit,
-    routing::{get, post, delete, any},
+    routing::{get, post, put, delete, any},
 };
 use std::sync::Arc;
 
@@ -181,6 +181,7 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         .route("/api/v1/federation/peers", get(federation_list_peers).post(federation_add_peer))
         .route("/api/v1/federation/peers/{name}", delete(federation_remove_peer))
         .route("/api/v1/federation/peers/{name}/approve", post(federation_approve_peer))
+        .route("/api/v1/federation/peers/{name}/permissions", put(federation_set_permissions))
         .route("/api/v1/federation/sync", post(federation_sync_push))
         .route("/api/v1/federation/sync/receive", post(federation_sync_receive))
         // M11-B: Pull sync + bidirectional
