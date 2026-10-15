@@ -41,6 +41,47 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [x] **Fase 0 paso 3 — variante B: SystemOneDecisionProvider HTTP (clef-flash)** `[MEDIDO Y CERRADO 2026-10-08 — NO-GO con dato real]` — servido real con `llama-server -hf ggml-org/Clef-Flash-GGUF --port 8080` (release b11507, el pin b10158 del instalador no soportaba la arquitectura `clef` del PR #29818, ver `project_tylluan_stale_pinned_binary_versions_idea`). Primera corrida contra un servidor real expuso 3 bugs reales del harness (nunca ejercitados contra `/v1/systemone` de verdad): preguntas empaquetadas todo-o-nada en `decide()`, campo `instructions` requerido por el protocolo real, y la misma rigidez del lado de la respuesta — los 3 corregidos (commit `c40a409`). Con los fixes, `decide_errors` bajó de 1230/1230 (100%) a 62/1230 (5%, todos "input too large" del servidor, límite de batch size 512, esperado). **Resultado real (1230 items, split=all, source=confusion)**: `hitl_resolve` (n=1168) accuracy baseline 0.283→variante 0.452 (mejora), Brier 0.717→0.282 y ECE 0.717→0.187 (mucho mejor calibrado), pero AUROC 0.409 (por debajo de 0.5 — el ranking de probabilidades es peor que azar pese a la mejor clasificación binaria); `route_guild` (n=243) accuracy baseline 0.872→variante 0.576 (EMPEORA respecto a las reglas actuales), Brier 0.128→0.649 (mucho peor calibrado). **VEREDICTO: NO-GO en cláusulas 1-3** — legítimo, no un bug del harness. Cláusula 4 (coste) con latencia real medida (p50 3382ms / p99 13895ms, cold CPU sin batching); falta solo el usage/tokens del servidor para el cálculo final de coste si se quiere completar. Consistente con variante C (Laya) tampoco superando el gate — de las 3 variantes medidas (B, C, D) solo D dio GO-PROVISIONAL.
 - [x] **Fase 0 paso 4 — variante D: DecimaOnnxDecisionProvider (Decima-small, 122M, amyrmahdy/decima-small, Apache-2.0) (TL, 2026-10-05)** `[VERIFICADO Y MEDIDO — GO-PROVISIONAL]` — José descartó clef-flash por peso (9GB) y pidió investigar el panorama real de clones de Jev/SystemOne "cafetera-friendly" (ver `project_tylluan_systemone_opensource_landscape_2026_10` en memoria). Decima-small es 3.4x más pequeño que Laya (122M vs 421M), int8 ONNX nativo, calibrado de fábrica (ECE 0.055 publicado) en vez de zero-shot. Arquitectura real confirmada por introspección directa del grafo ONNX (no de documentación): dual-encoder "late interaction" — `encoder.onnx` (input_ids/attention_mask → token_states[n,seq,384], compartido para state y choices) + `scorer.onnx` (state_h/state_mask/choice_h/choice_mask → scores[n_choices]), `state_prefix="query: "`/`choice_prefix="passage: "`, `temperature=0.9355568358032639` (todo de `onnx/int8/decima.json`, sin redondear). Port Rust/ort en el mismo harness (`--variant-d models/decima`). **Paridad golden verificada contra el ejemplo publicado del model card** (texto sin repetir la pregunta en choice/state, a diferencia de lo que sugería la paráfrasis inicial): deltas máx 0.0068 (int8 vs el ejemplo de referencia). **VEREDICTO REAL (split test, source confusion, n=245 hitl)**: cláusula 1 accuracy hitl 0.5510 vs baseline A 0.5306 — PASS; cláusula 2 calibración Brier 0.2390/ECE 0.0851 vs baseline 0.4694/0.4694 — PASS; cláusula 3 p99 147.0 ms vs presupuesto 500 ms — PASS. Cláusula 4 (coste vs LLM) sigue pendiente de variante B. **GO-PROVISIONAL — primer candidato real del Decision Fabric que pasa el gate**, a diferencia de Laya (NO-GO total). Modelo gitignored en `models/decima/` (receta en el doc-comment del harness, ~127MB descarga).
 
+### 🟢 CICLO 2026-10-14/15 — Redes por equipo (ADR-019) y Decision Fabric como servicio (ADR-020 propuesto)
+
+> Leyenda: **[x]** = terminado y verificado de forma independiente (git, tests o CI), no por informe de agente. **[ ]** = abierto. **[~]** = hecho a medias o con deuda declarada.
+
+**ADR-019 — redes por equipo (LAN o VPN propia)**
+- [x] Decisión de José: malla global fuera; redes por equipo con emparejamiento simple. Modelo de permisos aprobado (todo vacío por defecto, despacho denegado).
+- [x] Paso 1 — auditoría de lo que puede hacer hoy un par aprobado (verificada por el TL con `fichero:línea`).
+- [x] Paso 5 — spike `iroh`: **NO-GO** con dato (uso real = misma red, LAN o VPN propia). Rama `spike/iroh` solo local, no se fusiona. Reabrir solo si un equipo debe conectarse sin VPN desde otra red.
+- [x] **Paso 2 — permisos por par y por espacio** (`742eacf`, publicado en `9070c66`): deny-by-default, ingesta única, envío por par, allow-list exacta de dispatch, un par nunca cambia `protected`/peso de un nodo existente, error de frescura = rechazo. Verificado: clippy limpio, 1019 tests de kernel, `federation_audit` 12/12, `mesh_audit` 11/11, CI en verde tras relanzar un test intermitente.
+- [~] Paso 2 — deuda declarada: **no hay test de integración end-to-end del gate de dispatch P2P** (listener Noise con pares reales). Cubierto solo con tests unitarios.
+- [ ] **NUEVO — frontera de autenticación/operador (OAuth)**: hoy `/oauth/authorize` es público, auto-aprueba y no valida `client_id` ni `redirect_uri`, y el JWT resultante se acepta como bearer. Bloquea `dev_mode=false` con acceso por LAN. Requiere diseño propio y tests de rechazo. **Precondición del paso 3.**
+- [ ] Paso 3 — invitación de un solo uso y fijación de clave (parado hasta cerrar OAuth).
+- [ ] Paso 4 — revocación inmediata.
+- [ ] Paso 6 — Coloquio federado (solo tras 2 y 4; `coloquio_channels` existe pero es inerte).
+- [ ] **NUEVO — migración de memorias históricas a espacios**: lo que no tiene `metadata.space` resuelve a `default` y no se comparte. Hace falta etiquetado con vista previa y consentimiento de José.
+- [ ] **NUEVO — ángulo ciego del primer día en CoherenceGate**: un nodo de un par entra con peso 1,0 y la penalización de capa 2 solo aplica si peso < 1,0. Seguimiento aparte, no es del paso 2.
+
+**Decision Fabric como servicio (propuesto, sin código hasta OK de José)**
+- [x] Fase 0 de ADR-018 cerrada con datos (LAYA y Clef-Flash NO-GO en nuestra tarea; Decima-small GO-PROVISIONAL, 5 aciertos netos en 245 casos, sin test pareado todavía).
+- [x] Investigación de cómo integran comunidad y empresas estos modelos: `docs/reference/research/2026-10-15_decision_models_industry_integration.md` (dos dialectos de API, patrón aditivo, umbral por contexto, calibración, abstención).
+- [x] Principio fijado (confirmado por José): el modelo se consulta solo en decisiones semánticas concretas, acotadas y evaluables; las reglas deterministas conservan la autoridad; aprobación humana en acciones de riesgo.
+- [ ] **ADR-020 — servicio de decisión con dos puertas** (módulos internos + operación directa para el agente), estados desactivado / sombra / advisory / gate, contrato por módulo, abstención y registro de versión del modelo. Incluye decidir la sexta tool (CONTRACT-01 fija exactamente cinco): recomendado `tylluan_do`, decisión de José.
+- [ ] Test pareado (McNemar o bootstrap) sobre las discordancias de Decima-small frente a reglas, y escalado de temperatura por módulo.
+- [ ] Soporte del dialecto `/v1/decisions` (OpenAI) o LiteLLM como pasarela opcional; hoy solo existe el cliente de `/v1/systemone`.
+- [ ] Filtro de salida: capa de verificación independiente del generador (tres veredictos), no una pregunta al mismo modelo.
+- [ ] REA como guild con prioridad: **checklist de verificación previo** (licencia en el repositorio oficial, nombre y versión del paquete, qué ejecuta sobre el objetivo, dependencias). No se integra por popularidad.
+- [ ] Primer caso de prueba acotado: agente de código que propone cambios, medido contra el flujo actual (cambios dañinos, falsos bloqueos, éxito, latencia, reversibilidad).
+
+**Calidad, CI y limpieza**
+- [x] Auditoría documental de Buffy: correcciones aplicadas (GPU_SETUP, DOCKER_INSTALL_LESSONS, watchers/README, guilds/README); gate `docs_reality` alineado.
+- [x] Limpieza aprobada por José (`package.json`, `package-lock.json`, `uv.lock`, backup de `main.rs`; resultados JSON de latencia en `.gitignore`).
+- [ ] Test intermitente de dashboard `FleetHealthPanel` (modal de historial de turnos): usar `findBy*`/`waitFor`. Sin asignar.
+- [ ] Test intermitente de Rust `hybrid_classify_is_inert_in_test_builds` (esperaba 4 filas de telemetría y vio 6): causa raíz pendiente. Segundo síntoma de la misma familia que el mutex envenenado ya cerrado.
+- [ ] Siguiente bloque de auditoría de Buffy (benchmarks, AI_POLICY, CODE_OF_CONDUCT, resto de `.md` de la raíz) y propuesta de cambio del `FORJA_URL` por defecto de los watchers a 47004. Sin entregar.
+- [ ] Re-sellar el HTML de la biblia con los cierres de este ciclo.
+
+**Producción (decisión de José)**
+- [ ] Reinicio del kernel cuando el equipo cierre el ciclo (hoy corre `a6f45e3`; el paso 2 y el resto no están desplegados).
+- [ ] Confirmar o revertir la edición no autorizada de `[p2p] enabled = false` en `tylluan.toml` (la hizo un agente sin OK; el puerto del par sigue abierto hasta reiniciar).
+- [ ] Rotación del token maestro (expuesto en una transcripción): recomendada al pasar a `dev_mode=false`.
+
 ### ADR-017 — resultado real de la Fase 1 (2026-10-04)
 
 **F1 (ROUTING + warm-start): NO-GO en el batcher, GO en el warm-start.** Dos gates completos contra la baseline OFF, con dato:
