@@ -62,18 +62,35 @@ describe('FleetHealthPanel', () => {
     };
   });
 
+  /**
+   * Render the panel and wait until Coloquio data has actually landed — proven
+   * by the turn-history action, which only a card carrying content renders.
+   *
+   * Waiting on an agent name instead (`getByText('Deep')`) is a vacuous gate:
+   * the panel renders a placeholder card for every KNOWN_AGENTS entry before
+   * the fetch resolves, so that gate passes with zero messages loaded and the
+   * next synchronous query then throws ("Unable to find an element with the
+   * text: /View Turn History/i").
+   */
+  async function renderWithData() {
+    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
+    await screen.findAllByText(/View Turn History/i);
+  }
+
   it('renders header, metric cards, and agent loop cards', async () => {
     render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
 
     expect(screen.getByText('Fleet Health & Loop Supervisor')).toBeDefined();
     expect(screen.getByText('WORK_PROTOCOL §7')).toBeDefined();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Deep').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Buffy').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Claude').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Antigravity').length).toBeGreaterThan(0);
-    });
+    // Static chrome renders immediately; the agent cards only carry turn
+    // history once the #general fetch resolves.
+    await screen.findAllByText(/View Turn History/i);
+
+    expect(screen.getAllByText('Deep').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Buffy').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Claude').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Antigravity').length).toBeGreaterThan(0);
 
     // Check stats metrics
     expect(screen.getByText('Monitored Agents')).toBeDefined();
@@ -84,24 +101,18 @@ describe('FleetHealthPanel', () => {
   });
 
   it('classifies health statuses correctly based on heuristics', async () => {
-    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
+    await renderWithData();
 
-    await waitFor(() => {
-      // Buffy has alert/warning/timeout -> incident status
-      expect(screen.getByText('incident')).toBeDefined();
-      // Claude has active execution -> active status
-      expect(screen.getByText('active')).toBeDefined();
-      // Deep and Antigravity have ACK/success -> healthy status
-      expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
-    });
+    // Buffy has alert/warning/timeout -> incident status
+    expect(screen.getByText('incident')).toBeDefined();
+    // Claude has active execution -> active status
+    expect(screen.getByText('active')).toBeDefined();
+    // Deep and Antigravity have ACK/success -> healthy status
+    expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
   });
 
   it('filters agents by text search query', async () => {
-    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Deep').length).toBeGreaterThan(0);
-    });
+    await renderWithData();
 
     const searchInput = screen.getByPlaceholderText('Filter by agent, keywords or content...');
     fireEvent.change(searchInput, { target: { value: 'buffy' } });
@@ -113,11 +124,7 @@ describe('FleetHealthPanel', () => {
   });
 
   it('filters agents by status button', async () => {
-    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Buffy').length).toBeGreaterThan(0);
-    });
+    await renderWithData();
 
     const incidentFilter = screen.getByRole('button', { name: 'Incidents' });
     fireEvent.click(incidentFilter);
@@ -129,13 +136,9 @@ describe('FleetHealthPanel', () => {
   });
 
   it('opens and closes turn history inspector modal', async () => {
-    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
+    await renderWithData();
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Deep').length).toBeGreaterThan(0);
-    });
-
-    const historyButtons = screen.getAllByText(/View Turn History/i);
+    const historyButtons = await screen.findAllByText(/View Turn History/i);
     fireEvent.click(historyButtons[0]);
 
     await waitFor(() => {
@@ -152,7 +155,7 @@ describe('FleetHealthPanel', () => {
 
   it('renders empty state when no messages are found', async () => {
     mockBridge.fetchRaw.mockResolvedValueOnce({ messages: [] });
-    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
+    await renderWithData();
 
     // Filter to something that doesn't match
     const searchInput = screen.getByPlaceholderText('Filter by agent, keywords or content...');
@@ -161,5 +164,31 @@ describe('FleetHealthPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('No matching agent loops')).toBeDefined();
     });
+  });
+
+  // Regression guard for the vacuous gate this file used to rely on: before the
+  // #general fetch resolves, the panel already renders a placeholder card per
+  // KNOWN_AGENTS entry — so `getByText('Deep')` passes with zero messages
+  // loaded and says nothing about whether data ever arrived.
+  it('renders no turn-history action until the Coloquio fetch actually resolves', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    mockBridge.fetchRaw.mockImplementation(async (url: string) => {
+      await gate;
+      return url.startsWith('/api/v1/coloquio/channels/general')
+        ? { channel_id: 'general', messages: mockMessages, count: mockMessages.length }
+        : { messages: [] };
+    });
+
+    render(<FleetHealthPanel bridge={mockBridge} notify={mockNotify} />);
+
+    expect(screen.getAllByText('Deep').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/View Turn History/i).length).toBe(0);
+
+    release();
+
+    expect((await screen.findAllByText(/View Turn History/i)).length).toBeGreaterThan(0);
   });
 });
