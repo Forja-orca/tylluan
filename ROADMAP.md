@@ -308,6 +308,22 @@ Stretch goals (not funded yet; deferred to v1.x):
 
 ---
 
+## Architecture decisions in flight (2026-10-15)
+
+These decisions were taken by the project owner on 2026-10-15 and have started to change the codebase. Status is explicit: ✅ merged on `main` · 🟡 decided or approved, not merged · 📐 proposed · ⛔ rejected for now.
+
+- ✅ **ADR-019 step 2 — per-peer and per-space federation permissions, deny-by-default** (on `main`, not yet in a tagged release). Existing peers sync nothing until permissions are granted.
+- 🟡 **Auth boundary hardening — Phase 1:** OAuth tokens never satisfy operator actions, `/oauth/authorize` auto-approves only in `dev_mode`, mutating endpoints are operator-only by default. Implementation assigned. 📐 Phase 2: operator consent, client registry, scopes. Prerequisite for ADR-019 step 3 and for exposing the kernel beyond `127.0.0.1`.
+- 📐 **ADR-019 steps 3, 4 and 6:** single-use invitations with key pinning, instant revocation, federated Coloquio (only after steps 2 and 4).
+- 📐 **ADR-020 — Inference Gateway:** capability-based abstraction (`embed`, `rerank`, `decide`, `generate`) over any inference engine, with privacy classes and model identity versioned per vector; proposed invariant: an outbound-only client layer (Tylluan consumes inference, it does not offer it as a service). Draft under review.
+- 🟡 **ADR-021 — Decision service and a sixth sovereign tool:** decided by the project owner. CONTRACT-01 will be amended from five to six tools; the model never holds authority; modes off / shadow / advisory / gate. ADR not yet written.
+- 🟡 **REA** as an optional external MCP server, after a verification checklist.
+- ⛔ **`iroh` transport:** NO-GO for now; LAN or your own VPN is the supported path. Reopen only if a team must connect from another network without a VPN.
+
+Evidence and details: `docs/reference/adr/ADR019_team_scoped_networks.md`, `docs/reference/adr/ADR018_decision_fabric.md`, `docs/reference/research/2026-10-15_decision_models_industry_integration.md`.
+
+---
+
 ## Horizon — Team-scoped Networks & Dual A2A Architecture
 
 **Direction (set by the project owner, 2026-10-13):** Tylluan does not pursue a global, auto-connecting memory mesh. Each instance joins only a network that its operator or team chooses, with its own authentication — on a LAN or through a link between sites — and pairing must be simple while an unauthorised connection stays rejected. This is a direction, not a shipped feature: the architecture decision record is still being written, and nothing below is implemented yet. What exists today is approved-peer sync (see [docs/concepts/SECURITY_FEDERATION.md](docs/concepts/SECURITY_FEDERATION.md)); invitation pairing, per-peer and per-space sharing permissions, a shared Coloquio and revocation of already-synced memories do not exist.

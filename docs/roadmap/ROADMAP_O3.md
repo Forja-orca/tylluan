@@ -63,7 +63,7 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [x] Investigación de cómo integran comunidad y empresas estos modelos: `docs/reference/research/2026-10-15_decision_models_industry_integration.md` (dos dialectos de API, patrón aditivo, umbral por contexto, calibración, abstención).
 - [x] Principio fijado (confirmado por José): el modelo se consulta solo en decisiones semánticas concretas, acotadas y evaluables; las reglas deterministas conservan la autoridad; aprobación humana en acciones de riesgo.
 - [ ] **ADR-020 — Inference Gateway** (decisión de José 2026-10-15: dos ADR separados). Capas por capacidad (`embed`, `rerank`, `decide`, `generate`), registro único de proveedores, clase de privacidad, identidad del modelo versionada junto a cada vector, auditoría por llamada. Análisis y listas de "cambiar ahora" y "ganchos futuros": anexo 7 de `docs/reference/research/2026-10-15_decision_models_industry_integration.md`. **Borrador asignado a Antigravity** (Coloquio T1191), solo papel.
-- [ ] **ADR-021 — servicio de decisión** sobre el gateway: dos puertas (módulos internos + operación directa), estados desactivado / sombra / advisory / gate, contrato por módulo, abstención y versión del modelo registrada. **Lo redacta el TL tras recibir el ADR-020.** Incluye decidir la sexta tool (CONTRACT-01 fija exactamente cinco): recomendado `tylluan_do`; **decisión pendiente de José**.
+- [ ] **ADR-021 — servicio de decisión** sobre el gateway: dos puertas (módulos internos + **sexta tool real**, decisión de José 2026-10-15), estados desactivado / sombra / advisory / gate, contrato por módulo, abstención y versión del modelo registrada. **Lo redacta el TL tras recibir el ADR-020.** Incluye la **enmienda formal de CONTRACT-01** (de cinco a seis tools: nombre, contrato sin autoridad para ejecutar ni conceder permisos, interruptor de desactivado) y la lista de ficheros a actualizar (`tools.rs`, test E2E de las cinco tools, `AGENTS.md`, README, guías de clientes MCP). Sin código de la tool hasta ADR aprobado.
 - [ ] Antes de cualquier segundo modelo de embeddings: filtro por `model_hash` en `search.rs` (propuesta de Deep, hoy sin aprobar) y trait `Embedder`.
 - [ ] Hacer extensible por descriptor la lista de familias peligrosas de `dispatch_allow` (hoy `bash`, `filesystem`, `code`) y comprobar si un MCP externo es alcanzable por el dispatch P2P.
 - [ ] Respetar `untrusted_content: true` en CoherenceGate (hoy solo existe el helper en un guild Python).
@@ -82,8 +82,8 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [ ] Re-sellar el HTML de la biblia con los cierres de este ciclo.
 
 **Producción (decisión de José)**
-- [ ] Reinicio del kernel cuando el equipo cierre el ciclo (hoy corre `a6f45e3`; el paso 2 y el resto no están desplegados).
-- [ ] Confirmar o revertir la edición no autorizada de `[p2p] enabled = false` en `tylluan.toml` (la hizo un agente sin OK; el puerto del par sigue abierto hasta reiniciar).
+- [ ] Reinicio del kernel: **José decidió (2026-10-15) esperar a cerrar OAuth**. Hoy corre `a6f45e3`; el paso 2 y el resto no están desplegados.
+- [x] `[p2p] enabled = false` en `tylluan.toml`: **José decidió (2026-10-15) dejarlo en `false` como contención, sin dar por bueno retroactivamente quién lo cambió** (fichero en `.gitignore`, sin línea base). Activar P2P sería decisión de exposición de red. Surte efecto al reiniciar; nadie toca ese fichero.
 - [ ] Rotación del token maestro (expuesto en una transcripción): recomendada al pasar a `dev_mode=false`.
 
 ### ADR-017 — resultado real de la Fase 1 (2026-10-04)

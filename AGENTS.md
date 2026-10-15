@@ -165,7 +165,7 @@ cargo test -p tylluan-kernel --lib 2>&1 | tail -3
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
 # Esperado: 74 link tests passing
 
-# tylluan-evals es un harness de benchmark: no tiene #[test] propios, no cuenta en el total de 1093.
+# tylluan-evals es un harness de benchmark: no tiene #[test] propios, no cuenta en el total de 1105.
 ```
 
 ---

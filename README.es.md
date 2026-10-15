@@ -130,6 +130,8 @@ tylluan_graph     Operaciones directas de grafo — triples, caminos, PageRank
 
 Eso es deliberado. Sea cual sea el guild que termine haciendo el trabajo — git, visión, una consulta a base de datos — el cliente solo ve siempre esta única interfaz limpia.
 
+> **Decisión de arquitectura en curso (2026-10-15) — todavía sin entregar.** El contrato de hoy son exactamente estas cinco herramientas. El responsable del proyecto ha decidido añadir una **sexta herramienta soberana**: una puerta directa al servicio de decisión descrito en [Decisiones de arquitectura en curso](#decisiones-de-arquitectura-en-curso). Se introducirá mediante una enmienda formal de CONTRACT-01 (ADR-021) antes de escribir código. Hasta entonces, todos los clientes siguen viendo cinco herramientas.
+
 ### ¿Qué tan bien funciona realmente la recuperación?
 
 > **Estos números son de `v0.12.0` (2026-07-05), medidos con BGE-M3 — el modelo que Tylluan usaba en ese momento, no el default actual.** El kernel desde entonces pasó a `mxbai-embed-large` (2026-09-30) como su modelo de embeddings por defecto. Todavía no hemos re-corrido LongMemEval-S contra el nuevo default, así que trata la tabla de abajo como una referencia histórica de la *arquitectura* de recuperación (BM25+vector+RRF+grafo), no como una afirmación en vivo sobre los números exactos de hoy. Re-correr este benchmark contra el default actual es trabajo abierto — ver [ROADMAP.md](ROADMAP.md).
@@ -338,6 +340,24 @@ Para el historial completo, ver [CHANGELOG.md](CHANGELOG.md). Para lo que genuin
 
 ---
 
+## Decisiones de arquitectura en curso
+
+> **Léelo como un tablero de estado, no como una lista de funciones.** Son decisiones de arquitectura tomadas el 2026-10-15 que ya han *empezado* a cambiar el proyecto. Cada fila dice exactamente qué existe hoy. Nada marcado 🟡 o 📐 está en una versión publicada, y solo las filas ✅ están integradas.
+
+| Decisión | Qué cambia | Estado hoy |
+|----------|------------|------------|
+| **Redes por equipo — ADR-019** (tu LAN o tu propia VPN; sin malla global) | Los pares federados tienen **permisos por par y por espacio, denegados por defecto**; el despacho remoto de herramientas exige una lista exacta `guild.tool`; un par nunca puede cambiar `protected` ni el peso de un nodo existente | ✅ Paso 1 (auditoría de capacidades) y **paso 2 (permisos) en `main`, aún sin versión etiquetada**. 📐 Propuestos: paso 3 invitaciones de un solo uso + fijación de clave, paso 4 revocación inmediata, paso 6 Coloquio federado |
+| **Endurecimiento de la frontera de autenticación (OAuth / operador)** | Un token OAuth nunca podrá realizar acciones de operador; `/oauth/authorize` solo auto-aprobará en `dev_mode`; los endpoints que modifican estado serán de operador por defecto | 🟡 Fase 1 aprobada, implementación asignada, **sin integrar**. 📐 Fase 2: consentimiento de operador, registro de clientes, scopes. Hasta entonces, mantén el kernel en `127.0.0.1` |
+| **Inference Gateway — ADR-020** | Una capa interna que abstrae la inferencia **por capacidad** (`embed`, `rerank`, `decide`, `generate`), no por motor: local o remota, con clase de privacidad por proveedor y la identidad del modelo guardada con cada vector. **Invariante propuesto: capa cliente solo de salida — Tylluan consume inferencia, no la ofrece como servicio** (única excepción: llama.cpp local explícito). El comportamiento por defecto sigue idéntico byte a byte | 📐 Borrador en revisión. Sin código |
+| **Servicio de decisión + sexta herramienta soberana — ADR-021** | Un servicio de decisión compartido con dos puertas: módulos internos y una sexta herramienta nueva (CONTRACT-01 pasará de cinco a seis). El modelo nunca tiene autoridad: las reglas deterministas deciden permisos y límites. Modos: apagado / sombra / consultivo / puerta | 🟡 Decidido por el responsable del proyecto. ADR sin escribir, nada implementado |
+| **Modelos de decisión (LAYA / Clef-Flash / Decima)** | Medición de la Fase 0 con datos propios de Tylluan: LAYA y Clef-Flash NO-GO; Decima-small GO-PROVISIONAL (+5 aciertos netos de 245, sin establecer estadísticamente) | ✅ Medido · sin integración en producción |
+| **REA (servidor MCP de ingeniería inversa)** | Servidor MCP externo opcional, fuera de la ruta crítica | 🟡 GO como opcional · lista de verificación pendiente · sin registrar |
+| **Transporte `iroh`** | Habría permitido conectar equipos de redes distintas sin VPN | ⛔ NO-GO por ahora — LAN o tu propia VPN es el camino soportado |
+
+Leyenda: ✅ en `main` · 🟡 decidido o aprobado, sin entregar · 📐 propuesto · ⛔ descartado por ahora. Detalles y evidencia: [ADR-019](docs/reference/adr/ADR019_team_scoped_networks.md), [ADR-018](docs/reference/adr/ADR018_decision_fabric.md), la [nota de investigación sobre modelos de decisión](docs/reference/research/2026-10-15_decision_models_industry_integration.md) y el [checklist del roadmap](docs/roadmap/ROADMAP_O3.md).
+
+---
+
 ## Arquitectura
 
 ### Visión de alto nivel
@@ -347,11 +367,13 @@ flowchart LR
   CLIENTS["Clientes e IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Núcleo Soberano"]
-    TOOLS["5 Herramientas Soberanas (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
+    TOOLS["5 Herramientas Soberanas hoy (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
+    TOOL6["6ª Herramienta Soberana (decidida, sin entregar)<br/>puerta de decisión · enmienda de CONTRACT-01 (ADR-021)"]:::future
+    AUTH["Endurecimiento de autenticación (Fase 1 aprobada)<br/>Los tokens OAuth nunca dan acciones de operador"]:::future
 
     subgraph GOVERN["Gobernanza Cognitiva y Enrutamiento"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · reglas deterministas (Decima ONNX previsto)"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · reglas deterministas · spike Fase 0, diseño del servicio: ADR-021"]
       CGATE["CoherenceGate (ADR-011)<br/>Firewall L1-L4 · Signal Loop"]
     end
   end
@@ -362,6 +384,7 @@ flowchart LR
   end
 
   subgraph INFER["Inferencia Local (Cero Nube)"]
+    GATEWAY["Inference Gateway (ADR-020, propuesto)<br/>embed · rerank · decide · generate · clases de privacidad"]:::future
     ONNX["ONNX Runtime Embebido<br/>mxbai-embed-large (1024d) · Jina Reranker"]
     LLAMA["Backend LLM Local<br/>llama-server GGUF · Ollama"]
   end
@@ -373,7 +396,7 @@ flowchart LR
   end
 
   subgraph MESH["Malla Criptográfica tylluan-link"]
-    P2P["Pool de Sesiones P2P y Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opcional)"]
+    P2P["Pool de Sesiones P2P y Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opcional)<br/>permisos por par/espacio, denegados por defecto (ADR-019 paso 2)"]
     GOSSIP["Motor Gossip y Malla Local<br/>Anti-Entropía · Noise NK · mDNS LAN"]
   end
 
@@ -397,6 +420,13 @@ flowchart LR
 
   ONNX -.-> SPARSE
   MEMORY -.-> POSTCARD
+  CLIENTS -.-> TOOL6
+  TOOL6 -.-> DECIDER
+  DECIDER -.-> GATEWAY
+  GATEWAY -.-> ONNX
+  GATEWAY -.-> LLAMA
+  CLIENTS -.-> AUTH
+  AUTH -.-> TOOLS
 
   classDef sovStyle fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
   classDef govStyle fill:#065f46,stroke:#6ee7b7,color:#f8fafc,stroke-width:1.5px;
@@ -421,6 +451,7 @@ flowchart LR
   linkStyle 8 stroke:#a855f7,stroke-width:1.5px,stroke-dasharray:3 3;
   linkStyle 9,10,11 stroke:#38bdf8,stroke-width:2.5px;
   linkStyle 12,13 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 14,15,16,17,18,19,20 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
 
 > El diagrama detallado de topología por capas y circuitos está arriba en [Arquitectura de un vistazo](#arquitectura-de-un-vistazo) — este flowchart es la lectura técnica rápida; el SVG es la inmersión completa con zoom.
@@ -490,6 +521,24 @@ curl "http://127.0.0.1:47004/api/v1/federation/nodes?source=node-b"
 
 Algunos invariantes que se mantienen sin importar la configuración: los pares no aprobados nunca se sincronizan, los nodos protegidos nunca se exportan, y cualquier cosa recibida de un par se etiqueta con `federation_source` y se excluye de futura sincronización saliente por defecto — así el conocimiento no puede dar vueltas infinitamente entre instancias.
 
+### Permisos por par y por espacio (ADR-019, paso 2)
+
+> **Cambio de comportamiento en `main` (aún sin versión etiquetada):** un par empieza ahora con **permisos vacíos: no sincroniza nada ni puede despachar nada** hasta que se lo concedas de forma explícita. Tras actualizar, un par existente deja de sincronizar hasta que fijes sus permisos.
+
+El conocimiento se comparte por **espacio**. El espacio de un nodo es su `topic_key`, si no `metadata.space`, si no `default`; `default` nunca se puede compartir. Etiqueta lo que quieras compartir y concede una dirección por espacio (`pull`, `push`, `both`, `none`):
+
+```bash
+# Etiquetar una memoria con un espacio
+#   tylluan_remember(content="...", metadata={"space": "proyecto-x"})
+
+# Conceder al par exactamente ese espacio (y ningún despacho remoto de herramientas)
+curl -X PUT http://127.0.0.1:47004/api/v1/federation/peers/node-b/permissions \
+  -H "Content-Type: application/json" \
+  -d '{"sync_spaces":[{"space":"proyecto-x","direction":"both"}],"dispatch_allow":[]}'
+```
+
+`dispatch_allow` admite entradas exactas `guild.tool` (sin comodines); todo lo demás se deniega y se audita. Listar familias que ejecutan código (`bash`, `filesystem`, `code`) se acepta con una advertencia fuerte. Las denegaciones quedan en el registro de auditoría.
+
 ## Seguridad
 
 Tylluan corre **código real en tu máquina**. Antes de desplegarlo en algo que importe, lee:
@@ -502,6 +551,8 @@ Algunos defaults que no deberías cambiar sin entender las consecuencias:
 - `host = "127.0.0.1"` — solo localhost
 - `dev_mode = false` — auth habilitada
 - **Nunca** pongas `host = "0.0.0.0"` junto con `dev_mode = true`
+
+> **Exposición de red:** hasta que se entregue el endurecimiento de la frontera de autenticación descrito en [Decisiones de arquitectura en curso](#decisiones-de-arquitectura-en-curso), mantén el kernel en `127.0.0.1`. No lo expongas a una LAN ni a Internet, ni siquiera con `dev_mode = false`.
 
 ## Ejemplos
 
