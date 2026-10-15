@@ -514,6 +514,35 @@ mod tests {
     use super::*;
     use crate::memory::silva::SilvaDB;
 
+    /// Guard that serializes every test which observes or moves the
+    /// process-global `RECALL_COUNTER` (private to the parent module).
+    ///
+    /// That one `AtomicI64` is shared by the whole test process and two families
+    /// of test touch it: `hybrid_classify_is_inert_in_test_builds` snapshots it,
+    /// waits 25 yields and asserts it did NOT move (that immobility IS the
+    /// assertion: no judge body may run in a test build), while the three
+    /// `workflow_id_*` tests call `generate_workflow_id`, which increments it by
+    /// one per call. libtest schedules tests in parallel, so a `workflow_id_*`
+    /// test landing inside that snapshot -> assert window moved the counter and
+    /// failed the canary at line 653 -- the intermittent 4-vs-6 CI failure of
+    /// 2026-10-15. Measured on real binaries before this guard, no mirror harness:
+    /// 5/60 runs failed at `--test-threads=4` and 3/60 at `--test-threads=8`,
+    /// always the canary; at `--test-threads=64`, 2/60 failed instead in
+    /// `workflow_id_is_nonzero_and_deterministic` (+3 where +2 was expected).
+    /// Same race, different witness.
+    ///
+    /// Both sides take this guard, so those tests stop racing each other. It does
+    /// NOT weaken any assertion: a real regression runs the production increment at
+    /// line ~375, which takes no test lock, so the counter still moves inside the
+    /// window and the canary still fails (deliberately re-verified by forcing that
+    /// increment back on, see the flake report).
+    ///
+    /// `tokio::sync::Mutex`, not `std::sync::Mutex`: the canary holds it across an
+    /// await point (the yield loop) and clippy `await_holding_lock` is denied in CI.
+    /// ANY new test that reads or writes `RECALL_COUNTER` must take this same
+    /// guard, or the canary goes back to being a coin flip.
+    static RECALL_COUNTER_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     fn node(id: &str, content: &str, provenance: &str, weight: f64) -> GraphNode {
         GraphNode {
             id: id.to_string(),
@@ -602,6 +631,9 @@ mod tests {
     /// DB de test actual.
     #[tokio::test(flavor = "multi_thread")]
     async fn hybrid_classify_is_inert_in_test_builds() {
+        // Exclusive window over the global counter for the whole snapshot ->
+        // assert sequence below (RECALL_COUNTER_LOCK documents the race it closes).
+        let _counter_guard = RECALL_COUNTER_LOCK.lock().await;
         let db = SilvaDB::in_memory().await.unwrap();
         db.upsert_node("flagged", "lesson", "some content", "{}").await.unwrap();
 
@@ -658,8 +690,21 @@ mod tests {
 
         // No telemetry may have landed in the current test DB (examples or
         // friction events) — a regression here re-opens the llm_examples flake.
-        let conn = crate::config::open_db(&crate::security::friction_log::friction_db_path())
-            .expect("open unique test db");
+        //
+        // Resolve the path ONCE and assert it is this test's own per-test DB:
+        // re-resolving it unchecked is how a lost redirect used to turn into a
+        // bare "expected 1, saw N" — the read silently landed in the shared
+        // scratch DB instead (keyed on the OS PID and, until 2026-10-15, able
+        // to hold rows from an earlier process). Counting through the captured
+        // path keeps the assertion exact and the failure self-explaining.
+        let test_db = crate::security::friction_log::friction_db_path();
+        assert!(
+            test_db.to_string_lossy().contains("tylluan_friction_test_"),
+            "the per-test DB redirect was lost before the read-back: {} is the shared \
+             scratch DB, so these counts are not this test's",
+            test_db.display()
+        );
+        let conn = crate::config::open_db(&test_db).expect("open unique test db");
         let examples: i64 = conn
             .query_row("SELECT COUNT(*) FROM llm_decision_examples", [], |r| r.get(0))
             .expect("count examples");
@@ -982,6 +1027,11 @@ mod tests {
 
     /// Replicate the workflow_id generation logic from hybrid_classify to test
     /// it in isolation (hybrid_classify itself requires LLM backend).
+    ///
+    /// This is the only test-side writer of `RECALL_COUNTER`: every caller must
+    /// hold `RECALL_COUNTER_LOCK` for its whole assertion window. Taking the guard
+    /// in here instead would not help -- two tests could still interleave their
+    /// two calls and one of them would see a +4 delta.
     fn generate_workflow_id(query: &str) -> i64 {
         let recall_counter = RECALL_COUNTER.fetch_add(1, Ordering::Relaxed);
         let query_hash: i64 = {
@@ -995,6 +1045,9 @@ mod tests {
 
     #[test]
     fn workflow_id_is_nonzero_and_deterministic() {
+        // Held across BOTH generations: the +2 delta asserted below is only
+        // meaningful while no other test can increment in between.
+        let _counter_guard = RECALL_COUNTER_LOCK.blocking_lock();
         let before = RECALL_COUNTER.load(Ordering::Relaxed);
         let id1 = generate_workflow_id("test query alpha");
         let id2 = generate_workflow_id("test query alpha");
@@ -1014,6 +1067,7 @@ mod tests {
 
     #[test]
     fn workflow_id_groups_same_query() {
+        let _counter_guard = RECALL_COUNTER_LOCK.blocking_lock();
         // Two calls with the same query should have the same hash component,
         // making them groupable by query for analysis.
         // We verify by computing the hash separately and checking it matches.
@@ -1035,6 +1089,7 @@ mod tests {
 
     #[test]
     fn workflow_id_different_for_different_queries() {
+        let _counter_guard = RECALL_COUNTER_LOCK.blocking_lock();
         let id_alpha = generate_workflow_id("query alpha");
         let id_beta = generate_workflow_id("query beta");
         // Different queries should produce different IDs
