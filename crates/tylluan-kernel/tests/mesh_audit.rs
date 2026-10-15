@@ -420,7 +420,7 @@ async fn test_kernel_remote_dispatch_routes_via_real_noise_xk_p2p() {
     let remote_identity = Arc::new(NodeIdentity::load_or_create(&tmp_dir.join("remote.json")).unwrap());
     let remote_pubkey = remote_identity.public_key_hex().to_string();
 
-    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest| {
+    let handler: tylluan_link::p2p::P2pHandlerFn = Arc::new(|req: GuildDispatchRequest, _caller_x25519: String| {
         Box::pin(async move {
             GuildDispatchResponse {
                 request_id: req.request_id,

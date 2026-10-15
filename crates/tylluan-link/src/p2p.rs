@@ -141,7 +141,10 @@ pub async fn execute_remote_tcp(
 }
 
 /// Async handler for inbound P2P dispatch requests.
-pub type P2pHandlerFn = Arc<dyn Fn(GuildDispatchRequest) -> Pin<Box<dyn Future<Output = GuildDispatchResponse> + Send>> + Send + Sync + 'static>;
+/// Second argument: the caller's X25519 static key (hex) as revealed by the
+/// Noise XK handshake — the kernel uses it to enforce the peer's dispatch
+/// allow-list (ADR-019 step 2).
+pub type P2pHandlerFn = Arc<dyn Fn(GuildDispatchRequest, String) -> Pin<Box<dyn Future<Output = GuildDispatchResponse> + Send>> + Send + Sync + 'static>;
 
 /// Provider of approved peers' X25519 static keys for the responder side.
 /// Returned list may be empty (fail-closed: nothing executes). In production
@@ -244,8 +247,10 @@ pub async fn start_p2p_listener_noise(
                             }
                         };
 
-                        // Call handler (async via P2pHandlerFn)
-                        let response = h(request).await;
+                        // Call handler (async via P2pHandlerFn); the caller's
+                        // X25519 static key travels with the request so the
+                        // kernel can enforce per-peer dispatch policy.
+                        let response = h(request, pipe.peer_id.clone()).await;
 
                         // Write GuildDispatchResponse
                         let resp_bytes = match serde_json::to_vec(&response) {
@@ -345,7 +350,7 @@ mod tests {
         let executed = Arc::new(AtomicUsize::new(0));
         let handler: P2pHandlerFn = {
             let executed = executed.clone();
-            Arc::new(move |req: GuildDispatchRequest| {
+            Arc::new(move |req: GuildDispatchRequest, _caller_x25519: String| {
                 let executed = executed.clone();
                 Box::pin(async move {
                     executed.fetch_add(1, Ordering::Relaxed);

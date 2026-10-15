@@ -2225,3 +2225,73 @@ async fn stale_embeddings_detects_real_hash_mismatch_but_not_pre_hash_sentinel()
     assert!(stale.contains(&"h2".to_string()), "real hash mismatch IS stale");
     assert!(!stale.contains(&"h3".to_string()), "unknown-pre-hash sentinel never triggers re-embed");
 }
+
+/// T16 (ADR-019 step 2): federation peer ingestion must NEVER change
+/// `protected` nor the weight of an existing node; new peer nodes enter
+/// protected=0 / weight=1.0; other callers keep the standard semantics.
+#[tokio::test(flavor = "multi_thread")]
+async fn t16_peer_ingest_preserves_protected_and_weight() {
+    let db = super::SilvaDB::in_memory().await.unwrap();
+    db.init().await.unwrap();
+
+    db.upsert_node_with_provenance("t16:local", "lesson", "orig", "{}", "local_write")
+        .await
+        .unwrap();
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        c.execute("UPDATE nodes SET weight = 0.3, protected = 1 WHERE id = 't16:local'", []).unwrap();
+    }
+
+    let peer_opts = super::NodeWriteOptions::new("federation_peer").federation_ingest();
+    db.upsert_node_with_validity("t16:local", "lesson", "from peer", "{\"federation_source\":\"peerA\"}", peer_opts)
+        .await
+        .unwrap();
+
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        let (w, prot, content): (f64, i64, String) = c
+            .query_row("SELECT weight, protected, content FROM nodes WHERE id = 't16:local'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(prot, 1, "a peer write must NOT unprotect an existing node");
+        assert!((w - 0.3).abs() < 1e-9, "a peer write must NOT raise/change the weight of an existing node (got {w})");
+        assert_eq!(content, "from peer", "content still updates on conflict");
+    }
+
+    // New node via peer ingest -> protected=0, weight=1.0
+    db.upsert_node_with_validity("t16:new", "lesson", "brand new", "{}", super::NodeWriteOptions::new("federation_peer").federation_ingest())
+        .await
+        .unwrap();
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        let (w, prot): (f64, i64) = c
+            .query_row("SELECT weight, protected FROM nodes WHERE id = 't16:new'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(prot, 0, "new peer node enters unprotected");
+        assert!((w - 1.0).abs() < 1e-9, "new peer node enters weight 1.0 (day-1 semantics unchanged)");
+    }
+
+    // Control: a NON-ingest upsert keeps the standard semantics on an
+    // UNPROTECTED node (weight floor raise to 1.0).
+    db.upsert_node_with_provenance("t16:control", "lesson", "ctl", "{}", "local_write")
+        .await
+        .unwrap();
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        c.execute("UPDATE nodes SET weight = 0.3 WHERE id = 't16:control'", []).unwrap();
+    }
+    db.upsert_node_with_validity("t16:control", "lesson", "ctl again", "{}", super::NodeWriteOptions::new("local_write"))
+        .await
+        .unwrap();
+    {
+        let g = db.conn_lock();
+        let c = g.lock().await;
+        let w: f64 = c.query_row("SELECT weight FROM nodes WHERE id = 't16:control'", [], |r| r.get(0)).unwrap();
+        assert!((w - 1.0).abs() < 1e-9, "other callers unaffected: weight raised to 1.0 (got {w})");
+    }
+}

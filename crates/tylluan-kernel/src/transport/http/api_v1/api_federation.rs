@@ -7,6 +7,7 @@ use axum::{
 use std::sync::Arc;
 use serde::Deserialize;
 use crate::transport::http::HttpState;
+use crate::federation::permissions;
 
 #[derive(Deserialize)]
 pub struct AddFederationPeerRequest {
@@ -50,6 +51,152 @@ async fn reload_peers_cache(state: &Arc<HttpState>) {
     if let Ok(peers) = state.peer_db.load_all() {
         state.config.write().await.federation_peers = peers;
     }
+}
+
+// ── ADR-019 step 2: shared peer gates ────────────────────────────────────────
+//
+// THE single ingestion helper (used by receive / pull manual / sync_both /
+// pull_from_peer_internal) and THE single send-side body builder (used by
+// push manual / sync_both / auto-sync). Duplicating the gates per flow is how
+// holes appear — see docs/internal/DESIGN_adr019_step2_2026-10.md §4.
+
+/// Outcome of ingesting one envelope from a peer.
+#[derive(Debug, PartialEq, Eq)]
+pub enum IngestOutcome {
+    Received,
+    Skipped(&'static str),
+    Denied(String),
+}
+
+/// Pure freshness decision — separated so an `Err` reading freshness is a
+/// REJECT (TL decision), never a silent upsert. Kept generic over the error
+/// type so tests can feed it any `Err`.
+pub fn decide_freshness<E>(
+    fresh: Result<Option<(String, bool, String)>, E>,
+    remote_hash: &str,
+    remote_updated_at: &str,
+    peer_name: &str,
+) -> Result<(), &'static str> {
+    match fresh {
+        Ok(Some((local_hash, local_protected, local_updated_at))) => {
+            match crate::consensus::resolve_node_freshness(
+                &local_hash,
+                local_protected,
+                &local_updated_at,
+                remote_hash,
+                10, // REMOTE_PEER_PRIORITY — remote always loses to local
+                peer_name,
+                remote_updated_at,
+            ) {
+                crate::consensus::FreshnessResolution::AcceptRemote { .. } => Ok(()),
+                crate::consensus::FreshnessResolution::Identical => Err("identical hash"),
+                crate::consensus::FreshnessResolution::KeepLocal { .. } => Err("local wins"),
+                crate::consensus::FreshnessResolution::MarkConflicted { .. } => Err("conflicted"),
+            }
+        }
+        Ok(None) => Ok(()), // node doesn't exist locally — first sync
+        Err(_) => Err("freshness read error"),
+    }
+}
+
+/// ADR-019 step 2 — THE single peer ingestion path:
+/// sig-verify → protected skip → space+direction gate (deny-by-default,
+/// audited on denial) → provenance stamp → freshness (Err = reject) →
+/// hardened upsert (a peer write never changes `protected`/`weight` of an
+/// existing node, nor can it raise a local weight).
+pub async fn ingest_from_peer(
+    state: &Arc<HttpState>,
+    peer: &crate::federation::FederationPeer,
+    envelope: &tylluan_link::identity::SignedEnvelope,
+    flow: &str,
+) -> IngestOutcome {
+    let has_pubkey = !peer.ed25519_pubkey.is_empty();
+    if has_pubkey
+        && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey)
+    {
+        tracing::warn!("⛔ {flow}: sig verify failed from '{}': {e}", peer.name);
+        return IngestOutcome::Skipped("signature verification failed");
+    }
+
+    let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
+    if is_protected {
+        return IngestOutcome::Skipped("protected node");
+    }
+
+    let node_id = envelope.node.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let node_type = envelope.node.get("node_type").and_then(|v| v.as_str()).unwrap_or("entity");
+    let content = envelope.node.get("content").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Space gate BEFORE any mutation work — deny-by-default.
+    let raw_meta = envelope.node.get("metadata").and_then(|m| m.as_str()).unwrap_or("{}");
+    let topic_key = envelope.node.get("topic_key").and_then(|v| v.as_str());
+    let space = permissions::resolve_space(topic_key, raw_meta);
+    if !peer.permissions.may_receive_space(&space) {
+        let reason = format!("space '{space}' not allowed (direction receive)");
+        permissions::audit_permission_denied(&peer.name, flow, "federation", "sync", &reason);
+        return IngestOutcome::Denied(reason);
+    }
+
+    let mut meta: serde_json::Value = serde_json::from_str(raw_meta).unwrap_or_else(|_| serde_json::json!({}));
+    if let serde_json::Value::Object(ref mut map) = meta {
+        map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
+    }
+    let meta_str = serde_json::to_string(&meta).unwrap_or_default();
+
+    let remote_hash = envelope.node.get("content_hash").and_then(|v| v.as_str()).unwrap_or("");
+    let remote_updated_at = envelope.node.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
+
+    let fresh = state.silva.get_freshness_info(node_id).await;
+    if let Err(reason) = decide_freshness(fresh, remote_hash, remote_updated_at, &peer.name) {
+        return IngestOutcome::Skipped(reason);
+    }
+
+    let opts = crate::memory::silva::NodeWriteOptions::new("federation_peer").federation_ingest();
+    match state.silva.upsert_node_with_validity(node_id, node_type, content, &meta_str, opts).await {
+        Ok(_) => IngestOutcome::Received,
+        Err(e) => {
+            tracing::trace!("{flow}: upsert rejected for '{node_id}': {e}");
+            IngestOutcome::Skipped("upsert rejected")
+        }
+    }
+}
+
+/// ADR-019 step 2 — THE single send-side body builder. Applies the shareable
+/// filter, the no-echo filter and the space/direction gate for THIS peer
+/// (deny-by-default), then signs the envelopes. Send-side exclusion is silent
+/// policy (trace); audit is reserved for peer-attempted denials (receive and
+/// dispatch), avoiding one audit row per node on every auto-sync cycle.
+pub async fn push_body_for_peer(
+    state: &Arc<HttpState>,
+    peer: &crate::federation::FederationPeer,
+) -> Vec<tylluan_link::identity::SignedEnvelope> {
+    let Ok(nodes) = state.silva.get_shareable_nodes().await else {
+        return Vec::new();
+    };
+    let mut envelopes = Vec::new();
+    let mut excluded_by_policy = 0usize;
+    for node in nodes.iter() {
+        let meta: serde_json::Value = serde_json::from_str(&node.metadata).unwrap_or_default();
+        if meta.get("federation_source").is_some() {
+            continue; // echo-loop prevention (unchanged)
+        }
+        let space = permissions::resolve_space(node.topic_key.as_deref(), &node.metadata);
+        if !peer.permissions.may_send_space(&space) {
+            excluded_by_policy += 1;
+            continue;
+        }
+        let node_json = serde_json::to_value(node).unwrap_or_default();
+        if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
+            envelopes.push(e);
+        }
+    }
+    if excluded_by_policy > 0 {
+        tracing::trace!(
+            "push filter: {excluded_by_policy} node(s) excluded by space policy for '{}'",
+            peer.name
+        );
+    }
+    envelopes
 }
 
 // ── Peer management ──────────────────────────────────────────────────────────
@@ -96,7 +243,7 @@ pub async fn federation_add_peer(
         approved: true,
         added_at: now_secs() as u64,
         ed25519_pubkey: String::new(),
-        external_address: String::new(),
+            external_address: String::new(), permissions: crate::federation::PeerPermissions::default(),
     };
 
     if let Err(e) = state.peer_db.insert(&peer) {
@@ -170,6 +317,56 @@ pub async fn federation_approve_peer(
     }
 }
 
+// ── ADR-019 step 2: permissions endpoint ────────────────────────────────────
+
+/// PUT /api/v1/federation/peers/{name}/permissions — admin-protected (NOT in
+/// `is_public_bypass_path`). Body = PeerPermissions JSON. Rejects `default`
+/// spaces, wildcards and malformed `guild.tool` entries. Dangerous dispatch
+/// families produce a STRONG warning + audit entry (never an error).
+pub async fn federation_set_permissions(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let perms: crate::federation::PeerPermissions = match serde_json::from_value(body) {
+        Ok(p) => p,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("invalid permissions body: {e}")
+            }))).into_response()
+        }
+    };
+    if let Err(msg) = permissions::validate_permissions(&perms) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": msg }))).into_response();
+    }
+    let dangerous = permissions::dangerous_dispatch_entries(&perms);
+    if !dangerous.is_empty() {
+        tracing::warn!(
+            "⚠️ STRONG: peer '{}' allow-lists code-executing tools (sandbox is OFF by default): {:?}",
+            name, dangerous
+        );
+        permissions::audit_permission_denied(
+            &name,
+            "permissions-update",
+            "federation",
+            "set_permissions",
+            &format!("dangerous families listed in dispatch_allow: {}", dangerous.join(", ")),
+        );
+    }
+    let json_perms = permissions::permissions_to_json(&perms);
+    match state.peer_db.update_permissions(&name, &json_perms) {
+        Ok(true) => {
+            reload_peers_cache(&state).await;
+            tracing::info!("🔐 Federation peer '{}' permissions updated", name);
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "updated", "name": name, "permissions": perms
+            }))).into_response()
+        }
+        Ok(false) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": format!("Peer '{}' not found", name)}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 // ── Push sync ────────────────────────────────────────────────────────────────
 
 pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Result<usize> {
@@ -178,26 +375,8 @@ pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Resul
         return Ok(0);
     }
 
-    let shareable_nodes = state.silva.get_shareable_nodes().await?;
-
-    // Exclude nodes received from federation (no echo loops)
-    let local_nodes: Vec<_> = shareable_nodes.iter()
-        .filter(|n| {
-            let meta: serde_json::Value = serde_json::from_str(&n.metadata).unwrap_or_default();
-            meta.get("federation_source").is_none()
-        })
-        .collect();
-
-    // M12-B: sign each node
-    let mut envelopes = Vec::with_capacity(local_nodes.len());
-    for node in &local_nodes {
-        let node_json = serde_json::to_value(node).unwrap_or_default();
-        if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
-            envelopes.push(e);
-        }
-    }
-    let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
     let mut synced_count = 0;
+    let mut nodes_sent = 0usize;
     let client = reqwest::Client::new();
 
     for peer in &peers {
@@ -205,6 +384,14 @@ pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Resul
             tracing::warn!("⛔ Federation: skipping unapproved peer '{}'", peer.name);
             continue;
         }
+        // ADR-019 step 2: per-peer body filtered by space+direction
+        // (deny-by-default). A peer with nothing permitted is skipped.
+        let envelopes = push_body_for_peer(state, peer).await;
+        if envelopes.is_empty() {
+            tracing::trace!("Federation: nothing permitted to push to '{}'", peer.name);
+            continue;
+        }
+        let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
         let encrypted = match crate::federation::encrypt_for_peer(&plain_body, &state.node_identity, peer) {
             Ok(enc) => enc,
             Err(e) => { tracing::error!("Federation encrypt failed for '{}': {}", peer.name, e); continue; }
@@ -220,6 +407,7 @@ pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Resul
 
         if let Ok(r) = resp && r.status().is_success() {
             synced_count += 1;
+            nodes_sent += envelopes.len();
             let _ = state.peer_db.update_last_sync(&peer.name, now_secs());
         }
     }
@@ -227,7 +415,7 @@ pub async fn perform_sync_push_internal(state: &Arc<HttpState>) -> anyhow::Resul
     reload_peers_cache(state).await;
     let _ = state.broadcast_tx.send(serde_json::json!({
         "type": "federation_sync", "direction": "push",
-        "synced": synced_count, "total_peers": peers.len(), "nodes_synced": local_nodes.len(),
+        "synced": synced_count, "total_peers": peers.len(), "nodes_synced": nodes_sent,
         "ts": chrono::Utc::now().timestamp_millis()
     }));
 
@@ -304,80 +492,14 @@ pub async fn federation_sync_receive(
     let has_pubkey = !peer.ed25519_pubkey.is_empty();
 
     for envelope in &envelopes {
-        // M12-B: verify signature if peer has a pubkey on record
-        if has_pubkey {
-            match tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
-                Ok(()) => verified += 1,
-                Err(e) => {
-                    tracing::warn!("⛔ Federation: signature verification failed from '{}': {e}", peer.name);
-                    skipped += 1;
-                    continue;
-                }
-            }
+        // M12-B counter: the helper re-verifies as part of the single gate.
+        if has_pubkey && tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey).is_ok() {
+            verified += 1;
         }
-
-        let node_id = envelope.node.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        let node_type = envelope.node.get("node_type").and_then(|v| v.as_str()).unwrap_or("entity");
-        let content = envelope.node.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
-
-        if is_protected { skipped += 1; continue; }
-
-        let mut meta: serde_json::Value = envelope.node.get("metadata")
-            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
-            .unwrap_or(serde_json::json!({}));
-        if let serde_json::Value::Object(ref mut map) = meta {
-            map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
-        }
-        let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-
-        // Paper 1.3: deterministic freshness conflict resolution
-        match state.silva.get_freshness_info(node_id).await {
-            Ok(Some((local_hash, local_protected, local_updated_at))) => {
-                use crate::consensus::resolve_node_freshness;
-                let remote_hash = envelope.node.get("content_hash")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let remote_updated_at = envelope.node.get("updated_at")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                // Priority: remote peers have lower priority (higher number) than local (priority 1)
-                const REMOTE_PEER_PRIORITY: u32 = 10;
-                match resolve_node_freshness(
-                    &local_hash,
-                    local_protected,
-                    &local_updated_at,
-                    remote_hash,
-                    REMOTE_PEER_PRIORITY,
-                    &peer.name,
-                    remote_updated_at,
-                ) {
-                    crate::consensus::FreshnessResolution::Identical => {
-                        tracing::trace!("📋 [Federation] SH-conflict skip (same hash): {}", node_id);
-                        skipped += 1;
-                    }
-                    crate::consensus::FreshnessResolution::KeepLocal { reason } => {
-                        tracing::trace!("📋 [Federation] local wins for '{}': {}", node_id, reason);
-                        skipped += 1;
-                    }
-                    crate::consensus::FreshnessResolution::AcceptRemote { reason } => {
-                        tracing::trace!("📋 [Federation] remote wins for '{}': {}", node_id, reason);
-                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                            received += 1;
-                        } else { skipped += 1; }
-                    }
-                    crate::consensus::FreshnessResolution::MarkConflicted { reason } => {
-                        tracing::warn!("📋 [Federation] conflicted '{}': {}", node_id, reason);
-                        skipped += 1;
-                    }
-                }
-            }
-            _ => {
-                // Node doesn't exist locally — accept unconditionally (first sync)
-                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                    received += 1;
-                } else { skipped += 1; }
-            }
+        // ADR-019 step 2: THE single ingestion path (space gate + hardening).
+        match ingest_from_peer(&state, &peer, envelope, "receive").await {
+            IngestOutcome::Received => received += 1,
+            IngestOutcome::Skipped(_) | IngestOutcome::Denied(_) => skipped += 1,
         }
     }
 
@@ -444,9 +566,29 @@ pub async fn federation_sync_export(
             .collect()
     };
 
+    // ADR-019 step 2: space+direction gate for THIS peer (deny-by-default).
+    // Send-side exclusion is silent policy (trace) — auditing here would chain
+    // one row per unshared node on every export/pull cycle.
+    let mut excluded_by_policy = 0usize;
+    let gated: Vec<_> = nodes_for_export
+        .into_iter()
+        .filter(|n| {
+            let space = permissions::resolve_space(n.topic_key.as_deref(), &n.metadata);
+            let allowed = peer.permissions.may_send_space(&space);
+            if !allowed { excluded_by_policy += 1; }
+            allowed
+        })
+        .collect();
+    if excluded_by_policy > 0 {
+        tracing::trace!(
+            "export filter: {excluded_by_policy} node(s) excluded by space policy for '{}'",
+            peer.name
+        );
+    }
+
     // M12-B: sign each node before encrypting
-    let mut envelopes = Vec::with_capacity(nodes_for_export.len());
-    for node in &nodes_for_export {
+    let mut envelopes = Vec::with_capacity(gated.len());
+    for node in &gated {
         let node_json = serde_json::to_value(node).unwrap_or_default();
         match tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
             Ok(envelope) => envelopes.push(envelope),
@@ -514,69 +656,12 @@ pub async fn federation_sync_pull(
     };
 
     let (mut received, mut skipped) = (0u64, 0u64);
-    let has_pubkey = !peer.ed25519_pubkey.is_empty();
 
     for envelope in &envelopes {
-        if has_pubkey
-            && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
-                tracing::warn!("⛔ Pull: sig verify failed from '{}': {e}", peer.name);
-                skipped += 1;
-                continue;
-            }
-
-        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
-        if is_protected { skipped += 1; continue; }
-
-        let node_id = envelope.node["id"].as_str().unwrap_or("");
-        let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
-        let content = envelope.node["content"].as_str().unwrap_or("");
-        let mut meta: serde_json::Value = envelope.node.get("metadata")
-            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
-            .unwrap_or(serde_json::json!({}));
-        if let serde_json::Value::Object(ref mut map) = meta {
-            map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
-        }
-        let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-
-        // Paper 1.3: deterministic freshness conflict resolution
-        match state.silva.get_freshness_info(node_id).await {
-            Ok(Some((local_hash, local_protected, local_updated_at))) => {
-                use crate::consensus::resolve_node_freshness;
-                let remote_hash = envelope.node.get("content_hash")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let remote_updated_at = envelope.node.get("updated_at")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                const REMOTE_PEER_PRIORITY: u32 = 10;
-                match resolve_node_freshness(
-                    &local_hash,
-                    local_protected,
-                    &local_updated_at,
-                    remote_hash,
-                    REMOTE_PEER_PRIORITY,
-                    &peer.name,
-                    remote_updated_at,
-                ) {
-                    crate::consensus::FreshnessResolution::Identical
-                    | crate::consensus::FreshnessResolution::KeepLocal { .. } => {
-                        skipped += 1;
-                    }
-                    crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
-                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                            received += 1;
-                        } else { skipped += 1; }
-                    }
-                    crate::consensus::FreshnessResolution::MarkConflicted { .. } => {
-                        skipped += 1;
-                    }
-                }
-            }
-            _ => {
-                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                    received += 1;
-                } else { skipped += 1; }
-            }
+        // ADR-019 step 2: THE single ingestion path (space gate + hardening).
+        match ingest_from_peer(&state, &peer, envelope, "pull").await {
+            IngestOutcome::Received => received += 1,
+            IngestOutcome::Skipped(_) | IngestOutcome::Denied(_) => skipped += 1,
         }
     }
 
@@ -620,26 +705,15 @@ pub async fn federation_sync_both(
 
     let client = reqwest::Client::new();
 
-    // Push: local shareable (no echo) → peer's /receive
-    let push_ok = if let Ok(shareable) = state.silva.get_shareable_nodes().await {
-        let local_nodes: Vec<_> = shareable.iter()
-            .filter(|n| {
-                let meta: serde_json::Value = serde_json::from_str(&n.metadata).unwrap_or_default();
-                meta.get("federation_source").is_none()
-            })
-            .collect();
-        // M12-B: sign each node
-        let mut envelopes = Vec::with_capacity(local_nodes.len());
-        for node in &local_nodes {
-            let node_json = serde_json::to_value(node).unwrap_or_default();
-            if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
-                envelopes.push(e);
-            }
-        }
-        if let Ok(plain) = serde_json::to_vec(&envelopes) {
-                if let Ok(enc) = crate::federation::encrypt_for_peer(&plain, &state.node_identity, &peer) {
-                    let push_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
-                    matches!(
+    // Push: per-peer body filtered by space+direction (ADR-019 step 2)
+    let push_ok = {
+        let envelopes = push_body_for_peer(&state, &peer).await;
+        if envelopes.is_empty() {
+            false
+        } else if let Ok(plain) = serde_json::to_vec(&envelopes) {
+            if let Ok(enc) = crate::federation::encrypt_for_peer(&plain, &state.node_identity, &peer) {
+                let push_url = peer_url_for_sync(&peer, &client, "/api/v1/federation/sync/receive").await;
+                matches!(
                     client.post(&push_url).bearer_auth(&peer.auth_token)
                         .header("content-type", "application/octet-stream")
                         .body(enc).send().await,
@@ -647,7 +721,7 @@ pub async fn federation_sync_both(
                 )
             } else { false }
         } else { false }
-    } else { false };
+    };
 
     // Pull: peer's /export → local SilvaDB
     let mut pulled = 0u64;
@@ -657,47 +731,12 @@ pub async fn federation_sync_both(
             && let Ok(enc_bytes) = r.bytes().await
                 && let Ok(plain) = crate::federation::decrypt_from_peer(&enc_bytes, &state.node_identity, &peer)
                     && let Ok(envelopes) = serde_json::from_slice::<Vec<tylluan_link::identity::SignedEnvelope>>(&plain) {
-                        let has_pubkey = !peer.ed25519_pubkey.is_empty();
                         for envelope in &envelopes {
-                            if has_pubkey
-                                && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
-                                    tracing::warn!("⛔ Both sync: sig verify failed from '{}': {e}", peer.name);
-                                    continue;
-                                }
-                            let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
-                            if is_protected { continue; }
-                            let node_id = envelope.node["id"].as_str().unwrap_or("");
-                            let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
-                            let content = envelope.node["content"].as_str().unwrap_or("");
-                            let mut meta: serde_json::Value = envelope.node.get("metadata")
-                                .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
-                                .unwrap_or(serde_json::json!({}));
-                            if let serde_json::Value::Object(ref mut map) = meta {
-                                map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
-                            }
-                            let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-                            // Paper 1.3: deterministic freshness conflict resolution
-                            match state.silva.get_freshness_info(node_id).await {
-                                Ok(Some((local_hash, local_protected, local_updated_at))) => {
-                                    let remote_hash = envelope.node.get("content_hash")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    let remote_updated_at = envelope.node.get("updated_at")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    if let crate::consensus::FreshnessResolution::AcceptRemote { .. } = crate::consensus::resolve_node_freshness(
-                                        &local_hash, local_protected, &local_updated_at,
-                                        remote_hash, 10, &peer.name, remote_updated_at,
-                                    )
-                                        && state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                                            pulled += 1;
-                                        }
-                                }
-                                _ => {
-                                    if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                                        pulled += 1;
-                                    }
-                                }
+                            // ADR-019 step 2: THE single ingestion path (covers
+                            // both sync_both upserts that used to sit here).
+                            match ingest_from_peer(&state, &peer, envelope, "both").await {
+                                IngestOutcome::Received => pulled += 1,
+                                IngestOutcome::Skipped(_) | IngestOutcome::Denied(_) => {}
                             }
                         }
                     }
@@ -960,68 +999,11 @@ async fn pull_from_peer_internal(
     let envelopes: Vec<tylluan_link::identity::SignedEnvelope> = serde_json::from_slice(&plain)?;
 
     let mut received = 0;
-    let has_pubkey = !peer.ed25519_pubkey.is_empty();
-
     for envelope in &envelopes {
-        // M12-B: verify signature if peer has a pubkey on record
-        if has_pubkey
-            && let Err(e) = tylluan_link::identity::verify_envelope(envelope, &peer.ed25519_pubkey) {
-                tracing::warn!("⛔ Pull internal: sig verify failed from '{}': {e}", peer.name);
-                continue;
-            }
-
-        let node_id = envelope.node["id"].as_str().unwrap_or("");
-        let node_type = envelope.node["node_type"].as_str().unwrap_or("entity");
-        let content = envelope.node["content"].as_str().unwrap_or("");
-        let mut meta: serde_json::Value = envelope.node.get("metadata")
-            .and_then(|m| serde_json::from_str(m.as_str().unwrap_or("{}")).ok())
-            .unwrap_or(serde_json::json!({}));
-
-        if let serde_json::Value::Object(ref mut map) = meta {
-            map.insert("federation_source".into(), serde_json::Value::String(peer.name.clone()));
-        }
-        let meta_str = serde_json::to_string(&meta).unwrap_or_default();
-
-        let is_protected = envelope.node.get("protected").and_then(|v| v.as_bool()).unwrap_or(false);
-        if is_protected {
-            continue;
-        }
-
-        // Paper 1.3: deterministic freshness conflict resolution
-        match state.silva.get_freshness_info(node_id).await {
-            Ok(Some((local_hash, local_protected, local_updated_at))) => {
-                use crate::consensus::resolve_node_freshness;
-                let remote_hash = envelope.node.get("content_hash")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let remote_updated_at = envelope.node.get("updated_at")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                const REMOTE_PEER_PRIORITY: u32 = 10;
-                match resolve_node_freshness(
-                    &local_hash,
-                    local_protected,
-                    &local_updated_at,
-                    remote_hash,
-                    REMOTE_PEER_PRIORITY,
-                    &peer.name,
-                    remote_updated_at,
-                ) {
-                    crate::consensus::FreshnessResolution::Identical
-                    | crate::consensus::FreshnessResolution::KeepLocal { .. } => {}
-                    crate::consensus::FreshnessResolution::AcceptRemote { .. } => {
-                        if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                            received += 1;
-                        }
-                    }
-                    crate::consensus::FreshnessResolution::MarkConflicted { .. } => {}
-                }
-            }
-            _ => {
-                if state.silva.upsert_node_with_provenance(node_id, node_type, content, &meta_str, "federation_peer").await.is_ok() {
-                    received += 1;
-                }
-            }
+        // ADR-019 step 2: THE single ingestion path (space gate + hardening).
+        match ingest_from_peer(state, peer, envelope, "pull").await {
+            IngestOutcome::Received => received += 1,
+            IngestOutcome::Skipped(_) | IngestOutcome::Denied(_) => {}
         }
     }
 
@@ -1104,31 +1086,6 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new());
 
-            // Prepare local shareable nodes in case of "push" or "both"
-            let plain_body = if curr_mode == "push" || curr_mode == "both" {
-                if let Ok(nodes) = state.silva.get_shareable_nodes().await {
-                    let local_nodes: Vec<_> = nodes.iter()
-                        .filter(|n| {
-                            let meta: serde_json::Value = serde_json::from_str(&n.metadata).unwrap_or_default();
-                            meta.get("federation_source").is_none()
-                        })
-                        .collect();
-                    // M12-B: sign each node
-                    let mut envelopes = Vec::with_capacity(local_nodes.len());
-                    for node in &local_nodes {
-                        let node_json = serde_json::to_value(node).unwrap_or_default();
-                        if let Ok(e) = tylluan_link::identity::sign_node(&state.node_identity, &node_json) {
-                            envelopes.push(e);
-                        }
-                    }
-                    serde_json::to_vec(&envelopes).unwrap_or_default()
-                } else {
-                    Vec::new()
-                }
-            } else {
-                Vec::new()
-            };
-
             // Per-peer, concurrent: one hung peer can no longer stall the
             // whole cycle (this was a sequential for-loop — every other peer
             // waited behind a single dead endpoint).
@@ -1136,13 +1093,17 @@ pub fn spawn_auto_sync(state: Arc<HttpState>) {
             for peer in peers.into_iter().filter(|p| p.approved) {
                 let state = state.clone();
                 let client = client.clone();
-                let plain_body = plain_body.clone();
                 let curr_mode = curr_mode.clone();
                 join_set.spawn(async move {
-                    if (curr_mode == "push" || curr_mode == "both") && !plain_body.is_empty() {
-                        match push_to_peer_internal(&state, &peer, &client, &plain_body).await {
-                            Ok(_) => tracing::info!("🔄 Auto-sync: successfully pushed to '{}'", peer.name),
-                            Err(e) => tracing::error!("🔄 Auto-sync: push to '{}' failed: {e}", peer.name),
+                    // ADR-019 step 2: per-peer body (space+direction filtered)
+                    if curr_mode == "push" || curr_mode == "both" {
+                        let envelopes = push_body_for_peer(&state, &peer).await;
+                        if !envelopes.is_empty() {
+                            let plain_body = serde_json::to_vec(&envelopes).unwrap_or_default();
+                            match push_to_peer_internal(&state, &peer, &client, &plain_body).await {
+                                Ok(_) => tracing::info!("🔄 Auto-sync: successfully pushed to '{}'", peer.name),
+                                Err(e) => tracing::error!("🔄 Auto-sync: push to '{}' failed: {e}", peer.name),
+                            }
                         }
                     }
 
@@ -1246,3 +1207,28 @@ pub async fn nat_external_address(
     }
 }
 
+
+#[cfg(test)]
+mod step2_unit_tests {
+    use super::*;
+
+    /// T17: an ERROR reading freshness must REJECT, never fall through to upsert.
+    #[test]
+    fn t17_freshness_error_rejects() {
+        let r: Result<Option<(String, bool, String)>, String> = Err("db exploded".to_string());
+        assert_eq!(decide_freshness(r, "rh", "rt", "peer"), Err("freshness read error"));
+    }
+
+    #[test]
+    fn freshness_ok_none_accepts_new_node() {
+        let r: Result<Option<(String, bool, String)>, String> = Ok(None);
+        assert_eq!(decide_freshness(r, "rh", "rt", "peer"), Ok(()));
+    }
+
+    #[test]
+    fn freshness_identical_is_skipped() {
+        let r: Result<Option<(String, bool, String)>, String> =
+            Ok(Some(("same".into(), false, "2026-01-01 00:00:00".into())));
+        assert!(decide_freshness(r, "same", "2026-01-01 00:00:00", "peer").is_err());
+    }
+}

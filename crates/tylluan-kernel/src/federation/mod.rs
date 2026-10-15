@@ -8,6 +8,10 @@ use rusqlite::params;
 use std::sync::Arc;
 use tylluan_link::identity::NodeIdentity;
 
+pub mod permissions;
+
+pub use permissions::PeerPermissions;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationPeer {
     pub name: String,
@@ -30,6 +34,10 @@ pub struct FederationPeer {
     /// Format: "ip:port" e.g. "203.0.113.5:3001". Empty string means unknown.
     #[serde(default)]
     pub external_address: String,
+    /// ADR-019 step 2: per-peer and per-space permissions. Fail-closed:
+    /// default is deny-all. Stored as JSON TEXT in `federation_peers.permissions`.
+    #[serde(default)]
+    pub permissions: PeerPermissions,
 }
 
 impl FederationPeer {
@@ -64,13 +72,16 @@ impl PeerDb {
                  approved      INTEGER NOT NULL DEFAULT 0,
                  last_sync     INTEGER,
                  added_at      INTEGER NOT NULL,
-                  ed25519_pubkey TEXT NOT NULL DEFAULT '',
-                  external_address TEXT NOT NULL DEFAULT ''
+                   ed25519_pubkey TEXT NOT NULL DEFAULT '',
+                   external_address TEXT NOT NULL DEFAULT '',
+                   permissions   TEXT NOT NULL DEFAULT '{}'
               );",
         )?;
         // Safe migrations: add columns if they don't exist yet (existing databases)
         let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN ed25519_pubkey TEXT NOT NULL DEFAULT '';");
         let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN external_address TEXT NOT NULL DEFAULT '';");
+        // ADR-019 step 2: existing rows default to deny-all (DEFAULT '{}').
+        let _ = conn.execute_batch("ALTER TABLE federation_peers ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}';");
         Ok(Self { conn: Arc::new(std::sync::Mutex::new(conn)) })
     }
 
@@ -83,9 +94,12 @@ impl PeerDb {
                 .unwrap_or_default()
                 .as_secs() as i64
         };
+        // NOTE: `permissions` is intentionally NOT in the ON CONFLICT update —
+        // re-adding a peer (TOML seed, mDNS) must never clobber permissions set
+        // via the dedicated endpoint.
         self.conn.lock().expect("peers db mutex").execute(
-             "INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address)
-              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+             "INSERT INTO federation_peers(name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address,permissions)
+              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
               ON CONFLICT(name) DO UPDATE SET
                   url=excluded.url,
                   auth_token=excluded.auth_token,
@@ -96,10 +110,20 @@ impl PeerDb {
             params![
                 peer.name, peer.url, peer.auth_token, peer.shared_secret,
                 peer.approved as i64, peer.last_sync, added_at, peer.ed25519_pubkey,
-                peer.external_address
+                peer.external_address, permissions::permissions_to_json(&peer.permissions)
             ],
         )?;
         Ok(())
+    }
+
+    /// ADR-019 step 2: persist the permissions JSON for a peer. Returns false
+    /// when the peer does not exist.
+    pub fn update_permissions(&self, name: &str, permissions_json: &str) -> rusqlite::Result<bool> {
+        let n = self.conn.lock().expect("peers db mutex").execute(
+            "UPDATE federation_peers SET permissions=?2 WHERE name=?1",
+            params![name, permissions_json],
+        )?;
+        Ok(n > 0)
     }
 
     pub fn remove(&self, name: &str) -> rusqlite::Result<bool> {
@@ -152,7 +176,7 @@ impl PeerDb {
     pub fn load_all(&self) -> rusqlite::Result<Vec<FederationPeer>> {
         let conn = self.conn.lock().expect("peers db mutex");
         let mut stmt = conn.prepare(
-            "SELECT name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address
+            "SELECT name,url,auth_token,shared_secret,approved,last_sync,added_at,ed25519_pubkey,external_address,permissions
              FROM federation_peers",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -166,6 +190,10 @@ impl PeerDb {
                 added_at: row.get::<_, i64>(6)? as u64,
                 ed25519_pubkey: row.get::<_, String>(7).unwrap_or_default(),
                 external_address: row.get::<_, String>(8).unwrap_or_default(),
+                // Fail-closed: invalid stored JSON degrades to deny-all with a warn.
+                permissions: permissions::parse_permissions(
+                    &row.get::<_, String>(9).unwrap_or_default(),
+                ),
             })
         })?;
         rows.collect()
@@ -273,7 +301,7 @@ mod tests {
             approved: true,
             added_at: 0,
             ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         assert_eq!(peer.encryption_key(), "auth-tok", "empty shared_secret falls back to auth_token");
     }
@@ -289,7 +317,7 @@ mod tests {
             approved: true,
             added_at: 0,
             ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         assert_eq!(peer.encryption_key(), "my-secret");
     }
@@ -306,7 +334,7 @@ mod tests {
             approved: true,
             added_at: 1000,
             ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         db.insert(&peer).expect("insert");
         let loaded = db.load_all().expect("load_all");
@@ -324,7 +352,7 @@ mod tests {
             name: "bob".into(), url: "http://bob:3000".into(),
             auth_token: "tok-bob".into(), shared_secret: "".into(),
             last_sync: None, approved: false, added_at: 0, ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         db.insert(&peer).expect("insert");
         assert!(db.remove("bob").expect("remove"));
@@ -339,7 +367,7 @@ mod tests {
             name: "carol".into(), url: "http://carol:3000".into(),
             auth_token: "old-tok".into(), shared_secret: "".into(),
             last_sync: None, approved: false, added_at: 0, ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         db.insert(&peer).expect("insert");
         let found = db.update_approved("carol", "new-tok", Some("new-secret"), true)
@@ -358,7 +386,7 @@ mod tests {
             name: "dave".into(), url: "http://dave:3000".into(),
             auth_token: "tok-dave".into(), shared_secret: "".into(),
             last_sync: None, approved: true, added_at: 0, ed25519_pubkey: "".into(),
-            external_address: "".into(),
+            external_address: "".into(), permissions: PeerPermissions::default(),
         };
         db.insert(&peer).expect("insert");
         db.update_last_sync("dave", 9999).expect("update_last_sync");
