@@ -128,6 +128,8 @@ tylluan_graph     Direct graph operations — triples, paths, PageRank
 
 That's deliberate. Whatever guild ends up doing the work — git, vision, a database query — the client only ever sees this one clean interface.
 
+> **Architecture decision in progress (2026-10-15) — not shipped yet.** The contract today is exactly these five tools. The project owner has decided to add a **sixth sovereign tool**: a direct door to the decision service described in [Architecture decisions in flight](#architecture-decisions-in-flight). It will be introduced through a formal amendment of CONTRACT-01 (ADR-021) before any code is written. Until that lands, every client still sees five tools.
+
 ### How well does retrieval actually work?
 
 > **These numbers are from `v0.12.0` (2026-07-05), measured with BGE-M3 — the model Tylluan used at the time, not the current default.** The kernel has since moved to `mxbai-embed-large` (2026-09-30) as its default embedding model. We have not re-run LongMemEval-S against the new default yet, so treat the table below as a historical baseline for the retrieval *architecture* (BM25+vector+RRF+graph), not a live claim about today's exact numbers. Re-running this benchmark against the current default is open work — see [ROADMAP.md](ROADMAP.md).
@@ -336,6 +338,24 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 
 ---
 
+## Architecture decisions in flight
+
+> **Read this as a status board, not a feature list.** These are architectural decisions taken on 2026-10-15 that have *started* to change the project. Each row says exactly what exists today. Nothing marked 🟡 or 📐 is in a release, and only ✅ rows are merged.
+
+| Decision | What it changes | Status today |
+|----------|-----------------|--------------|
+| **Team-scoped networks — ADR-019** (your LAN or your own VPN; no global mesh) | Federated peers get **per-peer, per-space permissions, deny-by-default**; remote tool dispatch needs an exact `guild.tool` allow-list; a peer can never change `protected` or the weight of an existing node | ✅ Step 1 (capability audit) and **step 2 (permissions) on `main`, not yet in a tagged release**. 📐 Proposed: step 3 single-use invitations + key pinning, step 4 instant revocation, step 6 federated Coloquio |
+| **Auth boundary hardening (OAuth / operator)** | An OAuth token will never be able to perform operator actions; `/oauth/authorize` will auto-approve only in `dev_mode`; mutating endpoints become operator-only by default | 🟡 Phase 1 approved, implementation assigned, **not merged**. 📐 Phase 2: operator consent, client registry, scopes. Until it ships, keep the kernel on `127.0.0.1` |
+| **Inference Gateway — ADR-020** | One internal layer that abstracts inference **by capability** (`embed`, `rerank`, `decide`, `generate`), not by engine: local or remote, with a privacy class per provider and the model identity stored with every vector. **Proposed invariant: outbound-only client layer — Tylluan consumes inference, it does not offer it as a service** (the only exception is the explicit local llama.cpp). Default behaviour stays byte-identical | 📐 Draft under review. No code |
+| **Decision service + 6th sovereign tool — ADR-021** | A shared decision service with two doors: internal modules and a new sixth tool (CONTRACT-01 will be amended from five to six). The model never holds authority: deterministic rules decide permissions and limits. Modes: off / shadow / advisory / gate | 🟡 Decided by the project owner. ADR not written, nothing implemented |
+| **Decision models (LAYA / Clef-Flash / Decima)** | Phase-0 measurement on Tylluan's own data: LAYA and Clef-Flash are NO-GO; Decima-small is GO-PROVISIONAL (+5 net correct answers out of 245, not statistically established) | ✅ Measured · not integrated in production |
+| **REA (reverse-engineering MCP server)** | Optional external MCP server, outside the critical path | 🟡 GO as optional · verification checklist pending · not registered |
+| **`iroh` transport** | Would have let teams on different networks connect without a VPN | ⛔ NO-GO for now — LAN or your own VPN is the supported path |
+
+Legend: ✅ shipped on `main` · 🟡 decided or approved, not shipped · 📐 proposed · ⛔ rejected for now. Details and evidence: [ADR-019](docs/reference/adr/ADR019_team_scoped_networks.md), [ADR-018](docs/reference/adr/ADR018_decision_fabric.md), the [decision-model research note](docs/reference/research/2026-10-15_decision_models_industry_integration.md) and the [roadmap checklist](docs/roadmap/ROADMAP_O3.md).
+
+---
+
 ## Architecture
 
 ### High-Level Overview
@@ -345,11 +365,13 @@ flowchart LR
   CLIENTS["Clients & IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Sovereign Core"]
-    TOOLS["5 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
+    TOOLS["5 Sovereign Tools today (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
+    TOOL6["6th Sovereign Tool (decided, not shipped)<br/>decision door · CONTRACT-01 amendment (ADR-021)"]:::future
+    AUTH["Auth boundary hardening (Phase 1 approved)<br/>OAuth tokens never grant operator actions"]:::future
 
     subgraph GOVERN["Cognitive Governance & Routing"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules (Decima ONNX planned)"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules · Phase-0 spike, service design: ADR-021"]
       CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
     end
   end
@@ -360,6 +382,7 @@ flowchart LR
   end
 
   subgraph INFER["Local Inference (Zero Cloud)"]
+    GATEWAY["Inference Gateway (ADR-020, proposed)<br/>embed · rerank · decide · generate · privacy classes"]:::future
     ONNX["ONNX Runtime Embedded<br/>mxbai-embed-large (1024d) · Jina Reranker"]
     LLAMA["Local LLM Backend<br/>llama-server GGUF · Ollama"]
   end
@@ -371,7 +394,7 @@ flowchart LR
   end
 
   subgraph MESH["tylluan-link Cryptographic Mesh"]
-    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opt-in)"]
+    P2P["P2P Session Pool & Dispatch<br/>Noise NK/XK · ChaCha20-Poly1305 (Opt-in)<br/>per-peer/space permissions, deny-by-default (ADR-019 step 2)"]
     GOSSIP["Gossip Engine & Local Mesh<br/>Anti-Entropy · Noise NK · LAN mDNS"]
   end
 
@@ -395,6 +418,13 @@ flowchart LR
 
   ONNX -.-> SPARSE
   MEMORY -.-> POSTCARD
+  CLIENTS -.-> TOOL6
+  TOOL6 -.-> DECIDER
+  DECIDER -.-> GATEWAY
+  GATEWAY -.-> ONNX
+  GATEWAY -.-> LLAMA
+  CLIENTS -.-> AUTH
+  AUTH -.-> TOOLS
 
   classDef sovStyle fill:#064e3b,stroke:#34d399,color:#f8fafc,stroke-width:2px;
   classDef govStyle fill:#065f46,stroke:#6ee7b7,color:#f8fafc,stroke-width:1.5px;
@@ -419,6 +449,7 @@ flowchart LR
   linkStyle 8 stroke:#a855f7,stroke-width:1.5px,stroke-dasharray:3 3;
   linkStyle 9,10,11 stroke:#38bdf8,stroke-width:2.5px;
   linkStyle 12,13 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
+  linkStyle 14,15,16,17,18,19,20 stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:3 3;
 ```
 
 > The detailed layered topology & circuits diagram is up top in [Architecture at a glance](#architecture-at-a-glance) — this flowchart is the quick technical read; the SVG is the full zoomable deep dive.
@@ -488,6 +519,24 @@ curl "http://127.0.0.1:47004/api/v1/federation/nodes?source=node-b"
 
 A few invariants that hold regardless of configuration: unapproved peers are never synced, protected nodes are never exported, and anything received from a peer is tagged with `federation_source` and excluded from further outbound sync by default — so knowledge can't loop endlessly between instances.
 
+### Per-peer and per-space permissions (ADR-019 step 2)
+
+> **Behaviour change on `main` (not yet in a tagged release):** a peer now starts with **empty permissions — it syncs nothing and may dispatch nothing** until you grant it explicitly. After upgrading, an existing peer stops syncing until you set its permissions.
+
+Knowledge is shared by **space**. A node's space is its `topic_key`, else `metadata.space`, else `default`; `default` can never be shared. Tag what you want to share, then grant a direction per space (`pull`, `push`, `both`, `none`):
+
+```bash
+# Tag a memory with a space
+#   tylluan_remember(content="...", metadata={"space": "project-x"})
+
+# Grant the peer exactly that space (and no remote tool dispatch)
+curl -X PUT http://127.0.0.1:47004/api/v1/federation/peers/node-b/permissions \
+  -H "Content-Type: application/json" \
+  -d '{"sync_spaces":[{"space":"project-x","direction":"both"}],"dispatch_allow":[]}'
+```
+
+`dispatch_allow` takes exact `guild.tool` entries (no wildcards); anything else is denied and audited. Listing code-executing families (`bash`, `filesystem`, `code`) is accepted with a strong warning. Denials are written to the audit log.
+
 ## Security
 
 Tylluan runs **real code on your machine**. Before you deploy it anywhere that matters, read:
@@ -500,6 +549,8 @@ A few defaults you shouldn't change without understanding the consequences:
 - `host = "127.0.0.1"` — localhost only
 - `dev_mode = false` — auth enabled
 - **Never** set `host = "0.0.0.0"` together with `dev_mode = true`
+
+> **Network exposure:** until the auth-boundary hardening listed in [Architecture decisions in flight](#architecture-decisions-in-flight) ships, keep the kernel on `127.0.0.1`. Do not expose it to a LAN or the Internet, even with `dev_mode = false`.
 
 ## Examples
 

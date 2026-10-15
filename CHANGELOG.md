@@ -4,6 +4,18 @@ All notable changes to Tylluan are documented here.
 
 ---
 
+## [Unreleased]
+
+**Upgrade note — federation (behaviour change).** Peers now start with empty permissions: they sync nothing and may dispatch nothing until you grant them explicitly with `PUT /api/v1/federation/peers/{name}/permissions`. After upgrading, an existing peer stops syncing until you set its permissions. See the README "Per-peer and per-space permissions" section.
+
+**Security**
+- ADR-019 step 2 (`742eacf`): per-peer and per-space permissions, deny-by-default. One ingestion path for all four peer-ingest entry points and one send-side builder for all three push flows; exports are filtered by space and direction. A peer write can no longer change `protected` or the weight of an existing node, and an error while reading freshness now rejects the write instead of upserting. Remote dispatch (P2P) is gated by an exact `guild.tool` allow-list (empty = deny) and denials are audited.
+- Known and being fixed: the OAuth endpoint auto-approves and its tokens are accepted as bearer; keep the kernel on `127.0.0.1` until the hardening in the roadmap ships.
+
+**Architecture decisions (not shipped)** — see the README "Architecture decisions in flight": Inference Gateway (ADR-020, proposed), decision service with a sixth sovereign tool (ADR-021, decided), `iroh` transport rejected for now.
+
+---
+
 ## [0.17.1] — 2026-10-13
 
 **609 commits since v0.17.0 (`git rev-list --count v0.17.0..HEAD`).** This entry lists the user-visible fixes found and verified in the 2026-10-05/12 window; it does not itemise the other commits in that range, so use `git log v0.17.0..v0.17.1` for the full list.
