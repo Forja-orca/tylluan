@@ -121,3 +121,14 @@ Coste que se evita: subir rustc 1.88 a 1.91 en repo y CI, 24 versiones duplicada
 
 El paso 5 del orden de trabajo queda cerrado. Los pasos 2, 3 y 4 siguen adelante sobre el camino base.
 
+### Cierre del paso 2 (2026-10-15)
+
+Implementado por Deep, revisado de forma adversaria por Antigravity y verificado de forma independiente por el TL. Publicado en `742eacf` (cabeza de `main`: `9070c66`).
+
+- Permisos por par y por espacio con denegación por defecto (`federation/permissions.rs`), columna `permissions` en `federation_peers` (las filas existentes quedan en denegar todo), `PUT /api/v1/federation/peers/{name}/permissions`.
+- Un único helper de ingesta para los cuatro puntos de entrada y un único constructor del cuerpo de envío para los tres flujos; exportación filtrada por espacio y dirección.
+- Un par nunca cambia `protected` ni el peso de un nodo existente; un error al leer la frescura rechaza la escritura.
+- El gate de dispatch P2P exige coincidencia exacta `guild.tool`, vacío = denegar, y audita las denegaciones.
+- **Límites conocidos:** sin test end-to-end del dispatch P2P; el endpoint exige solo el bearer genérico (sin comprobación de rol), igual que `add_peer` y `approve`; la frontera OAuth es un bloqueo previo a exponer el kernel por LAN (ver ROADMAP_O3); los recuerdos sin `metadata.space` no se comparten hasta definir la migración.
+- **Siguiente:** cerrar la frontera de autenticación/operador antes del paso 3.
+
