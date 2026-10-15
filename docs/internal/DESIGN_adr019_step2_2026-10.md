@@ -17,9 +17,9 @@
   1. `federation_sync_receive` (receive): upserts **:365** y **:377**.
   2. Pull manual (`federation_sync_pull`): upserts **:566** y **:576** (sig-verify :520-525, protected :527, frescura :541-573).
   3. **`federation_sync_both`**: upserts **:692** y **:697** (sig-verify :661-666, protected :667-668, frescura :680-701) — **faltaba en la v1; el hueco lo encontró el TL**.
-  4. `pull_from_peer_internal` (auto-sync): upserts **:1013** y **:1021**.
+  4. `pull_from_peer_internal` (auto-sync): upserts **L1013** y **L1021**.
   Las 4 funciones repiten el mismo cuerpo (verify → protected → meta `federation_source` → frescura → upsert): **duplicación exacta en 4 sitios**.
-- **Push global**: un único body para TODOS los pares — manual ([`api_federation.rs:181-199`]), **`sync_both` ([:624-650])** y auto-sync ([:1107-1130]).
+- **Push global**: un único body para TODOS los pares — manual ([`api_federation.rs:181-199`]), **`sync_both` ([:624-650])** y auto-sync ([L1107-1130]).
 - **Dispatch P2P sin allow-list**: el handler ejecuta `reg.call_tool` para cualquier `guild`+`tool` ([`transport/http/mod.rs:1005-1037`]). La identidad del llamante **está disponible en el punto de invocación** (`pipe.peer_id` en [`p2p.rs:197`], handler llamado en [`p2p.rs:247-248`]) pero no se pasa al handler.
 - **Auditoría de despachos YA EXISTE y está viva** (corrección a la v1 de esta auditoría, ya señalada por el TL en `9c50725`): `log_audit_entry` ([`transport/server/handler_do/audit.rs:25`], INSERT del camino principal en [`audit.rs:71`]) escribe filas hash-chained en `guild_audit_log` (misma DB que `audit_db_path`, [`audit.rs:15`], seam `TYLLUAN_AUDIT_DB`) en cada dispatch de `tylluan_do`. Las denegaciones del paso 2 usarán ESTE mismo canal (§2.6).
 - **Pares existentes: 0** — verificado en vivo: `GET /api/v1/federation/peers` → `[]`.
@@ -94,10 +94,10 @@ Forma del JSON (versión 1):
 
 **Refactor mínimo aceptado**: el mismo gate copiado 4 veces es como aparecen los agujeros. Dos helpers nuevos en `federation/permissions.rs`, y las rutas existentes los llaman:
 
-- **`ingest_from_peer(state, peer, envelope, flow) -> IngestOutcome`** — encapsula el cuerpo hoy duplicado: sig-verify → protected → **gate `may_receive_space(space_of(node))` (pull|both)** → meta `federation_source` → frescura → upsert. Devuelve `Received` / `Skipped(reason)` / `Denied(reason)` (Denied ⇒ §2.6). **Las 4 funciones de ingesta llaman SOLO a este helper** (receive :365/:377, pull manual :566/:576, sync_both :692/:697, pull_internal :1013/:1021 dejan de tener upsert propio).
+- **`ingest_from_peer(state, peer, envelope, flow) -> IngestOutcome`** — encapsula el cuerpo hoy duplicado: sig-verify → protected → **gate `may_receive_space(space_of(node))` (pull|both)** → meta `federation_source` → frescura → upsert. Devuelve `Received` / `Skipped(reason)` / `Denied(reason)` (Denied ⇒ §2.6). **Las 4 funciones de ingesta llaman SOLO a este helper** (receive :365/:377, pull manual :566/:576, sync_both :692/:697, pull_internal L1013/L1021 dejan de tener upsert propio).
   - **Endurecimiento del upsert (añadido, revisión 2):** la ingesta de un par **NUNCA** cambia `protected` ni el peso de un nodo existente. Hoy el SQL común hace `protected = excluded.protected` (el nodo entrante no trae el campo → cae a 0 y puede desproteger un nodo local, [`nodes.rs:195`]) y `weight = MAX(nodes.weight, excluded.weight)` (sube a 1.0, [`nodes.rs:191-194`]). El helper usará un modo de escritura dedicado (p. ej. `NodeWriteOptions.from_peer`) cuya rama ON CONFLICT usa `protected = nodes.protected` y `weight = nodes.weight`. Los nodos **nuevos** de par siguen entrando `protected = 0, weight = 1.0` — el «hueco de día 1» del peso (el Coherence Gate solo penaliza procedencia si `weight < 1.0`, [`coherence_gate.rs:300`]) queda como **seguimiento aparte del ADR**, fuera del paso 2.
   - **Error de lectura de frescura = rechazo (añadido, revisión 2):** hoy un `Err` de `get_freshness_info` cae en el brazo `_ =>` que **hace upsert** (p. ej. [`api_federation.rs:575-579`]). El helper lo convierte en `Skipped(reason = "freshness read error")` + `warn`, sin upsert.
-- **`push_body_for_peer(state, peer) -> Vec<SignedEnvelope>`** — construye el body **por par**: shareable→filtro `federation_source`→**gate `may_send_space` (push|both) por nodo**→sign. Lo llaman los 3 flujos de envío (push manual :181-199, sync_both :624-650, auto-sync :1107-1130); par con ningún espacio permitido → body vacío y se le omite.
+- **`push_body_for_peer(state, peer) -> Vec<SignedEnvelope>`** — construye el body **por par**: shareable→filtro `federation_source`→**gate `may_send_space` (push|both) por nodo**→sign. Lo llaman los 3 flujos de envío (push manual :181-199, sync_both :624-650, auto-sync L1107-1130); par con ningún espacio permitido → body vacío y se le omite.
 - Helpers de predicado: `space_of(node)`, `may_send_space`, `may_receive_space`, `may_dispatch`, `peer_by_x25519` (mismo cálculo que `approved_x25519`, [`transport/http/mod.rs:1046-1053`]).
 
 | # | Flujo | Punto de código (hoy) | Cambio de diseño | Deny |
@@ -106,7 +106,7 @@ Forma del JSON (versión 1):
 | B | **Export** (servimos a P) | `api_federation.rs:401-464` (bearer→par :417-427; filtro :429-445) | Filtrar `nodes_for_export` por `may_send_space` adicional al filtro shareable/echo | Nodos excluidos; vacío → export vacío + **audit** por nodo excluido |
 | C | **Receive** (P nos empuja) | `:257-395` → **helper** | `ingest_from_peer(…, "receive")` | `Skipped` + `Denied` ⇒ **audit** |
 | D | **Pull** (nosotros) | manual `:519-577` y `pull_from_peer_internal :942-1031` → **ambas vía helper** | `ingest_from_peer(…, "pull")` en las DOS rutas | idem C |
-| E | **Push** (enviamos) | manual `:175-235` + auto-sync `:1107-1130` → **helper** | `push_body_for_peer` | idem B |
+| E | **Push** (enviamos) | manual `:175-235` + auto-sync `L1107-1130` → **helper** | `push_body_for_peer` | idem B |
 | F | **sync_both** (punto NUEVO de la v2) | `:600-715`: push :624-650 + pull :661-702 (`:692`/`:697`) | push → `push_body_for_peer`; pull → `ingest_from_peer(…, "both")` | cubierto por B+C (sin ruta propia) |
 
 **Fuera de este choke point (no es tarea del paso 2):** `POST /api/v1/guilds/dispatch/execute` es operator-only (bearer maestro; `auth.rs:192-200` no lo exime — Antigravity) y A2A no es peer-facing. Si aparece una vía peer-facing nueva, DEBE usar los helpers.
