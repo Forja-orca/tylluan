@@ -515,7 +515,7 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
         ip_rate_limiter: Arc::new(crate::security::rate_limiter::RateLimiter::new(Some(300))),
         config: crate::config::TylluanConfig::load_cached().unwrap_or_else(|_| Arc::new(RwLock::new(crate::config::TylluanConfig::default()))),
         tunnel_wsl_url,
-        oauth: std::sync::Arc::new(oauth::OAuthState::new(base_url)),
+        oauth: std::sync::Arc::new(oauth::OAuthState::new(base_url).with_dev_mode(dev_mode)),
         metrics_ring: metrics_ring.clone(),
         jobs: jobs.clone(),
         cancel_token,
@@ -1177,6 +1177,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/mcp", any(api_v1::mcp_handler))
         .route("/api/v1/mcp", any(api_v1::mcp_handler))
         .route("/a2a", post(a2a::a2a_jsonrpc_handler))
+        // ADR-019/OAuth Fase 1(b): the operator-class gate runs INSIDE bearer
+        // auth (bearer installs ACL_AUTH_KIND first — the last layer added is
+        // the outermost). It refuses OAuth-JWT/peer auth on management paths.
+        .layer(middleware::from_fn(auth::operator_gate_middleware))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::bearer_auth_middleware,

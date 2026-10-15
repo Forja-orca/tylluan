@@ -47,6 +47,28 @@ task_local! {
     /// M31-P1: Bound agent_id for the request, resolved from the bearer token.
     /// Empty if no binding is configured (backwards compatible — any agent_id allowed).
     pub static ACL_AGENT_ID: String;
+    /// ADR-019/OAuth Fase 1(b): HOW the request was authenticated. The
+    /// operator-class gate requires this to be MasterToken/DevBypass;
+    /// absence is fail-closed.
+    pub static ACL_AUTH_KIND: AclAuthKind;
+}
+
+/// How an HTTP request was authenticated (ADR-019/OAuth Fase 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AclAuthKind {
+    /// The static master token (env/`.tylluan-token`) — the operator credential.
+    MasterToken,
+    /// A JWT issued by the local OAuth server.
+    OAuthJwt,
+    /// dev_mode=true local bypass.
+    DevBypass,
+    /// Endpoint with internal verification (federation peers, mcp probe…).
+    PublicBypass,
+}
+
+/// Current request's auth kind. Missing context is fail-closed (None).
+pub fn current_auth_kind() -> Option<AclAuthKind> {
+    ACL_AUTH_KIND.try_with(|k| *k).ok()
 }
 
 /// Get the explicit current ACL context. The middleware's ACL_ROLE task-local
@@ -213,6 +235,118 @@ pub fn is_public_bypass_path(uri: &str) -> bool {
         || uri.starts_with("/fonts/")
 }
 
+// ── ADR-019/OAuth Fase 1(b): operator-class gate ────────────────────────────
+//
+// The class-“Operador” surfaces (management/execution) require the MASTER
+// token (or the local dev bypass). An OAuth JWT — obtainable by any process
+// in dev_mode — and peer bypasses never satisfy them. ONE table, unit-tested;
+// see docs/internal/DESIGN_oauth_operator_2026-10.md §2/§3.
+
+/// Paths/methods whose class is “Operador” (management + direct execution).
+/// Pure and exhaustive: the single source of truth for the gate.
+pub fn operator_class_required(method: &str, path: &str) -> bool {
+    let m = method.to_ascii_uppercase();
+    // Whole management areas
+    if path.starts_with("/api/v1/admin/")
+        || path.starts_with("/api/v1/maintenance/")
+        || path == "/api/v1/config"
+        || path.starts_with("/api/v1/config/")
+        || path.starts_with("/api/v1/mcp/external")
+        || path.starts_with("/api/v1/autoresearch/")
+        || path.starts_with("/api/v1/a2a/agents")
+        || path.starts_with("/api/v1/dispatches/")
+    {
+        return true;
+    }
+    // Exact endpoints
+    if path == "/api/v1/bash"
+        || path == "/api/v1/doctor/repair"
+        || path == "/api/v1/guild-start"
+        || path == "/api/v1/setup-hint/apply"
+        || path == "/api/v1/guilds/register"
+        || path == "/api/v1/guilds/request"
+        || path == "/api/v1/guilds/dispatch/execute"
+        || path == "/api/v1/guilds/dispatch/remote"
+    {
+        return true;
+    }
+    // Guild lifecycle mutations (NOT tool calls — those stay agent-class)
+    if m == "POST"
+        && path.starts_with("/api/v1/guilds/")
+        && (path.ends_with("/start")
+            || path.ends_with("/stop")
+            || path.ends_with("/reset-backoff")
+            || path.ends_with("/test"))
+    {
+        return true;
+    }
+    // Federation MANAGEMENT mutations only (sync/receive/export keep their own auth)
+    if path.starts_with("/api/v1/federation/peers") && m != "GET" {
+        return true;
+    }
+    if path.starts_with("/api/v1/federation/sharing/") {
+        return true;
+    }
+    // Operator-initiated federation sync runs (mutations on OUR state);
+    // /sync/receive stays peer-class with its own bypass auth.
+    if path == "/api/v1/federation/sync"
+        || path == "/api/v1/federation/sync/pull"
+        || path == "/api/v1/federation/sync/both"
+    {
+        return true;
+    }
+    // Config-like writes surfaced by the route inventory (TL 1210):
+    // provider management, security scopes and project skills.
+    if m == "POST"
+        && (path == "/api/v1/inference/providers"
+            || path == "/api/v1/security/scopes"
+            || path == "/api/v1/skills")
+    {
+        return true;
+    }
+    // Silva destructive writes (adopted from the adversarial review of the design)
+    if m == "DELETE" && path.starts_with("/api/v1/silva/nodes/") {
+        return true;
+    }
+    if m == "POST" && (path == "/api/v1/silva/edge" || path == "/api/v1/silva/consolidate") {
+        return true;
+    }
+    false
+}
+
+/// Which auth kinds satisfy the operator class. Fail-closed on absence.
+pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
+    matches!(
+        kind,
+        Some(AclAuthKind::MasterToken) | Some(AclAuthKind::DevBypass)
+    )
+}
+
+/// Layer applied INSIDE the bearer middleware (which installs ACL_AUTH_KIND):
+/// refuses non-master auth on operator-class paths with 403.
+pub async fn operator_gate_middleware(request: Request, next: Next) -> Response {
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    if operator_class_required(&method, &path) && !operator_gate_allows(current_auth_kind()) {
+        warn!(
+            "🚫 OPERATOR_REQUIRED: refusing {:?} auth on {} {}",
+            current_auth_kind(),
+            method,
+            path
+        );
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "operator_required",
+                "message": "This endpoint requires the master operator token. \
+                    OAuth tokens and peer bypasses are not accepted."
+            })),
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
+
 /// Bearer token authentication middleware.
 pub async fn bearer_auth_middleware(
     State(state): State<Arc<HttpState>>,
@@ -256,11 +390,16 @@ pub async fn bearer_auth_middleware(
         }
     }
 
-    // Determine if request is authorized and resolve ACL role
-    let is_authorized = {
-        // 1. Explicit Public Bypass, or 2. Dev Mode Bypass
-        if is_public_bypass_path(uri) || state.dev_mode.unwrap_or(false) {
-            true
+    // Determine if request is authorized, HOW it was authenticated (Fase 1),
+    // and resolve ACL role
+    let (is_authorized, auth_kind) = {
+        // 1. Explicit Public Bypass
+        if is_public_bypass_path(uri) {
+            (true, AclAuthKind::PublicBypass)
+        }
+        // 2. Dev Mode Bypass (localhost development only)
+        else if state.dev_mode.unwrap_or(false) {
+            (true, AclAuthKind::DevBypass)
         }
         // 3. Token Authentication (Header or Query)
         else if let Some(expected) = &state.auth_token {
@@ -269,12 +408,14 @@ pub async fn bearer_auth_middleware(
                 .get("authorization")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
-            
-            let has_valid_bearer = if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
-                ExecutionGuard::secure_compare(bearer, expected)
-                    || state.oauth.validate_bearer(bearer)
+
+            let (has_master_bearer, has_oauth_bearer) = if let Some(bearer) = auth_header.strip_prefix("Bearer ") {
+                (
+                    ExecutionGuard::secure_compare(bearer, expected),
+                    state.oauth.validate_bearer(bearer),
+                )
             } else {
-                false
+                (false, false)
             };
 
             // B. Check Token in Query String (with URL decoding to support / and +)
@@ -294,11 +435,18 @@ pub async fn bearer_auth_middleware(
                 }
             });
 
-            has_valid_bearer || has_valid_query
+            if has_master_bearer || has_valid_query {
+                (true, AclAuthKind::MasterToken)
+            } else if has_oauth_bearer {
+                (true, AclAuthKind::OAuthJwt)
+            } else {
+                // Irrelevant when denied; kept for type completeness.
+                (false, AclAuthKind::MasterToken)
+            }
         }
         else {
             warn!("🚫 AUTH_FAILURE: No Master Token configured and dev_mode is false.");
-            false
+            (false, AclAuthKind::MasterToken)
         }
     };
 
@@ -372,9 +520,11 @@ pub async fn bearer_auth_middleware(
         }
     };
 
-    ACL_ROLE.scope(acl_role, async move {
-        ACL_AGENT_ID.scope(acl_agent_id, async move {
-            next.run(request).await
+    ACL_AUTH_KIND.scope(auth_kind, async move {
+        ACL_ROLE.scope(acl_role, async move {
+            ACL_AGENT_ID.scope(acl_agent_id, async move {
+                next.run(request).await
+            }).await
         }).await
     }).await
 }
@@ -706,5 +856,174 @@ mod tests {
                 assert_eq!(current_acl_role().as_deref(), Some("admin"));
             })
             .await;
+    }
+}
+
+#[cfg(test)]
+mod fase1_operator_tests {
+    use super::*;
+
+    #[test]
+    fn operator_table_covers_management_and_excludes_agent_surfaces() {
+        // Operator class (management / execution):
+        assert!(operator_class_required("POST", "/api/v1/admin/shutdown"));
+        assert!(operator_class_required("POST", "/api/v1/maintenance/purge"));
+        assert!(operator_class_required("PUT", "/api/v1/federation/peers/x/permissions"));
+        assert!(operator_class_required("POST", "/api/v1/federation/peers/x/approve"));
+        assert!(operator_class_required("DELETE", "/api/v1/federation/peers/x"));
+        assert!(operator_class_required("POST", "/api/v1/federation/sharing/enable"));
+        assert!(operator_class_required("POST", "/api/v1/bash"));
+        assert!(operator_class_required("POST", "/api/v1/guilds/foo/start"));
+        assert!(operator_class_required("POST", "/api/v1/guilds/foo/stop"));
+        assert!(operator_class_required("POST", "/api/v1/mcp/external/discover"));
+        assert!(operator_class_required("DELETE", "/api/v1/silva/nodes/n1"));
+        assert!(operator_class_required("POST", "/api/v1/silva/edge"));
+        assert!(operator_class_required("POST", "/api/v1/silva/consolidate"));
+        assert!(operator_class_required("POST", "/api/v1/dispatches/42/approve"));
+        // NOT operator (agent-class surfaces):
+        assert!(!operator_class_required("GET", "/api/v1/federation/peers"));
+        assert!(!operator_class_required("POST", "/api/v1/memory/write"));
+        assert!(!operator_class_required("POST", "/api/v1/coloquio/channels/general/post"));
+        assert!(!operator_class_required("POST", "/api/v1/guilds/foo/tools/git.status"));
+        assert!(!operator_class_required("POST", "/api/v1/guilds/foo/call/git.status"));
+        assert!(!operator_class_required("POST", "/api/v1/silva/node"));
+        assert!(!operator_class_required("GET", "/api/v1/silva/nodes/n1"));
+        // Inventory-forced classifications (TL 1210):
+        assert!(operator_class_required("POST", "/api/v1/config"), "bare /api/v1/config save");
+        assert!(operator_class_required("POST", "/api/v1/federation/sync"));
+        assert!(operator_class_required("POST", "/api/v1/federation/sync/pull"));
+        assert!(operator_class_required("POST", "/api/v1/federation/sync/both"));
+        assert!(!operator_class_required("POST", "/api/v1/federation/sync/receive"), "peer-class stays");
+        assert!(operator_class_required("POST", "/api/v1/inference/providers"));
+        assert!(operator_class_required("POST", "/api/v1/security/scopes"));
+        assert!(operator_class_required("POST", "/api/v1/skills"));
+        assert!(!operator_class_required("POST", "/api/v1/inference/providers/openai/test"));
+        assert!(!operator_class_required("GET", "/api/v1/inference/providers"), "reads stay generic");
+    }
+
+    #[test]
+    fn operator_gate_allows_only_master_and_dev() {
+        assert!(operator_gate_allows(Some(AclAuthKind::MasterToken)));
+        assert!(operator_gate_allows(Some(AclAuthKind::DevBypass)));
+        assert!(!operator_gate_allows(Some(AclAuthKind::OAuthJwt)));
+        assert!(!operator_gate_allows(Some(AclAuthKind::PublicBypass)));
+        assert!(!operator_gate_allows(None), "absence is fail-closed");
+    }
+
+    /// Structural inventory (TL 1210): EVERY mutating route in the api_v1
+    /// routing table must be explicitly classified — Operador through
+    /// `operator_class_required`, or Agente/Par through the documented
+    /// allowlist below (this test is the single classification record).
+    /// A new unclassified mutating route FAILS here, so the blacklist in
+    /// `operator_class_required` cannot silently leave new routes reachable
+    /// by OAuth JWTs.
+    #[test]
+    fn route_inventory_every_mutating_route_is_classified() {
+        const ROUTES_RS: &str = include_str!("api_v1/routes.rs");
+        // Agente / Par / a-decidir — NON-operator mutating surfaces.
+        // "a-decidir" marks the few the design (v2 §4) deferred to the TL.
+        const AGENT_OR_PEER_CLASS: &[&str] = &[
+            "/api/v1/do",
+            "/api/v1/guilds/{guild_name}/tools/{tool_name}",
+            "/api/v1/guilds/{guild_name}/call/{tool_name}",
+            "/api/v1/silva/node",
+            "/api/v1/silva/node/{id}/shareable",
+            "/api/v1/silva/save-cluster-summary",
+            "/api/v1/silva/communities",
+            "/api/v1/silva/graphrag-trigger", // a-decidir
+            "/api/v1/silva/analyze",          // any(): POST accepted, read-only
+            "/api/v1/silva/edge/search",      // POST read-only search
+            "/api/v1/sessions/resume",
+            "/api/v1/sessions/{session_id}",
+            "/api/v1/ingest",
+            "/api/v1/ingest/upload",
+            "/api/v1/memory/reindex",
+            "/api/v1/memory/write",
+            "/api/v1/memory/search", // any(): read-only
+            "/api/v1/inference/providers/{name}/test", // a-decidir (ADR-020)
+            "/api/v1/external-providers/{name}/test",  // a-decidir (ADR-020)
+            "/api/v1/test-connection",
+            "/api/v1/mailbox/send",
+            "/api/v1/agent-memories/{agent_id}",
+            "/api/v1/session-digest",
+            "/api/v1/blackboard/plan",
+            "/api/v1/blackboard/tasks/{msg_id}/done",
+            "/api/v1/tylluan_graph",
+            "/api/v1/federation/sync/receive", // Par (own bypass auth)
+            "/api/v1/routing/anchors",
+            "/api/v1/routing/anchors/reembed",
+            "/api/v1/coloquio/channels",
+            "/api/v1/coloquio/channels/{id}",
+            "/api/v1/coloquio/channels/{id}/post",
+            "/api/v1/coloquio/channels/{id}/read",
+            "/api/v1/coloquio/channels/{id}/typing",
+            "/api/v1/coloquio/repair-msgids",
+            "/api/v1/coloquio/documents",
+            "/api/v1/coloquio/documents/{id}",
+            "/api/v1/coloquio/documents/{id}/append",
+            "/api/v1/canvas/{channel}/nodes",
+            "/api/v1/nodes/{agent_id}/register",
+            "/api/v1/nodes/{agent_id}/send",
+            "/api/v1/nodes/broadcast",
+            "/api/v1/nodes/{agent_id}/program",
+            "/api/v1/nodes/{agent_id}/unregister",
+            "/api/v1/journal/{agent_id}/checkin",
+            "/api/v1/agents/session/start",
+            "/api/v1/agents/session/stop",
+            "/api/v1/agents/heartbeat",
+            "/api/v1/work-contracts",
+            "/api/v1/work-contracts/{id}/tick",
+            "/api/v1/work-contracts/{id}/deliver",
+            "/api/v1/work-contracts/{id}/vote",
+            "/api/v1/work-contracts/{id}/close",
+            "/api/v1/work-contracts/{id}/context/decision",
+            "/api/v1/work-contracts/{id}/context/pointer",
+            "/api/v1/mesh/refresh", // a-decidir
+            "/api/v1/gossip",       // a-decidir
+            "/api/v1/eval/run",     // a-decidir
+            "/api/v1/embed",        // a-decidir
+            "/api/v1/stigmergy/traces",
+        ];
+
+        let mut unclassified: Vec<String> = Vec::new();
+        let mut mutating_total = 0usize;
+        let mut operator_total = 0usize;
+        for line in ROUTES_RS.lines() {
+            let Some(pos) = line.find(".route(\"") else { continue };
+            let rest = &line[pos + 8..];
+            let Some(end) = rest.find('"') else { continue };
+            let path = &rest[..end];
+            let handlers = &rest[end..];
+            let mut methods: Vec<&str> = Vec::new();
+            if handlers.contains("post(") { methods.push("POST"); }
+            if handlers.contains("put(") { methods.push("PUT"); }
+            if handlers.contains("delete(") { methods.push("DELETE"); }
+            if handlers.contains("patch(") { methods.push("PATCH"); }
+            if handlers.contains("any(") {
+                methods.extend_from_slice(&["POST", "PUT", "DELETE", "PATCH"]);
+            }
+            if methods.is_empty() { continue; }
+            mutating_total += 1;
+            if methods.iter().any(|m| operator_class_required(m, path)) {
+                operator_total += 1;
+                continue;
+            }
+            if AGENT_OR_PEER_CLASS.contains(&path) { continue; }
+            unclassified.push(path.to_string());
+        }
+        assert!(
+            mutating_total >= 110,
+            "parser sanity: expected the full mutating table (~121), saw {mutating_total}"
+        );
+        assert!(
+            unclassified.is_empty(),
+            "Unclassified mutating route(s) — classify each as Operador in \
+             operator_class_required(), or add it to AGENT_OR_PEER_CLASS in this test:\n{}",
+            unclassified.join("\n")
+        );
+        assert!(
+            operator_total >= 50,
+            "operator-class surfaces sanity (split too small): {operator_total} of {mutating_total}"
+        );
     }
 }

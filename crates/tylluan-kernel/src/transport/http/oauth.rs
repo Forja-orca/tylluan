@@ -1,7 +1,13 @@
 // Minimal OAuth 2.0 + PKCE (RFC 7636) server for local desktop MCP clients.
 // Desktop apps (local MCP clients) require OAuth as a protocol ritual even
-// when connecting to localhost. Everything runs on the same machine — this
-// implementation auto-approves in dev_mode and validates PKCE + JWT always.
+// when connecting to localhost.
+//
+// ADR-019/OAuth Fase 1 (2026-10-15, docs/internal/DESIGN_oauth_operator_2026-10.md):
+// the authorization endpoint auto-approves ONLY when dev_mode=true (local
+// development). With dev_mode=false it refuses (403) until the operator-consent
+// flow of Fase 2 exists — this closes the LAN "JWT dispenser" hole where any
+// LAN host could self-issue an admin-role token. redirect_uri is restricted to
+// loopback. PKCE + JWT validation always run.
 
 use axum::{
     Form, Json,
@@ -25,6 +31,10 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct OAuthState {
     inner: Arc<OAuthInner>,
     pub base_url: String,
+    /// Fase 1-a: gate for the auto-approving /oauth/authorize. Fail-closed
+    /// default (`false`): callers that want dev behavior opt in explicitly
+    /// via `with_dev_mode(true)`.
+    dev_mode: bool,
 }
 
 struct OAuthInner {
@@ -49,7 +59,18 @@ impl OAuthState {
                 codes: Mutex::new(HashMap::new()),
                 revoked: Mutex::new(HashSet::new()),
             }),
+            dev_mode: false,
         }
+    }
+
+    /// Fase 1-a: opt in to the auto-approving authorize flow (dev_mode=true).
+    pub fn with_dev_mode(mut self, dev_mode: bool) -> Self {
+        self.dev_mode = dev_mode;
+        self
+    }
+
+    pub fn dev_mode(&self) -> bool {
+        self.dev_mode
     }
 
     pub fn sign_jwt(&self, jti: &str, ttl_secs: i64) -> String {
@@ -147,11 +168,55 @@ pub async fn metadata_handler(State(oauth): State<Arc<OAuthState>>) -> impl Into
     }))
 }
 
-/// GET /oauth/authorize  — auto-approves, redirects with auth code
+/// Fase 1-c: loopback-only redirect_uri (RFC 8252). Deliberately a strict
+/// host parse — `http://127.0.0.1.evil.com` must NOT pass.
+fn is_loopback_redirect_uri(uri: &str) -> bool {
+    let rest = match uri.strip_prefix("http://").or_else(|| uri.strip_prefix("https://")) {
+        Some(r) => r,
+        None => return false,
+    };
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = if let Some(after_bracket) = host_port.strip_prefix('[') {
+        after_bracket.split(']').next().unwrap_or("")
+    } else {
+        host_port.split(':').next().unwrap_or("")
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// GET /oauth/authorize  — auto-approves (dev_mode only), redirects with auth code
 pub async fn authorize_handler(
     State(oauth): State<Arc<OAuthState>>,
     Query(params): Query<AuthorizeQuery>,
 ) -> Response {
+    // Fase 1-a: auto-approval is dev_mode-only. With dev_mode=false this is
+    // refused until the operator-consent flow (Fase 2) exists.
+    if !oauth.dev_mode {
+        info!("[OAuth] Authorize refused: dev_mode=false and operator consent (Fase 2) is not implemented");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "access_denied",
+                "error_description": "OAuth auto-approval is disabled outside dev_mode. \
+                    Operator consent lands in Fase 2; meanwhile use a static Bearer token \
+                    (Authorization header)."
+            })),
+        )
+            .into_response();
+    }
+
+    // Fase 1-c: loopback-only redirect_uri (defense in depth).
+    if !is_loopback_redirect_uri(&params.redirect_uri) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "invalid_request",
+                "error_description": "redirect_uri must use a loopback host (127.0.0.1, localhost or ::1)"
+            })),
+        )
+            .into_response();
+    }
+
     // Only S256 supported
     if params.code_challenge_method.as_deref().unwrap_or("S256") != "S256" {
         return (
@@ -283,4 +348,62 @@ pub async fn revoke_handler(
                             info!("[OAuth] Token revoked (jti prefix: {})", &jti[..8.min(jti.len())]);
                         }
     StatusCode::OK
+}
+
+#[cfg(test)]
+mod fase1_tests {
+    use super::*;
+    use axum::extract::{Query, State};
+
+    fn q(redirect: &str) -> AuthorizeQuery {
+        AuthorizeQuery {
+            redirect_uri: redirect.to_string(),
+            code_challenge: "abc".to_string(),
+            code_challenge_method: Some("S256".to_string()),
+            state: None,
+        }
+    }
+
+    /// R13: with dev_mode=false the authorize endpoint must REFUSE (Fase 1-a).
+    #[tokio::test]
+    async fn r13_authorize_refuses_when_dev_mode_false() {
+        let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()));
+        assert!(!st.dev_mode(), "fail-closed default");
+        let resp = authorize_handler(State(st), Query(q("http://127.0.0.1:9999/cb"))).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// R15: non-loopback redirect_uri is rejected even with dev_mode=true.
+    #[tokio::test]
+    async fn r15_redirect_must_be_loopback() {
+        let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(true));
+        let bad = authorize_handler(State(st.clone()), Query(q("http://evil.example/cb"))).await;
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+        let sneaky = authorize_handler(State(st), Query(q("http://127.0.0.1.evil.example/cb"))).await;
+        assert_eq!(sneaky.status(), StatusCode::BAD_REQUEST, "prefix lookalike must not pass");
+    }
+
+    /// R12: dev_mode=true keeps the local auto-approval flow intact (302-ish redirect with code).
+    #[tokio::test]
+    async fn r12_dev_mode_approves_loopback_and_redirects() {
+        let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(true));
+        let resp = authorize_handler(State(st), Query(q("http://127.0.0.1:9999/cb"))).await;
+        assert!(resp.status().is_redirection(), "got {}", resp.status());
+        let loc = resp
+            .headers()
+            .get(axum::http::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(loc.contains("code="), "location: {loc}");
+    }
+
+    #[test]
+    fn loopback_helper_boundaries() {
+        assert!(is_loopback_redirect_uri("http://127.0.0.1:8080/cb"));
+        assert!(is_loopback_redirect_uri("http://localhost/cb"));
+        assert!(is_loopback_redirect_uri("http://[::1]:4711/cb"));
+        assert!(!is_loopback_redirect_uri("http://127.0.0.1.evil.com/cb"));
+        assert!(!is_loopback_redirect_uri("https://example.com/cb"));
+        assert!(!is_loopback_redirect_uri("ftp://127.0.0.1/cb"));
+    }
 }

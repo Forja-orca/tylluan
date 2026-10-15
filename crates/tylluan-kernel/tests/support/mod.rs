@@ -48,7 +48,13 @@ pub fn test_counter_next() -> u64 {
 ///
 /// `identity_tag` keeps each binary's node-identity temp files distinct
 /// (`tylluan_id_<tag>_<n>` under the system temp dir).
+/// Default harness variant: dev_mode=true, no auth token (all existing callers).
 pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
+    test_state_custom(identity_tag, None, true).await
+}
+
+/// Parameterized variant for auth/middleware tests (Fase 1: OAuth gate).
+pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, dev_mode: bool) -> Arc<HttpState> {
     let workspace_root = std::env::current_dir().unwrap_or_default();
     let registry_raw = GuildRegistry::new(workspace_root.clone(), 5, TimeoutsConfig::default(), 5);
     let registry_arc = Arc::new(RwLock::new(registry_raw));
@@ -86,8 +92,8 @@ pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
     Arc::new(HttpState {
         task_context: Arc::new(tylluan_kernel::memory::task_context::TaskContextStore::in_memory().unwrap()),
         version: "test".to_string(),
-        auth_token: None,
-        dev_mode: Some(true),
+        auth_token,
+        dev_mode: Some(dev_mode),
         start_time: Instant::now(),
         server: Some(Arc::new(RwLock::new(server))),
         registry: registry_handle,
@@ -106,7 +112,7 @@ pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
         }),
         matcher,
         tunnel_wsl_url: None,
-        oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3030".to_string())),
+        oauth: Arc::new(tylluan_kernel::transport::http::oauth::OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(dev_mode)),
         metrics_ring: Arc::new(RwLock::new(tylluan_kernel::metrics_ring::MetricsRingBuffer::new())),
         jobs: Arc::new(tylluan_kernel::memory::jobs::JobQueue::open(std::path::Path::new(":memory:")).unwrap()),
         agents_contract: Arc::new(tylluan_kernel::security::agents_contract::AgentsContract::empty()),
