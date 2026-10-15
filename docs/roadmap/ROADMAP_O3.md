@@ -51,7 +51,7 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [x] Paso 5 — spike `iroh`: **NO-GO** con dato (uso real = misma red, LAN o VPN propia). Rama `spike/iroh` solo local, no se fusiona. Reabrir solo si un equipo debe conectarse sin VPN desde otra red.
 - [x] **Paso 2 — permisos por par y por espacio** (`742eacf`, publicado en `9070c66`): deny-by-default, ingesta única, envío por par, allow-list exacta de dispatch, un par nunca cambia `protected`/peso de un nodo existente, error de frescura = rechazo. Verificado: clippy limpio, 1019 tests de kernel, `federation_audit` 12/12, `mesh_audit` 11/11, CI en verde tras relanzar un test intermitente.
 - [~] Paso 2 — deuda declarada: **no hay test de integración end-to-end del gate de dispatch P2P** (listener Noise con pares reales). Cubierto solo con tests unitarios.
-- [ ] **NUEVO — frontera de autenticación/operador (OAuth)**: hoy `/oauth/authorize` es público, auto-aprueba y no valida `client_id` ni `redirect_uri`, y el JWT resultante se acepta como bearer. Bloquea `dev_mode=false` con acceso por LAN. Requiere diseño propio y tests de rechazo. **Precondición del paso 3.**
+- [ ] **NUEVO — frontera de autenticación/operador (OAuth)**: hoy `/oauth/authorize` es público, auto-aprueba y no valida `client_id` ni `redirect_uri`, y el JWT resultante se acepta como bearer. Bloquea `dev_mode=false` con acceso por LAN. Requiere diseño propio y tests de rechazo. **Precondición del paso 3.** **Diseño asignado a Deep (Coloquio T1189), revisión adversaria de Antigravity después.**
 - [ ] Paso 3 — invitación de un solo uso y fijación de clave (parado hasta cerrar OAuth).
 - [ ] Paso 4 — revocación inmediata.
 - [ ] Paso 6 — Coloquio federado (solo tras 2 y 4; `coloquio_channels` existe pero es inerte).
@@ -62,18 +62,22 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [x] Fase 0 de ADR-018 cerrada con datos (LAYA y Clef-Flash NO-GO en nuestra tarea; Decima-small GO-PROVISIONAL, 5 aciertos netos en 245 casos, sin test pareado todavía).
 - [x] Investigación de cómo integran comunidad y empresas estos modelos: `docs/reference/research/2026-10-15_decision_models_industry_integration.md` (dos dialectos de API, patrón aditivo, umbral por contexto, calibración, abstención).
 - [x] Principio fijado (confirmado por José): el modelo se consulta solo en decisiones semánticas concretas, acotadas y evaluables; las reglas deterministas conservan la autoridad; aprobación humana en acciones de riesgo.
-- [ ] **ADR-020 — servicio de decisión con dos puertas** (módulos internos + operación directa para el agente), estados desactivado / sombra / advisory / gate, contrato por módulo, abstención y registro de versión del modelo. Incluye decidir la sexta tool (CONTRACT-01 fija exactamente cinco): recomendado `tylluan_do`, decisión de José.
+- [ ] **ADR-020 — Inference Gateway** (decisión de José 2026-10-15: dos ADR separados). Capas por capacidad (`embed`, `rerank`, `decide`, `generate`), registro único de proveedores, clase de privacidad, identidad del modelo versionada junto a cada vector, auditoría por llamada. Análisis y listas de "cambiar ahora" y "ganchos futuros": anexo 7 de `docs/reference/research/2026-10-15_decision_models_industry_integration.md`. **Borrador asignado a Antigravity** (Coloquio T1191), solo papel.
+- [ ] **ADR-021 — servicio de decisión** sobre el gateway: dos puertas (módulos internos + operación directa), estados desactivado / sombra / advisory / gate, contrato por módulo, abstención y versión del modelo registrada. **Lo redacta el TL tras recibir el ADR-020.** Incluye decidir la sexta tool (CONTRACT-01 fija exactamente cinco): recomendado `tylluan_do`; **decisión pendiente de José**.
+- [ ] Antes de cualquier segundo modelo de embeddings: filtro por `model_hash` en `search.rs` (propuesta de Deep, hoy sin aprobar) y trait `Embedder`.
+- [ ] Hacer extensible por descriptor la lista de familias peligrosas de `dispatch_allow` (hoy `bash`, `filesystem`, `code`) y comprobar si un MCP externo es alcanzable por el dispatch P2P.
+- [ ] Respetar `untrusted_content: true` en CoherenceGate (hoy solo existe el helper en un guild Python).
 - [ ] Test pareado (McNemar o bootstrap) sobre las discordancias de Decima-small frente a reglas, y escalado de temperatura por módulo.
 - [ ] Soporte del dialecto `/v1/decisions` (OpenAI) o LiteLLM como pasarela opcional; hoy solo existe el cliente de `/v1/systemone`.
 - [ ] Filtro de salida: capa de verificación independiente del generador (tres veredictos), no una pregunta al mismo modelo.
-- [ ] REA como guild con prioridad: **checklist de verificación previo** (licencia en el repositorio oficial, nombre y versión del paquete, qué ejecuta sobre el objetivo, dependencias). No se integra por popularidad.
+- [ ] REA: **GO como herramienta opcional vía MCP externo** (no guild, no kernel, no sexta tool; opiniones de Deep y Antigravity en T1188). Antes de registrarlo: **checklist de verificación** (licencia en el repositorio oficial, nombre y versión del paquete, qué ejecuta sobre el objetivo, dependencias). Procedencia de sus conclusiones: `agent_generated`. No se integra por popularidad.
 - [ ] Primer caso de prueba acotado: agente de código que propone cambios, medido contra el flujo actual (cambios dañinos, falsos bloqueos, éxito, latencia, reversibilidad).
 
 **Calidad, CI y limpieza**
 - [x] Auditoría documental de Buffy: correcciones aplicadas (GPU_SETUP, DOCKER_INSTALL_LESSONS, watchers/README, guilds/README); gate `docs_reality` alineado.
 - [x] Limpieza aprobada por José (`package.json`, `package-lock.json`, `uv.lock`, backup de `main.rs`; resultados JSON de latencia en `.gitignore`).
-- [ ] Test intermitente de dashboard `FleetHealthPanel` (modal de historial de turnos): usar `findBy*`/`waitFor`. Sin asignar.
-- [ ] Test intermitente de Rust `hybrid_classify_is_inert_in_test_builds` (esperaba 4 filas de telemetría y vio 6): causa raíz pendiente. Segundo síntoma de la misma familia que el mutex envenenado ya cerrado.
+- [ ] Test intermitente de dashboard `FleetHealthPanel` (modal de historial de turnos): usar `findBy*`/`waitFor`. **Asignado a Buffy (T1190).**
+- [ ] Test intermitente de Rust `hybrid_classify_is_inert_in_test_builds` (esperaba 4 filas de telemetría y vio 6): causa raíz pendiente. Segundo síntoma de la misma familia que el mutex envenenado ya cerrado. **Asignado a Buffy (T1190)**; pista a verificar: redirección thread-local de la DB de test perdida al reanudarse la tarea en otro hilo (`multi_thread`).
 - [ ] Siguiente bloque de auditoría de Buffy (benchmarks, AI_POLICY, CODE_OF_CONDUCT, resto de `.md` de la raíz) y propuesta de cambio del `FORJA_URL` por defecto de los watchers a 47004. Sin entregar.
 - [ ] Re-sellar el HTML de la biblia con los cierres de este ciclo.
 

@@ -72,6 +72,53 @@ Convergencia clara en la literatura de 2026 **[SECUNDARIO, resúmenes de arXiv y
 7. **REA:** entra como candidato con checklist de verificación previo (sección 5); no se integra por la fama del repositorio.
 8. **Ninguna fuente demuestra mejora general de precisión.** La evidencia disponible es de integraciones estrechas con respaldo determinista.
 
+## 7. Anexo — arnés interno (Inference Gateway): análisis y decisiones del 2026-10-15
+
+> Origen: pregunta de José — ¿se puede crear un arnés interno como capa intermedia para que todo el sistema sea agnóstico al motor de inferencia, y qué conviene cambiar ahora para dejar abierto el futuro? Decisión de José: **dos ADR separados** (ADR-020 Inference Gateway y ADR-021 servicio de decisión sobre él).
+
+### 7.1 Puntos de inferencia reales hoy (verificado con grep sobre `crates/` y `guilds/`)
+
+| Capacidad | Dónde vive | Estado |
+|---|---|---|
+| Decidir | trait `DecisionProvider` (`router/decision/mod.rs`) | Único trait de proveedor que existe. Las variantes LAYA, Clef-Flash y Decima viven en el harness de evaluación (`examples/decision_fabric_spike.rs`), no en producción. |
+| Embeddings | struct `EmbeddingEngine` (fastembed/ort, en proceso) | Unos 12 puntos de llamada, todos vía `embed_batch_coalesced*`. Tipo concreto, no trait. |
+| Reranker y MLP | `router/light_reranker.rs`, `mlp/mod.rs` | Sesiones `ort` directas sobre ficheros ONNX locales. |
+| Generar texto | guild Python `guilds/core/llama_backend.py` | Ya habla `/v1/chat/completions`; endpoint configurable, pero `[inference.llama]` mezcla parámetros propios de llama-server. |
+| Visión | guild `guilds/core/vision.py` | `onnxruntime` dentro del guild. |
+| Gobierno de carga | `memory/inference_budget.rs` | Gobierna embed + rerank. Semilla de un gobernador común. |
+
+### 7.2 Idea central: abstraer por CAPACIDAD, no por motor
+
+Cambiar de motor no es cambiar de modelo. Los embeddings son un contrato de datos (dimensión y hash del modelo invalidan los vectores guardados) y las decisiones tienen calibración propia. El gateway define capacidades tipadas (`embed`, `rerank`, `decide`, `generate`, más adelante `vision`), un trait por capacidad, adaptadores por dialecto (ONNX en proceso, HTTP compatible OpenAI, `/v1/systemone`, `/v1/decisions`, Anthropic `/messages`) y un registro único de proveedores con presupuesto, métrica y auditoría compartidos. El servicio de decisión (ADR-021) es la capacidad `decide` de este gateway, con dos puertas: módulos internos y operación directa para el agente.
+
+### 7.3 Cambios a hacer AHORA (baratos hoy, caros después)
+
+1. `EmbeddingEngine` a trait, con el motor actual por defecto (comportamiento idéntico).
+2. Identidad del modelo (id, dimensión, versión) guardada junto a cada vector y filtrado por ella en la búsqueda. Es la propuesta pendiente de Deep (filtro por `model_hash` en `search.rs`): pasa a **requisito previo de cualquier segundo modelo**.
+3. Un registro de proveedores único (hoy `[inference]`, `[inference.llama]` y la configuración de decisión van por separado).
+4. **Clase de privacidad por proveedor** (local / red del equipo / nube) con política de qué datos pueden salir, modelada sobre los espacios de ADR-019. Mantiene la regla "sin nube en la ruta crítica".
+5. Auditoría de cada llamada (proveedor, versión del modelo, latencia, coste, resultado) en el registro existente. Sin esto no hay modo sombra ni calibración.
+6. Semántica de fallo por capacidad en el contrato (bajo impacto continúa con reglas; acción crítica se abstiene o pide aprobación).
+7. Separar los parámetros de llama-server del bloque genérico de inferencia, compatible hacia atrás.
+8. Que los guilds Python usen el gateway en vez de cada uno su motor.
+
+### 7.4 Ganchos futuros (solo diseñar la puerta, no implementar)
+
+Más dialectos (`/v1/decisions`, LiteLLM como pasarela opcional), multi-embedding versionado (hoy archivado como backlog), umbral y calibración por módulo, cambio de modelo en caliente y comparación en sombra, selección de proveedor según hardware (ancla del médico con Raspberry Pi), un par del equipo como proveedor de inferencia vía `dispatch_allow` de ADR-019, cortacircuitos y salud por proveedor.
+
+### 7.5 Reglas de adopción y límites fijados (José, 2026-10-15)
+
+- El modelo de decisión se consulta solo en decisiones semánticas concretas, acotadas y evaluables. Las reglas deterministas conservan la autoridad sobre permisos, seguridad y límites; las acciones de riesgo exigen aprobación humana.
+- Un módulo adopta el modelo solo si en modo sombra supera a sus propias reglas en sus métricas (los datos propios dicen que no está garantizado: LAYA 0,351 frente a 0,531 de las reglas).
+- Estados de activación: desactivado / sombra / advisory / gate. Desactivado = flujo actual intacto.
+- Filtro de salida: capa de verificación independiente del generador, no una pregunta al mismo modelo. "Cero alucinación" es aspiración; lo medible es menos afirmaciones sin respaldo y abstención cuando falta evidencia.
+- **La sexta tool sigue siendo decisión de José** (CONTRACT-01 fija exactamente cinco). Recomendación del TL: exponer la decisión directa como operación de `tylluan_do`.
+- No es reescritura: capa fina detrás de los caminos actuales, comportamiento por defecto byte-idéntico, validada con los tests existentes. No toca las cinco tools ni los timeouts de los guilds.
+
+### 7.6 REA (opiniones de Deep y Antigravity, verificadas en parte por el TL)
+
+GO como herramienta **opcional vía MCP externo** (existe `external_mcp.rs`, `[[external_mcp]]` y `/api/v1/mcp/external`), fuera de la ruta crítica y sin ser sexta tool. Aportes: (a) la lista de familias peligrosas del paso 2 de ADR-019 es fija (`bash`, `filesystem`, `code`) y debe volverse extensible por descriptor; (b) respetar `untrusted_content: true` en CoherenceGate sería trabajo nuevo (en Rust no hay ningún manejo; solo el helper `flag_untrusted_content` en un guild de Python); (c) sus conclusiones en memoria llevan procedencia `agent_generated`, nunca `verified`. Sin verificar por el TL: licencia (no se leyó `LICENSE`), versión del paquete y popularidad (las fuentes discrepan). Pendiente comprobar si un MCP externo es alcanzable por el dispatch P2P.
+
 ## Fuentes
 
 - LiteLLM, "/v1/decisions and /v1/systemone" — https://docs.litellm.ai/docs/decisions **[leída]**
