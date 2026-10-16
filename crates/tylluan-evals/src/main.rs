@@ -8,6 +8,9 @@ mod beam_scale;
 mod paired_eval;
 
 #[cfg(test)]
+mod paired_eval_e2e;
+
+#[cfg(test)]
 mod tests;
 
 use std::path::Path;
