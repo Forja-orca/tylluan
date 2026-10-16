@@ -299,6 +299,32 @@ fn decide_pid_action(
     }
 }
 
+/// Text for invocations that only ask for information (`--version`/`-V`,
+/// `--help`/`-h`). These must print and exit BEFORE logging, config loading or
+/// any kernel startup: `invocations_boot_server` only protects the PID file,
+/// it does not stop the process from booting a whole kernel afterwards.
+fn early_info_output(args: &[String]) -> Option<String> {
+    let name = env!("CARGO_BIN_NAME");
+    if args.iter().skip(1).any(|a| a == "--version" || a == "-V") {
+        return Some(format!("{name} {}", env!("CARGO_PKG_VERSION")));
+    }
+    if args.iter().skip(1).any(|a| a == "--help" || a == "-h") {
+        return Some(format!(
+            "{name} {}
+
+USAGE:
+  {name} [--config <file>] [--token <token>] [--port <port>]
+  {name} --stdio
+  {name} --export [file.tar.gz] | --import <file.tar.gz> | --download-models
+  {name} --version | --help
+
+With no arguments the kernel boots (see tylluan.toml). Use `tylluan start` for the managed CLI.",
+            env!("CARGO_PKG_VERSION")
+        ));
+    }
+    None
+}
+
 /// S0: should this invocation be treated as a server boot for anti-orphan
 /// purposes? Help/version/maintenance/stdio invocations never bind the port,
 /// so they must never touch the PID file or kill anything (incident of
@@ -436,6 +462,12 @@ async fn main() -> anyhow::Result<()> {
 
     // 0. Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
+
+    // Information-only invocations never start anything.
+    if let Some(text) = early_info_output(&args) {
+        println!("{text}");
+        return Ok(());
+    }
 
     // Register --config's path override BEFORE any TylluanConfig::load()/
     // load_cached() call below -- CONFIG_PATH_OVERRIDE is a OnceLock, so
@@ -2290,6 +2322,21 @@ mod anti_orphan_tests {
             decide_with(None, Some("37052"), &[37052], &[(37052, Some(47004))]),
             (PeerDecision::UnknownPeer, None)
         );
+    }
+
+    #[test]
+    fn info_only_invocations_print_and_never_boot() {
+        let a = |argv: &[&str]| argv.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let v = early_info_output(&a(&["tylluan-nexus", "--version"])).expect("--version prints");
+        assert!(v.contains(env!("CARGO_PKG_VERSION")));
+        assert!(early_info_output(&a(&["tylluan-nexus", "-V"])).is_some());
+        let h = early_info_output(&a(&["tylluan-nexus", "--help"])).expect("--help prints");
+        assert!(h.contains("USAGE"));
+        assert!(early_info_output(&a(&["tylluan-nexus", "-h"])).is_some());
+        // A normal boot, a --config value or the program name alone must not match.
+        assert!(early_info_output(&a(&["tylluan-nexus"])).is_none());
+        assert!(early_info_output(&a(&["tylluan-nexus", "--config", "x.toml"])).is_none());
+        assert!(early_info_output(&a(&["--version"])).is_none(), "argv[0] is the program name");
     }
 
     #[test]
