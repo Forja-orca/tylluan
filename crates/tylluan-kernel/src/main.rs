@@ -780,7 +780,7 @@ async fn main() -> anyhow::Result<()> {
             "type": "universal_skill",
             "endpoint": "/api/v1/skill",
             "version": env!("CARGO_PKG_VERSION"),
-            "tools": ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"]
+            "tools": ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"]
         }).to_string()
     ).await;
     let _ = silva.set_protected(skill_id, true).await;
