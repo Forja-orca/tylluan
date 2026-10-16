@@ -2067,7 +2067,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             ).unwrap();
         }
 
-        // Open + init: must migrate to v27 without touching the old row.
+        // Open + init: must migrate to the latest schema without touching the old row.
         let db = SilvaDB::open(&db_path_str).unwrap();
         db.init_schema().await.unwrap();
         let has_cols = |cols: &std::collections::HashSet<String>| {
@@ -2090,7 +2090,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             Ok::<_, anyhow::Error>((version, ok, old_row))
         }).unwrap();
 
-        assert_eq!(version, 27, "user_version must be stamped to 27");
+        assert_eq!(version, 28, "user_version must be stamped to the latest (28 since ADR-021 decision_shadow_log)");
         assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
         assert!(old_row.0.is_none() && old_row.1.is_none() && old_row.2.is_none(),
             "pre-migration rows must read back NULL (honest absence), not 0.0");
@@ -2109,7 +2109,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             assert!(has_cols(&cols2), "columns must still exist after a second init_schema run");
             Ok::<_, anyhow::Error>(version2)
         }).unwrap();
-        assert_eq!(version2, 27);
+        assert_eq!(version2, 28);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

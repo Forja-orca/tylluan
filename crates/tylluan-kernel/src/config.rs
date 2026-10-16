@@ -102,6 +102,8 @@ pub fn load_guild_config(config: &TylluanConfig) -> Vec<GremioDiscovery> {
     discoveries
 }
 
+use crate::router::decision::api_types::DecisionMode;
+
 /// Root configuration structure, parsed from `tylluan.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Default)]
@@ -185,6 +187,13 @@ pub struct TylluanConfig {
     /// NightConsolidation scheduling and concurrency settings.
     #[serde(default)]
     pub night: NightConfig,
+
+    /// ADR-021: servicio de decisión `tylluan_decide` — interruptor global,
+    /// modos por contrato y límites por petición. Encendido por defecto
+    /// (decisión de José, 2026-10-16); apagado responde `status: disabled`
+    /// sin ninguna llamada externa.
+    #[serde(default)]
+    pub decision: DecisionConfig,
 }
 
 /// NightConsolidation scheduling and concurrency settings.
@@ -1861,6 +1870,68 @@ impl GuildWeight {
 
 static CONFIG_CACHE: std::sync::OnceLock<Arc<RwLock<TylluanConfig>>> = std::sync::OnceLock::new();
 static CONFIG_PATH_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// ADR-021: `[decision]` — núcleo del servicio de decisión `tylluan_decide`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionConfig {
+    /// Interruptor global (§3.2). Encendido por defecto (José 2026-10-16):
+    /// apagado → `status: disabled`, cero llamadas, cero efectos.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Modo por defecto de los contratos internos sin entrada en
+    /// `[decision.contracts]` — `off` (ADR-021 §3.2).
+    #[serde(default)]
+    pub default_mode: DecisionMode,
+    /// Modo por contrato interno (nombre → off|shadow|advisory|gate).
+    /// Decidido por José (2026-10-16): `scheduler_routing` y `human_review`
+    /// en `shadow`; el resto `off`.
+    #[serde(default = "default_decision_contracts")]
+    pub contracts: std::collections::HashMap<String, DecisionMode>,
+    /// Proveedor del servicio. Fase 1: solo `"rules"` (baseline
+    /// determinista); cualquier otro valor avisa y cae a `rules`.
+    #[serde(default = "default_decision_provider")]
+    pub provider: String,
+    /// Techo de preguntas por petición (§1217: 1..=16).
+    #[serde(default = "default_decision_max_questions")]
+    pub max_questions: usize,
+    /// Techo del `state` serializado, en bytes (§1217: 16 KiB).
+    #[serde(default = "default_decision_max_state_bytes")]
+    pub max_state_bytes: usize,
+    /// Auditoría por decisión en `decision_shadow_log` (§3.5, §9-F1).
+    #[serde(default = "default_true")]
+    pub shadow_log: bool,
+}
+
+fn default_decision_contracts() -> std::collections::HashMap<String, DecisionMode> {
+    let mut m = std::collections::HashMap::new();
+    m.insert("scheduler_routing".to_string(), DecisionMode::Shadow);
+    m.insert("human_review".to_string(), DecisionMode::Shadow);
+    m
+}
+
+fn default_decision_provider() -> String {
+    "rules".to_string()
+}
+fn default_decision_max_questions() -> usize {
+    16
+}
+fn default_decision_max_state_bytes() -> usize {
+    16 * 1024
+}
+
+impl Default for DecisionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            default_mode: DecisionMode::default(),
+            contracts: default_decision_contracts(),
+            provider: default_decision_provider(),
+            max_questions: default_decision_max_questions(),
+            max_state_bytes: default_decision_max_state_bytes(),
+            shadow_log: default_true(),
+        }
+    }
+}
 
 impl TylluanConfig {
     pub fn security_intent_filter_enabled(&self) -> bool {
