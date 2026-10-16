@@ -64,6 +64,10 @@ pub enum DecisionError {
     EmptyQuestion(String),
     #[error("provider '{0}' failed: {1}")]
     Provider(String, String),
+    /// ADR-021 §5.4: la petición no cumple los límites del contrato
+    /// (preguntas, tamaño de `state`, opciones cerradas).
+    #[error("invalid request: {0}")]
+    Validation(String),
 }
 
 /// Contrato del Decision Fabric (ADR-018 §2.1): nunca `LayaProvider` —
@@ -90,7 +94,12 @@ pub(crate) fn distribution_sums_to_one(dist: &HashMap<String, f32>) -> bool {
     (sum - 1.0).abs() < 1e-3
 }
 
+pub mod api_types;
 pub mod rules;
+pub mod service;
+
+pub use api_types::{Answer, DecideRequest, DecideResponse, DecideStatus, DecisionMode, QuestionKind, QuestionSpec};
+pub use service::{DecisionService, decision_row_hash};
 
 #[cfg(test)]
 mod tests {

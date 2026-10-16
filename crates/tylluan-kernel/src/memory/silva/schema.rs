@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 27;
+            const SCHEMA_VERSION: i32 = 28;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -361,6 +361,30 @@ impl super::SilvaDB {
                 let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN score_graph REAL", []);
                 let _ = conn.execute("ALTER TABLE recall_feedback ADD COLUMN recency_score REAL", []);
                 tracing::info!("🌲 SilvaDB: added recall_feedback score_rrf/score_graph/recency_score (v27, ADR-011 §Fase 3)");
+            }
+            if schema_version < 28 {
+                // ADR-021 §1217 (esquema ÚNICO del TL): auditoría del
+                // servicio `tylluan_decide`. SOLO el hash del `state` — nunca
+                // en claro (§1217 + matriz de privacidad ADR-020).
+                // `model_value`/`model_probs_json`/`agreed` quedan NULL hasta
+                // que exista proveedor de modelo y comparación en sombra.
+                let _ = conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS decision_shadow_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ts TEXT NOT NULL,
+                        contract TEXT NOT NULL DEFAULT '',
+                        request_hash TEXT NOT NULL,
+                        rules_value TEXT,
+                        model_value TEXT,
+                        model_probs_json TEXT,
+                        provider TEXT NOT NULL DEFAULT '',
+                        latency_ms INTEGER NOT NULL DEFAULT 0,
+                        agreed INTEGER,
+                        mode TEXT NOT NULL DEFAULT 'off'
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_decision_shadow_log_ts ON decision_shadow_log(ts);",
+                );
+                tracing::info!("🌲 SilvaDB: added decision_shadow_log (v28, ADR-021 esquema 1217)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
