@@ -2,7 +2,7 @@
 
 ## Overview
 
-Tylluan is a **sovereign MCP kernel** — a local-first memory and routing substrate for AI agents. It exposes exactly 5 tools to any MCP client while internally orchestrating 47+ Python guilds, a semantic router, a knowledge graph, and a P2P mesh.
+Tylluan is a **sovereign MCP kernel** — a local-first memory and routing substrate for AI agents. It exposes exactly 6 tools to any MCP client while internally orchestrating 47+ Python guilds, a semantic router, a knowledge graph, and a P2P mesh.
 
 ```
 MCP Client (Claude, Cursor, VS Code, LM Studio, any SSE client)
@@ -22,9 +22,9 @@ MCP Client (Claude, Cursor, VS Code, LM Studio, any SSE client)
 
 **There is no proxy.** `tylluan-nexus` binds directly to `:47004`. Zero-downtime restarts are handled by the OS — clients reconnect on the SSE retry loop.
 
-## 5 Sovereign Tools (CONTRACT-01)
+## 6 Sovereign Tools (CONTRACT-01)
 
-Every MCP client sees exactly these 5 tools — nothing more, nothing less:
+Every MCP client sees exactly these 6 tools — nothing more, nothing less:
 
 | Tool | Purpose |
 |------|---------|
@@ -33,8 +33,9 @@ Every MCP client sees exactly these 5 tools — nothing more, nothing less:
 | `tylluan_recall` | Hybrid search (BM25 + FTS5 + vector + LinearRAG graph) over SilvaDB |
 | `tylluan_think` | Sequential reasoning chains via `sequential_thinking` guild |
 | `tylluan_graph` | Graph operations — add nodes/edges, query relationships, PageRank |
+| `tylluan_decide` | Bounded typed questions (choice / score / boolean) answered from a closed set, or an explicit abstention. Rules baseline only today; never a permission gate (ADR-021) |
 
-CONTRACT-01 is inviolable. New capabilities route through `tylluan_do`, never as new tools.
+CONTRACT-01 is inviolable: it changes only by a formal amendment approved by the project owner (the sixth tool, `tylluan_decide`, entered that way in ADR-021). New capabilities route through `tylluan_do`, never as new tools.
 
 ## Key Components
 

@@ -116,7 +116,7 @@ CLIENT                    PROXY :47004              KERNEL :303X
   │──POST /messages─────────▶│                         │
   │  {initialize}            │──POST /messages────────▶│
   │                          │◀── InitializeResult ────│
-  │◀── {protocolVersion,     │     {5 tools,           │
+  │◀── {protocolVersion,     │     {6 tools,           │
   │     capabilities}        │      prompts,           │
   │                          │      resources}         │
   │                          │                         │
@@ -410,8 +410,8 @@ CLIENT                    PROXY :47004              KERNEL :303X
 
 ```
   ┌────────────────────────────────────────────────────────────┐
-  │  5 SOVEREIGN TOOLS — all_tools() filters to exactly these  │
-  │  test_sovereign_count_is_exactly_5 enforces this           │
+  │  6 SOVEREIGN TOOLS — all_tools() filters to exactly these  │
+  │  the sovereign-count tests enforce this (exactly 6)        │
   │                                                            │
   │  ┌─────────────┐  Natural language intent → guild router   │
   │  │ tylluan_do    │  → keyword-scored tool selection          │
@@ -434,7 +434,7 @@ CLIENT                    PROXY :47004              KERNEL :303X
   │  │ tylluan_graph │  → direct graph manipulation              │
   │  └─────────────┘                                           │
   │                                                            │
-  │  "Herramientas ilimitadas detrás, 5 soberanas delante"    │
+  │  "Herramientas ilimitadas detrás, 6 soberanas delante"    │
   └────────────────────────────────────────────────────────────┘
 ```
 

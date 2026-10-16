@@ -38,7 +38,7 @@ If your PR touches security-sensitive code (auth, guild execution, token handlin
 
 ## Architecture rules
 
-- The kernel exposes exactly 5 sovereign MCP tools: `tylluan_do`, `tylluan_recall`, `tylluan_remember`, `tylluan_think`, `tylluan_graph`
+- The kernel exposes exactly 6 sovereign MCP tools: `tylluan_do`, `tylluan_recall`, `tylluan_remember`, `tylluan_think`, `tylluan_graph`, `tylluan_decide`
 - Guilds are Python subprocesses using `fastmcp` — each is self-contained
 - No cloud dependencies in the critical path
 - Always use `127.0.0.1`, never `localhost` (IPv6 trap on Windows)

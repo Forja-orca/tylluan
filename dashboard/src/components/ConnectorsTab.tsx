@@ -382,10 +382,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
               <div className="p-5 bg-gradient-to-br from-emerald-700/25 to-slate-900/50 border border-emerald-500/20 rounded-2xl shadow-md">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-4.5 h-4.5 text-emerald-400" />
-                  <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Sovereign Contract (5 Tools)</h3>
+                  <h3 className="text-sm font-black font-sans text-slate-50 tracking-wide uppercase">Sovereign Contract (6 Tools)</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  CONTRACT-01 guarantees that clients always see exactly these 5 tools. Any guild work is requested through them, preventing context overload.
+                  CONTRACT-01 guarantees that clients always see exactly these 6 tools. Any guild work is requested through them, preventing context overload.
                 </p>
 
                 <div className="space-y-2.5">
@@ -628,7 +628,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                       The client bridge file is located at <code>C:/Users/FoRJa/.gemini/antigravity/mcp/tylluan_mcp_client.js</code> and orchestrates stdio transport mapping to Tylluan's HTTP REST endpoints.
                     </p>
                     <p>
-                      <span className="font-bold text-slate-400">HANDSHAKE CONTRACT:</span> The Cline agent will see exactly 5 sovereign tools. It will call <code>tylluan_recall</code> or <code>tylluan_graph</code> for memory indexing, and route all filesystem, git, and bash intents dynamically via <code>tylluan_do</code>.
+                      <span className="font-bold text-slate-400">HANDSHAKE CONTRACT:</span> The Cline agent will see exactly 6 sovereign tools. It will call <code>tylluan_recall</code> or <code>tylluan_graph</code> for memory indexing, and route all filesystem, git, and bash intents dynamically via <code>tylluan_do</code>.
                     </p>
                   </div>
                 </div>

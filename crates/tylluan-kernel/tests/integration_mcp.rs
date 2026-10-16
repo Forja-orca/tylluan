@@ -2,7 +2,7 @@
 //!
 //! Verifies the full MCP tool lifecycle without real guilds or Python:
 //!  1. TylluanServer boots in test mode (SilvaDB in-memory)
-//!  2. all_tools() returns exactly 5 sovereign tools
+//!  2. all_tools() returns exactly 6 sovereign tools
 //!  3. tylluan_remember stores a node in SilvaDB
 //!  4. tylluan_recall finds the stored node
 //!

@@ -1,6 +1,6 @@
 # ADR-021: Servicio de decisión y la sexta herramienta soberana `tylluan_decide`
 
-- **Estado:** 📐 **PROPUESTO** — borrador del Tech Lead. Solo diseño en papel: **cero código** hasta que José lo apruebe.
+- **Estado:** ✅ **APROBADO por José (2026-10-16)**. Fase 1 implementada en `main` (herramienta + REST + base de reglas + registro en sombra); **sin proveedor de modelo todavía** (ver §13).
 - **Fecha:** 2026-10-16
 - **Depende de:** ADR-018 (Decision Fabric, Fase 0) y ADR-020 (Inference Gateway: capacidad `decide`, dialectos, clases de privacidad).
 - **Sustituye en parte:** la regla "exactamente 5 herramientas soberanas" de CONTRACT-01, que pasa a **exactamente 6** (enmienda formal en §5).
@@ -165,4 +165,16 @@ REA (servidor MCP de ingeniería inversa) entra como **MCP externo opcional**, f
 
 ## 12. Decisiones de José (2026-10-16) y pendientes
 Decididas: herramienta **encendida por defecto** (seis herramientas); nombre `tylluan_decide`; primeros contratos en sombra = enrutado del Scheduler y revisión humana; endpoint **REST equivalente** además de MCP.
-Pendientes antes de aprobar el ADR: confirmar los cuatro modos (`off / shadow / advisory / gate`) y el criterio de adopción por módulo con test pareado; el esquema final de campos de §5.3.
+Aprobado el 2026-10-16: los cuatro modos (`off / shadow / advisory / gate`) y el criterio de adopción por módulo con test pareado. El esquema de campos quedó fijado en la implementación (ver §13).
+
+## 13. Fase 1: lo implementado (2026-10-16)
+Lo que existe en `main`, verificado con tests, y las desviaciones respecto al diseño de arriba.
+
+- **Herramienta y REST:** `tylluan_decide` es la sexta herramienta soberana (CONTRACT-01 = exactamente 6). `POST /api/v1/decide` tiene el mismo cuerpo y la misma respuesta; los dos caminos llaman al mismo `DecisionService`. Clase agente, nunca operador. Una petición que rompe los límites recibe `400` con `status: error`. Hay tests de paridad MCP/REST.
+- **Límites del esquema:** 1 a 16 preguntas; `state` hasta 16 KiB serializado; instrucciones hasta 1 KiB; `choice` con 2 a 32 opciones; `score` con 2 a 10 niveles; `max_latency_ms` hasta 10000 (2000 por defecto). Una respuesta fuera de las opciones declaradas se rechaza.
+- **Interruptor:** `[decision] enabled` (encendido por defecto). Apagado: la herramienta sigue listada y responde `status: disabled`, sin respuestas, sin proveedor y sin fila de registro. La sección se lee al arrancar el kernel; no se recarga en caliente.
+- **Qué responde hoy:** solo los contratos con nombre `scheduler_routing` y `human_review` (modo `shadow` por defecto), con el proveedor de reglas. Una pregunta libre (sin contrato) se abstiene: `abstained: true`, `abstain_reason: "no_model_provider"` y `status: degraded`, porque no hay ningún proveedor de modelo conectado.
+- **Forma de la respuesta:** los campos de respuesta se serializan siempre (con `null` si no hay valor).
+- **Registro en sombra** (`decision_shadow_log`, esquema de SilvaDB v28): **una fila por pregunta**. `request_hash` es el SHA-256 de `state` más el nombre de la pregunta (función `decision_row_hash`); el `state` no se guarda nunca en claro. `rules_value` es el valor simple de la respuesta de las reglas (NULL si hubo abstención); `model_value`, `model_probs_json` y `agreed` quedan NULL hasta que exista un proveedor de modelo.
+- **Evaluación pareada** (`tylluan-evals --suite paired`): lee ese registro en solo lectura y lo une por `request_hash` con un fichero externo de verdad `{hash: valor}`. McNemar exacto, Brier y ECE en 10 bins. Un contrato solo sube de modo si el modelo gana con p<0.05 y un ECE aceptable.
+- **No hecho:** proveedores de modelo (fases 2 y 3 del plan), calibración propia, ningún contrato por encima de `shadow`, el vector adversario «el modelo no revierte un rechazo determinista» (marcado `#[ignore]` hasta el primer proveedor). Los canvas del Coloquio no pueden llamar a `tylluan_decide` (lista de permitidos del dashboard sin cambios).

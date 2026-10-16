@@ -1400,7 +1400,7 @@ async fn health_handler(
     (StatusCode::OK, Json(resp)).into_response()
 }
 
-/// Returns the 5 sovereign MCP tools for agent discovery.
+/// Returns the 6 sovereign MCP tools for agent discovery.
 async fn discovery_handler() -> impl IntoResponse {
     (StatusCode::OK, Json(serde_json::json!({
         "server": "tylluan-nexus-sovereign",
@@ -1411,7 +1411,8 @@ async fn discovery_handler() -> impl IntoResponse {
             { "name": "tylluan_remember", "description": "Store knowledge in SilvaDB long-term memory" },
             { "name": "tylluan_recall",   "description": "Retrieve knowledge from SilvaDB via hybrid BM25+vector search" },
             { "name": "tylluan_think",    "description": "Structured multi-step reasoning with hypothesis tracking" },
-            { "name": "tylluan_graph",    "description": "Query and traverse the knowledge graph (PPR, BFS, edges)" }
+            { "name": "tylluan_graph",    "description": "Query and traverse the knowledge graph (PPR, BFS, edges)" },
+            { "name": "tylluan_decide",   "description": "Answer a bounded typed question (choice, score, boolean) from a closed set, or abstain" }
         ],
         "endpoints": {
             "sse":      "/sse",

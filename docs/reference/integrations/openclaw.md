@@ -16,7 +16,7 @@
 openclaw mcp add tylluan http://127.0.0.1:47004/sse
 ```
 
-OpenClaw will detect the 5 sovereign tools automatically on next restart.
+OpenClaw will detect the 6 sovereign tools automatically on next restart.
 
 ### Option B — Config file
 

@@ -759,11 +759,12 @@ async fn main() -> anyhow::Result<()> {
     let skill_id = "skill:universal:tylluan-nexus-o3";
     let skill_content = concat!(
         "TylluanNexus o3 Universal Skill — qué puedo hacer en este sistema. ",
-        "5 herramientas soberanas: tylluan_do (ejecuta cualquier tarea via guilds), ",
+        "6 herramientas soberanas: tylluan_do (ejecuta cualquier tarea via guilds), ",
         "tylluan_remember (guarda en memoria a largo plazo SilvaDB), ",
         "tylluan_recall (busca en memoria con BGE-M3 hybrid BM25+vector RRF, 82% Recall@5), ",
         "tylluan_think (razonamiento profundo PageRank + GraphRAG), ",
-        "tylluan_graph (inspecciona y manipula el grafo SilvaDB). ",
+        "tylluan_graph (inspecciona y manipula el grafo SilvaDB), ",
+        "tylluan_decide (responde una pregunta acotada y tipada con respuesta de conjunto cerrado o abstencion; nunca una puerta de permisos). ",
         "Guilds activos: bash git filesystem monitor docker code coloquio memory knowledge web sequential_thinking vision deep_analysis. ",
         "Endpoints clave: GET /api/v1/skill (este documento completo), GET /health, GET /api/v1/guilds, POST /api/v1/do. ",
         "Protocolo: memoria compartida via SilvaDB, coordinacion via coloquio canal mision-activa, ",

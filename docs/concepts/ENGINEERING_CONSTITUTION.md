@@ -40,7 +40,7 @@ verificado, no por lo que dices haber hecho.
 *(Ejemplo real de Tylluan entre paréntesis — cada proyecto define las suyas.)*
 
 1. **El contrato de superficie del sistema no se toca sin autorización.** (Tylluan: exactamente
-   5 sovereign tools — `tylluan_do/remember/recall/think/graph`. Ni una más, ni una menos.)
+   6 sovereign tools — `tylluan_do/remember/recall/think/graph/decide`. Ni una más, ni una menos.)
 2. **Todos los tests en verde, siempre.** Un cambio que rompe un test no está terminado — está roto.
 3. **Los timeouts/límites de recursos existen por una razón medida, no arbitraria.** Bajarlos
    sin entender por qué se pusieron así no es optimizar: es repetir un incidente ya resuelto.

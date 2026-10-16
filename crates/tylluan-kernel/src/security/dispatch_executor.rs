@@ -32,7 +32,7 @@
 //! unattended loop hammering the store, so retry is a human decision.
 //!
 //! CONTRACT-01 note: this module is a kernel-internal security primitive,
-//! not an MCP tool — `all_tools()` still exposes exactly the 5 sovereign
+//! not an MCP tool — `all_tools()` still exposes exactly the 6 sovereign
 //! tools. WORK_PROTOCOL remains the authority: `--exec`-class execution is
 //! activated only by a `[wake]` config the operator wrote, per-message.
 

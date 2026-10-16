@@ -278,11 +278,11 @@ pub async fn handle_tylluan_do(
     }
 
     // Deterministic whoami/register_identity routing — these are real kernel
-    // tools (see handlers.rs) but are NOT in the 5-sovereign tools/list surface,
+    // tools (see handlers.rs) but are NOT in the 6-sovereign tools/list surface,
     // by design (CONTRACT-01). A client that only ever discovers tools via
     // tools/list (LM Studio, Qwen, generic MCP clients -- anything that isn't
     // told the literal tool name out of band) could never reach them otherwise.
-    // Routing through tylluan_do's intent text keeps the 5-tool contract intact
+    // Routing through tylluan_do's intent text keeps the 6-tool contract intact
     // while making identity actually usable by the whole fleet, not just
     // clients that happen to know the exact tool name.
     {

@@ -24,7 +24,7 @@ Casos de uso:
 ### 2. Agentes usuarios (clientes MCP de terceros que conectan a un Tylluan instalado)
 Casos de uso:
 - Instalar con `tylluan-cli install --profile portable|clinic|server` y conectar vía `:47004/sse`
-- Usar las 5 sovereign tools (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) para dar memoria persistente a cualquier agente sin tooling nativo
+- Usar las 6 sovereign tools (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`, `tylluan_decide`) para dar memoria persistente a cualquier agente sin tooling nativo
 - Casos reales: un médico en zona sin internet que necesita memoria clínica offline-first (perfil `clinic`); un desarrollador que quiere que su agente de código recuerde contexto entre sesiones (perfil `portable`); un equipo que necesita mesh compartido entre varias instancias (perfil `server`)
 
 ### 3. Humanos (usuarios finales que instalan Tylluan para sí mismos)
@@ -67,5 +67,5 @@ Tylluan sigue estas 7 propiedades como principios de diseño explícitos:
 | **Algoritmo de Olvido** | 🟢 FSRS-5 por nodo + Retrievability | 🔴 Peso estático (LIFO) | 🟡 Memoria jerárquica (L1/L2) con LLM |
 | **Federación P2P** | 🟢 Nativo (Kademlia + Noise XK) | 🔴 No | 🔴 Centralizado (Server-Client) |
 | **Consolidación** | 🟢 DreamCycle (dedup/decay automático) + memoria episódica | 🔴 No | 🟡 Buffer de mensajes manual |
-| **Tooling** | 🟢 5 Sovereign Tools MCP | 🟡 Integración custom | 🟡 Agent-specific APIs |
+| **Tooling** | 🟢 6 Sovereign Tools MCP | 🟡 Integración custom | 🟡 Agent-specific APIs |
 

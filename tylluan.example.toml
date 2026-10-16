@@ -177,8 +177,8 @@ admin = ["*"]
 # "my-reader-token-here" = "reader"
 # "my-writer-token-here" = "writer"
 
-# M31-P0: deterministic pre/post hooks around the 5 sovereign tools (tylluan_do,
-# tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph) plus tylluan_ingest.
+# M31-P0: deterministic pre/post hooks around the 6 sovereign tools (tylluan_do,
+# tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph, tylluan_decide) plus tylluan_ingest.
 # Runs once for every MCP client (Claude Desktop, Claude Code, LM Studio, ...) --
 # a single choke point to allow/deny/redact/inject context, not per-client logic.
 # No LLM in this path by design: pure regex matching, deterministic and auditable.

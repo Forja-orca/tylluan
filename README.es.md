@@ -115,9 +115,9 @@ Tylluan viene con un dashboard en React para observar al kernel trabajar.
 </p>
 <p align="center"><sub>Trust Console (M40-P6): detecta en vivo la deriva entre el commit cargado del kernel en ejecución y lo que realmente hay en disco — la misma clase de obsolescencia que este proyecto ha sufrido de verdad más de una vez.</sub></p>
 
-### Cinco herramientas, nada escondido detrás
+### Seis herramientas, nada escondido detrás
 
-Todo cliente MCP que se conecta a Tylluan ve exactamente estas cinco herramientas — sin importar cuántos guilds estén corriendo debajo:
+Todo cliente MCP que se conecta a Tylluan ve exactamente estas seis herramientas — sin importar cuántos guilds estén corriendo debajo:
 
 ```
 tylluan_do        Enruta una tarea a un guild, descrita en lenguaje natural
@@ -126,11 +126,12 @@ tylluan_recall    Busca en memoria a largo plazo (híbrido palabra clave + vecto
 tylluan_remember  Guarda conocimiento, o actualiza la persona de un agente de forma persistente
 tylluan_think     Razona sobre el grafo de conocimiento
 tylluan_graph     Operaciones directas de grafo — triples, caminos, PageRank
+tylluan_decide    Haz una pregunta acotada y tipada (opción / nivel / booleano): respuesta de conjunto cerrado o abstención explícita
 ```
 
 Eso es deliberado. Sea cual sea el guild que termine haciendo el trabajo — git, visión, una consulta a base de datos — el cliente solo ve siempre esta única interfaz limpia.
 
-> **Decisión de arquitectura en curso (2026-10-15) — todavía sin entregar.** El contrato de hoy son exactamente estas cinco herramientas. El responsable del proyecto ha decidido añadir una **sexta herramienta soberana**: una puerta directa al servicio de decisión descrito en [Decisiones de arquitectura en curso](#decisiones-de-arquitectura-en-curso). Se introducirá mediante una enmienda formal de CONTRACT-01 (ADR-021) antes de escribir código. Hasta entonces, todos los clientes siguen viendo cinco herramientas.
+> **Novedad en `main` (2026-10-16): `tylluan_decide`, la sexta herramienta soberana.** CONTRACT-01 pasa a decir exactamente seis herramientas (enmendado por ADR-021). Viene encendida por defecto y se alcanza por MCP y por REST (`POST /api/v1/decide`, mismo cuerpo y misma respuesta). Hoy solo responde dos contratos con nombre (`scheduler_routing`, `human_review`) con la base de reglas deterministas, en modo sombra, y registra cada decisión para compararla después (la entrada se guarda solo como hash). Las preguntas libres se abstienen de forma explícita (`no_model_provider`) porque **todavía no hay ningún proveedor de modelo conectado**. Nunca es una puerta de permisos. Está en `main` pero aún no en una release etiquetada. Ver [Decisiones de arquitectura en curso](#decisiones-de-arquitectura-en-curso).
 
 ### ¿Qué tan bien funciona realmente la recuperación?
 
@@ -349,7 +350,7 @@ Para el historial completo, ver [CHANGELOG.md](CHANGELOG.md). Para lo que genuin
 | **Redes por equipo — ADR-019** (tu LAN o tu propia VPN; sin malla global) | Los pares federados tienen **permisos por par y por espacio, denegados por defecto**; el despacho remoto de herramientas exige una lista exacta `guild.tool`; un par nunca puede cambiar `protected` ni el peso de un nodo existente | ✅ Paso 1 (auditoría de capacidades) y **paso 2 (permisos) en `main`, aún sin versión etiquetada**. 📐 Propuestos: paso 3 invitaciones de un solo uso + fijación de clave, paso 4 revocación inmediata, paso 6 Coloquio federado |
 | **Endurecimiento de la frontera de autenticación (OAuth / operador)** | Un token OAuth no puede realizar acciones de operador; `/oauth/authorize` solo auto-aprueba en `dev_mode`; los endpoints de gestión son solo de operador | ✅ Fase 1 integrada en `main` (`61bc97e`): `/oauth/authorize` solo auto-aprueba con `dev_mode=true` (403 si no), `redirect_uri` estrictamente loopback, los endpoints de gestión exigen un llamador de clase operador (JWT OAuth / autenticación de par rechazados), test de inventario de rutas que modifican estado. Aún no corre en el kernel del responsable. 📐 Fase 2 (consentimiento de operador, registro de clientes, scopes) sin aprobar; hasta entonces, los flujos OAuth de `mcp-remote` / Claude Desktop no funcionan con `dev_mode=false` (los clientes con Bearer por cabecera sí). Mantén el kernel en `127.0.0.1` |
 | **Inference Gateway — ADR-020** | Una capa interna que abstrae la inferencia **por capacidad** (`embed`, `rerank`, `decide`, `generate`), no por motor: local o remota, con clase de privacidad por proveedor y la identidad del modelo guardada con cada vector. **Decisión de arquitectura actual (no un invariante permanente, revisable): capa cliente solo de salida — Tylluan consume inferencia, no la ofrece como servicio** (única excepción: llama.cpp local explícito). El comportamiento por defecto sigue idéntico byte a byte | 📐 Borrador en revisión. Sin código |
-| **Servicio de decisión + sexta herramienta soberana — ADR-021** | Un servicio de decisión compartido con dos puertas: módulos internos y una sexta herramienta nueva, llamada `tylluan_decide` (CONTRACT-01 pasará de cinco a seis). El modelo nunca tiene autoridad: las reglas deterministas deciden permisos y límites. Modos: apagado / sombra / consultivo / puerta | 🟡 Decidido por el responsable del proyecto (encendida por defecto, MCP + REST, dos primeros contratos en sombra). ADR-021 propuesto, nada implementado |
+| **Servicio de decisión + sexta herramienta soberana — ADR-021** | Un servicio de decisión compartido con dos puertas: módulos internos y una sexta herramienta, `tylluan_decide` (CONTRACT-01 enmendado de cinco a seis). El modelo nunca tiene autoridad: las reglas deterministas deciden permisos y límites. Modos: apagado / sombra / consultivo / puerta | ✅ Fase 1 en `main` (2026-10-16): la herramienta, su gemela REST, la base de reglas y el registro en sombra, con tests adversarios y de paridad MCP/REST. 🟡 Sin empezar: proveedores de modelo, calibración, evaluación pareada, cualquier contrato por encima de `shadow` |
 | **Modelos de decisión (LAYA / Clef-Flash / Decima)** | Medición de la Fase 0 con datos propios de Tylluan: LAYA y Clef-Flash NO-GO; Decima-small GO-PROVISIONAL (+5 aciertos netos de 245, sin establecer estadísticamente) | ✅ Medido · sin integración en producción |
 | **REA (servidor MCP de ingeniería inversa)** | Servidor MCP externo opcional, fuera de la ruta crítica | 🟡 GO como opcional · lista de verificación pendiente · sin registrar |
 | **Transporte `iroh`** | Habría permitido conectar equipos de redes distintas sin VPN | ⛔ NO-GO por ahora — LAN o tu propia VPN es el camino soportado |
@@ -367,13 +368,13 @@ flowchart LR
   CLIENTS["Clientes e IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Núcleo Soberano"]
-    TOOLS["5 Herramientas Soberanas hoy (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
-    TOOL6["6ª Herramienta Soberana (decidida, sin entregar)<br/>puerta de decisión · enmienda de CONTRACT-01 (ADR-021)"]:::future
+    TOOLS["6 Herramientas Soberanas (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph · decide"]
+    TOOL6["tylluan_decide (6ª herramienta, en main)<br/>MCP + REST · reglas · registro en sombra · sin modelo aún (ADR-021)"]
     AUTH["Endurecimiento de autenticación (Fase 1 integrada, Fase 2 pendiente)<br/>Los tokens OAuth nunca dan acciones de operador"]:::future
 
     subgraph GOVERN["Gobernanza Cognitiva y Enrutamiento"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · reglas deterministas · spike Fase 0, diseño del servicio: ADR-021"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · reglas deterministas · hoy lo sirve tylluan_decide (solo reglas); proveedores de modelo sin conectar (ADR-021)"]
       CGATE["CoherenceGate (ADR-011)<br/>Firewall L1-L4 · Signal Loop"]
     end
   end

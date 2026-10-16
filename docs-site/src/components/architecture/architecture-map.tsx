@@ -101,7 +101,7 @@ export function ArchitectureMap() {
           </PhaseBox>
 
           {/* Sovereign Core & 46 Guilds */}
-          <PhaseBox x={730} y={212} width={360} height={190} title="5 Sovereign Tools &amp; 46 Guilds (CONTRACT-01)" color="#A855F7">
+          <PhaseBox x={730} y={212} width={360} height={190} title="6 Sovereign Tools &amp; 46 Guilds (CONTRACT-01)" color="#A855F7">
             <SvgNode x={750} y={250} width={100} height={34} label="tylluan_do" sublabel="execute actions" style={NODE_STYLES.process} />
             <SvgNode x={870} y={250} width={100} height={34} label="tylluan_recall" sublabel="memory access" style={NODE_STYLES.process} />
             <SvgNode x={750} y={300} width={100} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />

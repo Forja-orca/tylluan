@@ -9,12 +9,13 @@ Tylluan acts as a **Sovereign MCP Hub**. This document describes how external AI
 ## 1. Core Architecture & Discovery Philosophy
 
 ### The Sovereign Contract: CONTRACT-01
-Tylluan preserves a strict contract where MCP clients are presented with exactly **5 sovereign tools**:
+Tylluan preserves a strict contract where MCP clients are presented with exactly **6 sovereign tools**:
 1. `tylluan_do` (natural language intent router)
 2. `tylluan_remember` (write to long-term memory)
 3. `tylluan_recall` (query long-term memory)
 4. `tylluan_think` (cognitive graph reasoning)
 5. `tylluan_graph` (direct triple store / GraphRAG operations)
+6. `tylluan_decide` (bounded typed questions, closed-set answer or abstention)
 
 Mounting dozens of individual guild tools directly into the top-level tool list is rejected because:
 - It causes client agent context bloating.

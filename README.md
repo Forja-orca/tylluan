@@ -113,9 +113,9 @@ Tylluan ships with a React dashboard for watching the kernel work.
 </p>
 <p align="center"><sub>Trust Console (M40-P6): detects live drift between the running kernel's loaded commit and what's actually on disk — the same class of staleness this project has hit for real more than once.</sub></p>
 
-### Five tools, nothing hidden behind them
+### Six tools, nothing hidden behind them
 
-Every MCP client that connects to Tylluan sees exactly these five tools — no matter how many guilds are running underneath:
+Every MCP client that connects to Tylluan sees exactly these six tools — no matter how many guilds are running underneath:
 
 ```
 tylluan_do        Route a task to a guild, described in natural language
@@ -124,11 +124,12 @@ tylluan_recall    Search long-term memory (hybrid keyword + vector) or an agent'
 tylluan_remember  Store knowledge, or update an agent's persona persistently
 tylluan_think     Reason over the knowledge graph
 tylluan_graph     Direct graph operations — triples, paths, PageRank
+tylluan_decide    Ask a bounded typed question (choice / score / boolean): closed-set answer or explicit abstention
 ```
 
 That's deliberate. Whatever guild ends up doing the work — git, vision, a database query — the client only ever sees this one clean interface.
 
-> **Architecture decision in progress (2026-10-15) — not shipped yet.** The contract today is exactly these five tools. The project owner has decided to add a **sixth sovereign tool, `tylluan_decide`, enabled by default and exposed over both MCP and REST**: a direct door to the decision service described in [Architecture decisions in flight](#architecture-decisions-in-flight). It will be introduced through a formal amendment of CONTRACT-01 (ADR-021) before any code is written. Until that lands, every client still sees five tools.
+> **New in `main` (2026-10-16): `tylluan_decide`, the sixth sovereign tool.** CONTRACT-01 now says exactly six tools (amended by ADR-021). It is on by default and reachable over both MCP and REST (`POST /api/v1/decide`, same body and same response). Today it answers only two named contracts (`scheduler_routing`, `human_review`) with the deterministic rules baseline, in shadow mode, and records each decision for later comparison (the input is stored only as a hash). Free questions abstain explicitly (`no_model_provider`) because **no model provider is wired in yet**. It is never a permission gate. It is in `main` but not in a tagged release yet. See [Architecture decisions in flight](#architecture-decisions-in-flight).
 
 ### How well does retrieval actually work?
 
@@ -347,7 +348,7 @@ For the full history, see [CHANGELOG.md](CHANGELOG.md). For what's genuinely sti
 | **Team-scoped networks — ADR-019** (your LAN or your own VPN; no global mesh) | Federated peers get **per-peer, per-space permissions, deny-by-default**; remote tool dispatch needs an exact `guild.tool` allow-list; a peer can never change `protected` or the weight of an existing node | ✅ Step 1 (capability audit) and **step 2 (permissions) on `main`, not yet in a tagged release**. 📐 Proposed: step 3 single-use invitations + key pinning, step 4 instant revocation, step 6 federated Coloquio |
 | **Auth boundary hardening (OAuth / operator)** | An OAuth token cannot perform operator actions; `/oauth/authorize` auto-approves only in `dev_mode`; management endpoints are operator-only | ✅ Phase 1 merged on `main` (`61bc97e`): `/oauth/authorize` auto-approves only with `dev_mode=true` (403 otherwise), `redirect_uri` strictly loopback, management endpoints require an operator-class caller (OAuth JWT / peer auth rejected), route-inventory test over mutating routes. Not yet running on the maintainer's kernel. 📐 Phase 2 (operator consent, client registry, scopes) not approved yet; until it ships, OAuth flows of `mcp-remote` / Claude Desktop do not work with `dev_mode=false` (header-Bearer clients are fine). Keep the kernel on `127.0.0.1` |
 | **Inference Gateway — ADR-020** | One internal layer that abstracts inference **by capability** (`embed`, `rerank`, `decide`, `generate`), not by engine: local or remote, with a privacy class per provider and the model identity stored with every vector. **Current architectural decision (not a permanent invariant, revisable): an outbound-only client layer — Tylluan consumes inference, it does not offer it as a service** (the only exception is the explicit local llama.cpp). Default behaviour stays byte-identical | 📐 Draft under review. No code |
-| **Decision service + 6th sovereign tool — ADR-021** | A shared decision service with two doors: internal modules and a new sixth tool, named `tylluan_decide` (CONTRACT-01 will be amended from five to six). The model never holds authority: deterministic rules decide permissions and limits. Modes: off / shadow / advisory / gate | 🟡 Decided by the project owner (on by default, MCP + REST, first two contracts in shadow). ADR-021 proposed, nothing implemented |
+| **Decision service + 6th sovereign tool — ADR-021** | A shared decision service with two doors: internal modules and a sixth tool, `tylluan_decide` (CONTRACT-01 amended from five to six). The model never holds authority: deterministic rules decide permissions and limits. Modes: off / shadow / advisory / gate | ✅ Phase 1 in `main` (2026-10-16): the tool, its REST twin, the rules baseline and the shadow log, with adversarial and MCP/REST parity tests. 🟡 Not started: model providers, calibration, paired evaluation, any contract above `shadow` |
 | **Decision models (LAYA / Clef-Flash / Decima)** | Phase-0 measurement on Tylluan's own data: LAYA and Clef-Flash are NO-GO; Decima-small is GO-PROVISIONAL (+5 net correct answers out of 245, not statistically established) | ✅ Measured · not integrated in production |
 | **REA (reverse-engineering MCP server)** | Optional external MCP server, outside the critical path | 🟡 GO as optional · verification checklist pending · not registered |
 | **`iroh` transport** | Would have let teams on different networks connect without a VPN | ⛔ NO-GO for now — LAN or your own VPN is the supported path |
@@ -365,13 +366,13 @@ flowchart LR
   CLIENTS["Clients & IDEs<br/>Claude Code · Cursor · VS Code · A2A · CLI"]
 
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Sovereign Core"]
-    TOOLS["5 Sovereign Tools today (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
-    TOOL6["6th Sovereign Tool (decided, not shipped)<br/>decision door · CONTRACT-01 amendment (ADR-021)"]:::future
+    TOOLS["6 Sovereign Tools (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph · decide"]
+    TOOL6["tylluan_decide (6th tool, in main)<br/>MCP + REST · rules baseline · shadow log · no model yet (ADR-021)"]
     AUTH["Auth boundary hardening (Phase 1 merged, Phase 2 pending)<br/>OAuth tokens never grant operator actions"]:::future
 
     subgraph GOVERN["Cognitive Governance & Routing"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]
-      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules · Phase-0 spike, service design: ADR-021"]
+      DECIDER["Decision Fabric (ADR-018)<br/>DecisionProvider · deterministic rules · served today by tylluan_decide (rules only); model providers not wired (ADR-021)"]
       CGATE["CoherenceGate (ADR-011)<br/>L1-L4 Firewall · Signal Loop"]
     end
   end

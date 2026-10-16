@@ -146,7 +146,7 @@ pub struct TylluanConfig {
     #[serde(default)]
     pub security: SecurityConfig,
 
-    /// M31-P0: deterministic pre/post hooks around the 5 sovereign tools.
+    /// M31-P0: deterministic pre/post hooks around the 6 sovereign tools.
     /// `[[hooks]]` array-of-tables in TOML, see security::hooks::HookRule.
     #[serde(default)]
     pub hooks: Vec<crate::security::hooks::HookRule>,
@@ -524,7 +524,7 @@ pub struct NexusConfig {
     #[serde(default)]
     pub dev_mode: bool,
 
-    /// Expose all kernel utility tools via MCP (not just 5 sovereign).
+    /// Expose all kernel utility tools via MCP (not just the 6 sovereign).
     /// Enables agents without native tools to call
     /// health, doctor, memory_search, graph ops directly without tylluan_do routing.
     #[serde(default)]

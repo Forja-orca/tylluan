@@ -253,7 +253,7 @@ impl TylluanServer {
         Ok(ListPromptsResult {
             prompts: vec![Prompt::new(
                 "tylluan_capabilities",
-                Some("What TylluanNexus can do — read this before your first call to understand the 5 sovereign tools and example intents"),
+                Some("What TylluanNexus can do — read this before your first call to understand the 6 sovereign tools and example intents"),
                 None,
             )],
             next_cursor: None,
@@ -265,7 +265,7 @@ impl TylluanServer {
             return Err(McpError::invalid_params("unknown prompt", None));
         }
         let text = concat!(
-            "# TylluanNexus — 5 Sovereign Tools\n\n",
+            "# TylluanNexus — 6 Sovereign Tools\n\n",
             "## tylluan_do\n",
             "Execute any task in natural language. The kernel routes to the right guild automatically.\n",
             "Examples:\n",
@@ -294,6 +294,10 @@ impl TylluanServer {
             "- tylluan_graph(command='stats')\n",
             "- tylluan_graph(command='add_triple', subject='auth', predicate='uses', object='JWT')\n",
             "- tylluan_graph(command='list_neighbors', entity='auth')\n\n",
+            "## tylluan_decide\n",
+            "Ask a bounded, typed question (choice, score or boolean) and get an answer from a closed set, or an explicit abstention. Never a permission gate.\n",
+            "Examples:\n",
+            "- tylluan_decide(state={\"risk\":0.2}, questions={\"route\":{\"kind\":\"choice\",\"options\":[\"local_fast\",\"human\"]}}, contract='scheduler_routing')\n\n",
             "## Workflow pattern for new sessions\n",
             "1. tylluan_think(query='<topic>') — understand what is known\n",
             "2. tylluan_recall(query='<topic>') — retrieve relevant memory\n",
