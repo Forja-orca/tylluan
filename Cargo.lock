@@ -4463,6 +4463,7 @@ name = "tylluan-evals"
 version = "0.17.1"
 dependencies = [
  "anyhow",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",

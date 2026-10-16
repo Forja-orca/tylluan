@@ -12,3 +12,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+# Paired eval (paired_eval.rs): lectura solo-lectura de decision_shadow_log.
+# Misma versión y feature "bundled" que tylluan-kernel para reusar el build.
+# NOTA: la línea de AGENTS.md "tylluan-evals no tiene #[test] propios" deja
+# de ser cierta con los tests unitarios de paired_eval.rs — ver informe.
+rusqlite = { version = "0.33", default-features = false, features = ["bundled"] }
