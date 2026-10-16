@@ -188,6 +188,22 @@ pub fn peer_by_x25519<'a>(
     })
 }
 
+/// Decision of the P2P dispatch gate for one inbound request: the audit label
+/// of the caller and whether `guild.tool` may run. Fail-closed: a caller that
+/// was approved at handshake but cannot be resolved now (e.g. revoked
+/// mid-flight) is denied. Pure so the real rule is testable without a socket.
+pub fn dispatch_gate_decision(
+    peers: &[FederationPeer],
+    caller_x25519_hex: &str,
+    guild: &str,
+    tool: &str,
+) -> (String, bool) {
+    match peer_by_x25519(peers, caller_x25519_hex) {
+        Some(p) => (p.name.clone(), p.permissions.may_dispatch(guild, tool)),
+        None => (format!("x25519:{caller_x25519_hex}"), false),
+    }
+}
+
 /// Denial audit: one hash-chained row in `guild_audit_log` (same store as
 /// `tylluan_do` dispatches) plus a warn. Errors from the audit write are
 /// non-fatal (same posture as `log_audit_entry` itself).
@@ -319,6 +335,55 @@ mod tests {
         assert!(peer_by_x25519(&peers, "00").is_none(), "malformed key rejected");
         let other: String = std::iter::repeat_n("aa", 32).collect();
         assert!(peer_by_x25519(&peers, &other).is_none(), "unknown key rejected");
+    }
+
+    #[test]
+    fn dispatch_gate_decision_is_deny_by_default_and_exact() {
+        use tylluan_link::identity::NodeIdentity;
+        let dir = std::env::temp_dir().join(format!("tylluan_gate_keys_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let id = NodeIdentity::load_or_create(&dir.join("g.identity")).expect("identity");
+        let pub_hex = id.public_key_hex().to_string();
+        let x = tylluan_link::noise::x25519_from_ed25519_hex(&pub_hex).expect("x25519");
+        let x_hex: String = x.iter().map(|b| format!("{b:02x}")).collect();
+        let mk = |approved: bool, json: &str| FederationPeer {
+            name: "hospital".into(),
+            url: "http://x".into(),
+            auth_token: "t".into(),
+            shared_secret: String::new(),
+            last_sync: None,
+            approved,
+            added_at: 0,
+            ed25519_pubkey: pub_hex.clone(),
+            external_address: String::new(),
+            permissions: perms(json),
+        };
+
+        // Approved peer with no permissions: everything denied, labelled by name.
+        let (label, ok) = dispatch_gate_decision(&[mk(true, "")], &x_hex, "git", "status");
+        assert_eq!(label, "hospital");
+        assert!(!ok, "deny-by-default");
+
+        // Exact guild.tool only.
+        let peers = [mk(true, r#"{"dispatch_allow":["git.status"]}"#)];
+        assert!(dispatch_gate_decision(&peers, &x_hex, "git", "status").1);
+        assert!(!dispatch_gate_decision(&peers, &x_hex, "git", "log").1, "other tool of same guild");
+        assert!(!dispatch_gate_decision(&peers, &x_hex, "docker", "status").1, "same tool other guild");
+
+        // Dangerous families are NOT blocked at dispatch time (documented decision:
+        // warning + audit on save); allow-listed means allowed.
+        let peers = [mk(true, r#"{"dispatch_allow":["bash.execute"]}"#)];
+        assert!(dispatch_gate_decision(&peers, &x_hex, "bash", "execute").1);
+        assert!(!dispatch_gate_decision(&peers, &x_hex, "bash", "other").1);
+
+        // Not approved / unknown caller / malformed key: denied, labelled by key.
+        let peers = [mk(false, r#"{"dispatch_allow":["git.status"]}"#)];
+        let (label, ok) = dispatch_gate_decision(&peers, &x_hex, "git", "status");
+        assert!(!ok && label.starts_with("x25519:"), "unapproved peer never dispatches");
+        let approved = [mk(true, r#"{"dispatch_allow":["git.status"]}"#)];
+        let stranger: String = std::iter::repeat_n("aa", 32).collect();
+        assert!(!dispatch_gate_decision(&approved, &stranger, "git", "status").1);
+        assert!(!dispatch_gate_decision(&approved, "00", "git", "status").1);
     }
 
     #[test]

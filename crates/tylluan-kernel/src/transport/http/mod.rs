@@ -1015,15 +1015,12 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
                 Box::pin(async move {
                     let (peer_label, allowed) = {
                         let peers = gate_peers.load_all().unwrap_or_default();
-                        match crate::federation::permissions::peer_by_x25519(&peers, &caller_x25519) {
-                            Some(p) => (
-                                p.name.clone(),
-                                p.permissions.may_dispatch(&req.guild, &req.tool),
-                            ),
-                            // Fail-closed: approved at handshake but not
-                            // resolvable now (e.g. revoked mid-flight).
-                            None => (format!("x25519:{caller_x25519}"), false),
-                        }
+                        crate::federation::permissions::dispatch_gate_decision(
+                            &peers,
+                            &caller_x25519,
+                            &req.guild,
+                            &req.tool,
+                        )
                     };
                     if !allowed {
                         crate::federation::permissions::audit_permission_denied(
