@@ -128,7 +128,7 @@ El binario nativo sigue siendo el camino principal. Los install scripts se reesc
 
 ### Fase P2 — Docker imagen oficial
 
-**Imagen:** `ghcr.io/forja-orca/tylluan:latest` y `ghcr.io/forja-orca/tylluan:v0.12.0`
+**Imagen:** `ghcr.io/forja-orca/tylluan:latest` y `ghcr.io/forja-orca/tylluan:v0.12.0` _(nota 2026-10-16: nombre previsto; ningún workflow del repo publica en ghcr y la existencia de la imagen no está verificada)_
 
 **Flujo de uso:**
 

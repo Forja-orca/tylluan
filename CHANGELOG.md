@@ -335,7 +335,7 @@ No breaking changes — drop-in upgrade from v0.12.0.
 
 - **M15-P1 — First-run UX** (`commit 2df8f73`) — `GET /api/v1/setup-hint`: JSON con configs MCP para Claude Desktop, Claude Code y Cursor + comandos de verify. `embedding_model = "none"` como default en `--profile portable`. BM25 funciona sin descargar modelos.
 
-- **M15-P2 — Docker imagen oficial** (`commits a2642da, 13086eb`) — `ghcr.io/forja-orca/tylluan:latest`: multi-stage build (`rust:1.88-bookworm` → `debian:bookworm-slim`), ONNX Runtime 1.22.0 instalado según arquitectura (x64/aarch64), `HEALTHCHECK` en `/health`, `VOLUME /data` del usuario. `dev_mode = false` por defecto. Sin telemetría, sin call-home, sin federación en el default. Soberanía intacta.
+- **M15-P2 — Docker imagen oficial** (`commits a2642da, 13086eb`) — `Dockerfile` de la imagen (nombre previsto `ghcr.io/forja-orca/tylluan:latest`; ningún workflow la publica y no se ha verificado que exista en el registro): multi-stage build (`rust:1.88-bookworm` → `debian:bookworm-slim`), ONNX Runtime 1.22.0 instalado según arquitectura (x64/aarch64), `HEALTHCHECK` en `/health`, `VOLUME /data` del usuario. `dev_mode = false` por defecto. Sin telemetría, sin call-home, sin federación en el default. Soberanía intacta.
 
 - **M15-P3 — Verificación OpenClaw** (`commit 5c9b32d`) — OpenClaw confirmado: 368,249 stars (fuente primaria), soporte MCP SSE nativo (`openclaw mcp add <url>`). Hermes Agent (NousResearch) compatible vía `~/.hermes/config.yaml`. **M17 Rama A decidida:** docs de integración en v0.13.0, sin cambios en kernel.
 
