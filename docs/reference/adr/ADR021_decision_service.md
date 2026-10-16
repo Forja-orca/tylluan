@@ -3,7 +3,7 @@
 - **Estado:** 📐 **PROPUESTO** — borrador del Tech Lead. Solo diseño en papel: **cero código** hasta que José lo apruebe.
 - **Fecha:** 2026-10-16
 - **Depende de:** ADR-018 (Decision Fabric, Fase 0) y ADR-020 (Inference Gateway: capacidad `decide`, dialectos, clases de privacidad).
-- **Sustituye en parte:** la regla "exactamente 5 herramientas soberanas" de CONTRACT-01 (enmienda formal en §5).
+- **Sustituye en parte:** la regla "exactamente 5 herramientas soberanas" de CONTRACT-01, que pasa a **exactamente 6** (enmienda formal en §5).
 
 ---
 
@@ -13,15 +13,17 @@
 1. **Principio:** el modelo de decisión se consulta solo cuando un módulo tiene una decisión semántica concreta, acotada y evaluable. Las reglas deterministas conservan la autoridad sobre permisos, seguridad y límites; las acciones de riesgo exigen aprobación humana.
 2. **Dos puertas** sobre un mismo servicio: los módulos internos del core y una herramienta directa para los agentes IDE.
 3. **Sexta herramienta real**, de nombre **`tylluan_decide`** (se descartó exponerla como operación de `tylluan_do`).
-4. **Desactivable:** si el usuario no quiere usarla, el core funciona como hasta ahora.
-5. Dialectos `/v1/systemone` y `/v1/decisions` desde el principio, con contrato interno neutro (ADR-020).
-6. Datos clínicos hacia la nube solo con aprobación explícita por petición; cambio de perfil automático solo hacia local (ADR-020).
-7. "Solo de salida" es una decisión de arquitectura actual, revisable, no un invariante.
+4. **Encendida por defecto (2026-10-16):** hay seis herramientas soberanas siempre. Los contratos internos no consultan al modelo salvo que estén en `shadow`/`advisory`/`gate`; el interruptor global sigue existiendo y, apagado, el core funciona como hasta ahora.
+5. **Nombre confirmado:** `tylluan_decide` (guion bajo, como las otras cinco).
+6. **Primeros contratos en sombra:** (1) enrutado del Scheduler y (2) decisión de revisión humana (donde Decima ya tiene datos).
+7. **MCP y REST siempre:** la capacidad se expone por ambas vías para cubrir el máximo de agentes (regla general de José, no solo de esta herramienta).
+8. Dialectos `/v1/systemone` y `/v1/decisions` desde el principio, con contrato interno neutro (ADR-020).
+9. Datos clínicos hacia la nube solo con aprobación explícita por petición; cambio de perfil automático solo hacia local (ADR-020).
+10. "Solo de salida" es una decisión de arquitectura actual, revisable, no un invariante.
 
 ### Propuesto por el TL (pendiente de confirmar por José)
 - Regla de adopción: un módulo adopta el modelo solo si, en modo sombra, supera a sus propias reglas en sus métricas.
 - Estados `desactivado / sombra / consultivo / puerta` por contrato.
-- `tylluan_decide` **desactivada por defecto** (ver §5.2 y §10).
 - Filtro de salida como capa de verificación independiente del generador (§7).
 
 ---
@@ -97,10 +99,10 @@ Fachada directa sobre el mismo servicio, para que un agente IDE haga **preguntas
 - **Clase agente** en el modelo de autenticación (no operador).
 - Pasa por el Inference Gateway: privacidad, presupuesto y auditoría de ADR-020.
 
-### 5.2 Activación y compatibilidad (propuesta)
-- **Desactivada por defecto.** Con ella apagada, `tools/list` devuelve **exactamente las 5 herramientas de hoy**: ningún cliente ve un cambio y los tests actuales siguen válidos.
-- Al activarla en la configuración, `tools/list` añade la sexta. CONTRACT-01 pasa a decir: *"5 herramientas soberanas siempre, más `tylluan_decide` cuando el servicio de decisión está habilitado."*
-- **Alternativa** (más estricta): fijar siempre seis herramientas y que la sexta devuelva `status: disabled`. Se descarta como recomendación porque obliga a todos los clientes a ver un cambio aunque no lo usen.
+### 5.2 Activación y compatibilidad (DECIDIDO por José, 2026-10-16)
+- **Encendida por defecto:** `tools/list` devuelve **seis herramientas**. CONTRACT-01 pasa a decir: *"exactamente 6 herramientas soberanas: las cinco de siempre más `tylluan_decide`."* Los clientes ven un cambio (una herramienta nueva); las cinco existentes no cambian.
+- Con el interruptor global del servicio apagado, la herramienta sigue listada y responde `status: disabled` (así el número de herramientas es siempre seis y los tests lo fijan en 6).
+- **MCP y REST:** la herramienta MCP tiene un endpoint REST equivalente con el mismo contrato, la misma autenticación (clase agente) y los mismos límites; los tests de paridad son obligatorios.
 
 ### 5.3 Contrato de la herramienta (propuesta)
 Entrada: `state` (texto o estructura acotada), `questions` (mapa nombre → tipo `choice | score | boolean`, con opciones o niveles e instrucciones), opcionalmente `contract` para invocar un contrato interno nombrado, y un límite de latencia.
@@ -113,7 +115,7 @@ Salida: por pregunta, el valor, las probabilidades, la confianza o la **abstenci
 - Auditoría de cada llamada.
 
 ### 5.5 Qué hay que actualizar (a regenerar con `git grep` al implementar)
-- **Código:** la lista de herramientas soberanas en `all_tools()` y sus comentarios de contrato; `test_sovereign_count_is_exactly_5` y su par, `sovereign_tools_e2e.rs`, `integration_mcp.rs`, `guilds_v2_integration.rs`; la Agent Card A2A (5 skills) y la sonda de salud `tool_count == 5`, para que acepten 5 por defecto y 6 con el servicio habilitado.
+- **Código:** la lista de herramientas soberanas en `all_tools()` y sus comentarios de contrato; `test_sovereign_count_is_exactly_5` y su par, `sovereign_tools_e2e.rs`, `integration_mcp.rs`, `guilds_v2_integration.rs`; la Agent Card A2A (5 skills) y la sonda de salud `tool_count == 5`, para que fijen 6.
 - **Documentación pública y diagramas:** README (EN/ES), ROADMAP, SPEC, AGENTS, CLAUDE, CONTRIBUTING, STATUS, `docs/concepts/*`, `CLIENT_INTEGRATION_GUIDE`, el mapa de arquitectura de `docs-site`, `architecture.svg` y el diagrama interactivo.
 - **Interfaz:** `ConnectorsTab` y `ColoquioCanvasWorkspace` del dashboard.
 
@@ -143,27 +145,24 @@ REA (servidor MCP de ingeniería inversa) entra como **MCP externo opcional**, f
 ## 9. Fases propuestas
 | Fase | Contenido | Condición de avance |
 |---|---|---|
-| 0 | Contratos, interruptor global, la tool detrás de la bandera **apagada**, solo el proveedor de reglas. Tests: con la bandera apagada son 5 herramientas; con ella encendida son 6 | ADR aprobado |
-| 1 | `shadow` en uno o dos contratos con el proveedor local (`/v1/systemone`) | Registro de auditoría funcionando |
+| 0 | Contratos, interruptor global, la tool `tylluan_decide` (MCP + REST) encendida, solo el proveedor de reglas. Tests: seis herramientas; con el interruptor apagado responde `disabled` | ADR aprobado |
+| 1 | `shadow` en los dos contratos decididos (enrutado del Scheduler; revisión humana) con el proveedor local (`/v1/systemone`) | Registro de auditoría funcionando |
 | 2 | Evaluación pareada y calibración; `advisory` donde gane | Criterio de adopción de §4 |
 | 3 | `gate` selectivo y filtro de salida | Evidencia medida y revisión adversaria |
 
-**Tests obligatorios** (a concretar): bandera apagada = 5 herramientas idénticas a hoy; encendida = 6; opciones cerradas (una respuesta fuera del conjunto se rechaza); abstención respetada; el modelo no puede revertir un rechazo determinista; no hay llamadas externas con el servicio apagado; privacidad clínica; inyección en `state`; herramienta no accesible como operador.
+**Tests obligatorios** (a concretar): seis herramientas en `tools/list`; paridad MCP/REST; interruptor apagado = `status: disabled` sin llamadas externas; opciones cerradas (una respuesta fuera del conjunto se rechaza); abstención respetada; el modelo no puede revertir un rechazo determinista; no hay llamadas externas con el servicio apagado; privacidad clínica; inyección en `state`; herramienta no accesible como operador.
 
 ## 10. Riesgos y límites
-- Añadir una herramienta amplía la superficie que ven los clientes; por eso nace apagada.
+- Añadir una herramienta amplía la superficie que ven los clientes; se mitiga con clase agente, solo lectura, límites y auditoría, y con contratos internos en `off` salvo los dos en sombra.
 - Un modelo de decisión puede **empeorar** un módulo (LAYA: 0,351 de acierto frente a 0,531 de las reglas); la adopción es por módulo y con datos.
 - Los dos dialectos no son equivalentes (ADR-020); no todas las preguntas son portables.
 - Este ADR no define el filtro de salida completo ni elige qué módulos migran.
 
 ## 11. Marcado de veracidad
 - **VERIFICADO:** lo de §2 contra el árbol; el comportamiento de `all_tools()` y los tests que fijan el 5.
-- **HIPÓTESIS / PROPUESTA:** contrato de la herramienta (§5.3), activación apagada por defecto, criterio de adopción, fases y umbrales.
+- **HIPÓTESIS / PROPUESTA:** contrato de la herramienta (§5.3), criterio de adopción, fases y umbrales.
 - **No verificado:** las cifras externas citadas por terceros sobre umbrales y mejora de cascadas.
 
-## 12. Decisiones que necesita José
-1. ¿`tylluan_decide` **apagada por defecto** (recomendado) o encendida?
-2. ¿Confirmas el nombre con guion bajo, `tylluan_decide`, como las otras cinco?
-3. ¿Aprobamos los cuatro modos (`off / shadow / advisory / gate`) y el criterio de adopción por módulo con test pareado?
-4. ¿Con qué uno o dos contratos empezamos en modo sombra? (propuesta: uno de enrutado del Scheduler y uno de decisión de revisión humana, donde Decima ya tiene datos)
-5. ¿Existe también un endpoint REST equivalente, o solo la herramienta MCP?
+## 12. Decisiones de José (2026-10-16) y pendientes
+Decididas: herramienta **encendida por defecto** (seis herramientas); nombre `tylluan_decide`; primeros contratos en sombra = enrutado del Scheduler y revisión humana; endpoint **REST equivalente** además de MCP.
+Pendientes antes de aprobar el ADR: confirmar los cuatro modos (`off / shadow / advisory / gate`) y el criterio de adopción por módulo con test pareado; el esquema final de campos de §5.3.
