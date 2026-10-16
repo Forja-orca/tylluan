@@ -1,0 +1,315 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Tylluan Kernel Architecture",
+    "subtitle": "main 8c9287b — sovereign memory + tool execution, single Rust binary",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto"
+    },
+    "repository": {
+      "url": "https://github.com/Forja-orca/tylluan",
+      "revision": "8c9287b94bfec956b87a01d63ee91b678861e1c1"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 2,
+    "gapX": 72,
+    "gapY": 64,
+    "cellW": 240,
+    "cellH": 96
+  },
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Clients",
+      "wraps": [
+        "mcp_clients",
+        "dashboard_ui"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "security-group",
+      "label": "Sovereign layer (CONTRACT-01: 6 tools)",
+      "wraps": [
+        "auth_boundary",
+        "tools6",
+        "matcher",
+        "decision_svc"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "region",
+      "label": "Execution",
+      "wraps": [
+        "guilds46",
+        "coloquio"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "Local inference (ONNX, CPU)",
+      "wraps": [
+        "embed_engine",
+        "inf_budget"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "SilvaDB",
+      "wraps": [
+        "sqlite_wal",
+        "cap_registry"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "tylluan-link mesh",
+      "wraps": [
+        "gossip_dht",
+        "peers"
+      ],
+      "pad": 16
+    }
+  ],
+  "components": [
+    {
+      "id": "mcp_clients",
+      "type": "external",
+      "label": "MCP IDEs + A2A",
+      "row": 0,
+      "col": 0
+    },
+    {
+      "id": "dashboard_ui",
+      "type": "frontend",
+      "label": "Dashboard",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "auth_boundary",
+      "type": "security",
+      "label": "Auth boundary",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/http/auth.rs",
+          "label": "operator vs agent class"
+        }
+      ],
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "tools6",
+      "type": "backend",
+      "label": "6 Sovereign Tools",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/transport/server/tools.rs",
+          "label": "all_tools()"
+        }
+      ],
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "matcher",
+      "type": "backend",
+      "label": "Guild Matcher",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/router/matcher.rs",
+          "line": 160,
+          "label": "GuildMatcher"
+        }
+      ],
+      "row": 2,
+      "col": 0
+    },
+    {
+      "id": "decision_svc",
+      "type": "backend",
+      "label": "Decision (rules)",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/router/decision/service.rs",
+          "line": 85,
+          "label": "DecisionService::decide"
+        }
+      ],
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "guilds46",
+      "type": "backend",
+      "label": "46 Python guilds",
+      "sources": [
+        {
+          "path": "guilds/core/coloquio.py",
+          "label": "guilds/core/"
+        }
+      ],
+      "row": 3,
+      "col": 0
+    },
+    {
+      "id": "coloquio",
+      "type": "backend",
+      "label": "Coloquio/Contracts",
+      "row": 3,
+      "col": 1
+    },
+    {
+      "id": "embed_engine",
+      "type": "backend",
+      "label": "mxbai + Jina",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/router/embeddings.rs",
+          "line": 186,
+          "label": "EmbeddingEngine"
+        }
+      ],
+      "row": 4,
+      "col": 0
+    },
+    {
+      "id": "inf_budget",
+      "type": "backend",
+      "label": "InferenceBudget",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/memory/inference_budget.rs",
+          "label": "bounded queue + 503"
+        }
+      ],
+      "row": 4,
+      "col": 1
+    },
+    {
+      "id": "sqlite_wal",
+      "type": "database",
+      "label": "SQLite+FTS5+HNSW",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/memory/silva/graph.rs",
+          "label": "PageRank+FSRS"
+        }
+      ],
+      "row": 5,
+      "col": 0
+    },
+    {
+      "id": "cap_registry",
+      "type": "database",
+      "label": "Capability Registry",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/registry/capability_registry.rs",
+          "line": 71,
+          "label": "build_registry()"
+        }
+      ],
+      "row": 5,
+      "col": 1
+    },
+    {
+      "id": "gossip_dht",
+      "type": "messagebus",
+      "label": "Gossip+DHT+Noise",
+      "sources": [
+        {
+          "path": "crates/tylluan-kernel/src/federation/permissions.rs",
+          "label": "per-peer, per-space ACL (deny-by-default)"
+        }
+      ],
+      "row": 6,
+      "col": 0
+    },
+    {
+      "id": "peers",
+      "type": "external",
+      "label": "Remote peers",
+      "row": 6,
+      "col": 1
+    }
+  ],
+  "connections": [
+    {
+      "from": "mcp_clients",
+      "to": "auth_boundary"
+    },
+    {
+      "from": "dashboard_ui",
+      "to": "auth_boundary",
+      "label": "HTTP"
+    },
+    {
+      "from": "auth_boundary",
+      "to": "tools6"
+    },
+    {
+      "from": "tools6",
+      "to": "matcher",
+      "label": "tylluan_do"
+    },
+    {
+      "from": "tools6",
+      "to": "decision_svc",
+      "label": "tylluan_decide",
+      "labelAt": [
+        412,
+        314
+      ]
+    },
+    {
+      "from": "matcher",
+      "to": "guilds46",
+      "label": "dispatch",
+      "labelAt": [
+        100,
+        474
+      ]
+    },
+    {
+      "from": "guilds46",
+      "to": "coloquio"
+    },
+    {
+      "from": "guilds46",
+      "to": "embed_engine"
+    },
+    {
+      "from": "embed_engine",
+      "to": "inf_budget",
+      "variant": "dashed"
+    },
+    {
+      "from": "inf_budget",
+      "to": "sqlite_wal"
+    },
+    {
+      "from": "cap_registry",
+      "to": "sqlite_wal",
+      "variant": "dashed"
+    },
+    {
+      "from": "sqlite_wal",
+      "to": "gossip_dht"
+    },
+    {
+      "from": "gossip_dht",
+      "to": "peers",
+      "label": "opportunistic"
+    }
+  ]
+}
