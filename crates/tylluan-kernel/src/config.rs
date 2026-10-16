@@ -194,6 +194,36 @@ pub struct TylluanConfig {
     /// sin ninguna llamada externa.
     #[serde(default)]
     pub decision: DecisionConfig,
+
+    /// TC-03: umbrales de observabilidad configurables (`slo_target` era el
+    /// literal 99.9 hardcodeado en tres handlers — última instancia viva de
+    /// MD-6; ver `docs/architecture/MEASUREMENT_DEBT_REGISTER.md`).
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
+}
+
+/// TC-03: `[observability]` — umbrales de observabilidad configurables.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfig {
+    /// Objetivo del SLO de disponibilidad, en porcentaje. Default 99.9 =
+    /// comportamiento histórico byte-idéntico. Lo consumen
+    /// `/api/v1/slo/summary`, `/api/v1/health/golden-signals` y
+    /// `/api/v1/dashboard/summary`; las bandas derivadas del handler de SLO
+    /// (`degraded` = target − 1.0 pp) también salen de aquí.
+    #[serde(default = "default_slo_target")]
+    pub slo_target: f64,
+}
+
+fn default_slo_target() -> f64 {
+    99.9
+}
+
+impl Default for ObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            slo_target: default_slo_target(),
+        }
+    }
 }
 
 /// NightConsolidation scheduling and concurrency settings.

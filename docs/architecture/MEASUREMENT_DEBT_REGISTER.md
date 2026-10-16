@@ -9,7 +9,7 @@
 > **Regla de mantenimiento:** cada número de este documento se re-verifica
 > contra su fuente (commit, JSON comiteado, código en disco o post de
 > Coloquio) **en el momento de escribir/actualizar**. Nada entra por memoria.
-> Fecha de esta revisión: **2026-09-14**.
+> Fecha de esta revisión: **2026-09-14** (actualización parcial 2026-10-16: MD-6).
 >
 > **Estados:** `ABIERTO` · `PARCIAL` (una parte cerrada, otra no) · `CERRADO`
 > (con la evidencia del cierre).
@@ -244,7 +244,7 @@ a la cola del embed.
 
 ---
 
-## MD-6 · Drift narrativo de cifras canónicas — `ABIERTO`, con instancia viva hoy
+## MD-6 · Drift narrativo de cifras canónicas — `CERRADO` (2026-10-16, TC-03)
 
 **Qué pasa:** las cifras que citan los docs (conteo de tests, HEAD) se
 desincronizan de la realidad y terceros las citan como estado verificado.
@@ -262,9 +262,18 @@ no al commitear. Este registro lo documenta; corregir README/STATUS es del
 propietario del próximo pase de docs-sync (no se toca aquí para mantener el
 diff de este ciclo en archivos nuevos).
 
-**Cierre:** sentinel de frescura en `check_docs_reality.sh` (WS9,
-pendiente) + disciplina de actualizar conteo en el mismo commit que añade
-tests.
+**Cierre (2026-10-16, TC-03, Deep):** la última instancia viva era el literal
+`slo_target: 99.9` servido por tres endpoints de observabilidad
+(`api_monitor.rs:176`, `api_ops.rs:153`, `api_federation.rs:857` — y como
+umbral en `api_federation.rs:854-855`), un placeholder que sobrevivió al
+cierre de MD-4: una cifra canónica presentada como configuración sin fuente.
+Cerrado llevándolo a `[observability] slo_target` (default 99.9, `config.rs`),
+consumido por los tres handlers, con tests de los tres endpoints
+(`tests/slo_target_config.rs`) + bandas y error-budget unitarios. Los gates
+de cifras (`check_head_sync`, `check_test_count`, `check_docs_reality`) están
+cableados a `scripts/verify.sh` (líneas 181/235/241; MD-9) y el conteo de
+tests se actualiza en el mismo commit que añade tests — disciplina operativa
+que este mismo pase ejerció (1125 → 1127, MD-6).
 
 ---
 
@@ -356,7 +365,7 @@ correcta adoptada, no borrado del número.
 | MD-3 | Accuracy live mezcla routing+args+dataset | CERRADO | cerrado 2026-09-30 (Buffy/Codebuff) — protocolo descompuesto operativo (prefijos Stage-1 `00a93af` + harness + fixes registro `f00d293`); baseline 4 cifras en `benchmarks/BENCHMARK_MD3_DECOMPOSED.md` |
 | MD-4 | Golden-signals errors sintético | CERRADO | 0ca5579 (merge 8929c3e), Buffy/Codebuff 2026-09-28 |
 | MD-5 | Claims globales de latencia vs cola condicionada | CERRADO | cerrado 2026-09-29 (Deep, T4) — baseline post-fixes comiteado con 2 condiciones del flag de batching; flag ON NO-GO re-confirmado con datos |
-| MD-6 | Drift narrativo de cifras (instancia viva: 861 vs 867) | ABIERTO | WS9 / docs-sync |
+| MD-6 | Drift narrativo de cifras | CERRADO | cerrado 2026-10-16 (TC-03, Deep) — última instancia viva (`slo_target` literal 99.9) llevada a `[observability]`; gates de cifras activos y conteo en el mismo commit que añade tests |
 | MD-7 | Latencia por-request sin fuente consultable | CERRADO | cerrado 2026-09-14, `900816a` (con corrección de premisa) |
 | MD-8 | Precision@5 sin contexto (LongMemEval) | CERRADO | cerrado 2026-09-03 |
 | MD-9 | Gates de verificación existentes pero no invocados | CERRADO | cerrado 2026-09-28 (Claude Code cablería inicial + Antigravity meta-test T6/T7 y cobertura 100%) |

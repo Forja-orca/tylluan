@@ -123,6 +123,8 @@ pub async fn golden_signals_handler(State(state): State<Arc<HttpState>>) -> impl
     if let Some(obj) = errors_block.as_object_mut() {
         obj.insert("critical".into(), serde_json::json!(diag.status == "critical"));
     }
+    // TC-03: objetivo SLO desde `[observability]` (era el literal 99.9).
+    let slo_target = state.config.read().await.observability.slo_target;
     let always_on_count = statuses.iter().filter(|s| s.always_on).count() as f64;
     let online_always_on = statuses.iter().filter(|s| s.always_on && s.running).count() as f64;
     let slo_availability = if always_on_count > 0.0 {
@@ -150,7 +152,7 @@ pub async fn golden_signals_handler(State(state): State<Arc<HttpState>>) -> impl
             "edge_count": edge_count
         },
         "uptime_seconds": state.start_time.elapsed().as_secs(),
-        "slo_target": 99.9,
+        "slo_target": slo_target,
         "slo_availability_percent": slo_availability,
         "status": {
             "guilds_online": online,
