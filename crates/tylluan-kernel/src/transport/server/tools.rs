@@ -3,18 +3,18 @@ use super::types::{TylluanTool, ToolCategory};
 
 // @CONTRACT: SOVEREIGN-TOOLS (CONTRACT-01)
 // See CONTRACTS.md before modifying this function
-// Invariant: exactly 5 sovereign tools
-// Guarding test: test_sovereign_count_is_exactly_5
+// Invariant: exactly 6 sovereign tools (ADR-021)
+// Guarding test: test_sovereign_count_is_exactly_6
 // DO NOT ADD tools here without CONTRACT-01 audit
 impl super::TylluanServer {
     /// Build the complete tool list for the current session.
     ///
-    /// Default mode: exactly 5 sovereign tools (tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph).
+    /// Default mode: exactly 6 sovereign tools (tylluan_do, tylluan_remember, tylluan_recall, tylluan_think, tylluan_graph, tylluan_decide).
     /// Expanded mode (expose_guild_tools=true in tylluan.toml): sovereign + all kernel utility tools + all guild-provided tools.
     /// This gives agents without native tools direct access to
     /// everything without routing through tylluan_do.
     pub async fn all_tools(&self) -> Vec<rmcp::model::Tool> {
-        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"];
+        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"];
         if !self.expose_guild_tools {
             return Self::kernel_tools()
                 .iter()
@@ -273,6 +273,36 @@ impl super::TylluanServer {
                 "silva_get_context".into(),
                 "silva_find_clusters".into(),
                 "generate_cluster_summary".into(),
+            ]),
+            TylluanTool::new(
+                "tylluan_decide",
+                "Evaluate structured semantic decisions over a system state (Choice, Score, Boolean). Evaluates deterministic rules and/or probabilistic decision models without side effects. Invariant: 6th sovereign tool.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "state": {
+                            "description": "Arbitrary system state to evaluate against (text or JSON object, max 16 KiB serialized)."
+                        },
+                        "questions": {
+                            "type": "object",
+                            "description": "Map of 1 to 16 typed decision questions (Choice, Score, Boolean)."
+                        },
+                        "contract": {
+                            "type": "string",
+                            "description": "Optional named contract (e.g. 'scheduler_routing', 'human_review')."
+                        },
+                        "max_latency_ms": {
+                            "type": "integer",
+                            "description": "Optional latency budget in milliseconds (default 2000, max 10000)."
+                        }
+                    },
+                    "required": ["state", "questions"]
+                }),
+                ToolCategory::Kernel,
+                RiskLevel::Low,
+            ).with_subtools(vec![
+                "decision_evaluate".into(),
+                "contract_shadow_eval".into(),
             ]),
             TylluanTool::new(
                 "tylluan_ingest",
@@ -648,7 +678,7 @@ mod tests {
 
     #[test]
     fn fractal_sovereign_tools_have_subtools() {
-        let sovereign = ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"];
+        let sovereign = ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"];
         let tools = TylluanServer::kernel_tools();
         for name in &sovereign {
             let t = tools.iter().find(|t| &t.name.as_str() == name)
@@ -658,15 +688,15 @@ mod tests {
     }
 
     #[test]
-    fn contract_01_exactly_five_sovereign_tools() {
-        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"];
-        assert_eq!(sovereign.len(), 5, "CONTRACT-01: Must have exactly 5 sovereign tools");
+    fn contract_01_exactly_six_sovereign_tools() {
+        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"];
+        assert_eq!(sovereign.len(), 6, "CONTRACT-01: Must have exactly 6 sovereign tools");
         let tools = TylluanServer::kernel_tools();
         let found: Vec<&str> = tools.iter()
             .filter(|t| sovereign.contains(&t.name.as_str()))
             .map(|t| t.name.as_str())
             .collect();
-        assert_eq!(found.len(), 5, "CONTRACT-01: Expected 5 sovereign tools, got {}: {:?}", found.len(), found);
+        assert_eq!(found.len(), 6, "CONTRACT-01: Expected 6 sovereign tools, got {}: {:?}", found.len(), found);
         for name in sovereign {
             assert!(found.contains(name), "CONTRACT-01: Sovereign tool '{name}' not found in kernel_tools()");
         }

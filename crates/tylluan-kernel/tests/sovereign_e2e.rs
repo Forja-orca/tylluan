@@ -290,6 +290,6 @@ async fn test_sovereign_tools_only() {
     let mut names: Vec<String> = tools.iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
     names.sort();
     
-    let expected = vec!["tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"];
-    assert_eq!(names, expected, "Sovereign invariant violated: exact 5 tools required");
+    let expected = vec!["tylluan_decide", "tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"];
+    assert_eq!(names, expected, "Sovereign invariant violated: exact 6 tools required");
 }

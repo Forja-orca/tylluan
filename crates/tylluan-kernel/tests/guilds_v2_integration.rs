@@ -377,7 +377,7 @@ async fn test_guilds_v2_sovereign_tools_unchanged() {
     let server = create_test_server("./gv2_t4").await;
     let tools = server.all_tools().await;
     assert_eq!(
-        tools.len(), 5,
+        tools.len(), 6,
         "Guild V2 migration must NOT change sovereign tool count. Got: {}",
         tools.len()
     );

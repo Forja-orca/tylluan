@@ -440,19 +440,19 @@ pub async fn canary_handler(State(state): State<Arc<HttpState>>) -> impl IntoRes
         }));
     }
 
-    // 2. MCP tools probe: exactly 5 sovereign tools
+    // 2. MCP tools probe: exactly 6 sovereign tools
     {
         total += 1;
         let tool_count = if let Some(ref srv_arc) = state.server {
             let srv = srv_arc.read().await;
             srv.all_tools().await.len()
         } else { 0 };
-        let ok = tool_count == 5;
+        let ok = tool_count == 6;
         if ok { passed += 1; }
         probe_results.push(serde_json::json!({
             "name": "mcp_tools",
             "pass": ok,
-            "detail": format!("{} sovereign tools registered (expected 5)", tool_count)
+            "detail": format!("{} sovereign tools registered (expected 6)", tool_count)
         }));
     }
 

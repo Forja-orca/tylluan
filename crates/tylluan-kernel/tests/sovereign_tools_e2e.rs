@@ -48,7 +48,7 @@ async fn create_server(dir: &str) -> TylluanServer {
 async fn test_exactly_3_sovereign_tools() {
     let server = create_server("./e2e_t1").await;
     let tools = server.all_tools().await;
-    assert_eq!(tools.len(), 5, "Expected exactly 5 sovereign tools, got {}", tools.len());
+    assert_eq!(tools.len(), 6, "Expected exactly 6 sovereign tools, got {}", tools.len());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -61,7 +61,8 @@ async fn test_sovereign_tool_names_exact() {
     assert!(names.contains(&"tylluan_recall"), "missing tylluan_recall");
     assert!(names.contains(&"tylluan_think"), "missing tylluan_think");
     assert!(names.contains(&"tylluan_graph"), "missing tylluan_graph");
-    let allowed = ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"];
+    assert!(names.contains(&"tylluan_decide"), "missing tylluan_decide");
+    let allowed = ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"];
     for name in &names {
         assert!(allowed.contains(name), "Unexpected sovereign tool: {name}");
     }
@@ -427,15 +428,63 @@ async fn test_tylluan_graph_missing_command_returns_error() {
 // ── Invariant: no new sovereign tools added silently ─────────────────────────
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_sovereign_count_is_exactly_5() {
-    // INVARIANT: MCP clients must always see exactly 5 sovereign tools.
+async fn test_sovereign_count_is_exactly_6() {
+    // INVARIANT: MCP clients must always see exactly 6 sovereign tools (ADR-021).
     // If this fails, a tool was added to all_tools() without an architecture review.
     let server = create_server("./e2e_t29").await;
     let tools = server.all_tools().await;
     assert_eq!(
-        tools.len(), 5,
-        "SOVEREIGN INVARIANT VIOLATED: expected 5 tools, got {}. \
-         Update CLAUDE.md invariant #1 if this is intentional.",
+        tools.len(), 6,
+        "SOVEREIGN INVARIANT VIOLATED: expected 6 tools, got {}. \
+         Update CONTRACT-01 if this is intentional.",
         tools.len()
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_tylluan_decide_basic_evaluation() {
+    let server = create_server("./e2e_decide_1").await;
+    let mut args = JsonObject::new();
+    args.insert("state".into(), serde_json::json!({ "risk": 0.1, "intent": "fast_search" }));
+    let mut questions = serde_json::Map::new();
+    questions.insert("provider_selection".into(), serde_json::json!({
+        "kind": "choice",
+        "instructions": "Select provider",
+        "options": ["local_fast", "local_deep"]
+    }));
+    args.insert("questions".into(), serde_json::Value::Object(questions));
+    args.insert("contract".into(), serde_json::Value::String("scheduler_routing".into()));
+
+    let res = server.handle_kernel_tool("tylluan_decide", Some(args)).await.expect("handle tool");
+    assert_eq!(res.is_error, Some(false));
+    let text = &res.content[0].as_text().expect("text content").text;
+    let resp: serde_json::Value = serde_json::from_str(text).expect("valid json response");
+    assert_eq!(resp["status"], "ok");
+    assert_eq!(resp["mode"], "shadow");
+    assert_eq!(resp["answers"]["provider_selection"]["value"], "local_fast");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_tylluan_decide_disabled_mode() {
+    let mut server = create_server("./e2e_decide_2").await;
+    let mut cfg = tylluan_kernel::config::TylluanConfig::default();
+    cfg.decision.enabled = false;
+    server.set_decision_config(&cfg);
+
+    let mut args = JsonObject::new();
+    args.insert("state".into(), serde_json::json!({ "risk": 0.1 }));
+    let mut questions = serde_json::Map::new();
+    questions.insert("provider_selection".into(), serde_json::json!({
+        "kind": "choice",
+        "options": ["local_fast", "local_deep"]
+    }));
+    args.insert("questions".into(), serde_json::Value::Object(questions));
+
+    let res = server.handle_kernel_tool("tylluan_decide", Some(args)).await.expect("handle tool");
+    assert_eq!(res.is_error, Some(false));
+    let text = &res.content[0].as_text().expect("text content").text;
+    let resp: serde_json::Value = serde_json::from_str(text).expect("valid json response");
+    assert_eq!(resp["status"], "disabled");
+    assert_eq!(resp["mode"], "off");
+    assert!(resp["answers"].as_object().unwrap().is_empty());
 }
