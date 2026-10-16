@@ -5,6 +5,7 @@ mod longmemeval;
 mod metrics;
 mod runner;
 mod beam_scale;
+mod paired_eval;
 
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,13 @@ enum Suite {
     BeamScale { questions: usize, use_embedding: bool },
     IdleLab { db_path: String, oracle_path: String, experiments: usize },
     Coordinator,
+    /// Evaluación pareada sobre decision_shadow_log (ADR-021 §4).
+    Paired {
+        db_path: String,
+        contract: Option<String>,
+        truth: String,
+        ece_max: f64,
+    },
 }
 
 enum CliMode {
@@ -39,6 +47,9 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
     let mut experiments: usize = 8;
     let mut save_path: Option<String> = None;
     let mut threads: Option<usize> = None;
+    let mut truth = "data/decision_truth.json".to_string();
+    let mut contract: Option<String> = None;
+    let mut ece_max = paired_eval::DEFAULT_ECE_MAX;
 
     let mut i = 1;
     while i < args.len() {
@@ -91,6 +102,24 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
                     i += 1;
                 }
             }
+            "--truth" => {
+                if i + 1 < args.len() {
+                    truth = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--contract" => {
+                if i + 1 < args.len() {
+                    contract = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--ece-max" => {
+                if i + 1 < args.len() {
+                    ece_max = args[i + 1].parse().unwrap_or(paired_eval::DEFAULT_ECE_MAX);
+                    i += 1;
+                }
+            }
             "--save"
                 if i + 1 < args.len() => {
                     save_path = Some(args[i + 1].clone());
@@ -119,9 +148,51 @@ fn parse_args() -> (CliMode, Option<String>, Option<usize>) {
         "beam-emb" => Suite::BeamScale { questions: limit.min(3), use_embedding: true },
         "idle-lab" | "il" => Suite::IdleLab { db_path, oracle_path, experiments },
         "coordinator" | "coord" => Suite::Coordinator,
+        "paired" | "decide" | "pareado" => {
+            Suite::Paired { db_path, contract, truth, ece_max }
+        }
         _ => Suite::Synthetic,
     };
     (CliMode::Suite(suite), save_path, threads)
+}
+
+/// Corre la evaluación pareada y opcionalmente guarda el informe JSON.
+/// Extraído para poder llamarse ANTES de cargar el motor de embeddings
+/// (esta suite es solo lectura de SQLite + estadística, no necesita ONNX).
+fn run_paired_suite(
+    db_path: &str,
+    contract: Option<&str>,
+    truth: &str,
+    ece_max: f64,
+    save_path: Option<&str>,
+) {
+    println!("  ══ PAIRED EVAL — decision_shadow_log ══");
+    println!("  DB: {db_path}");
+    println!("  truth: {truth}  (JSON {{request_hash: valor_correcto}})");
+    println!("  ece_max: {ece_max}  alpha: {}", paired_eval::MCNEMAR_ALPHA);
+    println!();
+    match paired_eval::run_paired(
+        Path::new(db_path),
+        contract,
+        Path::new(truth),
+        ece_max,
+    ) {
+        Ok(report) => {
+            paired_eval::print_summary(&report);
+            if let Some(path) = save_path {
+                let json =
+                    serde_json::to_string_pretty(&report).expect("serialize PairedReport");
+                match std::fs::write(path, &json) {
+                    Ok(_) => println!("  Saved JSON report to {path}"),
+                    Err(e) => eprintln!("  ERROR writing {path}: {e}"),
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("  ERROR: {e:#}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -139,6 +210,13 @@ async fn main() {
         println!("  Mode: GENERATE IDLELAB ORACLE");
         println!();
         runner::generate_oracle(db_path, std::path::Path::new(output)).await;
+        return;
+    }
+
+    // La evaluación pareada es offline (SQLite + estadística): se atiende
+    // ANTES de cargar el motor de embeddings para que no pague ese coste.
+    if let CliMode::Suite(Suite::Paired { db_path, contract, truth, ece_max }) = &mode {
+        run_paired_suite(db_path, contract.as_deref(), truth, *ece_max, save_path.as_deref());
         return;
     }
 
@@ -258,6 +336,10 @@ async fn main() {
             println!("  Run: tylluan-evals --suite coordinator");
             println!("  Status: stub — benchmark queries defined in ADR-008");
             println!();
+        }
+        // Atendida antes del motor de embeddings (ver dispatch temprano).
+        Suite::Paired { db_path, contract, truth, ece_max } => {
+            run_paired_suite(&db_path, contract.as_deref(), &truth, ece_max, save_path.as_deref());
         }
         Suite::BeamScale { questions, use_embedding } => {
             let data_path = Path::new("data/longmemeval_s_subset.json");
