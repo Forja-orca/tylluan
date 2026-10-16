@@ -32,7 +32,7 @@ target/release/tylluan-nexus
 
 **Never start a second kernel from the same working directory as a running one.** If the configured port is busy, the kernel binds the next free port, records it in `data/active_port.json` and tells the previous kernel (the port recorded there) to shut down; it replaces the running kernel instead of coexisting with it (`crates/tylluan-kernel/src/transport/http/mod.rs`, `start_http_server`; read from the code, not exercised here). Test instances need their own directory, config, data directory (`TYLLUAN_DATA_DIR`) and `--port`.
 
-A `tylluan.toml` is optional: without one the kernel starts with built-in defaults. Those defaults include the **stdio** transport, which makes a kernel started without a terminal (a service, `nohup`, CI) exit as soon as it reads end-of-input. Always set `transport` explicitly when you start it that way. Create a config with either:
+A `tylluan.toml` is optional: without one the kernel starts with built-in defaults. Those defaults serve **http** and **sse** only. The **stdio** transport is opt-in (`--stdio`, or `transport = ["stdio", "http"]` in `tylluan.toml`), because a kernel started without a terminal (a service, `nohup`, CI) exits as soon as stdio reads end-of-input. Create a config with either:
 
 ```bash
 # Generate one for a profile (also starts the kernel; --dir picks the target directory)
