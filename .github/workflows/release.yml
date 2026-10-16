@@ -107,6 +107,11 @@ jobs:
             archive="tylluan-${platform}.tar.gz"
             cd "$dir"
             sha256sum tylluan-nexus* tylluan-cli* > checksums.txt
+            # upload/download-artifact@v4 do not preserve the executable bit,
+            # so the binaries would reach users as mode 0644 and a plain
+            # `tar -xzf && ./tylluan-nexus` would fail with "Permission
+            # denied". Restore it here, after the checksum, before tar.
+            chmod +x tylluan-nexus* tylluan-cli*
             tar czf "../$archive" .
             cd ..
             # Anti-relapse gate (audit finding B): every release tarball MUST
@@ -127,6 +132,16 @@ jobs:
             fi
             if ! grep -Eq '^\./?guilds/core/(bash|coloquio|code_graph)\.py$' <<<"$listing"; then
               echo "::error::$archive is missing guilds/core python guilds (audit finding B regression)"
+              exit 1
+            fi
+            # Executable bit gate: EVERY tylluan-nexus/tylluan-cli member must
+            # be executable (and at least one must exist). Listed into a
+            # variable, not piped to `grep -q`, for the same SIGPIPE reason.
+            verbose="$(tar tvzf "$archive")"
+            bins="$(grep -E ' \./?tylluan-(nexus|cli)(\.exe)?$' <<<"$verbose" || true)"
+            nonexec="$(grep -Ev '^-r[w-]x' <<<"$bins" || true)"
+            if [ -z "$bins" ] || [ -n "$nonexec" ]; then
+              echo "::error::$archive binaries missing or lost their executable bit: ${nonexec:-none listed}"
               exit 1
             fi
             if grep -q '__pycache__' <<<"$listing"; then
