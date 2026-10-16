@@ -1796,7 +1796,11 @@ fn default_host() -> String { "127.0.0.1".into() }
 // Canonical port: 47004 (CONTRACT-01, tylluan-cli DEFAULT_PORT, tylluan-mcp, install scripts).
 // Migrated 2026-09-12 by José to prevent collisions with common dev ports (3000, 3030, 4000, 8080).
 fn default_port() -> u16 { 47004 }
-fn default_transports() -> Vec<String> { vec!["stdio".into(), "http".into(), "sse".into()] }
+/// stdio is opt-in (`--stdio`, or an explicit `transport` entry): a kernel
+/// started without a terminal (service, `nohup`, CI, `curl | sh`) reads
+/// end-of-input on stdin and shuts down, HTTP included. `main.rs` appends
+/// "stdio" when `--stdio` is on the command line.
+fn default_transports() -> Vec<String> { vec!["http".into(), "sse".into()] }
 fn default_db_path() -> String { "./data/tylluan.db".into() }
 fn default_embedding_model() -> String { "mxbai-embed-large".into() }
 fn default_dimensions() -> u32 {
@@ -2111,6 +2115,29 @@ mod tests {
             parsed_nexus.nexus.host, "127.0.0.1",
             "Serde default for [nexus] without host must resolve to 127.0.0.1"
         );
+    }
+
+    /// stdio must never be on by default: without a terminal it reads EOF and
+    /// takes the whole kernel (HTTP included) down. It stays reachable via
+    /// `--stdio` (main.rs) or an explicit `transport = [..., "stdio"]`.
+    #[test]
+    fn test_default_transport_excludes_stdio() {
+        let expected = vec!["http".to_string(), "sse".to_string()];
+        assert_eq!(NexusConfig::default().transport, expected);
+
+        let parsed_empty: TylluanConfig = toml::from_str("").unwrap();
+        assert_eq!(parsed_empty.nexus.transport, expected);
+
+        let parsed_nexus: TylluanConfig = toml::from_str("[nexus]
+port = 47004
+").unwrap();
+        assert_eq!(parsed_nexus.nexus.transport, expected);
+
+        let explicit: TylluanConfig =
+            toml::from_str("[nexus]
+transport = [\"stdio\", \"http\"]
+").unwrap();
+        assert_eq!(explicit.nexus.transport, vec!["stdio".to_string(), "http".to_string()]);
     }
 
     /// Audit Finding #6: default_port() must be 47004 to uphold CONTRACT-01
