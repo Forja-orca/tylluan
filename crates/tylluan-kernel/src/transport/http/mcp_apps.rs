@@ -64,7 +64,7 @@ pub fn graph_resource_descriptor() -> Value {
 }
 
 /// Serialize rmcp tools and add the Apps manifest only to the graph tool.
-/// The exact five sovereign tools and their schemas remain unchanged.
+/// The exact six sovereign tools and their schemas remain unchanged.
 pub fn tools_json(tools: &[rmcp::model::Tool], apps_enabled: bool) -> Value {
     let mut tools = tools
         .iter()

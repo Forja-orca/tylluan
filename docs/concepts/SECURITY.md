@@ -49,7 +49,7 @@ Federation adds peer-to-peer attack surface beyond the local threat model. See [
 | TLS | ❌ Not implemented | Localhost-only mitigates this |
 | Rate limiting | ⚠️ Basic | Per-IP counting, no sliding window |
 | Guild isolation | ⚠️ Same user | Guilds share OS user with kernel |
-| Audit log | ✅ Active | All 5 sovereign tool calls logged to `data/audit.db` |
+| Audit log | ✅ Active | All 6 sovereign tool calls logged to `data/audit.db` |
 | Input validation | ✅ | Intent strings sanitized before guild routing |
 | Docker Sandbox | ✅ Active | Windows UNC path prefix (`\\?`) is automatically stripped for cross-platform support. |
 | ACL Check | ✅ Active | Full role-based validation applied to both `tylluan_do` and direct guild tool routes. |

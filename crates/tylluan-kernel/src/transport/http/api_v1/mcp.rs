@@ -658,7 +658,7 @@ pub async fn mcp_handler(
                     "prompts": [
                         {
                             "name": "tylluan_capabilities",
-                            "description": "What TylluanNexus can do ??? read this before your first call to understand the 5 sovereign tools and example intents"
+                            "description": "What TylluanNexus can do ??? read this before your first call to understand the 6 sovereign tools and example intents"
                         },
                         {
                             "name": "tylluan_engineering_constitution",
@@ -688,7 +688,7 @@ pub async fn mcp_handler(
             } else if prompt_name != "tylluan_capabilities" {
                 serde_json::json!({ "jsonrpc": "2.0", "error": { "code": -32602, "message": "unknown prompt" }, "id": id })
             } else {
-                let text = "# TylluanNexus ??? 5 Sovereign Tools\n\n\
+                let text = "# TylluanNexus ??? 6 Sovereign Tools\n\n\
                     ## tylluan_do\n\
                     Execute any task in natural language. The kernel routes to the right guild automatically.\n\
                     Examples:\n\
@@ -717,6 +717,10 @@ pub async fn mcp_handler(
                     - tylluan_graph(command='stats')\n\
                     - tylluan_graph(command='add_triple', subject='auth', predicate='uses', object='JWT')\n\
                     - tylluan_graph(command='list_neighbors', entity='auth')\n\n\
+                    ## tylluan_decide\n\
+                    Ask a bounded, typed question (choice, score or boolean) and get an answer from a closed set, or an explicit abstention. Never a permission gate.\n\
+                    Examples:\n\
+                    - tylluan_decide(state={\"risk\":0.2}, questions={\"route\":{\"kind\":\"choice\",\"options\":[\"local_fast\",\"human\"]}}, contract='scheduler_routing')\n\n\
                     ## Workflow pattern for new sessions\n\
                     1. tylluan_think(query='<topic>') ??? understand what is known\n\
                     2. tylluan_recall(query='<topic>') ??? retrieve relevant memory\n\

@@ -5,7 +5,7 @@
 **Status:** Published. Historical baseline: this describes v0.1.0 as released (47 guilds, BGE-M3, the reranker of that time); today there are 46 guild files, 45 routed by default, and the default embedding model is `mxbai-embed-large`.
 
 What was included:
-- Rust kernel (tokio + axum) with 5 sovereign MCP tools
+- Rust kernel (tokio + axum) with 6 sovereign MCP tools
 - 47 Python guilds (bash, git, filesystem, code, vision, web search, and more)
 - Persistent memory with BGE-M3 embeddings + BM25 + Jina Reranker
 - Knowledge graph (SilvaDB) with entity extraction and clustering
@@ -316,7 +316,7 @@ These decisions were taken by the project owner on 2026-10-15 and have started t
 - ✅ **Auth boundary hardening — Phase 1 (merged on `main`, `61bc97e`):** OAuth tokens never satisfy operator actions, `/oauth/authorize` auto-approves only in `dev_mode` (403 otherwise), `redirect_uri` strictly loopback, route-inventory test over mutating routes. Not yet running on the maintainer's kernel. Consequence: `mcp-remote` / Claude Desktop OAuth flows do not work with `dev_mode=false` until Phase 2; header-Bearer clients are fine. 📐 Phase 2 (not approved yet): operator consent, client registry, scopes. Prerequisite for ADR-019 step 3 and for exposing the kernel beyond `127.0.0.1`.
 - 📐 **ADR-019 steps 3, 4 and 6:** single-use invitations with key pinning, instant revocation, federated Coloquio (only after steps 2 and 4).
 - 📐 **ADR-020 — Inference Gateway:** capability-based abstraction (`embed`, `rerank`, `decide`, `generate`) over any inference engine, with privacy classes and model identity versioned per vector; current architectural decision (not a permanent invariant, revisable): an outbound-only client layer (Tylluan consumes inference, it does not offer it as a service). Draft under review.
-- 🟡 **ADR-021 — Decision service and a sixth sovereign tool (`tylluan_decide`):** decided by the project owner. CONTRACT-01 will be amended from five to six tools; the model never holds authority; modes off / shadow / advisory / gate. Enabled by default, exposed over MCP and REST; first two contracts in shadow (Scheduler routing, human review). ADR-021 is written and proposed; nothing implemented.
+- 🟡 **ADR-021 — Decision service and a sixth sovereign tool (`tylluan_decide`):** phase 1 is in `main` (2026-10-16): CONTRACT-01 amended from five to six tools; the tool is on by default over MCP and REST; the first two contracts (Scheduler routing, human review) run the deterministic rules baseline in shadow with a decision log. The model never holds authority; modes off / shadow / advisory / gate. Not started: model providers (phase 2 and 3), calibration, paired evaluation, any contract above shadow.
 - 🟡 **REA** as an optional external MCP server, after a verification checklist.
 - ⛔ **`iroh` transport:** NO-GO for now; LAN or your own VPN is the supported path. Reopen only if a team must connect from another network without a VPN.
 

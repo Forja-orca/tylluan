@@ -68,7 +68,7 @@ Para arrancar procesos: proporcionar el comando al usuario, no ejecutarlo vía B
 
 ## Arquitectura Invariante (CONTRACT-01)
 
-1. **5 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`. `all_tools()` en `server.rs` DEBE filtrar a estos 5 y nada más. NUNCA añadir herramientas nuevas aquí.
+1. **6 sovereign tools exactamente:** `tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`, `tylluan_decide` (la sexta, `tylluan_decide`, entró por enmienda formal ADR-021, 2026-10-16). `all_tools()` en `server.rs` DEBE filtrar a estas 6 y nada más. NUNCA añadir herramientas nuevas aquí sin una enmienda formal de CONTRACT-01 aprobada por José.
 2. **Embeddings a 1024 dimensiones** — `vector_dimensions = 1024`. NUNCA reducir a 768. El invariante es la dimensión, no un modelo concreto: BGE-M3 (default hasta 2026-09-29) y mxbai-embed-large (default desde 2026-09-30) son ambos nativos 1024-dim — cambiar de modelo está permitido, cambiar la dimensión sin migrar cada vector existente no. Nota (2026-10-14): `router/embeddings.rs` también acepta `bge-small`/`minilm` (384d) y `nomic-embed-text` (768d) y el perfil `clinic` usa 384d; si esa flexibilidad debe existir es una decisión de arquitectura pendiente, no un detalle de configuración.
 3. **Headless-first:** kernel sin UI propia. Dashboard React en `/dashboard`.
 4. **Puerto único:** `tylluan-nexus` escucha en `:47004` directamente. **SIN proxy** de zero-downtime — un solo proceso kernel.

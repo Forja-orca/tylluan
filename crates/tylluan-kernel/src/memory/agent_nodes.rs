@@ -7,7 +7,7 @@
 //! Arquitectura:
 //!   IDE/MCP → tylluan_do(intent="node send to X: msg") → AgentNodeRouter → SSE push a X
 //!
-//! Sin tocar CONTRACT-01 (5 herramientas soberanas). Sin tocar SO ni IDEs.
+//! Sin tocar CONTRACT-01 (herramientas soberanas). Sin tocar SO ni IDEs.
 //! El router vive 100% dentro del kernel como Arc<AgentNodeRouter>.
 
 use std::collections::HashMap;

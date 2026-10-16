@@ -143,9 +143,9 @@ def generate_svg():
       <rect x="65" y="320" width="1150" height="95" rx="10" fill="url(#sov-grad)" stroke="#10b981" stroke-width="2"/>
       <text x="80" y="340" fill="#6ee7b7" font-size="11" font-weight="700" letter-spacing="1">2. SOVEREIGN LAYER, COGNITIVE SCHEDULER &amp; DECISION FABRIC (CONTRACT-01)</text>
 
-      <!-- 5 Sovereign Tools -->
+      <!-- 6 Sovereign Tools -->
       <rect x="80" y="348" width="340" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
-      <text x="95" y="368" fill="#ffffff" font-size="13" font-weight="700">5 Sovereign Tools</text>
+      <text x="95" y="368" fill="#ffffff" font-size="13" font-weight="700">6 Sovereign Tools</text>
       <text x="95" y="384" fill="#6ee7b7" font-size="10">tylluan_do · tylluan_remember</text>
       <text x="95" y="396" fill="#6ee7b7" font-size="10">tylluan_recall · tylluan_think · tylluan_graph</text>
 

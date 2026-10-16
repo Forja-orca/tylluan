@@ -66,7 +66,7 @@ function buildSrcdoc(code: string, lang: string): string {
         }
         lastCallTime = now;
 
-        // Security checklist: only allow the 5 sovereign tools
+        // Security checklist: canvases may call 5 of the 6 sovereign tools (tylluan_decide is deliberately not exposed to sandboxed canvases)
         const allowedTools = ['tylluan_do', 'tylluan_remember', 'tylluan_recall', 'tylluan_think', 'tylluan_graph'];
         if (!allowedTools.includes(tool)) {
           reject(new Error("Security Error: Tool '" + tool + "' is not authorized."));
@@ -172,7 +172,7 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
 
       const { tool, args, requestId } = event.data;
 
-      // Restrict to the 5 sovereign tools
+      // Restrict to the 5 canvas-safe sovereign tools (tylluan_decide is not exposed to canvases)
       const allowedTools = ['tylluan_do', 'tylluan_remember', 'tylluan_recall', 'tylluan_think', 'tylluan_graph'];
       if (!allowedTools.includes(tool)) {
         iframeRef.current?.contentWindow?.postMessage({

@@ -22,7 +22,7 @@ mcp_servers:
     url: "http://127.0.0.1:47004/sse"
 ```
 
-Hermes infers transport from the `url` field (no `transport:` key needed). Restart Hermes after editing — it auto-discovers the 5 sovereign tools on startup.
+Hermes infers transport from the `url` field (no `transport:` key needed). Restart Hermes after editing — it auto-discovers the 6 sovereign tools on startup.
 
 **Hermes Desktop:** The desktop app uses the same `~/.hermes/config.yaml`. Add the entry above, then use the "Reload MCP" button in Settings instead of restarting.
 
