@@ -112,9 +112,9 @@ pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl Int
 }
 
 fn build_skills_list() -> Vec<AgentSkill> {
-    let sovereign_names: [&str; 5] = [
+    let sovereign_names: [&str; 6] = [
         "tylluan_do", "tylluan_remember", "tylluan_recall",
-        "tylluan_think", "tylluan_graph",
+        "tylluan_think", "tylluan_graph", "tylluan_decide",
     ];
 
     let kernel_tools = TylluanServer::kernel_tools();
@@ -773,7 +773,6 @@ pub fn a2a_routes() -> Router<Arc<HttpState>> {
 mod tests {
     use super::*;
     use crate::memory::silva::SilvaDB;
-    use crate::transport::server::TylluanServer;
 
     async fn test_mgr() -> A2aTaskManager {
         let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
@@ -783,21 +782,10 @@ mod tests {
 
     #[test]
     fn test_agent_card_has_6_skills_plus_guild_dispatch() {
-        let tools = TylluanServer::kernel_tools();
-        let sovereign_names: [&str; 6] = [
-            "tylluan_do", "tylluan_remember", "tylluan_recall",
-            "tylluan_think", "tylluan_graph", "tylluan_decide",
-        ];
-        let skills: Vec<AgentSkill> = tools.into_iter()
-            .filter(|t| sovereign_names.contains(&t.name.as_str()))
-            .map(|t| AgentSkill {
-                id: t.name.clone(),
-                name: t.name.clone(),
-                description: t.description.clone(),
-                tags: vec![],
-            })
-            .collect();
-        assert_eq!(skills.len(), 6, "Agent Card must have exactly 6 sovereign skills");
+        let skills = build_skills_list();
+        assert_eq!(skills.len(), 7, "Agent Card must have 6 sovereign skills plus guild_dispatch");
+        assert!(skills.iter().any(|s| s.id == "tylluan_decide"));
+        assert!(skills.iter().any(|s| s.id == "guild_dispatch"));
     }
 
     #[test]
