@@ -49,6 +49,11 @@ DOCS=(STATUS.md README.md AGENTS.md CLAUDE.md)
 while IFS= read -r d; do
     DOCS+=("$d")
 done < <(find docs -name '*.md' -type f 2>/dev/null | sort || true)
+# Test hook: DOCS_REALITY_DOCS="a.md b.md" replaces the doc list (used to
+# prove the checks are not vacuous against a fixture; never set in CI).
+if [ -n "${DOCS_REALITY_DOCS:-}" ]; then
+    read -r -a DOCS <<< "$DOCS_REALITY_DOCS"
+fi
 
 # The kernel's real port lives in the [nexus] section (line ~201: port = 47004).
 # `tylluan.toml` is the LIVE config (gitignored -- absent in a clean clone/CI,
@@ -87,34 +92,192 @@ low_conf=0
 hist_regex='antes|historico|hist[oó]rico|migro|migr[oó]|previously|was port|old port|former port|commit [0-9a-f]{7,}|secondary|secundari|docker.compose|node-b|node b|drill|ef[ií]mera|restaur|aislad[oa]|isolated|test kernel|kernel de test'
 
 # ── Check 1: backtick-cited paths must exist ──────────────────────────────
-# One grep pass per doc: GNU grep -n -o prints "lineno:match" per match.
+# History: until 2026-10-16 this loop used `grep -nEo '\`[^\`]+\`'`; in GNU
+# grep `\`` is the start-of-buffer anchor, so the check matched NOTHING and
+# passed vacuously for its whole life. A plain backtick regex then produced
+# ~1300 false positives (leftover backticks, `file.rs:110`, crate-relative
+# paths, API routes). This version does ONE awk pass over every doc (no
+# per-match process spawning) against `git ls-files` loaded once:
+#   - inline code spans are the text between paired backticks; fenced code
+#     blocks (``` / ~~~) are skipped -- they hold commands, not citations;
+#   - the first whitespace-delimited token is taken, `./`/`../` and a
+#     `:line`/`:line-line`/`#Lnn`/`:symbol` suffix and trailing punctuation
+#     are dropped;
+#   - URLs (`://`), anything starting with `/` (API routes, absolute paths),
+#     globs, placeholders (`<`, `{`, `$`), ellipsis, flags, `~`, `@`, `=`,
+#     `\`, `::` and other non-path inline code are ignored;
+#   - a token is judged only if it ends in a known source extension, or
+#     contains '/' AND its first component is a real tracked directory name
+#     (so `origin/main`, `BAAI/bge-m3`, `application/json` are not paths);
+#   - it EXISTS if it equals a tracked file/directory or is a path suffix of
+#     one (`router/catalog.rs` -> crates/tylluan-kernel/src/router/catalog.rs,
+#     which covers crate src roots, guilds/, docs/, dashboard/, scripts/);
+#   - lines matching hist_regex (above) or describing removed/renamed files
+#     are historical context, not current claims, and are skipped.
+# Runtime/gitignored artifacts that docs legitimately cite but that are never
+# tracked (so absent from `git ls-files` and from a clean CI clone):
+#   dirs  data/ target/ node_modules/ .venv/ venv/ -- runtime DBs, cargo
+#         build output, JS/Python deps (all in .gitignore);
+#   files .tylluan-token (bearer token, gitignored by design), tylluan.toml
+#         (live config, gitignored; tylluan.example.toml is the tracked one),
+#         .env (local secrets);
+#   ext   *.db *.sqlite *.db-wal *.db-shm -- SQLite stores created at runtime;
+#   registry.json (persisted guild registry, gitignored), backup-manifest.json
+#   (written by `tylluan-cli backup` into the backup dir, never in the repo).
+# Files that live OUTSIDE the repo by definition (MCP client configs the docs
+# tell users to edit): claude_desktop_config.json, mcp.json, .vscode/mcp.json,
+# mcp_settings.json, cline_mcp_settings.json. Not path claims about this repo.
+# Agent auto-memory notes (incident_*/feedback_*/project_*/session_*/role_*.md)
+# live in the operator's memory dir, not the repo -- skipped by name pattern.
+# Inline code that is a protocol method, not a path: MCP JSON-RPC methods
+# (tools/list, tools/call, resources/list, resources/read, prompts/list, ...).
+# Rust module equivalence: `foo.rs` and `foo/mod.rs` (and a dir `foo/`) name
+# the same module, so a doc citing `server.rs` for transport/server/mod.rs or
+# `router/matcher/` for router/matcher.rs is not drift.
+c1_runtime_dirs='data target node_modules .venv venv'
+c1_runtime_files='.tylluan-token tylluan.toml .env registry.json backup-manifest.json claude_desktop_config.json mcp.json mcp_settings.json cline_mcp_settings.json'
+c1_non_paths='tools/list tools/call resources/list resources/read resources/templates/list prompts/list prompts/get notifications/initialized'
+c1_runtime_exts='db sqlite db-wal db-shm'
+# Worked examples the docs say are intentionally NOT in the repo (exact
+# token). Not a place to park real drift -- fix the doc instead.
+#   guilds/builders/plugins/word_count.py -- docs/guides/ADDING_A_GUILD.md:46
+#     "The example is intentionally not added to the repository".
+c1_examples='guilds/builders/plugins/word_count.py'
+# Same policy as Check 2 for ADRs: design docs, research, plans, internal
+# notes and archives routinely name files that are PROPOSED or were never
+# built, with the "this is a proposal" context paragraphs away from the
+# citation. Missing paths there are printed as low-confidence (visible, not
+# silent) instead of hard errors. Canonical docs (STATUS/README/AGENTS/
+# CLAUDE, docs/guides, docs/concepts, docs/roadmap, ...) stay hard errors.
+c1_lowconf_docs='^docs/(reference/adr|architecture|internal|superpowers|reference/research|research|archive)/'
+c1_exts='rs py toml json sh md yml yaml ts tsx html css svg lock db'
+# hist_regex plus removed/renamed vocabulary; `{7,}` expanded and accented
+# letters made byte-tolerant because the awk below runs with LC_ALL=C and
+# must also work on mawk (CI) -- no interval expressions there.
+c1_skip_regex="${hist_regex/'[0-9a-f]{7,}'/'[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'}|hist..?rico|migr..?|ef..?mera|eliminad|removed|borrad|deleted|renamed|renombrad|retirad|ya no existe|no longer exist|previously"
+# Lines that mention a path as a PROPOSAL / plan / thing to create, as a file
+# of an external or predecessor project, or as something cleaned up -- not a
+# claim that it exists in this repo today. Found by running this check for
+# real (2026-10-16): design docs and plans legitimately name files that do not
+# exist yet ("Crear: `docs/v1/V1_SCOPE.md`", "Write `host_devmode_refuses.sh`").
+c1_skip_regex="$c1_skip_regex|crear|create|a..?adir|implementar|propuest|propone|proposed|si se prefiere|if you add|never created|no existe|does not exist|no hay |predecesor|predecessor|memoria del proyecto|revisor externo|external review|limpieza|elimina|se archiva|si se commitea|escribir|write \`"
+
+c1_tracked=$(mktemp "${TMPDIR:-/tmp}/docs_reality_tracked.XXXXXX")
+trap 'rm -f "$c1_tracked"' EXIT
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git ls-files > "$c1_tracked"
+else
+    find . -type f -not -path './.git/*' | sed 's#^\./##' > "$c1_tracked"
+fi
+
+c1_docs=()
 for doc in "${DOCS[@]}"; do
-    [ -f "$doc" ] || continue
-    while IFS= read -r m; do
-        lineno="${m%%:*}"
-        tok="${m#*:}"
-        # Skip obviously non-path tokens.
-        case "$tok" in
-            *://*|git@*|www.*|:*|http*) continue ;;
-            */*|*.rs|*.py|*.toml|*.json|*.sh|*.md|*.yml|*.yaml|*.ts|*.tsx|*.html|*.css|*.svg|*.lock|*.db)
-                ;;
-            *) continue ;;
-        esac
-        # Strip ./ prefix, trailing line/col refs and punctuation.
-        p="${tok#./}"
-        p="${p%%:[0-9]*}"
-        p="${p%%#L*}"
-        p="${p%%,}"
-        p="${p%%)}"
-        p="${p%,}"
-        p="${p%.}"
-        [ -n "$p" ] || continue
-        if [ ! -e "$p" ]; then
-            echo "❌ $doc:$lineno: cita \`$tok\` (path \`$p\`) que no existe en el repo"
-            problems=1
-        fi
-    done < <(grep -nEo '\`[^\`]+\`' "$doc" || true)
+    [ -f "$doc" ] && c1_docs+=("$doc")
 done
+
+c1_rc=0
+c1_out=""
+if [ "${#c1_docs[@]}" -gt 0 ]; then
+    c1_out=$(LC_ALL=C awk \
+        -v skip_re="$c1_skip_regex" \
+        -v exts="$c1_exts" \
+        -v rdirs="$c1_runtime_dirs" \
+        -v rfiles="$c1_runtime_files" \
+        -v rexts="$c1_runtime_exts" \
+        -v nonpaths="$c1_non_paths" \
+        -v examples="$c1_examples" \
+        -v lowconf_re="$c1_lowconf_docs" '
+    BEGIN {
+        n = split(exts, a, " ");   for (i = 1; i <= n; i++) EXT[a[i]] = 1
+        n = split(rdirs, a, " ");  for (i = 1; i <= n; i++) RDIR[a[i]] = 1
+        n = split(rfiles, a, " "); for (i = 1; i <= n; i++) RFILE[a[i]] = 1
+        n = split(rexts, a, " ");  for (i = 1; i <= n; i++) REXT[a[i]] = 1
+        n = split(nonpaths, a, " "); for (i = 1; i <= n; i++) NONPATH[a[i]] = 1
+        n = split(examples, a, " "); for (i = 1; i <= n; i++) EXAMPLE[a[i]] = 1
+        found = 0
+    }
+    # Pass 1: tracked paths -> every path suffix of every file and directory.
+    FNR == NR {
+        n = split($0, s, "/")
+        for (k = 1; k <= n; k++) {
+            if (k < n) DIRNAME[s[k]] = 1
+            if (k == 1 && n > 1) TOPDIR[s[1]] = 1
+            t = s[k]; KNOWN[t] = 1
+            for (i = k - 1; i >= 1; i--) { t = s[i] "/" t; KNOWN[t] = 1 }
+        }
+        next
+    }
+    FNR == 1 { infence = 0 }
+    /^[ \t]*(```|~~~)/ { infence = !infence; next }
+    infence { next }
+    {
+        if (tolower($0) ~ skip_re) next
+        n = split($0, P, "`")
+        # Even-indexed pieces are inside a backtick pair; the last piece is
+        # only code if a closing backtick follows it (i < n).
+        for (i = 2; i < n; i += 2) judge(P[i])
+    }
+    function judge(seg,    tok, p, q, ext, first, m, c, k, last) {
+        sub(/^[ \t]+/, "", seg)
+        if (seg == "") return
+        split(seg, W, /[ \t]+/); tok = W[1]
+        p = tok
+        while (p ~ /^[("'\''\[]/) p = substr(p, 2)
+        while (substr(p, 1, 2) == "./") p = substr(p, 3)
+        while (substr(p, 1, 3) == "../") p = substr(p, 4)
+        if (p ~ /:\/\// || p ~ /^\// || p ~ /::/ || index(p, "...")) return
+        if (p ~ /[*<>{}$\\@=|~?%^]/ || p ~ /^-/ || index(p, "\342\200\246")) return
+        sub(/#.*$/, "", p)          # #L12 anchors
+        sub(/:.*$/, "", p)          # :110, :10-20, :symbol
+        while (p ~ /[,;.)\]'\''"!]$/) p = substr(p, 1, length(p) - 1)
+        sub(/\/+$/, "", p)          # trailing slash = directory
+        if (p == "" || p ~ /[(),;"'\'']/) return
+        if (p in NONPATH || p in EXAMPLE) return
+        ext = ""
+        if (match(p, /\.[A-Za-z0-9-]+$/)) ext = substr(p, RSTART + 1)
+        first = p; sub(/\/.*$/, "", first)
+        if (index(p, "/") > 0 && !(first in DIRNAME) && !(first in RDIR)) {
+            # First component names no directory of this repo: a path inside
+            # some other repo/model (e.g. `onnx/int8/decima.json` in a
+            # Hugging Face repo), not a claim about this tree.
+            return
+        }
+        if (!(ext in EXT)) {
+            # No source extension: judge only `<top-level tracked dir>/...`
+            # (skips API routes without a leading slash, `origin/main`, ...).
+            if (index(p, "/") == 0) return
+            if (!(first in TOPDIR) && !(first in RDIR)) return
+        } else if (index(p, "/") == 0 && substr(p, 1, 1) == ".") {
+            # `.rs`, `.py`, `.example.toml`: an extension, not a file -- unless
+            # it is a known runtime dotfile (handled by RFILE below).
+            if (!(p in RFILE)) return
+        }
+        if (p in KNOWN) return
+        if (ext == "rs") { q = p; sub(/\.rs$/, "/mod.rs", q); if (q in KNOWN) return }
+        if (ext == "") { if ((p ".rs") in KNOWN) return }
+        m = split(p, c, "/"); last = c[m]
+        if (last in RFILE || ext in REXT) return
+        if (last ~ /^(incident|feedback|project|session|role)_.*\.md$/) return
+        for (k = 1; k <= m; k++) if (c[k] in RDIR) return
+        if (FILENAME ~ lowconf_re) {
+            printf "\342\232\240\357\270\217  low-confidence %s:%d: cita `%s` (path `%s`) que no existe en el repo (doc de diseno/plan/ADR: puede nombrar ficheros propuestos)\n", FILENAME, FNR, tok, p
+            return
+        }
+        printf "\342\235\214 %s:%d: cita `%s` (path `%s`) que no existe en el repo\n", FILENAME, FNR, tok, p
+        found++
+    }
+    END { exit (found > 0) ? 1 : 0 }
+    ' "$c1_tracked" "${c1_docs[@]}") || c1_rc=$?
+fi
+[ -z "$c1_out" ] || printf '%s\n' "$c1_out"
+c1_low=$(printf '%s\n' "$c1_out" | grep -c 'low-confidence' || true)
+low_conf=$((low_conf + c1_low))
+if [ "$c1_rc" -eq 1 ]; then
+    problems=1
+elif [ "$c1_rc" -ne 0 ]; then
+    echo "❌ check_docs_reality.sh: Check 1 (awk) failed with exit $c1_rc -- path check did NOT run"
+    problems=1
+fi
 
 # ── Check 2: cited ports must match the real port ─────────────────────────
 for doc in "${DOCS[@]}"; do
