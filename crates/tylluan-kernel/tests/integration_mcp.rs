@@ -51,14 +51,14 @@ async fn create_server(label: &str) -> TylluanServer {
     TylluanServer::new(registry, matcher, silva, mailbox, doctor, node_router)
 }
 
-/// Server boots and reports exactly 5 sovereign tools.
+/// Server boots and reports exactly 6 sovereign tools.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_integration_tools_list_exactly_5() {
+async fn test_integration_tools_list_exactly_6() {
     let server = create_server("t1").await;
     let tools = server.all_tools().await;
-    assert_eq!(tools.len(), 5, "Expected exactly 5 sovereign tools");
+    assert_eq!(tools.len(), 6, "Expected exactly 6 sovereign tools");
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
-    for expected in &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"] {
+    for expected in &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"] {
         assert!(names.contains(expected), "Missing tool: {expected}");
     }
 }

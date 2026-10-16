@@ -314,7 +314,7 @@ async fn test_graph_add_and_retrieve() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_sovereign_tools_exactly_5() {
+async fn test_sovereign_tools_exactly_6() {
     let state = test_state().await;
     let app = build_test_app(state);
 
@@ -338,7 +338,7 @@ async fn test_sovereign_tools_exactly_5() {
     let mut names: Vec<String> = tools.iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
     names.sort();
     assert_eq!(names,
-        vec!["tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"]);
+        vec!["tylluan_decide", "tylluan_do", "tylluan_graph", "tylluan_recall", "tylluan_remember", "tylluan_think"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

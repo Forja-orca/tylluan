@@ -924,6 +924,7 @@ mod fase1_operator_tests {
         // "a-decidir" marks the few the design (v2 §4) deferred to the TL.
         const AGENT_OR_PEER_CLASS: &[&str] = &[
             "/api/v1/do",
+            "/api/v1/decide",
             "/api/v1/guilds/{guild_name}/tools/{tool_name}",
             "/api/v1/guilds/{guild_name}/call/{tool_name}",
             "/api/v1/silva/node",

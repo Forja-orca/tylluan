@@ -1306,6 +1306,7 @@ async fn main() -> anyhow::Result<()> {
     let mlp_scorer = tylluan_kernel::mlp::MlpScorer::new(&models_dir);
     server.set_mlp(mlp_scorer, data_dir);
     server.expose_guild_tools = config.nexus.expose_guild_tools;
+    server.set_decision_config(&config);
 
     // Wire crash-safe journal from HttpState into TylluanServer
     let journal_path = "./data/journal.db";

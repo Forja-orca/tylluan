@@ -1,15 +1,15 @@
 use rmcp::{Error as McpError, model::{CallToolResult, Content, JsonObject}};
 use crate::registry::proxy::error_result;
 use serde_json;
-use super::{handler_do, handler_remember, handler_recall, handler_think, handler_graph, handler_ingest, TylluanServer};
+use super::{handler_do, handler_remember, handler_recall, handler_think, handler_graph, handler_ingest, handler_decide, TylluanServer};
 
-/// The 5 sovereign tools plus tylluan_ingest -- the single dispatch point
+/// The 6 sovereign tools plus tylluan_ingest -- the single dispatch point
 /// M31-P0's hooks apply to, so every MCP client (Claude Desktop, Claude
 /// Code, LM Studio, Qwen, ...) gets the same pre/post behavior regardless
 /// of which one it is, rather than per-client logic bolted on separately.
-const SOVEREIGN_TOOLS: [&str; 6] = [
+const SOVEREIGN_TOOLS: [&str; 7] = [
     "tylluan_do", "tylluan_remember", "tylluan_recall",
-    "tylluan_think", "tylluan_graph", "tylluan_ingest",
+    "tylluan_think", "tylluan_graph", "tylluan_decide", "tylluan_ingest",
 ];
 
 impl TylluanServer {
@@ -91,6 +91,7 @@ impl TylluanServer {
             "tylluan_recall" => handler_recall::handle_tylluan_recall(self, arguments).await,
             "tylluan_think" => handler_think::handle_tylluan_think(self, arguments).await,
             "tylluan_graph" => handler_graph::handle_tylluan_graph(self, arguments).await,
+            "tylluan_decide" => handler_decide::handle_tylluan_decide(self, arguments).await,
             "tylluan_ingest" => handler_ingest::handle_tylluan_ingest(self, arguments).await,
 
             "health" => {

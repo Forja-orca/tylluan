@@ -18,6 +18,7 @@ use super::*;
 pub fn api_v1_routes() -> Router<Arc<HttpState>> {
     Router::new()
         .route("/api/v1/do", post(do_intent_handler))
+        .route("/api/v1/decide", post(decide_handler))
         .route("/api/v1/guilds", get(guilds_list_handler))
         .route("/api/v1/guilds/health", get(guilds_health_handler))
         .route("/api/v1/guilds/register", post(guild_register_handler))

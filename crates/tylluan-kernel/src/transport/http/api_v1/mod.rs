@@ -37,10 +37,12 @@ pub mod api_a2a_agents;
 pub mod api_mesh;
 pub mod api_repo_map;
 pub mod api_dispatches;
+pub mod api_decide;
 pub mod mcp;
 pub mod routes;
 
 pub use api_guilds::*;
+pub use api_decide::*;
 pub use api_outputs::*;
 pub use api_admin::*;
 pub use api_coloquio::*;

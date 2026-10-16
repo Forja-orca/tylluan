@@ -7,6 +7,7 @@ pub mod handler_recall;
 pub mod handler_think;
 pub mod handler_graph;
 pub mod handler_ingest;
+pub mod handler_decide;
 pub mod logic;
 pub mod utils;
 pub mod intent_enhancer;
@@ -110,6 +111,10 @@ pub struct TylluanServer {
     /// rollback contract itself is declared in GuildDescriptor, not here.
     pub undo_log: Arc<std::sync::Mutex<std::collections::HashMap<String, ReversibleAction>>>,
     pub models_dir: PathBuf,
+    /// 6th sovereign tool (ADR-021): the decision service behind `tylluan_decide`
+    /// and `POST /api/v1/decide`. Built with default `[decision]` settings;
+    /// `main` swaps in the real config via [`Self::set_decision_config`].
+    pub decision_service: Arc<crate::router::decision::DecisionService>,
     /// Cached LightReranker instance — created once in `set_mlp` when
     /// models_dir is set, reused across all recall calls. Avoids reloading
     /// ONNX/weights on every request.
@@ -138,6 +143,11 @@ impl TylluanServer {
             },
             ..Default::default()
         };
+
+        let decision_service = Arc::new(crate::router::decision::DecisionService::new(
+            Arc::new(RwLock::new(crate::config::TylluanConfig::default())),
+            Some(silva.clone()),
+        ));
 
         Self {
             peer: Arc::new(RwLock::new(None)),
@@ -175,8 +185,17 @@ impl TylluanServer {
             background_budget: None,
             undo_log: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             models_dir: PathBuf::from("models"),
+            decision_service,
             light_reranker: None,
         }
+    }
+
+    /// Rebuild the decision service from the loaded kernel config (`[decision]`).
+    pub fn set_decision_config(&mut self, config: &crate::config::TylluanConfig) {
+        self.decision_service = Arc::new(crate::router::decision::DecisionService::new(
+            Arc::new(RwLock::new(config.clone())),
+            Some(self.silva.clone()),
+        ));
     }
 
     pub fn set_mlp(&mut self, scorer: MlpScorer, data_dir: &Path) {

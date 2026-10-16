@@ -782,11 +782,11 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_card_has_5_skills_plus_guild_dispatch() {
+    fn test_agent_card_has_6_skills_plus_guild_dispatch() {
         let tools = TylluanServer::kernel_tools();
-        let sovereign_names: [&str; 5] = [
+        let sovereign_names: [&str; 6] = [
             "tylluan_do", "tylluan_remember", "tylluan_recall",
-            "tylluan_think", "tylluan_graph",
+            "tylluan_think", "tylluan_graph", "tylluan_decide",
         ];
         let skills: Vec<AgentSkill> = tools.into_iter()
             .filter(|t| sovereign_names.contains(&t.name.as_str()))
@@ -797,7 +797,7 @@ mod tests {
                 tags: vec![],
             })
             .collect();
-        assert_eq!(skills.len(), 5, "Agent Card must have exactly 5 sovereign skills");
+        assert_eq!(skills.len(), 6, "Agent Card must have exactly 6 sovereign skills");
     }
 
     #[test]
