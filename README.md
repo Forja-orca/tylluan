@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.es.md">Español</a> · <sub>中文 (pending native review — see <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
+  <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.zh.md">中文</a> <sub>(pending native review — see <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
 </p>
 
 <h1 align="center">Tylluan</h1>
@@ -195,7 +195,7 @@ So "no cloud required" is the real invariant here. "No LLM at all" was never qui
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-1125 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+1127 tests across Rust kernel (lib), `tylluan-link`, and `tylluan-fsrs` — all green. Every push runs Rust build + test, clippy, `cargo-deny` (bans, licenses, advisories), Python lint + test, a dashboard build, and the security audit suite. Details in [STATUS.md](STATUS.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 

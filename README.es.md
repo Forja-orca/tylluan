@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <strong>Español</strong> · <sub>中文 (pendiente de revisión nativa — ver <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
+  <a href="README.md">English</a> · <strong>Español</strong> · <a href="README.zh.md">中文</a> <sub>(pendiente de revisión nativa — ver <a href="ROADMAP.md">ROADMAP.md</a>)</sub>
 </p>
 
 <h1 align="center">Tylluan</h1>

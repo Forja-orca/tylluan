@@ -100,6 +100,12 @@ decay_interval_secs = 300
 # SQLite WAL checkpoint interval (secs)
 checkpoint_interval_secs = 300
 
+[observability]
+# TC-03: objetivo SLO de disponibilidad (%) consumido por /api/v1/slo/summary,
+# /api/v1/health/golden-signals y /api/v1/dashboard/summary. Banda "degraded"
+# = target − 1.0 pp. Default 99.9 (comportamiento histórico).
+slo_target = 99.9
+
 # Local LLM inference via llama.cpp
 [inference.llama]
 # llama-server port (avoid Ollama 11434, LM Studio 1234, vLLM 8000, Gradio 7860)

@@ -847,14 +847,16 @@ pub async fn federation_ping() -> impl IntoResponse {
 pub async fn slo_summary_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let statuses = state.registry.status_all().await.unwrap_or_default();
     let silva = state.silva.clone();
+    // TC-03: objetivo SLO desde `[observability]` (era el literal 99.9).
+    let slo_target = state.config.read().await.observability.slo_target;
     let always_on_count = statuses.iter().filter(|s| s.always_on).count() as f64;
     let online_always_on = statuses.iter().filter(|s| s.always_on && s.running).count() as f64;
     let availability: f64 = if always_on_count > 0.0 { online_always_on / always_on_count * 100.0 } else { 100.0 };
     let node_count = silva.node_count().await.unwrap_or(0) as f64;
-    let error_budget_remaining = ((availability - 99.9) / 0.1 * 100.0).clamp(0.0_f64, 100.0_f64);
-    let slo_status = if availability >= 99.9 { "healthy" } else if availability >= 99.0 { "degraded" } else { "violated" };
+    let error_budget_remaining = error_budget_remaining_percent(availability, slo_target);
+    let slo_status = slo_status_for(availability, slo_target);
     (StatusCode::OK, Json(serde_json::json!({
-        "slo_target": 99.9,
+        "slo_target": slo_target,
         "current_availability": availability.round(),
         "error_budget_consumed_percent": (100.0_f64 - error_budget_remaining).round(),
         "error_budget_remaining_percent": error_budget_remaining.round(),
@@ -865,6 +867,32 @@ pub async fn slo_summary_handler(State(state): State<Arc<HttpState>>) -> impl In
             "total_nodes": node_count as i64
         }
     })))
+}
+
+/// TC-03: banda del SLO para una disponibilidad y objetivo dados —
+/// `healthy` si cumple el objetivo, `degraded` dentro de 1.0 pp por debajo,
+/// `violated` por debajo. Con el default 99.9 reproduce exactamente la banda
+/// histórica (99.0–99.9 → `degraded`).
+fn slo_status_for(availability: f64, target: f64) -> &'static str {
+    if availability >= target {
+        "healthy"
+    } else if availability >= target - 1.0 {
+        "degraded"
+    } else {
+        "violated"
+    }
+}
+
+/// TC-03: porcentaje restante del error budget respecto al objetivo
+/// configurado. Generalización directa de la fórmula histórica
+/// `(availability - 99.9) / 0.1 * 100` → `(a - t) / (100 - t) * 100`,
+/// idéntica con el default. Objetivo ≥ 100: sin división por cero.
+fn error_budget_remaining_percent(availability: f64, target: f64) -> f64 {
+    if target >= 100.0 {
+        if availability >= target { 100.0 } else { 0.0 }
+    } else {
+        ((availability - target) / (100.0 - target) * 100.0).clamp(0.0, 100.0)
+    }
 }
 
 pub async fn routing_anchors_list(
@@ -1230,5 +1258,46 @@ mod step2_unit_tests {
         let r: Result<Option<(String, bool, String)>, String> =
             Ok(Some(("same".into(), false, "2026-01-01 00:00:00".into())));
         assert!(decide_freshness(r, "same", "2026-01-01 00:00:00", "peer").is_err());
+    }
+}
+
+#[cfg(test)]
+mod tc03_slo_tests {
+    use super::*;
+
+    /// Bandas exactas con el objetivo por defecto (histórico intacto) y con
+    /// un objetivo custom — las bandas SE MUEVEN con el objetivo.
+    #[test]
+    fn slo_bands_follow_the_configured_target() {
+        assert_eq!(slo_status_for(100.0, 99.9), "healthy");
+        assert_eq!(slo_status_for(99.95, 99.9), "healthy");
+        assert_eq!(slo_status_for(99.5, 99.9), "degraded");
+        assert_eq!(slo_status_for(99.0, 99.9), "degraded");
+        assert_eq!(slo_status_for(98.5, 99.9), "violated");
+
+        assert_eq!(slo_status_for(98.5, 98.0), "healthy");
+        assert_eq!(slo_status_for(97.5, 98.0), "degraded");
+        assert_eq!(slo_status_for(96.9, 98.0), "violated");
+    }
+
+    /// El error budget generaliza la fórmula histórica: con el default es
+    /// idéntico; con un objetivo custom escala con (100 − target). En el
+    /// objetivo exacto el restante es 0 (el budget se consume al alcanzar
+    /// el límite de disponibilidad admitido).
+    #[test]
+    fn error_budget_follows_the_configured_target() {
+        assert!((error_budget_remaining_percent(100.0, 99.9) - 100.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(99.95, 99.9) - 50.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(99.9, 99.9) - 0.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(99.0, 99.9) - 0.0).abs() < 1e-9);
+
+        assert!((error_budget_remaining_percent(100.0, 98.0) - 100.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(99.0, 98.0) - 50.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(98.0, 98.0) - 0.0).abs() < 1e-9);
+        assert!((error_budget_remaining_percent(97.0, 98.0) - 0.0).abs() < 1e-9);
+
+        assert_eq!(error_budget_remaining_percent(0.0, 98.0), 0.0);
+        assert_eq!(error_budget_remaining_percent(100.0, 100.0), 100.0);
+        assert_eq!(error_budget_remaining_percent(99.0, 100.5), 0.0);
     }
 }
