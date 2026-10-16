@@ -10,9 +10,10 @@ All notable changes to Tylluan are documented here.
 
 **Security**
 - ADR-019 step 2 (`742eacf`): per-peer and per-space permissions, deny-by-default. One ingestion path for all four peer-ingest entry points and one send-side builder for all three push flows; exports are filtered by space and direction. A peer write can no longer change `protected` or the weight of an existing node, and an error while reading freshness now rejects the write instead of upserting. Remote dispatch (P2P) is gated by an exact `guild.tool` allow-list (empty = deny) and denials are audited.
-- Known and being fixed: the OAuth endpoint auto-approves and its tokens are accepted as bearer; keep the kernel on `127.0.0.1` until the hardening in the roadmap ships.
+- Auth boundary hardening, Phase 1 (`61bc97e`, on `main`, not in a tagged release): `/oauth/authorize` auto-approves only when `dev_mode=true` (403 otherwise), `redirect_uri` must be loopback, management endpoints require an operator-class caller (OAuth JWT and peer auth are rejected there), and a route-inventory test covers the mutating routes. Behaviour change: `mcp-remote` / Claude Desktop OAuth flows do not work with `dev_mode=false` until Phase 2 (operator consent, client registry, scopes; not approved yet); clients that send a header Bearer token are unaffected. Keep the kernel on `127.0.0.1`.
+- Tests: fixed a `RECALL_COUNTER` race in the kernel tests and an intermittent `FleetHealthPanel` dashboard test; temporary test databases are now cleaned up.
 
-**Architecture decisions (not shipped)** — see the README "Architecture decisions in flight": Inference Gateway (ADR-020, proposed), decision service with a sixth sovereign tool (ADR-021, decided), `iroh` transport rejected for now.
+**Architecture decisions (not shipped)** — see the README "Architecture decisions in flight": Inference Gateway (ADR-020, proposed), decision service with a sixth sovereign tool named `tylluan_decide` (ADR-021, decided), `iroh` transport rejected for now.
 
 ---
 

@@ -196,7 +196,7 @@ Así que "sin nube requerida" es el invariante real aquí. "Sin LLM en absoluto"
 
 [![CI](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml/badge.svg)](https://github.com/forja-orca/tylluan/actions/workflows/ci.yml)
 
-1079 tests en el kernel de Rust (lib), `tylluan-link`, y `tylluan-fsrs` — todos en verde. Cada push corre build + test de Rust, clippy, `cargo-deny` (bans, licencias, advisories), lint + test de Python, un build del dashboard, y la suite de auditoría de seguridad. Detalles en [STATUS.md](STATUS.md) y [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+1113 tests en el kernel de Rust (lib), `tylluan-link`, y `tylluan-fsrs` — todos en verde. Cada push corre build + test de Rust, clippy, `cargo-deny` (bans, licencias, advisories), lint + test de Python, un build del dashboard, y la suite de auditoría de seguridad. Detalles en [STATUS.md](STATUS.md) y [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
@@ -347,9 +347,9 @@ Para el historial completo, ver [CHANGELOG.md](CHANGELOG.md). Para lo que genuin
 | Decisión | Qué cambia | Estado hoy |
 |----------|------------|------------|
 | **Redes por equipo — ADR-019** (tu LAN o tu propia VPN; sin malla global) | Los pares federados tienen **permisos por par y por espacio, denegados por defecto**; el despacho remoto de herramientas exige una lista exacta `guild.tool`; un par nunca puede cambiar `protected` ni el peso de un nodo existente | ✅ Paso 1 (auditoría de capacidades) y **paso 2 (permisos) en `main`, aún sin versión etiquetada**. 📐 Propuestos: paso 3 invitaciones de un solo uso + fijación de clave, paso 4 revocación inmediata, paso 6 Coloquio federado |
-| **Endurecimiento de la frontera de autenticación (OAuth / operador)** | Un token OAuth nunca podrá realizar acciones de operador; `/oauth/authorize` solo auto-aprobará en `dev_mode`; los endpoints que modifican estado serán de operador por defecto | 🟡 Fase 1 aprobada, implementación asignada, **sin integrar**. 📐 Fase 2: consentimiento de operador, registro de clientes, scopes. Hasta entonces, mantén el kernel en `127.0.0.1` |
+| **Endurecimiento de la frontera de autenticación (OAuth / operador)** | Un token OAuth no puede realizar acciones de operador; `/oauth/authorize` solo auto-aprueba en `dev_mode`; los endpoints de gestión son solo de operador | ✅ Fase 1 integrada en `main` (`61bc97e`): `/oauth/authorize` solo auto-aprueba con `dev_mode=true` (403 si no), `redirect_uri` estrictamente loopback, los endpoints de gestión exigen un llamador de clase operador (JWT OAuth / autenticación de par rechazados), test de inventario de rutas que modifican estado. Aún no corre en el kernel del responsable. 📐 Fase 2 (consentimiento de operador, registro de clientes, scopes) sin aprobar; hasta entonces, los flujos OAuth de `mcp-remote` / Claude Desktop no funcionan con `dev_mode=false` (los clientes con Bearer por cabecera sí). Mantén el kernel en `127.0.0.1` |
 | **Inference Gateway — ADR-020** | Una capa interna que abstrae la inferencia **por capacidad** (`embed`, `rerank`, `decide`, `generate`), no por motor: local o remota, con clase de privacidad por proveedor y la identidad del modelo guardada con cada vector. **Decisión de arquitectura actual (no un invariante permanente, revisable): capa cliente solo de salida — Tylluan consume inferencia, no la ofrece como servicio** (única excepción: llama.cpp local explícito). El comportamiento por defecto sigue idéntico byte a byte | 📐 Borrador en revisión. Sin código |
-| **Servicio de decisión + sexta herramienta soberana — ADR-021** | Un servicio de decisión compartido con dos puertas: módulos internos y una sexta herramienta nueva (CONTRACT-01 pasará de cinco a seis). El modelo nunca tiene autoridad: las reglas deterministas deciden permisos y límites. Modos: apagado / sombra / consultivo / puerta | 🟡 Decidido por el responsable del proyecto. ADR sin escribir, nada implementado |
+| **Servicio de decisión + sexta herramienta soberana — ADR-021** | Un servicio de decisión compartido con dos puertas: módulos internos y una sexta herramienta nueva, llamada `tylluan_decide` (CONTRACT-01 pasará de cinco a seis). El modelo nunca tiene autoridad: las reglas deterministas deciden permisos y límites. Modos: apagado / sombra / consultivo / puerta | 🟡 Decidido por el responsable del proyecto. ADR sin escribir, nada implementado |
 | **Modelos de decisión (LAYA / Clef-Flash / Decima)** | Medición de la Fase 0 con datos propios de Tylluan: LAYA y Clef-Flash NO-GO; Decima-small GO-PROVISIONAL (+5 aciertos netos de 245, sin establecer estadísticamente) | ✅ Medido · sin integración en producción |
 | **REA (servidor MCP de ingeniería inversa)** | Servidor MCP externo opcional, fuera de la ruta crítica | 🟡 GO como opcional · lista de verificación pendiente · sin registrar |
 | **Transporte `iroh`** | Habría permitido conectar equipos de redes distintas sin VPN | ⛔ NO-GO por ahora — LAN o tu propia VPN es el camino soportado |
@@ -369,7 +369,7 @@ flowchart LR
   subgraph SOVEREIGN["tylluan-nexus (:47004) — Núcleo Soberano"]
     TOOLS["5 Herramientas Soberanas hoy (CONTRACT-01)<br/>tylluan_do · remember · recall · think · graph"]
     TOOL6["6ª Herramienta Soberana (decidida, sin entregar)<br/>puerta de decisión · enmienda de CONTRACT-01 (ADR-021)"]:::future
-    AUTH["Endurecimiento de autenticación (Fase 1 aprobada)<br/>Los tokens OAuth nunca dan acciones de operador"]:::future
+    AUTH["Endurecimiento de autenticación (Fase 1 integrada, Fase 2 pendiente)<br/>Los tokens OAuth nunca dan acciones de operador"]:::future
 
     subgraph GOVERN["Gobernanza Cognitiva y Enrutamiento"]
       SCHED["Cognitive Scheduler<br/>TaskContext · RiskTier · CallerTrust"]

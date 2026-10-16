@@ -160,7 +160,7 @@ cargo run -p tylluan-cli -- start
 ```bash
 cargo check -p tylluan-kernel
 cargo test -p tylluan-kernel --lib 2>&1 | tail -3
-# Esperado: 1007 lib tests passing (cifra exacta: scripts/check_test_count.sh)
+# Esperado: 1027 lib tests passing (cifra exacta: scripts/check_test_count.sh)
 
 cargo test -p tylluan-link --all-targets 2>&1 | Select-String "test result"
 # Esperado: 74 link tests passing
