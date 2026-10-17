@@ -289,13 +289,13 @@ fn question_spec(name: &str, q: &DecisionQuestion) -> Result<serde_json::Value, 
 /// Mapeo puro respuesta System One → distribución (clamp `[0,1]`; para `Noul`
 /// el campo tipado `noul` gana cuando está presente).
 fn distribution_for(q: &DecisionQuestion, ans: &SystemOneAnswer) -> HashMap<String, f32> {
-    if matches!(q, DecisionQuestion::Noul) {
-        if let Some(p) = ans.noul {
-            let p = p.clamp(0.0, 1.0) as f32;
-            return [("true".to_string(), p), ("false".to_string(), 1.0 - p)]
-                .into_iter()
-                .collect();
-        }
+    if matches!(q, DecisionQuestion::Noul)
+        && let Some(p) = ans.noul
+    {
+        let p = p.clamp(0.0, 1.0) as f32;
+        return [("true".to_string(), p), ("false".to_string(), 1.0 - p)]
+            .into_iter()
+            .collect();
     }
     ans.probabilities
         .iter()
