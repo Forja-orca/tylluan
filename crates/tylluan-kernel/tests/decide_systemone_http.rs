@@ -457,6 +457,7 @@ async fn config_parses_both_provider_forms_with_documented_defaults() {
             assert_eq!(c.max_inflight, 1);
             assert_eq!(c.breaker_failures, 3);
             assert_eq!(c.breaker_cooldown_s, 60);
+            assert_eq!(c.state_max_chars, 0, "sin tope por defecto");
         }
         other => panic!("expected systemone_http table, got {other:?}"),
     }
@@ -466,4 +467,184 @@ async fn config_parses_both_provider_forms_with_documented_defaults() {
         defaulted.decision.provider,
         DecisionProviderConfig::Name("rules".to_string())
     );
+}
+
+// ── T1241: 4xx de la ENTRADA no abren el cortacircuitos; 422 STATE_TRUNCATED → abstención estable ──
+
+/// Mock crudo: responde `status` con un cuerpo arbitrario (para simular el
+/// 422 STATE_TRUNCATED de Decima u otros 4xx). Cuenta las peticiones.
+async fn start_mock_raw(status: StatusCode, body: &'static str) -> MockServer {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let hits_for_handler = hits.clone();
+    let app = Router::new().route(
+        "/v1/systemone",
+        post(move || {
+            let hits = hits_for_handler.clone();
+            async move {
+                hits.fetch_add(1, Ordering::SeqCst);
+                (status, body).into_response()
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    MockServer {
+        url: format!("http://127.0.0.1:{}", addr.port()),
+        hits,
+    }
+}
+
+/// T1241 (hallazgo en vivo 2026-10-17): un 4xx causado por la ENTRADA no
+/// cuenta para el cortacircuitos — un llamante inválido no puede tumbar el
+/// carril del modelo para todos. `breaker_failures = 1` lo hace observable
+/// (con el bug, la 2ª llamada no llega al servidor).
+#[tokio::test(flavor = "multi_thread")]
+async fn client_4xx_does_not_count_toward_breaker() {
+    let mock = start_mock_raw(StatusCode::BAD_REQUEST, "invalid entry").await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "breaker_failures = 1")).await;
+
+    let r1 = svc.decide(contract_router(0.9), "test").await;
+    assert_eq!(
+        r1.answers["route"].value.as_deref(),
+        Some("human"),
+        "las reglas siguen respondiendo (solo se degrada el carril modelo)"
+    );
+    svc.drain_shadow_tasks().await;
+    let r2 = svc.decide(contract_router(0.9), "test").await;
+    svc.drain_shadow_tasks().await;
+    assert_eq!(r2.answers["route"].value.as_deref(), Some("human"));
+    assert_eq!(
+        mock.hits.load(Ordering::SeqCst),
+        2,
+        "el 4xx NO alimenta el cortacircuitos: las dos llamadas llegaron al servidor"
+    );
+}
+
+/// T1241: 422 STATE_TRUNCATED (Decima) en consulta libre → abstención con el
+/// motivo ESTABLE `state_too_long` (no un `provider_error:` con el dump del
+/// HTTP), y sin abrir el cortacircuitos.
+#[tokio::test(flavor = "multi_thread")]
+async fn state_truncated_422_is_stable_abstention_and_breaker_safe() {
+    let mock = start_mock_raw(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "STATE_TRUNCATED: state exceeds model limit",
+    )
+    .await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "breaker_failures = 1")).await;
+
+    let resp = svc.decide(free_bool(), "test").await;
+    assert_eq!(resp.status, DecideStatus::Degraded);
+    let a = &resp.answers["should_i"];
+    assert!(a.abstained);
+    assert_eq!(
+        a.abstain_reason.as_deref(),
+        Some("state_too_long"),
+        "el 422 STATE_TRUNCATED se mapea a abstención con motivo estable"
+    );
+
+    let resp2 = svc.decide(free_bool(), "test").await;
+    assert_eq!(resp2.status, DecideStatus::Degraded);
+    assert_eq!(
+        mock.hits.load(Ordering::SeqCst),
+        2,
+        "el 422 de la entrada NO abre el cortacircuitos: la segunda llamada salió"
+    );
+}
+
+/// T1241: en el carril de contrato (sombra), el 422 STATE_TRUNCATED tampoco
+/// cuenta para el cortacircuitos — las reglas responden y la fila del modelo
+/// queda NULL (semántica de evaluación pareada intacta).
+#[tokio::test(flavor = "multi_thread")]
+async fn shadow_422_state_truncated_leaves_rows_null_and_breaker_closed() {
+    let mock = start_mock_raw(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "STATE_TRUNCATED: state exceeds model limit",
+    )
+    .await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "breaker_failures = 1")).await;
+
+    let resp = svc.decide(contract_router(0.9), "test").await;
+    assert_eq!(resp.answers["route"].value.as_deref(), Some("human"));
+    svc.drain_shadow_tasks().await;
+    let resp2 = svc.decide(contract_router(0.9), "test").await;
+    svc.drain_shadow_tasks().await;
+    assert_eq!(resp2.answers["route"].value.as_deref(), Some("human"));
+
+    assert_eq!(
+        mock.hits.load(Ordering::SeqCst),
+        2,
+        "el 422 de la entrada NO abre el cortacircuitos en la sombra"
+    );
+    let rows = svc.read_shadow_log(10).await;
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.model_value.is_none()), "las filas quedan NULL");
+}
+
+/// Guarda T1241: 429 y 5xx SÍ cuentan para el cortacircuitos (fallo del
+/// carril, no de la entrada) — comportamiento previo intacto.
+#[tokio::test(flavor = "multi_thread")]
+async fn breaker_still_counts_429_and_5xx() {
+    for (status, body) in [
+        (StatusCode::TOO_MANY_REQUESTS, "slow down"),
+        (StatusCode::SERVICE_UNAVAILABLE, "overloaded"),
+    ] {
+        let mock = start_mock_raw(status, body).await;
+        let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "breaker_failures = 1")).await;
+
+        svc.decide(contract_router(0.9), "test").await;
+        svc.drain_shadow_tasks().await;
+        svc.decide(contract_router(0.9), "test").await;
+        svc.drain_shadow_tasks().await;
+        assert_eq!(
+            mock.hits.load(Ordering::SeqCst),
+            1,
+            "HTTP {status}: tras el primer fallo el cortacircuitos abre y la 2ª llamada no sale"
+        );
+    }
+}
+
+/// T1241 (parte opcional): tope configurable `state_max_chars` — un estado
+/// que se sabe que no cabe ni siquiera se envía (abstención `state_too_long`
+/// sin coste de red); por debajo del tope, el carril funciona con normalidad.
+#[tokio::test(flavor = "multi_thread")]
+async fn state_max_chars_cap_skips_the_wire() {
+    let mock = start_mock(
+        serde_json::json!({ "route": { "probabilities": { "human": 1.0 } } }),
+        StatusCode::OK,
+        0,
+    )
+    .await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "state_max_chars = 32")).await;
+
+    // Estado pequeño (por debajo del tope) → el modelo se consulta.
+    let resp = svc.decide(contract_router(0.9), "test").await;
+    assert_eq!(resp.answers["route"].value.as_deref(), Some("human"));
+    svc.drain_shadow_tasks().await;
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
+
+    // Estado por encima del tope → ni siquiera se envía; las reglas siguen.
+    let big = DecideRequest {
+        state: serde_json::json!({ "risk": 0.9, "pad": "x".repeat(64) }),
+        questions: std::collections::BTreeMap::from([("route".to_string(), route_spec())]),
+        contract: Some("scheduler_routing".to_string()),
+        max_latency_ms: None,
+    };
+    let resp = svc.decide(big, "test").await;
+    assert_eq!(
+        resp.answers["route"].value.as_deref(),
+        Some("human"),
+        "las reglas siguen respondiendo"
+    );
+    svc.drain_shadow_tasks().await;
+    assert_eq!(
+        mock.hits.load(Ordering::SeqCst),
+        1,
+        "estado demasiado grande: cero llamadas nuevas al servidor"
+    );
+    let rows = svc.read_shadow_log(10).await;
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].model_value.is_none(), "la fila del estado grande queda NULL");
 }

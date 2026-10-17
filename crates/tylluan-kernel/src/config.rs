@@ -1984,6 +1984,13 @@ pub struct SystemoneHttpConfig {
     /// Enfriamiento del cortacircuitos abierto, segundos. Default 60.
     #[serde(default = "default_decision_breaker_cooldown_s")]
     pub breaker_cooldown_s: u64,
+    /// Tope opcional de la representación JSON de `state` (caracteres): por
+    /// encima, el proveedor ni siquiera llama al servidor (abstención
+    /// `state_too_long` sin coste de red). `0` (default) = sin límite. El
+    /// contrato wire ya impone 16 KiB (`MAX_STATE_BYTES`); este tope es el
+    /// límite real del modelo (T1241, hallazgo en vivo con Decima).
+    #[serde(default)]
+    pub state_max_chars: usize,
 }
 
 fn default_decision_request_timeout_ms() -> u64 {

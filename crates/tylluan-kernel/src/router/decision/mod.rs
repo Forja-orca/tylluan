@@ -68,6 +68,12 @@ pub enum DecisionError {
     /// (preguntas, tamaño de `state`, opciones cerradas).
     #[error("invalid request: {0}")]
     Validation(String),
+    /// El proveedor se abstiene con motivo estable (entrada que no cabe o no
+    /// puede procesarse, p. ej. `state_too_long`): NO cuenta como fallo del
+    /// proveedor ni alimenta el cortacircuitos; el servicio la traduce a
+    /// abstención con esa razón exacta (T1241).
+    #[error("{0}")]
+    Abstained(String),
 }
 
 /// Contrato del Decision Fabric (ADR-018 §2.1): nunca `LayaProvider` —
