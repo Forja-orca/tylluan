@@ -27,6 +27,7 @@ use std::time::Duration;
 
 use crate::config::SystemoneHttpConfig;
 
+use super::api_types::ABSTAIN_STATE_TOO_LONG;
 use super::{DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest};
 
 pub const PROVIDER_ID: &str = "systemone-http-v1";
@@ -63,6 +64,9 @@ pub struct SystemOneHttpProvider {
     semaphore: tokio::sync::Semaphore,
     breaker_failures: u32,
     breaker_cooldown_s: u64,
+    /// Tope de la representación JSON de `state` (caracteres); 0 = sin
+    /// límite (T1241).
+    state_max_chars: usize,
     consecutive_failures: AtomicU32,
     /// Epoch secs hasta el que el cortacircuitos está abierto (0 = cerrado).
     breaker_open_until: AtomicU64,
@@ -92,6 +96,7 @@ impl SystemOneHttpProvider {
             semaphore: tokio::sync::Semaphore::new(cfg.max_inflight.max(1)),
             breaker_failures: cfg.breaker_failures.max(1),
             breaker_cooldown_s: cfg.breaker_cooldown_s,
+            state_max_chars: cfg.state_max_chars,
             consecutive_failures: AtomicU32::new(0),
             breaker_open_until: AtomicU64::new(0),
         })
@@ -151,6 +156,13 @@ impl DecisionProvider for SystemOneHttpProvider {
                 "circuit breaker open".into(),
             ));
         }
+        // Tope del estado (T1241): si se sabe que no cabe en el modelo, ni
+        // siquiera se envía — abstención estable sin coste de red.
+        if self.state_max_chars > 0
+            && req.state.to_string().chars().count() > self.state_max_chars
+        {
+            return Err(DecisionError::Abstained(ABSTAIN_STATE_TOO_LONG.to_string()));
+        }
         let _permit = self.semaphore.acquire().await.map_err(|e| {
             DecisionError::Provider(PROVIDER_ID.into(), format!("semaphore closed: {e}"))
         })?;
@@ -191,6 +203,23 @@ impl DecisionProvider for SystemOneHttpProvider {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
+            // 422 STATE_TRUNCATED (Decima, hallazgo en vivo 2026-10-17): la
+            // ENTRADA no cabe — abstención con motivo estable, sin penalizar
+            // al proveedor ni al resto de llamantes.
+            if status == reqwest::StatusCode::UNPROCESSABLE_ENTITY
+                && text.to_ascii_lowercase().contains("state_truncated")
+            {
+                return Err(DecisionError::Abstained(ABSTAIN_STATE_TOO_LONG.to_string()));
+            }
+            // 4xx salvo 429: causa en la ENTRADA, no en el proveedor — no
+            // cuenta para el cortacircuitos (un llamante inválido no puede
+            // tumbar el carril del modelo para todos).
+            if status.is_client_error() && status != reqwest::StatusCode::TOO_MANY_REQUESTS {
+                return Err(DecisionError::Provider(
+                    PROVIDER_ID.into(),
+                    format!("{url}: HTTP {status} — {}", clip_str(&text, 300)),
+                ));
+            }
             self.note_failure();
             return Err(DecisionError::Provider(
                 PROVIDER_ID.into(),

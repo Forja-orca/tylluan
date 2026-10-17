@@ -43,6 +43,10 @@ pub const ABSTAIN_NO_MODEL_PROVIDER: &str = "no_model_provider";
 /// Motivo de abstención cuando el proveedor devolvió un valor fuera de las
 /// opciones declaradas (respuesta RECHAZADA, §1217).
 pub const ABSTAIN_ANSWER_OUT_OF_OPTIONS: &str = "answer_out_of_options";
+/// Motivo de abstención cuando la ENTRADA no cabe en el proveedor (422
+/// STATE_TRUNCATED de Decima, o tope `state_max_chars`): motivo estable,
+/// no es un fallo del proveedor ni abre el cortacircuitos (T1241).
+pub const ABSTAIN_STATE_TOO_LONG: &str = "state_too_long";
 
 /// Modo de un contrato interno (ADR-021 §3.2). `off` por defecto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

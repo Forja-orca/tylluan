@@ -39,7 +39,7 @@ use super::api_types::{
     answer_from_core, to_core_question, validate_request,
 };
 use super::systemone_http::SystemOneHttpProvider;
-use super::{DecisionAnswer, DecisionProvider, DecisionQuestion, DecisionRequest, rules::RulesDecisionProvider};
+use super::{DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest, rules::RulesDecisionProvider};
 
 /// Motivo de abstención del carril síncrono cuando el modelo excede su deadline.
 const ABSTAIN_PROVIDER_TIMEOUT: &str = "provider_timeout";
@@ -317,6 +317,16 @@ impl DecisionService {
                 }
                 (wire, degraded)
             }
+            Err(DecisionError::Abstained(reason)) => {
+                // Motivo estable del proveedor (p. ej. state_too_long): la
+                // abstención viaja tal cual, sin prefijo (T1241).
+                let wire = req
+                    .questions
+                    .keys()
+                    .map(|name| (name.clone(), abstain(reason.clone())))
+                    .collect();
+                (wire, true)
+            }
             Err(e) => {
                 // El proveedor falla → abstención explícita por pregunta; el
                 // llamante aplica su regla de reserva (§3.4).
@@ -471,6 +481,16 @@ impl DecisionService {
                     }
                 }
                 (wire, degraded)
+            }
+            Ok(Err(DecisionError::Abstained(reason))) => {
+                // Motivo estable del proveedor (p. ej. state_too_long): viaja
+                // tal cual, sin prefijo (T1241).
+                let wire = req
+                    .questions
+                    .keys()
+                    .map(|name| (name.clone(), abstain(reason.clone())))
+                    .collect();
+                (wire, true)
             }
             Ok(Err(e)) => {
                 let reason = format!("provider_error: {e}");
@@ -631,6 +651,12 @@ impl DecisionService {
             let model_latency_ms = call_started.elapsed().as_millis() as i64;
             let answers = match outcome {
                 Ok(Ok(a)) => a,
+                Ok(Err(DecisionError::Abstained(reason))) => {
+                    tracing::debug!(
+                        "decision shadow: model abstained ({reason}) — rows stay NULL"
+                    );
+                    return;
+                }
                 Ok(Err(e)) => {
                     tracing::warn!("decision shadow: model provider error: {e}");
                     return;
