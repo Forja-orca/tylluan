@@ -119,6 +119,7 @@ impl AutoLinker {
             ("tylluan_recall", "tylluan_recall"),
             ("tylluan_think", "tylluan_think"),
             ("tylluan_graph", "tylluan_graph"),
+            ("tylluan_decide", "tylluan_decide"),
             ("tylluan_nexus", "tylluan-nexus"),
             ("silvadb", "silvadb"),
             ("fastmcp", "fastmcp"),
@@ -417,3 +418,36 @@ impl AutoLinker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_link_tool_references_includes_tylluan_decide() {
+        let silva = Arc::new(SilvaDB::in_memory().await.unwrap());
+        silva.init().await.unwrap();
+        silva
+            .upsert_node(
+                "doc:decide-note",
+                "lesson",
+                "Use tylluan_decide for bounded choice, score, and boolean evaluations.",
+                "{}",
+            )
+            .await
+            .unwrap();
+
+        let linker = AutoLinker::new(silva.clone());
+        let created = linker.link_tool_references().await;
+        assert_eq!(created, 1, "link_tool_references must create uses_tool edge for tylluan_decide");
+
+        let edges = silva.get_all_edges().await.unwrap();
+        assert!(
+            edges.iter().any(|e| e["source"].as_str() == Some("doc:decide-note")
+                && e["target"].as_str() == Some("tylluan_decide")
+                && e["type"].as_str() == Some("uses_tool")),
+            "expected uses_tool edge from doc:decide-note to tylluan_decide, got {edges:?}"
+        );
+    }
+}
+

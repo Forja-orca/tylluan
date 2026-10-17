@@ -377,7 +377,7 @@ async fn test_mcp_apps_manifest_is_negotiated_and_persisted_for_legacy_session()
     let graph = response["result"]["tools"]
         .as_array()
         .and_then(|tools| tools.iter().find(|tool| tool["name"] == "tylluan_graph"))
-        .expect("tylluan_graph must remain one of the five sovereign tools");
+        .expect("tylluan_graph must remain one of the six sovereign tools");
     assert_eq!(graph["_meta"]["ui"]["resourceUri"], "ui://tylluan/knowledge-graph-canvas");
     assert_eq!(graph["_meta"]["ui"]["visibility"][0], "model");
 }

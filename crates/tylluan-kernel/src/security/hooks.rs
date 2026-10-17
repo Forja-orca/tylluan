@@ -244,7 +244,7 @@ mod tests {
             tool: "*".into(), phase: HookPhase::Pre, pattern: None,
             action: HookAction::Deny, message: Some("blocked".into()), replacement: None, inject: None,
         }];
-        for tool in ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph"] {
+        for tool in ["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"] {
             let mut args = args_with("intent", "x");
             assert!(matches!(run_pre_hooks(&rules, tool, &mut args), PreHookOutcome::Deny(_)));
         }

@@ -18,6 +18,49 @@ Thank you for your interest in contributing. Tylluan is built by humans and AI a
 5. Run `cargo clippy -p tylluan-kernel -- -D warnings`
 6. Submit a pull request with a clear description
 
+## Your first PR in 30 minutes
+
+A step-by-step guide to clone, build, verify, and open your first Pull Request with zero cloud dependencies or heavy model downloads:
+
+### Minutes 0–5: Clone and prepare a clean branch
+```bash
+git clone https://github.com/forja-orca/tylluan.git
+cd tylluan
+git checkout -b feat/my-first-pr
+cp tylluan.example.toml tylluan.toml
+```
+
+### Minutes 5–15: Build and run the lightweight unit test suite (`--lib`)
+Verify that the kernel and link protocol compile and pass their unit tests without spawning external processes:
+```bash
+cargo check -p tylluan-kernel
+cargo test -p tylluan-kernel --lib
+cargo test -p tylluan-link --all-targets
+```
+
+### Minutes 15–25: Make a focused change with a test
+Pick a small, self-contained improvement:
+- **A Rust fix or unit test:** Add or update a unit test inside the `#[cfg(test)]` module of the file you touch under `crates/tylluan-kernel/src/` and run it in isolation:
+  ```bash
+  cargo test -p tylluan-kernel --lib your_test_name
+  ```
+- **A new Python guild:** Follow [`docs/guides/ADDING_A_GUILD.md`](docs/guides/ADDING_A_GUILD.md) — create the file in `guilds/`, register its descriptor in `crates/tylluan-kernel/src/router/catalog.rs` and its module path in `LAZY_GUILDS` (`crates/tylluan-kernel/src/registry/guild_list.rs`), then verify:
+  ```bash
+  cargo test -p tylluan-kernel --lib test_every_guild_file_is_in_catalog
+  ```
+- **A documentation fix:** If you update file paths, ports, or test counts in Markdown docs, run the documentation reality gates:
+  ```bash
+  bash scripts/check_docs_reality.sh
+  python scripts/check_doc_links.py
+  ```
+
+### Minutes 25–30: Run Clippy and open the PR
+CI enforces `clippy` with `-D warnings` (note: `cargo fmt --check` is not currently a CI gate and the existing tree has unformatted files, so format only the lines you touch rather than running a repo-wide `cargo fmt --check`):
+```bash
+cargo clippy -p tylluan-kernel -- -D warnings
+```
+If your commit touches `transport/`, `guilds/`, `integrations/`, or `tylluan*.toml`, include an `## Impact` section in the commit message explaining which flows or contracts are affected (checked by `scripts/check_no_predation.sh`). Open the Pull Request using the repository template.
+
 ## What to NEVER include in a pull request
 
 - Personal data (names, emails, local usernames)
