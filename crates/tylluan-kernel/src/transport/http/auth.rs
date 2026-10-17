@@ -58,6 +58,11 @@ task_local! {
 pub enum AclAuthKind {
     /// The static master token (env/`.tylluan-token`) — the operator credential.
     MasterToken,
+    /// The master token presented via `?token=` query-string. Authenticates the
+    /// request (dashboard `/sse` + sandbox files), but does NOT satisfy the
+    /// operator class: operator routes require the token in the Authorization
+    /// header (E1, Jose via TL turno 1237).
+    MasterTokenQuery,
     /// A JWT issued by the local OAuth server.
     OAuthJwt,
     /// dev_mode=true local bypass.
@@ -315,6 +320,9 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
 }
 
 /// Which auth kinds satisfy the operator class. Fail-closed on absence.
+/// E1 (turno 1237): el token maestro por query-string
+/// (`AclAuthKind::MasterTokenQuery`) NO satisface la clase operador — las
+/// rutas de `operator_class_required` exigen el token por CABECERA (403).
 pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
     matches!(
         kind,
@@ -338,8 +346,8 @@ pub async fn operator_gate_middleware(request: Request, next: Next) -> Response 
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({
                 "error": "operator_required",
-                "message": "This endpoint requires the master operator token. \
-                    OAuth tokens and peer bypasses are not accepted."
+                "message": "This endpoint requires the master operator token in the Authorization header. \
+                    OAuth tokens, query-string tokens and peer bypasses are not accepted."
             })),
         )
             .into_response();
@@ -435,8 +443,12 @@ pub async fn bearer_auth_middleware(
                 }
             });
 
-            if has_master_bearer || has_valid_query {
+            if has_master_bearer {
                 (true, AclAuthKind::MasterToken)
+            } else if has_valid_query {
+                // E1 (turno 1237): el token por query-string autentica, pero
+                // el MEDIO no satisface la clase operador (solo cabecera).
+                (true, AclAuthKind::MasterTokenQuery)
             } else if has_oauth_bearer {
                 (true, AclAuthKind::OAuthJwt)
             } else {
