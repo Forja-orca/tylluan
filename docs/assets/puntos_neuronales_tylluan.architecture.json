@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Puntos neuronales de Tylluan",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 5,
+    "gapX": 116,
+    "gapY": 80,
+    "cellW": 170,
+    "cellH": 64
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "Agentes y clientes",
+      "sublabel": "MCP, REST, A2A",
+      "row": 0,
+      "col": 0,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "tools6",
+      "type": "backend",
+      "label": "6 tools soberanas",
+      "sublabel": "MCP y REST gemelas",
+      "row": 0,
+      "col": 1,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "router",
+      "type": "backend",
+      "label": "P1 Enrutado",
+      "sublabel": "tylluan_do · matcher",
+      "tag": "cabeza aprendida: prop.",
+      "row": 0,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "decide",
+      "type": "backend",
+      "label": "P6 Decisión",
+      "sublabel": "ADR-021 · reglas + modelo",
+      "tag": "modo sombra",
+      "row": 0,
+      "col": 3,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "decima",
+      "type": "external",
+      "label": "Decima-small",
+      "sublabel": "127.0.0.1:11436 · int8",
+      "tag": "flojo fuera de NLI",
+      "row": 0,
+      "col": 4,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "p4",
+      "type": "security",
+      "label": "P4 No confiable",
+      "sublabel": "Gate · TaskContext",
+      "tag": "taint: propuesta",
+      "row": 1,
+      "col": 0,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "write",
+      "type": "backend",
+      "label": "P3 Escritura",
+      "sublabel": "hash · link · FSRS",
+      "tag": "supersedir: prop.",
+      "row": 1,
+      "col": 1,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "recall",
+      "type": "backend",
+      "label": "P5 Recall",
+      "sublabel": "RRF + rerankers",
+      "tag": "A/B pendiente",
+      "row": 1,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "shadow",
+      "type": "database",
+      "label": "shadow_log",
+      "sublabel": "hash · reglas · modelo",
+      "tag": "falta verdad humana",
+      "row": 1,
+      "col": 3,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "silva",
+      "type": "database",
+      "label": "SilvaDB",
+      "sublabel": "9.896 nodos · 368 marcas",
+      "row": 2,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "p2",
+      "type": "backend",
+      "label": "P2 Contradicciones",
+      "sublabel": "estructura + consenso",
+      "tag": "NLI: propuesta",
+      "row": 2,
+      "col": 3,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "night",
+      "type": "backend",
+      "label": "NightConsolidation",
+      "sublabel": "consenso horario",
+      "row": 2,
+      "col": 4,
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-clients-tools",
+      "from": "clients",
+      "to": "tools6",
+      "label": "MCP / REST"
+    },
+    {
+      "id": "c-clients-p4",
+      "from": "clients",
+      "to": "p4",
+      "label": "contenido externo",
+      "variant": "dashed",
+      "labelDy": 24
+    },
+    {
+      "id": "c-p4-write",
+      "from": "p4",
+      "to": "write",
+      "label": "procedencia"
+    },
+    {
+      "id": "c-tools-router",
+      "from": "tools6",
+      "to": "router",
+      "label": "tylluan_do"
+    },
+    {
+      "id": "c-tools-write",
+      "from": "tools6",
+      "to": "write",
+      "label": "remember",
+      "labelDy": 24
+    },
+    {
+      "id": "c-router-decide",
+      "from": "router",
+      "to": "decide",
+      "label": "guild_routing",
+      "variant": "dashed"
+    },
+    {
+      "id": "c-decide-decima",
+      "from": "decide",
+      "to": "decima",
+      "label": "loopback"
+    },
+    {
+      "id": "c-decide-shadow",
+      "from": "decide",
+      "to": "shadow",
+      "label": "sombra",
+      "labelDy": 24
+    },
+    {
+      "id": "c-write-silva",
+      "from": "write",
+      "to": "silva",
+      "label": "guarda"
+    },
+    {
+      "id": "c-recall-silva",
+      "from": "recall",
+      "to": "silva",
+      "label": "lee",
+      "labelDy": 24
+    },
+    {
+      "id": "c-silva-p2",
+      "from": "silva",
+      "to": "p2",
+      "label": "candidatos"
+    },
+    {
+      "id": "c-night-p2",
+      "from": "night",
+      "to": "p2",
+      "label": "cada hora"
+    },
+    {
+      "id": "c-p2-shadow",
+      "from": "p2",
+      "to": "shadow",
+      "label": "contradiction_verify",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Existe y funciona",
+      "items": [
+        "P6 de punta a punta: reglas, proveedor HTTP, registro con hash",
+        "P5 recall con tres capas de ranking",
+        "P2 detecta por estructura (fan-out ya corregido)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Medido hoy: Decima-small",
+      "items": [
+        "Enrutado: 2,7 % a 19,9 % de acuerdo según la redacción de las opciones",
+        "hitl_resolve: sin señal (P entre 0,30 y 0,75)",
+        "Terreno natural: relación entre dos enunciados (NLI), sin medir aún"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Propuesto y pendiente de verdad humana",
+      "items": [
+        "P1 cabeza aprendida ligera con abstención",
+        "P2 verificador de contradicciones que solo poda",
+        "P3 supersedir al escribir",
+        "P4 procedencia estructural, modelos solo como sensores"
+      ]
+    }
+  ]
+}
