@@ -345,11 +345,11 @@ impl DecisionService {
         } else {
             shadow_slot.as_ref().map(|m| m.identity.clone())
         };
-        if let Some(slot) = shadow_slot {
-            if !shadow_targets.is_empty() {
-                let state = req.state.clone();
-                self.spawn_shadow(slot, state, shadow_targets);
-            }
+        if let Some(slot) = shadow_slot
+            && !shadow_targets.is_empty()
+        {
+            let state = req.state.clone();
+            self.spawn_shadow(slot, state, shadow_targets);
         }
 
         DecideResponse {
