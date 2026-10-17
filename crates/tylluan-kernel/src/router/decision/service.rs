@@ -8,13 +8,16 @@
 //!   los responde el proveedor de reglas existente (`rules.rs`, intacto);
 //!   con un proveedor de modelo configurado y modo ≠ `off`, además se lanza
 //!   una consulta EN SOMBRA ASÍNCRONA (dos tiempos) que compara y registra.
+//!   En modo `advisory`/`gate` la consulta cubre TAMBIÉN las preguntas
+//!   rechazadas/abstencidas por las reglas (invariante v8: el modelo puede
+//!   puntuar, nunca revertir el rechazo — la respuesta final las conserva).
 //! - **Preguntas libres** (sin contrato): sin proveedor de modelo → abstención
 //!   `no_model_provider` (§1217); con proveedor → las responde el modelo en
 //!   el carril síncrono (deadline = min(`max_latency_ms`, `request_timeout_ms`)).
 //! - **Regla aditiva**: una respuesta fuera de las opciones declaradas se
 //!   RECHAZA (abstención `answer_out_of_options`); el modelo nunca revierte un
-//!   rechazo determinista, y una ABSTENCIÓN DE REGLAS ES ESTADO FINAL (no se
-//!   consulta al modelo para rescatarla — diseño aprobado).
+//!   rechazo determinista, y en `shadow` una ABSTENCIÓN DE REGLAS ES ESTADO
+//!   FINAL (no se consulta al modelo para rescatarla — diseño aprobado).
 //! - **Auditoría** en `decision_shadow_log` con SOLO el hash del `state`
 //!   (nunca en claro): columnas del §1217 + `model_identity`/`model_latency_ms`
 //!   (v29). Sombra en dos tiempos: INSERT con las reglas → UPDATE con el
@@ -63,17 +66,18 @@ struct ModelSlot {
     identity: String,
     /// Techo del carril síncrono (consultas libres).
     request_timeout: Duration,
-    /// Deadline del carril asíncrono (contratos en sombra).
+    /// Deadline del carril asíncrono (contratos).
     shadow_timeout: Duration,
 }
 
-/// Objetivo de la sombra asíncrona: pregunta + spec + valor de reglas (que
-/// es estado final) + fila a actualizar en el segundo tiempo.
+/// Objetivo de la consulta asíncrona al modelo: pregunta + spec + valor de
+/// reglas (`None` si la regla rechazó/abstuvo) + fila a actualizar en el
+/// segundo tiempo.
 #[derive(Clone)]
 struct ShadowTarget {
     name: String,
     spec: QuestionSpec,
-    rules_value: String,
+    rules_value: Option<String>,
     row_id: i64,
 }
 
@@ -192,6 +196,23 @@ impl DecisionService {
 
     pub fn provider_id(&self) -> &'static str {
         self.provider.provider_id()
+    }
+
+    /// Inyecta un proveedor de modelo (tests y arranques alternativos sin
+    /// HTTP: p. ej. proveedores canario). Sustituye el slot resuelto desde
+    /// `[decision.provider]`; deadlines con los defaults documentados
+    /// (5 s carril síncrono / 30 s carril asíncrono).
+    pub fn inject_model_provider(
+        &mut self,
+        provider: Arc<dyn DecisionProvider>,
+        identity: impl Into<String>,
+    ) {
+        self.model = Some(ModelSlot {
+            provider,
+            identity: identity.into(),
+            request_timeout: Duration::from_millis(5000),
+            shadow_timeout: Duration::from_millis(30_000),
+        });
     }
 
     /// Espera a que terminen las tareas de sombra en vuelo (tests y apagado
@@ -316,25 +337,30 @@ impl DecisionService {
             Vec::new()
         };
 
-        // Sombra asíncrona (segundo tiempo): solo con proveedor de modelo,
-        // modo != off y AL MENOS una pregunta con valor de reglas. La
-        // abstención de reglas es estado final (diseño aprobado): no se
-        // consulta al modelo para rescatarla.
+        // Consulta asíncrona al modelo (segundo tiempo): con proveedor de
+        // modelo, modo != off y shadow_log activo.
+        // - `shadow`: SOLO preguntas con valor de reglas (la abstención es
+        //   estado final — diseño aprobado).
+        // - `advisory`/`gate`: TODAS las preguntas, incluidas las rechazadas
+        //   por las reglas — el modelo puede puntuar, nunca revertir el
+        //   rechazo (invariante v8; la respuesta final no cambia).
         let shadow_slot = match (&self.model, mode != DecisionMode::Off, shadow_log) {
             (Some(slot), true, true) => Some(slot.clone()),
             _ => None,
         };
+        let consult_rejected = matches!(mode, DecisionMode::Advisory | DecisionMode::Gate);
         let mut shadow_targets: Vec<ShadowTarget> = Vec::new();
         if shadow_slot.is_some() {
             for (name, row_id) in &row_ids {
-                if let (Some(value), Some(spec)) = (
-                    answers.get(name).and_then(|a| a.value.clone()),
-                    req.questions.get(name),
-                ) {
+                let Some(spec) = req.questions.get(name) else {
+                    continue;
+                };
+                let rules_value = answers.get(name).and_then(|a| a.value.clone());
+                if rules_value.is_some() || consult_rejected {
                     shadow_targets.push(ShadowTarget {
                         name: name.clone(),
                         spec: spec.clone(),
-                        rules_value: value,
+                        rules_value,
                         row_id: *row_id,
                     });
                 }
@@ -490,9 +516,9 @@ impl DecisionService {
     }
 
     /// INSERT (primer tiempo) de la decisión de REGLAS, una fila por pregunta.
-    /// Devuelve `(pregunta, rowid)` para que la sombra asíncrona haga el
-    /// UPDATE (segundo tiempo) de las columnas del modelo. Un fallo de
-    /// escritura se avisa y no rompe la decisión.
+    /// Devuelve `(pregunta, rowid)` para que la consulta asíncrona al modelo
+    /// haga el UPDATE (segundo tiempo). Un fallo de escritura se avisa y no
+    /// rompe la decisión.
     async fn insert_rule_rows(
         &self,
         req: &DecideRequest,
@@ -584,10 +610,11 @@ impl DecisionService {
         }
     }
 
-    /// Sombra asíncrona (segundo tiempo): consulta al modelo con deadline
+    /// Consulta asíncrona al modelo (segundo tiempo): deadline
     /// `shadow_timeout` y UPDATE de las columnas del modelo por fila, juntos
     /// o ninguno. Timeout/error → las filas quedan NULL (que `paired_eval`
     /// interpreta como fallo conservador del modelo) y la causa va a tracing.
+    /// El resultado NUNCA altera la respuesta ya emitida (invariante v8).
     fn spawn_shadow(&self, slot: ModelSlot, state: serde_json::Value, targets: Vec<ShadowTarget>) {
         let Some(silva) = self.silva.clone() else {
             return;
@@ -625,7 +652,13 @@ impl DecisionService {
                 let Some((value, probs_json)) = validated_argmax(core, &t.spec) else {
                     continue;
                 };
-                let agreed = (value.as_str() == t.rules_value.as_str()) as i64;
+                // `agreed` solo existe cuando hay valor de reglas con el que
+                // comparar (en preguntas rechazadas el modelo puntúa pero no
+                // hay acuerdo que calcular — invariante v8 las cubre).
+                let agreed: Option<i64> = t
+                    .rules_value
+                    .as_deref()
+                    .map(|rv| (value.as_str() == rv) as i64);
                 let result = conn.execute(
                     "UPDATE decision_shadow_log
                      SET model_value = ?1, model_probs_json = ?2, agreed = ?3,

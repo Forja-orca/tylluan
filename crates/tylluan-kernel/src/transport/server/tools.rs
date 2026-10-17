@@ -14,7 +14,7 @@ impl super::TylluanServer {
     /// This gives agents without native tools direct access to
     /// everything without routing through tylluan_do.
     pub async fn all_tools(&self) -> Vec<rmcp::model::Tool> {
-        let sovereign: &[&str] = &["tylluan_do", "tylluan_remember", "tylluan_recall", "tylluan_think", "tylluan_graph", "tylluan_decide"];
+        let sovereign = Self::sovereign_tool_names();
         if !self.expose_guild_tools {
             return Self::kernel_tools()
                 .iter()
@@ -41,6 +41,20 @@ impl super::TylluanServer {
         }
 
         all
+    }
+
+    /// CONTRACT-01: nombres de las herramientas soberanas — FUENTE ÚNICA del
+    /// filtro de `all_tools()` y del chequeo de `/health` (H2, turno 1234).
+    /// Exactamente 6 (ADR-021). No añadir sin enmienda formal de CONTRACT-01.
+    pub fn sovereign_tool_names() -> &'static [&'static str] {
+        &[
+            "tylluan_do",
+            "tylluan_remember",
+            "tylluan_recall",
+            "tylluan_think",
+            "tylluan_graph",
+            "tylluan_decide",
+        ]
     }
 
     /// Actionable tool discovery (M40-P1/discoverability extension).
