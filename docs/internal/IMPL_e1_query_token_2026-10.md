@@ -36,3 +36,9 @@
 - **Cierra E1**: el token maestro por query-string deja de satisfacer las rutas de operador (403 `operator_required`), cerrando el bypass de `/api/v1/bash?token=…` y el resto de la clase operador.
 - Sin cambio de comportamiento fuera de esas rutas: query-string sigue autenticando `/sse` y sandbox (verificado por test), dev_mode y JWT intactos, sobre de error existente reutilizado.
 - Sin cambios de contrato de respuesta ni de esquema; fail-closed por construcción (variante excluida de la lista del gate).
+
+## Registro de integración (TL, 2026-10-17)
+
+- Integrado en `6b9b177`. Verificado por el TL: diff de `auth.rs` leído, `oauth_operator_gate` 6/6, clippy stable `--all-targets -D warnings` limpio, y el dashboard solo usa `?token=` en `/sse` y archivos del sandbox (ninguna ruta de operador); el kernel no lee cookies.
+- La declaración de impacto (ADR-013 §1) del commit estaba en una línea `Impact:` en lugar del encabezado `## Impact` que exige el gate; esta nota la deja registrada. Efecto: el token maestro por query-string deja de satisfacer la clase operador (403 `operator_required`); sin otros cambios de comportamiento.
+- El kernel en ejecución no lo aplica hasta reiniciarlo.
