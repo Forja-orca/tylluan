@@ -1,33 +1,45 @@
-//! # DecisionService — núcleo de `tylluan_decide` (ADR-021, Fase 1 del reparto)
+//! # DecisionService — núcleo de `tylluan_decide` (ADR-021 Fase 1; ADR-020 Fase 2)
 //!
-//! Semántica fijada por el TL (Coloquio 1217/1218):
+//! Semántica fijada por el TL (Coloquio 1217/1218) y por el diseño de Fase 2
+//! aprobado por José (2026-10-16):
 //! - **Interruptor global**: apagado → `status=disabled`, `answers` vacío,
 //!   CERO llamadas (ni auditoría: no hay decisión que registrar).
 //! - **Contratos internos nombrados** (`scheduler_routing`, `human_review`…):
-//!   los responde el proveedor de reglas existente (`rules.rs`, intacto).
-//! - **Preguntas libres** (sin contrato) sin proveedor de modelo:
-//!   `abstained=true`, `abstain_reason="no_model_provider"` (§1217).
+//!   los responde el proveedor de reglas existente (`rules.rs`, intacto);
+//!   con un proveedor de modelo configurado y modo ≠ `off`, además se lanza
+//!   una consulta EN SOMBRA ASÍNCRONA (dos tiempos) que compara y registra.
+//! - **Preguntas libres** (sin contrato): sin proveedor de modelo → abstención
+//!   `no_model_provider` (§1217); con proveedor → las responde el modelo en
+//!   el carril síncrono (deadline = min(`max_latency_ms`, `request_timeout_ms`)).
 //! - **Regla aditiva**: una respuesta fuera de las opciones declaradas se
-//!   RECHAZA (abstención `answer_out_of_options`); el modelo nunca revierte
-//!   un rechazo determinista; abstención explícita siempre.
+//!   RECHAZA (abstención `answer_out_of_options`); el modelo nunca revierte un
+//!   rechazo determinista, y una ABSTENCIÓN DE REGLAS ES ESTADO FINAL (no se
+//!   consulta al modelo para rescatarla — diseño aprobado).
 //! - **Auditoría** en `decision_shadow_log` con SOLO el hash del `state`
-//!   (nunca en claro): columnas exactas del §1217.
+//!   (nunca en claro): columnas del §1217 + `model_identity`/`model_latency_ms`
+//!   (v29). Sombra en dos tiempos: INSERT con las reglas → UPDATE con el
+//!   modelo (`model_value`, `model_probs_json`, `agreed` 1/0/NULL).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
-use crate::config::TylluanConfig;
+use crate::config::{DecisionProviderConfig, DecisionProviderTable, TylluanConfig};
 use crate::memory::silva::SilvaDB;
 
 use super::api_types::{
-    ABSTAIN_ANSWER_OUT_OF_OPTIONS, ABSTAIN_NO_MODEL_PROVIDER, Answer, DecideRequest,
-    DecideResponse, DecideStatus, DecisionMode, abstain, answer_from_core, to_core_question,
-    validate_request,
+    ABSTAIN_ANSWER_OUT_OF_OPTIONS, ABSTAIN_NO_MODEL_PROVIDER, Answer, DEFAULT_MAX_LATENCY_MS,
+    DecideRequest, DecideResponse, DecideStatus, DecisionMode, QuestionSpec, abstain,
+    answer_from_core, to_core_question, validate_request,
 };
-use super::{DecisionProvider, DecisionRequest, rules::RulesDecisionProvider};
+use super::systemone_http::SystemOneHttpProvider;
+use super::{DecisionAnswer, DecisionProvider, DecisionQuestion, DecisionRequest, rules::RulesDecisionProvider};
+
+/// Motivo de abstención del carril síncrono cuando el modelo excede su deadline.
+const ABSTAIN_PROVIDER_TIMEOUT: &str = "provider_timeout";
 
 /// Clave de unión de una fila de `decision_shadow_log` con una verdad
 /// externa: SHA-256 hex de `serde_json::to_string(state)`, un separador 0x1F
@@ -43,15 +55,42 @@ pub fn decision_row_hash(state: &serde_json::Value, question: &str) -> String {
     format!("{:x}", h.finalize())
 }
 
+/// Proveedor de modelo de Fase 2 + parámetros de sus dos carriles.
+#[derive(Clone)]
+struct ModelSlot {
+    provider: Arc<dyn DecisionProvider>,
+    /// `"systemone-http-v1:<model>"` — viaja en la respuesta y en la fila.
+    identity: String,
+    /// Techo del carril síncrono (consultas libres).
+    request_timeout: Duration,
+    /// Deadline del carril asíncrono (contratos en sombra).
+    shadow_timeout: Duration,
+}
+
+/// Objetivo de la sombra asíncrona: pregunta + spec + valor de reglas (que
+/// es estado final) + fila a actualizar en el segundo tiempo.
+#[derive(Clone)]
+struct ShadowTarget {
+    name: String,
+    spec: QuestionSpec,
+    rules_value: String,
+    row_id: i64,
+}
+
 /// Núcleo del servicio. Construirlo NO abre puertas.
 pub struct DecisionService {
     config: Arc<RwLock<TylluanConfig>>,
     provider: Arc<dyn DecisionProvider>,
+    /// Slot del proveedor de modelo (Fase 2). `None` = solo reglas.
+    model: Option<ModelSlot>,
     /// SilvaDB para `decision_shadow_log`. `None` desactiva solo el registro.
     silva: Option<Arc<SilvaDB>>,
+    /// Tareas de sombra en vuelo (dos tiempos) — drenables por tests y
+    /// apagado ordenado; los handles terminados se podan al añadir otro.
+    shadow_tasks: std::sync::Mutex<Vec<JoinHandle<()>>>,
 }
 
-/// Una fila de `decision_shadow_log` (columnas EXACTAS del §1217).
+/// Una fila de `decision_shadow_log` (columnas §1217 + v29).
 #[derive(Debug, Clone)]
 pub struct ShadowLogRow {
     pub id: i64,
@@ -65,18 +104,106 @@ pub struct ShadowLogRow {
     pub latency_ms: i64,
     pub agreed: Option<i64>,
     pub mode: String,
+    /// v29: identidad del modelo que respondió (NULL si no respondió).
+    pub model_identity: Option<String>,
+    /// v29: latencia de la llamada al modelo en ms (NULL si no respondió).
+    pub model_latency_ms: Option<i64>,
+}
+
+/// Resuelve el proveedor de modelo Fase 2 desde `[decision.provider]`.
+/// Fuera de la impl: se llama en construcción (sin lock retenido más allá del
+/// `try_read`). Cualquier config inválida o endpoint no-loopback avisa y cae
+/// al baseline de reglas: nunca un arranque roto, nunca una salida de red no
+/// aprobada (fail-closed).
+fn resolve_model_slot(config: &Arc<RwLock<TylluanConfig>>) -> Option<ModelSlot> {
+    let cfg = match config.try_read() {
+        Ok(c) => c.clone(),
+        Err(_) => {
+            tracing::warn!(
+                "decision: config lock contended at construction — model provider not resolved (rules only)"
+            );
+            return None;
+        }
+    };
+    match &cfg.decision.provider {
+        DecisionProviderConfig::Name(name) => {
+            if name != "rules" {
+                tracing::warn!(
+                    "decision: [decision] provider='{name}' is not implemented yet — using rules baseline"
+                );
+            }
+            None
+        }
+        DecisionProviderConfig::Table(DecisionProviderTable::SystemoneHttp(sc)) => {
+            match SystemOneHttpProvider::from_config(sc) {
+                Ok(p) => {
+                    let identity = format!("{}:{}", p.provider_id(), sc.model);
+                    tracing::info!(
+                        "decision: systemone_http provider ready ({identity}); loopback-only phase 2"
+                    );
+                    Some(ModelSlot {
+                        provider: Arc::new(p),
+                        identity,
+                        request_timeout: Duration::from_millis(sc.request_timeout_ms),
+                        shadow_timeout: Duration::from_millis(sc.shadow_timeout_ms),
+                    })
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "decision: [decision.provider] systemone_http rejected ({e}) — using rules baseline"
+                    );
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Argmax + JSON compacto SOLO si está dentro del conjunto cerrado de la
+/// pregunta. Fuera de opciones → `None` (la respuesta se RECHAZA, §1217; el
+/// valor violador no contamina la evaluación pareada). Traza `warn`.
+fn validated_argmax(core: &DecisionAnswer, spec: &QuestionSpec) -> Option<(String, String)> {
+    let (value, _) = core.distribution.iter().max_by(|a, b| a.1.total_cmp(b.1))?;
+    if !spec.allowed_values().contains(&value.as_str()) {
+        tracing::warn!(
+            "decision shadow: model answered '{value}' outside the declared set — rejected"
+        );
+        return None;
+    }
+    let probs_json = serde_json::to_string(&core.distribution).unwrap_or_default();
+    Some((value.clone(), probs_json))
 }
 
 impl DecisionService {
-    /// Fase 1: `[decision] provider` solo admite `"rules"`; cualquier otro
-    /// valor avisa y cae al baseline determinista (nunca un arranque roto).
+    /// Resuelve el proveedor desde `[decision] provider`. La sección se lee
+    /// al construir (igual que el arranque del kernel; sin recarga en
+    /// caliente, ADR-021 §13).
     pub fn new(config: Arc<RwLock<TylluanConfig>>, silva: Option<Arc<SilvaDB>>) -> Self {
         let provider: Arc<dyn DecisionProvider> = Arc::new(RulesDecisionProvider::new());
-        Self { config, provider, silva }
+        let model = resolve_model_slot(&config);
+        Self {
+            config,
+            provider,
+            model,
+            silva,
+            shadow_tasks: std::sync::Mutex::new(Vec::new()),
+        }
     }
 
     pub fn provider_id(&self) -> &'static str {
         self.provider.provider_id()
+    }
+
+    /// Espera a que terminen las tareas de sombra en vuelo (tests y apagado
+    /// ordenado). No afecta a `decide()`.
+    pub async fn drain_shadow_tasks(&self) {
+        let handles: Vec<JoinHandle<()>> = match self.shadow_tasks.lock() {
+            Ok(mut h) => std::mem::take(&mut *h),
+            Err(_) => Vec::new(),
+        };
+        for h in handles {
+            let _ = h.await;
+        }
     }
 
     /// Decide `req`. `caller` identifica la puerta ("mcp", "rest",
@@ -85,7 +212,7 @@ impl DecisionService {
     pub async fn decide(&self, req: DecideRequest, caller: &str) -> DecideResponse {
         let started = Instant::now();
 
-        let (enabled, configured_provider, contract_mode, shadow_log) = {
+        let (enabled, contract_mode, shadow_log) = {
             let cfg = self.config.read().await;
             let d = &cfg.decision;
             let contract_mode = req
@@ -93,18 +220,12 @@ impl DecisionService {
                 .as_ref()
                 .and_then(|c| d.contracts.get(c).copied())
                 .unwrap_or(d.default_mode);
-            (d.enabled, d.provider.clone(), contract_mode, d.shadow_log)
+            (d.enabled, contract_mode, d.shadow_log)
         };
 
         if !enabled {
             // Cero efectos: ni proveedor ni auditoría (no hay decisión).
             return DecideResponse::disabled();
-        }
-
-        if configured_provider != "rules" {
-            tracing::warn!(
-                "decision: [decision] provider='{configured_provider}' is not implemented yet — using rules baseline"
-            );
         }
 
         if let Err(clear) = validate_request(&req) {
@@ -123,29 +244,13 @@ impl DecisionService {
             mode.as_str()
         );
 
-        // Consulta LIBRE sin proveedor de modelo (§1217): abstención explícita.
+        // Consulta LIBRE: sin proveedor de modelo → abstención explícita
+        // (§1217); con proveedor → carril síncrono del modelo.
         if req.contract.is_none() {
-            let answers: BTreeMap<String, Answer> = req
-                .questions
-                .keys()
-                .map(|name| (name.clone(), abstain(ABSTAIN_NO_MODEL_PROVIDER)))
-                .collect();
-            let response = DecideResponse {
-                request_id: uuid::Uuid::new_v4().to_string(),
-                status: DecideStatus::Degraded,
-                mode,
-                provider: self.provider_id().to_string(),
-                model_identity: None,
-                degraded: true,
-                answers,
-            };
-            if shadow_log {
-                self.log_shadow(&req, &response, started).await;
-            }
-            return response;
+            return self.decide_free(req, mode, shadow_log, started).await;
         }
 
-        // Contrato nombrado → proveedor de reglas existente.
+        // Contrato nombrado → proveedor de reglas existente (autoridad).
         let core_req = DecisionRequest {
             state: req.state.clone(),
             questions: req
@@ -204,30 +309,243 @@ impl DecisionService {
             }
         };
 
-        let response = DecideResponse {
+        // Registro de la decisión de reglas (INSERT, primer tiempo).
+        let row_ids = if shadow_log {
+            self.insert_rule_rows(&req, &answers, mode, started).await
+        } else {
+            Vec::new()
+        };
+
+        // Sombra asíncrona (segundo tiempo): solo con proveedor de modelo,
+        // modo != off y AL MENOS una pregunta con valor de reglas. La
+        // abstención de reglas es estado final (diseño aprobado): no se
+        // consulta al modelo para rescatarla.
+        let shadow_slot = match (&self.model, mode != DecisionMode::Off, shadow_log) {
+            (Some(slot), true, true) => Some(slot.clone()),
+            _ => None,
+        };
+        let mut shadow_targets: Vec<ShadowTarget> = Vec::new();
+        if shadow_slot.is_some() {
+            for (name, row_id) in &row_ids {
+                if let (Some(value), Some(spec)) = (
+                    answers.get(name).and_then(|a| a.value.clone()),
+                    req.questions.get(name),
+                ) {
+                    shadow_targets.push(ShadowTarget {
+                        name: name.clone(),
+                        spec: spec.clone(),
+                        rules_value: value,
+                        row_id: *row_id,
+                    });
+                }
+            }
+        }
+        let consulted_identity = if shadow_targets.is_empty() {
+            None
+        } else {
+            shadow_slot.as_ref().map(|m| m.identity.clone())
+        };
+        if let Some(slot) = shadow_slot {
+            if !shadow_targets.is_empty() {
+                let state = req.state.clone();
+                self.spawn_shadow(slot, state, shadow_targets);
+            }
+        }
+
+        DecideResponse {
             request_id: uuid::Uuid::new_v4().to_string(),
             status: if degraded { DecideStatus::Degraded } else { DecideStatus::Ok },
             mode,
             provider: self.provider_id().to_string(),
-            model_identity: None,
+            model_identity: consulted_identity,
+            degraded,
+            answers,
+        }
+    }
+
+    /// Carril síncrono de consultas libres con proveedor de modelo: deadline
+    /// = min(`max_latency_ms` del wire ‖ 2000, `request_timeout_ms`). Fallo o
+    /// timeout → abstención explícita con motivo; jamás una respuesta
+    /// inventada.
+    async fn decide_free(
+        &self,
+        req: DecideRequest,
+        mode: DecisionMode,
+        shadow_log: bool,
+        started: Instant,
+    ) -> DecideResponse {
+        let Some(slot) = self.model.clone() else {
+            // Fase 1 intacta: sin proveedor de modelo → abstención explícita.
+            let answers: BTreeMap<String, Answer> = req
+                .questions
+                .keys()
+                .map(|name| (name.clone(), abstain(ABSTAIN_NO_MODEL_PROVIDER)))
+                .collect();
+            let response = DecideResponse {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                status: DecideStatus::Degraded,
+                mode,
+                provider: self.provider_id().to_string(),
+                model_identity: None,
+                degraded: true,
+                answers,
+            };
+            if shadow_log {
+                self.insert_rule_rows(&req, &response.answers, mode, started).await;
+            }
+            return response;
+        };
+
+        let wire_deadline = req.max_latency_ms.unwrap_or(DEFAULT_MAX_LATENCY_MS);
+        let config_cap = slot.request_timeout.as_millis().min(u128::from(u32::MAX)) as u32;
+        let deadline_ms = wire_deadline.min(config_cap);
+        let core_req = DecisionRequest {
+            state: req.state.clone(),
+            questions: req
+                .questions
+                .iter()
+                .map(|(n, s)| (n.clone(), to_core_question(s)))
+                .collect(),
+        };
+        let call_started = Instant::now();
+        let outcome = tokio::time::timeout(
+            Duration::from_millis(u64::from(deadline_ms)),
+            slot.provider.decide(&core_req),
+        )
+        .await;
+        let model_latency_ms = call_started.elapsed().as_millis() as i64;
+
+        let (answers, degraded) = match outcome {
+            Ok(Ok(core_answers)) => {
+                let mut degraded = false;
+                let mut wire: BTreeMap<String, Answer> = BTreeMap::new();
+                for (name, spec) in &req.questions {
+                    match core_answers.get(name) {
+                        Some(core) => {
+                            let a = answer_from_core(core);
+                            let out_of_set = a
+                                .value
+                                .as_deref()
+                                .map(|v| !spec.allowed_values().contains(&v))
+                                .unwrap_or(false);
+                            if out_of_set {
+                                degraded = true;
+                                wire.insert(name.clone(), abstain(ABSTAIN_ANSWER_OUT_OF_OPTIONS));
+                            } else {
+                                wire.insert(name.clone(), a);
+                            }
+                        }
+                        None => {
+                            degraded = true;
+                            wire.insert(
+                                name.clone(),
+                                abstain("provider returned no answer for this question"),
+                            );
+                        }
+                    }
+                }
+                (wire, degraded)
+            }
+            Ok(Err(e)) => {
+                let reason = format!("provider_error: {e}");
+                let wire = req
+                    .questions
+                    .keys()
+                    .map(|name| (name.clone(), abstain(reason.clone())))
+                    .collect();
+                (wire, true)
+            }
+            Err(_) => {
+                let wire = req
+                    .questions
+                    .keys()
+                    .map(|name| (name.clone(), abstain(ABSTAIN_PROVIDER_TIMEOUT)))
+                    .collect();
+                (wire, true)
+            }
+        };
+
+        let response = DecideResponse {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            status: if degraded { DecideStatus::Degraded } else { DecideStatus::Ok },
+            mode,
+            provider: slot.provider.provider_id().to_string(),
+            model_identity: Some(slot.identity.clone()),
             degraded,
             answers,
         };
-
         if shadow_log {
-            self.log_shadow(&req, &response, started).await;
+            self.insert_free_rows(
+                &req,
+                &response.answers,
+                mode,
+                started,
+                slot.provider.provider_id(),
+                &slot.identity,
+                model_latency_ms,
+            )
+            .await;
         }
         response
     }
 
-    /// Fila de auditoría (§1217), UNA POR PREGUNTA: así cada fila es una
-    /// decisión comparable con una verdad externa (evaluación pareada).
-    /// `request_hash` = [`decision_row_hash`] (SHA-256 de `state` + nombre de
-    /// la pregunta); el `state` nunca se guarda en claro. `rules_value` es el
-    /// valor simple de la respuesta (NULL si hubo abstención);
-    /// `model_value`/`model_probs_json`/`agreed` quedan NULL hasta que exista
-    /// proveedor de modelo. Un fallo de escritura se avisa y no rompe la decisión.
-    async fn log_shadow(&self, req: &DecideRequest, resp: &DecideResponse, started: Instant) {
+    /// INSERT (primer tiempo) de la decisión de REGLAS, una fila por pregunta.
+    /// Devuelve `(pregunta, rowid)` para que la sombra asíncrona haga el
+    /// UPDATE (segundo tiempo) de las columnas del modelo. Un fallo de
+    /// escritura se avisa y no rompe la decisión.
+    async fn insert_rule_rows(
+        &self,
+        req: &DecideRequest,
+        answers: &BTreeMap<String, Answer>,
+        mode: DecisionMode,
+        started: Instant,
+    ) -> Vec<(String, i64)> {
+        let Some(silva) = &self.silva else {
+            return Vec::new();
+        };
+        let ts = chrono::Utc::now().to_rfc3339();
+        let latency_ms = started.elapsed().as_millis() as i64;
+        let contract = req.contract.clone().unwrap_or_default();
+        let g = silva.conn_lock();
+        let conn = g.lock().await;
+        let mut ids = Vec::with_capacity(answers.len());
+        for (question, answer) in answers {
+            let result = conn.execute(
+                "INSERT INTO decision_shadow_log
+                 (ts, contract, request_hash, rules_value, provider, latency_ms, mode)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    ts,
+                    contract,
+                    decision_row_hash(&req.state, question),
+                    answer.value,
+                    self.provider_id(),
+                    latency_ms,
+                    mode.as_str(),
+                ],
+            );
+            match result {
+                Ok(_) => ids.push((question.clone(), conn.last_insert_rowid())),
+                Err(e) => tracing::warn!("decision_shadow_log write failed: {e}"),
+            }
+        }
+        ids
+    }
+
+    /// INSERT (único tiempo) de una respuesta SÍNCRONA del MODELO a una
+    /// consulta libre: `rules_value` NULL, columnas del modelo pobladas,
+    /// `agreed` NULL (no hay regla con la que comparar).
+    #[allow(clippy::too_many_arguments)]
+    async fn insert_free_rows(
+        &self,
+        req: &DecideRequest,
+        answers: &BTreeMap<String, Answer>,
+        mode: DecisionMode,
+        started: Instant,
+        provider_id: &str,
+        identity: &str,
+        model_latency_ms: i64,
+    ) {
         let Some(silva) = &self.silva else {
             return;
         };
@@ -236,25 +554,100 @@ impl DecisionService {
         let contract = req.contract.clone().unwrap_or_default();
         let g = silva.conn_lock();
         let conn = g.lock().await;
-        for (question, answer) in &resp.answers {
+        for (question, answer) in answers {
+            let probs_json = if answer.abstained {
+                None
+            } else {
+                Some(serde_json::to_string(&answer.probabilities).unwrap_or_default())
+            };
             let result = conn.execute(
                 "INSERT INTO decision_shadow_log
                  (ts, contract, request_hash, rules_value, model_value, model_probs_json,
-                  provider, latency_ms, agreed, mode)
-                 VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, ?6, NULL, ?7)",
+                  provider, latency_ms, agreed, mode, model_identity, model_latency_ms)
+                 VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10)",
                 rusqlite::params![
                     ts,
                     contract,
                     decision_row_hash(&req.state, question),
                     answer.value,
-                    resp.provider,
+                    probs_json,
+                    provider_id,
                     latency_ms,
-                    resp.mode.as_str(),
+                    mode.as_str(),
+                    identity,
+                    model_latency_ms,
                 ],
             );
             if let Err(e) = result {
                 tracing::warn!("decision_shadow_log write failed: {e}");
             }
+        }
+    }
+
+    /// Sombra asíncrona (segundo tiempo): consulta al modelo con deadline
+    /// `shadow_timeout` y UPDATE de las columnas del modelo por fila, juntos
+    /// o ninguno. Timeout/error → las filas quedan NULL (que `paired_eval`
+    /// interpreta como fallo conservador del modelo) y la causa va a tracing.
+    fn spawn_shadow(&self, slot: ModelSlot, state: serde_json::Value, targets: Vec<ShadowTarget>) {
+        let Some(silva) = self.silva.clone() else {
+            return;
+        };
+        let handle = tokio::spawn(async move {
+            let questions: std::collections::HashMap<String, DecisionQuestion> = targets
+                .iter()
+                .map(|t| (t.name.clone(), to_core_question(&t.spec)))
+                .collect();
+            let core_req = DecisionRequest { state, questions };
+            let call_started = Instant::now();
+            let outcome =
+                tokio::time::timeout(slot.shadow_timeout, slot.provider.decide(&core_req)).await;
+            let model_latency_ms = call_started.elapsed().as_millis() as i64;
+            let answers = match outcome {
+                Ok(Ok(a)) => a,
+                Ok(Err(e)) => {
+                    tracing::warn!("decision shadow: model provider error: {e}");
+                    return;
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "decision shadow: model call timed out ({} ms) — rows stay NULL",
+                        slot.shadow_timeout.as_millis()
+                    );
+                    return;
+                }
+            };
+            let g = silva.conn_lock();
+            let conn = g.lock().await;
+            for t in &targets {
+                let Some(core) = answers.get(&t.name) else {
+                    continue;
+                };
+                let Some((value, probs_json)) = validated_argmax(core, &t.spec) else {
+                    continue;
+                };
+                let agreed = (value.as_str() == t.rules_value.as_str()) as i64;
+                let result = conn.execute(
+                    "UPDATE decision_shadow_log
+                     SET model_value = ?1, model_probs_json = ?2, agreed = ?3,
+                         model_identity = ?4, model_latency_ms = ?5
+                     WHERE id = ?6",
+                    rusqlite::params![
+                        value,
+                        probs_json,
+                        agreed,
+                        slot.identity,
+                        model_latency_ms,
+                        t.row_id
+                    ],
+                );
+                if let Err(e) = result {
+                    tracing::warn!("decision shadow UPDATE failed: {e}");
+                }
+            }
+        });
+        if let Ok(mut hs) = self.shadow_tasks.lock() {
+            hs.retain(|h| !h.is_finished());
+            hs.push(handle);
         }
     }
 
@@ -267,7 +660,7 @@ impl DecisionService {
         let conn = g.lock().await;
         let mut stmt = match conn.prepare(
             "SELECT id, ts, contract, request_hash, rules_value, model_value, model_probs_json,
-                    provider, latency_ms, agreed, mode
+                    provider, latency_ms, agreed, mode, model_identity, model_latency_ms
              FROM decision_shadow_log ORDER BY id DESC LIMIT ?1",
         ) {
             Ok(s) => s,
@@ -286,6 +679,8 @@ impl DecisionService {
                 latency_ms: r.get(8)?,
                 agreed: r.get(9)?,
                 mode: r.get(10)?,
+                model_identity: r.get(11)?,
+                model_latency_ms: r.get(12)?,
             })
         })
         .map(|it| it.filter_map(Result::ok).collect())
@@ -335,7 +730,10 @@ mod tests {
         assert_eq!(d.contracts.get("scheduler_routing"), Some(&DecisionMode::Shadow));
         assert_eq!(d.contracts.get("human_review"), Some(&DecisionMode::Shadow));
         assert_eq!(d.default_mode, DecisionMode::Off);
-        assert_eq!(d.provider, "rules");
+        assert_eq!(
+            d.provider,
+            crate::config::DecisionProviderConfig::Name("rules".to_string())
+        );
         assert_eq!(d.max_questions, 16);
         assert_eq!(d.max_state_bytes, 16 * 1024);
         assert!(d.shadow_log);
@@ -414,8 +812,10 @@ mod tests {
             r.request_hash,
             decision_row_hash(&serde_json::json!({ "risk": 0.9 }), "route")
         );
-        assert!(r.model_value.is_none(), "NULL hasta Fase 2");
+        assert!(r.model_value.is_none(), "NULL sin proveedor de modelo (reglas solas)");
         assert!(r.model_probs_json.is_none());
+        assert!(r.model_identity.is_none());
+        assert!(r.model_latency_ms.is_none());
         assert!(r.agreed.is_none());
         assert!(!r.ts.is_empty());
     }

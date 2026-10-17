@@ -106,6 +106,21 @@ checkpoint_interval_secs = 300
 # = target − 1.0 pp. Default 99.9 (comportamiento histórico).
 slo_target = 99.9
 
+[decision]
+# ADR-021: servicio tylluan_decide (6ª herramienta soberana). Encendido por
+# defecto; los contratos internos por defecto están en "shadow" y el resto en
+# "off". Servicio apagado = status "disabled", sin ninguna llamada externa.
+# Fase 2 (ADR-020, aprobada 2026-10-16): proveedor de modelo HTTP del
+# dialecto System One, SOLO loopback (p. ej. `decima serve` :11436,
+# `llama-server` :8080 u Ollama >= 0.35):
+# [decision.provider]
+# kind = "systemone_http"
+# endpoint = "http://127.0.0.1:11436"
+# model = "decima-small"
+# request_timeout_ms = 5000    # carril síncrono (consultas libres)
+# shadow_timeout_ms = 30000    # carril asíncrono (contratos en sombra)
+# max_inflight = 1             # llama.cpp local suele ser single-slot
+
 # Local LLM inference via llama.cpp
 [inference.llama]
 # llama-server port (avoid Ollama 11434, LM Studio 1234, vLLM 8000, Gradio 7860)

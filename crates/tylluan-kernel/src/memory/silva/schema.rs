@@ -48,7 +48,7 @@ impl super::SilvaDB {
                 );")?;
 
             let schema_version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
-            const SCHEMA_VERSION: i32 = 28;
+            const SCHEMA_VERSION: i32 = 29;
 
             if schema_version < 1 {
                 let _ = conn.execute("ALTER TABLE nodes ADD COLUMN conflicted INTEGER NOT NULL DEFAULT 0", []);
@@ -385,6 +385,22 @@ impl super::SilvaDB {
                     CREATE INDEX IF NOT EXISTS idx_decision_shadow_log_ts ON decision_shadow_log(ts);",
                 );
                 tracing::info!("🌲 SilvaDB: added decision_shadow_log (v28, ADR-021 esquema 1217)");
+            }
+            if schema_version < 29 {
+                // ADR-020 Fase 2 (= ADR-021 Fase 1): proveedor HTTP
+                // /v1/systemone. Columnas ADITIVAS de auditoría — identidad
+                // del modelo y latencia de la llamada al modelo — NULL hasta
+                // que un proveedor de modelo responda (diseño aprobado
+                // 2026-10-16; sin cambios del esquema de respuesta).
+                let _ = conn.execute(
+                    "ALTER TABLE decision_shadow_log ADD COLUMN model_identity TEXT",
+                    [],
+                );
+                let _ = conn.execute(
+                    "ALTER TABLE decision_shadow_log ADD COLUMN model_latency_ms INTEGER",
+                    [],
+                );
+                tracing::info!("SilvaDB: added decision_shadow_log model_identity/model_latency_ms (v29, ADR-020 Fase 2)");
             }
             if schema_version < SCHEMA_VERSION {
                 conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;

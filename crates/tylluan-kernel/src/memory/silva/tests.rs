@@ -2073,7 +2073,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
         let has_cols = |cols: &std::collections::HashSet<String>| {
             ["score_rrf", "score_graph", "recency_score"].iter().all(|c| cols.contains(*c))
         };
-        let (version, cols_ok, old_row) = tokio::task::block_in_place(|| {
+        let (version, cols_ok, v29_ok, old_row) = tokio::task::block_in_place(|| {
             let conn = db.conn.blocking_lock();
             let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
             let mut stmt = conn.prepare("PRAGMA table_info(recall_feedback)").unwrap();
@@ -2083,14 +2083,28 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
                 .flatten()
                 .collect();
             let ok = has_cols(&cols);
+            // v29 (ADR-020 Fase 2): columnas aditivas del proveedor de modelo.
+            let mut shadow_stmt = conn.prepare("PRAGMA table_info(decision_shadow_log)").unwrap();
+            let shadow_cols: std::collections::HashSet<String> = shadow_stmt
+                .query_map([], |r| r.get::<_, String>(1))
+                .unwrap()
+                .flatten()
+                .collect();
+            let v29 = ["model_identity", "model_latency_ms"]
+                .iter()
+                .all(|c| shadow_cols.contains(*c));
             let old_row: (Option<f64>, Option<f64>, Option<f64>) = conn.query_row(
                 "SELECT score_rrf, score_graph, recency_score FROM recall_feedback WHERE memory_id = 'old-mem'",
                 [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             ).unwrap();
-            Ok::<_, anyhow::Error>((version, ok, old_row))
+            Ok::<_, anyhow::Error>((version, ok, v29, old_row))
         }).unwrap();
 
-        assert_eq!(version, 28, "user_version must be stamped to the latest (28 since ADR-021 decision_shadow_log)");
+        assert_eq!(version, 29, "user_version must be stamped to the latest (29 since ADR-020 phase 2 model columns)");
+        assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
+        assert!(v29_ok, "model_identity/model_latency_ms must exist on decision_shadow_log after v29");
+        assert!(old_row.0.is_none() && old_row.1.is_none() && old_row.2.is_none(),
+            "pre-migration rows must read back NULL (honest absence), not 0.0");
         assert!(cols_ok, "score_rrf/score_graph/recency_score columns must exist after migration");
         assert!(old_row.0.is_none() && old_row.1.is_none() && old_row.2.is_none(),
             "pre-migration rows must read back NULL (honest absence), not 0.0");
@@ -2109,7 +2123,7 @@ async fn lifecycle_archived_purges_embedding_and_invalidates_indexes() {
             assert!(has_cols(&cols2), "columns must still exist after a second init_schema run");
             Ok::<_, anyhow::Error>(version2)
         }).unwrap();
-        assert_eq!(version2, 28);
+        assert_eq!(version2, 29);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
