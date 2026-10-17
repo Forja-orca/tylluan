@@ -1917,10 +1917,12 @@ pub struct DecisionConfig {
     /// en `shadow`; el resto `off`.
     #[serde(default = "default_decision_contracts")]
     pub contracts: std::collections::HashMap<String, DecisionMode>,
-    /// Proveedor del servicio. Fase 1: solo `"rules"` (baseline
-    /// determinista); cualquier otro valor avisa y cae a `rules`.
+    /// Proveedor del servicio. Forma histórica `provider = "rules"`
+    /// (baseline determinista) o tabla fase 2 `[decision.provider]`
+    /// (`kind = "systemone_http"`, ver `DecisionProviderTable`).
+    /// Config inválida o endpoint no-loopback → avisa y cae a `rules`.
     #[serde(default = "default_decision_provider")]
-    pub provider: String,
+    pub provider: DecisionProviderConfig,
     /// Techo de preguntas por petición (§1217: 1..=16).
     #[serde(default = "default_decision_max_questions")]
     pub max_questions: usize,
@@ -1939,8 +1941,69 @@ fn default_decision_contracts() -> std::collections::HashMap<String, DecisionMod
     m
 }
 
-fn default_decision_provider() -> String {
-    "rules".to_string()
+/// ADR-020 Fase 2: forma de `[decision.provider]`. Untagged para conservar
+/// byte-idéntica la forma histórica `provider = "rules"`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum DecisionProviderConfig {
+    /// Forma histórica: string ("rules").
+    Name(String),
+    /// Forma fase 2: tabla con `kind`.
+    Table(DecisionProviderTable),
+}
+
+/// Proveedores de modelo fase 2 (interno etiquetado por `kind`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DecisionProviderTable {
+    /// Cliente HTTP aislado del dialecto System One (`POST /v1/systemone`),
+    /// SOLO loopback en esta fase (dato clínico nunca sale de la máquina).
+    SystemoneHttp(SystemoneHttpConfig),
+}
+
+/// `[decision.provider]` con `kind = "systemone_http"` (ADR-020 Fase 2).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SystemoneHttpConfig {
+    /// Base sin path (el cliente añade `/v1/systemone`). Debe ser loopback.
+    pub endpoint: String,
+    /// Etiqueta que viaja como campo `model` en el cuerpo.
+    pub model: String,
+    /// Techo del carril síncrono (consultas libres), ms. Default 5000.
+    #[serde(default = "default_decision_request_timeout_ms")]
+    pub request_timeout_ms: u64,
+    /// Deadline del carril asíncrono (contratos en sombra), ms. Default
+    /// 30000 — cubre el p99 medido de clef-flash (~13.5 s) con margen x2.
+    #[serde(default = "default_decision_shadow_timeout_ms")]
+    pub shadow_timeout_ms: u64,
+    /// Llamadas concurrentes al servidor. Default 1 (single-slot llama.cpp).
+    #[serde(default = "default_decision_max_inflight")]
+    pub max_inflight: usize,
+    /// Fallos consecutivos antes de abrir el cortacircuitos. Default 3.
+    #[serde(default = "default_decision_breaker_failures")]
+    pub breaker_failures: u32,
+    /// Enfriamiento del cortacircuitos abierto, segundos. Default 60.
+    #[serde(default = "default_decision_breaker_cooldown_s")]
+    pub breaker_cooldown_s: u64,
+}
+
+fn default_decision_request_timeout_ms() -> u64 {
+    5000
+}
+fn default_decision_shadow_timeout_ms() -> u64 {
+    30_000
+}
+fn default_decision_max_inflight() -> usize {
+    1
+}
+fn default_decision_breaker_failures() -> u32 {
+    3
+}
+fn default_decision_breaker_cooldown_s() -> u64 {
+    60
+}
+
+fn default_decision_provider() -> DecisionProviderConfig {
+    DecisionProviderConfig::Name("rules".to_string())
 }
 fn default_decision_max_questions() -> usize {
     16

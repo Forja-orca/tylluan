@@ -97,6 +97,7 @@ pub(crate) fn distribution_sums_to_one(dist: &HashMap<String, f32>) -> bool {
 pub mod api_types;
 pub mod rules;
 pub mod service;
+pub mod systemone_http;
 
 pub use api_types::{Answer, DecideRequest, DecideResponse, DecideStatus, DecisionMode, QuestionKind, QuestionSpec};
 pub use service::{DecisionService, decision_row_hash};
