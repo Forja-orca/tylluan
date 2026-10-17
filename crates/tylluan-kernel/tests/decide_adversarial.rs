@@ -18,7 +18,7 @@
 //! | 1 | inyección de instrucciones en state  | `v1_state_injection_never_escapes_options`  | #[ignore] hasta endpoint |
 //! | 2 | respuesta fuera de opciones          | `v2_answer_outside_declared_options_rejected` | #[ignore] hasta endpoint |
 //! | 3 | abstención respetada                 | `v3_free_question_abstains_no_model_provider` | #[ignore] hasta endpoint |
-//! | 4 | modelo no revierte rechazo determinista | `v8_model_cannot_overturn_deterministic_rejection` | Fase 2 (sin proveedor de modelo) |
+//! | 4 | modelo no revierte rechazo determinista | `v8_model_cannot_overturn_deterministic_rejection` | ✅ implementado (advisory/gate, turno 1234) |
 //! | 5 | datos clínicos no salan de la máquina | `v5_clinical_state_never_echoed_nor_stored` | #[ignore] hasta endpoint (capa respuesta; capa BD = test de Deep) |
 //! | 6 | tool no accesible como operador      | `v4_decide_is_agent_class_not_operator`     | #[ignore] hasta endpoint |
 //! | 7 | límites de tamaño/preguntas          | `v6_size_and_question_limits_rejected`      | #[ignore] hasta endpoint |
@@ -463,19 +463,188 @@ async fn v7_disabled_switch_answers_disabled_empty() {
     assert_eq!(resp["degraded"], serde_json::json!(false), "apagado no es degradación: {resp}");
 }
 
-// ── Vector 4bis (ADR-021 §3.3 / turno 1220): el modelo no revierte un
-// rechazo determinista. FASE 2: la Fase 1 (turno 1218) trae SOLO el
-// proveedor de reglas — no existe aún ningún camino por el que un modelo
-// intente revertir un rechazo. Este marcador queda para que el vector no se
-// pierda: se implementa con el primer proveedor de modelo (fase 2 del plan).
+// ── Vector 4bis (ADR-021 §3.3): el modelo no revierte un rechazo determinista ─
+// Implementado 2026-10-16 (Deep, turno 1234) con proveedor de modelo
+// INYECTABLE (tests canario, sin HTTP): contrato en modo advisory/gate cuya
+// regla determinista RECHAZA una acción; el modelo puntúa A FAVOR dentro de
+// las opciones declaradas y la respuesta final conserva el rechazo. El
+// modelo puede puntuar —nunca revertir—: su opinión queda registrada en
+// `decision_shadow_log` con `agreed` NULL (no hay valor de reglas con el que
+// comparar).
+
+/// Proveedor canario: puntúa siempre a favor de `banana_only` (dentro de las
+/// opciones declaradas del vector) y cuenta las consultas.
+struct CannedProvider {
+    hits: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl tylluan_kernel::router::decision::DecisionProvider for CannedProvider {
+    async fn decide(
+        &self,
+        req: &tylluan_kernel::router::decision::DecisionRequest,
+    ) -> Result<
+        std::collections::HashMap<
+            String,
+            tylluan_kernel::router::decision::DecisionAnswer,
+        >,
+        tylluan_kernel::router::decision::DecisionError,
+    > {
+        self.hits
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(req
+            .questions
+            .keys()
+            .map(|name| {
+                (
+                    name.clone(),
+                    tylluan_kernel::router::decision::DecisionAnswer {
+                        distribution: std::collections::HashMap::from([
+                            ("banana_only".to_string(), 0.95f32),
+                            ("kiwi_only".to_string(), 0.05f32),
+                        ]),
+                        calibration: None,
+                    },
+                )
+            })
+            .collect())
+    }
+
+    fn provider_id(&self) -> &'static str {
+        "canned-v1"
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "ADR-021 fase 2: requiere proveedor de modelo (turno 1218 no lo incluye); implementar al llegar el primero"]
 async fn v8_model_cannot_overturn_deterministic_rejection() {
-    // Condición de llegada: proveedor de modelo configurado + contrato en
-    // modo advisory/gate cuya regla determinista rechaza una acción. El
-    // test debe assertar que la respuesta final conserva el rechazo aunque
-    // el modelo puntúe a favor. Hoy no hay forma honesta de construirlo.
-    unimplemented!(
-        "PENDIENTE fase 2 (ADR-021): proveedor de modelo inyectable en DecisionService"
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    use tokio::sync::RwLock;
+    use tylluan_kernel::memory::silva::SilvaDB;
+    use tylluan_kernel::router::decision::api_types::{
+        DecideRequest as WireRequest, QuestionKind, QuestionSpec,
+    };
+    use tylluan_kernel::router::decision::{DecisionMode, DecisionService};
+
+    for mode in [DecisionMode::Advisory, DecisionMode::Gate] {
+        let db = Arc::new(SilvaDB::in_memory().await.unwrap());
+        db.init().await.unwrap();
+        let mut cfg = tylluan_kernel::config::TylluanConfig::default();
+        cfg.decision
+            .contracts
+            .insert("scheduler_routing".to_string(), mode);
+        let mut svc = DecisionService::new(Arc::new(RwLock::new(cfg)), Some(db));
+        let canned = Arc::new(CannedProvider {
+            hits: std::sync::atomic::AtomicUsize::new(0),
+        });
+        svc.inject_model_provider(canned.clone(), "canned-v1:test-model");
+
+        // La regla determinista RECHAZA: con risk=0.9 las reglas responden
+        // "human", que NO está entre las opciones declaradas → el sanity
+        // check de `rules.rs` eleva error determinista (nunca devuelve un
+        // valor fuera del conjunto) y el servicio lo conserva como
+        // abstención explícita con motivo.
+        let req = WireRequest {
+            state: serde_json::json!({"risk": 0.9}),
+            questions: BTreeMap::from([(
+                "route".to_string(),
+                QuestionSpec {
+                    kind: QuestionKind::Choice,
+                    instructions: None,
+                    options: vec!["banana_only".into(), "kiwi_only".into()],
+                    levels: vec![],
+                },
+            )]),
+            contract: Some("scheduler_routing".to_string()),
+            max_latency_ms: None,
+        };
+        let resp = svc.decide(req, "test").await;
+
+        // LA INVARIANTE v8: la respuesta final conserva el rechazo aunque el
+        // modelo puntúe a favor.
+        let ans = resp.answers.get("route").expect("route answered");
+        assert!(
+            ans.abstained,
+            "modo {mode:?}: el rechazo determinista se conserva: {resp:?}"
+        );
+        let reason = ans.abstain_reason.as_deref().unwrap_or("");
+        assert!(
+            reason.starts_with("provider error"),
+            "modo {mode:?}: el rechazo determinista de las reglas es estado final: {resp:?}"
+        );
+        assert_eq!(
+            ans.value, None,
+            "modo {mode:?}: el modelo no puede inventar un valor sobre el rechazo"
+        );
+        assert_eq!(
+            resp.model_identity.as_deref(),
+            Some("canned-v1:test-model"),
+            "modo {mode:?}: el modelo FUE consultado (advisory/gate)"
+        );
+
+        // El modelo fue consultado y su opinión quedó registrada…
+        svc.drain_shadow_tasks().await;
+        assert_eq!(
+            canned.hits.load(Ordering::SeqCst),
+            1,
+            "modo {mode:?}: exactamente una consulta al modelo"
+        );
+        let rows = svc.read_shadow_log(5).await;
+        assert_eq!(rows.len(), 1, "modo {mode:?}: una fila de auditoría");
+        assert_eq!(
+            rows[0].model_value.as_deref(),
+            Some("banana_only"),
+            "modo {mode:?}: la opinión del modelo (a favor) queda registrada"
+        );
+        assert!(
+            rows[0].rules_value.is_none(),
+            "modo {mode:?}: la fila conserva el rechazo de reglas (NULL)"
+        );
+        assert!(
+            rows[0].agreed.is_none(),
+            "modo {mode:?}: sin valor de reglas no hay 'agreed'"
+        );
+        // …pero NUNCA pudo revertir el rechazo determinista.
+    }
+}
+
+// ── H1 (revisión de Buffy, turno 1234): JSON malformado → sobre canónico ─────
+// El endpoint no puede dejar escapar el rechazo en texto plano del extractor
+// `Json` de axum: mismo contrato que un fallo de límites (400 + `status:
+// error`), la misma forma que ve el cliente en cualquier otro rechazo.
+#[tokio::test(flavor = "multi_thread")]
+async fn h1_malformed_json_returns_canonical_error_envelope() {
+    let app = build_router(authed_state().await);
+    let req = Request::builder()
+        .method("POST")
+        .uri(DECIDE_PATH)
+        .header(header::AUTHORIZATION, format!("Bearer {MASTER_TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{\"state\": not-json"))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "un cuerpo no deserializable es 400"
+    );
+    let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes)
+        .expect("el cuerpo debe ser el sobre canónico JSON, no texto plano de axum");
+    assert_eq!(
+        json["status"],
+        serde_json::json!("error"),
+        "sobre canónico status=error: {json}"
+    );
+    assert!(
+        json["answers"]
+            .as_object()
+            .map(|o| o.is_empty())
+            .unwrap_or(false),
+        "sin answers en el error: {json}"
     );
 }

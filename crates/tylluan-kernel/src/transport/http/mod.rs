@@ -1366,6 +1366,13 @@ async fn health_handler(
         let p2p_sessions = state.p2p_pool.try_lock().map(|p| p.len()).unwrap_or(0);
         let dht_peers = state.dht_routing_table.try_read().map(|t| t.peer_count()).unwrap_or(0);
 
+        // H2 (revisión de Buffy, turno 1234): CONTRACT-01 fija exactamente 6
+        // herramientas soberanas — el health lo expone Y lo chequea (la
+        // promesa del mensaje de 44d5828, ahora verdadera y pinada por test
+        // en tests/health_sovereign_count.rs).
+        let sovereign_tool_count =
+            crate::transport::server::TylluanServer::sovereign_tool_names().len();
+
         let overall = if !ready { "warming_up" }
             else if embeddings_loaded && active_guilds > 0 { "healthy" }
             else if embeddings_loaded || active_guilds > 0 { "degraded" }
@@ -1384,6 +1391,10 @@ async fn health_handler(
                 "guilds":     { "ok": active_guilds > 0, "active": active_guilds, "total": total_guilds },
                 "mesh":       { "ok": p2p_sessions > 0 || dht_peers > 0,
                                 "p2p_sessions": p2p_sessions, "dht_peers": dht_peers },
+                "sovereign_tools": {
+                    "ok": sovereign_tool_count == 6,
+                    "count": sovereign_tool_count,
+                },
                 // WS5: canonical identity of this running system — every
                 // benchmark/audit result can cite this instead of prose.
                 "system_snapshot": crate::router::system_snapshot::global_json()
