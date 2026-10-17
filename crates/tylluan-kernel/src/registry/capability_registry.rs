@@ -91,7 +91,7 @@ pub fn build_registry() -> HashMap<String, Capability> {
     }
 
     // Kernel-canonical tools that are not owned by any scanned guild file
-    // (e.g. the 5 sovereign MCP tools) still deserve an entry — provided by
+    // (e.g. the 6 sovereign MCP tools) still deserve an entry — provided by
     // the kernel itself.
     for (name, meta) in TOOL_METADATA.iter() {
         if !index.contains_key(name) {

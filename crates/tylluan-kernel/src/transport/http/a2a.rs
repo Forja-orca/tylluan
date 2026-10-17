@@ -70,10 +70,10 @@ pub struct AgentCard {
 
 #[derive(Serialize)]
 pub struct AgentSkill {
-    id: String,
-    name: String,
-    description: String,
-    tags: Vec<String>,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) tags: Vec<String>,
 }
 
 pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
@@ -111,7 +111,7 @@ pub async fn agent_card_handler(State(state): State<Arc<HttpState>>) -> impl Int
     (StatusCode::OK, Json(card))
 }
 
-fn build_skills_list() -> Vec<AgentSkill> {
+pub(crate) fn build_skills_list() -> Vec<AgentSkill> {
     let sovereign_names: [&str; 6] = [
         "tylluan_do", "tylluan_remember", "tylluan_recall",
         "tylluan_think", "tylluan_graph", "tylluan_decide",

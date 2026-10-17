@@ -317,6 +317,48 @@ pub async fn dashboard_summary_handler(State(state): State<Arc<HttpState>>) -> i
     }))
 }
 
+pub(crate) fn build_skill_sovereign_tools() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "name": "tylluan_do",
+            "description": "Execute any task using natural language. The kernel routes the intent to the right guild automatically.",
+            "when_to_use": "Bash commands, git ops, file operations, posting to coloquio, web search, code analysis — anything that maps to a guild.",
+            "examples": [
+                "tylluan_do('publica en coloquio mision-activa: [STATUS] task complete')",
+                "tylluan_do('run cargo test -p tylluan-kernel --lib')",
+                "tylluan_do('lee el canal mision-activa ultimos 5 mensajes', guild='coloquio')",
+                "tylluan_do('list files in crates/tylluan-kernel/src/')"
+            ],
+            "tip": "Use the `guild` parameter to force routing when intent is ambiguous."
+        },
+        {
+            "name": "tylluan_remember",
+            "description": "Store information in long-term memory (SilvaDB knowledge graph).",
+            "when_to_use": "Decisions, findings, facts, conclusions, architectural choices, anything that should survive context resets."
+        },
+        {
+            "name": "tylluan_recall",
+            "description": "Search long-term memory using hybrid retrieval: BM25 + BGE-M3 vector + Jina Reranker.",
+            "when_to_use": "Any time you need context about the project, past decisions, or what other agents have done."
+        },
+        {
+            "name": "tylluan_think",
+            "description": "Deep reasoning over the knowledge graph. Runs PageRank + gap analysis + GraphRAG cluster summaries.",
+            "when_to_use": "Strategic analysis, gap detection, cross-domain synthesis, when you need the system to reason about what it knows."
+        },
+        {
+            "name": "tylluan_graph",
+            "description": "Inspect and manipulate the SilvaDB knowledge graph directly.",
+            "when_to_use": "Graph visualization, node inspection, edge queries, community detection."
+        },
+        {
+            "name": "tylluan_decide",
+            "description": "Answer a bounded, typed question (choice, score or boolean) from a closed set, or return an explicit abstention. Never a permission gate.",
+            "when_to_use": "Structured routing, risk-tier classification, or bounded semantic decisions over a system state without side effects."
+        }
+    ])
+}
+
 /// GET /api/v1/skill
 /// Universal skill document for any agent connecting to TylluanNexus via MCP.
 pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
@@ -326,6 +368,7 @@ pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResp
     drop(config);
 
     let guild_count = state.registry.status_all().await.unwrap_or_default().len();
+    let sovereign_tools = build_skill_sovereign_tools();
 
     let skill = serde_json::json!({
         "schema_version": "1.0",
@@ -340,40 +383,7 @@ pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResp
             },
             "protocol": "MCP 2024-11-05 / 2025-06-18 (auto-negotiated)"
         },
-        "sovereign_tools": [
-            {
-                "name": "tylluan_do",
-                "description": "Execute any task using natural language. The kernel routes the intent to the right guild automatically.",
-                "when_to_use": "Bash commands, git ops, file operations, posting to coloquio, web search, code analysis — anything that maps to a guild.",
-                "examples": [
-                    "tylluan_do('publica en coloquio mision-activa: [STATUS] task complete')",
-                    "tylluan_do('run cargo test -p tylluan-kernel --lib')",
-                    "tylluan_do('lee el canal mision-activa ultimos 5 mensajes', guild='coloquio')",
-                    "tylluan_do('list files in crates/tylluan-kernel/src/')"
-                ],
-                "tip": "Use the `guild` parameter to force routing when intent is ambiguous."
-            },
-            {
-                "name": "tylluan_remember",
-                "description": "Store information in long-term memory (SilvaDB knowledge graph).",
-                "when_to_use": "Decisions, findings, facts, conclusions, architectural choices, anything that should survive context resets."
-            },
-            {
-                "name": "tylluan_recall",
-                "description": "Search long-term memory using hybrid retrieval: BM25 + BGE-M3 vector + Jina Reranker.",
-                "when_to_use": "Any time you need context about the project, past decisions, or what other agents have done."
-            },
-            {
-                "name": "tylluan_think",
-                "description": "Deep reasoning over the knowledge graph. Runs PageRank + gap analysis + GraphRAG cluster summaries.",
-                "when_to_use": "Strategic analysis, gap detection, cross-domain synthesis, when you need the system to reason about what it knows."
-            },
-            {
-                "name": "tylluan_graph",
-                "description": "Inspect and manipulate the SilvaDB knowledge graph directly.",
-                "when_to_use": "Graph visualization, node inspection, edge queries, community detection."
-            }
-        ],
+        "sovereign_tools": sovereign_tools,
         "active_guilds": {
             "count": guild_count,
             "always_on": ["bash", "git", "filesystem", "monitor", "docker", "code", "coloquio", "memory", "knowledge", "web", "sequential_thinking"],
@@ -390,6 +400,7 @@ pub async fn skill_handler(State(state): State<Arc<HttpState>>) -> impl IntoResp
             "coloquio_channels": "GET /api/v1/coloquio/channels",
             "system_status": "GET /api/v1/system/status",
             "do": "POST /api/v1/do  {intent, guild?, agent_id?, remember?}",
+            "decide": "POST /api/v1/decide  {state, questions, contract?, max_latency_ms?}",
             "memory_search": "POST /api/v1/memory/search  {query, limit?}"
         },
         "collaboration_protocol": {
@@ -864,3 +875,59 @@ pub async fn autoresearch_evaluate_handler(State(state): State<Arc<HttpState>>) 
         "experiment_run": true
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::http::a2a::build_skills_list;
+    use crate::transport::server::TylluanServer;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn test_skill_handler_and_agent_card_match_kernel_tools() {
+        let expected: BTreeSet<&str> = [
+            "tylluan_do",
+            "tylluan_remember",
+            "tylluan_recall",
+            "tylluan_think",
+            "tylluan_graph",
+            "tylluan_decide",
+        ]
+        .into_iter()
+        .collect();
+
+        let kernel_set: BTreeSet<String> = TylluanServer::kernel_tools()
+            .into_iter()
+            .filter(|t| expected.contains(t.name.as_str()))
+            .map(|t| t.name)
+            .collect();
+        assert_eq!(
+            kernel_set.len(),
+            6,
+            "TylluanServer::kernel_tools() must contain all 6 sovereign tools"
+        );
+
+        let skill_tools = build_skill_sovereign_tools();
+        let skill_set: BTreeSet<String> = skill_tools
+            .as_array()
+            .expect("sovereign_tools must be a JSON array")
+            .iter()
+            .map(|t| t["name"].as_str().expect("each entry must have a name").to_string())
+            .collect();
+        assert_eq!(
+            skill_set, kernel_set,
+            "skill_handler sovereign_tools must match TylluanServer::kernel_tools()"
+        );
+
+        let card_set: BTreeSet<String> = build_skills_list()
+            .into_iter()
+            .filter(|s| s.id != "guild_dispatch")
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(
+            card_set, kernel_set,
+            "A2A Agent Card sovereign skills must match TylluanServer::kernel_tools()"
+        );
+    }
+}
+

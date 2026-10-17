@@ -135,7 +135,7 @@ def generate_svg():
       <!-- REST Server -->
       <rect x="840" y="252" width="360" height="40" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
       <text x="855" y="269" fill="#f8fafc" font-size="12" font-weight="600">REST API v1</text>
-      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/do · /recall · /remember · /think · /graph · /health</text>
+      <text x="855" y="284" fill="#cbd5e1" font-size="10">/api/v1/do · /recall · /remember · /think · /graph · /decide · /health</text>
     </g>
 
     <!-- SECTION 2: SOVEREIGN CORE, SCHEDULER & DECISION FABRIC -->
@@ -146,8 +146,8 @@ def generate_svg():
       <!-- 6 Sovereign Tools -->
       <rect x="80" y="348" width="340" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>
       <text x="95" y="368" fill="#ffffff" font-size="13" font-weight="700">6 Sovereign Tools</text>
-      <text x="95" y="384" fill="#6ee7b7" font-size="10">tylluan_do · tylluan_remember</text>
-      <text x="95" y="396" fill="#6ee7b7" font-size="10">tylluan_recall · tylluan_think · tylluan_graph</text>
+      <text x="95" y="384" fill="#6ee7b7" font-size="10">tylluan_do · tylluan_remember · tylluan_recall</text>
+      <text x="95" y="396" fill="#6ee7b7" font-size="10">tylluan_think · tylluan_graph · tylluan_decide</text>
 
       <!-- Cognitive Scheduler & CoherenceGate -->
       <rect x="435" y="348" width="380" height="55" rx="8" fill="#022c22" stroke="#34d399" stroke-width="1.5"/>

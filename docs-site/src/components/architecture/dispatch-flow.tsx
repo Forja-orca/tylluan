@@ -114,28 +114,29 @@ export function DispatchFlow() {
           <PhaseBox x={40} y={407} width={1030} height={140} title="Guild Execution & Response" color="#14B8A6">
             {/* Guild types */}
             <SvgNode x={60} y={440} width={110} height={34} label="tylluan_do" sublabel="execute action" style={NODE_STYLES.process} />
-            <SvgNode x={190} y={440} width={110} height={34} label="tylluan_recall" sublabel="memory search" style={NODE_STYLES.process} />
-            <SvgNode x={320} y={440} width={130} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
-            <SvgNode x={470} y={440} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
-            <SvgNode x={600} y={440} width={110} height={34} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
+            <SvgNode x={180} y={440} width={110} height={34} label="tylluan_recall" sublabel="memory search" style={NODE_STYLES.process} />
+            <SvgNode x={300} y={440} width={125} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
+            <SvgNode x={435} y={440} width={110} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
+            <SvgNode x={555} y={440} width={110} height={34} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
+            <SvgNode x={675} y={440} width={110} height={34} label="tylluan_decide" sublabel="typed decision" style={NODE_STYLES.process} />
 
             {/* Execution details */}
-            <text x={600} y={448} fill="#94A3B8" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={448} fill="#94A3B8" fontSize="9" fontFamily="ui-monospace, monospace">
               Each guild:
             </text>
-            <text x={600} y={464} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={464} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               1. Receives args from router
             </text>
-            <text x={600} y={478} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={478} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               2. May call LinearRAG (recall)
             </text>
-            <text x={600} y={492} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={492} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               3. Executes with timeout
             </text>
-            <text x={600} y={506} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={506} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               4. Returns result + metadata
             </text>
-            <text x={600} y={520} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
+            <text x={810} y={520} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
               5. touch_node() on accessed memories
             </text>
 
