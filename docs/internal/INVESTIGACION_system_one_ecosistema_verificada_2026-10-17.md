@@ -67,7 +67,7 @@ Tres reservas sobre los benchmarks: casi todos los números de modelo son **auto
 
 - Afirmó que el dataset limpio es Apache-2.0: **es CC BY-4.0**.
 - Afirmó (y yo lo había anotado) que la negativa del modelo es una clave ausente en `answers`: **no está documentado en ninguna fuente primaria revisada**.
-- Citó `STATE_TRUNCATED` en `decima/systemone.py`: **ese código no aparece en ese módulo**, que trocea los estados largos en lugar de truncarlos; no revisé `serve.py`, donde también lo situaba.
+- Citó `STATE_TRUNCATED` en `decima/systemone.py`: **ese código no aparece en ese módulo**, que trocea los estados largos en lugar de truncarlos. **Corrección posterior (2026-10-17, medido en vivo):** el servidor `decima serve` sí devuelve `HTTP 422` con `"code": "STATE_TRUNCATED"` cuando el estado no cabe en el contexto de decima-small (13 de 245 casos con intenciones de ~3.000 caracteres de media). La afirmación de Antigravity era correcta respecto al servidor; el fallo estaba en mi revisión incompleta, que no miró `serve.py`.
 - Acertó en: licencias NC de Decima (tabla de `LICENSING.md`), Clef-Flash Apache-2.0 con `/v1/systemone`, llama.cpp y vLLM fusionados, y la existencia de `POST /v1/decisions` de OpenAI.
 
 ## 7. Qué no verifiqué
