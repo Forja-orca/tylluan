@@ -340,14 +340,14 @@ pub fn evaluate_contract(
             (true, true) => both_correct += 1,
             (false, false) => both_wrong += 1,
         }
-        if let Some(probs) = &row.model_probs {
-            if let Some((top, top_p)) = probs.iter().max_by(|a, b| {
+        if let Some(probs) = &row.model_probs
+            && let Some((top, top_p)) = probs.iter().max_by(|a, b| {
                 a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal)
-            }) {
-                confidences.push(*top_p as f64);
-                correct_flags.push(top == expected);
-                scored.push((probs.clone(), expected.clone()));
-            }
+            })
+        {
+            confidences.push(*top_p as f64);
+            correct_flags.push(top == expected);
+            scored.push((probs.clone(), expected.clone()));
         }
     }
 
