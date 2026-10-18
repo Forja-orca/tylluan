@@ -626,15 +626,24 @@ impl super::SilvaDB {
         })
     }
 
-    /// Get all nodes marked conflicted.
-    pub async fn get_all_conflicted(&self) -> Result<Vec<GraphNode>> {
+    /// Página de nodos con `conflicted = 1`, paginada EN SQL (T1277-B2: el
+    /// `LIMIT` va en la consulta — cargar todo y cortar después no escala con
+    /// miles de conflictos) junto al `COUNT(*)` total de conflicto en la misma
+    /// conexión. Orden: `updated_at` descendente (más reciente primero).
+    /// Returns `(page, total_conflicted)`.
+    pub async fn get_conflicted_page(&self, limit: usize) -> Result<(Vec<GraphNode>, i64)> {
         tokio::task::block_in_place(|| {
             let conn = self.conn.blocking_lock();
+            let total: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM nodes WHERE conflicted = 1",
+                [],
+                |r| r.get(0),
+            )?;
             let mut stmt = conn.prepare(
                 "SELECT id, type, content, metadata, weight, protected, conflicted, topic_key, created_at, updated_at, shareable, valid_from, valid_until, provenance
-                 FROM nodes WHERE conflicted = 1 ORDER BY updated_at DESC",
+                 FROM nodes WHERE conflicted = 1 ORDER BY updated_at DESC LIMIT ?1",
             )?;
-            let rows = stmt.query_map([], |row| {
+            let rows = stmt.query_map(params![limit as i64], |row| {
                 Ok(GraphNode {
                     id: row.get(0)?, node_type: row.get(1)?, content: row.get(2)?,
                     metadata: row.get(3)?, weight: row.get(4)?,
@@ -650,7 +659,7 @@ impl super::SilvaDB {
             })?;
             let mut results = Vec::new();
             for node in rows { results.push(node?); }
-            Ok(results)
+            Ok((results, total))
         })
     }
 
@@ -1758,6 +1767,28 @@ mod tests {
             !node.conflicted,
             "remembers fan-out (one agent identity, many remembered things) must never be flagged as a contradiction"
         );
+    }
+
+    /// T1277-B2: la paginación de conflictos ocurre EN SQL (LIMIT) y el
+    /// total se cuenta aparte (COUNT(*)), no cargando el conjunto entero.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn conflicted_page_limits_in_sql_and_counts_total() {
+        let db = crate::memory::silva::SilvaDB::in_memory().await.unwrap();
+        for i in 0..3 {
+            let id = format!("cp_conf_{i}");
+            db.upsert_node(&id, "fact", "conflicted content", "{}").await.unwrap();
+            db.mark_conflicted(&id, true).await.unwrap();
+        }
+        db.upsert_node("cp_clean", "fact", "clean content", "{}").await.unwrap();
+
+        let (page, total) = db.get_conflicted_page(2).await.unwrap();
+        assert_eq!(page.len(), 2, "LIMIT respected in SQL");
+        assert!(page.iter().all(|n| n.conflicted), "page only conflicted");
+        assert_eq!(total, 3, "COUNT(*) independent of the page limit");
+
+        let (all, total_all) = db.get_conflicted_page(50).await.unwrap();
+        assert_eq!(all.len(), 3);
+        assert_eq!(total_all, 3);
     }
 
     #[tokio::test(flavor = "multi_thread")]

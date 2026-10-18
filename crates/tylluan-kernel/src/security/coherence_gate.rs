@@ -5,7 +5,8 @@
 //! context window (post ADR-010). Four layers, cheapest first:
 //!
 //! 1. Known injection patterns -> eliminated silently (confirmed risk).
-//! 2. Untrusted provenance (federation-sourced, low weight) -> penalized, not removed.
+//! 2. Untrusted provenance (federation-sourced at default/decayed weight,
+//!    or `untrusted_content: true` in node metadata) -> penalized, not removed.
 //! 3. Query/content embedding cosine below threshold -> penalized, not removed.
 //! 4. Reasoning judgment (v3 calibrated prompt, 78.85% on 52 real cases)
 //!    -> called via llama_backend guild for candidates flagged by layers 1-3.
@@ -80,6 +81,20 @@ fn tokenize_query(query: &str) -> Vec<String> {
         .map(|w| w.to_string())
         .filter(|w| w.len() >= 2)
         .collect()
+}
+
+/// ¿El metadata JSON del nodo lleva `untrusted_content: true`? El flag lo
+/// ponen productores de contenido externo (hoy el helper Python
+/// `guilds/core/utils.flag_untrusted_content` solo añade un banner de texto;
+/// el gate respeta el flag booleano cuando existe — T1277-A, trabajo nuevo
+/// pedido en ADR-021 §REA y en el research 2026-10-15). Mejor esfuerzo:
+/// metadata ilegible o sin la clave no penaliza; nunca panic en la ruta
+/// caliente de recall.
+fn metadata_untrusted(node: &GraphNode) -> bool {
+    serde_json::from_str::<serde_json::Value>(&node.metadata)
+        .ok()
+        .and_then(|m| m.get("untrusted_content").and_then(|v| v.as_bool()))
+        .unwrap_or(false)
 }
 
 /// Production-judge-only helper (the Layer 4 body is `cfg(not(test))`).
@@ -297,7 +312,18 @@ impl CoherenceGate {
 
             let mut node_penalized = false;
 
-            if node.provenance == "federation_peer" && node.weight < 1.0 {
+            // Capa 2 (T1277-A): procedencia no confiable. `weight > 1.0` solo
+            // se alcanza con un refuerzo deliberado (reinforce_node > 1); el
+            // peso 1.0 es el DEFAULT de todo nodo recién creado, no una señal
+            // de confianza — hasta aquí el primer miembro de un par federado
+            // entraba SIN penalización (ángulo ciego del primer día, cerrado
+            // con `<=`; el umbral de exención > 1.0 no se toca).
+            // `untrusted_content: true` en el metadata JSON (productores
+            // externos: MCP tipo REA, A2A, ingestion web) penaliza con el
+            // MISMO multiplicador, con cualquier peso y procedencia.
+            if (node.provenance == "federation_peer" && node.weight <= 1.0)
+                || metadata_untrusted(&node)
+            {
                 score *= PROVENANCE_PENALTY;
                 node_penalized = true;
             }
@@ -755,6 +781,53 @@ mod tests {
         assert!((survivors[0].1 - 0.9).abs() < 1e-5, "high-weight federation node should not be penalized");
         assert_eq!(stats.penalized, 0);
         assert!(stats.penalized_nodes.is_empty(), "non-penalized nodes must not appear in penalized_nodes");
+    }
+
+    /// T1277-A — ángulo ciego del primer día: un nodo de un par recién creado
+    /// entra con el peso DEFAULT 1.0, no con un boost de confianza. Antes de
+    /// T1277-A la capa 2 solo aplicaba si `weight < 1.0`, así que el primer
+    /// miembro de un par federado entraba SIN penalización. El umbral
+    /// `> 1.0` (boost deliberado — test de arriba) queda intacto.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn layer2_penalizes_fresh_federation_node_at_default_weight() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let results = vec![
+            (node("fed_fresh", "fresh federated pair member", "federation_peer", 1.0), 0.9),
+        ];
+        let (survivors, stats) = CoherenceGate::filter(results, &db, None).await;
+        assert_eq!(survivors.len(), 1, "penalized nodes survive, not removed");
+        assert!(
+            (survivors[0].1 - 0.09).abs() < 1e-5,
+            "fresh weight=1.0 must be penalized x0.1, got {}",
+            survivors[0].1
+        );
+        assert_eq!(stats.penalized, 1);
+    }
+
+    /// T1277-A — `untrusted_content: true` en el metadata JSON del nodo (la
+    /// marca de los productores externos; en Rust no había ningún manejo)
+    /// penaliza por capa 2 con el MISMO multiplicador, con cualquier peso y
+    /// procedencia. Metadata vacía, sin la clave o ilegible no penaliza.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn layer2_penalizes_untrusted_content_metadata_flag() {
+        let db = SilvaDB::in_memory().await.unwrap();
+        let mut flagged = node("rea", "external finding marked untrusted", "agent_generated", 1.0);
+        flagged.metadata = r#"{"untrusted_content": true}"#.to_string();
+        let mut boosted_flagged = node("rea_boosted", "boosted but still untrusted", "agent_generated", 1.5);
+        boosted_flagged.metadata = r#"{"untrusted_content": true}"#.to_string();
+        let clean = node("clean", "local note", "agent_generated", 1.0);
+        let results = vec![
+            (flagged, 0.9),
+            (boosted_flagged, 0.9),
+            (clean, 0.9),
+        ];
+        let (survivors, stats) = CoherenceGate::filter(results, &db, None).await;
+        assert_eq!(survivors.len(), 3, "penalized nodes survive, not removed");
+        assert_eq!(stats.penalized, 2, "both flagged nodes must be penalized");
+        let score_of = |id: &str| survivors.iter().find(|(n, _)| n.id == id).unwrap().1;
+        assert!((score_of("rea") - 0.09).abs() < 1e-5, "flag must penalize at default weight");
+        assert!((score_of("rea_boosted") - 0.09).abs() < 1e-5, "flag overrides any weight boost");
+        assert!((score_of("clean") - 0.9).abs() < 1e-5, "clean node must keep its score");
     }
 
     #[tokio::test(flavor = "multi_thread")]

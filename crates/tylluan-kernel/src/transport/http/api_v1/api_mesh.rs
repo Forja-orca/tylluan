@@ -192,12 +192,20 @@ pub async fn guild_dispatch_remote_handler(
             match execute_remote_tcp(&mut pool, request, tcp_addr, node_id, &state.node_identity).await {
                 Ok(resp) => {
                     state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_success(node_id);
-                    (StatusCode::OK, Json(serde_json::json!({
+                    // T1277-C: surface the remote's own failure reason (gate
+                    // denial vs guild error vs handshake rejection) — without
+                    // this field the requester sees a bare success=false and
+                    // cannot tell a policy denial from an execution failure.
+                    let mut body = serde_json::json!({
                         "success": resp.success,
                         "result": resp.result,
                         "executor": format!("p2p://{}:{}", node_id, tcp_port),
                         "duration_ms": resp.duration_ms,
-                    })))
+                    });
+                    if let Some(err) = resp.error {
+                        body["error"] = serde_json::Value::String(err);
+                    }
+                    (StatusCode::OK, Json(body))
                 }
                 Err(e) => {
                     state.dispatch_router.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).record_failure(node_id);

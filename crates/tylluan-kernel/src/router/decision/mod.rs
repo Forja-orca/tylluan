@@ -107,6 +107,11 @@ pub enum DecisionError {
     /// abstención con esa razón exacta (T1241).
     #[error("{0}")]
     Abstained(String),
+    /// T1277-B3: fallo de la BD de auditoría (`decision_shadow_log`). Una
+    /// lectura que no puede responder NO se traduce en "cero filas" — el
+    /// panel de operador debe ver el error, no un total falso.
+    #[error("decision storage unavailable: {0}")]
+    Storage(String),
 }
 
 /// Contrato del Decision Fabric (ADR-018 §2.1): nunca `LayaProvider` —
