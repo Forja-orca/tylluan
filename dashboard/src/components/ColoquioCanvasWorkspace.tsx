@@ -229,17 +229,21 @@ function PreviewTab({ messages }: { messages: ColoquioMessage[] }) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Sandbox Allowlist Notice (D6: 5 of 6 sovereign tools) */}
+      {/* Sandbox Allowlist Notice (D6). TL decision 2026-10-18: tylluan_decide stays
+          blocked in canvases (they run code pasted into chat). */}
       <div
         role="note"
-        aria-label="Sandbox tool allowlist policy"
-        className="shrink-0 px-3 py-1.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-2 text-xs font-mono text-slate-300"
+        aria-label="Canvas tool allowlist policy"
+        className="shrink-0 px-3 py-1.5 bg-slate-950/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300"
       >
         <span>
-          Sandbox policy: <strong className="text-emerald-400">5/6 sovereign tools</strong> authorized (`do`, `remember`, `recall`, `think`, `graph`).
+          Canvas bridge: <strong className="text-emerald-400">5 of 6 sovereign tools</strong> (`do`, `remember`, `recall`, `think`, `graph`).
         </span>
-        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0" title="Sandboxed iframes cannot invoke tylluan_decide to prevent untrusted artifacts from triggering policy or routing verdicts.">
-          tylluan_decide blocked in iframe
+        <span
+          className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
+          title="Why: a canvas runs code pasted into a chat channel, so it should not be able to ask for policy or routing verdicts (tylluan_decide). TL decision (2026-10-18): stays blocked. Scope: this bridge refuses the call, but it is not a hard security boundary — the preview iframe runs with allow-same-origin."
+        >
+          tylluan_decide: not exposed (TL decision: stays blocked)
         </span>
       </div>
 
