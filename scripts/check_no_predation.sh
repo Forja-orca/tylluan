@@ -12,43 +12,72 @@
 # WIP, migrates a port without its config, or touches a critical route without
 # declaring impact -- and nobody would catch it until the damage surfaced.
 #
-# What it evaluates: the HEAD commit (run it right after `git commit`, before
-# pushing or reporting as verified) plus the working tree left behind.
+# What it evaluates (T1275, 2026-10-18): EVERY commit of the range being
+# pushed, not just HEAD. Real incident: a 5-commit push slipped through
+# because HEAD was a docs-only commit while an EARLIER commit in the same
+# push (abc8534) touched crates/tylluan-kernel/src/transport/ without a
+# `## Impact` section -- the pre-push hook ran this gate against HEAD and
+# saw only STATUS.md. Per-commit checks (ports, Impact) are therefore
+# evaluated per commit; working-tree checks (WIP ajeno, alcance) compare
+# against the UNION of all commits in the range, and against the range tip
+# (the commit the working tree actually sits on).
 #
-# Four checks (ADR-013 §2):
-#   1. Foreign WIP in the diff: tracked files modified/staged beyond the commit
-#      that are NOT part of it; plus low-confidence warning for untracked files
-#      whose basename matches a path the commit touches.
+# Range resolution:
+#   - No argument: `origin/main..HEAD` (what a push to main would carry),
+#     falling back to `HEAD` alone when the range is empty (everything
+#     already pushed) or origin/main does not exist (fresh clone without
+#     remote, detached worktree, empty repo guard). This keeps the classic
+#     "run it right after `git commit`" usage identical: right after a
+#     commit, origin/main..HEAD IS that commit.
+#   - Optional argument: an explicit rev-range or single commit
+#     (`scripts/check_no_predation.sh abc8534~1..abc8534`). The pre-push
+#     hook can pass the exact range it received ($remote_sha..$local_sha).
+#     An unresolvable explicit argument exits 2 (usage error -- a gate that
+#     cannot evaluate must never silently pass).
+#
+# Four checks (ADR-013 §2), all preserved from the HEAD-only version:
+#   1. Foreign WIP in the diff: tracked files modified/staged beyond the
+#      range tip that are NOT part of any commit in the range; plus
+#      low-confidence warning for untracked files whose basename matches a
+#      path the range touches.
 #   2. Port contracts: a commit that swaps port-like values (`:NNNN`,
-#      `port = NNNNN`) in non-.toml files without any .toml in the same commit.
-#   3. Impact declaration: commits touching critical routes
+#      `port = NNNNN`) in non-.toml files without any .toml in the SAME
+#      commit. Evaluated per commit, because ADR-013 requires the config in
+#      the same commit as the swap.
+#   3. Impact declaration: EACH commit touching critical routes
 #      (crates/tylluan-kernel/src/transport/, guilds/, integrations/,
-#      tylluan*.toml) without a `## Impact` section in the message.
-#   4. Out-of-scope workload (heuristic, low-confidence, never fails alone):
-#      modified files neither mentioned in the commit subject nor part of it.
+#      tylluan*.toml) must carry a `## Impact` section in ITS OWN message.
+#   4. Out-of-scope workload (heuristic, low-confidence, never fails
+#      alone): modified files neither mentioned in any commit subject of
+#      the range nor part of it.
 #
 # Regla de oro (ADR-013): the gate REPORTS, it never edits, reverts or blocks
-# mechanically. Exit 1 means "findings exist -- resolve them or add `## Impact`
-# via `git commit --amend` before reporting this change as verified".
+# mechanically. Exit 1 means "findings exist -- resolve them before reporting
+# this change as verified" (for an already-published commit the resolution is
+# a RETROACTIVE `## Impact` note in the review report, never a history
+# rewrite).
 #
 # Performance note (ADR-013 targets <1s): on Windows/MSYS every process spawn
-# AND every bash subshell fork costs ~0.1-0.4s, so this script makes exactly
-# 4 git calls and parses everything -- port values out of the diff, file
-# lists out of the patch headers, critical-route matching, basename/dirname,
-# subject mentions -- in PURE BASH with ZERO forks inside loops (the port
-# extractor communicates through a global instead of $(), which cost ~60ms
-# per diff line and made two earlier implementations measure 5.6s and >15s
-# on the same commit). Measured on the 2026-09-13 machine: ~1s wall on
-# Windows/MSYS (4 git spawns dominate), well under 1s on Linux/CI.
+# AND every bash subshell fork costs ~0.1-0.4s, so this script keeps the
+# original discipline -- the whole range's messages AND patches arrive in ONE
+# `git log` call (2 more for the working tree and untracked lists, +1 for the
+# origin/main probe), and everything else (port values, file lists,
+# critical-route matching, subject mentions) is parsed in PURE BASH with ZERO
+# forks inside loops. Measured on the 2026-10-18 Windows/MSYS machine: 2.2s
+# for the single-commit fallback and 4.0s for a 5-commit range -- above the
+# ADR-013 <1s target on this OS (git spawns + the per-file sort in the port
+# check dominate); acceptable for a report-only gate that runs once per
+# push/CI job, and well under 1s on Linux/CI.
 #
-# Usage: scripts/check_no_predation.sh
+# Usage: scripts/check_no_predation.sh [rev-range|commit]
 # Exit 0 if no hard findings (low-confidence findings are listed, count shown).
 # Exit 1 if any hard finding (checks 1a/2/3) -- read the output, it names them.
+# Exit 2 if an explicit argument cannot be resolved (usage error).
 #
-# Self-tested 2026-09-13 against known-truth cases from ADR-013 Verification §2
-# (critical route without `## Impact` -> exit 1; with `## Impact` -> exit 0;
-# port swap without .toml -> exit 1; port swap with .toml -> exit 0), each in
-# a disposable worktree whose checked-out tree matches the tested commit.
+# Self-tested by scripts/test_check_no_predation.sh (T1275 fixtures: 2-commit
+# range where the FIRST commit touches transport/ without Impact and the last
+# is docs-only -> exit 1 -- the exact abc8534 escape; same range with Impact
+# -> exit 0; single-commit and empty-repo regressions).
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -56,20 +85,89 @@ cd "$(dirname "$0")/.."
 problems=0
 low_conf=0
 
-# git call 1 of 4: subject + body in one shot (doubles as the empty-repo guard).
-combined=$(git log -1 --format=%s%n%b HEAD 2>/dev/null) || {
-    echo "✅ No HEAD commit to evaluate (empty repo)."
-    exit 0
-}
-head_subject="${combined%%$'\n'*}"
-head_body="${combined#*$'\n'}"
+# ── Range resolution ─────────────────────────────────────────────────────
+range_arg="${1:-}"
+defaulted=0
+if [ -n "$range_arg" ]; then
+    range="$range_arg"
+elif git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+    range="origin/main..HEAD"
+    defaulted=1
+else
+    range="HEAD"
+    defaulted=1
+fi
 
-# git call 2 of 4: the whole-commit -U0 patch. File list AND per-line port
-# values are parsed from this single output -- no separate --name-only call.
-head_files=()
-declare -A seen_files=() port_add=() port_rem=()
-cur_file=""
-PORTS_OUT=""
+# Per-commit state, reset on every commit token.
+cur_sha="" cur_subject="" cur_body="" cur_file="" tip_sha=""
+in_msg=0
+cur_files=()
+declare -A cur_seenA=() port_add=() port_rem=()
+# Range-wide state (never reset).
+declare -A seen_files=() subject_lc_by_sha=()
+ordered_shas=()
+subjects_lc=""
+commits_n=0
+impact_findings=()
+port_findings=()
+
+short_sha() { local s="${cur_sha:0:12}"; printf '%s' "$s"; }
+
+finalize_commit() {
+    [ -z "$cur_sha" ] && return
+    # ── Check 2: port contracts, per commit (config must ride the SAME
+    #    commit as the swap -- ADR-013 §2). Pure bash, zero forks in loops. ──
+    local toml_in=0 f r a a_sorted r_sorted
+    local -a port_changed=()
+    for f in "${cur_files[@]}"; do
+        case "$f" in *.toml) toml_in=1 ;; esac
+    done
+    for f in "${cur_files[@]}"; do
+        case "$f" in *.toml|"") continue ;; esac
+        r="${port_rem[$f]:-}"
+        a="${port_add[$f]:-}"
+        [ -z "$r" ] && continue
+        [ -z "$a" ] && continue   # pure removal of a port reference is not a migration (HEAD-only semantics, kept)
+        a_sorted=$(printf '%s' "$a" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        r_sorted=$(printf '%s' "$r" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        if [ "$a_sorted" != "$r_sorted" ]; then
+            port_changed+=("$f")
+        fi
+    done
+    if [ "${#port_changed[@]}" -gt 0 ] && [ "$toml_in" -eq 0 ]; then
+        for f in "${port_changed[@]}"; do
+            port_findings+=("$(short_sha): '$f' cambia valores con forma de puerto sin que ningún .toml (tylluan.toml / tylluan.example.toml) forme parte del MISMO commit -- si es una migración de puerto real, la config va en el mismo commit (ADR-013 §2).")
+        done
+        problems=1
+    fi
+
+    # ── Check 3: impact declaration, per commit -- each commit touching
+    #    critical routes carries `## Impact` in ITS OWN message. ──
+    local -a crit=()
+    for f in "${cur_files[@]}"; do
+        case "$f" in
+            crates/tylluan-kernel/src/transport/*|guilds/*|integrations/*|tylluan*.toml)
+                crit+=("$f") ;;
+        esac
+    done
+    if [ "${#crit[@]}" -gt 0 ]; then
+        local body_lc="${cur_body,,}"
+        if [[ $body_lc != *'## impact'* ]]; then
+            for f in "${crit[@]}"; do
+                impact_findings+=("$(short_sha): toca la ruta crítica '$f' sin sección '## Impact' en SU mensaje (ADR-013 §1). Corrige con: git commit --amend si aún no se ha empujado; si ya está publicado, nota Impact retroactiva en el informe de revisión (NUNCA reescribiendo historia).")
+            done
+            problems=1
+        fi
+    fi
+
+    # Range-wide accumulation for checks 1a/1b/4 and the header.
+    subjects_lc+=" ${cur_subject,,}"
+    subject_lc_by_sha["$cur_sha"]="${cur_subject,,}"
+
+    cur_sha="" cur_subject="" cur_body="" in_msg=0
+    cur_files=(); port_add=(); port_rem=(); cur_seenA=()
+}
+
 extract_ports() {
     local line="$1" re='(:|port[[:space:]]*=|PORT[[:space:]]*=)[[:space:]]*([0-9]{4,5})'
     PORTS_OUT=""
@@ -78,121 +176,144 @@ extract_ports() {
         line="${line#*"${BASH_REMATCH[2]}"}"
     done
 }
-while IFS= read -r line; do
-    case "$line" in
-        'diff --git '*)
-            cur_file="${line##* b/}"
-            if [ -n "$cur_file" ] && [ -z "${seen_files[$cur_file]:-}" ]; then
-                seen_files[$cur_file]=1
-                head_files+=("$cur_file")
-            fi
-            ;;
-        +++*|---*|\\*) continue ;;
-        +*) extract_ports "${line#+}"; [ -n "$PORTS_OUT" ] && port_add["$cur_file"]+="$PORTS_OUT " ;;
-        -*) extract_ports "${line#-}"; [ -n "$PORTS_OUT" ] && port_rem["$cur_file"]+="$PORTS_OUT " ;;
-    esac
-done < <(git show --format= -U0 HEAD 2>/dev/null || true)
 
-# git call 3 of 4: working-tree changes beyond the commit.
-mapfile -t wt_files < <(git diff --name-only HEAD 2>/dev/null || true)
-# git call 4 of 4: untracked files.
+evaluate_range() {
+    commits_n=0
+    ordered_shas=()
+    subjects_lc=""
+    impact_findings=()
+    port_findings=()
+    # One git call for the whole range: messages AND -U0 patches. A single
+    # rev (HEAD fallback or explicit sha, i.e. no '..' in the range) needs
+    # -1: `git log <sha>` would walk the ENTIRE history reachable from it
+    # (caught live: the HEAD fallback parsed the whole repo, T1275).
+    local -a gl=(git log --format=$'@@@NPTOKEN %H%n%s%n%b' -U0)
+    case "$range" in
+        *..*) gl+=(--no-merges) ;;
+        *)    gl+=(-1) ;;
+    esac
+    while IFS= read -r line; do
+        case "$line" in
+            '@@@NPTOKEN '*)
+                finalize_commit
+                cur_sha="${line#@@@NPTOKEN }"
+                ordered_shas+=("$cur_sha")
+                commits_n=$((commits_n+1))
+                [ -z "$tip_sha" ] && tip_sha="$cur_sha"   # git log lists tip first
+                in_msg=1
+                ;;
+            'diff --git '*)
+                in_msg=0
+                cur_file="${line##* b/}"
+                if [ -n "$cur_file" ] && [ -z "${cur_seenA[$cur_file]:-}" ]; then
+                    cur_seenA["$cur_file"]=1
+                    cur_files+=("$cur_file")
+                    seen_files["$cur_file"]=1
+                fi
+                ;;
+            +++*|---*|\\*) continue ;;
+            +*) if [ "$in_msg" -eq 1 ]; then cur_body+="$line"$'\n'; else extract_ports "${line#+}"; [ -n "$PORTS_OUT" ] && port_add["$cur_file"]+="$PORTS_OUT "; fi ;;
+            -*) if [ "$in_msg" -eq 1 ]; then cur_body+="$line"$'\n'; else extract_ports "${line#-}"; [ -n "$PORTS_OUT" ] && port_rem["$cur_file"]+="$PORTS_OUT "; fi ;;
+            *)
+                if [ "$in_msg" -eq 1 ]; then
+                    if [ -z "$cur_subject" ] && [ -n "$cur_sha" ]; then
+                        cur_subject="$line"
+                    else
+                        cur_body+="$line"$'\n'
+                    fi
+                fi
+                ;;
+        esac
+    done < <("${gl[@]}" "$range" 2>/dev/null)
+    finalize_commit
+    [ "$commits_n" -gt 0 ]
+}
+
+# Empty-repo / empty-range guards (kept from the HEAD-only version).
+if ! git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    echo "✅ No HEAD commit to evaluate (empty repo)."
+    exit 0
+fi
+
+if ! evaluate_range; then
+    if [ -n "$range_arg" ]; then
+        echo "❌ Rango explícito no resoluble: '$range_arg' -- un gate que no puede evaluar nunca pasa en silencio (error de uso)."
+        exit 2
+    fi
+    if [ "$defaulted" -eq 1 ] && [ "$range" = "origin/main..HEAD" ]; then
+        echo "ℹ️  origin/main..HEAD está vacío (todo ya empujado) -- se evalúa HEAD solo (uso clásico)."
+        range="HEAD"
+        tip_sha=""
+        evaluate_range || { echo "✅ No HEAD commit to evaluate (empty repo)."; exit 0; }
+    fi
+fi
+
+# git call: working-tree changes beyond the range tip.
+mapfile -t wt_files < <(git diff --name-only "${tip_sha:-HEAD}" 2>/dev/null || true)
+# git call: untracked files.
 mapfile -t untracked < <(git ls-files --others --exclude-standard 2>/dev/null || true)
 
-declare -A in_head=()
-for f in "${head_files[@]}"; do in_head["$f"]=1; done
-
-echo "Evaluating: $head_subject"
-echo "Files in commit: ${#head_files[@]} | tracked files modified beyond it: ${#wt_files[@]}"
+echo "Rango evaluado: $range ($commits_n commit(s))"
+for sha in "${ordered_shas[@]}"; do
+    echo "  - ${sha:0:12} ${subject_lc_by_sha[$sha]}"
+done
+echo "Files in range: ${#seen_files[@]} | tracked files modified beyond the tip: ${#wt_files[@]}"
 echo ""
 
-# ── Check 1a: foreign WIP -- tracked files modified/staged beyond the commit
-#    that the commit itself does not contain (someone else's uncommitted work
-#    sitting in this checkout while I commit mine). ──
+# ── Check 1a: foreign WIP -- tracked files modified/staged beyond the range
+#    tip that NO commit in the range contains (someone else's uncommitted
+#    work sitting in this checkout while I commit mine). ──
 foreign_wip=()
 for f in "${wt_files[@]}"; do
-    [ -n "${in_head[$f]:-}" ] && continue
+    [ -n "${seen_files[$f]:-}" ] && continue
     foreign_wip+=("$f")
 done
 if [ "${#foreign_wip[@]}" -gt 0 ]; then
     for f in "${foreign_wip[@]}"; do
-        echo "❌ WIP ajeno: '$f' está modificado en el working tree pero NO forma parte del commit evaluado -- posible trabajo de otro agente en este checkout (ADR-013 §2)."
+        echo "❌ WIP ajeno: '$f' está modificado en el working tree pero NO forma parte de ningún commit del rango evaluado -- posible trabajo de otro agente en este checkout (ADR-013 §2)."
     done
     problems=1
 fi
 
 # ── Check 1b (low-confidence): untracked files whose basename matches a path
-#    the commit touches -- possible foreign/ignored file silently excluded. ──
-declare -A head_bases=()
-for f in "${head_files[@]}"; do head_bases["${f##*/}"]="$f"; done
+#    the range touches -- possible foreign/ignored file silently excluded. ──
+declare -A range_bases=()
+for f in "${!seen_files[@]}"; do range_bases["${f##*/}"]="$f"; done
 for u in "${untracked[@]}"; do
     b="${u##*/}"
-    [ -n "${head_bases[$b]:-}" ] || continue
-    [ "${head_bases[$b]}" = "$u" ] && continue
-    echo "⚠️  low-confidence: el archivo sin trackear '$u' coincide en nombre con '${head_bases[$b]}' que SÍ toca el commit, pero no forma parte de él -- posible WIP ajeno o ignorado."
+    [ -n "${range_bases[$b]:-}" ] || continue
+    [ "${range_bases[$b]}" = "$u" ] && continue
+    echo "⚠️  low-confidence: el archivo sin trackear '$u' coincide en nombre con '${range_bases[$b]}' que SÍ toca el rango, pero no forma parte de él -- posible WIP ajeno o ignorado."
     low_conf=$((low_conf+1))
 done
 
-# ── Check 2: port contracts -- the commit swaps port-like values in non-.toml
-#    files without any .toml in the same commit. A pure addition of a port
-#    reference is NOT a migration and is ignored. ──
-toml_in_commit=0
-for f in "${head_files[@]}"; do
-    case "$f" in *.toml) toml_in_commit=1 ;; esac
-done
-port_changed=()
-for f in "${!port_add[@]}"; do
-    case "$f" in *.toml|"") continue ;; esac
-    r="${port_rem[$f]:-}"
-    [ -z "$r" ] && continue
-    a_sorted=$(printf '%s' "${port_add[$f]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')
-    r_sorted=$(printf '%s' "$r" | tr ' ' '\n' | sort -u | tr '\n' ' ')
-    if [ "$a_sorted" != "$r_sorted" ]; then
-        port_changed+=("$f")
-    fi
-done
-if [ "${#port_changed[@]}" -gt 0 ] && [ "$toml_in_commit" -eq 0 ]; then
-    for f in "${port_changed[@]}"; do
-        echo "❌ Contrato de puerto: '$f' cambia valores con forma de puerto sin que ningún .toml (tylluan.toml / tylluan.example.toml) forme parte del commit -- si es una migración de puerto real, la config va en el MISMO commit (ADR-013 §2)."
+# ── Per-commit findings collected during parsing. ──
+if [ "${#port_findings[@]}" -gt 0 ]; then
+    for m in "${port_findings[@]}"; do
+        echo "❌ Contrato de puerto: $m"
     done
-    problems=1
 fi
-
-# ── Check 3: impact declaration -- commits touching critical routes must
-#    carry a `## Impact` section in the message (ADR-013 §1). Pure-bash
-#    glob matching against the four route patterns. ──
-critical_hits=()
-for f in "${head_files[@]}"; do
-    case "$f" in
-        crates/tylluan-kernel/src/transport/*|guilds/*|integrations/*|tylluan*.toml)
-            critical_hits+=("$f") ;;
-    esac
-done
-if [ "${#critical_hits[@]}" -gt 0 ]; then
-    body_lcase="${head_body,,}"
-    if [[ $body_lcase != *'## impact'* ]]; then
-        for f in "${critical_hits[@]}"; do
-            echo "❌ Declaración de impacto: el commit toca la ruta crítica '$f' sin sección '## Impact' en el mensaje (ADR-013 §1). Corrige con: git commit --amend"
-        done
-        problems=1
-    fi
+if [ "${#impact_findings[@]}" -gt 0 ]; then
+    for m in "${impact_findings[@]}"; do
+        echo "❌ Declaración de impacto: $m"
+    done
 fi
 
 # ── Check 4 (heuristic, low-confidence, never fails alone): out-of-scope
-#    workload -- modified files neither mentioned in the commit subject nor
-#    part of the commit itself. ──
-subject_lcase="${head_subject,,}"
+#    workload -- modified files neither mentioned in any commit subject of
+#    the range nor part of it. ──
 scope_hits=()
 for f in "${wt_files[@]}"; do
-    [ -n "${in_head[$f]:-}" ] && continue
+    [ -n "${seen_files[$f]:-}" ] && continue
     base="${f##*/}"
     dir="${f%/*}"
-    if [[ $subject_lcase == *"${base,,}"* || $subject_lcase == *"${dir,,}"* ]]; then
+    if [[ $subjects_lc == *"${base,,}"* || $subjects_lc == *"${dir,,}"* ]]; then
         continue
     fi
     scope_hits+=("$f")
 done
 if [ "${#scope_hits[@]}" -gt 0 ]; then
-    echo "⚠️  low-confidence: ${#scope_hits[@]} archivo(s) modificado(s) fuera del alcance declarado del commit (no mencionados en el mensaje y no parte de él):"
+    echo "⚠️  low-confidence: ${#scope_hits[@]} archivo(s) modificado(s) fuera del alcance declarado del rango (no mencionados en ningún mensaje y no parte de él):"
     n=0
     for f in "${scope_hits[@]}"; do
         n=$((n+1))
@@ -216,5 +337,7 @@ fi
 
 echo ""
 echo "❌ Hallazgos de no-depredación arriba. El gate es REPORT-ONLY: nunca edita ni revierte."
-echo "   Resuélvelos (o declara '## Impact' vía git commit --amend) antes de reportar el cambio como verificado (ADR-013)."
+echo "   Resuélvelos (o declara '## Impact' vía git commit --amend si aún no se empujó;"
+echo "   si el commit ya está publicado, nota Impact retroactiva en el informe de revisión)"
+echo "   antes de reportar el cambio como verificado (ADR-013)."
 exit 1
