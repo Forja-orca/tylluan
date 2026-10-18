@@ -3,14 +3,14 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Tylluan Kernel Architecture",
-    "subtitle": "main 8c9287b — sovereign memory + tool execution, single Rust binary",
+    "subtitle": "v0.17.1 — sovereign memory + tool execution, single Rust binary",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto"
     },
     "repository": {
       "url": "https://github.com/Forja-orca/tylluan",
-      "revision": "8c9287b94bfec956b87a01d63ee91b678861e1c1"
+      "revision": "743a7069df6fac1baa28683ab21221e3b3f44823"
     }
   },
   "layout": {
@@ -137,7 +137,12 @@
     {
       "id": "decision_svc",
       "type": "backend",
-      "label": "Decision (rules)",
+      "label": "Decision Service",
+      "sublabel": "reglas + modelo opcional en sombra",
+      "size": [
+        160,
+        56
+      ],
       "sources": [
         {
           "path": "crates/tylluan-kernel/src/router/decision/service.rs",
@@ -151,7 +156,7 @@
     {
       "id": "guilds46",
       "type": "backend",
-      "label": "46 Python guilds",
+      "label": "45 Python guilds",
       "sources": [
         {
           "path": "guilds/core/coloquio.py",
@@ -266,6 +271,8 @@
       "from": "tools6",
       "to": "decision_svc",
       "label": "tylluan_decide",
+      "fromSide": "bottom",
+      "toSide": "top",
       "labelAt": [
         412,
         314

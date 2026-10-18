@@ -77,7 +77,7 @@ export function DispatchFlow() {
           <SectionLabel x={30} y={250} text="STEP 3A: Local Resolution (score &lt; 0.3)" color="#10B981" />
 
           <PhaseBox x={40} y={262} width={500} height={110} title="Local Path — Embedding Similarity" color="#10B981">
-            <SvgNode x={60} y={300} width={150} height={30} label="BGE-M3 Encode Query" sublabel="1024d" style={NODE_STYLES.core} />
+            <SvgNode x={60} y={300} width={150} height={30} label="mxbai Encode Query" sublabel="1024d" style={NODE_STYLES.core} />
             <SvgNode x={230} y={300} width={150} height={30} label="Cosine to Guild Descs" sublabel="similarity ranking" style={NODE_STYLES.core} />
             <SvgNode x={400} y={300} width={120} height={30} label="Select Guild" sublabel="top-1" style={{ fill: '#0A1A15', stroke: '#10B981', strokeWidth: 1.5 }} />
 

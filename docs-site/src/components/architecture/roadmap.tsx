@@ -227,9 +227,9 @@ export function Roadmap() {
       <div className="rounded-lg border border-teal-500/20 bg-teal-500/5 p-4">
         <h4 className="text-xs font-mono font-semibold text-teal-400 mb-2 uppercase tracking-wider">Estado Real (Oct 2026 — v0.17.1)</h4>
         <div className="text-xs text-muted-foreground space-y-1">
-          <p>• <strong className="text-emerald-400">Activos</strong>: Decision Fabric (ADR-018, variante D Decima-ONNX GO-PROVISIONAL) · Cognitive Scheduler · CoherenceGate L1-L4 &amp; Signal Loop (ADR-011) · Stigmergy &amp; Wake-Up con escritor de producción (ADR-015 §4.1) · FSRS-5 · Noise NK/XK P2P Mesh.</p>
+          <p>• <strong className="text-emerald-400">Activos</strong>: Decision Service (ADR-021, 6ª tool soberana `tylluan_decide` + modo sombra v29) · Cognitive Scheduler · CoherenceGate L1-L4 &amp; Signal Loop (ADR-011) · Stigmergy &amp; Wake-Up con escritor de producción (ADR-015 §4.1) · FSRS-5 · Noise NK/XK P2P Mesh.</p>
           <p>• <strong className="text-amber-400">Medido y cerrado (NO-GO)</strong>: Decision Fabric variantes B (SystemOne/clef-flash, falla latencia 27x) y C (Laya-ONNX) — solo D sigue viva. <strong className="text-amber-400">En curso</strong>: Sparse Vectors (SPLADE) · Postcard zero-copy Serde.</p>
-          <p>• <strong className="text-slate-300">1,093 tests</strong> · 1007 kernel + 74 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
+          <p>• <strong className="text-slate-300">1,139 tests</strong> · 1053 kernel + 74 tylluan-link + 12 FSRS · 0 cloud dependencies.</p>
         </div>
       </div>
 

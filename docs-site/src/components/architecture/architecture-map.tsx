@@ -79,7 +79,7 @@ export function ArchitectureMap() {
           {/* LinearRAG */}
           <PhaseBox x={60} y={212} width={350} height={170} title="LinearRAG — Retrieval Engine" color="#14B8A6">
             <SvgNode x={80} y={250} width={100} height={34} label="BM25" sublabel="keyword search" style={NODE_STYLES.core} />
-            <SvgNode x={195} y={250} width={100} height={34} label="BGE-M3" sublabel="vector search" style={NODE_STYLES.core} />
+            <SvgNode x={195} y={250} width={100} height={34} label="mxbai (1024d)" sublabel="vector search" style={NODE_STYLES.core} />
             <SvgNode x={310} y={250} width={80} height={34} label="PageRank" sublabel="graph score" style={NODE_STYLES.core} />
 
             {/* Active PageRank */}
@@ -100,17 +100,24 @@ export function ArchitectureMap() {
             <SvgNode x={520} y={342} width={100} height={28} label="tldraw" sublabel="whiteboard" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 0.5, strokeDasharray: '3 2' } as any} />
           </PhaseBox>
 
-          {/* Sovereign Core & 46 Guilds */}
-          <PhaseBox x={730} y={212} width={360} height={190} title="6 Sovereign Tools &amp; 46 Guilds (CONTRACT-01)" color="#A855F7">
+          {/* Sovereign Core & 45 Guilds */}
+          <PhaseBox x={730} y={212} width={360} height={190} title="6 Sovereign Tools &amp; 45 Guilds (CONTRACT-01)" color="#A855F7">
             <SvgNode x={750} y={250} width={100} height={34} label="tylluan_do" sublabel="execute actions" style={NODE_STYLES.process} />
             <SvgNode x={870} y={250} width={100} height={34} label="tylluan_recall" sublabel="memory access" style={NODE_STYLES.process} />
             <SvgNode x={750} y={300} width={100} height={34} label="tylluan_remember" sublabel="persist memory" style={NODE_STYLES.process} />
             <SvgNode x={870} y={300} width={100} height={34} label="tylluan_graph" sublabel="knowledge graph" style={NODE_STYLES.process} />
             <SvgNode x={750} y={350} width={100} height={28} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
+            <SvgNode x={870} y={350} width={100} height={28} label="tylluan_decide" sublabel="rules + shadow" style={NODE_STYLES.process} />
 
-            <rect x={870} y={350} width={200} height={28} rx={4} fill="#1E1B4B" stroke="#818CF8" strokeWidth={0.8} opacity={0.8} />
-            <text x={970} y={368} textAnchor="middle" fill="#C7D2FE" fontSize="9" fontFamily="ui-monospace, monospace">
-              ACTIVE: Decision Fabric (ADR-018)
+            <rect x={980} y={250} width={95} height={128} rx={4} fill="#1E1B4B" stroke="#818CF8" strokeWidth={0.8} opacity={0.8} />
+            <text x={1027} y={306} textAnchor="middle" fill="#C7D2FE" fontSize="9" fontFamily="ui-monospace, monospace">
+              Decision
+            </text>
+            <text x={1027} y={320} textAnchor="middle" fill="#C7D2FE" fontSize="9" fontFamily="ui-monospace, monospace">
+              Service
+            </text>
+            <text x={1027} y={334} textAnchor="middle" fill="#94A3B8" fontSize="8" fontFamily="ui-monospace, monospace">
+              (ADR-021)
             </text>
           </PhaseBox>
 
@@ -130,7 +137,7 @@ export function ArchitectureMap() {
           {/* Query Cache */}
           <PhaseBox x={610} y={402} width={200} height={130} title="Query Cache" color="#64748B">
             <SvgNode x={630} y={440} width={160} height={34} label="LRU Cache" sublabel="TTL · 256 entries" style={NODE_STYLES.subsystem} />
-            <SvgNode x={630} y={484} width={160} height={34} label="Embedding Cache" sublabel="BGE-M3 results" style={NODE_STYLES.subsystem} />
+            <SvgNode x={630} y={484} width={160} height={34} label="Embedding Cache" sublabel="mxbai 1024d" style={NODE_STYLES.subsystem} />
           </PhaseBox>
 
           {/* Profiles */}
@@ -149,7 +156,7 @@ export function ArchitectureMap() {
           {/* ═══════ LAYER 5: INFRASTRUCTURE ═══════ */}
           <SectionLabel x={30} y={562} text="INFRASTRUCTURE" color="#64748B" />
 
-          <SvgNode x={60} y={548} width={160} height={36} label="BGE-M3 Embeddings" sublabel="multilingual · 1024d" style={NODE_STYLES.subsystem} />
+          <SvgNode x={60} y={548} width={160} height={36} label="mxbai-embed-large" sublabel="default · 1024d" style={NODE_STYLES.subsystem} />
           <SvgNode x={250} y={548} width={140} height={36} label="HNSW Index" sublabel="vector search" style={NODE_STYLES.subsystem} />
           <SvgNode x={420} y={548} width={130} height={36} label="SQLite / WAL" sublabel="persistence" style={NODE_STYLES.subsystem} />
           <SvgNode x={580} y={548} width={140} height={36} label="Noise Protocol" sublabel="encrypted p2p" style={NODE_STYLES.subsystem} />
@@ -241,7 +248,7 @@ export function ArchitectureMap() {
               Per-memory stability model + CoherenceGate L1-L4 hybrid memory firewall (ADR-011).
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,093 tests passing (1007+74+12)
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,139 tests passing (1053+74+12)
             </text>
           </g>
 
@@ -251,10 +258,10 @@ export function ArchitectureMap() {
               ⬡ Project Status — Oct 2026 (v0.17.1)
             </text>
             <text x={616} y={746} fill="#94A3B8" fontSize="10" fontFamily="system-ui, sans-serif">
-              ACTIVE: Decision Fabric (ADR-018) · Cognitive Scheduler · CoherenceGate L1-L4 · Stigmergy (ADR-015) · Noise NK/XK
+              ACTIVE: Decision Service (ADR-021) · Cognitive Scheduler · CoherenceGate L1-L4 · Stigmergy (ADR-015) · Noise NK/XK
             </text>
             <text x={616} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              SPIKE/RESEARCH: System One Laya ONNX (ADR-018) · Sparse Vectors (SPLADE) · Postcard zero-copy Serde
+              PHASE 2 SHADOW: Loopback HTTP JSON DecisionProvider (v29) · Sparse Vectors (SPLADE) · Postcard zero-copy Serde
             </text>
           </g>
 
@@ -289,16 +296,16 @@ export function ArchitectureMap() {
           <div className="space-y-1.5 text-xs text-muted-foreground">
             <div className="flex justify-between"><span>Interfaces</span><span className="font-mono text-slate-400">CLI · API · Dashboard · Coloquio</span></div>
             <div className="flex justify-between"><span>Orquestación</span><span className="font-mono text-slate-400">Cascade · Dispatch · Federation</span></div>
-            <div className="flex justify-between"><span>Core</span><span className="font-mono text-slate-400">LinearRAG · Coloquio · Guilds</span></div>
+            <div className="flex justify-between"><span>Core</span><span className="font-mono text-slate-400">LinearRAG · Coloquio · 45 Guilds</span></div>
             <div className="flex justify-between"><span>Storage</span><span className="font-mono text-slate-400">SilvaDB · FSRS · Cache</span></div>
-            <div className="flex justify-between"><span>Infra</span><span className="font-mono text-slate-400">BGE-M3 · HNSW · SQLite · ONNX</span></div>
+            <div className="flex justify-between"><span>Infra</span><span className="font-mono text-slate-400">mxbai (1024d) · HNSW · SQLite · ONNX</span></div>
           </div>
         </div>
         <div className="rounded-lg border border-border/50 bg-surface/50 p-4">
           <h4 className="text-xs font-mono font-semibold text-emerald-400 mb-2 uppercase tracking-wider">Primitivos activos</h4>
           <div className="space-y-1.5 text-xs text-muted-foreground">
             <div className="flex justify-between"><span>Decay model</span><span className="font-mono text-emerald-500/80">FSRS (per-memory stability)</span></div>
-            <div className="flex justify-between"><span>Retrieval</span><span className="font-mono text-emerald-500/80">BM25 + BGE-M3 + PageRank + RRF</span></div>
+            <div className="flex justify-between"><span>Retrieval</span><span className="font-mono text-emerald-500/80">BM25 + mxbai (1024d) + PageRank + RRF</span></div>
             <div className="flex justify-between"><span>Graph</span><span className="font-mono text-emerald-500/80">Node + Edge store</span></div>
             <div className="flex justify-between"><span>Federation</span><span className="font-mono text-emerald-500/80">Echo loop (safe mode)</span></div>
             <div className="flex justify-between"><span>Mesh</span><span className="font-mono text-emerald-500/80">mDNS discovery · Noise Protocol</span></div>
