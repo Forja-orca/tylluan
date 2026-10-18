@@ -107,15 +107,16 @@ def generate_svg():
     <rect x="40" y="170" width="1200" height="700" rx="16" fill="url(#nexus-grad)" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.6"/>
     <rect x="40" y="170" width="1200" height="700" rx="16" fill="none" stroke="#34d399" stroke-width="1" stroke-opacity="0.3"/>
     
-    <text x="65" y="200" fill="#38bdf8" font-size="16" font-weight="800" letter-spacing="1">tylluan-nexus (:47004)</text>
-    <text x="245" y="200" fill="#64748b" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
+    <text x="65" y="193" fill="#38bdf8" font-size="15" font-weight="800" letter-spacing="1">tylluan-nexus</text>
+    <text x="65" y="210" fill="#38bdf8" font-size="12" font-weight="700" letter-spacing="0.5">(:47004)</text>
+    <text x="270" y="200" fill="#94a3b8" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
     
-    <!-- Badges -->
-    <rect x="910" y="183" width="170" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-    <text x="925" y="199" fill="#34d399" font-size="11" font-weight="700">1,093 TESTS GREEN</text>
+    <!-- Badges (positioned between Arrow 2 at 640 and Arrow 3 at 1035 for clean clearance) -->
+    <rect x="705" y="183" width="160" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+    <text x="720" y="199" fill="#34d399" font-size="11" font-weight="700">1,139 TESTS GREEN</text>
     
-    <rect x="1090" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
-    <text x="1105" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
+    <rect x="875" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+    <text x="890" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
 
     <!-- SECTION 1: INGRESS & TRANSPORT -->
     <g id="ingress-sec">
@@ -155,11 +156,11 @@ def generate_svg():
       <text x="450" y="384" fill="#a7f3d0" font-size="10">TaskContext · RiskTier · CallerTrust · LatencyClass</text>
       <text x="450" y="396" fill="#a7f3d0" font-size="10">CoherenceGate L1-L4 Firewall · Signal Loop (ADR-011)</text>
 
-      <!-- Decision Fabric (ADR-018) -->
+      <!-- Decision Service (ADR-021) -->
       <rect x="830" y="348" width="370" height="55" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
-      <text x="845" y="368" fill="#ffffff" font-size="13" font-weight="700">Decision Fabric (ADR-018)</text>
-      <text x="845" y="384" fill="#6ee7b7" font-size="10">DecisionProvider trait · Deterministic rules baseline</text>
-      <text x="845" y="396" fill="#6ee7b7" font-size="10">Deterministic rules provider: choice · score</text>
+      <text x="845" y="368" fill="#ffffff" font-size="13" font-weight="700">Decision Service (ADR-021)</text>
+      <text x="845" y="384" fill="#6ee7b7" font-size="10">4 typed contracts · Deterministic rules baseline</text>
+      <text x="845" y="396" fill="#6ee7b7" font-size="10">Optional loopback model in shadow mode (v29)</text>
     </g>
 
     <!-- SECTION 3: SILVADB (LEFT) & INFERENCE (RIGHT) -->
@@ -195,10 +196,10 @@ def generate_svg():
       <text x="785" y="522" fill="#d8b4fe" font-size="11">• Jina Reranker v1 Turbo / v2 (cross-encoder)</text>
       <text x="785" y="538" fill="#d8b4fe" font-size="11">• llama_backend (llama-server GGUF) · Ollama / LM Studio</text>
 
-      <!-- Roadmap: Sparse Vectors (Translucent) -->
-      <rect x="770" y="560" width="430" height="42" rx="6" fill="#f59e0b" fill-opacity="0.08" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 4"/>
-      <text x="785" y="579" fill="#fef3c7" fill-opacity="0.9" font-size="12" font-weight="600">🚧 [Research] Sparse Vectors (SPLADE / BGE-M3 Lexical)</text>
-      <text x="785" y="594" fill="#fde68a" fill-opacity="0.75" font-size="10">Multi-vector lexical weights for hybrid sparse-dense retrieval</text>
+      <!-- Delivered / Config-gated: Learned-Sparse Lexical Embeddings -->
+      <rect x="770" y="560" width="430" height="42" rx="6" fill="#1e1b4b" fill-opacity="0.9" stroke="#9333ea" stroke-width="1"/>
+      <text x="785" y="579" fill="#e9d5ff" font-size="12" font-weight="600">⚡ Learned-Sparse Lexical Embeddings (BGE-M3 · Config-gated)</text>
+      <text x="785" y="594" fill="#d8b4fe" font-size="10">Fastembed sparse head (1024-dim vocabulary projection) · SQLite node_sparse_embeddings</text>
     </g>
 
     <!-- SECTION 4: EXECUTION & GUILDS (LEFT) & FEDERATION MESH (RIGHT) -->
@@ -268,16 +269,19 @@ def generate_svg():
   <!-- Sovereign to Memory (Green) -->
   <path d="M 250 415 L 250 435" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arr-green)"/>
   
-  <!-- Scheduler & Decision Fabric to Execution (Blue) -->
-  <path d="M 625 415 L 625 635" stroke="#60a5fa" stroke-width="2" fill="none" marker-end="url(#arr-blue)"/>
+  <!-- Sovereign to Inference (Purple) -->
+  <path d="M 985 415 L 985 435" stroke="#c084fc" stroke-width="2" fill="none" marker-end="url(#arr-purple)"/>
 
-  <!-- Decision Fabric to Mesh Dispatch (Cyan) -->
-  <path d="M 1015 415 L 1015 635" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arr-cyan)"/>
+  <!-- Scheduler & Decision Service to Execution via central corridor (Blue) -->
+  <path d="M 625 415 L 625 425 L 742 425 L 742 625 L 395 625 L 395 635" stroke="#60a5fa" stroke-width="2" fill="none" marker-end="url(#arr-blue)"/>
+
+  <!-- Decision Service to Mesh Dispatch via central corridor (Cyan) -->
+  <path d="M 1015 415 L 1015 425 L 748 425 L 748 625 L 985 625 L 985 635" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arr-cyan)"/>
 
   <!-- Memory <-> Inference (Purple) -->
-  <path d="M 735 525 L 755 525" stroke="#c084fc" stroke-width="2" fill="none" marker-end="url(#arr-purple)"/>
+  <path d="M 735 510 L 755 510" stroke="#c084fc" stroke-width="2" fill="none" marker-end="url(#arr-purple)"/>
 
-  <!-- Memory <-> Mesh (Cyan) -->
+  <!-- Execution <-> Mesh (Cyan) -->
   <path d="M 735 740 L 755 740" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arr-cyan)"/>
 
   <!-- Mesh to Remote Peers (Cyan) -->
