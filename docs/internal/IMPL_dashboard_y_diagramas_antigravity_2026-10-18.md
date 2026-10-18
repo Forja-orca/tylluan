@@ -406,3 +406,72 @@ Revisión independiente del turno 1284 con `react-reviewer`; el TL aplicó estos
 - Botón «Volver» del Coloquio móvil: área táctil ≥ 40 px y anillo de foco visible.
 - Limitaciones que siguen abiertas, sin arreglar: el ancho del chat y `showCanvas` se leen de `window.innerWidth` en el render y no reaccionan a rotación o redimensionado (se corrige solo en el siguiente render); entre 768 y 1023 px el canvas empieza apagado y se activa con el botón; `refreshData` no refresca `healthDetailed`, y su `catch` casi nunca se alcanza (`Promise.allSettled`), por lo que el banner «Reintentar» rara vez aparece; la flecha de clientes del PNG sigue cruzando el texto `(:47004)` (G5 no resuelto).
 - No verificado: ninguna de estas vistas se ha renderizado en un navegador por el TL ni por el revisor.
+
+---
+
+## Turno 1285 — G5 Definitivo, useNexus Error Handling y Cierre Q3/Q6
+
+**Autor:** `@antigravity`  
+**Fecha:** 2026-10-18  
+**Worktree:** `E:\tylluan-wt-antigravity` (base: `5dec8cc`)  
+**Estado:** Entrega Completa — diff SIN commitear  
+
+### 1. Resumen de Cambios Realizados
+
+1. **G5 (Despeje Total de Flechas en Diagrama de Arquitectura):**
+   - **Causa del hallazgo:** En versiones previas, la flecha vertical de clientes MCP que desciende a `x=245` cruzaba sobre el texto `(:47004)` de la cabecera de `tylluan-nexus`.
+   - **Corrección:**
+     - En `scripts/generate_architecture_svg.py` y `docs/assets/architecture.svg`:
+       - `tylluan-nexus` (y=193) y `(:47004)` (y=210) se ubican estrictamente en `x=65..175`, dejando un margen libre de 70 px antes de la flecha en `x=245`.
+       - El subtítulo `— Single Sovereign Rust Process` se desplazó a `x=285`, dejando un margen libre de 40 px tras la flecha.
+       - Las badges de estado se reubicaron en `x=705` y `x=875`, despejando completamente las flechas de WebSocket (`x=640`) y REST/SSE (`x=1035`).
+     - **Regeneración efectiva del PNG:** Se regeneró `docs/assets/architecture.png` vía CDP headless (`ChromeVisualBrowser`). Se verificó visualmente mediante recorte que el corredor vertical de la flecha en `x=245` está 100% limpio y libre de colisiones textuales.
+     - **Evidencia Git:** `docs/assets/architecture.png | Bin 290767 -> 290792 bytes`.
+
+2. **Arreglo de Fondo de `useNexus` (Propagación Real de Errores de Conexión):**
+   - **Causa:** `refreshData()` utilizaba `Promise.allSettled`, el cual nunca rechaza. El bloque `catch (e)` era inalcanzable ante caídas de red o desconexiones del kernel, provocando que `error` permaneciera en `null` y el banner «Communication Error» / «Reintentar» casi nunca se disparara.
+   - **Corrección:**
+     - En `packages/tylluan-ui-core/src/hooks/useNexus.tsx`:
+       - Se analizan las promesas rechazadas (`results.filter(r => r.status === 'rejected')`).
+       - En caída total (todas las promesas rechazadas), se extrae el motivo del error y se asigna a `setError(msg)`.
+       - Si el resumen del sistema (`results[8]`) falla y $\ge 3$ endpoints no responden, se activa `setError(...)`.
+       - En recuperaciones exitosas, se restablece `setError(null)`.
+       - En el callback del bridge de conexión: al desconectarse (`status === false`), se asigna inmediatamente `setError('Disconnected from Tylluan kernel (:47004)')`. Al reconectar, se limpia el error.
+     - Se compiló el paquete `@tylluan/ui-core` (`npm run build` en `packages/tylluan-ui-core` con exit code `0`).
+
+3. **Cierre de Q3 y Q6 en Paneles Pendientes:**
+   - **`FleetTab.tsx`:**
+     - **Q6:** Se reemplazó el `if (!data) return null;` por un componente de estado de error/desconexión con icono, explicación y botón accesible «Reintentar». Además se añadió un contenedor de estado vacío cuando `data.agents.length === 0`.
+     - **Q3:** El punto de estado del agente cuenta ahora con `role="status"` y `aria-label={`Agent status: ${status}`}` accesible. Para agentes offline sin turnos previos, se muestra la píldora textual explícita `<StatusPill status="offline" label="inactive" />` en lugar de omitirla.
+   - **`KnowledgeGraphTab.tsx`:**
+     - **Q6:** Se incorporó estado de carga activo (`searching`) con spinner e indicador verbal («Cargando nodos de SilvaDB...»). Se implementó un estado vacío completo cuando `filteredResults.length === 0`, diferenciando honestamente si la base SilvaDB está vacía («No hay memorias en SilvaDB», sugiriendo usar `tylluan_remember` y botón de reintento) o si ningún nodo coincide con el filtro de ciclo de vida activo («No hay nodos con estado "...""», con botón para mostrar todos).
+     - **Q3:** Se añadió `aria-hidden="true"` al punto de color decorativo del tipo de nodo, complementando la etiqueta textual adyacente que ya define el tipo.
+
+---
+
+## Impact
+
+1. **No-depredación (ADR-013):**
+   - No se alteró ningún archivo de `crates/` ni `guilds/`.
+   - No se modificaron contratos ni esquemas de la API REST / MCP.
+   - No se tocaron puertos de producción (`:47004`).
+   - El trabajo se circunscribe a la capa de presentación (`dashboard` y `@tylluan/ui-core`) y a los diagramas estáticos de documentación (`docs/assets/`).
+
+2. **Evidencia de Comandos y Códigos de Salida:**
+   - `npx tsc --noEmit` (en `dashboard`): Exit code `0`
+   - `npx vitest run` (en `dashboard`): Exit code `0` (9 test files passed, 53/53 tests passed)
+   - `npm run build` (en `dashboard`): Exit code `0` (`dist/` generado limpiamente)
+   - `bash scripts/check_docs_reality.sh`: Exit code `0` (`✅ No doc-path, doc-port or version drift found`)
+   - `python scripts/check_doc_links.py`: Exit code `0` (`✅ 222 relative doc links across 163 Markdown files all resolve to tracked paths`)
+   - `git status`: 6 ficheros modificados, listos sin commitear para revisión del Tech Lead.
+
+
+## Nota del TL sobre el turno 1285 (2026-10-18)
+
+Revisión independiente (`react-reviewer`); el TL aplicó estos cambios antes de commitear:
+
+- `useNexus`: el banner «Communication Error» solo se activa ahora con caída total (todas las consultas de `refreshData` rechazadas). Se retiraron la rama basada en `results[8]` (frágil por índice y capaz de disparar el banner por un endpoint opcional lento), el error en la desconexión del SSE (un parpadeo transitorio con reconexión automática lo mostraba aunque REST funcionara) y el `setError(null)` inicial (el banner parpadeaba en cada sondeo durante una caída real). Los mensajes ya no fijan el puerto `:47004`.
+- `KnowledgeGraphTab`: se eliminaron los dos bloques de estado vacío antiguos que quedaban apilados bajo el nuevo.
+- `FleetTab`: el punto de estado ya no es `role="status"` (región viva implícita sobre contenido sondeado); es decorativo y el estado va en un `sr-only`.
+- Abiertos, sin arreglar: el estado vacío de KnowledgeGraph dice «No hay memorias» también cuando la carga falló (falta `loadError`) y parpadea antes de la primera carga (falta `hasLoaded`); un `loadRecent` en segundo plano sustituye la lista por el spinner; `refresh` de FleetTab no da feedback de carga ni avisa de datos viejos; textos en español e inglés mezclados.
+- G5 verificado visualmente en el PNG regenerado: la flecha de clientes ya no cruza el título.
