@@ -17,13 +17,13 @@ export function MetricCard({ icon: Icon, label, value, unit, sub, valueClass }: 
     //   icon hover (emerald-400)         → 9.58:1 PASS
     <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md hover:border-emerald-500/30 transition-all group overflow-hidden relative">
       <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-3xl -mr-12 -mt-12 rounded-full group-hover:bg-emerald-500/10 transition-colors" />
-      <div className="flex items-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest font-sans font-bold mb-1">
+      <div className="flex items-center gap-2 text-slate-400 text-[11px] uppercase tracking-widest font-sans font-bold mb-1">
         <Icon className="w-3 h-3 group-hover:text-emerald-400 transition-colors" /> {label}
       </div>
       <p className={`text-2xl font-black tracking-tighter font-sans ${valueClass || 'text-slate-100'}`}>
         {value}{unit && <span className="text-xs text-slate-400 ml-1 font-normal uppercase font-mono">{unit}</span>}
       </p>
-      {sub && <p className="text-[10px] text-slate-400 mt-1 font-mono">{sub}</p>}
+      {sub && <p className="text-[11px] text-slate-400 mt-1 font-mono">{sub}</p>}
     </div>
   );
 }

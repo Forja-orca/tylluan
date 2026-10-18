@@ -1,21 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Cpu,
-  ServerOff,
   CheckCircle2,
   XCircle,
   Loader2,
   Eye,
   HelpCircle,
-  Clock,
   Play
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { BackgroundJob } from '../lib/nexus-bridge';
+import { BackgroundJob, NexusBridge } from '../lib/nexus-bridge';
 import { usePolling } from '../hooks/usePolling';
 
 interface BackgroundJobsPanelProps {
-  bridge: any;
+  bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
@@ -28,7 +26,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   const [jobs, setJobs] = useState<BackgroundJob[]>([]);
   const [intent, setIntent] = useState('');
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const pollRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -38,17 +36,21 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
     try {
       const res = await bridge.listBackgroundJobs();
       if (res && res.jobs) {
-        setJobs(res.jobs.map((j: any) => ({
-          id: j.id,
-          guild: j.guild || j.name || 'kernel',
-          intent: j.intent || j.description || j.name,
-          status: j.status || 'running',
-          started_at: j.created_at || new Date().toISOString(),
-          elapsed_secs: j.elapsed_secs || 0,
-        })));
+        setJobs(res.jobs.map((j) => {
+          const item = j as unknown as Record<string, unknown>;
+          return {
+            id: String(item.id ?? ''),
+            guild: String(item.guild || item.name || 'kernel'),
+            intent: String(item.intent || item.description || item.name || ''),
+            status: (item.status as BackgroundJob['status']) || 'running',
+            started_at: String(item.created_at || new Date().toISOString()),
+            elapsed_secs: Number(item.elapsed_secs || 0),
+          };
+        }));
       }
-    } catch (err: any) {
-      console.error("Error al cargar lista de trabajos en segundo plano:", err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Error al cargar lista de trabajos en segundo plano:", msg);
     }
   };
 
@@ -71,9 +73,10 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
       setJobs(prev => [job, ...prev]);
       setIntent('');
       pollJob(jobId);
-    } catch (err: any) {
-      console.error("Error al iniciar trabajo en segundo plano:", err.message);
-      setError(`Error al iniciar trabajo (@bg:${intent.trim()}): ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Error al iniciar trabajo en segundo plano:", msg);
+      setError(`Error al iniciar trabajo (@bg:${intent.trim()}): ${msg}`);
     } finally {
       setStarting(false);
     }
@@ -141,8 +144,9 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   }, [notify]);
 
   useEffect(() => {
+    const polls = pollRef.current;
     return () => {
-      Object.values(pollRef.current).forEach(clearInterval);
+      Object.values(polls).forEach(clearInterval);
     };
   }, []);
 
@@ -160,7 +164,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
   };
 
   const getStatusBadge = (status: BackgroundJob['status']) => {
-    const base = "px-2 py-0.5 rounded-full text-[10px] font-medium leading-none";
+    const base = "px-2 py-0.5 rounded-full text-[11px] font-medium leading-none";
     switch (status) {
       case 'pending':
         return cn(base, "bg-emerald-500/10 text-emerald-400 border-emerald-500/20");
@@ -241,12 +245,12 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
                         <span className="text-sm font-mono font-bold text-slate-200">{job.id}</span>
                         <span className={getStatusBadge(job.status)}>{job.status}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-[10px] text-slate-500 font-mono mt-1 flex-wrap">
+                      <div className="flex items-center gap-4 text-[11px] text-slate-500 font-mono mt-1 flex-wrap">
                         <span>Guild: <strong className="text-slate-350">{job.guild}</strong></span>
                         <span>Started: {new Date(job.started_at).toLocaleTimeString()}</span>
                         {job.status === 'pending' && <span>Elapsed: {job.elapsed_secs}s</span>}
                       </div>
-                      <p className="text-[10px] font-mono text-slate-500 mt-1 truncate max-w-md">{job.intent}</p>
+                      <p className="text-[11px] font-mono text-slate-500 mt-1 truncate max-w-md">{job.intent}</p>
                     </div>
                   </div>
 
@@ -293,7 +297,7 @@ export default function BackgroundJobsPanel({ bridge, notify }: BackgroundJobsPa
                 <HelpCircle className="w-12 h-12 text-slate-700 animate-pulse" />
                 <div className="text-center">
                   <p>No job selected</p>
-                  <p className="text-[10px] text-slate-600 mt-1">Select a job to inspect its result.</p>
+                  <p className="text-[11px] text-slate-600 mt-1">Select a job to inspect its result.</p>
                 </div>
               </div>
             )}

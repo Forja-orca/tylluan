@@ -120,7 +120,7 @@ function ForestStatus({ interoception, guilds }: { interoception: Interoception 
       </div>
 
       <div className="mt-2 pt-2 border-t border-slate-800/50">
-        <div className="flex justify-between text-[10px] text-slate-500 mb-1 font-medium">
+        <div className="flex justify-between text-[11px] text-slate-500 mb-1 font-medium">
           <span>Forest Density</span>
           <span>{densityVal.toFixed(4)} / 0.0100</span>
         </div>
@@ -173,7 +173,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
 
   const HormoneBar = ({ label, value, color }: { label: string, value: number, color: string }) => (
     <div className="space-y-1">
-      <div className="flex justify-between text-[10px] font-mono">
+      <div className="flex justify-between text-[11px] font-mono">
         <span className="text-slate-400">{label}</span>
         <span style={{ color }}>{(value * 100).toFixed(0)}%</span>
       </div>
@@ -206,25 +206,25 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-1">Homeostasis</div>
+          <div className="text-[11px] text-slate-500 mb-1">Homeostasis</div>
           <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.homeostasis > 0.7 ? '#34d399' : interoception.homeostasis > 0.4 ? '#fbbf24' : '#ef4444') : '#64748b' }}>
             {interoception ? `${(interoception.homeostasis * 100).toFixed(0)}%` : '—'}
           </div>
         </div>
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-1">Stress</div>
+          <div className="text-[11px] text-slate-500 mb-1">Stress</div>
           <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.stress_level < 0.3 ? '#34d399' : interoception.stress_level < 0.6 ? '#fbbf24' : '#ef4444') : '#64748b' }}>
             {interoception ? `${(interoception.stress_level * 100).toFixed(0)}%` : '—'}
           </div>
         </div>
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-1">Knowledge Hunger</div>
+          <div className="text-[11px] text-slate-500 mb-1">Knowledge Hunger</div>
           <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.knowledge_hunger > 0.7 ? '#fbbf24' : '#34d399') : '#64748b' }}>
             {interoception ? `${(interoception.knowledge_hunger * 100).toFixed(0)}%` : '—'}
           </div>
         </div>
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-1">Graph Density</div>
+          <div className="text-[11px] text-slate-500 mb-1">Graph Density</div>
           <div className="text-2xl font-bold font-mono text-slate-300">
             {interoception ? interoception.graph_density.toFixed(4) : '—'}
           </div>
@@ -233,7 +233,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-2">Active Pheromones</div>
+          <div className="text-[11px] text-slate-500 mb-2">Active Pheromones</div>
           <div className="text-sm font-mono text-emerald-400">
             {interoception ? `${interoception.active_pheromones} signals` : '—'}
           </div>
@@ -242,7 +242,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
 
       {interoception?.recommendations && interoception.recommendations.length > 0 && (
         <div className="rounded-lg bg-slate-900/50 p-3">
-          <div className="text-[10px] text-slate-500 mb-2">Recommendations</div>
+          <div className="text-[11px] text-slate-500 mb-2">Recommendations</div>
           <ul className="space-y-1">
             {interoception.recommendations.map((rec: string, i: number) => (
               <li key={i} className="text-xs text-amber-400 font-mono">• {rec}</li>
@@ -259,7 +259,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
               <span className="text-violet-400 text-sm">🧬</span>
               <span className="text-[11px] font-medium text-slate-400">Metabolic Matrix & Agent Allocation</span>
             </div>
-            <span className="text-[9px] text-slate-500">Collective Efficiency</span>
+            <span className="text-[11px] text-slate-500">Collective Efficiency</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -292,25 +292,25 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
                   <div className="flex items-start justify-between">
                     <div>
                       <h5 className="text-xs font-semibold text-slate-200">{p.agent_id}</h5>
-                      <p className="text-[9px] text-slate-500 font-mono mt-0.5">{description}</p>
+                      <p className="text-[11px] text-slate-500 font-mono mt-0.5">{description}</p>
                     </div>
-                    <span className={cn("text-[8px] uppercase px-1.5 py-0.5 rounded bg-slate-900", costColor)}>
+                    <span className={cn("text-[11px] uppercase px-1.5 py-0.5 rounded bg-slate-900", costColor)}>
                       {costTier}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <div className="flex justify-between items-center text-[11px] text-slate-400">
                     <span>Total calls:</span>
                     <span className="font-mono text-slate-200 font-medium">{p.total_calls}</span>
                   </div>
 
                   {Object.keys(p.competencies).length > 0 && (
                     <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
-                      <p className="text-[10px] text-slate-500 font-medium">Domain Competency</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Domain Competency</p>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                         {Object.entries(p.competencies).map(([guild, val]) => (
                           <div key={guild} className="space-y-0.5">
-                            <div className="flex justify-between text-[8px] font-mono">
+                            <div className="flex justify-between text-[11px] font-mono">
                               <span className="text-slate-500 uppercase truncate max-w-[80px]" title={guild}>{guild}</span>
                               <span className="text-amber-400/80">{(val * 100).toFixed(0)}%</span>
                             </div>
@@ -337,7 +337,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
             {Object.entries(interoception.agent_rhythms).map(([agentId, rhythm]) => (
               <div key={agentId} className="flex items-center gap-3 text-xs">
                 <span className="font-mono text-slate-300 w-32 truncate">{agentId}</span>
-                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">
+                <span className="px-2 py-0.5 rounded text-[11px] bg-slate-800 text-slate-400">
                   {rhythm.client}
                 </span>
                 <span className="text-slate-400 font-mono">
@@ -355,7 +355,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
       {/* Capabilities row */}
       <div className="flex gap-3 mt-4">
         <div className={cn(
-          "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-medium",
+          "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium",
           interoception?.capabilities?.embeddings_loaded
             ? "bg-emerald-500/10 text-emerald-400"
             : "bg-slate-800 text-slate-500"
@@ -364,7 +364,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
           {interoception?.capabilities?.embedding_model ?? 'embeddings'} 
         </div>
         <div className={cn(
-          "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-medium",
+          "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium",
           interoception?.capabilities?.reranker_loaded
             ? "bg-violet-500/10 text-violet-400"
             : "bg-slate-800 text-slate-500"
@@ -376,7 +376,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
         {interoception?.tunnel && (
           <div className="flex items-center gap-2">
             <span className={cn(
-              "px-2 py-1 rounded-full text-[10px] font-medium",
+              "px-2 py-1 rounded-full text-[11px] font-medium",
               interoception.tunnel.wsl_bridge_active
                 ? "bg-blue-500/10 text-blue-400"
                 : "bg-slate-700/50 text-slate-500"
@@ -384,7 +384,7 @@ export function InteroceptionTab({ interoception, memoryStats }: Props) {
               {interoception.tunnel.wsl_bridge_active ? "🌉 WSL Bridge" : "WSL Bridge OFF"}
             </span>
             {interoception.tunnel.wsl_url && (
-              <span className="text-[9px] font-mono text-slate-500 truncate max-w-[200px]"
+              <span className="text-[11px] font-mono text-slate-500 truncate max-w-[200px]"
                     title={interoception.tunnel.wsl_url}>
                 {interoception.tunnel.wsl_url}
               </span>

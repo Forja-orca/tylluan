@@ -112,7 +112,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                     </div>
                     <div>
                       <div className="text-sm font-bold text-slate-200">{session.client_name}</div>
-                      <div className="text-[10px] font-mono text-slate-600 uppercase tracking-tighter">ID: {session.id.slice(0, 13)}...</div>
+                      <div className="text-[11px] font-mono text-slate-600 uppercase tracking-tighter">ID: {session.id.slice(0, 13)}...</div>
                     </div>
                   </div>
                 </td>
@@ -149,7 +149,7 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
                 </td>
                 <td className="px-6 py-4 text-right">
                   {session.id === currentSessionId ? (
-                    <span className="text-[10px] font-medium text-emerald-500/40 px-3 py-1.5 rounded-lg">Current Session</span>
+                    <span className="text-[11px] font-medium text-emerald-500/40 px-3 py-1.5 rounded-lg">Current Session</span>
                   ) : (
                     <button
                       onClick={() => revokeSession(session.id)}
@@ -179,8 +179,8 @@ export function SessionsTab({ bridge, notify }: { bridge: NexusBridge | null; no
           <div className="py-24 flex flex-col items-center justify-center text-slate-600 bg-slate-900/20">
             <Users className="w-12 h-12 mb-4 opacity-20" />
             <p className="text-sm font-medium italic">{searchTerm ? 'No sessions match your filter' : 'No active MCP sessions'}</p>
-            {!searchTerm && <p className="text-[10px] mt-2 text-slate-500 max-w-xs">Sessions appear here when an MCP client connects to the kernel. Connect a client to start a session.</p>}
-            {searchTerm && <p className="text-[10px] mt-1 uppercase tracking-widest opacity-50">Adjust your filter or search term</p>}
+            {!searchTerm && <p className="text-[11px] mt-2 text-slate-500 max-w-xs">Sessions appear here when an MCP client connects to the kernel. Connect a client to start a session.</p>}
+            {searchTerm && <p className="text-[11px] mt-1 uppercase tracking-widest opacity-50">Adjust your filter or search term</p>}
           </div>
         )}
       </div>

@@ -174,7 +174,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
           <Upload className="w-3.5 h-3.5 text-emerald-500" />
           <span>Ingest Knowledge</span>
           {recent.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold border border-emerald-500/25">
+            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[11px] font-bold border border-emerald-500/25">
               {recent.length}
             </span>
           )}
@@ -189,7 +189,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             <button
               onClick={() => setMode('text')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors",
+                "px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors",
                 mode === 'text'
                   ? "bg-slate-800 text-emerald-400 border border-slate-700"
                   : "text-slate-500 hover:text-slate-300"
@@ -200,7 +200,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             <button
               onClick={() => setMode('url')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors",
+                "px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors",
                 mode === 'url'
                   ? "bg-slate-800 text-emerald-400 border border-slate-700"
                   : "text-slate-500 hover:text-slate-300"
@@ -211,7 +211,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
             <button
               onClick={() => setMode('file')}
               className={cn(
-                "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors",
+                "px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors",
                 mode === 'file'
                   ? "bg-slate-800 text-emerald-400 border border-slate-700"
                   : "text-slate-500 hover:text-slate-300"
@@ -250,7 +250,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 <button
                   onClick={() => setBulk(v => !v)}
                   className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-colors',
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md border text-[11px] font-bold uppercase tracking-wider transition-colors',
                     bulk
                       ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                       : 'bg-slate-950 border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300'
@@ -263,7 +263,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
               {/* Bulk preview */}
               {bulk && bulkChunks && bulkChunks.length > 0 && (
-                <div className="text-[10px] text-slate-500 font-mono">
+                <div className="text-[11px] text-slate-500 font-mono">
                   {bulkChunks.length} chunk{bulkChunks.length !== 1 ? 's' : ''} detected
                   {bulkChunks.map((c, i) => (
                     <span key={i} className="ml-2 px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
@@ -284,7 +284,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 placeholder="https://example.com/article"
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 transition-colors"
               />
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[11px] text-slate-500">
                 Provide a URL to crawl and ingest its content automatically into SilvaDB.
               </p>
             </div>
@@ -324,12 +324,12 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
                 {selectedFile ? (
                   <div className="text-xs text-slate-200">
                     <p className="font-bold text-emerald-400">{selectedFile.name}</p>
-                    <p className="text-[10px] text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    <p className="text-[11px] text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                 ) : (
                   <div className="text-xs text-slate-400">
                     <p className="font-bold">Drag and drop a file here</p>
-                    <p className="text-[10px] text-slate-600">or click to browse</p>
+                    <p className="text-[11px] text-slate-600">or click to browse</p>
                   </div>
                 )}
               </div>
@@ -338,7 +338,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
 
           {/* Submit */}
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-600 font-mono">
+            <span className="text-[11px] text-slate-600 font-mono">
               {mode === 'text' && `${charCount} chars`}
               {mode === 'url' && 'URL Mode'}
               {mode === 'file' && (selectedFile ? `${selectedFile.name}` : 'File Mode')}
@@ -370,9 +370,9 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
           {/* Recent nodes */}
           {recent.length > 0 && (
             <div className="border-t border-slate-800 pt-3 space-y-1.5">
-              <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold">Recent</p>
+              <p className="text-[11px] uppercase tracking-widest text-slate-600 font-bold">Recent</p>
               {recent.map(n => (
-                <div key={n.node_id + n.ts} className="flex items-start gap-2 text-[10px] font-mono">
+                <div key={n.node_id + n.ts} className="flex items-start gap-2 text-[11px] font-mono">
                   <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-px" />
                   <div className="flex-1 min-w-0">
                     <span className="text-slate-300 truncate block">{n.preview}</span>

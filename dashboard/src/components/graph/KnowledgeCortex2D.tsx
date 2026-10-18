@@ -33,9 +33,14 @@ import { nodeTypeColor, clusterRingColor, CORTEX_BACKGROUND } from './palette';
 interface CortexNode extends GraphNode {
   cluster_id?: number | string;
   stigmergy_heat?: number;
+  type?: string;
+  label?: string;
   x?: number; y?: number;
 }
-interface CortexLink { source: string; target: string; }
+interface CortexLink {
+  source: string | CortexNode;
+  target: string | CortexNode;
+}
 interface CortexData { nodes: CortexNode[]; links: CortexLink[]; }
 
 interface Props {
@@ -47,7 +52,7 @@ interface Props {
 const REFRESH_DEBOUNCE_MS = 1500;
 const COOLDOWN_MS = 6000; // physics budget per layout settle — then idle at 0 cpu
 
-function normalizeLinks(raw: any[]): CortexLink[] {
+function normalizeLinks(raw: Array<Record<string, unknown>>): CortexLink[] {
   return raw
     .map((l) => ({
       source: String(l.source ?? l.from ?? l.s ?? ''),
@@ -56,20 +61,28 @@ function normalizeLinks(raw: any[]): CortexLink[] {
     .filter((l) => l.source && l.target);
 }
 
+interface ForceGraphHandle {
+  d3Force: (name: string) => { strength: (v: number) => void; distance: (v: number) => void } | undefined;
+  d3ReheatSimulation: () => void;
+  centerAt?: (x: number, y: number, ms?: number) => void;
+  zoomToFit?: (ms?: number, pad?: number) => void;
+}
+
 export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
-  const fgRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<ForceGraphHandle & any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 800, h: 500 });
   const [data, setData] = useState<CortexData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
-  const [hoverNode, setHoverNode] = useState<any>(null);
-  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [hoverNode, setHoverNode] = useState<CortexNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<CortexNode | null>(null);
   const seenEventTsRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAutoFramedRef = useRef(false);
 
   // Highlight links that connect to whatever the user is looking at.
-  const isLinkConnectedToActiveNode = useCallback((link: any) => {
+  const isLinkConnectedToActiveNode = useCallback((link: CortexLink) => {
     if (!hoverNode && !selectedNode) return true;
     const activeId = hoverNode?.id || selectedNode?.id;
     const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
@@ -96,7 +109,7 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
       const g = await bridge.getSilvaGraph(500, true);
       setData({
         nodes: (g.nodes as CortexNode[]) || [],
-        links: normalizeLinks(g.edges || []),
+        links: normalizeLinks((g.edges || []) as Array<Record<string, unknown>>),
       });
     } catch {
       // Transient — the panel keeps showing the last good graph rather than blanking.
@@ -158,7 +171,7 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
   // one circle + optional one stroke per node is the whole cost. Text is the
   // expensive part at graph scale, so labels render only on hover/select or
   // when the user has zoomed in enough to read them anyway.
-  const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+  const paintNode = useCallback((node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const n = node as CortexNode;
     const weight = Number.isFinite(n.weight) ? Math.min(1, Number(n.weight)) : 0.4;
     const r = 3 + weight * 5;
@@ -167,10 +180,10 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
 
     ctx.beginPath();
     ctx.arc(x, y, r, 0, 2 * Math.PI, false);
-    ctx.fillStyle = nodeTypeColor(n.node_type || (n as any).type);
+    ctx.fillStyle = nodeTypeColor(n.node_type || n.type);
     ctx.fill();
 
-    const isActive = hoverNode === node || selectedNode === node;
+    const isActive = hoverNode === n || selectedNode === n;
     if (isActive) {
       ctx.lineWidth = 1.5 / globalScale;
       ctx.strokeStyle = '#e2e8f0';
@@ -185,7 +198,7 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
     }
 
     if (isActive || globalScale >= 1.8) {
-      const label = String(n.content || (n as any).label || n.id || '').slice(0, 42);
+      const label = String(n.content || n.label || n.id || '').slice(0, 42);
       // Escalado inverso al zoom: 10px CONSTANTES en pantalla. Un floor en
       // unidades de mundo (p.ej. 3) hace que a zoom alto el label explote
       // (3px de mundo × 8 de zoom = 24px visuales y creciendo) — cazado en la
@@ -200,7 +213,7 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
   }, [hoverNode, selectedNode]);
 
   // Hit area must match the custom painter or hover/click detection breaks.
-  const paintNodeHitArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
+  const paintNodeHitArea = useCallback((node: object, color: string, ctx: CanvasRenderingContext2D) => {
     const n = node as CortexNode;
     ctx.beginPath();
     ctx.arc(n.x ?? 0, n.y ?? 0, 8, 0, 2 * Math.PI, false);
@@ -208,10 +221,10 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
     ctx.fill();
   }, []);
 
-  const handleNodeClick = useCallback((node: any) => {
-    setSelectedNode(node);
-    onNodeClick?.(node as GraphNode);
+  const handleNodeClick = useCallback((node: object) => {
     const n = node as CortexNode;
+    setSelectedNode(n);
+    onNodeClick?.(n as GraphNode);
     fgRef.current?.centerAt?.(n.x ?? 0, n.y ?? 0, 500);
   }, [onNodeClick]);
 
@@ -226,7 +239,7 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
         </div>
       )}
 
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 font-mono text-[10px] text-slate-400">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 font-mono text-[11px] text-slate-400">
         <span className="px-2 py-1 rounded bg-background/40 backdrop-blur border border-slate-800/60">
           {nodeCount} nodes · {linkCount} edges
         </span>
@@ -245,26 +258,30 @@ export function KnowledgeCortex2D({ bridge, events, onNodeClick }: Props) {
 
       <ForceGraph2D
         ref={fgRef}
-        graphData={useMemo(() => ({ nodes: data.nodes as any[], links: data.links as any[] }), [data])}
+        graphData={useMemo(() => ({ nodes: data.nodes, links: data.links }), [data])}
         width={dims.w}
         height={dims.h}
         backgroundColor={CORTEX_BACKGROUND}
         nodeCanvasObject={paintNode}
         nodePointerAreaPaint={paintNodeHitArea}
-        nodeLabel={(n: any) => `${n.node_type || n.type || 'node'} · ${(n.content || n.label || n.id || '').toString().slice(0, 160)}`}
-        linkColor={(link: any) => {
+        nodeLabel={(node: object) => {
+          const n = node as CortexNode;
+          return `${n.node_type || n.type || 'node'} · ${(n.content || n.label || n.id || '').toString().slice(0, 160)}`;
+        }}
+        linkColor={(l: object) => {
+          const link = l as CortexLink;
           const isConnected = isLinkConnectedToActiveNode(link);
           if (hoverNode || selectedNode) {
             return isConnected ? 'rgba(34, 211, 238, 0.85)' : 'rgba(148, 163, 184, 0.04)';
           }
           return 'rgba(148, 163, 184, 0.16)';
         }}
-        linkWidth={(link: any) => (isLinkConnectedToActiveNode(link) && (hoverNode || selectedNode) ? 1.4 : 0.5)}
+        linkWidth={(l: object) => (isLinkConnectedToActiveNode(l as CortexLink) && (hoverNode || selectedNode) ? 1.4 : 0.5)}
         cooldownTime={COOLDOWN_MS}
         d3VelocityDecay={0.35}
         minZoom={0.15}
         maxZoom={8}
-        onNodeHover={(node: any) => setHoverNode(node)}
+        onNodeHover={(node: object | null) => setHoverNode(node as CortexNode | null)}
         onNodeClick={handleNodeClick}
         onEngineStop={() => {
           // Layout settled (or hit the time budget) — physics idle from here

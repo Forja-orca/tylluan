@@ -67,18 +67,21 @@ export function useNexusSSE(
 
     // ── Error result from kernel tools ────────────────────────────────────
     if (ev.type === 'error_result' || ev.type === 'tool_error') {
-      const msg = (ev.data as any)?.message
-        || (ev.data as any)?.error
+      const d = (ev.data ?? {}) as Record<string, unknown>;
+      const msg = (typeof d.message === 'string' && d.message)
+        || (typeof d.error === 'string' && d.error)
         || 'Kernel reported an error';
-      const guild = (ev.data as any)?.guild || (ev.data as any)?.tool;
+      const guild = (typeof d.guild === 'string' ? d.guild : undefined)
+        || (typeof d.tool === 'string' ? d.tool : undefined);
       onError?.(msg, guild);
     }
 
     // ── Guild status updates (kernel sends 'guild_status', not 'guild_killed') ──
     if (ev.type === 'guild_status') {
-      const guild = (ev.data as any)?.guild || 'unknown';
-      const status = (ev.data as any)?.status || 'unknown';
-      const pid = (ev.data as any)?.pid ?? null;
+      const d = (ev.data ?? {}) as Record<string, unknown>;
+      const guild = typeof d.guild === 'string' ? d.guild : 'unknown';
+      const status = typeof d.status === 'string' ? d.status : 'unknown';
+      const pid = typeof d.pid === 'number' ? d.pid : null;
       if (status === 'crashed') {
         onError?.(`Guild crashed: ${guild}`, guild);
       }
@@ -92,13 +95,15 @@ export function useNexusSSE(
 
     // ── Mention event detection ──────────────────────────────────────────
     if (ev.type === 'mention' || ev.type.startsWith('mention:')) {
-      const data = ev.data as any;
+      const data = (ev.data ?? {}) as Record<string, unknown>;
       const targetAgent = ev.type.startsWith('mention:') 
         ? ev.type.slice(8) 
-        : data?.agent_id || 'all';
-      const channel = data?.channel_id || 'coloquio';
-      const message = data?.message || data?.content || 'Has sido mencionado';
-      const sender = data?.sender_id || data?.author_id || 'alguien';
+        : (typeof data.agent_id === 'string' ? data.agent_id : 'all');
+      const channel = typeof data.channel_id === 'string' ? data.channel_id : 'coloquio';
+      const message = (typeof data.message === 'string' ? data.message : undefined)
+        || (typeof data.content === 'string' ? data.content : 'Has sido mencionado');
+      const sender = (typeof data.sender_id === 'string' ? data.sender_id : undefined)
+        || (typeof data.author_id === 'string' ? data.author_id : 'alguien');
       
       window.dispatchEvent(
         new CustomEvent('nexus_mention', { 

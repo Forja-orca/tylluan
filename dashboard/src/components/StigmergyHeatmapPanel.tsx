@@ -350,12 +350,12 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
                 Stigmergic Heatmap & Workprints
               </h2>
               {isLive ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
+                <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
                   <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
                   Live Kernel Stream
                 </span>
               ) : (
-                <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-amber-950/60 border border-amber-800/50 text-amber-300">
+                <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-amber-950/60 border border-amber-800/50 text-amber-300">
                   ADR-015 Phase 4
                 </span>
               )}
@@ -487,14 +487,14 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
                 {/* Card Header: Zone Name + Category Badge */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 block">
                       {zone.subsystem}
                     </span>
                     <h3 className="font-mono font-bold text-xs text-slate-100 truncate" title={zone.zone_id}>
                       {zone.zone_id}
                     </h3>
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] font-mono font-bold flex-shrink-0">
+                  <div className="flex items-center gap-1 text-[11px] font-mono font-bold flex-shrink-0">
                     {badge.icon}
                     <span>{zone.heat.toFixed(2)}</span>
                   </div>
@@ -507,7 +507,7 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
 
               {/* Heat Meter Bar */}
               <div className="space-y-1 pt-1 border-t border-slate-800/60">
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
                   <span>Warmth Intensity</span>
                   <span className="font-bold">{heatPercent}%</span>
                 </div>
@@ -520,7 +520,7 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
               </div>
 
               {/* Card Footer: Active Contributors + Last Touch */}
-              <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-slate-400">
+              <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-slate-400">
                 {/* Contributor Avatars */}
                 <div className="flex items-center -space-x-1.5">
                   {zone.active_agents.length === 0 ? (
@@ -533,7 +533,7 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
                           key={aid}
                           title={`@${aid}`}
                           className={cn(
-                            'w-5 h-5 rounded-full flex items-center justify-center font-bold text-[9px] border ring-1 ring-slate-900',
+                            'w-5 h-5 rounded-full flex items-center justify-center font-bold text-[11px] border ring-1 ring-slate-900',
                             style.bg,
                             style.color,
                             style.border
@@ -591,15 +591,15 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
               {/* Key Zone Metrics */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Heat Index</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Heat Index</span>
                   <span className="text-base font-bold text-amber-400">{selectedZone.heat.toFixed(2)}</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Half-Life</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Half-Life</span>
                   <span className="text-base font-bold text-slate-200">{selectedZone.half_life_hours}h</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Contention Risk</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Contention Risk</span>
                   <span
                     className={cn(
                       'text-base font-bold capitalize',
@@ -618,18 +618,18 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
               {/* Description & Neighbors */}
               <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Zone Scope</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Zone Scope</span>
                   <p className="text-slate-200 text-[11px] mt-0.5">{selectedZone.description}</p>
                 </div>
 
                 {selectedZone.neighbor_zones && selectedZone.neighbor_zones.length > 0 && (
                   <div className="pt-2 border-t border-slate-800/60">
-                    <span className="text-[10px] text-slate-500 uppercase block">
+                    <span className="text-[11px] text-slate-500 uppercase block">
                       1-Hop Diffusion Neighbors (β = 0.25)
                     </span>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {selectedZone.neighbor_zones.map((nz) => (
-                        <span key={nz} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[10px]">
+                        <span key={nz} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[11px]">
                           {nz}
                         </span>
                       ))}
@@ -658,7 +658,7 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
                           <div className="flex items-start gap-2">
                             <div
                               className={cn(
-                                'w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] border mt-0.5',
+                                'w-5 h-5 rounded flex items-center justify-center font-bold text-[11px] border mt-0.5',
                                 style.bg,
                                 style.color,
                                 style.border
@@ -669,17 +669,17 @@ export function StigmergyHeatmapPanel({ bridge, notify }: StigmergyHeatmapPanelP
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-slate-200">@{t.agent_id}</span>
-                                <span className="px-1.5 py-0.2 rounded text-[9px] uppercase bg-slate-800 border border-slate-700 text-slate-300">
+                                <span className="px-1.5 py-0.2 rounded text-[11px] uppercase bg-slate-800 border border-slate-700 text-slate-300">
                                   {t.trace_type}
                                 </span>
-                                <span className="text-slate-500 text-[10px]">w={t.weight.toFixed(1)}</span>
+                                <span className="text-slate-500 text-[11px]">w={t.weight.toFixed(1)}</span>
                               </div>
                               {t.note && (
                                 <p className="text-slate-400 text-[11px] mt-0.5">{t.note}</p>
                               )}
                             </div>
                           </div>
-                          <span className="text-slate-500 text-[10px] whitespace-nowrap">
+                          <span className="text-slate-500 text-[11px] whitespace-nowrap">
                             {formatTimeAgo(t.touched_at)}
                           </span>
                         </div>

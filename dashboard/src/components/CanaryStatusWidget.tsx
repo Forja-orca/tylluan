@@ -109,19 +109,19 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
             {/* Health Score Overview */}
             <div className="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-lg">
               <div className="flex flex-col">
-                <span className="text-[10px] text-slate-500 font-mono">Assertion Score</span>
+                <span className="text-[11px] text-slate-500 font-mono">Assertion Score</span>
                 <span className="text-xl font-bold text-slate-200 font-mono">
                   {canary.score.toFixed(0)}%
                 </span>
               </div>
-              <span className={cn("text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md", getStatusColor(canary.status))}>
+              <span className={cn("text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md", getStatusColor(canary.status))}>
                 {getStatusText(canary.status)}
               </span>
             </div>
 
             {/* Invariants Probe List */}
             <div className="space-y-1">
-              <div className="text-[10px] text-slate-500 font-medium mb-1">
+              <div className="text-[11px] text-slate-500 font-medium mb-1">
                 Security Invariants
               </div>
               <div className="max-h-[170px] overflow-y-auto space-y-1.5 rounded-lg p-2 bg-slate-950/40">
@@ -133,13 +133,13 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
                       <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 font-medium">
+                      <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 font-medium">
                         <span className="truncate">{probe.name}</span>
                         <span className={probe.pass ? "text-emerald-500" : "text-rose-500"}>
                           {probe.pass ? "PASS" : "FAIL"}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5" title={probe.detail}>
+                      <p className="text-[11px] text-slate-500 truncate font-mono mt-0.5" title={probe.detail}>
                         {probe.detail}
                       </p>
                     </div>
@@ -149,7 +149,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
             </div>
           </div>
         ) : (
-          <div className="text-[10px] text-slate-500 text-center py-4">No data received.</div>
+          <div className="text-[11px] text-slate-500 text-center py-4">No data received.</div>
         )}
       </div>
     </div>

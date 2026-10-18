@@ -78,10 +78,10 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
       <div className="p-5 bg-slate-900/60 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
+            <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
               P2P Topology
             </span>
-            <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md">
+            <span className="px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-md">
               Blackboard Active
             </span>
           </div>
@@ -96,17 +96,21 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
 
         <div className="flex items-center gap-2">
           <button 
+            type="button"
+            aria-label="Sync Agent Nodes"
             onClick={fetchNodes} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium rounded-xl transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} /> 
+            <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} aria-hidden="true" /> 
             Sync Nodes
           </button>
           <button 
+            type="button"
+            aria-label="Register Dashboard Node"
             onClick={registerNode} 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
-            <Radio className="w-3.5 h-3.5" /> 
+            <Radio className="w-3.5 h-3.5" aria-hidden="true" /> 
             Register Dashboard Node
           </button>
         </div>
@@ -117,19 +121,19 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         <div className="bg-slate-900/60 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" /> 
+              <Users className="w-4 h-4 text-amber-400" aria-hidden="true" /> 
               Connected Fleet Nodes ({nodes.length})
             </h3>
-            <span className="text-[10px] text-slate-500">Live Agent Registry</span>
+            <span className="text-[11px] text-slate-400">Live Agent Registry</span>
           </div>
 
           {loading ? (
-            <div className="text-center py-8 text-xs text-slate-500 animate-pulse">Scanning agent substrate nodes...</div>
+            <div role="status" aria-live="polite" className="text-center py-8 text-xs text-slate-400 animate-pulse">Scanning agent substrate nodes...</div>
           ) : nodes.length === 0 ? (
-            <div className="text-center py-10 text-slate-600 space-y-2 rounded-xl">
-              <Radio className="w-8 h-8 mx-auto text-slate-700" />
-              <p className="text-xs font-semibold text-slate-400">No active nodes registered</p>
-              <p className="text-[11px] text-slate-500">Register a node via tylluan_do or click 'Register Dashboard Node' above.</p>
+            <div className="text-center py-10 text-slate-500 space-y-2 rounded-xl">
+              <Radio className="w-8 h-8 mx-auto text-slate-700" aria-hidden="true" />
+              <p className="text-xs font-semibold text-slate-300">No active nodes registered</p>
+              <p className="text-[11px] text-slate-400">Register a node via tylluan_do or click 'Register Dashboard Node' above.</p>
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -137,24 +141,26 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                 <div key={n.agent_id} className="flex items-center justify-between bg-slate-800/40 rounded-xl p-3.5 hover:bg-slate-800/60 transition-all">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                      <Cpu className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                       <span className="text-sm font-semibold text-slate-100">{n.agent_id}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-500">
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
                       <span>Rules: <strong className="text-slate-300">{n.rules}</strong></span>
                       <span>Registered: <strong className="text-slate-300">{new Date(n.registered_at * 1000).toLocaleTimeString()}</strong></span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/50 rounded-lg text-xs">
-                      <Inbox className="w-3 h-3 text-amber-400" />
+                    <div role="status" className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/50 rounded-lg text-xs">
+                      <Inbox className="w-3 h-3 text-amber-400" aria-hidden="true" />
                       <span className="text-slate-300 font-bold">{n.inbox_pending}</span>
-                      <span className="text-[9px] text-slate-500">pending</span>
+                      <span className="text-[11px] text-slate-400">pending</span>
                     </div>
                     <button
+                      type="button"
+                      aria-label={`Select ${n.agent_id} as target`}
                       onClick={() => setTargetId(n.agent_id)}
-                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-lg transition-all"
+                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
                     >
                       Target
                     </button>
@@ -169,17 +175,18 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
         <div className="bg-slate-900/60 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-medium text-slate-400 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-amber-400" /> 
+              <MessageSquare className="w-4 h-4 text-amber-400" aria-hidden="true" /> 
               Direct Node Dispatcher
             </h3>
-            <span className="text-[10px] text-slate-500">Substrate Message Bus</span>
+            <span className="text-[11px] text-slate-400">Substrate Message Bus</span>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-medium">Target Agent ID:</label>
+              <label htmlFor="target-agent-id" className="text-xs text-slate-400 font-medium">Target Agent ID:</label>
               <div className="flex gap-2">
                 <input
+                  id="target-agent-id"
                   type="text"
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
@@ -188,13 +195,15 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
                 />
               </div>
               {/* Quick Select Badges */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
+              <div role="group" aria-label="Quick Select Agent" className="flex flex-wrap gap-1.5 pt-1">
                 {quickAgents.map((ag) => (
                   <button
                     key={ag}
+                    type="button"
+                    aria-pressed={targetId === ag}
                     onClick={() => setTargetId(ag)}
                     className={cn(
-                      "px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all",
+                      "px-2 py-0.5 text-[11px] font-semibold rounded-md transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none",
                       targetId === ag
                         ? "bg-amber-500/20 text-amber-400"
                         : "bg-slate-800/50 text-slate-400 hover:text-slate-200"
@@ -207,22 +216,24 @@ export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; not
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-medium">Payload Message:</label>
+              <label htmlFor="substrate-payload-msg" className="text-xs text-slate-400 font-medium">Payload Message:</label>
               <textarea
+                id="substrate-payload-msg"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Enter direct substrate payload for targeted agent node..."
                 rows={4}
-                className="w-full px-3.5 py-2.5 bg-slate-800/50 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded-xl outline-none placeholder:text-slate-600 resize-none"
+                className="w-full px-3.5 py-2.5 bg-slate-800/50 focus:ring-1 focus:ring-amber-500/50 text-slate-100 text-xs rounded-xl outline-none placeholder:text-slate-500 resize-none"
               />
             </div>
 
             <button
+              type="button"
               onClick={sendMessage}
               disabled={!targetId || !message}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all disabled:opacity-40"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl transition-all disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Dispatch Substrate Message</span>
             </button>
           </div>

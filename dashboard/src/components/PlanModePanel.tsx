@@ -3,11 +3,8 @@ import {
   ShieldCheck, 
   Play, 
   Eye, 
-  AlertOctagon, 
   CheckCircle2, 
-  Activity,
   ChevronRight,
-  ServerOff,
   CornerDownRight,
   UserCheck,
   Zap
@@ -21,7 +18,7 @@ interface BackendPlan {
   tool: string;
   risk_level: 'Low' | 'Medium' | 'High';
   intent: string;
-  arguments: any;
+  arguments: Record<string, unknown>;
   message: string;
 }
 
@@ -30,7 +27,7 @@ interface PlanDetails {
   tool_name: string;
   destructive: boolean;
   sandbox_profile: string;
-  args_preview: any;
+  args_preview: Record<string, unknown>;
 }
 
 export interface PlanResponse {
@@ -51,7 +48,7 @@ export function detectDestructiveKeywords(intentText: string): boolean {
 }
 
 interface PlanModePanelProps {
-  bridge: any;
+  bridge: { fetchRaw: (url: string, opts?: RequestInit) => Promise<{ result?: BackendPlan; [key: string]: unknown }> } | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 
@@ -60,7 +57,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
   const [agentId, setAgentId] = useState('claude-code');
   const [loading, setLoading] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResponse | null>(null);
-  const [executionResult, setExecutionResult] = useState<any>(null);
+  const [executionResult, setExecutionResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handlePreviewPlan = async () => {
@@ -114,9 +111,10 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
         setError('Backend did not return a valid plan for the requested intent.');
         notify('No plan was received from the kernel', 'error');
       }
-    } catch (err: any) {
-      setError(`Failed to reach kernel: ${err.message}`);
-      notify(`Plan Mode request failed: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to reach kernel: ${msg}`);
+      notify(`Plan Mode request failed: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -137,7 +135,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
     setExecutionResult(null);
 
     try {
-      let result: any;
+      let result: Record<string, unknown>;
       if (planResult.plan_id) {
         result = await bridge.fetchRaw('/api/v1/do', {
           method: 'POST',
@@ -167,9 +165,10 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
       }
       setExecutionResult(result);
       notify('Execution completed successfully', 'info');
-    } catch (err: any) {
-      notify(`Execution failed: ${err.message}`, 'error');
-      setExecutionResult({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`Execution failed: ${msg}`, 'error');
+      setExecutionResult({ error: msg });
     } finally {
       setLoading(false);
     }
@@ -178,13 +177,13 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-950/90 border border-slate-800/80 rounded-2xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded">
+            <span className="px-2 py-0.5 text-[11px] font-mono font-bold tracking-wider uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded">
               HITL Pre-Flight
             </span>
-            <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider uppercase bg-amber-400/10 text-amber-400 border border-amber-400/30 rounded">
+            <span className="px-2 py-0.5 text-[11px] font-mono font-bold tracking-wider uppercase bg-amber-400/10 text-amber-400 border border-amber-400/30 rounded">
               M31-P2 Contract
             </span>
           </div>
@@ -199,7 +198,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
       </div>
 
       {/* Input Section */}
-      <div className="p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl space-y-4">
+      <div className="p-5 bg-slate-950/90 border border-slate-800/80 rounded-2xl space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-3 space-y-1.5">
             <label className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -254,7 +253,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
 
       {/* Plan Preview Result */}
       {planResult && (
-        <div className="p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl space-y-4 border-l-4 border-l-amber-500">
+        <div className="p-5 bg-slate-950/90 border border-slate-800/80 rounded-2xl space-y-4 border-l-4 border-l-amber-500">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-800/80">
             <div>
               <div className="flex items-center gap-2 font-mono">
@@ -289,7 +288,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
 
           {/* Routing Trace */}
           <div className="space-y-1 font-mono text-xs">
-            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Routing Trace &amp; Fingerprint:</span>
+            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Routing Trace &amp; Fingerprint:</span>
             {planResult.routing_trace.map((step, idx) => (
               <div key={idx} className="flex items-center gap-2 text-slate-300">
                 <CornerDownRight className="w-3 h-3 text-amber-400" />
@@ -300,7 +299,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
 
           {/* Argument Payload Preview */}
           <div className="space-y-1 font-mono text-xs">
-            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Calculated Parameter Payload:</span>
+            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider">Calculated Parameter Payload:</span>
             <pre className="p-3 bg-slate-950 border border-slate-850 text-emerald-400 rounded-xl text-xs overflow-x-auto">
               {JSON.stringify(planResult.would_execute.args_preview, null, 2)}
             </pre>
@@ -327,7 +326,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
 
       {/* Real Execution Output */}
       {executionResult && (
-        <div className="p-5 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl space-y-2 font-mono">
+        <div className="p-5 bg-slate-950/90 border border-slate-800/80 rounded-2xl space-y-2 font-mono">
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
             <CheckCircle2 className="w-4 h-4" />
             Execution Completed Result:

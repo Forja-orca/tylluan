@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity,
   Wifi,
@@ -10,9 +10,7 @@ import {
   Cpu,
   Clock,
   History,
-  Shield,
   Zap,
-  Info,
   User
 } from 'lucide-react';
 import type {
@@ -38,6 +36,28 @@ import { DreamStatusWidget } from './DreamStatusWidget';
 import { CanaryStatusWidget } from './CanaryStatusWidget';
 import { WelcomeEmptyState } from './WelcomeEmptyState';
 
+interface CurriculumEntry {
+  total?: number;
+  successes?: number;
+  avg_latency_ms?: number;
+}
+
+interface HealthDetailedShape {
+  score?: number;
+  [key: string]: unknown;
+}
+
+interface SysStatusShape {
+  sessions?: unknown[];
+  night_consolidation_active?: boolean;
+  embeddings_loaded?: boolean;
+  silva_healthy?: boolean;
+  mailbox_healthy?: boolean;
+  curriculum_entries?: number;
+  uptime_secs?: number;
+  [key: string]: unknown;
+}
+
 interface OverviewTabProps {
   bridge: NexusBridge | null;
   goldenSignals: GoldenSignals | null;
@@ -47,8 +67,8 @@ interface OverviewTabProps {
   guilds: Guild[];
   approvals: Approval[];
   memoryStats: MemoryStats | null;
-  healthDetailed: any | null;
-  sysStatus: any | null;
+  healthDetailed: HealthDetailedShape | null;
+  sysStatus: SysStatusShape | null;
   events: NexusEvent[];
   notify: (msg: string, type?: 'info' | 'error') => void;
   refreshData: () => Promise<void>;
@@ -69,7 +89,7 @@ export function OverviewTab({
   notify,
   refreshData
 }: OverviewTabProps) {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [_refreshTrigger, setRefreshTrigger] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<{
     totalCalls: number; successRate: number; avgLatency: number;
     activeAgents: number; broadcastsLastHour: number; graphNodes: number;
@@ -86,7 +106,7 @@ export function OverviewTab({
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
       try {
-        const raw = await bridge.fetchRaw('/api/v1/metrics/history', {}) as any;
+        const raw = await bridge.fetchRaw('/api/v1/metrics/history', {}) as { snapshots?: Array<{ ts: number; cpu: number; mem: number }> };
         const snapshots: Array<{ ts: number; cpu: number; mem: number }> = raw?.snapshots ?? [];
         setCpuHistory(snapshots.map((s) => s.cpu));
         setMemHistory(snapshots.map((s) => s.mem));
@@ -120,7 +140,7 @@ export function OverviewTab({
   usePolling('overview-metrics', async () => {
     if (!bridge) return;
     try {
-      const raw = await bridge.fetchRaw('/api/v1/metrics/history', {}) as any;
+      const raw = await bridge.fetchRaw('/api/v1/metrics/history', {}) as { snapshots?: Array<{ ts: number; cpu: number; mem: number }> };
       const snapshots: Array<{ ts: number; cpu: number; mem: number }> = raw?.snapshots ?? [];
       setCpuHistory(snapshots.map((s) => s.cpu));
       setMemHistory(snapshots.map((s) => s.mem));
@@ -150,13 +170,13 @@ export function OverviewTab({
     const source = metricsEvent?.data || sysStatus;
     
     if (source) {
-      const m = source as any;
+      const m = source as { curriculum?: { entries?: CurriculumEntry[] }; nodes_count?: number; storage?: { nodes_count?: number } };
       const curriculum = m.curriculum || {};
-      const entries: any[] = curriculum.entries ?? [];
-      const totalCalls = entries.reduce((s: number, e: any) => s + (e.total ?? 0), 0);
-      const totalSuccess = entries.reduce((s: number, e: any) => s + (e.successes ?? 0), 0);
+      const entries: CurriculumEntry[] = curriculum.entries ?? [];
+      const totalCalls = entries.reduce((s: number, e: CurriculumEntry) => s + (e.total ?? 0), 0);
+      const totalSuccess = entries.reduce((s: number, e: CurriculumEntry) => s + (e.successes ?? 0), 0);
       const avgLat = entries.length > 0
-        ? entries.reduce((s: number, e: any) => s + (e.avg_latency_ms ?? 0), 0) / entries.length : 0;
+        ? entries.reduce((s: number, e: CurriculumEntry) => s + (e.avg_latency_ms ?? 0), 0) / entries.length : 0;
       
       setLiveMetrics({
         totalCalls,
@@ -175,7 +195,7 @@ export function OverviewTab({
         setPrevSilvaCount(current);
       }
     }
-  }, [events, blackboard, sysStatus, collectivePulse]);
+  }, [events, blackboard, sysStatus, collectivePulse, prevSilvaCount]);
 
   const activeGuilds = guilds?.filter(g => g.running).length || 0;
   
@@ -215,8 +235,8 @@ export function OverviewTab({
       <WelcomeEmptyState
         bridge={bridge}
         sysStatus={sysStatus}
-        sessions={sysStatus?.sessions || []}
-        memoryStats={memoryStats}
+        sessions={Array.isArray(sysStatus?.sessions) ? sysStatus.sessions : []}
+        memoryStats={memoryStats as unknown as Record<string, unknown> | null}
         notify={notify}
         onRefresh={() => {
           setRefreshTrigger(p => p + 1);
@@ -253,7 +273,7 @@ export function OverviewTab({
       {/* What is Tylluan doing now — human-readable status */}
       <div className={`rounded-xl border p-4 ${tylluanStatus.color} transition-all duration-500`}>
         <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+          <div className={`w-3 h-3 rounded-full ${tylluanStatus.pulse ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-semibold">Tylluan is {tylluanStatus.text.toLowerCase()}</h3>
             <p className="text-[11px] opacity-70 mt-0.5">{tylluanStatus.subtext}</p>
@@ -265,16 +285,18 @@ export function OverviewTab({
       <HomeostasisWidget bridge={bridge} />
 
       {/* Health Banner */}
-      {healthDetailed && healthDetailed.score < 70 && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 animate-pulse">
-          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+      {healthDetailed && typeof healthDetailed.score === 'number' && healthDetailed.score < 70 && (
+        <div role="alert" className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 animate-pulse">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" aria-hidden="true" />
           <div className="flex-1">
             <h4 className="text-sm font-bold text-amber-400">Degraded Performance (Health: {healthDetailed.score}%)</h4>
             <p className="text-xs text-amber-500/70">The kernel is experiencing high latency or resource constraints (RAM/Embeddings).</p>
           </div>
           <button 
+            type="button"
+            aria-label="Run Vacuum Maintenance Fix"
             onClick={() => bridge?.fetchRaw('/api/v1/maintenance/vacuum', { method: 'POST' })}
-            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-lg text-[10px] font-bold border border-amber-500/30 transition-colors cursor-pointer"
+            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-lg text-[11px] font-bold border border-amber-500/30 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             VACUUM FIX
           </button>
@@ -282,14 +304,14 @@ export function OverviewTab({
       )}
 
       {/* Hub Status Pills */}
-      <div className="flex flex-wrap gap-2">
+      <div role="status" aria-label="System Telemetry Summary" className="flex flex-wrap gap-2">
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+          <div className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true"></div>
           <span className="text-[11px] font-semibold text-slate-300">Kernel</span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <div className={cn("w-2 h-2 rounded-full", sysStatus?.embeddings_loaded ? "bg-emerald-500" : "bg-amber-500")}></div>
-          <span className="text-[11px] font-semibold text-slate-300">BGE-M3</span>
+          <div className={cn("w-2 h-2 rounded-full", sysStatus?.embeddings_loaded ? "bg-emerald-500" : "bg-amber-500")} aria-hidden="true"></div>
+          <span className="text-[11px] font-semibold text-slate-300">mxbai-embed-large</span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <span className="text-[11px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
@@ -320,31 +342,31 @@ export function OverviewTab({
             { label: 'Memory Nodes', value: liveMetrics.graphNodes, icon: Database },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center hover:bg-slate-900/60 transition-colors group">
-              <Icon className="w-3 h-3 text-slate-600 mx-auto mb-1 group-hover:text-amber-400 transition-colors" />
+              <Icon className="w-3 h-3 text-slate-400 mx-auto mb-1 group-hover:text-amber-400 transition-colors" aria-hidden="true" />
               <div className="text-lg font-bold font-mono text-slate-100">{value}</div>
-              <div className="text-[11px] font-medium text-slate-500 mt-0.5">{label}</div>
+              <div className="text-[11px] font-medium text-slate-400 mt-0.5">{label}</div>
             </div>
           ))}
         </div>
       )}
       {sysStatus && (
         <div className="mt-4 flex gap-3 flex-wrap">
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
             SilvaDB: {sysStatus.silva_healthy ? 'OK' : 'ERROR'}
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
             Mailbox: {sysStatus.mailbox_healthy ? 'OK' : 'ERROR'}
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
-            Curriculum: {sysStatus.curriculum_entries} entries
+            Curriculum: {sysStatus.curriculum_entries ?? 0} entries
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
-            Uptime: {Math.floor(sysStatus.uptime_secs / 60)}m
+            Uptime: {Math.floor((sysStatus.uptime_secs ?? 0) / 60)}m
           </span>
-          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
+          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
             ? 'bg-blue-500/20 text-blue-300'
             : 'bg-amber-500/20 text-amber-400'}`}>
-            Embeddings: {sysStatus.embeddings_loaded ? 'BGE-M3' : 'FTS5 fallback'}
+            Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : 'FTS5 fallback'}
           </span>
         </div>
       )}
@@ -352,22 +374,22 @@ export function OverviewTab({
         <div className="flex items-center gap-4 relative z-10">
           <div className="relative">
             <div className="w-14 h-14 rounded-full border border-amber-500/20 flex items-center justify-center bg-amber-500/5">
-              <Activity className="w-7 h-7 text-amber-400 animate-pulse" />
+              <Activity className="w-7 h-7 text-amber-400 animate-pulse" aria-hidden="true" />
             </div>
             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-slate-950 rounded-full flex items-center justify-center">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" aria-hidden="true"></div>
             </div>
           </div>
           <div>
             <h3 className="text-xs font-semibold text-slate-100">Sovereign Kernel Pulse</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">O3 ENGINE · UPTIME: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">O3 ENGINE · UPTIME: {Math.floor((goldenSignals?.uptime_seconds || 0) / 3600)}h {Math.floor(((goldenSignals?.uptime_seconds || 0) % 3600) / 60)}m</p>
           </div>
         </div>
         <div className="text-right relative z-10">
-          <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-500")}>
+          <div role="status" className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-400")}>
             {sloSummary?.status ? sloSummary.status.toUpperCase() : 'TELEMETRY IDLE'}
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">Availability: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Availability: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
         </div>
       </div>
 
@@ -412,7 +434,7 @@ export function OverviewTab({
             const color = good(value) ? '#34d399' : warn(value) ? '#fbbf24' : '#ef4444';
             return (
               <div key={label} className="p-3 rounded-xl bg-slate-900/40">
-                <div className="text-[11px] font-medium text-slate-500 mb-1">{label}</div>
+                <div className="text-[11px] font-medium text-slate-400 mb-1">{label}</div>
                 <div className="text-lg font-black font-mono" style={{ color }}>{pct.toFixed(0)}%</div>
                 <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${invert ? 100 - pct : pct}%`, backgroundColor: color }} />
@@ -427,11 +449,11 @@ export function OverviewTab({
       <div className="rounded-xl bg-slate-900/50 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <History className="w-3.5 h-3.5 text-amber-400" />
+            <History className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
             <span className="text-[11px] font-medium text-slate-400">Sovereign Activity Stream</span>
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1 text-[9px] text-slate-600 cursor-pointer select-none hover:text-slate-400 transition-colors">
+            <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer select-none hover:text-slate-200 transition-colors">
               <input
                 type="checkbox"
                 checked={showHeartbeats}
@@ -440,8 +462,8 @@ export function OverviewTab({
               />
               Show heartbeats
             </label>
-            <span className="text-[9px] text-slate-500 font-mono">LIVE EVENTS</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+            <span className="text-[11px] text-slate-400 font-mono">LIVE EVENTS</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" aria-hidden="true" />
           </div>
         </div>
         <div className="divide-y divide-slate-800/50">
@@ -449,7 +471,7 @@ export function OverviewTab({
              <div className="px-4 py-2.5 flex items-center justify-between group hover:bg-slate-800/20 transition-colors">
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" />
-                  <span className="text-[10px] text-slate-300">
+                  <span className="text-[11px] text-slate-300">
                     <span className="font-bold text-emerald-400">{silvaDelta} new nodes</span> integrated in the last 30s
                   </span>
                 </div>
@@ -463,17 +485,17 @@ export function OverviewTab({
                   <User className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col">
-                   <span className="text-[10px] font-semibold text-slate-200">{agent.split('-')[0]}</span>
-                   <span className="text-[8px] text-slate-500">active</span>
+                   <span className="text-[11px] font-semibold text-slate-200">{agent.split('-')[0]}</span>
+                   <span className="text-[11px] text-slate-400">active</span>
                 </div>
               </div>
             ))}
             {(!blackboard?.active_agents || blackboard.active_agents.length === 0) && (
-              <div className="flex items-center gap-2 text-slate-600">
+              <div className="flex items-center gap-2 text-slate-400">
                 <div className="w-7 h-7 rounded-full border border-slate-800 flex items-center justify-center opacity-30">
                   <User className="w-4 h-4" />
                 </div>
-                <span className="text-[10px] italic text-slate-600">No agents detected</span>
+                <span className="text-[11px] italic text-slate-400">No agents detected</span>
               </div>
             )}
           </div>
@@ -481,9 +503,11 @@ export function OverviewTab({
           <div className="max-h-96 overflow-y-auto divide-y divide-slate-800/30">
           {events
             .filter(e => ['tool_call', 'memory_added', 'memory_updated', 'heartbeat', 'log', 'maintenance_started', 'maintenance_finished'].includes(e.type))
-            .filter(e => showHeartbeats || (e.type !== 'uptime' && !((e.data as any)?.uptime_secs !== undefined)))
+            .filter(e => showHeartbeats || (e.type !== 'uptime' && !((e.data as Record<string, unknown>)?.uptime_secs !== undefined)))
             .slice(0, 15)
-            .map((e, i) => (
+            .map((e, i) => {
+              const d = (e.data || {}) as Record<string, unknown>;
+              return (
               <div key={`${e.ts}-${i}`} className="px-4 py-2.5 flex items-center justify-between group hover:bg-slate-800/20 transition-colors">
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className={cn(
@@ -495,26 +519,27 @@ export function OverviewTab({
                   )} />
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[11px] font-bold text-slate-200 shrink-0 capitalize">
-                      {e.source === 'mcp' ? 'MCP' : (e.data as any).agent_id || 'System'}
+                      {e.source === 'mcp' ? 'MCP' : String(d.agent_id || 'System')}
                     </span>
-                    <span className="text-slate-500 text-[10px]">·</span>
-                    <span className="text-[10px] text-slate-400 truncate">
-                      {e.type === 'tool_call' ? `tool: ${(e.data as any).tool}` : 
-                       e.type === 'heartbeat' ? `uptime: ${(e.data as any).uptime_secs}s` :
-                       e.type.startsWith('maintenance') ? `maint: ${(e.data as any).task}` :
+                    <span className="text-slate-500 text-[11px]">·</span>
+                    <span className="text-[11px] text-slate-400 truncate">
+                      {e.type === 'tool_call' ? `tool: ${String(d.tool ?? '')}` : 
+                       e.type === 'heartbeat' ? `uptime: ${String(d.uptime_secs ?? '')}s` :
+                       e.type.startsWith('maintenance') ? `maint: ${String(d.task ?? '')}` :
                        e.type}
                     </span>
                   </div>
                 </div>
-                <div className="text-[9px] text-slate-600 font-mono shrink-0 ml-4">
+                <div className="text-[11px] text-slate-400 font-mono shrink-0 ml-4">
                   <RelativeTime ts={e.ts} />
                 </div>
               </div>
-            ))}
+              );
+            })}
             {events.length === 0 && !silvaDelta && !blackboard?.pending.length && (
               <div className="p-12 text-center flex flex-col items-center justify-center gap-2">
                 <Zap className="w-6 h-6 text-slate-800 animate-pulse" />
-                <span className="text-[11px] text-slate-600">Silent Mode — Awaiting Signal</span>
+                <span className="text-[11px] text-slate-400">Silent Mode — Awaiting Signal</span>
               </div>
             )}
           </div>
@@ -526,7 +551,7 @@ export function OverviewTab({
         <div className="lg:col-span-2 rounded-xl bg-slate-900/50 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-800/50 flex items-center justify-between">
             <span className="text-[11px] font-medium text-slate-400">Operational Guilds</span>
-            <span className="text-[10px] text-slate-500">{activeGuilds} / {guilds?.length || 0} online</span>
+            <span className="text-[11px] text-slate-400">{activeGuilds} / {guilds?.length || 0} online</span>
           </div>
           <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
             {guilds?.map((g) => (
@@ -538,12 +563,12 @@ export function OverviewTab({
                   <div className={cn("w-1.5 h-1.5 rounded-full", g.running ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-slate-700")}></div>
                   <span className="text-xs font-mono text-slate-300">{g.name}</span>
                   {(g.restarts_5m ?? 0) > 3 && (
-                    <span className="text-[7px] bg-red-500 text-slate-50 px-1 rounded-sm font-bold animate-pulse">DEGRADED</span>
+                    <span className="text-[11px] bg-red-500 text-slate-50 px-1 rounded-sm font-bold animate-pulse">DEGRADED</span>
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0">
                    {g.launcher_type && (
-                    <span className={cn("text-[7px] px-1 rounded-sm uppercase font-bold flex items-center", 
+                    <span className={cn("text-[11px] px-1 rounded-sm uppercase font-bold flex items-center", 
                       g.launcher_type === 'http' ? "text-violet-400 border border-violet-500/30" :
                       g.launcher_type === 'stdio' ? "text-amber-400 border border-amber-500/30" :
                       "text-blue-400 border border-blue-500/30"
@@ -551,7 +576,7 @@ export function OverviewTab({
                       {g.launcher_type}
                     </span>
                   )}
-                  <span className="text-[10px] text-slate-600 font-mono">{g.tools_count}T</span>
+                  <span className="text-[11px] text-slate-400 font-mono">{g.tools_count}T</span>
                 </div>
               </div>
             ))}
@@ -568,18 +593,18 @@ export function OverviewTab({
               <>
                 <CheckCircle className="w-10 h-10 text-emerald-500/20 mb-2" />
                 <p className="text-xs text-slate-500">Security Clearance High</p>
-                <p className="text-[10px] text-slate-600">No pending approvals required.</p>
+                <p className="text-[11px] text-slate-600">No pending approvals required.</p>
               </>
             ) : (
               <div className="w-full space-y-2">
                 <p className="text-xs font-bold text-amber-400 mb-3">{approvals.length} ACTIONS BLOCKED</p>
                 {approvals.slice(0, 3).map((a) => (
                   <div key={a.id} className="p-2 bg-amber-500/5 border border-amber-500/20 rounded text-left overflow-hidden">
-                    <div className="text-[9px] font-mono text-amber-500 truncate">{a.id}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{a.tool}</div>
+                    <div className="text-[11px] font-mono text-amber-500 truncate">{a.id}</div>
+                    <div className="text-[11px] text-slate-400 truncate">{a.tool}</div>
                   </div>
                 ))}
-                <button className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded text-[10px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors">
+                <button className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors">
                   MANAGE APPROVALS
                 </button>
               </div>
@@ -596,7 +621,7 @@ export function OverviewTab({
             <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium">
               <Cpu className="w-3.5 h-3.5 text-amber-400" /> Guild Utilization
             </div>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[11px] text-slate-500">
               {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} active
               <span className="ml-2 text-slate-600">·</span>
               <span className="ml-2 text-slate-500">
@@ -605,14 +630,14 @@ export function OverviewTab({
             </span>
           </div>
           <div className="space-y-4">
-            {(guildsUtilization?.active_guilds || []).slice(0, 6).map((guild: any) => {
+            {(guildsUtilization?.active_guilds || []).slice(0, 6).map((guild: { name: string; idle_secs?: number }) => {
               const idleSecs = guild.idle_secs ?? 0;
               const utilPct = idleSecs < 60 ? 80 : idleSecs < 300 ? 40 : 10;
               const barColor = utilPct >= 70 ? 'bg-emerald-500' : utilPct >= 40 ? 'bg-amber-500' : 'bg-slate-600';
               
               return (
                 <div key={guild.name} className="space-y-1.5">
-                  <div className="flex justify-between items-center text-[10px]">
+                  <div className="flex justify-between items-center text-[11px]">
                     <span className="text-slate-300 font-mono truncate mr-2">{guild.name}</span>
                     <span className="text-slate-500 font-mono">{utilPct}%</span>
                   </div>
@@ -627,7 +652,7 @@ export function OverviewTab({
             })}
             {(!guildsUtilization?.active_guilds || guildsUtilization.active_guilds.length === 0) && (
               <div className="py-6 text-center">
-                <p className="text-[10px] text-slate-600 italic">No active guilds monitored</p>
+                <p className="text-[11px] text-slate-600 italic">No active guilds monitored</p>
               </div>
             )}
           </div>
@@ -652,7 +677,7 @@ export function OverviewTab({
                 <div className="text-sm font-bold text-slate-200 tracking-tight">
                   {memoryRetention.silva.total_nodes.toLocaleString()}
                 </div>
-                <div className="text-[10px] text-slate-500 font-medium">
+                <div className="text-[11px] text-slate-500 font-medium">
                   Total Sovereign Nodes
                 </div>
               </div>
@@ -684,8 +709,16 @@ export function OverviewTab({
   );
 }
 
+interface SessionDigest {
+  id?: string;
+  created_at: number | string;
+  content?: string;
+  summary?: string;
+  agent_id?: string;
+}
+
 function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
-  const [digests, setDigests] = useState<any[]>([]);
+  const [digests, setDigests] = useState<SessionDigest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -716,11 +749,11 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
       {digests.map((d, i) => (
         <div key={i} className="p-4 hover:bg-slate-800/20 transition-colors">
           <div className="flex justify-between items-start mb-2">
-            <div className="text-[10px] font-bold text-blue-400 font-mono">@{d.agent_id || 'anon'}</div>
-            <div className="text-[9px] text-slate-600 font-mono">{d.created_at}</div>
+            <div className="text-[11px] font-bold text-blue-400 font-mono">@{d.agent_id || 'anon'}</div>
+            <div className="text-[11px] text-slate-600 font-mono">{d.created_at}</div>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 italic">
-            "{d.content}"
+            "{d.content || d.summary}"
           </p>
         </div>
       ))}

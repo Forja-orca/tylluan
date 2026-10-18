@@ -147,9 +147,9 @@ function KernelCard({ k }: { k: KernelHealth }) {
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-indigo-400" />
           <span className="text-xs font-semibold text-slate-200">Kernel</span>
-          <span className="text-[10px] text-slate-500">{k.version}</span>
+          <span className="text-[11px] text-slate-500">{k.version}</span>
         </div>
-        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full',
+        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full',
           ok ? 'bg-emerald-950/60 text-emerald-400' : 'bg-amber-950/60 text-amber-400')}>
           {k.status}
         </span>
@@ -164,7 +164,7 @@ function KernelCard({ k }: { k: KernelHealth }) {
           <div key={label} className="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2">
             <Icon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <div>
-              <div className="text-[10px] text-slate-500">{label}</div>
+              <div className="text-[11px] text-slate-500">{label}</div>
               <div className="text-xs font-mono font-semibold text-slate-200">{value}</div>
             </div>
           </div>
@@ -191,11 +191,11 @@ function AgentCard({ a }: { a: AgentActivity }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-1">
           <span className={cn('text-xs font-semibold truncate', s.color)}>{label}</span>
-          <span className="text-[10px] text-slate-600 shrink-0">
+          <span className="text-[11px] text-slate-600 shrink-0">
             {a.lastTs > 0 ? fmtAgo(a.lastTs) : 'no activity'}
           </span>
         </div>
-        <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+        <div className="text-[11px] text-slate-500 mt-0.5 truncate">
           {a.lastTs > 0 ? (
             <>T{a.lastTurn} in <span className="text-slate-400">#{a.lastChannel}</span></>
           ) : (
@@ -203,7 +203,7 @@ function AgentCard({ a }: { a: AgentActivity }) {
           )}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
-          <div className="text-[9px] text-slate-600">{a.totalTurns} turns</div>
+          <div className="text-[11px] text-slate-600">{a.totalTurns} turns</div>
           {status === 'online' && <StatusPill status="online" label="active" />}
           {status === 'idle'   && <StatusPill status="idle" label="idle" />}
           {status === 'offline' && a.lastTs > 0 && <StatusPill status="offline" label="offline" />}
@@ -230,8 +230,8 @@ function GuildBar({ online, total }: { online: number; total: number }) {
       </div>
       <div className="grid grid-cols-3 gap-1.5 pt-1">
         {pct >= 80
-          ? <div className="col-span-3 flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle className="w-3 h-3" /> Operational fleet</div>
-          : <div className="col-span-3 flex items-center gap-1.5 text-[10px] text-amber-400"><AlertTriangle className="w-3 h-3" /> {total - online} guilds offline</div>
+          ? <div className="col-span-3 flex items-center gap-1.5 text-[11px] text-emerald-400"><CheckCircle className="w-3 h-3" /> Operational fleet</div>
+          : <div className="col-span-3 flex items-center gap-1.5 text-[11px] text-amber-400"><AlertTriangle className="w-3 h-3" /> {total - online} guilds offline</div>
         }
       </div>
     </div>
@@ -281,11 +281,11 @@ export function FleetTab() {
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-indigo-400" />
           <h2 className="text-sm font-bold text-slate-200">Fleet Status</h2>
-          <span className="text-[10px] bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded-full font-mono">
+          <span className="text-[11px] bg-indigo-950/60 text-indigo-400 px-2 py-0.5 rounded-full font-mono">
             {onlineCount} active
           </span>
         </div>
-        <button onClick={refresh} className="text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
+        <button onClick={refresh} className="text-[11px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
           refresh · {lastRefresh > 0 ? fmtAgo(Math.floor(lastRefresh / 1000)) : '—'}
         </button>
       </div>

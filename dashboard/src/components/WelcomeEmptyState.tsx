@@ -3,12 +3,13 @@ import { Terminal, MessageSquare, PlusCircle, CheckCircle2, Circle, Copy, Check 
 import { cn } from '../lib/utils';
 import { useNexus } from '../hooks/useNexus';
 import { TylluanLogo } from './TylluanLogo';
+import type { NexusBridge } from '../lib/nexus-bridge';
 
 interface WelcomeEmptyStateProps {
-  bridge: any;
-  sysStatus: any;
-  sessions: any[];
-  memoryStats: any;
+  bridge: NexusBridge | null;
+  sysStatus: { embeddings_loaded?: boolean; silva_healthy?: boolean; [key: string]: unknown } | null;
+  sessions: unknown[];
+  memoryStats: Record<string, unknown> | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
   onRefresh: () => void;
 }
@@ -35,7 +36,11 @@ export function WelcomeEmptyState({
     const b = bridge ?? ctxBridge ?? null;
     if (!b?.fetchRaw) return;
     b.fetchRaw('/api/v1/setup-hint')
-      .then((hint: any) => { if (hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url) setSseUrl(hint.mcp_clients.claude_desktop.config.mcpServers.tylluan.url); })
+      .then((hint: { mcp_clients?: { claude_desktop?: { config?: { mcpServers?: { tylluan?: { url?: string } } } } } }) => {
+        if (hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url) {
+          setSseUrl(hint.mcp_clients.claude_desktop.config.mcpServers.tylluan.url);
+        }
+      })
       .catch(() => {});
   }, [bridge, ctxBridge]);
 
@@ -88,8 +93,9 @@ export function WelcomeEmptyState({
       notify('First note stored in SilvaDB!', 'info');
       setNoteText('');
       onRefresh();
-    } catch (err: any) {
-      notify(`Failed to add note: ${err.message || 'Unknown error'}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      notify(`Failed to add note: ${msg}`, 'error');
     } finally {
       setAddingNote(false);
     }
@@ -110,8 +116,9 @@ export function WelcomeEmptyState({
       setFirstQueryDone(true);
       localStorage.setItem('tylluan_wizard_query', 'true');
       setFirstQueryText('');
-    } catch (err: any) {
-      notify(`Query failed: ${err?.message || 'Unknown error'}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      notify(`Query failed: ${msg}`, 'error');
     } finally {
       setQuerying(false);
     }
@@ -177,7 +184,7 @@ export function WelcomeEmptyState({
                 setMcpChecked(true);
                 notify('Skipped onboarding tutorial', 'info');
               }}
-              className="w-full text-center text-[10px] text-slate-500 hover:text-slate-300 font-medium mt-2 cursor-pointer transition-colors"
+              className="w-full text-center text-[11px] text-slate-500 hover:text-slate-300 font-medium mt-2 cursor-pointer transition-colors"
             >
               Skip Tutorial
             </button>
@@ -210,7 +217,7 @@ export function WelcomeEmptyState({
                 <button
                   type="submit"
                   disabled={addingNote}
-                  className="w-full py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg text-[10px] font-semibold transition-all duration-200 cursor-pointer"
+                  className="w-full py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer"
                 >
                   {addingNote ? 'Saving...' : 'Remember'}
                 </button>
@@ -230,7 +237,7 @@ export function WelcomeEmptyState({
               </p>
 
               <div className="relative mt-2">
-                <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[10px] font-mono text-slate-300 leading-normal overflow-x-auto select-all max-h-[85px]">
+                <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 leading-normal overflow-x-auto select-all max-h-[85px]">
                   {mcpConfigJson}
                 </pre>
                 <button
@@ -267,7 +274,7 @@ export function WelcomeEmptyState({
                 <button
                   type="submit"
                   disabled={querying}
-                  className="w-full py-1.5 bg-violet-500/10 text-violet-400 hover:bg-violet-500 hover:text-slate-950 rounded-lg text-[10px] font-semibold transition-all duration-200 cursor-pointer"
+                  className="w-full py-1.5 bg-violet-500/10 text-violet-400 hover:bg-violet-500 hover:text-slate-950 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer"
                 >
                   {querying ? 'Querying...' : 'Ask'}
                 </button>

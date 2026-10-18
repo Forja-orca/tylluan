@@ -27,8 +27,18 @@ import { usePolling } from '../hooks/usePolling';
 import type { Guild, NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { GuildInspector } from './GuildInspector';
-import { CATEGORY_MAP, CATEGORY_STYLE, DEPRECATED_GUILDS, getGuildCategory } from '../lib/guild-meta';
+import { CATEGORY_STYLE, DEPRECATED_GUILDS, getGuildCategory } from '../lib/guild-meta';
 import type { GuildCategory } from '../lib/guild-meta';
+
+interface GuildWithMetrics extends Guild {
+  cpu_percent?: number;
+  memory_mb?: number;
+  capabilities?: {
+    process_execution?: boolean;
+    filesystem_scope?: string[];
+    network_hosts?: string[];
+  };
+}
 
 // ─── Guild Status Helpers ──────────────────────────────────────────────────────
 
@@ -64,7 +74,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   // Guilds actively executing right now (from SSE guild_progress events, last 5s)
   const activeGuilds = events
     ?.filter(e => e.type === 'guild_progress' && Date.now() - e.ts < 5000)
-    .map(e => (e as any).guild)
+    .map(e => (e as { guild?: string }).guild)
     .filter((g): g is string => typeof g === 'string') || [];
 
   const { guilds: globalGuilds, refreshData } = useNexus();
@@ -79,7 +89,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
   const [hideInactive, setHideInactive] = useState(true);
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxProfile, setSandboxProfile] = useState<'strict' | 'balanced' | 'permissive'>('balanced');
-  const [fullConfig, setFullConfig] = useState<any>(null);
+  const [_fullConfig, setFullConfig] = useState<Record<string, unknown> | null>(null);
   const [guildOverrides, setGuildOverrides] = useState<Record<string, 'inherited' | 'strict' | 'balanced' | 'permissive'>>({});
 
   const getEffectiveProfile = (guildName: string) => {
@@ -135,9 +145,10 @@ export function GuildsTab({ bridge, notify, events }: Props) {
           : `Sandbox Profile set to ${newProfile}`,
         'info'
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       setSandboxProfile(previous);
-      notify(`Failed to update Sandbox Profile: ${err.message}`, 'error');
+      notify(`Failed to update Sandbox Profile: ${msg}`, 'error');
     }
   };
 
@@ -245,7 +256,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             <span className="text-sm font-mono font-semibold truncate">{guild.name}</span>
             {/* Live execution badge */}
             {isActive && (
-              <span className="text-[8px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1 rounded font-bold animate-pulse flex-shrink-0">
+              <span className="text-[11px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1 rounded font-bold animate-pulse flex-shrink-0">
                 ⚡ Live
               </span>
             )}
@@ -253,16 +264,17 @@ export function GuildsTab({ bridge, notify, events }: Props) {
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {/* Category badge (V2 Gremio) */}
             <span className={cn(
-              'text-[8px] px-1.5 py-0.5 rounded font-bold border uppercase tracking-tighter',
+              'text-[11px] px-1.5 py-0.5 rounded font-bold border uppercase tracking-tighter',
               catStyle.cls
             )}>
               {catStyle.label}
             </span>
             {/* Status badge */}
             <span 
+              role="status"
               title={statusStyle.tooltip}
               className={cn(
-                'text-[9px] px-2 py-0.5 rounded-full font-black border tracking-tighter cursor-help',
+                'text-[11px] px-2 py-0.5 rounded-full font-black border tracking-tighter cursor-help',
                 statusStyle.badge
               )}
             >
@@ -274,16 +286,17 @@ export function GuildsTab({ bridge, notify, events }: Props) {
         {/* Metrics Row — CPU/RAM from kernel (0/unset → N/A badge) */}
         <div className="grid grid-cols-2 gap-2 mb-3 bg-slate-950/40 p-2 rounded-lg border border-slate-800/50">
           {(() => {
-            const cpu = (guild as any).cpu_percent;
-            const mem = (guild as any).memory_mb;
+            const gMetrics = guild as GuildWithMetrics;
+            const cpu = gMetrics.cpu_percent;
+            const mem = gMetrics.memory_mb;
             const hasCpu = cpu !== undefined && cpu !== null && cpu > 0;
             const hasMem = mem !== undefined && mem !== null && mem > 0;
 
             if (!hasCpu && !hasMem) {
               return (
                 <div className="col-span-2 flex items-center justify-center gap-2 py-2">
-                  <Cpu className="w-3 h-3 text-slate-600" />
-                  <span className="text-[9px] text-slate-600 font-mono bg-slate-800/50 px-2 py-0.5 rounded-full">N/A (no medido)</span>
+                  <Cpu className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                  <span className="text-[11px] text-slate-400 font-mono bg-slate-800/50 px-2 py-0.5 rounded-full">N/A (no medido)</span>
                 </div>
               );
             }
@@ -292,7 +305,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               <>
                 {hasCpu && (
                   <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
+                    <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-tighter">
                       <span>CPU</span>
                       <span className="text-slate-300">{cpu}%</span>
                     </div>
@@ -304,7 +317,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                 )}
                 {hasMem && (
                   <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
+                    <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-tighter">
                       <span>RAM</span>
                       <span className="text-slate-300">{mem}MB</span>
                     </div>
@@ -320,10 +333,10 @@ export function GuildsTab({ bridge, notify, events }: Props) {
         </div>
 
         {/* Details */}
-        <div className="space-y-1 text-[10px] text-slate-500 mb-4 font-mono">
+        <div className="space-y-1 text-[11px] text-slate-400 mb-4 font-mono">
           <div className="flex justify-between">
             <span>Always-on</span>
-            <span className={guild.always_on ? 'text-amber-400' : 'text-slate-600'}>
+            <span className={guild.always_on ? 'text-amber-400' : 'text-slate-400'}>
               {guild.always_on ? 'Yes' : 'No'}
             </span>
           </div>
@@ -336,14 +349,14 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             <span className={cn(
               guild.last_latency_ms && guild.last_latency_ms > 5000
                 ? 'text-amber-400'
-                : 'text-slate-400'
+                : 'text-slate-300'
             )}>
               {guild.total_calls || 0} / {guild.last_latency_ms ? `${guild.last_latency_ms}ms` : '—'}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="uppercase font-bold tracking-tighter text-[9px]">Tools</span>
-            <span className={!guild.running && !guild.tools_count ? 'text-slate-700 italic' : 'text-slate-300'}>
+            <span className="uppercase font-bold tracking-tighter text-[11px]">Tools</span>
+            <span className={!guild.running && !guild.tools_count ? 'text-slate-400 italic' : 'text-slate-300'}>
               {guild.tools_count || (guild.running ? '0' : '— offline')}
             </span>
           </div>
@@ -351,7 +364,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
           {(guild.restarts_5m ?? 0) > 0 && (
             <div className="flex justify-between text-red-400">
               <span className="flex items-center gap-1">
-                <Activity className="w-2.5 h-2.5" />
+                <Activity className="w-2.5 h-2.5" aria-hidden="true" />
                 Restarts (5m)
               </span>
               <span className="font-bold">{guild.restarts_5m}</span>
@@ -361,7 +374,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
 
         {/* Capabilities & Sandbox Badges */}
         {(() => {
-          const caps = (guild as any).capabilities;
+          const caps = (guild as GuildWithMetrics).capabilities;
           const isSandboxActive = sandboxEnabled && (guild.name === 'bash' || guild.name === 'code');
           const hasCaps = caps !== undefined && caps !== null;
 
@@ -372,9 +385,9 @@ export function GuildsTab({ bridge, notify, events }: Props) {
               {isSandboxActive && (
                 <span 
                   title="Enforced Docker Sandbox Active"
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono font-bold uppercase tracking-tight"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[11px] font-mono font-bold uppercase tracking-tight"
                 >
-                  <ShieldCheck className="w-2.5 h-2.5 text-blue-400" />
+                  <ShieldCheck className="w-2.5 h-2.5 text-blue-400" aria-hidden="true" />
                   Sandbox
                 </span>
               )}
@@ -382,7 +395,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                 <>
                   {/* Process Execution */}
                   {caps.process_execution !== false && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-mono uppercase tracking-tight">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[11px] font-mono uppercase tracking-tight">
                       <span className="w-1 h-1 rounded-full bg-rose-400" />
                       ProcExec
                     </span>
@@ -391,7 +404,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                   {Array.isArray(caps.filesystem_scope) && caps.filesystem_scope.length > 0 && (
                     <span 
                       title={`FileSystem Scope: ${caps.filesystem_scope.join(', ')}`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-mono uppercase tracking-tight cursor-help"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-mono uppercase tracking-tight cursor-help"
                     >
                       <span className="w-1 h-1 rounded-full bg-amber-400" />
                       FS ({caps.filesystem_scope.length})
@@ -401,7 +414,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                   {Array.isArray(caps.network_hosts) && caps.network_hosts.length > 0 && (
                     <span 
                       title={`Allowed Network Hosts: ${caps.network_hosts.join(', ')}`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono uppercase tracking-tight cursor-help"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[11px] font-mono uppercase tracking-tight cursor-help"
                     >
                       <span className="w-1 h-1 rounded-full bg-blue-400" />
                       NET ({caps.network_hosts.length})
@@ -415,29 +428,30 @@ export function GuildsTab({ bridge, notify, events }: Props) {
 
         {/* Sandbox Override Selector */}
         <div className={cn(
-          "mt-2 mb-3 pt-2 border-t border-slate-800/60 space-y-1.5 font-mono text-[9px]",
+          "mt-2 mb-3 pt-2 border-t border-slate-800/60 space-y-1.5 font-mono text-[11px]",
           !sandboxEnabled && "opacity-60"
         )}>
           <div className="flex justify-between items-center">
-            <span className="text-slate-500">Effective Sandbox</span>
+            <span className="text-slate-400">Effective Sandbox</span>
             <div className="flex items-center gap-1">
               <span className={cn(
-                "px-1 py-0.5 rounded text-[8px] font-bold uppercase",
-                !sandboxEnabled ? 'bg-slate-800 text-slate-500 border border-slate-700' :
+                "px-1 py-0.5 rounded text-[11px] font-bold uppercase",
+                !sandboxEnabled ? 'bg-slate-800 text-slate-400 border border-slate-700' :
                 getEffectiveProfile(guild.name).profile === 'strict' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
                 getEffectiveProfile(guild.name).profile === 'balanced' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
                 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               )}>
                 {sandboxEnabled ? getEffectiveProfile(guild.name).profile : 'inactive'}
               </span>
-              <span className="text-[8px] text-slate-600">
+              <span className="text-[11px] text-slate-400">
                 ({sandboxEnabled ? getEffectiveProfile(guild.name).source : 'global off'})
               </span>
             </div>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-slate-500">Sandbox Override</span>
+            <span className="text-slate-400">Sandbox Override</span>
             <select
+              aria-label={`Sandbox Override for ${guild.name}`}
               value={guildOverrides[guild.name] || 'inherited'}
               disabled={!sandboxEnabled}
               onChange={async (e) => {
@@ -475,7 +489,8 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                       'info'
                     );
                   }
-                } catch (err: any) {
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err);
                   // Revert the optimistic update — the backend call above failed
                   // (e.g. the DELETE endpoint doesn't exist on this build yet),
                   // so the UI must not claim a state it never actually applied.
@@ -485,13 +500,13 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                     else copy[guild.name] = previous;
                     return copy;
                   });
-                  notify(`Failed to update override for ${guild.name}: ${err.message}`, 'error');
+                  notify(`Failed to update override for ${guild.name}: ${msg}`, 'error');
                 }
               }}
               title={!sandboxEnabled ? "Enable global sandbox to configure overrides" : undefined}
               className={cn(
-                "bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-[8px] text-slate-300 font-mono focus:border-emerald-500 focus:outline-none",
-                !sandboxEnabled && "cursor-not-allowed bg-slate-900 text-slate-600"
+                "bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-[11px] text-slate-300 font-mono focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
+                !sandboxEnabled && "cursor-not-allowed bg-slate-900 text-slate-500"
               )}
             >
               <option value="inherited">Inherited</option>
@@ -507,59 +522,65 @@ export function GuildsTab({ bridge, notify, events }: Props) {
           {(guild.running || (guild.restarts_5m ?? 0) > 0) ? (
             <>
               <button type="button"
+                aria-label={`Stop ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'stop')}
                 disabled={loading === guild.name}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed">
-                <Square className="w-3 h-3" /> Stop
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none">
+                <Square className="w-3 h-3" aria-hidden="true" /> Stop
               </button>
               <button type="button"
+                aria-label={`Force Restart ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'restart')}
                 disabled={loading === guild.name}
                 title="Force Restart"
                 className={cn(
-                  'px-2 py-1.5 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed',
+                  'px-2 py-1.5 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none',
                   guild.running
                     ? 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400'
                     : 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
                 )}>
-                <RefreshCw className={cn('w-3 h-3', loading === guild.name && 'animate-spin')} />
+                <RefreshCw className={cn('w-3 h-3', loading === guild.name && 'animate-spin')} aria-hidden="true" />
               </button>
             </>
           ) : status === 'lazy' ? (
             <>
               <button type="button"
+                aria-label={`Wake ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'start')}
                 disabled={loading === guild.name}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20 rounded text-xs font-bold transition-all disabled:opacity-50 cursor-pointer">
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20 rounded text-xs font-bold transition-all disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none">
                 {loading === guild.name ? (
-                  <RefreshCw className="w-3 h-3 animate-spin animate-spin-fast" />
+                  <RefreshCw className="w-3 h-3 animate-spin animate-spin-fast" aria-hidden="true" />
                 ) : (
-                  <Zap className="w-3 h-3 text-blue-400" />
+                  <Zap className="w-3 h-3 text-blue-400" aria-hidden="true" />
                 )}
                 Wake
               </button>
               <button type="button"
+                aria-label={`Reset crash backoff and start ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'reset_start')}
                 disabled={loading === guild.name}
                 title="Reset crash backoff and start"
-                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed">
-                <Zap className="w-3 h-3" />
+                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none">
+                <Zap className="w-3 h-3" aria-hidden="true" />
               </button>
             </>
           ) : (
             <>
               <button type="button"
+                aria-label={`Start ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'start')}
                 disabled={loading === guild.name}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed">
-                <Play className="w-3 h-3" /> Start
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none">
+                <Play className="w-3 h-3" aria-hidden="true" /> Start
               </button>
               <button type="button"
+                aria-label={`Reset crash backoff and start ${guild.name}`}
                 onClick={() => handleGuildAction(guild.name, 'reset_start')}
                 disabled={loading === guild.name}
                 title="Reset crash backoff and start"
-                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed">
-                <Zap className="w-3 h-3" />
+                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none">
+                <Zap className="w-3 h-3" aria-hidden="true" />
               </button>
             </>
           )}
@@ -578,45 +599,47 @@ export function GuildsTab({ bridge, notify, events }: Props) {
     <div className="space-y-4">
       {/* Docker offline warning */}
       {dockerStatus?.status === 'offline' && (
-        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-xs">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+        <div role="alert" className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-xs">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <div className="flex-1">
             <p className="font-bold">Sandbox Isolation Degraded</p>
             <p className="opacity-80">Docker Desktop is not running. Sandbox guilds will fail to initialize.</p>
           </div>
           <button type="button" onClick={() => window.location.reload()}
-            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded font-bold uppercase tracking-wider text-[10px]">
+            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded font-bold uppercase tracking-wider text-[11px] focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none">
             Retry
           </button>
         </div>
       )}
 
       {/* Sub-tab Navigation */}
-      <div className="flex border-b border-slate-800 pb-px">
+      <div role="group" aria-label="Guilds View Modes" className="flex border-b border-slate-800 pb-px">
         <button
           type="button"
+          aria-pressed={subTab === 'overview'}
           onClick={() => setSubTab('overview')}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-mono font-bold tracking-wider uppercase transition-all',
+            'flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-mono font-bold tracking-wider uppercase transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none',
             subTab === 'overview'
               ? 'border-blue-500 text-blue-400 bg-blue-500/5'
-              : 'border-transparent text-slate-500 hover:text-slate-300'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
           )}
         >
-          <Layers className="w-3.5 h-3.5" />
+          <Layers className="w-3.5 h-3.5" aria-hidden="true" />
           Overview
         </button>
         <button
           type="button"
+          aria-pressed={subTab === 'inspector'}
           onClick={() => setSubTab('inspector')}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-mono font-bold tracking-wider uppercase transition-all',
+            'flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-mono font-bold tracking-wider uppercase transition-all focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none',
             subTab === 'inspector'
               ? 'border-blue-500 text-blue-400 bg-blue-500/5'
-              : 'border-transparent text-slate-500 hover:text-slate-300'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
           )}
         >
-          <Settings className="w-3.5 h-3.5" />
+          <Settings className="w-3.5 h-3.5" aria-hidden="true" />
           Inspector & Playground
         </button>
       </div>
@@ -626,8 +649,8 @@ export function GuildsTab({ bridge, notify, events }: Props) {
           {/* Header + Category Filters */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-slate-500" />
-              <span className="text-xs text-slate-500 font-mono">{guilds?.length || 0} guilds registered</span>
+              <Cpu className="w-4 h-4 text-slate-400" aria-hidden="true" />
+              <span className="text-xs text-slate-400 font-mono">{guilds?.length || 0} guilds registered</span>
               <span className="text-slate-700">·</span>
               <span className="text-xs text-emerald-500 font-mono">
                 {guilds?.filter(g => g.running).length || 0} running
@@ -636,44 +659,47 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             {/* Docker status badge */}
             <div className="flex items-center gap-2">
               {dockerStatus === null ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-500 border border-slate-700">
+                <span role="status" className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
                   Docker...
                 </span>
               ) : dockerStatus.status === 'online' ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                <span role="status" className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
                   Docker {dockerStatus.version ? `v${dockerStatus.version}` : ''}
                 </span>
               ) : dockerStatus.status === 'error' ? (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/20">
+                <span role="status" className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-500/20 text-red-400 border border-red-500/20">
                   Docker Unreachable
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/20">
+                <span role="status" className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-500/20 text-red-400 border border-red-500/20">
                   Docker Offline
                 </span>
               )}
               {/* Hide inactive toggle */}
               <button
+                type="button"
+                aria-pressed={!hideInactive}
                 onClick={() => setHideInactive(h => !h)}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded border border-slate-700 hover:border-slate-600"
+                className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded border border-slate-700 hover:border-slate-600 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
               >
                 {hideInactive ? `Show all (${guilds.length})` : `Hide inactive`}
               </button>
             </div>
             {/* Category filter pills */}
-            <div className="flex gap-1.5 flex-wrap">
+            <div role="group" aria-label="Guild Categories" className="flex gap-1.5 flex-wrap">
               {CATEGORIES.map(cat => (
                 <button
                   key={cat}
                   type="button"
+                  aria-pressed={activeCategory === cat}
                   onClick={() => setActiveCategory(cat)}
                   className={cn(
-                    'px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors uppercase tracking-wider',
+                    'px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors uppercase tracking-wider focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none',
                     activeCategory === cat
                       ? cat === 'all'
                         ? 'bg-slate-700 text-slate-200 border-slate-500'
                         : CATEGORY_STYLE[cat as GuildCategory].cls + ' opacity-100'
-                      : 'bg-slate-900 text-slate-600 border-slate-800 hover:border-slate-600'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'
                   )}
                 >
                   {cat === 'all' ? `All (${guilds.length})` : `${cat} (${categoryCounts[cat] || 0})`}
@@ -689,12 +715,12 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h3 className="text-xs font-bold text-slate-50 uppercase tracking-wider font-mono">Sandbox Security Profile</h3>
-                  <p className="text-[10px] text-slate-500 font-mono">Configure execution isolation constraints for active guilds</p>
+                  <p className="text-[11px] text-slate-500 font-mono">Configure execution isolation constraints for active guilds</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className={cn(
-                  "px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase border",
+                  "px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border",
                   sandboxEnabled 
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
                     : "bg-slate-800 text-slate-500 border-slate-700"
@@ -708,21 +734,21 @@ export function GuildsTab({ bridge, notify, events }: Props) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
                 {
-                  id: 'strict',
+                  id: 'strict' as const,
                   label: 'Strict',
                   desc: 'Full isolation: Docker for all guilds, process_execution=false, network=none, filesystem=read-only workspace.',
                   color: 'hover:border-red-500/30 active:border-red-500/50',
                   activeColor: 'border-red-500 bg-red-500/10 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.05)]'
                 },
                 {
-                  id: 'balanced',
+                  id: 'balanced' as const,
                   label: 'Balanced',
                   desc: 'Moderate isolation: Docker for bash/code only, enforcement per declared capabilities, network/filesystem per guild declaration. (Default)',
                   color: 'hover:border-blue-500/30 active:border-blue-500/50',
                   activeColor: 'border-blue-500 bg-blue-500/10 text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.05)]'
                 },
                 {
-                  id: 'permissive',
+                  id: 'permissive' as const,
                   label: 'Permissive',
                   desc: 'No isolation: no Docker, process_execution allowed, full network and filesystem access. Advisory-only capability declarations.',
                   color: 'hover:border-emerald-500/30 active:border-emerald-500/50',
@@ -734,7 +760,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => handleProfileChange(p.id as any)}
+                    onClick={() => handleProfileChange(p.id)}
                     className={cn(
                       "p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col space-y-1.5",
                       isActive 
@@ -743,7 +769,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                     )}
                   >
                     <span className="text-xs font-bold font-mono uppercase tracking-wider">{p.label}</span>
-                    <span className="text-[10px] text-slate-500 leading-normal font-mono">{p.desc}</span>
+                    <span className="text-[11px] text-slate-500 leading-normal font-mono">{p.desc}</span>
                   </button>
                 );
               })}
@@ -787,7 +813,7 @@ export function GuildsTab({ bridge, notify, events }: Props) {
                       <Zap className="w-4 h-4 text-blue-400" />
                       On-Demand Guilds
                     </h3>
-                    <span className="text-[10px] text-slate-500 font-mono">Start automatically when needed</span>
+                    <span className="text-[11px] text-slate-500 font-mono">Start automatically when needed</span>
                   </div>
                 </div>
                 {onDemandGuilds.length === 0 ? (

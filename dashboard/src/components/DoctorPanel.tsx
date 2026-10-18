@@ -190,7 +190,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Execution Provider:
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400">
+              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-400">
                 {report.system.warnings?.length ? 'System Inspection OK' : 'Default Hardware Engine'}
               </span>
             </div>
@@ -214,7 +214,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
                     <div className={cn("w-2 h-2 rounded-full", g.running ? "bg-emerald-500" : "bg-red-500")} />
                     <div>
                       <p className="text-sm font-mono text-slate-200">{g.name}</p>
-                      <p className="text-[10px] text-slate-500">{g.tools_count} tools</p>
+                      <p className="text-[11px] text-slate-500">{g.tools_count} tools</p>
                       {g.issues.length > 0 && (
                         <p className="text-xs text-red-400 mt-1">{g.issues[0]}</p>
                       )}

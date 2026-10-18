@@ -141,7 +141,7 @@ export function VisionTab({ bridge, notify }: Props) {
               <p className="mt-1 text-[11px] opacity-80">
                 Para activar:
               </p>
-              <code className="block mt-1 px-2 py-1 bg-amber-950/50 rounded text-[10px] font-mono">
+              <code className="block mt-1 px-2 py-1 bg-amber-950/50 rounded text-[11px] font-mono">
                 pip install transformers torch pillow
               </code>
               <p className="mt-1 text-[11px] opacity-80">y reiniciar el kernel.</p>
@@ -162,7 +162,7 @@ export function VisionTab({ bridge, notify }: Props) {
                   setStarting(false);
                 }
               }}
-              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 rounded font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 shrink-0"
+              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 rounded font-bold uppercase tracking-wider text-[11px] flex items-center gap-1 shrink-0"
             >
               {starting && <RefreshCw className="w-3 h-3 animate-spin" />}
               {starting ? 'Loading vision model...' : 'Warm-up Vision Guild'}
@@ -184,7 +184,7 @@ export function VisionTab({ bridge, notify }: Props) {
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
         <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
           <span className="text-xs font-medium uppercase tracking-widest text-slate-400">Sovereign Visual Intelligence</span>
-          <div className={cn("flex items-center gap-1.5 text-[10px] font-bold",
+          <div className={cn("flex items-center gap-1.5 text-[11px] font-bold",
             visionRunning ? "text-emerald-400" : "text-slate-600"
           )}>
             <div className={cn("w-1.5 h-1.5 rounded-full", visionRunning ? "bg-emerald-500 animate-pulse" : "bg-slate-700")} />
@@ -212,7 +212,7 @@ export function VisionTab({ bridge, notify }: Props) {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-3">
-              <label className="block text-[10px] text-slate-500 uppercase mb-1" htmlFor="vision-image-path">Image Path (Absolute)</label>
+              <label className="block text-[11px] text-slate-500 uppercase mb-1" htmlFor="vision-image-path">Image Path (Absolute)</label>
               <input
                 id="vision-image-path"
                 type="text"
@@ -223,7 +223,7 @@ export function VisionTab({ bridge, notify }: Props) {
               />
             </div>
             <div>
-              <div className="block text-[10px] text-slate-500 uppercase mb-1">Inference Model</div>
+              <div className="block text-[11px] text-slate-500 uppercase mb-1">Inference Model</div>
               <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded text-xs text-emerald-400 font-mono">
                 {kernelConfig?.vision?.model_path?.split('/').pop() ?? 'SmolVLM2-256M'}
               </div>
@@ -231,7 +231,7 @@ export function VisionTab({ bridge, notify }: Props) {
           </div>
 
           <div>
-            <label className="block text-[10px] text-slate-500 uppercase mb-1" htmlFor="vision-prompt">Prompt / Schema</label>
+            <label className="block text-[11px] text-slate-500 uppercase mb-1" htmlFor="vision-prompt">Prompt / Schema</label>
             <textarea
               id="vision-prompt"
               value={prompt}
@@ -272,7 +272,7 @@ export function VisionTab({ bridge, notify }: Props) {
 
       {/* Result section */}
       <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden">
-        <div className="px-4 py-1.5 border-b border-slate-800 text-[10px] text-slate-500 uppercase tracking-widest flex items-center gap-2">
+        <div className="px-4 py-1.5 border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-widest flex items-center gap-2">
           <FileJson className="w-3 h-3" />
           Analysis Result
         </div>
@@ -287,7 +287,7 @@ export function VisionTab({ bridge, notify }: Props) {
             {parsedResult.status && (
               <div className="flex items-center gap-2">
                 <span className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                  "px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider",
                   parsedResult.status === 'ok' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
                   parsedResult.status === 'degraded' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
                   parsedResult.status === 'error' ? "bg-red-500/20 text-red-400 border border-red-500/30" :
@@ -297,13 +297,13 @@ export function VisionTab({ bridge, notify }: Props) {
                 </span>
                 {/* SilvaDB node_id badge */}
                 {parsedResult.node_id && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     SilvaDB Node: {parsedResult.node_id.slice(0, 12)}...
                   </span>
                 )}
                 {/* Triples count */}
                 {parsedResult.triples_extracted !== undefined && parsedResult.triples_extracted > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
                     Triples: {parsedResult.triples_extracted}
                   </span>
                 )}
@@ -312,7 +312,7 @@ export function VisionTab({ bridge, notify }: Props) {
             {/* Description */}
             {parsedResult.description && (
               <div>
-                <label className="block text-[10px] text-slate-500 uppercase mb-1">Description</label>
+                <label className="block text-[11px] text-slate-500 uppercase mb-1">Description</label>
                 <textarea
                   readOnly
                   value={parsedResult.description}
@@ -324,7 +324,7 @@ export function VisionTab({ bridge, notify }: Props) {
             {/* Error */}
             {parsedResult.error && (
               <div>
-                <label className="block text-[10px] text-red-500 uppercase mb-1">Error</label>
+                <label className="block text-[11px] text-red-500 uppercase mb-1">Error</label>
                 <p className="px-3 py-2 bg-red-950/30 border border-red-900/30 rounded text-xs text-red-400 font-mono">
                   {parsedResult.error}
                 </p>
@@ -333,7 +333,7 @@ export function VisionTab({ bridge, notify }: Props) {
             {/* OCR fallback */}
             {parsedResult.ocr && (
               <div>
-                <label className="block text-[10px] text-slate-500 uppercase mb-1">OCR</label>
+                <label className="block text-[11px] text-slate-500 uppercase mb-1">OCR</label>
                 <textarea
                   readOnly
                   value={parsedResult.ocr}

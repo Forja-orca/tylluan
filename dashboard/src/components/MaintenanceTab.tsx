@@ -234,7 +234,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
               <span className="text-[11px] font-medium">{label}</span>
             </div>
             <div className={cn("text-xl font-bold font-mono truncate", color)}>{value}</div>
-            <p className="text-[10px] text-slate-600 mt-1 truncate">{sub}</p>
+            <p className="text-[11px] text-slate-600 mt-1 truncate">{sub}</p>
           </div>
         ))}
       </div>
@@ -298,7 +298,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
               })}
             </div>
           )}
-          <p className="text-[10px] text-slate-600 mt-2 font-mono text-center italic">Kernel process monitor active</p>
+          <p className="text-[11px] text-slate-600 mt-2 font-mono text-center italic">Kernel process monitor active</p>
         </div>
         <div className="p-6 rounded-2xl bg-slate-950/40">
           <div className="flex items-center gap-2 mb-4">
@@ -320,7 +320,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-emerald-500/50 transition-all duration-1000" style={{ width: `${sysStatus?.system?.memory_percent ?? 0}%` }} />
               </div>
-              <p className="text-[10px] text-slate-600 mt-2 font-mono text-center italic">
+              <p className="text-[11px] text-slate-600 mt-2 font-mono text-center italic">
                 {sysStatus?.system?.used_memory_mb ?? 0} MB / {sysStatus?.system?.total_memory_mb ?? 0} MB RAM detected
               </p>
             </>
@@ -363,7 +363,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
             Save Token
           </button>
         </div>
-        <div className="mt-3 text-[10px] text-slate-600">
+        <div className="mt-3 text-[11px] text-slate-600">
           Press Enter to save. Token used for protected kernel APIs.
         </div>
       </div>

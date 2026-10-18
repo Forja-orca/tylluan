@@ -216,7 +216,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
               <div className="space-y-4 flex-1 flex flex-col">
                 <div>
-                  <label className="text-[10px] font-mono text-slate-500 block mb-1 font-medium">Skill Name / Identifier</label>
+                  <label className="text-[11px] font-mono text-slate-500 block mb-1 font-medium">Skill Name / Identifier</label>
                   <input
                     type="text"
                     value={newName}
@@ -228,7 +228,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
                 </div>
                 
                 <div className="flex-1 flex flex-col">
-                  <label className="text-[10px] font-mono text-slate-500 block mb-1 font-medium">Content / Instructions</label>
+                  <label className="text-[11px] font-mono text-slate-500 block mb-1 font-medium">Content / Instructions</label>
                   <textarea
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
@@ -254,7 +254,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
               <Eye className="w-12 h-12 text-slate-700 animate-pulse" />
               <div className="text-center">
                 <p>No skill selected</p>
-                <p className="text-[10px] text-slate-600 mt-1">Select a skill from the list to view or edit its contents.</p>
+                <p className="text-[11px] text-slate-600 mt-1">Select a skill from the list to view or edit its contents.</p>
               </div>
             </div>
           )}

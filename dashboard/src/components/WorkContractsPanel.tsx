@@ -260,7 +260,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               <h2 className="text-base font-bold text-slate-100 font-sans tracking-tight">
                 Bounded Work Contracts (BWC)
               </h2>
-              <span className="px-2 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-indigo-950/60 border border-indigo-700/50 text-indigo-300">
+              <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded bg-indigo-950/60 border border-indigo-700/50 text-indigo-300">
                 Finite Protocol · BWC-1..4
               </span>
             </div>
@@ -345,7 +345,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                 </span>
                 <div
                   className={cn(
-                    'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border',
+                    'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border',
                     getStatusBadge(activeContract.status).bg
                   )}
                 >
@@ -359,7 +359,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
               {/* Task Statement */}
               <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-xs font-mono text-slate-200 leading-relaxed">
-                <span className="text-[10px] uppercase font-bold text-indigo-400 block mb-1">
+                <span className="text-[11px] uppercase font-bold text-indigo-400 block mb-1">
                   Task Specification & Deliverable:
                 </span>
                 {activeContract.task}
@@ -384,7 +384,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                       <span className="font-bold">{mStyle.initial}</span>
                       <span>@{member}</span>
                       {isConsolidator && (
-                        <span className="ml-1 px-1 py-0.2 rounded bg-amber-950/80 border border-amber-700/60 text-amber-300 text-[9px] font-bold">
+                        <span className="ml-1 px-1 py-0.2 rounded bg-amber-950/80 border border-amber-700/60 text-amber-300 text-[11px] font-bold">
                           CONSOLIDATOR
                         </span>
                       )}
@@ -397,7 +397,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
             {/* Right Budget Meter */}
             <div className="w-full md:w-56 p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 font-mono space-y-2.5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 text-[10px] uppercase">Turn Budget</span>
+                <span className="text-slate-400 text-[11px] uppercase">Turn Budget</span>
                 <span className="font-bold text-slate-100">
                   {activeContract.budget_remaining} / {activeContract.budget}
                 </span>
@@ -417,7 +417,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                   }}
                 />
               </div>
-              <div className="flex justify-between items-center text-[10px] text-slate-400">
+              <div className="flex justify-between items-center text-[11px] text-slate-400">
                 <span>Deliveries: {activeContract.deliveries?.length || 0}</span>
                 <span>Votes: {activeContract.votes?.length || 0}</span>
               </div>
@@ -524,14 +524,14 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                             )}
                           </button>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-500 block">
+                        <span className="text-[11px] font-mono text-slate-500 block">
                           Created {formatRelativeTime(contract.created_at)}
                         </span>
                       </div>
 
                       <div
                         className={cn(
-                          'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border',
+                          'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border',
                           statusBadge.bg
                         )}
                       >
@@ -583,7 +583,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                   </h3>
                   <div
                     className={cn(
-                      'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border',
+                      'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase border',
                       getStatusBadge(selectedContract.status).bg
                     )}
                   >
@@ -607,7 +607,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
               {/* Task Details */}
               <div className="space-y-1.5">
-                <span className="text-[10px] uppercase text-slate-500 font-bold block">
+                <span className="text-[11px] uppercase text-slate-500 font-bold block">
                   Task Statement
                 </span>
                 <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-200 whitespace-pre-wrap leading-relaxed">
@@ -618,20 +618,20 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               {/* Meta Grid */}
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-slate-500 text-[9px] uppercase block">Turn Budget</span>
+                  <span className="text-slate-500 text-[11px] uppercase block">Turn Budget</span>
                   <span className="text-slate-200 font-bold">
                     {selectedContract.budget_remaining} remaining / {selectedContract.budget} total
                   </span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-slate-500 text-[9px] uppercase block">Consolidator</span>
+                  <span className="text-slate-500 text-[11px] uppercase block">Consolidator</span>
                   <span className="text-slate-200 font-bold">@{selectedContract.consolidator}</span>
                 </div>
               </div>
 
               {/* Team Members */}
               <div className="space-y-1.5">
-                <span className="text-[10px] uppercase text-slate-500 font-bold block">
+                <span className="text-[11px] uppercase text-slate-500 font-bold block">
                   Assigned Team ({selectedContract.team?.length || 0})
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -657,7 +657,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
 
               {/* Deliverables Ledger */}
               <div className="space-y-1.5">
-                <span className="text-[10px] uppercase text-slate-500 font-bold block">
+                <span className="text-[11px] uppercase text-slate-500 font-bold block">
                   Registered Deliverables ({selectedContract.deliveries?.length || 0})
                 </span>
                 {!selectedContract.deliveries || selectedContract.deliveries.length === 0 ? (
@@ -676,7 +676,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                           <p className="text-slate-300 text-[11px]">{del.artifact || del.note || 'Delivered'}</p>
                         </div>
                         {del.ts && (
-                          <span className="text-[10px] text-slate-500">{formatRelativeTime(del.ts)}</span>
+                          <span className="text-[11px] text-slate-500">{formatRelativeTime(del.ts)}</span>
                         )}
                       </div>
                     ))}
@@ -687,7 +687,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
               {/* Consensus & Votes */}
               {selectedContract.votes && selectedContract.votes.length > 0 && (
                 <div className="space-y-1.5">
-                  <span className="text-[10px] uppercase text-slate-500 font-bold block">
+                  <span className="text-[11px] uppercase text-slate-500 font-bold block">
                     Consensus Votes ({selectedContract.votes.length})
                   </span>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -699,7 +699,7 @@ export function WorkContractsPanel({ bridge, notify }: WorkContractsPanelProps) 
                         <span className="font-bold text-slate-300">@{v.agent_id}:</span>
                         <span
                           className={cn(
-                            'font-bold uppercase text-[10px]',
+                            'font-bold uppercase text-[11px]',
                             v.vote === 'approve' ? 'text-emerald-400' : 'text-rose-400'
                           )}
                         >

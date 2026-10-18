@@ -478,7 +478,7 @@ export function OutputsLedgerPanel({ bridge, notify }: OutputsLedgerPanelProps) 
                     {selectedManifest && (
                       <span
                         className={cn(
-                          "text-[10px] font-mono px-2 py-0.5 rounded-full border",
+                          "text-[11px] font-mono px-2 py-0.5 rounded-full border",
                           selectedManifest.delivery_status === 'ok'
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                             : "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -558,28 +558,28 @@ export function OutputsLedgerPanel({ bridge, notify }: OutputsLedgerPanelProps) 
                   {/* Meta Overview Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                      <span className="text-[10px] font-mono uppercase text-slate-500">Guild & Tool</span>
+                      <span className="text-[11px] font-mono uppercase text-slate-500">Guild & Tool</span>
                       <p className="text-xs font-mono text-slate-200 font-semibold mt-0.5">
                         {selectedManifest.guild} / {selectedManifest.tool}
                       </p>
                     </div>
 
                     <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                      <span className="text-[10px] font-mono uppercase text-slate-500">Requested By</span>
+                      <span className="text-[11px] font-mono uppercase text-slate-500">Requested By</span>
                       <p className="text-xs font-mono text-slate-200 font-semibold mt-0.5">
                         {selectedManifest.requested_by || 'system'}
                       </p>
                     </div>
 
                     <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                      <span className="text-[10px] font-mono uppercase text-slate-500">Created At</span>
+                      <span className="text-[11px] font-mono uppercase text-slate-500">Created At</span>
                       <p className="text-xs font-mono text-slate-200 mt-0.5">
                         {selectedManifest.created_at ? new Date(selectedManifest.created_at * 1000).toLocaleString() : 'N/A'}
                       </p>
                     </div>
 
                     <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                      <span className="text-[10px] font-mono uppercase text-slate-500">Schema Version</span>
+                      <span className="text-[11px] font-mono uppercase text-slate-500">Schema Version</span>
                       <p className="text-xs font-mono text-emerald-400 font-semibold mt-0.5">
                         v{selectedManifest.schema_version}
                       </p>

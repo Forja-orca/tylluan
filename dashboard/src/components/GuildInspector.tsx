@@ -3,7 +3,6 @@ import {
   Play, 
   Terminal, 
   Cpu, 
-  Activity, 
   Layers, 
   Plus,
   Trash2,
@@ -11,11 +10,15 @@ import {
   XCircle,
   Clock,
   Search,
-  ShieldAlert,
   Eye
 } from 'lucide-react';
 import type { Guild, NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+
+interface ExtendedGuild extends Guild {
+  required_args?: string[];
+  optional_args?: string[];
+}
 
 const GUILD_ARG_DEFAULTS: Record<string, { required: string[]; optional: string[]; placeholder: Record<string, string> }> = {
   bash: {
@@ -62,13 +65,13 @@ interface GuildInspectorProps {
 }
 
 export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) {
-  const [selectedGuild, setSelectedGuild] = useState<Guild | null>(guilds[0] || null);
+  const [selectedGuild, setSelectedGuild] = useState<ExtendedGuild | null>((guilds[0] as ExtendedGuild) || null);
   const [searchFilter, setSearchFilter] = useState('');
   const [isPlanMode, setIsPlanMode] = useState(true); // Default to dry-run pre-flight
   const [args, setArgs] = useState<Record<string, string>>({});
   const [customArgs, setCustomArgs] = useState<Array<{ key: string; val: string }>>([]);
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<any | null>(null);
+  const [response, setResponse] = useState<Record<string, unknown> | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   const filteredGuilds = guilds.filter(g => 
@@ -78,7 +81,7 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
 
   useEffect(() => {
     if (guilds.length > 0 && !selectedGuild) {
-      setSelectedGuild(guilds[0]);
+      setSelectedGuild(guilds[0] as ExtendedGuild);
     }
   }, [guilds, selectedGuild]);
 
@@ -88,9 +91,9 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
     setLatencyMs(null);
     setCustomArgs([]);
 
-    const defaults = (GUILD_ARG_DEFAULTS[selectedGuild.name] || ((selectedGuild as any).required_args ? {
-      required: (selectedGuild as any).required_args || [],
-      optional: (selectedGuild as any).optional_args || [],
+    const defaults = (GUILD_ARG_DEFAULTS[selectedGuild.name] || (selectedGuild.required_args ? {
+      required: selectedGuild.required_args || [],
+      optional: selectedGuild.optional_args || [],
       placeholder: {} as Record<string, string>
     } : {
       required: ['intent'],
@@ -150,14 +153,14 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
     setResponse(null);
     setLatencyMs(null);
 
-    const mergedArgs: Record<string, any> = { ...args };
+    const mergedArgs: Record<string, unknown> = { ...args };
     customArgs.forEach(item => {
       if (item.key.trim()) {
         mergedArgs[item.key.trim()] = item.val;
       }
     });
 
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       tool: 'tylluan_do',
       arguments: {
         guild: selectedGuild.name,
@@ -175,13 +178,14 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
       });
       const duration = Math.round(performance.now() - startTime);
       setLatencyMs(duration);
-      setResponse(res);
+      setResponse(res as Record<string, unknown>);
       notify(`Execution completed in ${duration}ms`, 'info');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const duration = Math.round(performance.now() - startTime);
+      const msg = err instanceof Error ? err.message : 'Execution failed';
       setLatencyMs(duration);
-      setResponse({ error: err.message || 'Execution failed' });
-      notify(`Execution error: ${err.message}`, 'error');
+      setResponse({ error: msg });
+      notify(`Execution error: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -193,10 +197,10 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
       <div className="p-5 bg-slate-900/60 rounded-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 rounded-md">
+            <span className="px-2 py-0.5 text-[11px] font-medium bg-amber-500/10 text-amber-400 rounded-md">
               Interactive Workbench
             </span>
-            <span className="px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 rounded-md">
+            <span className="px-2 py-0.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 rounded-md">
               FastMCP Tools
             </span>
           </div>
@@ -278,7 +282,7 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
                 <p className="text-xs text-slate-400 mt-0.5">{selectedGuild.description || 'No description available'}</p>
               </div>
               <span className={cn(
-                "px-2 py-1 text-[10px] font-medium rounded-md",
+                "px-2 py-1 text-[11px] font-medium rounded-md",
                 selectedGuild.running ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-800 text-slate-400"
               )}>
                 {selectedGuild.running ? 'Running' : 'Stopped'}
@@ -357,7 +361,7 @@ export function GuildInspector({ bridge, notify, guilds }: GuildInspectorProps) 
                   <span>Execution Output</span>
                 </div>
                 {latencyMs !== null && (
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
                     <Clock className="w-3 h-3 text-amber-400" /> {latencyMs}ms
                   </span>
                 )}

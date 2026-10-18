@@ -121,7 +121,7 @@ export function LogsTab({ events, onClear }: Props) {
               type="button"
               onClick={() => toggleFilter(type)}
               className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-bold border transition-colors",
+                "px-2 py-0.5 rounded text-[11px] font-bold border transition-colors",
                 activeFilters.has(type)
                   ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
                   : "bg-slate-900/50 border-slate-800 text-slate-600"
@@ -133,7 +133,7 @@ export function LogsTab({ events, onClear }: Props) {
           <button
             type="button"
             onClick={toggleAll}
-            className="px-2 py-0.5 rounded text-[10px] text-slate-600 hover:text-slate-400 transition-colors"
+            className="px-2 py-0.5 rounded text-[11px] text-slate-600 hover:text-slate-400 transition-colors"
           >
             Toggle
           </button>
@@ -141,7 +141,7 @@ export function LogsTab({ events, onClear }: Props) {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={autoScroll}
@@ -154,7 +154,7 @@ export function LogsTab({ events, onClear }: Props) {
           <button
             type="button"
             onClick={() => onClear?.()}
-            className="flex items-center gap-1 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[10px] font-bold transition-colors"
+            className="flex items-center gap-1 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[11px] font-bold transition-colors"
           >
             <Trash2 className="w-3 h-3" /> Limpiar
           </button>

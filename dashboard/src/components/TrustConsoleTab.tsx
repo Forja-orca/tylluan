@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Activity, CheckCircle, RefreshCw, Terminal, Layers, FileCode } from 'lucide-react';
+import { Shield, Activity, CheckCircle, AlertTriangle, RefreshCw, Terminal, Layers, FileCode, Wrench } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 
@@ -7,6 +7,24 @@ interface HealthData {
   status: string;
   version: string;
   commit: string;
+  components?: {
+    sovereign_tools?: {
+      ok: boolean;
+      count: number;
+    };
+    silva_db?: {
+      ok: boolean;
+    };
+    embeddings?: {
+      ok: boolean;
+      loaded?: boolean;
+      circuit_open?: boolean;
+    };
+    guild_supervisor?: {
+      ok: boolean;
+      active?: number;
+    };
+  };
 }
 
 // Mirrors crates/tylluan-kernel/src/registry/guild_process.rs GuildStatus (real fields).
@@ -36,7 +54,7 @@ export const TrustConsoleTab: React.FC = () => {
     try {
       if (bridge) {
         // fetchRaw returns the parsed JSON body (not a Response) — no .ok / .json()
-        const resHealth = await bridge.fetchRaw('/health') as HealthData;
+        const resHealth = await bridge.fetchRaw('/health?verbose=true') as HealthData;
         if (resHealth?.status) setHealth(resHealth);
         const resGuilds = await bridge.fetchRaw('/api/v1/guilds');
         if (Array.isArray(resGuilds)) setContracts(resGuilds as GuildContract[]);
@@ -56,25 +74,31 @@ export const TrustConsoleTab: React.FC = () => {
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('trust-console', fetchData, { interval: 'medium', enabled: !!bridge });
 
+  const sovereignTools = health?.components?.sovereign_tools;
+  const sovereignCount = sovereignTools?.count ?? null;
+  const sovereignOk = sovereignTools ? (sovereignTools.ok && sovereignTools.count === 6) : null;
+
   // WCAG-A pre-flight 2026-08-12 (dark theme, exact token vars):
   //  emerald-400 on emerald-700/40: 6.31:1 (RUNNING cell/card) · amber-400 on amber-600/40: 5.42:1
   //  rose-400 on rose-700/40: 4.97:1 (contradicted card) · emerald-400 on slate-900 9.59:1
   return (
-    <div className="p-6 space-y-6 bg-slate-950 text-slate-100 min-h-screen">
+    <div className="p-6 space-y-6 bg-slate-950 text-slate-100 rounded-2xl border border-slate-800/80">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-bold font-sans flex items-center gap-3 text-amber-400">
-            <Shield className="w-7 h-7" /> Trust Console — Trust & Continuity Layer
+            <Shield className="w-7 h-7" /> Trust Console — Trust &amp; Continuity Layer
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Runtime monitor, version drift detection (M40-P6) and guild self-documented contracts (M40-P1).
+          <p className="text-sm text-slate-300 mt-1">
+            Runtime monitor, CONTRACT-01 sovereign tool invariant, version drift detection (M40-P6) and guild self-documented contracts (M40-P1).
           </p>
         </div>
         <button
+          type="button"
           onClick={fetchData}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-300 transition"
+          aria-label="Refresh Trust Console telemetry"
+          className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition cursor-pointer self-start sm:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           {lastRefreshed ? `Updated ${lastRefreshed}` : 'Refresh'}
@@ -82,35 +106,70 @@ export const TrustConsoleTab: React.FC = () => {
       </div>
 
       {/* Overview Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Kernel Health */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kernel Status</span>
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Kernel Status</span>
             <CheckCircle className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">{health?.status?.toUpperCase() || '—'}</div>
-          <div className="text-xs text-slate-400 mt-2">Version: <span className="font-mono text-slate-200">{health?.version || '—'}</span></div>
+          <div className="text-xs text-slate-300 mt-2">Version: <span className="font-mono text-slate-100">{health?.version || '—'}</span></div>
         </div>
 
         {/* Commit Hash */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Loaded Commit (Runtime)</span>
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Loaded Commit (Runtime)</span>
             <Terminal className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-xl font-mono text-amber-400 font-bold">{health?.commit?.slice(0, 12) || '—'}</div>
-          <div className="text-xs text-slate-400 mt-2">Commit loaded by the runtime kernel</div>
+          <div className="text-xs text-slate-300 mt-2">Commit loaded by the runtime kernel</div>
+        </div>
+
+        {/* Sovereign Tools Invariant (CONTRACT-01 / ADR-021 / D5) */}
+        <div
+          role="status"
+          aria-label="Sovereign tools CONTRACT-01 status"
+          className={`rounded-lg p-4 border ${
+            sovereignOk === false
+              ? 'bg-rose-950/50 border-rose-500/60'
+              : 'bg-slate-900 border-slate-800'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Sovereign Tools (CONTRACT-01)</span>
+            {sovereignOk === false ? (
+              <AlertTriangle className="w-4 h-4 text-rose-400" aria-hidden="true" />
+            ) : (
+              <Wrench className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            )}
+          </div>
+          <div
+            className={`text-xl font-mono font-bold ${
+              sovereignOk === false ? 'text-rose-400' : 'text-emerald-400'
+            }`}
+          >
+            {sovereignCount !== null ? `${sovereignCount} / 6` : '— / 6'}
+            <span className="ml-2 text-xs font-semibold uppercase">
+              {sovereignOk === false ? 'DRIFT ALERT' : sovereignOk === true ? 'VERIFIED' : 'PENDING'}
+            </span>
+          </div>
+          <div className={`text-xs mt-2 ${sovereignOk === false ? 'text-rose-300 font-medium' : 'text-slate-300'}`}>
+            {sovereignOk === false
+              ? `Invariant violation: expected 6 tools (ok=true), got count=${sovereignCount} (ok=${String(sovereignTools?.ok)})`
+              : 'do · remember · recall · think · graph · decide'}
+          </div>
         </div>
 
         {/* MCP Spec & Extensiones */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">MCP Spec & Extensions</span>
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">MCP Spec &amp; Extensions</span>
             <Layers className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-xl font-mono text-emerald-400 font-bold">SSE</div>
-          <div className="text-xs text-slate-400 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensions: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
+          <div className="text-xs text-slate-300 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensions: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
         </div>
       </div>
 
@@ -140,7 +199,7 @@ export const TrustConsoleTab: React.FC = () => {
                   <tr key={g.name} className="hover:bg-slate-800/40">
                     <td className="py-2.5 px-3 font-bold text-amber-400">{g.name}</td>
                     <td className="py-2.5 px-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] ${g.running ? 'bg-emerald-700/40 text-emerald-400 border border-emerald-700/40' : 'bg-slate-800 text-slate-400'}`}>
+                      <span className={`px-2 py-0.5 rounded text-[11px] ${g.running ? 'bg-emerald-700/40 text-emerald-400 border border-emerald-700/40' : 'bg-slate-800 text-slate-400'}`}>
                         {g.running ? 'RUNNING' : 'STOPPED'}
                       </span>
                     </td>
@@ -149,7 +208,7 @@ export const TrustConsoleTab: React.FC = () => {
                     </td>
                     <td className="py-2.5 px-3 text-emerald-400">
                       {g.tools_count}
-                      {g.always_on && <span className="text-[9px] text-slate-500 ml-1">always_on</span>}
+                      {g.always_on && <span className="text-[11px] text-slate-500 ml-1">always_on</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
                       {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600">all</span>}

@@ -318,7 +318,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
               <h2 className="text-base font-bold text-slate-100 font-sans tracking-tight">
                 Fleet Health & Loop Supervisor
               </h2>
-              <span className="px-2 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-indigo-950/60 border border-indigo-700/50 text-indigo-300">
+              <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded bg-indigo-950/60 border border-indigo-700/50 text-indigo-300">
                 WORK_PROTOCOL §7
               </span>
             </div>
@@ -477,7 +477,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-sm text-slate-100 font-sans">{style.label}</h4>
-                        <span className="text-[10px] font-mono text-slate-400">@{summary.authorId}</span>
+                        <span className="text-[11px] font-mono text-slate-400">@{summary.authorId}</span>
                       </div>
                       <p className="text-[11px] font-mono text-slate-400">{summary.statusReason}</p>
                     </div>
@@ -498,19 +498,19 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
                 {/* Telemetry Summary Bar */}
                 <div className="grid grid-cols-3 gap-2 my-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-[11px] font-mono">
                   <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Last Turn</span>
+                    <span className="text-slate-400 block text-[11px] uppercase">Last Turn</span>
                     <span className="text-slate-200 font-bold">
                       {summary.lastTurn > 0 ? `#${summary.lastTurn}` : 'None'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Timestamp</span>
+                    <span className="text-slate-400 block text-[11px] uppercase">Timestamp</span>
                     <span className="text-slate-200">
                       {summary.lastTs > 0 ? formatRelativeTime(summary.lastTs) : 'N/A'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Total Logs</span>
+                    <span className="text-slate-400 block text-[11px] uppercase">Total Logs</span>
                     <span className="text-slate-200">{summary.totalTurns} msgs</span>
                   </div>
                 </div>
@@ -518,12 +518,12 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
                 {/* Keywords Matched Pill */}
                 {summary.matchedKeywords.length > 0 && (
                   <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                    <span className="text-[10px] font-mono text-slate-400">Keywords:</span>
+                    <span className="text-[11px] font-mono text-slate-400">Keywords:</span>
                     {summary.matchedKeywords.map(kw => (
                       <span
                         key={kw}
                         className={cn(
-                          'px-1.5 py-0.5 rounded text-[10px] font-mono border',
+                          'px-1.5 py-0.5 rounded text-[11px] font-mono border',
                           summary.status === 'incident'
                             ? 'bg-rose-950/40 border-rose-800/40 text-rose-300'
                             : 'bg-emerald-950/40 border-emerald-800/40 text-emerald-300'
@@ -545,7 +545,7 @@ export function FleetHealthPanel({ bridge, notify }: FleetHealthPanelProps) {
                       {summary.lastContent.length > 150 && (
                         <button
                           onClick={() => toggleExpand(summary.authorId)}
-                          className="mt-2 text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                          className="mt-2 text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
                         >
                           {isExpanded ? (
                             <>

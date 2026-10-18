@@ -383,7 +383,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
               <h2 className="text-base font-bold text-slate-100 tracking-tight font-mono">
                 Agent Competency & Cognitive Domains
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
+              <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
                 ADR-014 Scheduler
               </span>
             </div>
@@ -574,7 +574,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                               <span className="font-mono font-bold text-sm text-slate-100">
                                 @{agent.agent_id}
                               </span>
-                              <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                              <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded-md bg-slate-800 text-slate-300 border border-slate-700">
                                 {agent.role || 'generalist'}
                               </span>
                             </div>
@@ -678,7 +678,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                                   <div className="flex items-center justify-between">
                                     <span
                                       className={cn(
-                                        'px-1.5 py-0.5 rounded text-[10px] border flex items-center gap-1',
+                                        'px-1.5 py-0.5 rounded text-[11px] border flex items-center gap-1',
                                         getDomainColor(ds.domain)
                                       )}
                                     >
@@ -687,7 +687,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                                     </span>
                                     <span className="text-slate-300 font-bold">{ratePct}%</span>
                                   </div>
-                                  <div className="flex items-center justify-between text-slate-400 text-[10px] pt-1">
+                                  <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1">
                                     <span className="text-emerald-400 flex items-center gap-0.5">
                                       <Check className="w-3 h-3" /> {ds.successes}
                                     </span>
@@ -734,14 +734,14 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                             <h3 className="font-mono font-bold text-sm text-slate-100 capitalize">
                               {domain}
                             </h3>
-                            <span className="text-[10px] font-mono text-slate-400">
+                            <span className="text-[11px] font-mono text-slate-400">
                               {leaderboard.length} eligible agent{leaderboard.length === 1 ? '' : 's'}
                             </span>
                           </div>
                         </div>
 
                         {bestAgent && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-950/50 border border-amber-800/40 text-amber-300 text-[10px] font-mono">
+                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-950/50 border border-amber-800/40 text-amber-300 text-[11px] font-mono">
                             <Award className="w-3 h-3 text-amber-400" />
                             <span>Top: @{bestAgent.agent_id}</span>
                           </div>
@@ -768,7 +768,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                                   <span className="text-slate-500 font-bold w-3">#{idx + 1}</span>
                                   <div
                                     className={cn(
-                                      'w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] border flex-shrink-0',
+                                      'w-5 h-5 rounded flex items-center justify-center font-bold text-[11px] border flex-shrink-0',
                                       style.bg,
                                       style.color,
                                       style.border
@@ -795,7 +795,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                                     >
                                       {ratePct}%
                                     </span>
-                                    <span className="text-[10px] text-slate-500 ml-1">
+                                    <span className="text-[11px] text-slate-500 ml-1">
                                       ({entry.successes}/{entry.total})
                                     </span>
                                   </div>
@@ -836,7 +836,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                     <h3 className="font-mono font-bold text-slate-100 text-sm">
                       @{selectedAgent.agent_id}
                     </h3>
-                    <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded bg-slate-800 text-slate-300 border border-slate-700">
                       {selectedAgent.role || 'generalist'}
                     </span>
                   </div>
@@ -860,17 +860,17 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
               {/* Basic Stats Grid */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Total Calls</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Total Calls</span>
                   <span className="text-base font-bold text-slate-200">{selectedAgent.total_calls}</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">First Seen</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">First Seen</span>
                   <span className="text-base font-bold text-slate-200 truncate block" title={String(selectedAgent.first_seen)}>
                     {String(selectedAgent.first_seen)}
                   </span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Domains</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Domains</span>
                   <span className="text-base font-bold text-slate-200">
                     {selectedAgent.domains?.length || 0}
                   </span>
@@ -880,7 +880,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
               {/* Last Intent */}
               {selectedAgent.last_intent && (
                 <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-[10px] text-slate-500 uppercase block">Last Intent</span>
+                  <span className="text-[11px] text-slate-500 uppercase block">Last Intent</span>
                   <p className="text-slate-300 font-mono text-[11px]">{selectedAgent.last_intent}</p>
                 </div>
               )}
@@ -897,7 +897,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                   <div className="border border-slate-800 rounded-lg overflow-hidden">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="bg-slate-950/80 text-[10px] uppercase text-slate-400 border-b border-slate-800">
+                        <tr className="bg-slate-950/80 text-[11px] uppercase text-slate-400 border-b border-slate-800">
                           <th className="py-2 px-3">Domain</th>
                           <th className="py-2 px-3 text-right">Successes</th>
                           <th className="py-2 px-3 text-right">Failures</th>
@@ -915,7 +915,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                               <td className="py-2 px-3">
                                 <span
                                   className={cn(
-                                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border',
+                                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] border',
                                     getDomainColor(d.domain)
                                   )}
                                 >
@@ -961,7 +961,7 @@ export function AgentCompetencyPanel({ bridge, notify }: AgentCompetencyPanelPro
                     )}
                   </button>
                 </div>
-                <pre className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 overflow-x-auto max-h-40 scrollbar-thin">
+                <pre className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 overflow-x-auto max-h-40 scrollbar-thin">
                   {JSON.stringify(selectedAgent, null, 2)}
                 </pre>
               </div>

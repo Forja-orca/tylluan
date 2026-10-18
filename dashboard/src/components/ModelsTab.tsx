@@ -144,7 +144,7 @@ export function ModelsTab({ bridge }: Props) {
             </p>
 
             <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 text-xs text-slate-400 font-mono">
-              <p className="text-slate-300 font-semibold text-[10px] mb-1">Restart instructions:</p>
+              <p className="text-slate-300 font-semibold text-[11px] mb-1">Restart instructions:</p>
               <p>1. Stop the current kernel in your terminal (press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Ctrl + C</kbd>).</p>
               <p>2. Start it again by running:</p>
               <div className="bg-slate-900 p-2 rounded border border-slate-800 text-slate-300">
