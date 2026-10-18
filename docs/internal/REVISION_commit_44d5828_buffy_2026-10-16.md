@@ -60,10 +60,22 @@ borrado). Veredicto al final.
   errores de límite usan la forma canónica») o añadir un `map_err` del extractor.
   Es la clase de hueco que Antigravity copiará byte a byte al espejar el
   esquema, así que decídolo antes de que pegue el espejo.
+- **CERRADO 2026-10-17 (encargo del TL a @buffy; implementado por Deep en `5a4a806`):**
+  `api_decide.rs` lee el body en crudo (`axum::body::Bytes`) y parsea en el
+  handler — cualquier cuerpo no deserializable responde `400` + sobre canónico
+  `DecideResponse::error()`, nunca texto plano de axum (los tres caminos de la
+  medición quedan en uno solo: 400 canónico). Test
+  `h1_malformed_json_returns_canonical_error_envelope` en `decide_adversarial.rs`;
+  decisión documentada en ADR-021 §13.
 - **H2 [bajo, veracidad del mensaje]: «/health … expect tool_count == 6» es
   falso** — `/health` no cuenta tools (§1). Corregir el mensaje o añadir el
   conteo donde el mensaje lo promete; hoy un lector del commit buscará un
   chequeo que no existe.
+- **CERRADO 2026-10-17 (Deep, `5a4a806`):** fuente única
+  `TylluanServer::sovereign_tool_names()` para `all_tools()` y para el health;
+  `/health?verbose=true` expone `components.sovereign_tools {ok, count}` con
+  `count == 6`; test `health_sovereign_count.rs`. El mensaje del commit queda
+  verdadero.
 - **H3 [informativo]: `tools.rs:6` apunta a `CONTRACTS.md`** («See CONTRACTS.md
   before modifying this function») y ese fichero no existe en el repo (buscado:
   cero). El guardián real es `contract_01_exactly_six_sovereign_tools` en el

@@ -30,7 +30,7 @@
 
 - Campo/máquina de `sensitivity` en el wire y toda la matriz de sensibilidad de ADR-020 §3.2.
 - Adaptador `/v1/decisions` (OpenAI): queda como diseño del §7 del DISENO.
-- Modos `advisory`/`gate` con efecto en respuesta (Fase 2 ejecuta la sombra para cualquier modo ≠ off, pero la autoridad y la respuesta siguen siendo reglas; documentado en la cabecera de `service.rs`).
+- Modos `advisory`/`gate` — **ya NO fuera de alcance** (2026-10-17, `5a4a806`): la consulta ASÍNCRONA al modelo cubre en esos modos TAMBIÉN las preguntas rechazadas/abstencidas por las reglas (`consult_rejected`; `rules_value: Option<String>`, `agreed` solo cuando hay valor de reglas con el que comparar). La respuesta emitida NUNCA se altera (invariante v8). Lo que sigue pendiente es el efecto en respuesta tipo ADR-021 §3.2 (señal visible en el wire / `gate` bajando `confidence`) — decisión del TL, no implementado.
 - HITL, dual-space, absorción del shim por el Inference Gateway (cuando aterrice ADR-020 Fase 1), integración con `InferenceBudget` (el semáforo propio cubre la ranura local; documentado en `systemone_http.rs`).
 - Nota honesta registrada en código: los timeouts bajo el deadline del *llamante* no cuentan para el cortacircuitos (solo los fallos que el proveedor observa dentro de su propio bound).
 

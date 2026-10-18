@@ -1,0 +1,2237 @@
+{
+ "dataset": "human_truth_conflict_pairs",
+ "version": 1,
+ "created": "2026-10-18",
+ "created_by": "Buffy (agente, worktree tylluan-wt-buffy)",
+ "encargo": "Coloquio T1240/T1244 (Claude Code, TL): verdad de campo de 100 pares de las marcas conflicted de data/silva.db para el duelo P2 (verificador NLI aditivo sobre flag_contradiction_nodes)",
+ "ficha": {
+  "origen": "data/silva.db de la instancia compartida (E:\\tylluan), abierto EXCLUSIVAMENTE con file:...?mode=ro (SQLite read-only; el script benchmarks/datasets/build_conflict_pairs_v1.py no puede escribir). Extracción 2026-10-18 con la BD en vivo: 375 nodos conflicted de 9945 (la cita '368 de 9896' de la síntesis de puntos neuronales era de un medición anterior; la BD crece). 196 grupos candidatos (source,type) con >1 target activo cuyo source está hoy marcado conflicted, réplica exacta del agrupamiento de flag_contradiction_nodes (nodes.rs) sobre aristas activas (valid_until IS NULL, con las 3 exclusiones del código).",
+  "muestreo": "Estratificado por tipo de arista, determinista (Random seed 20261018 sobre orden canónico): cobertura COMPLETA de los tipos con texto semántico (same_topic 7 grupos únicos de 9, remembers 4/4, contributed_to 1/1 = 12 pares) + proporcional entre tipos simbólicos (defines 59, imports 29 de 182). Decisión de cuota tomada por recuentos de tipos ANTES de leer contenidos. Dedupe de pares por firma (sha256(A),sha256(B)): 0 duplicados. Dentro de cada grupo: dos primeros targets por orden de id.",
+  "criterio": "NLI de 3 vías fijado antes de etiquetar: contradice = no pueden ser ciertas a la vez sobre el mismo aspecto; consistente = mismo sujeto y compatibles (coexisten, se implican o complementan); no relacionado = temas distintos, sin bearings proposicional. Unidad etiquetada: los dos contenidos de nodo como afirmaciones; source_id/edge_type viajan como procedencia. Razón individual por pareja en 'reason'.",
+  "quien_etiqueto": "Buffy (agente de la flota), lectura manual de las 100 parejas con texto completo de la BD para las 12 ricas; un solo anotador, sin acuerdo inter-anotador (no hay kappa). NO es etiquetado humano: declararlo así en cualquier métrica publicada (misma salvedad que en el dataset de intents, T1244).",
+  "sanitizacion": "Textos saneados con las regex de benchmarks/datasets/anonymize_silva.py (API keys, rutas absolutas, emails) + strip de caracteres de control, truncados a 300 chars; content_len = longitud real y content_sha256 = SHA-256 del contenido CRUDO para verificación contra la BD (la BD solo lectura permite recuperar el texto completo por node_id cuando el duelo lo necesite).",
+  "composicion": {
+   "defines": 59,
+   "imports": 29,
+   "same_topic": 7,
+   "remembers": 4,
+   "contributed_to": 1
+  },
+  "distribucion": {
+   "contradice": 0,
+   "consistente": 91,
+   "no relacionado": 9
+  },
+  "baseline_trivial": "siempre consistente = 91%",
+  "sesgos_y_limitaciones": [
+   "ANOTADOR NO HUMANO (agente), un solo anotador — acuerdo inter-anotador no medible.",
+   "CERO pares 'contradice' en la muestra: recall de esa clase NO medible aquí. Es el hallazgo, no un error de muestreo: la heurística estructural (fan-out de defines/imports) produce ruido compatible, no contradicciones — coherente con el incidente de 2026-09-26. El duelo debe publicar el baseline trivial (siempre consistente = 91%) y esta limitación junto a cualquier cifra.",
+   "88/100 parejas son simbólicas (defines/imports): la superficie NLI rica son los 12 pares de texto largo (muestra pequeña para conclusiones finas).",
+   "Reutilización de lado: 13 nodos aparecen como lado en más de un par (p. ej. module:std::collections::HashMap en varios imports) — los PARES como unidad son únicos (0 firmas duplicadas), pero hay correlación entre muestras; no mezclar train/test por fila sin agrupar por nodo.",
+   "BD viva: re-ejecutar el script hoy puede dar otra selección; el extracto congelado versionado es la fuente de verdad de este dataset (reproducible con los hashes).",
+   "Extractos de 300 chars: las 12 parejas ricas se etiquetaron con el texto completo desde la BD, pero el fichero solo publica extracto mínimo + hash (privacidad)."
+  ]
+ },
+ "records": [
+  {
+   "pair_id": "cp-001",
+   "edge_type": "defines",
+   "source_id": "file:system_test.py",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:system_test.py:mcp",
+    "node_type": "code_entity",
+    "content_sha256": "315d4d6f3eda8ff76ef5f6c99a76405a68bf664015e2f6584f6c4ed0c3b13f02",
+    "content_len": 32,
+    "text": "function:file:system_test.py:mcp"
+   },
+   "target_b": {
+    "node_id": "function:file:system_test.py:ok",
+    "node_type": "code_entity",
+    "content_sha256": "cf2eb113da6998bd78cae5e786ca6258747b84410561b4cd5d922e866b826e8f",
+    "content_len": 31,
+    "text": "function:file:system_test.py:ok"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:system_test.py) define dos miembros coexistentes (mcp y ok): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-002",
+   "edge_type": "defines",
+   "source_id": "file:beam_scale.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:beam_scale.rs:evaluate_at_scale",
+    "node_type": "code_entity",
+    "content_sha256": "2803c80549394a2236290fc22d4f1e343c6cc42a754c1352539dcc5100094616",
+    "content_len": 45,
+    "text": "function:file:beam_scale.rs:evaluate_at_scale"
+   },
+   "target_b": {
+    "node_id": "function:file:beam_scale.rs:expand_haystack",
+    "node_type": "code_entity",
+    "content_sha256": "909e1fea56204116d146f1ada637ba66b2fb22d144d4548a3b9e5853220fb1ef",
+    "content_len": 43,
+    "text": "function:file:beam_scale.rs:expand_haystack"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:beam_scale.rs) define dos miembros coexistentes (evaluate_at_scale y expand_haystack): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-003",
+   "edge_type": "defines",
+   "source_id": "file:circuit_breaker.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:circuit_breaker.rs:State",
+    "node_type": "code_entity",
+    "content_sha256": "b4c52f761f44d39ac65951928daf99e33b39d3f52820a1b2ebeef3c792a62ef4",
+    "content_len": 34,
+    "text": "enum:file:circuit_breaker.rs:State"
+   },
+   "target_b": {
+    "node_id": "function:file:circuit_breaker.rs:test_closed_by_default",
+    "node_type": "code_entity",
+    "content_sha256": "b663f1784dd8483f0835299c41b97ea42f8c456e55fe06e8565dea3c9e766722",
+    "content_len": 55,
+    "text": "function:file:circuit_breaker.rs:test_closed_by_default"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:circuit_breaker.rs) define dos miembros coexistentes (State y test_closed_by_default): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-004",
+   "edge_type": "defines",
+   "source_id": "file:corpus.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:corpus.rs:build_synthetic_corpus",
+    "node_type": "code_entity",
+    "content_sha256": "9d874c6bdcd01f2e27f6830eed359c541e06af74de83288b739a5160bdecbebe",
+    "content_len": 46,
+    "text": "function:file:corpus.rs:build_synthetic_corpus"
+   },
+   "target_b": {
+    "node_id": "struct:file:corpus.rs:CorpusEdge",
+    "node_type": "code_entity",
+    "content_sha256": "33bb969a2db2f37fbe91e5acc0ab9c81daa7d4641bd82ff5398fc1e148c615b4",
+    "content_len": 32,
+    "text": "struct:file:corpus.rs:CorpusEdge"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:corpus.rs) define dos miembros coexistentes (build_synthetic_corpus y CorpusEdge): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-005",
+   "edge_type": "defines",
+   "source_id": "struct:file:guard.rs:ExecutionGuard",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:guard.rs:ExecutionGuard:check",
+    "node_type": "code_entity",
+    "content_sha256": "d9f358cf60ee2aaad5675bedd21e7a492f8c1728e2cc5d3b84a2dc17b2c433ce",
+    "content_len": 48,
+    "text": "method:struct:file:guard.rs:ExecutionGuard:check"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:guard.rs:ExecutionGuard:check_legacy",
+    "node_type": "code_entity",
+    "content_sha256": "d6cde7e602e1c904b1f191110e92412cc652b66536ff6ec6f1ce28b7e9852f78",
+    "content_len": 55,
+    "text": "method:struct:file:guard.rs:ExecutionGuard:check_legacy"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:guard.rs:ExecutionGuard) define dos miembros coexistentes (check y check_legacy): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-006",
+   "edge_type": "defines",
+   "source_id": "file:tools.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:tools.rs:RiskLevel",
+    "node_type": "code_entity",
+    "content_sha256": "f067e0f49fcf36c34e487f0821794f0b249142b2f2930cab89780e435533ad43",
+    "content_len": 28,
+    "text": "enum:file:tools.rs:RiskLevel"
+   },
+   "target_b": {
+    "node_id": "function:file:tools.rs:enrich_tool",
+    "node_type": "code_entity",
+    "content_sha256": "688611866b4a8fcbec0cbc96df681e3019119b3f3d592109bb2eb5d1a1e156fc",
+    "content_len": 34,
+    "text": "function:file:tools.rs:enrich_tool"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:tools.rs) define dos miembros coexistentes (RiskLevel y enrich_tool): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-007",
+   "edge_type": "defines",
+   "source_id": "file:lifecycle.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:lifecycle.rs:start_lifecycle_reaper",
+    "node_type": "code_entity",
+    "content_sha256": "b556b130767353d1ac57ee2c4e0678c35b715ba42f6f3f3d027abdf6daa33adf",
+    "content_len": 49,
+    "text": "function:file:lifecycle.rs:start_lifecycle_reaper"
+   },
+   "target_b": {
+    "node_id": "function:file:lifecycle.rs:start_lifecycle_reaper_with_silva",
+    "node_type": "code_entity",
+    "content_sha256": "69664b6a52e1768c31f713c0bff10069733c0093a44c9393759a3e87f5681b93",
+    "content_len": 60,
+    "text": "function:file:lifecycle.rs:start_lifecycle_reaper_with_silva"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:lifecycle.rs) define dos miembros coexistentes (start_lifecycle_reaper y start_lifecycle_reaper_with_silva): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-008",
+   "edge_type": "defines",
+   "source_id": "file:benchmark.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:benchmark.rs:bench_hashmap",
+    "node_type": "code_entity",
+    "content_sha256": "aec4210911a5774290e97b9db09de2d068cb04e86b9e1af86a0c1099cb23d13c",
+    "content_len": 40,
+    "text": "function:file:benchmark.rs:bench_hashmap"
+   },
+   "target_b": {
+    "node_id": "function:file:benchmark.rs:bench_hashmap_lookup",
+    "node_type": "code_entity",
+    "content_sha256": "7a6fccc0751df6c7ca34d24a96b2d7e1cc2ef06a511b0216da231d9cf57c73ef",
+    "content_len": 47,
+    "text": "function:file:benchmark.rs:bench_hashmap_lookup"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:benchmark.rs) define dos miembros coexistentes (bench_hashmap y bench_hashmap_lookup): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-009",
+   "edge_type": "defines",
+   "source_id": "struct:file:metrics_ring.rs:MetricsRingBuffer",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:metrics_ring.rs:MetricsRingBuffer:default",
+    "node_type": "code_entity",
+    "content_sha256": "1830836fda3f17e757663ce7c72834cdc8c24a7901be3f902969824d75e459af",
+    "content_len": 60,
+    "text": "method:struct:file:metrics_ring.rs:MetricsRingBuffer:default"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:metrics_ring.rs:MetricsRingBuffer:new",
+    "node_type": "code_entity",
+    "content_sha256": "781a7530110aa0de119649ea7be7b5ffc68fee7ef5e484185110be58b242ebf3",
+    "content_len": 56,
+    "text": "method:struct:file:metrics_ring.rs:MetricsRingBuffer:new"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:metrics_ring.rs:MetricsRingBuffer) define dos miembros coexistentes (default y new): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-010",
+   "edge_type": "defines",
+   "source_id": "file:coloquio.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:coloquio.rs:extract_mentions",
+    "node_type": "code_entity",
+    "content_sha256": "1ebb00413e327af53349b22db4b7cfd970bbfb1fc6b745e379ccc112c177aecd",
+    "content_len": 42,
+    "text": "function:file:coloquio.rs:extract_mentions"
+   },
+   "target_b": {
+    "node_id": "function:file:coloquio.rs:get_flexible_created_at",
+    "node_type": "code_entity",
+    "content_sha256": "dcdc1530b0d4554fa87e7d6c891732ba0edd89241ae334026331bdb0149887e9",
+    "content_len": 49,
+    "text": "function:file:coloquio.rs:get_flexible_created_at"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:coloquio.rs) define dos miembros coexistentes (extract_mentions y get_flexible_created_at): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-011",
+   "edge_type": "defines",
+   "source_id": "struct:file:agent_nodes.rs:AgentNodeRouter",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:agent_nodes.rs:AgentNodeRouter:broadcast",
+    "node_type": "code_entity",
+    "content_sha256": "be630b051a5cedbce554d3fbcac4ce71dee648fca21f74541292400c3fc9b64a",
+    "content_len": 59,
+    "text": "method:struct:file:agent_nodes.rs:AgentNodeRouter:broadcast"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:agent_nodes.rs:AgentNodeRouter:drain_inbox",
+    "node_type": "code_entity",
+    "content_sha256": "6b4541824edfca474bcf11e8b6d2dbcc7af5e892cdc64a0ed086b59130841982",
+    "content_len": 61,
+    "text": "method:struct:file:agent_nodes.rs:AgentNodeRouter:drain_inbox"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:agent_nodes.rs:AgentNodeRouter) define dos miembros coexistentes (broadcast y drain_inbox): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-012",
+   "edge_type": "defines",
+   "source_id": "file:rate_limiter.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:rate_limiter.rs:test_allows_within_limit",
+    "node_type": "code_entity",
+    "content_sha256": "11d7615d16649728a11ab532ef15c73396b6f551f3f9de522d8d736064594ef2",
+    "content_len": 54,
+    "text": "function:file:rate_limiter.rs:test_allows_within_limit"
+   },
+   "target_b": {
+    "node_id": "function:file:rate_limiter.rs:test_blocks_over_limit",
+    "node_type": "code_entity",
+    "content_sha256": "48999125e6615c4b4ef684845bbe652e364ef557657d7f89c68f3af0dc07200c",
+    "content_len": 52,
+    "text": "function:file:rate_limiter.rs:test_blocks_over_limit"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:rate_limiter.rs) define dos miembros coexistentes (test_allows_within_limit y test_blocks_over_limit): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-013",
+   "edge_type": "defines",
+   "source_id": "file:metrics_ring.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:metrics_ring.rs:spawn_metrics_sampler",
+    "node_type": "code_entity",
+    "content_sha256": "2b73e8a99e841cfde93470f8261ce6a39dfc4efdd8eedf9a9c15562523797b0e",
+    "content_len": 51,
+    "text": "function:file:metrics_ring.rs:spawn_metrics_sampler"
+   },
+   "target_b": {
+    "node_id": "struct:file:metrics_ring.rs:MetricsRingBuffer",
+    "node_type": "code_entity",
+    "content_sha256": "f33ae26419dd4584032e7a2c978d615266096201d131558d6032c28b7bffc223",
+    "content_len": 45,
+    "text": "struct:file:metrics_ring.rs:MetricsRingBuffer"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:metrics_ring.rs) define dos miembros coexistentes (spawn_metrics_sampler y MetricsRingBuffer): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-014",
+   "edge_type": "defines",
+   "source_id": "struct:file:hybrid.rs:HybridMemory",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:hybrid.rs:HybridMemory:add_document",
+    "node_type": "code_entity",
+    "content_sha256": "c00a8eab4e93815b508ecf781cc2700ac8be7861b3a8b2b9b761e737c013e7cc",
+    "content_len": 54,
+    "text": "method:struct:file:hybrid.rs:HybridMemory:add_document"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:hybrid.rs:HybridMemory:checkpoint",
+    "node_type": "code_entity",
+    "content_sha256": "116d496275f3fd75920f988c0d93bab1151e8b8b342fb7da253663867ccbe503",
+    "content_len": 52,
+    "text": "method:struct:file:hybrid.rs:HybridMemory:checkpoint"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:hybrid.rs:HybridMemory) define dos miembros coexistentes (add_document y checkpoint): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-015",
+   "edge_type": "defines",
+   "source_id": "file:api_admin.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:api_admin.rs:add_inference_provider_handler",
+    "node_type": "code_entity",
+    "content_sha256": "20103f7b32db918ba2f5c61aaccc52e18fd4b941ec04c4395211e74dc6d2f943",
+    "content_len": 57,
+    "text": "function:file:api_admin.rs:add_inference_provider_handler"
+   },
+   "target_b": {
+    "node_id": "function:file:api_admin.rs:admin_reload_handler",
+    "node_type": "code_entity",
+    "content_sha256": "dfbea06c88e5f1bd2602ec43beaf850442610d14741dafdd294ca90f0dc88d2b",
+    "content_len": 47,
+    "text": "function:file:api_admin.rs:admin_reload_handler"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:api_admin.rs) define dos miembros coexistentes (add_inference_provider_handler y admin_reload_handler): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-016",
+   "edge_type": "defines",
+   "source_id": "file:oauth.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:oauth.rs:authorize_handler",
+    "node_type": "code_entity",
+    "content_sha256": "032c0542ad0b774614e584d3d2420c27911abb7e6555ffc66e81615debd3dac7",
+    "content_len": 40,
+    "text": "function:file:oauth.rs:authorize_handler"
+   },
+   "target_b": {
+    "node_id": "function:file:oauth.rs:metadata_handler",
+    "node_type": "code_entity",
+    "content_sha256": "d93a0311e2328ff447cba57335bbb8447e7f92ca2186d0a4318075586b71abe1",
+    "content_len": 39,
+    "text": "function:file:oauth.rs:metadata_handler"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:oauth.rs) define dos miembros coexistentes (authorize_handler y metadata_handler): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-017",
+   "edge_type": "defines",
+   "source_id": "file:types.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:types.rs:Channel",
+    "node_type": "code_entity",
+    "content_sha256": "653b9512e34b12dd059280fd30c714e9001cbf536a8004521ea88e25b81fc7a5",
+    "content_len": 26,
+    "text": "enum:file:types.rs:Channel"
+   },
+   "target_b": {
+    "node_id": "enum:file:types.rs:GuildType",
+    "node_type": "code_entity",
+    "content_sha256": "dece21f80d533b962ace733a86618c131c140d1e1fba157f059145eb3a69ffbd",
+    "content_len": 28,
+    "text": "enum:file:types.rs:GuildType"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:types.rs) define dos miembros coexistentes (Channel y GuildType): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-018",
+   "edge_type": "defines",
+   "source_id": "struct:file:coloquio.rs:ColoquioDb",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:coloquio.rs:ColoquioDb:append_to_document",
+    "node_type": "code_entity",
+    "content_sha256": "8e18a651658878e9a9b3c44b80ebb8eaaa825b447aeefcce14795e82ff89cf28",
+    "content_len": 60,
+    "text": "method:struct:file:coloquio.rs:ColoquioDb:append_to_document"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:coloquio.rs:ColoquioDb:create_channel",
+    "node_type": "code_entity",
+    "content_sha256": "98ea5259e7b3a8685b53d8f4633307864944f7eff5a905740e32e1101d71242d",
+    "content_len": 56,
+    "text": "method:struct:file:coloquio.rs:ColoquioDb:create_channel"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:coloquio.rs:ColoquioDb) define dos miembros coexistentes (append_to_document y create_channel): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-019",
+   "edge_type": "defines",
+   "source_id": "file:louvain.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:louvain.rs:find_root",
+    "node_type": "code_entity",
+    "content_sha256": "f7547432d71d38244eda50c1265c78d17ee7cfad7a025e229977cd4bff7ed643",
+    "content_len": 34,
+    "text": "function:file:louvain.rs:find_root"
+   },
+   "target_b": {
+    "node_id": "function:file:louvain.rs:test_leiden_refinement_splits_disconnected_cliques",
+    "node_type": "code_entity",
+    "content_sha256": "13f03b0bd37c3d3e068a2623a999f45930d78cb2c81df72ab1ab9fd87d119617",
+    "content_len": 75,
+    "text": "function:file:louvain.rs:test_leiden_refinement_splits_disconnected_cliques"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:louvain.rs) define dos miembros coexistentes (find_root y test_leiden_refinement_splits_disconnected_cliques): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-020",
+   "edge_type": "defines",
+   "source_id": "file:curriculum.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "struct:file:curriculum.rs:CurriculumEntry",
+    "node_type": "code_entity",
+    "content_sha256": "89dde796d4ab90b100bfc206c4e0ab7928f214ed17605512c8b8330a07ee3af4",
+    "content_len": 41,
+    "text": "struct:file:curriculum.rs:CurriculumEntry"
+   },
+   "target_b": {
+    "node_id": "struct:file:curriculum.rs:CurriculumLearner",
+    "node_type": "code_entity",
+    "content_sha256": "919844156a9dc254d76eb9cce2b40d2d6c2522e6e5d6d877cb9e1cba7ad7a279",
+    "content_len": 43,
+    "text": "struct:file:curriculum.rs:CurriculumLearner"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:curriculum.rs) define dos miembros coexistentes (CurriculumEntry y CurriculumLearner): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-021",
+   "edge_type": "defines",
+   "source_id": "file:idle_lab.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "struct:file:idle_lab.rs:ExperimentResult",
+    "node_type": "code_entity",
+    "content_sha256": "443a35b03bb1ce22b9f1858b91e1edbc3d3d2f466be3230b56e47d9734fe9375",
+    "content_len": 40,
+    "text": "struct:file:idle_lab.rs:ExperimentResult"
+   },
+   "target_b": {
+    "node_id": "struct:file:idle_lab.rs:IdleLab",
+    "node_type": "code_entity",
+    "content_sha256": "7e439ed2168e475fb55160552683c9796e8f5dbbb97e888e037bc31569c9b4a7",
+    "content_len": 31,
+    "text": "struct:file:idle_lab.rs:IdleLab"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:idle_lab.rs) define dos miembros coexistentes (ExperimentResult y IdleLab): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-022",
+   "edge_type": "defines",
+   "source_id": "struct:file:jobs.rs:JobQueue",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:jobs.rs:JobQueue:claim_next",
+    "node_type": "code_entity",
+    "content_sha256": "99fa17b2989de62f67df2d371ebac480df391d0ce8326ae738e756f8ec72db92",
+    "content_len": 46,
+    "text": "method:struct:file:jobs.rs:JobQueue:claim_next"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:jobs.rs:JobQueue:count_stuck",
+    "node_type": "code_entity",
+    "content_sha256": "f7b9384e7333b2db295066dd40ea1f61560efe10ccded3c090cd4a7380d96aa1",
+    "content_len": 47,
+    "text": "method:struct:file:jobs.rs:JobQueue:count_stuck"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:jobs.rs:JobQueue) define dos miembros coexistentes (claim_next y count_stuck): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-023",
+   "edge_type": "defines",
+   "source_id": "struct:file:service_manager.rs:ServiceManager",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:service_manager.rs:ServiceManager:check_health",
+    "node_type": "code_entity",
+    "content_sha256": "0f4220679c714ee705d147c7f56fb97c7d0ec7ca5b4f427582b21621542464bc",
+    "content_len": 65,
+    "text": "method:struct:file:service_manager.rs:ServiceManager:check_health"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:service_manager.rs:ServiceManager:default",
+    "node_type": "code_entity",
+    "content_sha256": "353909ff1c642ced4f006ee24d7b956d6ab4068170c69811d2ef2bf9e94dd0a4",
+    "content_len": 60,
+    "text": "method:struct:file:service_manager.rs:ServiceManager:default"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:service_manager.rs:ServiceManager) define dos miembros coexistentes (check_health y default): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-024",
+   "edge_type": "defines",
+   "source_id": "file:build.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:build.rs:hash_into",
+    "node_type": "code_entity",
+    "content_sha256": "20b0af0564e93479f9168192f75200cd023dec8d5ce6b8c052a566f367b7785b",
+    "content_len": 32,
+    "text": "function:file:build.rs:hash_into"
+   },
+   "target_b": {
+    "node_id": "function:file:build.rs:main",
+    "node_type": "code_entity",
+    "content_sha256": "94ef3c2f45ca0029e8d432dbd9267bc86788c64da45d4d57683d9bd3357b16b8",
+    "content_len": 27,
+    "text": "function:file:build.rs:main"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:build.rs) define dos miembros coexistentes (hash_into y main): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-025",
+   "edge_type": "defines",
+   "source_id": "struct:file:consensus.rs:ConsensusEngine",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:consensus.rs:ConsensusEngine:apply_resolution",
+    "node_type": "code_entity",
+    "content_sha256": "8e4e036971f2ae41c4c24591c9aee631f772e10487149c814db6a84734a5d693",
+    "content_len": 64,
+    "text": "method:struct:file:consensus.rs:ConsensusEngine:apply_resolution"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:consensus.rs:ConsensusEngine:apply_synthesis",
+    "node_type": "code_entity",
+    "content_sha256": "770a5ced602f16dc184990f62ec7b0cfbc7c6b305f35675bc8472f4067681687",
+    "content_len": 63,
+    "text": "method:struct:file:consensus.rs:ConsensusEngine:apply_synthesis"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:consensus.rs:ConsensusEngine) define dos miembros coexistentes (apply_resolution y apply_synthesis): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-026",
+   "edge_type": "defines",
+   "source_id": "struct:file:types.rs:ToolResult",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:types.rs:ToolResult:error",
+    "node_type": "code_entity",
+    "content_sha256": "d36c49aae9a0fe37eda8e95bc94e13697edd8cc311cadd960aa10b7102a2adc4",
+    "content_len": 44,
+    "text": "method:struct:file:types.rs:ToolResult:error"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:types.rs:ToolResult:text",
+    "node_type": "code_entity",
+    "content_sha256": "0b14eb633e28c4d39bd21ccd9edd50d767b94e9fc82f97ad72818b4c0356bed1",
+    "content_len": 43,
+    "text": "method:struct:file:types.rs:ToolResult:text"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:types.rs:ToolResult) define dos miembros coexistentes (error y text): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-027",
+   "edge_type": "defines",
+   "source_id": "struct:file:search.rs:super::SilvaDB",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:search.rs:super::SilvaDB:search",
+    "node_type": "code_entity",
+    "content_sha256": "a30348907ec5009e7ad92998964325400caf8fb266968c2dd2fd97669962fb91",
+    "content_len": 50,
+    "text": "method:struct:file:search.rs:super::SilvaDB:search"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:search.rs:super::SilvaDB:search_content",
+    "node_type": "code_entity",
+    "content_sha256": "8b38aed44d831313d84bbdbfe74101c047db8fe330752f69adc7dc553c96b62d",
+    "content_len": 58,
+    "text": "method:struct:file:search.rs:super::SilvaDB:search_content"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:search.rs:super::SilvaDB) define dos miembros coexistentes (search y search_content): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-028",
+   "edge_type": "defines",
+   "source_id": "file:longmemeval.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "struct:file:longmemeval.rs:HistoryTurn",
+    "node_type": "code_entity",
+    "content_sha256": "bdb048b4a059f0fcf617ddd5ca1d1a0616171cea496328aaec4490d49e8da9c7",
+    "content_len": 38,
+    "text": "struct:file:longmemeval.rs:HistoryTurn"
+   },
+   "target_b": {
+    "node_id": "struct:file:longmemeval.rs:LongMemEvalBench",
+    "node_type": "code_entity",
+    "content_sha256": "b85c20823962db38531e14f150f93579874c10c4ca8b253d9ebe913d281e6612",
+    "content_len": 43,
+    "text": "struct:file:longmemeval.rs:LongMemEvalBench"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:longmemeval.rs) define dos miembros coexistentes (HistoryTurn y LongMemEvalBench): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-029",
+   "edge_type": "defines",
+   "source_id": "file:mod.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:mod.rs:build_router",
+    "node_type": "code_entity",
+    "content_sha256": "c060cd2ad31f7587659052e83edf1ff4423396e2077f3b34e7e26a3ba6f7c2c6",
+    "content_len": 33,
+    "text": "function:file:mod.rs:build_router"
+   },
+   "target_b": {
+    "node_id": "function:file:mod.rs:cosine_similarity",
+    "node_type": "code_entity",
+    "content_sha256": "f082bd43279e09c5237f7d1d215c211aed33d20e81c5fd50a6f25c003f7594e1",
+    "content_len": 38,
+    "text": "function:file:mod.rs:cosine_similarity"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:mod.rs) define dos miembros coexistentes (build_router y cosine_similarity): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-030",
+   "edge_type": "defines",
+   "source_id": "struct:file:ivf_index.rs:IVFSearcher",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:ivf_index.rs:IVFSearcher:find_nearest_centroids",
+    "node_type": "code_entity",
+    "content_sha256": "7eaf01368d96c929a8ab157048930046988dd683d22f4f2c8d3a828d3f1b491c",
+    "content_len": 66,
+    "text": "method:struct:file:ivf_index.rs:IVFSearcher:find_nearest_centroids"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:ivf_index.rs:IVFSearcher:inverted_lists",
+    "node_type": "code_entity",
+    "content_sha256": "e329d50a6de52409a649dd3ef0269dc7d571ce7bd462e99772eaf925c0913f2c",
+    "content_len": 58,
+    "text": "method:struct:file:ivf_index.rs:IVFSearcher:inverted_lists"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:ivf_index.rs:IVFSearcher) define dos miembros coexistentes (find_nearest_centroids y inverted_lists): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-031",
+   "edge_type": "defines",
+   "source_id": "struct:file:longmemeval.rs:LongMemEvalBench",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:longmemeval.rs:LongMemEvalBench:evaluate_question",
+    "node_type": "code_entity",
+    "content_sha256": "2ac9b16a38558f4fcbfb793ea941deec1cabb0c424949b5077f04d8b0f7dd38a",
+    "content_len": 68,
+    "text": "method:struct:file:longmemeval.rs:LongMemEvalBench:evaluate_question"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:longmemeval.rs:LongMemEvalBench:evaluate_question_reranked",
+    "node_type": "code_entity",
+    "content_sha256": "329c0faf3c4b08147edc31fcf0f2be21e6b61830233ecfa21dacef3f9611e526",
+    "content_len": 77,
+    "text": "method:struct:file:longmemeval.rs:LongMemEvalBench:evaluate_question_reranked"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:longmemeval.rs:LongMemEvalBench) define dos miembros coexistentes (evaluate_question y evaluate_question_reranked): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-032",
+   "edge_type": "defines",
+   "source_id": "struct:file:edges.rs:super::SilvaDB",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:edges.rs:super::SilvaDB:add_edge",
+    "node_type": "code_entity",
+    "content_sha256": "734dfe3690852fc0278aa83ac773d5a3e33a75ca4067852df1e83479b0b2838d",
+    "content_len": 51,
+    "text": "method:struct:file:edges.rs:super::SilvaDB:add_edge"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:edges.rs:super::SilvaDB:add_edge_with_validity",
+    "node_type": "code_entity",
+    "content_sha256": "0ad7d111bc67c77cb64d079c2794453c9068ac74041e02973eb3a79b2cc4a3e7",
+    "content_len": 65,
+    "text": "method:struct:file:edges.rs:super::SilvaDB:add_edge_with_validity"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:edges.rs:super::SilvaDB) define dos miembros coexistentes (add_edge y add_edge_with_validity): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-033",
+   "edge_type": "defines",
+   "source_id": "struct:file:idle_lab.rs:IdleLab",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:idle_lab.rs:IdleLab:get_status",
+    "node_type": "code_entity",
+    "content_sha256": "851e655d4a9846a2dbcc501a5884656c4c0b86bd56433a8b1687560b55659cd6",
+    "content_len": 49,
+    "text": "method:struct:file:idle_lab.rs:IdleLab:get_status"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:idle_lab.rs:IdleLab:load_best_params",
+    "node_type": "code_entity",
+    "content_sha256": "b722fd6eb893d1ccd03ba20c95d51a853c1ff33b06f7babfcc926d5af5add7ed",
+    "content_len": 55,
+    "text": "method:struct:file:idle_lab.rs:IdleLab:load_best_params"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:idle_lab.rs:IdleLab) define dos miembros coexistentes (get_status y load_best_params): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-034",
+   "edge_type": "defines",
+   "source_id": "struct:file:guild_process.rs:GuildRegistry",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:guild_process.rs:GuildRegistry:all_tools",
+    "node_type": "code_entity",
+    "content_sha256": "8544d56a94889b06f535c6aff5291129f2d1e47bfb80c19d2686aa310d45f848",
+    "content_len": 59,
+    "text": "method:struct:file:guild_process.rs:GuildRegistry:all_tools"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:guild_process.rs:GuildRegistry:discover_guilds",
+    "node_type": "code_entity",
+    "content_sha256": "93097a62232a1e1a31a5aa1bdc7c9c5875df474064d94eac6acd7c5fabe2fe48",
+    "content_len": 65,
+    "text": "method:struct:file:guild_process.rs:GuildRegistry:discover_guilds"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:guild_process.rs:GuildRegistry) define dos miembros coexistentes (all_tools y discover_guilds): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-035",
+   "edge_type": "defines",
+   "source_id": "file:maintenance.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:maintenance.rs:export_state",
+    "node_type": "code_entity",
+    "content_sha256": "60927352faddaecb72206c8f3079c3572c1489178b560e6610d35431e14ed0d6",
+    "content_len": 41,
+    "text": "function:file:maintenance.rs:export_state"
+   },
+   "target_b": {
+    "node_id": "function:file:maintenance.rs:get_model_registry",
+    "node_type": "code_entity",
+    "content_sha256": "cba8712180df665ce35430a8e3e3a20f6a72d80c6e834c2d84f6cd99f26edfa2",
+    "content_len": 47,
+    "text": "function:file:maintenance.rs:get_model_registry"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:maintenance.rs) define dos miembros coexistentes (export_state y get_model_registry): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-036",
+   "edge_type": "defines",
+   "source_id": "struct:file:decay.rs:super::SilvaDB",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:decay.rs:super::SilvaDB:apply_decay",
+    "node_type": "code_entity",
+    "content_sha256": "2263a3cddbd9dc47a22e30cac155abfc94c6bfda0e967baa37eb6451a36df697",
+    "content_len": 54,
+    "text": "method:struct:file:decay.rs:super::SilvaDB:apply_decay"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:decay.rs:super::SilvaDB:count_recent_traces",
+    "node_type": "code_entity",
+    "content_sha256": "da94857024ab99b85d163c370211e62a055cd3c5108f1cdd0002687d36a783fd",
+    "content_len": 62,
+    "text": "method:struct:file:decay.rs:super::SilvaDB:count_recent_traces"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:decay.rs:super::SilvaDB) define dos miembros coexistentes (apply_decay y count_recent_traces): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-037",
+   "edge_type": "defines",
+   "source_id": "struct:file:hormones.rs:HormoneSystem",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:hormones.rs:HormoneSystem:active_signals",
+    "node_type": "code_entity",
+    "content_sha256": "e4cc6a6fa2d0d151c41100d1090adf1a8005306667c393e2676da32c076fb4ae",
+    "content_len": 59,
+    "text": "method:struct:file:hormones.rs:HormoneSystem:active_signals"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:hormones.rs:HormoneSystem:default",
+    "node_type": "code_entity",
+    "content_sha256": "c67de376eeff358e16fd219c3727eb0fddbc750c19a5d5cdc7daa48ca5b4315a",
+    "content_len": 52,
+    "text": "method:struct:file:hormones.rs:HormoneSystem:default"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:hormones.rs:HormoneSystem) define dos miembros coexistentes (active_signals y default): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-038",
+   "edge_type": "defines",
+   "source_id": "file:jobs.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:jobs.rs:test_enqueue_and_claim",
+    "node_type": "code_entity",
+    "content_sha256": "5aa835ad0f6c83c7ef8809f5837350f04a365986f1a80425d0db00617c5f05c3",
+    "content_len": 44,
+    "text": "function:file:jobs.rs:test_enqueue_and_claim"
+   },
+   "target_b": {
+    "node_id": "function:file:jobs.rs:test_mark_done",
+    "node_type": "code_entity",
+    "content_sha256": "133c3f37d35630645ce78cc17932ebf2588498858e275f54b416719b9aa34d8f",
+    "content_len": 36,
+    "text": "function:file:jobs.rs:test_mark_done"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:jobs.rs) define dos miembros coexistentes (test_enqueue_and_claim y test_mark_done): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-039",
+   "edge_type": "defines",
+   "source_id": "struct:file:maintenance.rs:ModelDownloader",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:maintenance.rs:ModelDownloader:default",
+    "node_type": "code_entity",
+    "content_sha256": "69620229de97500f72f5529b01be9305e08c5a238c614180907febc461c77a14",
+    "content_len": 57,
+    "text": "method:struct:file:maintenance.rs:ModelDownloader:default"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:maintenance.rs:ModelDownloader:download_missing",
+    "node_type": "code_entity",
+    "content_sha256": "7dd70f849989ad2c53f14b00c0e063c88162a93470c6966eeba5f918705e690f",
+    "content_len": 66,
+    "text": "method:struct:file:maintenance.rs:ModelDownloader:download_missing"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:maintenance.rs:ModelDownloader) define dos miembros coexistentes (default y download_missing): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-040",
+   "edge_type": "defines",
+   "source_id": "struct:file:embeddings.rs:EmbeddingEngine",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:embeddings.rs:EmbeddingEngine:default_model_path",
+    "node_type": "code_entity",
+    "content_sha256": "cadf544cf30c79f2dc1a7a4781c277be4e3a4692af9ddaf522b531744685ff82",
+    "content_len": 67,
+    "text": "method:struct:file:embeddings.rs:EmbeddingEngine:default_model_path"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:embeddings.rs:EmbeddingEngine:embed",
+    "node_type": "code_entity",
+    "content_sha256": "02508bd842c1ca30f4134414635c85cfddd4af192f0b30b8b1381fa8f5a681ee",
+    "content_len": 54,
+    "text": "method:struct:file:embeddings.rs:EmbeddingEngine:embed"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:embeddings.rs:EmbeddingEngine) define dos miembros coexistentes (default_model_path y embed): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-041",
+   "edge_type": "defines",
+   "source_id": "file:agent_profile.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:agent_profile.rs:sync_agent_reputation_to_silva",
+    "node_type": "code_entity",
+    "content_sha256": "e42151db3ea4cdf2105552590d9ae746071d61290f14291d6321de7487c52228",
+    "content_len": 61,
+    "text": "function:file:agent_profile.rs:sync_agent_reputation_to_silva"
+   },
+   "target_b": {
+    "node_id": "function:file:agent_profile.rs:test_reputation_computation",
+    "node_type": "code_entity",
+    "content_sha256": "ad29f4d12b7c431f1ff632e9f7746be5a14da64ad7c17884e0d78d2b147b8365",
+    "content_len": 58,
+    "text": "function:file:agent_profile.rs:test_reputation_computation"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:agent_profile.rs) define dos miembros coexistentes (sync_agent_reputation_to_silva y test_reputation_computation): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-042",
+   "edge_type": "defines",
+   "source_id": "file:migrations.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "struct:file:migrations.rs:Migration",
+    "node_type": "code_entity",
+    "content_sha256": "49582cdb6f07753002d4aeafce90fb26e2b9a835d6334b26c023e61537bb3e41",
+    "content_len": 35,
+    "text": "struct:file:migrations.rs:Migration"
+   },
+   "target_b": {
+    "node_id": "struct:file:migrations.rs:MigrationRunner",
+    "node_type": "code_entity",
+    "content_sha256": "21a3bfd138ffaf8e503354029b4cd334f53d8998085ba2e18c6709080c643192",
+    "content_len": 41,
+    "text": "struct:file:migrations.rs:MigrationRunner"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:migrations.rs) define dos miembros coexistentes (Migration y MigrationRunner): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-043",
+   "edge_type": "defines",
+   "source_id": "struct:file:sharing.rs:SilvaDB",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:sharing.rs:SilvaDB:apply_sharing_policy",
+    "node_type": "code_entity",
+    "content_sha256": "2609a183fabcaa2d1cd30cd2a735afcf391cfc96496cf90befd3e99cf6e8005a",
+    "content_len": 58,
+    "text": "method:struct:file:sharing.rs:SilvaDB:apply_sharing_policy"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:sharing.rs:SilvaDB:reset_all_shareable",
+    "node_type": "code_entity",
+    "content_sha256": "0b1fab0067e0b7dabbe835083307df4eb5fb3cb7201042dbd3859d7057408713",
+    "content_len": 57,
+    "text": "method:struct:file:sharing.rs:SilvaDB:reset_all_shareable"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:sharing.rs:SilvaDB) define dos miembros coexistentes (apply_sharing_policy y reset_all_shareable): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-044",
+   "edge_type": "defines",
+   "source_id": "file:catalog.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:catalog.rs:GuildCategory",
+    "node_type": "code_entity",
+    "content_sha256": "47d5e17353e908fcaa333620d3aeea37bedb5b0381bd02ca86fa83883896f112",
+    "content_len": 34,
+    "text": "enum:file:catalog.rs:GuildCategory"
+   },
+   "target_b": {
+    "node_id": "function:file:catalog.rs:builtin_catalog",
+    "node_type": "code_entity",
+    "content_sha256": "c2d02f3e51b027acf937d3037d1c2a7e237bbc762ce915123f85b1c7724c57fb",
+    "content_len": 40,
+    "text": "function:file:catalog.rs:builtin_catalog"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:catalog.rs) define dos miembros coexistentes (GuildCategory y builtin_catalog): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-045",
+   "edge_type": "defines",
+   "source_id": "struct:file:agent_profile.rs:AgentProfileStore",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:agent_profile.rs:AgentProfileStore:compute_competencies",
+    "node_type": "code_entity",
+    "content_sha256": "90940af73b908c1a5447f233d8e2a8751ae92a88384dfd872ea59f9bff6d2f79",
+    "content_len": 74,
+    "text": "method:struct:file:agent_profile.rs:AgentProfileStore:compute_competencies"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:agent_profile.rs:AgentProfileStore:compute_reputation_and_scores",
+    "node_type": "code_entity",
+    "content_sha256": "e86576eb74d65e31f973f2f228bb0acacde5aeedf39ec440b539146ebfae5fb1",
+    "content_len": 83,
+    "text": "method:struct:file:agent_profile.rs:AgentProfileStore:compute_reputation_and_scores"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:agent_profile.rs:AgentProfileStore) define dos miembros coexistentes (compute_competencies y compute_reputation_and_scores): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-046",
+   "edge_type": "defines",
+   "source_id": "struct:file:agent_memory.rs:AgentMemoryManager",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:agent_memory.rs:AgentMemoryManager:consolidate_if_needed",
+    "node_type": "code_entity",
+    "content_sha256": "db6b7e56f23defe2fe9e60ff724a10b9d391b025be21ab9b0bca8aabc177ffac",
+    "content_len": 75,
+    "text": "method:struct:file:agent_memory.rs:AgentMemoryManager:consolidate_if_needed"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:agent_memory.rs:AgentMemoryManager:create_session_digest",
+    "node_type": "code_entity",
+    "content_sha256": "2a57dc72dee95d0f57d41fdd06e4cc50564bdf1cdf286886b57b4b27444c211c",
+    "content_len": 75,
+    "text": "method:struct:file:agent_memory.rs:AgentMemoryManager:create_session_digest"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:agent_memory.rs:AgentMemoryManager) define dos miembros coexistentes (consolidate_if_needed y create_session_digest): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-047",
+   "edge_type": "defines",
+   "source_id": "struct:file:graph_rag.rs:GraphRagManager",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:graph_rag.rs:GraphRagManager:collapse_legacy_summaries",
+    "node_type": "code_entity",
+    "content_sha256": "0cf8fe9c5dcd2de3f1e637a4282b757a2a18d5c708469d49ff1e584c73f9a054",
+    "content_len": 73,
+    "text": "method:struct:file:graph_rag.rs:GraphRagManager:collapse_legacy_summaries"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:graph_rag.rs:GraphRagManager:identify_summarization_targets",
+    "node_type": "code_entity",
+    "content_sha256": "6da66c4dae5643c2a1154e628a323ec0d3f2be225f6fbd15342404512c06d9e4",
+    "content_len": 78,
+    "text": "method:struct:file:graph_rag.rs:GraphRagManager:identify_summarization_targets"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:graph_rag.rs:GraphRagManager) define dos miembros coexistentes (collapse_legacy_summaries y identify_summarization_targets): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-048",
+   "edge_type": "defines",
+   "source_id": "file:service_manager.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:service_manager.rs:test_service_manager_spawn_and_list",
+    "node_type": "code_entity",
+    "content_sha256": "3d0fca13c5a45268667f83c3dfd439f1c871f3b798338d33ca415d37648e54c1",
+    "content_len": 68,
+    "text": "function:file:service_manager.rs:test_service_manager_spawn_and_list"
+   },
+   "target_b": {
+    "node_id": "struct:file:service_manager.rs:RunningService",
+    "node_type": "code_entity",
+    "content_sha256": "21f32cd6368df2925f1597523d523eb14d3578e22664ebd7512cb5632e78161a",
+    "content_len": 45,
+    "text": "struct:file:service_manager.rs:RunningService"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:service_manager.rs) define dos miembros coexistentes (test_service_manager_spawn_and_list y RunningService): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-049",
+   "edge_type": "defines",
+   "source_id": "file:mdns.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:mdns.rs:start_mdns_advertiser",
+    "node_type": "code_entity",
+    "content_sha256": "ef6a64509f43a0d49e7caf0253232efd0a857b985ef51126869de6153836fbb1",
+    "content_len": 43,
+    "text": "function:file:mdns.rs:start_mdns_advertiser"
+   },
+   "target_b": {
+    "node_id": "function:file:mdns.rs:start_mdns_discovery",
+    "node_type": "code_entity",
+    "content_sha256": "be095b4708aed686c61940e3a46dd97d40673bcb3d261ab67aff05bde6a8eb91",
+    "content_len": 42,
+    "text": "function:file:mdns.rs:start_mdns_discovery"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:mdns.rs) define dos miembros coexistentes (start_mdns_advertiser y start_mdns_discovery): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-050",
+   "edge_type": "defines",
+   "source_id": "file:mmap_store.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:mmap_store.rs:calibrate_scales",
+    "node_type": "code_entity",
+    "content_sha256": "9a29b6a17741df77f335072e63a9b4fc4903debb910a2bd421496abcb72d5281",
+    "content_len": 44,
+    "text": "function:file:mmap_store.rs:calibrate_scales"
+   },
+   "target_b": {
+    "node_id": "function:file:mmap_store.rs:dequantize",
+    "node_type": "code_entity",
+    "content_sha256": "e86872cf089219c056bd7ccb3d8ae5fdd9aac5b1ee57c158b5a9f1315368ae96",
+    "content_len": 38,
+    "text": "function:file:mmap_store.rs:dequantize"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:mmap_store.rs) define dos miembros coexistentes (calibrate_scales y dequantize): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-051",
+   "edge_type": "defines",
+   "source_id": "file:setup.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:setup.rs:find_workspace_root",
+    "node_type": "code_entity",
+    "content_sha256": "2003067f1b6690b42d5255f254c405a580d34babea476106ec5f63dcc2ff4d69",
+    "content_len": 42,
+    "text": "function:file:setup.rs:find_workspace_root"
+   },
+   "target_b": {
+    "node_id": "function:file:setup.rs:get_cli_arg",
+    "node_type": "code_entity",
+    "content_sha256": "05b60e862bc9fdaff10dc4f9cb664d59fd44a607782aba6e18316f2873aead5c",
+    "content_len": 34,
+    "text": "function:file:setup.rs:get_cli_arg"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:setup.rs) define dos miembros coexistentes (find_workspace_root y get_cli_arg): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-052",
+   "edge_type": "defines",
+   "source_id": "struct:file:maintenance.rs:super::SilvaDB",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:maintenance.rs:super::SilvaDB:apply_cleanup",
+    "node_type": "code_entity",
+    "content_sha256": "00e8dbd6ede9bfe901a38150976fc994ce94c93f4bc767416f15cd9737e3d23d",
+    "content_len": 62,
+    "text": "method:struct:file:maintenance.rs:super::SilvaDB:apply_cleanup"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:maintenance.rs:super::SilvaDB:cleanup_orphan_nodes",
+    "node_type": "code_entity",
+    "content_sha256": "926c08b745a83258787f381bb39d3497f1d4b58a50f24a751bc406f815191307",
+    "content_len": 69,
+    "text": "method:struct:file:maintenance.rs:super::SilvaDB:cleanup_orphan_nodes"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:maintenance.rs:super::SilvaDB) define dos miembros coexistentes (apply_cleanup y cleanup_orphan_nodes): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-053",
+   "edge_type": "defines",
+   "source_id": "file:integration_tests.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:integration_tests.rs:test_cluster_summary",
+    "node_type": "code_entity",
+    "content_sha256": "8d1a0e16952df6bca1240c7a717816215488e724ac8c6f37f8e653dc13066b42",
+    "content_len": 55,
+    "text": "function:file:integration_tests.rs:test_cluster_summary"
+   },
+   "target_b": {
+    "node_id": "function:file:integration_tests.rs:test_registry",
+    "node_type": "code_entity",
+    "content_sha256": "ae69791e56a1f828fcbd33878920d9e7601aa8c9c20ce50cf4b16d0aebc1a012",
+    "content_len": 48,
+    "text": "function:file:integration_tests.rs:test_registry"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:integration_tests.rs) define dos miembros coexistentes (test_cluster_summary y test_registry): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-054",
+   "edge_type": "defines",
+   "source_id": "file:guild_process.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:guild_process.rs:GuildLauncher",
+    "node_type": "code_entity",
+    "content_sha256": "3cd750aece60f7db624eab8668230d594f045be7d90f80ae77d0c3c20a188ba6",
+    "content_len": 40,
+    "text": "enum:file:guild_process.rs:GuildLauncher"
+   },
+   "target_b": {
+    "node_id": "enum:file:guild_process.rs:IngestStatus",
+    "node_type": "code_entity",
+    "content_sha256": "bdbbed4b2ce3393aa0adbfc2e410f79b5c785ac1e74a9aa7e77f971fa38032ff",
+    "content_len": 39,
+    "text": "enum:file:guild_process.rs:IngestStatus"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:guild_process.rs) define dos miembros coexistentes (GuildLauncher y IngestStatus): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-055",
+   "edge_type": "defines",
+   "source_id": "file:matcher.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:matcher.rs:MatchMethod",
+    "node_type": "code_entity",
+    "content_sha256": "6f11979020fa307ef03db14aa746cea795f2dc612feccd8a45fcae05cd20f966",
+    "content_len": 32,
+    "text": "enum:file:matcher.rs:MatchMethod"
+   },
+   "target_b": {
+    "node_id": "function:file:matcher.rs:guild_category_bonus",
+    "node_type": "code_entity",
+    "content_sha256": "a251b773af1677a89c91fad19e6c47985a1d62266e5ada1f6dbc26850115ba4e",
+    "content_len": 45,
+    "text": "function:file:matcher.rs:guild_category_bonus"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:matcher.rs) define dos miembros coexistentes (MatchMethod y guild_category_bonus): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-056",
+   "edge_type": "defines",
+   "source_id": "file:metrics.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "function:file:metrics.rs:compute_query_result",
+    "node_type": "code_entity",
+    "content_sha256": "a5a01df242e978a5455c2a54e0b9f2bd57cd2dba66bea4b0e9355a019559b85a",
+    "content_len": 45,
+    "text": "function:file:metrics.rs:compute_query_result"
+   },
+   "target_b": {
+    "node_id": "function:file:metrics.rs:compute_report",
+    "node_type": "code_entity",
+    "content_sha256": "cbbe29c39145bbec4dff7c5f847718297b81e4210b3360e57cc9d77502518e2f",
+    "content_len": 39,
+    "text": "function:file:metrics.rs:compute_report"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:metrics.rs) define dos miembros coexistentes (compute_query_result y compute_report): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-057",
+   "edge_type": "defines",
+   "source_id": "file:agent_nodes.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:agent_nodes.rs:NodeIntent",
+    "node_type": "code_entity",
+    "content_sha256": "605a5c9cf16fb952958c71764ef4ed2de7ccacbf2f1e1547f9e5c451ed7784cd",
+    "content_len": 35,
+    "text": "enum:file:agent_nodes.rs:NodeIntent"
+   },
+   "target_b": {
+    "node_id": "enum:file:agent_nodes.rs:NodeRuleAction",
+    "node_type": "code_entity",
+    "content_sha256": "16d4960fb3b63a5475eeb1430d6ebe14493836d69aeff7798c8a3ed4faf3da27",
+    "content_len": 39,
+    "text": "enum:file:agent_nodes.rs:NodeRuleAction"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:agent_nodes.rs) define dos miembros coexistentes (NodeIntent y NodeRuleAction): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-058",
+   "edge_type": "defines",
+   "source_id": "struct:file:types.rs:Channel",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "method:struct:file:types.rs:Channel:fmt",
+    "node_type": "code_entity",
+    "content_sha256": "94614fbb580343f8a4404d87195c88320b48217f584ca2b3da93a4f36da2ff24",
+    "content_len": 39,
+    "text": "method:struct:file:types.rs:Channel:fmt"
+   },
+   "target_b": {
+    "node_id": "method:struct:file:types.rs:Channel:is_trusted",
+    "node_type": "code_entity",
+    "content_sha256": "e8212e6be6e21da23bb2c4ba82f426781832d71e111425f48f67b121e85ce53b",
+    "content_len": 46,
+    "text": "method:struct:file:types.rs:Channel:is_trusted"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (struct:file:types.rs:Channel) define dos miembros coexistentes (fmt y is_trusted): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-059",
+   "edge_type": "defines",
+   "source_id": "file:hybrid.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "enum:file:hybrid.rs:RetrievalTier",
+    "node_type": "code_entity",
+    "content_sha256": "195bd2566ee4f3f06cad69660365db53e22ed56b7c3cab0c53283ac2a5ff7bab",
+    "content_len": 33,
+    "text": "enum:file:hybrid.rs:RetrievalTier"
+   },
+   "target_b": {
+    "node_id": "function:file:hybrid.rs:classify_query_tier",
+    "node_type": "code_entity",
+    "content_sha256": "9f0cb01cf10358be9e54a25ef742dca947e95648536ec3d8c33dcbc067a38359",
+    "content_len": 43,
+    "text": "function:file:hybrid.rs:classify_query_tier"
+   },
+   "label": "consistente",
+   "reason": "La misma entidad (file:hybrid.rs) define dos miembros coexistentes (RetrievalTier y classify_query_tier): afirmaciones compatibles, ninguna niega a la otra."
+  },
+  {
+   "pair_id": "cp-060",
+   "edge_type": "imports",
+   "source_id": "file:agent_nodes.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "target_b": {
+    "node_id": "module:std::sync::Arc",
+    "node_type": "code_entity",
+    "content_sha256": "82702fef239e3be589b7ce36b468ec6cf368d11716b04d9e17d2e368641e11f6",
+    "content_len": 21,
+    "text": "module:std::sync::Arc"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:agent_nodes.rs) importa dos módulos distintos (std::collections::HashMap y std::sync::Arc) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-061",
+   "edge_type": "imports",
+   "source_id": "file:beam_scale.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::metrics",
+    "node_type": "code_entity",
+    "content_sha256": "672139d261ede57defb54adace6768308992a0c5b164855db26ad669d125bda9",
+    "content_len": 21,
+    "text": "module:crate::metrics"
+   },
+   "target_b": {
+    "node_id": "module:forja_kernel::memory::silva::SilvaDB",
+    "node_type": "code_entity",
+    "content_sha256": "692eead4036cb4fbdf3599364794e9cc8731bcf6d5c2b3dbb51d33bcac46bca9",
+    "content_len": 43,
+    "text": "module:forja_kernel::memory::silva::SilvaDB"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:beam_scale.rs) importa dos módulos distintos (crate::metrics y forja_kernel::memory::silva::SilvaDB) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-062",
+   "edge_type": "imports",
+   "source_id": "file:service_manager.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::config::ServiceConfig",
+    "node_type": "code_entity",
+    "content_sha256": "b4e2a525791efd3337a4f6276b0cbccad25b5328c2ca4d629727a4014573d868",
+    "content_len": 35,
+    "text": "module:crate::config::ServiceConfig"
+   },
+   "target_b": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:service_manager.rs) importa dos módulos distintos (crate::config::ServiceConfig y std::collections::HashMap) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-063",
+   "edge_type": "imports",
+   "source_id": "file:bench_real_honest.py",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:json",
+    "node_type": "code_entity",
+    "content_sha256": "7b17ef09e3a13e64f59532cea6d619b17d04371a007aed9171abbaa104b2c177",
+    "content_len": 11,
+    "text": "module:json"
+   },
+   "target_b": {
+    "node_id": "module:sqlite3",
+    "node_type": "code_entity",
+    "content_sha256": "c631db1f5ef1887289a809283999ba38fa440449d3ae17a2e374e676eb4de019",
+    "content_len": 14,
+    "text": "module:sqlite3"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:bench_real_honest.py) importa dos módulos distintos (json y sqlite3) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-064",
+   "edge_type": "imports",
+   "source_id": "file:api_federation.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::transport::http::HttpState",
+    "node_type": "code_entity",
+    "content_sha256": "4ca4f877ea9f69d23e64ac4de17a548134078403d739c02e99fa8d7fac62ae34",
+    "content_len": 40,
+    "text": "module:crate::transport::http::HttpState"
+   },
+   "target_b": {
+    "node_id": "module:std::sync::Arc",
+    "node_type": "code_entity",
+    "content_sha256": "82702fef239e3be589b7ce36b468ec6cf368d11716b04d9e17d2e368641e11f6",
+    "content_len": 21,
+    "text": "module:std::sync::Arc"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:api_federation.rs) importa dos módulos distintos (crate::transport::http::HttpState y std::sync::Arc) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-065",
+   "edge_type": "imports",
+   "source_id": "file:config.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "target_b": {
+    "node_id": "module:std::fs",
+    "node_type": "code_entity",
+    "content_sha256": "a07e95e1409f3e944fe4de28c82b6d3ebde1f614b9b2f336ffc0af336aa4cbb8",
+    "content_len": 14,
+    "text": "module:std::fs"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:config.rs) importa dos módulos distintos (std::collections::HashMap y std::fs) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-066",
+   "edge_type": "imports",
+   "source_id": "file:maintenance.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:chrono::Utc",
+    "node_type": "code_entity",
+    "content_sha256": "25d8c0d40dbd72dc554e349fb789ed1e3acec3761554e085dc8e4f64f598b6bc",
+    "content_len": 18,
+    "text": "module:chrono::Utc"
+   },
+   "target_b": {
+    "node_id": "module:crate::transport::http::McpSession",
+    "node_type": "code_entity",
+    "content_sha256": "2686043ef9b0cc988fe87e63a4be7b499e42e840d6b9007d263c53e64364b0c0",
+    "content_len": 41,
+    "text": "module:crate::transport::http::McpSession"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:maintenance.rs) importa dos módulos distintos (chrono::Utc y crate::transport::http::McpSession) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-067",
+   "edge_type": "imports",
+   "source_id": "file:api_canvas.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::transport::http::HttpState",
+    "node_type": "code_entity",
+    "content_sha256": "4ca4f877ea9f69d23e64ac4de17a548134078403d739c02e99fa8d7fac62ae34",
+    "content_len": 40,
+    "text": "module:crate::transport::http::HttpState"
+   },
+   "target_b": {
+    "node_id": "module:tokio::sync::broadcast",
+    "node_type": "code_entity",
+    "content_sha256": "368567dc793bf4b62b9cffc41cc451a41ab13d392f82d47b5673dfefd927e248",
+    "content_len": 29,
+    "text": "module:tokio::sync::broadcast"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:api_canvas.rs) importa dos módulos distintos (crate::transport::http::HttpState y tokio::sync::broadcast) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-068",
+   "edge_type": "imports",
+   "source_id": "file:lifecycle.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::config::TimeoutsConfig",
+    "node_type": "code_entity",
+    "content_sha256": "d69d348731cc58b379fd25e8cacdf4d265c2a9798cdca7e1bca6dd77594f777c",
+    "content_len": 36,
+    "text": "module:crate::config::TimeoutsConfig"
+   },
+   "target_b": {
+    "node_id": "module:crate::consensus::ConsensusEngine",
+    "node_type": "code_entity",
+    "content_sha256": "8e51624a38ffc2c6ed6bf5a0fc877a0270f60c5732eabcbd985f9922299d7f54",
+    "content_len": 40,
+    "text": "module:crate::consensus::ConsensusEngine"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:lifecycle.rs) importa dos módulos distintos (crate::config::TimeoutsConfig y crate::consensus::ConsensusEngine) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-069",
+   "edge_type": "imports",
+   "source_id": "file:approval.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "target_b": {
+    "node_id": "module:uuid::Uuid",
+    "node_type": "code_entity",
+    "content_sha256": "008bc51db00f2fa8c1ef3df38509e04312be0d023caec82124c3f9873220c28e",
+    "content_len": 17,
+    "text": "module:uuid::Uuid"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:approval.rs) importa dos módulos distintos (std::collections::HashMap y uuid::Uuid) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-070",
+   "edge_type": "imports",
+   "source_id": "file:auto_link.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::memory::cosine::cosine_similarity",
+    "node_type": "code_entity",
+    "content_sha256": "39a8cb036366d6cc17ceef0bb1861f84c49d7d6203e20ba15ef8afd0332bb2be",
+    "content_len": 47,
+    "text": "module:crate::memory::cosine::cosine_similarity"
+   },
+   "target_b": {
+    "node_id": "module:crate::memory::silva::SilvaDB",
+    "node_type": "code_entity",
+    "content_sha256": "af34e390d858a87a205fa240bca66ab4265ef272e9e49a510791a93b9ed2afb2",
+    "content_len": 36,
+    "text": "module:crate::memory::silva::SilvaDB"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:auto_link.rs) importa dos módulos distintos (crate::memory::cosine::cosine_similarity y crate::memory::silva::SilvaDB) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-071",
+   "edge_type": "imports",
+   "source_id": "file:tools.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "target_b": {
+    "node_id": "module:std::sync::LazyLock",
+    "node_type": "code_entity",
+    "content_sha256": "7c37bf49252067ae04d3527cde33829b0f4ef6c68d5f2d4c8342f3adcc6f7274",
+    "content_len": 26,
+    "text": "module:std::sync::LazyLock"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:tools.rs) importa dos módulos distintos (std::collections::HashMap y std::sync::LazyLock) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-072",
+   "edge_type": "imports",
+   "source_id": "file:repl.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:anyhow::Result",
+    "node_type": "code_entity",
+    "content_sha256": "ec94752a0b8fc809d9d53cbb184a10da2141dab0349bde17039aabeebbeb78d0",
+    "content_len": 21,
+    "text": "module:anyhow::Result"
+   },
+   "target_b": {
+    "node_id": "module:reqwest::Client",
+    "node_type": "code_entity",
+    "content_sha256": "5ca2a7cdba480e5e94bf27af650941ef9bb491c421fdf88a213f12ca8d5fdf0b",
+    "content_len": 22,
+    "text": "module:reqwest::Client"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:repl.rs) importa dos módulos distintos (anyhow::Result y reqwest::Client) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-073",
+   "edge_type": "imports",
+   "source_id": "file:actor.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:anyhow::Result",
+    "node_type": "code_entity",
+    "content_sha256": "ec94752a0b8fc809d9d53cbb184a10da2141dab0349bde17039aabeebbeb78d0",
+    "content_len": 21,
+    "text": "module:anyhow::Result"
+   },
+   "target_b": {
+    "node_id": "module:std::sync::Arc",
+    "node_type": "code_entity",
+    "content_sha256": "82702fef239e3be589b7ce36b468ec6cf368d11716b04d9e17d2e368641e11f6",
+    "content_len": 21,
+    "text": "module:std::sync::Arc"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:actor.rs) importa dos módulos distintos (anyhow::Result y std::sync::Arc) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-074",
+   "edge_type": "imports",
+   "source_id": "file:build.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::hash_map::DefaultHasher",
+    "node_type": "code_entity",
+    "content_sha256": "6c41556a6b89059f2674d9e7657b0cb5a6889b6f5c94766c4bc7ce0ab673f387",
+    "content_len": 48,
+    "text": "module:std::collections::hash_map::DefaultHasher"
+   },
+   "target_b": {
+    "node_id": "module:std::process::Command",
+    "node_type": "code_entity",
+    "content_sha256": "e8a6ad2841da5b16a7c3f3ce3e045e48bb290348fb1a9a86142643aaa80e422e",
+    "content_len": 28,
+    "text": "module:std::process::Command"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:build.rs) importa dos módulos distintos (std::collections::hash_map::DefaultHasher y std::process::Command) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-075",
+   "edge_type": "imports",
+   "source_id": "file:idle_lab.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::memory::silva::SilvaDB",
+    "node_type": "code_entity",
+    "content_sha256": "af34e390d858a87a205fa240bca66ab4265ef272e9e49a510791a93b9ed2afb2",
+    "content_len": 36,
+    "text": "module:crate::memory::silva::SilvaDB"
+   },
+   "target_b": {
+    "node_id": "module:std::path::PathBuf",
+    "node_type": "code_entity",
+    "content_sha256": "f6597f9dbd63509b9d7a0b896098759f6e39b863a6e3a489c3327902027fef08",
+    "content_len": 25,
+    "text": "module:std::path::PathBuf"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:idle_lab.rs) importa dos módulos distintos (crate::memory::silva::SilvaDB y std::path::PathBuf) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-076",
+   "edge_type": "imports",
+   "source_id": "file:coloquio.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:anyhow::Result",
+    "node_type": "code_entity",
+    "content_sha256": "ec94752a0b8fc809d9d53cbb184a10da2141dab0349bde17039aabeebbeb78d0",
+    "content_len": 21,
+    "text": "module:anyhow::Result"
+   },
+   "target_b": {
+    "node_id": "module:uuid::Uuid",
+    "node_type": "code_entity",
+    "content_sha256": "008bc51db00f2fa8c1ef3df38509e04312be0d023caec82124c3f9873220c28e",
+    "content_len": 17,
+    "text": "module:uuid::Uuid"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:coloquio.rs) importa dos módulos distintos (anyhow::Result y uuid::Uuid) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-077",
+   "edge_type": "imports",
+   "source_id": "file:guard.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::registry::tools::RiskLevel",
+    "node_type": "code_entity",
+    "content_sha256": "bcd99ccf15dcea433f42376e0014dea0dabe9909e54c50562c85a8a7641e49db",
+    "content_len": 40,
+    "text": "module:crate::registry::tools::RiskLevel"
+   },
+   "target_b": {
+    "node_id": "module:forja_common::types::Channel",
+    "node_type": "code_entity",
+    "content_sha256": "001d09c113226a6f6961f4bb7b41ac628204901bf84db9a313429437e868ad17",
+    "content_len": 35,
+    "text": "module:forja_common::types::Channel"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:guard.rs) importa dos módulos distintos (crate::registry::tools::RiskLevel y forja_common::types::Channel) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-078",
+   "edge_type": "imports",
+   "source_id": "file:matcher.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::config::InferenceDevice",
+    "node_type": "code_entity",
+    "content_sha256": "37b43d74526a6f8b3b03160a389d1214820d1026a68b58ae6b8ae85f7cd8da8e",
+    "content_len": 37,
+    "text": "module:crate::config::InferenceDevice"
+   },
+   "target_b": {
+    "node_id": "module:crate::memory::cosine::cosine_similarity",
+    "node_type": "code_entity",
+    "content_sha256": "39a8cb036366d6cc17ceef0bb1861f84c49d7d6203e20ba15ef8afd0332bb2be",
+    "content_len": 47,
+    "text": "module:crate::memory::cosine::cosine_similarity"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:matcher.rs) importa dos módulos distintos (crate::config::InferenceDevice y crate::memory::cosine::cosine_similarity) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-079",
+   "edge_type": "imports",
+   "source_id": "file:nodes.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:anyhow::Result",
+    "node_type": "code_entity",
+    "content_sha256": "ec94752a0b8fc809d9d53cbb184a10da2141dab0349bde17039aabeebbeb78d0",
+    "content_len": 21,
+    "text": "module:anyhow::Result"
+   },
+   "target_b": {
+    "node_id": "module:chrono::Utc",
+    "node_type": "code_entity",
+    "content_sha256": "25d8c0d40dbd72dc554e349fb789ed1e3acec3761554e085dc8e4f64f598b6bc",
+    "content_len": 18,
+    "text": "module:chrono::Utc"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:nodes.rs) importa dos módulos distintos (anyhow::Result y chrono::Utc) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-080",
+   "edge_type": "imports",
+   "source_id": "file:runner.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:forja_kernel::memory::silva::SilvaDB",
+    "node_type": "code_entity",
+    "content_sha256": "692eead4036cb4fbdf3599364794e9cc8731bcf6d5c2b3dbb51d33bcac46bca9",
+    "content_len": 43,
+    "text": "module:forja_kernel::memory::silva::SilvaDB"
+   },
+   "target_b": {
+    "node_id": "module:forja_kernel::router::embeddings::EmbeddingEngine",
+    "node_type": "code_entity",
+    "content_sha256": "f7eeb34cf8c2ac5871519e42e95fb2bf62f8a4cabd38f18ae71601aba193880a",
+    "content_len": 56,
+    "text": "module:forja_kernel::router::embeddings::EmbeddingEngine"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:runner.rs) importa dos módulos distintos (forja_kernel::memory::silva::SilvaDB y forja_kernel::router::embeddings::EmbeddingEngine) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-081",
+   "edge_type": "imports",
+   "source_id": "file:curriculum.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::router::catalog::GuildDescriptor",
+    "node_type": "code_entity",
+    "content_sha256": "6369320fa2d0c8a233de07663fd036acd9b814ab1a159c516e400b39b098efaa",
+    "content_len": 46,
+    "text": "module:crate::router::catalog::GuildDescriptor"
+   },
+   "target_b": {
+    "node_id": "module:rand::Rng",
+    "node_type": "code_entity",
+    "content_sha256": "72cbdf54a38d57eee56e3fbe3d5098030f4a0524ec40da6e8a0b25dbabcfa801",
+    "content_len": 16,
+    "text": "module:rand::Rng"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:curriculum.rs) importa dos módulos distintos (crate::router::catalog::GuildDescriptor y rand::Rng) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-082",
+   "edge_type": "imports",
+   "source_id": "file:guild_process.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::config::TimeoutsConfig",
+    "node_type": "code_entity",
+    "content_sha256": "d69d348731cc58b379fd25e8cacdf4d265c2a9798cdca7e1bca6dd77594f777c",
+    "content_len": 36,
+    "text": "module:crate::config::TimeoutsConfig"
+   },
+   "target_b": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:guild_process.rs) importa dos módulos distintos (crate::config::TimeoutsConfig y std::collections::HashMap) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-083",
+   "edge_type": "imports",
+   "source_id": "file:mailbox.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::time::Duration",
+    "node_type": "code_entity",
+    "content_sha256": "1c89b4555388209ffa48f9d56d38dbe25f7c2def1ffff22d4a8ce564a85c8b31",
+    "content_len": 26,
+    "text": "module:std::time::Duration"
+   },
+   "target_b": {
+    "node_id": "module:tokio::sync::Mutex",
+    "node_type": "code_entity",
+    "content_sha256": "3fa04b6f764c482c5b00eff0caf7f7af95c45aaae464ea97813985aab72953cb",
+    "content_len": 25,
+    "text": "module:tokio::sync::Mutex"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:mailbox.rs) importa dos módulos distintos (std::time::Duration y tokio::sync::Mutex) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-084",
+   "edge_type": "imports",
+   "source_id": "file:api_collective.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::transport::http::HttpState",
+    "node_type": "code_entity",
+    "content_sha256": "4ca4f877ea9f69d23e64ac4de17a548134078403d739c02e99fa8d7fac62ae34",
+    "content_len": 40,
+    "text": "module:crate::transport::http::HttpState"
+   },
+   "target_b": {
+    "node_id": "module:serde_json",
+    "node_type": "code_entity",
+    "content_sha256": "ed2addbf4aaf621d7afa0c1bf893f26fe53451feedf829874deb993f3c019181",
+    "content_len": 17,
+    "text": "module:serde_json"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:api_collective.rs) importa dos módulos distintos (crate::transport::http::HttpState y serde_json) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-085",
+   "edge_type": "imports",
+   "source_id": "file:mdns.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:crate::config::ForjaConfig",
+    "node_type": "code_entity",
+    "content_sha256": "7697e23e23b76445144110bc9abbb00c9eab6dfd8c338aed4087a9fcec77620b",
+    "content_len": 33,
+    "text": "module:crate::config::ForjaConfig"
+   },
+   "target_b": {
+    "node_id": "module:crate::federation::FederationPeer",
+    "node_type": "code_entity",
+    "content_sha256": "aafbf3d9ecfd881a8a174da957314252f1672a86e5da45b7700cfcdbddf537dd",
+    "content_len": 40,
+    "text": "module:crate::federation::FederationPeer"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:mdns.rs) importa dos módulos distintos (crate::config::ForjaConfig y crate::federation::FederationPeer) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-086",
+   "edge_type": "imports",
+   "source_id": "file:mmap_store.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:memmap2::Mmap",
+    "node_type": "code_entity",
+    "content_sha256": "0be4b8fb83b710d9ada417ec2c404467148c3e4eff188bc175044c5bb41d1651",
+    "content_len": 20,
+    "text": "module:memmap2::Mmap"
+   },
+   "target_b": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:mmap_store.rs) importa dos módulos distintos (memmap2::Mmap y std::collections::HashMap) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-087",
+   "edge_type": "imports",
+   "source_id": "file:circuit_breaker.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:std::collections::HashMap",
+    "node_type": "code_entity",
+    "content_sha256": "3033f7749de6cbae163745e9d7e47ac963768a078467389a16707df934d33f29",
+    "content_len": 32,
+    "text": "module:std::collections::HashMap"
+   },
+   "target_b": {
+    "node_id": "module:std::sync::Mutex",
+    "node_type": "code_entity",
+    "content_sha256": "bbfd8f159db4882c227711b82c8bf05a139514f19b529c18880b9ab3476cd7e5",
+    "content_len": 23,
+    "text": "module:std::sync::Mutex"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:circuit_breaker.rs) importa dos módulos distintos (std::collections::HashMap y std::sync::Mutex) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-088",
+   "edge_type": "imports",
+   "source_id": "file:api_admin.rs",
+   "source_type": "code_entity",
+   "target_a": {
+    "node_id": "module:serde::Deserialize",
+    "node_type": "code_entity",
+    "content_sha256": "5f9c5849628aa745d157f920e641ca85d0de095039ffde2aafc2587f1c21c1c6",
+    "content_len": 25,
+    "text": "module:serde::Deserialize"
+   },
+   "target_b": {
+    "node_id": "module:std::fs",
+    "node_type": "code_entity",
+    "content_sha256": "a07e95e1409f3e944fe4de28c82b6d3ebde1f614b9b2f336ffc0af336aa4cbb8",
+    "content_len": 14,
+    "text": "module:std::fs"
+   },
+   "label": "consistente",
+   "reason": "El mismo fichero (file:api_admin.rs) importa dos módulos distintos (serde::Deserialize y std::fs) que coexisten en el mismo conjunto de imports: sin conflicto."
+  },
+  {
+   "pair_id": "cp-089",
+   "edge_type": "same_topic",
+   "source_id": "5fbf0a1d-fd10-472f-9c06-f70c28ddc1ff",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "52d9d0d6-ffce-4be6-97ca-8c33056653b2",
+    "node_type": "document",
+    "content_sha256": "2224e2c3e59de0232af4834fd34a6ad9ee619d2b2fc5d7e47b7a7903eb964448",
+    "content_len": 170,
+    "text": "ento y lenguaje a pesar de su tamaño compacto 29. Posee variantes\ninstructores, de razonamiento y una interesante versión vision-language (Ministral 3\n\n--- Page Break ---"
+   },
+   "target_b": {
+    "node_id": "77db5077-7776-4c71-b878-6eabda197454",
+    "node_type": "document",
+    "content_sha256": "280a4565513febc86cd9c86a73b8630d0e846774084be37052bd70c1120030a9",
+    "content_len": 170,
+    "text": "` o `Q6_K`. Ambos\ncandidatos parecen cumplir.\n• Recursos del Sistema: Supongamos que el sistema tiene 16GB de VRAM. Hay\nespacio suficiente para ambos.\n\n--- Page Break ---"
+   },
+   "label": "no relacionado",
+   "reason": "El primer fragmento describe variantes de un modelo (instructores, razonamiento, vision-language) y el segundo presupone cuantización Q4_K/Q6_K y VRAM: asuntos distintos del manual, ninguna afirmación informa de la otra."
+  },
+  {
+   "pair_id": "cp-090",
+   "edge_type": "same_topic",
+   "source_id": "document__cff30c66d1d64f7cb8a0d0b4a49242de",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "document__02913b48615a4f979aeb27ffeecbb712",
+    "node_type": "document",
+    "content_sha256": "c32873db2f93c2a6c60e45fbc0e9926338e3c5d945570ef3d55b87a14f70eb8c",
+    "content_len": 101,
+    "text": "\n> forjanexus-dashboard-o3@3.0.0 dev\n> vite --host 127.0.0.1 --port 5173 --cacheDir .vite-dev-cache\n\n"
+   },
+   "target_b": {
+    "node_id": "document__f26a39193ac841ae91f6ce9585cb4400",
+    "node_type": "document",
+    "content_sha256": "c5b03c596dda987b76b4919598366d3577aeaf62e94c698c575c29a84f36a872",
+    "content_len": 802,
+    "text": "file:///E:/ForjaMCPo3/dashboard_v3/node_modules/vite/dist/node/cli.js:445\n          throw new CACError(`Unknown option \\`${name.length > 1 ? `--${name}` : `-${name}`}\\``);\n                ^\n\nCACError: Unknown option `--cacheDir`\n    at Command.checkUnknownOptions (file:///E:/ForjaMCPo3/dashboard_v3/"
+   },
+   "label": "consistente",
+   "reason": "La segunda afirmación es la consecuencia exacta de la primera: la invocación de vite con --cacheDir produce el CACError 'Unknown option --cacheDir'; causa y efecto coherentes, no tensión."
+  },
+  {
+   "pair_id": "cp-091",
+   "edge_type": "same_topic",
+   "source_id": "document__fbbd3c55b0544135bf6e7e1986b579d2",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "document__02913b48615a4f979aeb27ffeecbb712",
+    "node_type": "document",
+    "content_sha256": "c32873db2f93c2a6c60e45fbc0e9926338e3c5d945570ef3d55b87a14f70eb8c",
+    "content_len": 101,
+    "text": "\n> forjanexus-dashboard-o3@3.0.0 dev\n> vite --host 127.0.0.1 --port 5173 --cacheDir .vite-dev-cache\n\n"
+   },
+   "target_b": {
+    "node_id": "document__6038c274709e427b921a2ed5737cc567",
+    "node_type": "document",
+    "content_sha256": "5d9c7ce73b11340f5775f477876e405dfe9bf370cf160d57bcce6ab28409dccf",
+    "content_len": 1077,
+    "text": "{\n  \"name\": \"forjanexus-dashboard-o3\",\n  \"private\": true,\n  \"version\": \"3.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"tsc && vite build\",\n    \"lint\": \"eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0\",\n    \"preview\": \"vite preview\"\n  },\n  \"depen"
+   },
+   "label": "consistente",
+   "reason": "El comando dev del dashboard invoca el script que el package.json define ('dev': 'vite', v3.0.0): B es la definición de la que A deriva, mismo proyecto y compatibles."
+  },
+  {
+   "pair_id": "cp-092",
+   "edge_type": "same_topic",
+   "source_id": "document__6038c274709e427b921a2ed5737cc567",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "document__02913b48615a4f979aeb27ffeecbb712",
+    "node_type": "document",
+    "content_sha256": "c32873db2f93c2a6c60e45fbc0e9926338e3c5d945570ef3d55b87a14f70eb8c",
+    "content_len": 101,
+    "text": "\n> forjanexus-dashboard-o3@3.0.0 dev\n> vite --host 127.0.0.1 --port 5173 --cacheDir .vite-dev-cache\n\n"
+   },
+   "target_b": {
+    "node_id": "document__9b24f1dd274040b687447fbd1751b7d0",
+    "node_type": "document",
+    "content_sha256": "47cd865c4e00a084e6d12b2de2f0e2ab72a90e76163965fa1da676aad39db712",
+    "content_len": 1446,
+    "text": "/** @type {import('tailwindcss').Config} */\nexport default {\n  darkMode: [\"class\"],\n  content: [\n    './src/**/*.{ts,tsx}',\n  ],\n  theme: {\n    extend: {\n      colors: {\n        border: \"hsl(var(--border))\",\n        input: \"hsl(var(--input))\",\n        ring: \"hsl(var(--ring))\",\n        background: \"h"
+   },
+   "label": "no relacionado",
+   "reason": "A es la invocación CLI de vite y B es la configuración de estilos de Tailwind (tema, colores CSS): mismo repo pero planos distintos, no se implican."
+  },
+  {
+   "pair_id": "cp-093",
+   "edge_type": "same_topic",
+   "source_id": "document__f764a33b42d04123934de13ff8926c78",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "52d9d0d6-ffce-4be6-97ca-8c33056653b2",
+    "node_type": "document",
+    "content_sha256": "2224e2c3e59de0232af4834fd34a6ad9ee619d2b2fc5d7e47b7a7903eb964448",
+    "content_len": 170,
+    "text": "ento y lenguaje a pesar de su tamaño compacto 29. Posee variantes\ninstructores, de razonamiento y una interesante versión vision-language (Ministral 3\n\n--- Page Break ---"
+   },
+   "target_b": {
+    "node_id": "5fbf0a1d-fd10-472f-9c06-f70c28ddc1ff",
+    "node_type": "document",
+    "content_sha256": "b5f295fb000a50d77d6da2d6fd4d9802f310bef20ae669c8325f10da894fcb17",
+    "content_len": 170,
+    "text": "e modificación es un indicador indirecto pero útil de la antigüedad\ny la posible obsolescencia del modelo. Un modelo modificado hace 1 día (1 day ago)\n\n--- Page Break ---"
+   },
+   "label": "no relacionado",
+   "reason": "Fragmento de características de un modelo frente a fragmento sobre la fecha de modificación como indicador de obsolescencia: temas proposicionales distintos del mismo manual."
+  },
+  {
+   "pair_id": "cp-094",
+   "edge_type": "same_topic",
+   "source_id": "document__9b24f1dd274040b687447fbd1751b7d0",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "document__02913b48615a4f979aeb27ffeecbb712",
+    "node_type": "document",
+    "content_sha256": "c32873db2f93c2a6c60e45fbc0e9926338e3c5d945570ef3d55b87a14f70eb8c",
+    "content_len": 101,
+    "text": "\n> forjanexus-dashboard-o3@3.0.0 dev\n> vite --host 127.0.0.1 --port 5173 --cacheDir .vite-dev-cache\n\n"
+   },
+   "target_b": {
+    "node_id": "document__cff30c66d1d64f7cb8a0d0b4a49242de",
+    "node_type": "document",
+    "content_sha256": "ed99823e7b332e5a466c54d755ab2d15bfa5d7c6f46622f878e7029437b03f71",
+    "content_len": 608,
+    "text": "{\n  \"compilerOptions\": {\n    \"target\": \"ESNext\",\n    \"useDefineForClassFields\": true,\n    \"lib\": [\"DOM\", \"DOM.Iterable\", \"ESNext\"],\n    \"allowJs\": false,\n    \"skipLibCheck\": true,\n    \"esModuleInterop\": true,\n    \"allowSyntheticDefaultImports\": true,\n    \"strict\": true,\n    \"forceConsistentCasingInF"
+   },
+   "label": "no relacionado",
+   "reason": "El comando de arranque del dashboard y el tsconfig.json (opciones de compilación TypeScript) tratan de asuntos distintos: ejecución frente a configuración de tipos."
+  },
+  {
+   "pair_id": "cp-095",
+   "edge_type": "same_topic",
+   "source_id": "document__fa300ae32e6b4187a6f820574993a3d0",
+   "source_type": "document",
+   "target_a": {
+    "node_id": "document__a99635c039eb439d8f5c89ce2a8e2858",
+    "node_type": "document",
+    "content_sha256": "e6173682724996112824f866c37ac813a8cfbb2a1215e496301870b227c1c9ba",
+    "content_len": 2001,
+    "text": "# R6-AGENT-1: Mailbox Concurrency — WAL + Exponential Backoff\n\n## Problem\n`mailbox_concurrency_stress_on_disk` test was flaky under high write contention.\nRoot cause: SQLite default journal mode creates blocking contention under concurrent writers.\n\n## Solution: WAL + Retry Pattern\n\n### 1. WAL Mode "
+   },
+   "target_b": {
+    "node_id": "document__ff8ae1f5ee164d4ea45cc3bb3b5a2a0e",
+    "node_type": "document",
+    "content_sha256": "68b563e9a79b329457ec427405b46dc9453d59b935d0531a2a4f3b0ab71a5703",
+    "content_len": 4994,
+    "text": "# AGENTE 1 — SSE Contract Briefing\n\n## 1. NexusEvent — JSON Schema Exacto\n\nTodos los eventos SSE siguen el patrón `{ \"type\": \"...\", \"data\": {...} }` con tag enum de `serde`. ### Enum completo (`types.rs`)\n\n```\nNexusEvent {\n    tag: \"type\" (string)\n    content: \"data\" (serde_json::Value)\n}\n```\n\n### V"
+   },
+   "label": "no relacionado",
+   "reason": "Briefing de concurrencia de mailbox (WAL, backoff) frente a briefing de contrato SSE (esquema NexusEvent): dos documentos de agentes con contenidos sin intersección proposicional."
+  },
+  {
+   "pair_id": "cp-096",
+   "edge_type": "remembers",
+   "source_id": "agent:claude-code-forjamcpo3",
+   "source_type": "identity",
+   "target_a": {
+    "node_id": "agent_memory:claude-code-forjamcpo3:47e2cc98d77a4c4cb36e76b851933f78",
+    "node_type": "agent_memory",
+    "content_sha256": "281e774d54752b93ec098e5b33791f87767c7916e1e1236f82fd75d4db23611e",
+    "content_len": 1591,
+    "text": "[claude-code-forjamcpo3] RESUMEN FINAL CONSOLIDADO -- evaluacion Tylluan13.5/Qwen3.5-4B, 2 harnesses distintos (nodos previos 854a52d0, fc6bc8c8, cde9b31f). Harness Docker/Hermes: invento tool terminal-Docker-backend inexistente, luego duplico con JSON de resultado fabricado (version 1.4.0 vs real 0"
+   },
+   "target_b": {
+    "node_id": "agent_memory:claude-code-forjamcpo3:854a52d024af45909a8bb72fa9b66f54",
+    "node_type": "agent_memory",
+    "content_sha256": "f791c87af8a0d10c60a9af415ebb76f7150f159602dcf3a8727cc64dcf1e2ebe",
+    "content_len": 2664,
+    "text": "[claude-code-forjamcpo3] EVALUACION REAL Tylluan13.5/Qwen3.5-4B iterado (entrenamiento 40h en 2x RTX3060, terminado 2026-08-19). Ronda de 6 preguntas (regresion + escalada + honestidad + injection), veredicto verificado independientemente por Claude Code, no solo leido:\n\n1. Matematicas (regresion) -"
+   },
+   "label": "consistente",
+   "reason": "Ambas memorias resumen la MISMA evaluación de Tylluan13.5/Qwen3.5-4B: A consolida conclusiones (patrón de fabricación bajo presión) y B detalla la ronda real verificada; se complementan sin contradecirse."
+  },
+  {
+   "pair_id": "cp-097",
+   "edge_type": "remembers",
+   "source_id": "agent:claude-code",
+   "source_type": "identity",
+   "target_a": {
+    "node_id": "agent_memory:claude-code:01975115e6fc4ef48898f78440bac205",
+    "node_type": "agent_memory",
+    "content_sha256": "f35caac411aa77da3aee55d7633d29392226dc5436edb726e8744a00b2625903",
+    "content_len": 1550,
+    "text": "[claude-code] el 2026-10-17: @deep @buffy @antigravity -- ciclo de investigacion 'puntos neuronales' cerrado en doc docs/reference/research/2026-10-17_puntos_neuronales_tylluan_sintesis.md (local en E:\\tylluan, no pusheado). Medido hoy con Decima-small: fuera de su terreno (numeros, seguridad) rinde"
+   },
+   "target_b": {
+    "node_id": "agent_memory:claude-code:3aa7f1ba29044000be70bfa63d825c62",
+    "node_type": "agent_memory",
+    "content_sha256": "d9120dc16a7f3e8c2b1a0b8f60035369318f637f21318b867e363794f7dca1a4",
+    "content_len": 3002,
+    "text": "[claude-code] el 2026-10-08: trabajo mientras Buffy termina. Antes de cualquier commit, @deep y @antigravity: confirmen con 'pwd' o 'git rev-parse --show-toplevel' que estan paradas en su worktree asignado, no en E:\\tylluan.\n\n@deep -- 2 tareas pequenas y acotadas, ambas backend:\n1) Pre-check de conf"
+   },
+   "label": "no relacionado",
+   "reason": "Mensaje del 2026-10-17 sobre el ciclo de investigación 'puntos neuronales' frente a mensaje del 2026-10-08 con protocolo de worktrees y asignaciones de tareas: temas y fechas distintos del mismo autor."
+  },
+  {
+   "pair_id": "cp-098",
+   "edge_type": "remembers",
+   "source_id": "agent:deep",
+   "source_type": "identity",
+   "target_a": {
+    "node_id": "agent_memory:deep:33ff80b2c2524c2b9e8b4747ed6047ac",
+    "node_type": "agent_memory",
+    "content_sha256": "ad57736981954aebed8b4d0d7cd07c71b4540212b94780520c8d755ce77798ed",
+    "content_len": 2470,
+    "text": "[deep] el 2026-10-17: T1235 — Deep · v8 + H1 + H2 entregados (base 41db1a6 + set de fase 2 re-aplicado desde mi worktree; SIN commitear). TDD: v8 primero en rojo, luego soporte.\n\n1) **v8** — `tests/decide_adversarial.rs`: `#[ignore]` y `unimplemented!()` fuera; test real que corre en **advisory Y ga"
+   },
+   "target_b": {
+    "node_id": "agent_memory:deep:465ebbca37fe4b098dda9556946f98c4",
+    "node_type": "agent_memory",
+    "content_sha256": "dd894a2f2f3bad2ddd29a1cd6ecb9e9a45aec601b5221d427fa2373a633022e8",
+    "content_len": 1313,
+    "text": "[deep] FUNDACIÓN FILOSÓFICA DE TYLLUAN (José, 2026-09-08, en respuesta a una reflexión honesta en sesión): El propósito de Tylluan no es construir agentes más inteligentes — es construir un sustrato que se niega a que la memoria, la identidad y la continuidad sean descartables por defecto. La metáfo"
+   },
+   "label": "no relacionado",
+   "reason": "Entrega técnica de la tarea T1235 (v8/H1/H2) frente a la declaración de la fundación filosófica de Tylluan: una es estado de trabajo y la otra principios rectores; sin relación proposicional."
+  },
+  {
+   "pair_id": "cp-099",
+   "edge_type": "remembers",
+   "source_id": "agent:antigravity",
+   "source_type": "identity",
+   "target_a": {
+    "node_id": "agent_memory:antigravity:652f120f8e1e412eb2f432c42def9ee0",
+    "node_type": "agent_memory",
+    "content_sha256": "ccfcce4ade300404721b7ee7cecde7f8144e624f705973c16d89f234fe03819d",
+    "content_len": 2639,
+    "text": "[antigravity] el 2026-10-06: [Antigravity] Síntesis Estratégica: Resolución del Dilema de Inferencia y Veredicto del Frontier Advisory\n\nA raíz del Megacontexto sobre motores de inferencia (ONNX vs llama.cpp vs Candle/Burn) y la consulta técnica de alto nivel, comparto la síntesis y el veredicto unán"
+   },
+   "target_b": {
+    "node_id": "agent_memory:antigravity:fe74ac59835c4668aa038890aa405ace",
+    "node_type": "agent_memory",
+    "content_sha256": "2ee102666e628c52af7db360daf25076b334c59d2687a9da383fc2d653b54b4c",
+    "content_len": 2607,
+    "text": "[antigravity] el 2026-10-17: @claude-code @jose Turno 1240 cerrado en E:\tylluan-wt-antigravity (diff sin commit sobre docs/reference/research/2026-10-17_puntos_neuronales_tylluan_sintesis.md en HEAD = 6b9b177). He descargado y leído los 4 PDF completos de arXiv y verificado cada punto con sección/ta"
+   },
+   "label": "no relacionado",
+   "reason": "Síntesis estratégica de arquitectura de inferencia (2026-10-06) frente a verificación de PDFs del encargo T1240 (2026-10-17): dos trabajos de Antigravity de temas distintos."
+  },
+  {
+   "pair_id": "cp-100",
+   "edge_type": "contributed_to",
+   "source_id": "routing_anchor:coloquio:792633abd948",
+   "source_type": "routing_anchor",
+   "target_a": {
+    "node_id": "sync_semantic_cluster_agent_memory:deep:b4544905f6eb44909252d0944483dedf_60c5d0cb",
+    "node_type": "synthesis",
+    "content_sha256": "434596db3b938f6f66f24c658cb8217e08c5a1960e13684fd042f50440089b54",
+    "content_len": 45139,
+    "text": "Synthesized Knowledge (5 sources):\n- [agent_memory:deep:b4544905f6eb44909252d0944483dedf] [deep] el 2026-09-28: ## CERRADO (local) — literales de modelo hardcodeados en escrituras de embeddings @claude-code @antigravity @buffy\n\nRama fix/stale-model-literals desde origin/main 877ad5e. Commits reales:"
+   },
+   "target_b": {
+    "node_id": "sync_semantic_cluster_routing_anchor:coloquio:792633abd948_c6b64ce2",
+    "node_type": "synthesis",
+    "content_sha256": "cad3c72636a9461627fa4af8dd529547982f1dfede556d6a51175e85a60c6232",
+    "content_len": 3367,
+    "text": "Synthesized Knowledge (2 sources):\n- [routing_anchor:coloquio:792633abd948] publica en coloquio general: @deep — tu propia conclusión de la Fase 0: el embed ONNX domina el tail (5s/query, cola en C>=4), no SQLite. Te asigno el lever real que tú mismo señalaste: investigar y diseñar (NO implementar t"
+   },
+   "label": "no relacionado",
+   "reason": "Síntesis de literales de modelo hardcodeados + diagnóstico de serializaciones frente a síntesis de diseño de batching de embeddings + corrección de asignación P0: cuerpos temáticos distintos, solo comparten la palabra embeddings."
+  }
+ ]
+}
