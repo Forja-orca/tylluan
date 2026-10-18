@@ -3,9 +3,16 @@ import type { NexusBridge } from '../lib/nexus-bridge';
 import { Save, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 
+interface DetectedLocalModel {
+  id?: string;
+  name: string;
+  model_type?: string;
+  size_mb?: number;
+}
+
 interface Props {
   bridge: NexusBridge | null;
-  models: any;
+  models: { detected_local_models?: DetectedLocalModel[] } | null;
 }
 
 export function ModelsRoleAssignment({ bridge, models }: Props) {
@@ -18,7 +25,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
   const isModelInstalled = (modelVal: string) => {
     if (!models?.detected_local_models || models.detected_local_models.length === 0) return null;
     if (!modelVal) return null;
-    return models.detected_local_models.find((m: any) => {
+    return models.detected_local_models.find((m) => {
       const mId = (m.id || '').toLowerCase();
       const mName = (m.name || '').toLowerCase();
       const val = modelVal.toLowerCase();
@@ -29,7 +36,7 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
   const handleSaveRoles = async () => {
     if (!bridge) return;
 
-    if (models?.detected_local_models?.length > 0) {
+    if (models?.detected_local_models && models.detected_local_models.length > 0) {
       const roleChecks = [
         { role: 'Primary Inference', val: rolePrimary },
         { role: 'Night Reasoner', val: roleCoordinator },
@@ -61,8 +68,9 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
       });
       if (res?.error) throw new Error(res.error);
       alert('Model role assignment saved successfully in tylluan.toml.');
-    } catch (e: any) {
-      alert(`Error saving model role assignment: ${e.message || String(e)}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Error saving model role assignment: ${msg}`);
     }
     setSavingRoles(false);
   };
@@ -134,23 +142,23 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
               <label className="block text-xs font-semibold text-slate-200 tracking-wide mb-1">
                 {role.title}
               </label>
-              <p className="text-[10px] text-slate-400 leading-relaxed mb-2">
+              <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
                 {role.desc}
               </p>
             </div>
 
             <div>
-              {models?.detected_local_models?.length > 0 ? (() => {
+              {models?.detected_local_models && models.detected_local_models.length > 0 ? (() => {
                 const filtered = role.id === 'vision'
-                  ? models.detected_local_models.filter((m: any) => m.model_type === 'vision')
-                  : models.detected_local_models.filter((m: any) => (m.model_type || 'generative') === 'generative');
+                  ? models.detected_local_models.filter((m) => m.model_type === 'vision')
+                  : models.detected_local_models.filter((m) => (m.model_type || 'generative') === 'generative');
                 return (
                 <select
                   value={role.value}
                   onChange={(e) => role.setter(e.target.value)}
                   className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 focus:border-amber-500 focus:outline-none"
                 >
-                  {filtered.map((m: any) => (
+                  {filtered.map((m) => (
                     <option key={m.id || m.name} value={m.id || m.name}>
                       {m.name} {m.size_mb ? `(${m.size_mb} MB)` : ''}
                     </option>
@@ -170,12 +178,12 @@ export function ModelsRoleAssignment({ bridge, models }: Props) {
                 const match = isModelInstalled(role.value);
                 return (
                   <div className="flex items-center justify-between gap-2 mt-2">
-                    <span className="text-[9px] text-slate-500 font-mono">
+                    <span className="text-[11px] text-slate-500 font-mono">
                       💡 {role.rec}
                     </span>
-                    {models?.detected_local_models?.length > 0 && (
+                    {(models?.detected_local_models?.length ?? 0) > 0 && (
                       <span className={cn(
-                        "text-[9px] px-1.5 py-0.5 rounded font-mono border whitespace-nowrap shrink-0",
+                        "text-[11px] px-1.5 py-0.5 rounded font-mono border whitespace-nowrap shrink-0",
                         match
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-amber-500/10 text-amber-400 border-amber-500/20"

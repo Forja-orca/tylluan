@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   User,
   Users,
@@ -8,16 +8,11 @@ import {
   FileText,
   BookOpen,
   Trash2,
-  WifiOff,
-  MessageSquare,
-  Send,
-  Plus,
-  ChevronDown
+  WifiOff
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 import type { 
-  NexusEvent, 
   AgentMemory, 
   AgentMemorySummary, 
   AgentProfile 
@@ -33,11 +28,6 @@ interface CollectivePulse {
   broadcasts_last_hour: number;
   graph: { nodes: number; edges: number };
   ts: string;
-}
-
-interface HeatmapEntry {
-  node_id: string;
-  touches: number;
 }
 
 interface TimelineEvent {
@@ -58,7 +48,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
 
   useEffect(() => {
     if (!bridge) return;
-    bridge.fetchRaw('/api/v1/setup-hint', {}).then((hint: any) => {
+    bridge.fetchRaw('/api/v1/setup-hint', {}).then((hint: { mcp_clients?: { claude_desktop?: { config?: { mcpServers?: { tylluan?: { url?: string } } } } } }) => {
       const url = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url;
       if (url) setSseUrl(url);
     }).catch(() => {});
@@ -66,11 +56,11 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
 
   const [activity, setActivity] = useState<Record<string, { tool: string; intent?: string }>>({});
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const [_memories, setMemories] = useState<AgentMemory[]>([]);
   const [summary, setSummary] = useState<AgentMemorySummary | null>(null);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
   const [loadingMemory, setLoadingMemory] = useState(false);
-  const [identity, setIdentity] = useState<any>(null);
+  const [_identity, setIdentity] = useState<unknown>(null);
   const [askIdentityResponse, setAskIdentityResponse] = useState<string | null>(null);
   const [askingIdentity, setAskingIdentity] = useState(false);
 
@@ -166,7 +156,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
       });
       const text = res?.result || res?.response || (Array.isArray(res?.content) ? res.content[0]?.text : null) || JSON.stringify(res);
       setAskIdentityResponse(text);
-    } catch (e) {
+    } catch {
       notify('Error querying identity', 'error');
     } finally {
       setAskingIdentity(false);
@@ -232,7 +222,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
       <div className="flex items-center justify-between">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Connected Agents</span>
-          <p className="text-[10px] text-slate-600 font-mono mt-0.5">MCP Protocol Bridge · HTTP Streamable + SSE</p>
+          <p className="text-[11px] text-slate-600 font-mono mt-0.5">MCP Protocol Bridge · HTTP Streamable + SSE</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex -space-x-2">
@@ -240,14 +230,14 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
               const agentLabel = s.agent_id ?? s.client_name ?? 'anon';
               const color = colorMap[agentColor(agentLabel)] ?? colorMap.emerald;
               return (
-                <div key={s.id} className={`w-7 h-7 rounded-full border-2 border-slate-950 ${color.bg} flex items-center justify-center text-[9px] font-bold ${color.text} ring-1 ${color.ring}`}>
+                <div key={s.id} className={`w-7 h-7 rounded-full border-2 border-slate-950 ${color.bg} flex items-center justify-center text-[11px] font-bold ${color.text} ring-1 ${color.ring}`}>
                   {agentLabel.charAt(0).toUpperCase()}
                 </div>
               );
             })}
           </div>
           <div className="px-2 py-1 rounded-full bg-slate-800 border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-mono">{(sessions || []).length} online</span>
+            <span className="text-[11px] text-slate-400 font-mono">{(sessions || []).length} online</span>
           </div>
         </div>
       </div>
@@ -271,39 +261,39 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-100">{session.agent_id ?? session.client_name ?? 'anon'}</h4>
-                      <p className="text-[10px] font-mono text-slate-500">{session.id.slice(0, 16)}…</p>
+                      <p className="text-[11px] font-mono text-slate-500">{session.id.slice(0, 16)}…</p>
                     </div>
                   </div>
-                  <div className={cn("flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold border", isActive ? `${color.bg} ${color.border} ${color.text}` : 'bg-slate-800/60 border-slate-700 text-slate-500')}>
+                  <div className={cn("flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border", isActive ? `${color.bg} ${color.border} ${color.text}` : 'bg-slate-800/60 border-slate-700 text-slate-500')}>
                     <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? color.text.replace('text-', 'bg-') + ' animate-ping' : 'bg-slate-600')} />
                     {isActive ? 'ACTIVE' : 'IDLE'}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="rounded-lg bg-slate-800/50 px-3 py-2">
-                    <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Tool Calls</p>
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Tool Calls</p>
                     <p className={cn("text-lg font-bold font-mono", color.text)}>{session.tool_count ?? 0}</p>
                   </div>
                   <div className="rounded-lg bg-slate-800/50 px-3 py-2">
-                    <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Uptime</p>
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Uptime</p>
                     <p className="text-lg font-bold font-mono text-slate-300">{formatUptime(session.created_unix ? Math.floor(Date.now() / 1000) - session.created_unix : 0)}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {isActive && act ? (
                     <div className={cn("rounded-lg border px-3 py-2", color.bg, color.border)}>
-                      <p className={cn("text-[9px] uppercase tracking-wider mb-0.5 opacity-70", color.text)}>Executing</p>
+                      <p className={cn("text-[11px] uppercase tracking-wider mb-0.5 opacity-70", color.text)}>Executing</p>
                       <p className={cn("text-xs font-bold font-mono", color.text)}>{act.tool}</p>
-                      {act.intent && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{act.intent}</p>}
+                      {act.intent && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{act.intent}</p>}
                     </div>
                   ) : session.last_intent ? (
                     <div className="rounded-lg bg-slate-800/40 px-3 py-2">
-                      <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Last Intent</p>
-                      <p className="text-[10px] text-slate-400 truncate">{session.last_intent}</p>
+                      <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Last Intent</p>
+                      <p className="text-[11px] text-slate-400 truncate">{session.last_intent}</p>
                     </div>
                   ) : (
                     <div className="rounded-lg bg-slate-800/30 px-3 py-2">
-                      <p className="text-[10px] text-slate-600 italic">No activity recorded yet</p>
+                      <p className="text-[11px] text-slate-600 italic">No activity recorded yet</p>
                     </div>
                   )}
                   {session.last_guild && <span className={cn("font-bold uppercase", color.text)}>→ {session.last_guild}</span>}
@@ -311,7 +301,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                 <button
                   type="button"
                   onClick={() => setSelectedAgentId(session.agent_id ?? session.client_name ?? null)}
-                  className={cn("mt-4 w-full py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest hover:brightness-125 transition-all flex items-center justify-center gap-2", color.border, color.bg, color.text)}
+                  className={cn("mt-4 w-full py-2 rounded-xl border text-[11px] font-bold uppercase tracking-widest hover:brightness-125 transition-all flex items-center justify-center gap-2", color.border, color.bg, color.text)}
                 >
                   <BookOpen className="w-3 h-3" /> Ver Memoria e Identidad
                 </button>
@@ -327,7 +317,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
             </div>
             <h4 className="text-sm font-bold text-slate-400">No Active Connections</h4>
             <p className="text-xs text-slate-600 max-w-xs mt-2">Connect a MCP client to see it appear here in real-time.</p>
-            <div className="mt-4 font-mono text-[10px] text-slate-700 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2">
+            <div className="mt-4 font-mono text-[11px] text-slate-700 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2">
               claude mcp add tylluan --transport sse --url {sseUrl}
             </div>
           </div>
@@ -345,14 +335,14 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-100">{selectedAgentId}</h3>
-                  <p className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Sovereign Agent Profile</p>
+                  <p className="text-[11px] text-slate-500 font-mono uppercase tracking-widest">Sovereign Agent Profile</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button 
                   onClick={handleAskIdentity}
                   disabled={askingIdentity}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-lg text-[10px] font-bold uppercase transition-all border border-violet-500/30 disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-lg text-[11px] font-bold uppercase transition-all border border-violet-500/30 disabled:opacity-50"
                 >
                   {askingIdentity ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                   Ask Identity
@@ -365,7 +355,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               <section className="space-y-3">
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                   <FileText className="w-3 h-3" /> Narrative Summary
                 </h4>
                 <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 text-sm text-slate-300 italic leading-relaxed">
@@ -375,13 +365,13 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
 
               {profiles.find(p => p.agent_id === selectedAgentId) && (
                 <section className="space-y-3">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <Zap className="w-3 h-3 text-amber-400" /> Competencies Profile
                   </h4>
                   <div className="grid grid-cols-1 gap-2">
                     {Object.entries(profiles.find(p => p.agent_id === selectedAgentId)!.competencies).map(([guild, value]) => (
                       <div key={guild} className="space-y-1">
-                        <div className="flex justify-between text-[9px] font-mono">
+                        <div className="flex justify-between text-[11px] font-mono">
                           <span className="text-slate-400 uppercase">{guild}</span>
                           <span className="text-amber-400">{(value * 100).toFixed(0)}%</span>
                         </div>
@@ -397,7 +387,7 @@ function RealtimeAgentsTab({ notify }: { notify: (msg: string, type?: 'info' | '
               {(askIdentityResponse || askingIdentity) && (
                 <section className="space-y-3 animate-in zoom-in duration-300">
                   <div className="p-4 rounded-xl bg-violet-950/20 border border-violet-500/40 shadow-xl shadow-violet-500/5">
-                    <h4 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <h4 className="text-[11px] font-bold text-violet-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                       <Zap className="w-3 h-3" /> Cortex Response
                     </h4>
                     {askingIdentity ? (
@@ -436,9 +426,9 @@ export function CollectiveTab() {
   const [pulse, setPulse] = useState<CollectivePulse | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [heatmap, setHeatmap] = useState<{ date: string; count: number }[]>([]);
-  const [reputation, setReputation] = useState<any[]>([]);
+  const [reputation, setReputation] = useState<Array<{ guild: string; tier: string; total_calls: number; score: number; agent_id: string }>>([]);
   const [error, setError] = useState<string | null>(null);
-  const [sseUrl, setSseUrl] = useState<string>(`${window.location.origin}/sse`);
+  const [_sseUrl, setSseUrl] = useState<string>(`${window.location.origin}/sse`);
   const [suggestDomain, setSuggestDomain] = useState('');
   const [suggestResult, setSuggestResult] = useState<CollectiveSuggestResult | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -474,7 +464,7 @@ export function CollectiveTab() {
       if (p) setPulse(p);
       if (t) setTimeline(t.events ?? []);
       if (h) setHeatmap(h.heatmap ?? []);
-      if (r) setReputation(r.reputation ?? []);
+      if (r) setReputation((r.reputation ?? []) as Array<{ guild: string; tier: string; total_calls: number; score: number; agent_id: string }>);
 
       const hint = results[4].status === 'fulfilled' ? results[4].value : null;
       const hintUrl = hint?.mcp_clients?.claude_desktop?.config?.mcpServers?.tylluan?.url;
@@ -486,7 +476,7 @@ export function CollectiveTab() {
       } else {
         setError('Cannot connect to kernel');
       }
-    } catch (e) {
+    } catch {
       setError('Cannot connect to kernel');
     }
   }, [bridge]);
@@ -553,9 +543,9 @@ export function CollectiveTab() {
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-emerald-400" /> Stigmergy Heatmap
             </h3>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase tracking-wider">Collective Activity across the Realm</p>
+            <p className="text-[11px] text-slate-500 font-mono mt-0.5 uppercase tracking-wider">Collective Activity across the Realm</p>
           </div>
-          <div className="flex items-center gap-4 text-[10px] text-slate-500 font-mono">
+          <div className="flex items-center gap-4 text-[11px] text-slate-500 font-mono">
             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-slate-800" /> 0</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-emerald-900" /> 1-3</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-emerald-600" /> 4-9</div>
@@ -572,7 +562,7 @@ export function CollectiveTab() {
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-400" /> Guild Reliability
             </h3>
-            <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mt-0.5">Reputation by Domain</p>
+            <p className="text-[11px] text-slate-500 font-mono uppercase tracking-wider mt-0.5">Reputation by Domain</p>
           </div>
           <div className="p-6 space-y-4">
             {reputation.length === 0 && (
@@ -593,7 +583,7 @@ export function CollectiveTab() {
                     <div className="flex items-center gap-2">
                       <h4 className="text-xs font-bold text-slate-200">{item.guild}</h4>
                       <span className={cn(
-                        "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest",
+                        "px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-widest",
                         item.total_calls === 0 ? "bg-slate-800 text-slate-600" :
                         item.tier === 'reliable' ? "bg-emerald-500/20 text-emerald-400" :
                         "bg-amber-500/20 text-amber-400"
@@ -601,12 +591,12 @@ export function CollectiveTab() {
                         {item.total_calls === 0 ? 'dormant' : item.tier}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5 font-mono">{item.agent_id}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 font-mono">{item.agent_id}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs font-bold text-slate-100">{item.score.toFixed(1)}%</div>
-                  <div className="text-[9px] text-slate-500 font-mono mt-0.5">{item.total_calls} calls</div>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">{item.total_calls} calls</div>
                 </div>
               </div>
             ))}
@@ -614,7 +604,7 @@ export function CollectiveTab() {
 
           {/* Agent Suggestion — /api/v1/collective/suggest */}
           <div className="px-6 py-4 border-t border-slate-800 bg-slate-800/20">
-            <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mb-2">¿Quién es mejor para este dominio?</p>
+            <p className="text-[11px] text-slate-500 font-mono uppercase tracking-wider mb-2">¿Quién es mejor para este dominio?</p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -639,17 +629,17 @@ export function CollectiveTab() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-200">{suggestResult.best_agent}</span>
                       {suggestResult.confidence != null && (
-                        <span className="text-[10px] text-emerald-400 font-mono">{(suggestResult.confidence * 100).toFixed(0)}% confianza</span>
+                        <span className="text-[11px] text-emerald-400 font-mono">{(suggestResult.confidence * 100).toFixed(0)}% confianza</span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono mt-1">
+                    <div className="text-[11px] text-slate-500 font-mono mt-1">
                       {suggestResult.rate != null && `${(suggestResult.rate * 100).toFixed(0)}% éxito`}
                       {suggestResult.total_calls != null && ` · ${suggestResult.total_calls} llamadas`}
                     </div>
                     {suggestResult.alternatives && suggestResult.alternatives.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-slate-800 space-y-1">
                         {suggestResult.alternatives.map((alt, i) => (
-                          <div key={alt.agent_id + i} className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <div key={alt.agent_id + i} className="flex justify-between text-[11px] text-slate-500 font-mono">
                             <span>{alt.agent_id}</span>
                             <span>{(alt.rate * 100).toFixed(0)}% · {alt.total} calls</span>
                           </div>
@@ -672,9 +662,9 @@ export function CollectiveTab() {
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-blue-400" /> Activity Stream
               </h3>
-              <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mt-0.5">Real-time Collective Memory</p>
+              <p className="text-[11px] text-slate-500 font-mono uppercase tracking-wider mt-0.5">Real-time Collective Memory</p>
             </div>
-            <div className="px-2 py-1 rounded bg-slate-800 text-[10px] text-slate-500 font-mono border border-slate-700">
+            <div className="px-2 py-1 rounded bg-slate-800 text-[11px] text-slate-500 font-mono border border-slate-700">
               {timeline.length} events
             </div>
           </div>
@@ -695,11 +685,11 @@ export function CollectiveTab() {
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-slate-300 leading-relaxed font-medium">{ev.content}</p>
                   <div className="flex items-center gap-3 mt-1.5 opacity-60">
-                    <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">{ev.type}</span>
+                    <span className="text-[11px] text-slate-400 uppercase tracking-widest font-bold">{ev.type}</span>
                     {ev.updated_at && (
                       <>
-                        <span className="text-slate-700 text-[8px]">|</span>
-                        <span className="text-[9px] text-slate-500 font-mono">{new Date(ev.updated_at).toLocaleTimeString()}</span>
+                        <span className="text-slate-700 text-[11px]">|</span>
+                        <span className="text-[11px] text-slate-500 font-mono">{new Date(ev.updated_at).toLocaleTimeString()}</span>
                       </>
                     )}
                   </div>
@@ -762,7 +752,7 @@ function HeatmapGrid({ data }: { data: { date: string; count: number }[] }) {
           />
         ))}
       </div>
-      <p className="text-[9px] text-slate-500 text-right font-mono uppercase tracking-widest mt-2">Last 52 weeks of collective activity</p>
+      <p className="text-[11px] text-slate-500 text-right font-mono uppercase tracking-widest mt-2">Last 52 weeks of collective activity</p>
     </div>
   );
 }

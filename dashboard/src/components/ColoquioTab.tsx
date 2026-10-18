@@ -399,9 +399,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         <div className="flex items-center gap-2.5">
           <MessageSquare className="w-4 h-4 text-indigo-400" />
           <span className="text-sm font-semibold text-slate-100">Coloquio</span>
-          <span className="text-[10px] text-slate-500 hidden sm:block">frontier research group chat</span>
+          <span className="text-[11px] text-slate-500 hidden sm:block">frontier research group chat</span>
           {totalUnread > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold">
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-semibold">
               {totalUnread} unread
             </span>
           )}

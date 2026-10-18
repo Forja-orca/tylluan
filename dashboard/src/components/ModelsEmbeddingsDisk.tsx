@@ -49,7 +49,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
             <div className="text-sm font-mono text-emerald-400 truncate" title={embeddingModel}>
               {embeddingModel || 'None'}
             </div>
-            <div className="text-[9px] text-slate-500 mt-1">
+            <div className="text-[11px] text-slate-500 mt-1">
               (change requires restart + reindex)
             </div>
           </div>
@@ -93,7 +93,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold font-mono text-slate-200">{m.name}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono uppercase ${
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-mono uppercase ${
                       m.model_type === 'embedding' ? 'bg-emerald-500/10 text-emerald-400'
                         : m.model_type === 'vision' ? 'bg-blue-500/10 text-blue-400'
                         : 'bg-violet-500/10 text-violet-400'
@@ -101,7 +101,7 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
                       {m.model_type === 'embedding' ? 'Embedding' : m.model_type === 'vision' ? 'Vision' : 'Generative'}
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1">{m.path}</p>
+                  <p className="text-[11px] text-slate-500 font-mono mt-1">{m.path}</p>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-mono text-emerald-400 font-semibold">{m.size_mb || Math.round((m.size_bytes || 0) / 1048576)} MB</span>

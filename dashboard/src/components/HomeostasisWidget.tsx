@@ -79,7 +79,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
         <div className="space-y-3 text-center sm:text-left flex-1">
           <div className="flex items-center gap-2 justify-center sm:justify-start">
             <Heart className={cn("w-4 h-4", statusColor)} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">System Homeostasis</span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">System Homeostasis</span>
           </div>
           <div>
             <h3 className="text-lg font-black text-slate-100 tracking-tight">TylluanNexus o3 Cortex</h3>
@@ -89,7 +89,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           </div>
           
           {/* Status badge */}
-          <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-widest", statusBg, statusBorder, statusColor)}>
+          <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold uppercase tracking-widest", statusBg, statusBorder, statusColor)}>
             <div className={cn("w-1.5 h-1.5 rounded-full", score >= 80 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400 animate-pulse-soft" : "bg-red-500 animate-beacon")} />
             {loading ? "Calculating..." : health?.status === "healthy" ? "Cortex Stable" : "System Strain"}
           </div>

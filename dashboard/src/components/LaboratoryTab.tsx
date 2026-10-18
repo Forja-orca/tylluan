@@ -118,7 +118,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
             <h2 className="text-lg font-bold font-sans text-slate-50 tracking-tight flex items-center gap-2">
               AutoResearch Calibration Lab
               <span className={cn(
-                "text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded-full border",
+                "text-[11px] uppercase font-mono tracking-wider px-2 py-0.5 rounded-full border",
                 data.status === "Running" 
                   ? "bg-violet-500/15 border-violet-500/40 text-violet-400 animate-pulse"
                   : "bg-slate-900 border-slate-800 text-slate-500"
@@ -178,7 +178,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Recall@1 Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 1 (Precision)</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Recall @ 1 (Precision)</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_1 * 100).toFixed(1)}%
@@ -190,7 +190,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     {recallImprovement > 0 ? `+${(recallImprovement * 100).toFixed(1)}%` : '0.0%'}
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                <div className="text-[11px] text-slate-500 font-mono mt-1">
                   Baseline: {(data.metrics.baseline.recall_1 * 100).toFixed(1)}%
                 </div>
                 <div className="absolute right-2 bottom-2 text-slate-800 opacity-20">
@@ -200,7 +200,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
               {/* Recall@5 Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Recall @ 5 (Context)</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Recall @ 5 (Context)</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {(data.metrics.current.recall_5 * 100).toFixed(1)}%
@@ -209,7 +209,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     {data.metrics.current.recall_5 > data.metrics.baseline.recall_5 ? `+${((data.metrics.current.recall_5 - data.metrics.baseline.recall_5) * 100).toFixed(1)}%` : '0.0%'}
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                <div className="text-[11px] text-slate-500 font-mono mt-1">
                   Baseline: {(data.metrics.baseline.recall_5 * 100).toFixed(1)}%
                 </div>
                 <div className="absolute right-2 bottom-2 text-slate-800 opacity-20">
@@ -219,7 +219,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
 
               {/* Latency Card */}
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Retrieval Latency</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Retrieval Latency</span>
                 <div className="flex items-baseline justify-between mt-2">
                   <div className="text-2xl font-bold font-mono text-slate-50">
                     {data.metrics.current.latency_ms} ms
@@ -233,7 +233,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                       : '0.0ms'}
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                <div className="text-[11px] text-slate-500 font-mono mt-1">
                   Baseline: {data.metrics.baseline.latency_ms} ms
                 </div>
                 <div className="absolute right-2 bottom-2 text-slate-800 opacity-20">
@@ -290,13 +290,13 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                         <span className="font-bold text-slate-300">Step #{item.step}</span>
                         <span className="text-slate-500 font-mono">{item.target}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-1">
+                      <div className="text-[11px] text-slate-400 font-mono mt-1">
                         Trial Value: <span className="text-slate-50">{item.val}</span> | Recall@1: <span className="text-slate-50 font-bold">{(item.recall_1 * 100).toFixed(1)}%</span>
                       </div>
                     </div>
                     
                     <span className={cn(
-                      "text-[9px] uppercase font-mono tracking-wider font-bold px-2 py-0.5 rounded-md border",
+                      "text-[11px] uppercase font-mono tracking-wider font-bold px-2 py-0.5 rounded-md border",
                       item.status === "Committed"
                         ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                         : "bg-red-500/20 border-red-500/20 text-red-400"
@@ -333,7 +333,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     {data.current_params?.candidate_pool_mult ?? 20}x
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Candidate pool multiplier before Reranker filter (10x - 40x).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -352,7 +352,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     {data.current_params?.rerank_window ?? 40} docs
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Number of candidates sent to the Jina Cross-Encoder Re-ranking engine (20 - 80).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -371,7 +371,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     {data.current_params?.semantic_weight ?? 70}%
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Weight of vectorized BGE-M3 semantic search (vs lexical BM25) in RRF fusion.
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -390,7 +390,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                     0.{(data.current_params?.dedup_cosine ?? 92)}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Minimum cosine similarity threshold to merge new nodes in DreamCycle (0.80 - 0.98).
                 </p>
                 <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -414,7 +414,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
                 To prevent degrading user interaction, the engine only evaluates when the following criteria are met:
               </p>
               
-              <ul className="space-y-2 font-mono text-[10px] bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <ul className="space-y-2 font-mono text-[11px] bg-slate-950 p-3 rounded-lg border border-slate-800">
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
                   IDLE_SECS &gt; 180s (OK)

@@ -102,11 +102,11 @@ const QUICK_TEMPLATES = [
 function parseMarkdown(text: string): string {
   let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   h = h.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) =>
-    `<pre class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[10px] overflow-x-auto text-slate-300">` +
-    `<div class="text-[8px] text-slate-500 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
+    `<pre class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-300">` +
+    `<div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
     `<code>${code}</code></pre>`
   );
-  h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-950 border border-slate-700/50 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-300">$1</code>');
+  h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-950 border border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-300">$1</code>');
   h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>');
   h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   h = h.replace(/_([^_]+)_/g, '<em>$1</em>');
@@ -261,7 +261,7 @@ export function ColoquioMessagesPanel({
     return (
       <div className="flex items-center justify-center my-5">
         <div className="h-px bg-slate-800 flex-1" />
-        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-3 bg-[#0d1017]">{label}</span>
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-3 bg-slate-950">{label}</span>
         <div className="h-px bg-slate-800 flex-1" />
       </div>
     );
@@ -305,7 +305,7 @@ export function ColoquioMessagesPanel({
             {!cont && (
               <div className={cn(
                 'rounded-full flex items-center justify-center font-bold border',
-                compactMode ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs',
+                compactMode ? 'w-6 h-6 text-[11px]' : 'w-8 h-8 text-xs',
                 m.bg, m.color, m.border
               )}>
                 {m.initial}
@@ -316,10 +316,10 @@ export function ColoquioMessagesPanel({
             {!cont && (
               <div className={cn('flex items-center gap-2', isHuman ? 'flex-row-reverse' : '')}>
                 <span className={cn('text-[11px] font-semibold', m.color)}>{isHuman ? msg.author_id : `@${msg.author_id}`}</span>
-                <button onClick={() => scrollToTurn(msg.turn)} className="text-[9px] text-slate-600 font-mono hover:text-amber-400 transition-colors">#{msg.turn}</button>
-                <span className="text-[9px] text-slate-600">{fmtTime(msg.created_at)}</span>
+                <button onClick={() => scrollToTurn(msg.turn)} className="text-[11px] text-slate-600 font-mono hover:text-amber-400 transition-colors">#{msg.turn}</button>
+                <span className="text-[11px] text-slate-600">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
-                  <span className="text-[9px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
+                  <span className="text-[11px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
                     <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
                     escribiendo...
                   </span>
@@ -351,7 +351,7 @@ export function ColoquioMessagesPanel({
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                       🧠 Reasoning
                     </summary>
-                    <div className="mt-2 pl-3 border-l border-indigo-500/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[10px] select-text cursor-text" dangerouslySetInnerHTML={{
+                    <div className="mt-2 pl-3 border-l border-indigo-500/20 whitespace-pre-wrap leading-relaxed text-slate-400/90 font-mono text-[11px] select-text cursor-text" dangerouslySetInnerHTML={{
                       __html: parseMarkdown(thoughtContent)
                     }} />
                   </details>
@@ -359,7 +359,7 @@ export function ColoquioMessagesPanel({
 
                 {isPlan && !isApproved && (
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                    <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
                       Plan awaiting human approval
                     </span>
@@ -373,7 +373,7 @@ export function ColoquioMessagesPanel({
                             }));
                           }
                         }}
-                        className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-slate-50 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-slate-50 font-bold text-[11px] rounded-lg shadow-lg hover:shadow-violet-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Network className="w-3 h-3" /> Visualize on Whiteboard
                       </button>
@@ -389,7 +389,7 @@ export function ColoquioMessagesPanel({
                             fetchThread();
                           }
                         }}
-                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Check className="w-3 h-3 stroke-[3]" /> Approve & Start
                       </button>
@@ -399,7 +399,7 @@ export function ColoquioMessagesPanel({
 
                 {isPlan && isApproved && (
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-semibold">
+                    <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-semibold">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                       Plan aprobado por el humano
                     </div>
@@ -412,7 +412,7 @@ export function ColoquioMessagesPanel({
                           }));
                         }
                       }}
-                      className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[10px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer"
+                      className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[11px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer"
                     >
                       <Network className="w-3 h-3" /> Visualizar en Pizarra
                     </button>
@@ -455,11 +455,11 @@ export function ColoquioMessagesPanel({
       <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-700/60 bg-slate-900/60 shrink-0">
         <Hash className="w-4 h-4 text-slate-500" />
         <span className="text-sm font-semibold text-slate-200">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[10px] text-slate-600 font-mono">{allMessages.length} mensajes</span>
+        <span className="text-[11px] text-slate-600 font-mono">{allMessages.length} mensajes</span>
         <button
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[10px] px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer mr-1.5",
+            "ml-auto text-[11px] px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer mr-1.5",
             compactMode 
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)]" 
               : "border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
@@ -474,7 +474,7 @@ export function ColoquioMessagesPanel({
             placeholder="Buscar en el hilo..." value={msgSearch} onChange={e => setMsgSearch(e.target.value)} />
           {msgSearch && (
             <>
-              <span className="text-[9px] text-amber-400 font-mono">{filteredMessages.length}/{allMessages.length}</span>
+              <span className="text-[11px] text-amber-400 font-mono">{filteredMessages.length}/{allMessages.length}</span>
               <button onClick={() => setMsgSearch('')} className="text-slate-500 hover:text-slate-300"><X className="w-3 h-3" /></button>
             </>
           )}
@@ -497,21 +497,21 @@ export function ColoquioMessagesPanel({
         />
       )}
       {Object.keys(typingStatuses).length > 0 && (
-        <div className="px-5 py-1.5 text-[10px] text-slate-500 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
+        <div className="px-5 py-1.5 text-[11px] text-slate-500 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
           <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
-              <span key={agent} className="font-mono text-[9px]"><strong className="text-slate-400">@{agent}</strong>: <span className="italic text-slate-500">{val.status}</span></span>
+              <span key={agent} className="font-mono text-[11px]"><strong className="text-slate-400">@{agent}</strong>: <span className="italic text-slate-500">{val.status}</span></span>
             ))}
           </div>
         </div>
       )}
       <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider shrink-0">As:</span>
+          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider shrink-0">As:</span>
           <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
-          <button onClick={() => setShowTemplates(v => !v)} className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
+          <button onClick={() => setShowTemplates(v => !v)} className="ml-auto text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
             <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
           </button>
         </div>
@@ -519,7 +519,7 @@ export function ColoquioMessagesPanel({
           <div className="flex flex-wrap gap-1.5 mb-2">
             {QUICK_TEMPLATES.map(t => (
               <button key={t.label} onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[9px] font-bold bg-slate-800/60 hover:bg-indigo-950/30 text-slate-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800 hover:border-indigo-500/30 transition-all">{t.label}</button>
+                className="text-[11px] font-bold bg-slate-800/60 hover:bg-indigo-950/30 text-slate-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800 hover:border-indigo-500/30 transition-all">{t.label}</button>
             ))}
           </div>
         )}
@@ -562,7 +562,7 @@ export function ColoquioMessagesPanel({
             <Send className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex justify-between items-center mt-1.5 text-[9px] text-slate-700">
+        <div className="flex justify-between items-center mt-1.5 text-[11px] text-slate-700">
           <span>Enter para enviar, Shift+Enter nueva linea</span>
           <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Auto-refresh 5s</span>
         </div>

@@ -87,7 +87,7 @@ export default function DeviceStatusBadge({ bridge }: DeviceStatusBadgeProps) {
         <Cpu className="w-3.5 h-3.5 text-amber-400" />
       )}
 
-      <span className="uppercase tracking-widest text-[10px] font-bold">{label}</span>
+      <span className="uppercase tracking-widest text-[11px] font-bold">{label}</span>
     </div>
   );
 }

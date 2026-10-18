@@ -111,7 +111,7 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
           <FolderGit2 className="w-4 h-4 text-emerald-400" />
           <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-200">Repository Blueprint Map</span>
         </div>
-        <span className="text-[9px] font-mono text-slate-500 flex items-center gap-1">
+        <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
           <Clock className="w-2.5 h-2.5" />
           Built {formatRelativeTime(data.built_at_unix)} ({data.build_duration_ms}ms)
         </span>
@@ -121,27 +121,27 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
       <div className="grid grid-cols-3 gap-2 text-center font-mono">
         <div className="p-2 bg-slate-950 border border-slate-850 rounded-lg">
           <div className="text-sm font-bold text-emerald-400">{data.total_files.toLocaleString()}</div>
-          <div className="text-[9px] text-slate-500 uppercase">Files</div>
+          <div className="text-[11px] text-slate-500 uppercase">Files</div>
         </div>
         <div className="p-2 bg-slate-950 border border-slate-850 rounded-lg">
           <div className="text-sm font-bold text-emerald-400">{data.total_dirs.toLocaleString()}</div>
-          <div className="text-[9px] text-slate-500 uppercase">Dirs</div>
+          <div className="text-[11px] text-slate-500 uppercase">Dirs</div>
         </div>
         <div className="p-2 bg-slate-950 border border-slate-850 rounded-lg">
           <div className="text-sm font-bold text-emerald-400">{data.total_lines.toLocaleString()}</div>
-          <div className="text-[9px] text-slate-500 uppercase">Lines</div>
+          <div className="text-[11px] text-slate-500 uppercase">Lines</div>
         </div>
       </div>
 
       {/* Top Level Dirs Treemap-like Bars */}
       <div className="space-y-2.5">
-        <div className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">Directories file distribution</div>
+        <div className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Directories file distribution</div>
         <div className="space-y-2 font-mono text-xs">
           {data.top_level_dirs.map((dir) => {
             const percentage = (dir.file_count / maxFileCount) * 100;
             return (
               <div key={dir.name} className="space-y-1">
-                <div className="flex justify-between items-center text-[10px]">
+                <div className="flex justify-between items-center text-[11px]">
                   <span className="text-slate-300 font-bold">/{dir.name}</span>
                   <span className="text-slate-500">{dir.file_count} files</span>
                 </div>
@@ -159,7 +159,7 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
 
       {/* Language Breakdown Chips */}
       <div className="space-y-2 pt-2 border-t border-slate-800/40">
-        <div className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1">
+        <div className="text-[11px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1">
           <FileCode2 className="w-3 h-3 text-slate-450" />
           <span>Languages</span>
         </div>
@@ -169,7 +169,7 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
             .map(([lang, stats]) => (
             <span
               key={lang}
-              className="px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-850 text-[10px] font-mono text-slate-300 flex items-center gap-1"
+              className="px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-850 text-[11px] font-mono text-slate-300 flex items-center gap-1"
             >
               <span className="text-emerald-400 font-black">{lang}</span>
               <span className="text-slate-550">({stats.files} files, {stats.pct.toFixed(1)}%)</span>
@@ -180,11 +180,11 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
 
       {/* Key Files Inventory (backend only reports files it found -- not a full checklist) */}
       <div className="space-y-2 pt-2 border-t border-slate-800/40">
-        <div className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1">
+        <div className="text-[11px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1">
           <FileCheck2 className="w-3 h-3 text-slate-450" />
           <span>Key files found</span>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+        <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
           {data.key_files.map((f) => (
             <div
               key={f.path}

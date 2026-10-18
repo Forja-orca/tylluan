@@ -7,18 +7,15 @@ import {
   Globe, 
   Terminal, 
   AlertTriangle, 
-  CheckCircle,
-  XCircle,
   Server,
   ChevronDown,
   Copy,
   Check,
   Download,
   Share2,
-  ExternalLink,
   ShieldCheck
 } from 'lucide-react';
-import { NexusBridge } from '../lib/nexus-bridge';
+import { NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 
@@ -35,7 +32,28 @@ interface McpServerInfo {
 export interface McpRegistryPanelProps {
   bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
-  events?: any[];
+  events?: NexusEvent[];
+}
+
+interface McpCallLog {
+  ts?: number;
+  server?: string;
+  tool?: string;
+  intent?: string;
+  agent_id?: string;
+  status?: string;
+  duration_ms?: number;
+}
+
+interface SandboxGrant {
+  id?: string;
+  ts?: number;
+  guild?: string;
+  tool: string;
+  approved_by?: string;
+  scope?: string;
+  level?: string;
+  timestamp?: number;
 }
 
 function parseArgs(input: string): string[] {
@@ -74,7 +92,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   const [error, setError] = useState<string | null>(null);
   
   // Real-time external MCP call log history
-  const [calls, setCalls] = useState<any[]>([]);
+  const [calls, setCalls] = useState<McpCallLog[]>([]);
   const lastProcessedEventTs = React.useRef<number>(0);
 
   // Sandbox grants: managed via MCP tool calls (approve_action), not HTTP.
@@ -83,10 +101,10 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   // viable path until the kernel exposes a grants HTTP endpoint or the dashboard
   // gets an MCP client. The 'tylluan_grant_updated' CustomEvent is dispatched
   // by PlanModePanel when a grant is approved/rejected via the bridge.
-  const [grants, setGrants] = useState<any[]>([]);
+  const [grants, setGrants] = useState<SandboxGrant[]>([]);
 
   const fetchGrants = () => {
-    const data = JSON.parse(localStorage.getItem('tylluan_sandbox_grants') || '[]');
+    const data = JSON.parse(localStorage.getItem('tylluan_sandbox_grants') || '[]') as SandboxGrant[];
     setGrants(data);
   };
 
@@ -102,11 +120,11 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
     
     // Check if there are events to process
     const newCalls = events
-      .filter((ev: any) => ev.type === 'external_mcp_call' && ev.ts > lastProcessedEventTs.current)
-      .map((ev: any) => ev.data || ev);
+      .filter((ev) => ev.type === 'external_mcp_call' && ev.ts > lastProcessedEventTs.current)
+      .map((ev) => (ev.data || ev) as McpCallLog);
 
     if (newCalls.length > 0) {
-      const maxTs = Math.max(...newCalls.map((c: any) => c.ts || 0));
+      const maxTs = Math.max(...newCalls.map((c) => c.ts || 0));
       if (maxTs > lastProcessedEventTs.current) {
         lastProcessedEventTs.current = maxTs;
       }
@@ -119,15 +137,6 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
     }
   }, [events]);
 
-  // Live status synchronization on guild/mcp process changes
-  React.useEffect(() => {
-    if (!events?.length) return;
-    const last = events[0];
-    if (last.type === 'guild_spawned' || last.type === 'guild_killed') {
-      setTimeout(() => fetchServers(true), 300);
-    }
-  }, [events]);
-  
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -139,7 +148,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
   
   // Integration setup hint modal
   const [isIntegrationModalOpen, setIsIntegrationModalOpen] = useState(false);
-  const [setupHint, setSetupHint] = useState<any>(null);
+  const [setupHint, setSetupHint] = useState<{ kernel_url?: string; claude_desktop?: unknown; claude_code?: string; cursor?: unknown; [key: string]: unknown } | null>(null);
   const [copiedType, setCopiedType] = useState<string | null>(null);
   
   // Delete confirm state
@@ -154,8 +163,9 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
     try {
       const hint = await bridge.fetchRaw('/api/v1/setup-hint');
       setSetupHint(hint);
-    } catch (err: any) {
-      notify(err.message || 'Failed to fetch integration setup hint.', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch integration setup hint.';
+      notify(msg, 'error');
     }
   };
 
@@ -179,6 +189,29 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
     notify('Successfully downloaded mcp.json!', 'info');
   };
 
+  const fetchServers = useCallback(async (silent = false) => {
+    if (!bridge) return;
+    if (!silent) setLoading(true);
+    try {
+      const data = await bridge.listMcpExternal();
+      setServers(Array.isArray(data) ? data : []);
+      setError(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to retrieve MCP registry.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [bridge]);
+
+  // Live status synchronization on guild/mcp process changes
+  React.useEffect(() => {
+    if (!events?.length) return;
+    const last = events[0];
+    if (last.type === 'guild_spawned' || last.type === 'guild_killed') {
+      setTimeout(() => fetchServers(true), 300);
+    }
+  }, [events, fetchServers]);
+
   const handleToggleActive = async (name: string, active: boolean) => {
     if (!bridge) return;
     setTogglingName(name);
@@ -186,8 +219,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
       await bridge.toggleMcpExternal(name, active);
       notify(`Successfully ${active ? 'activated' : 'deactivated'} MCP server: ${name}`, 'info');
       fetchServers(true);
-    } catch (err: any) {
-      notify(err.message || `Failed to update MCP server status.`, 'error');
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : `Failed to update MCP server status.`, 'error');
     } finally {
       setTogglingName(null);
     }
@@ -197,23 +230,9 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
     setExpandedServers(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
-  const fetchServers = async (silent = false) => {
-    if (!bridge) return;
-    if (!silent) setLoading(true);
-    try {
-      const data = await bridge.listMcpExternal();
-      setServers(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to retrieve MCP registry.');
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchServers();
-  }, [bridge]);
+  }, [fetchServers]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('mcp-servers', () => fetchServers(true), { interval: 'slow', enabled: !!bridge });
@@ -228,7 +247,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
     setSubmitting(true);
     try {
-      const payload: any = { name: newName.trim() };
+      const payload: { name: string; url?: string; command?: string; args?: string[] } = { name: newName.trim() };
       if (serverType === 'url') {
         if (!newUrl.trim()) {
           notify('Server URL is required.', 'error');
@@ -260,8 +279,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
       
       // Refresh list
       fetchServers();
-    } catch (err: any) {
-      notify(err.message || 'Failed to add MCP server.', 'error');
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : 'Failed to add MCP server.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -274,8 +293,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
       notify(`Removed MCP server: ${name}`, 'info');
       setConfirmDeleteName(null);
       fetchServers();
-    } catch (err: any) {
-      notify(err.message || 'Failed to remove MCP server.', 'error');
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : 'Failed to remove MCP server.', 'error');
     }
   };
 
@@ -365,7 +384,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800/80 text-[10px] uppercase tracking-wider text-slate-500 font-mono font-bold bg-slate-950/40">
+                <tr className="border-b border-slate-800/80 text-[11px] uppercase tracking-wider text-slate-500 font-mono font-bold bg-slate-950/40">
                   <th className="py-3 px-5">Name</th>
                   <th className="py-3 px-5">Type / Location</th>
                   <th className="py-3 px-5">Status</th>
@@ -415,7 +434,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                               {server.args && server.args.length > 0 && (
                                 <div className="flex items-center gap-1 flex-wrap pl-5">
                                   {server.args.map((arg, idx) => (
-                                    <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] text-slate-500 font-mono border border-slate-700/50">
+                                    <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-800 text-[11px] text-slate-500 font-mono border border-slate-700/50">
                                       {arg}
                                     </span>
                                   ))}
@@ -426,17 +445,17 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                         </td>
                         <td className="py-4 px-5">
                           {server.active === false ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black border tracking-tight uppercase bg-slate-800 text-slate-500 border-slate-700">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-black border tracking-tight uppercase bg-slate-800 text-slate-500 border-slate-700">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                               Inactive
                             </span>
                           ) : server.running ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black border tracking-tight uppercase bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-black border tracking-tight uppercase bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                               Running
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black border tracking-tight uppercase bg-amber-500/10 text-amber-400 border-amber-500/20">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-black border tracking-tight uppercase bg-amber-500/10 text-amber-400 border-amber-500/20">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                               Offline
                             </span>
@@ -466,14 +485,14 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                               <button
                                 type="button"
                                 onClick={() => handleDeleteServer(server.name)}
-                                className="px-2 py-1 bg-red-500 hover:bg-red-600 text-slate-950 font-bold rounded text-[10px] uppercase transition-colors"
+                                className="px-2 py-1 bg-red-500 hover:bg-red-600 text-slate-950 font-bold rounded text-[11px] uppercase transition-colors"
                               >
                                 Confirm
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteName(null)}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[10px] uppercase border border-slate-700 transition-colors"
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px] uppercase border border-slate-700 transition-colors"
                               >
                                 Cancel
                               </button>
@@ -494,13 +513,13 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                         <tr className="bg-slate-950/20 border-b border-slate-800/40">
                           <td colSpan={5} className="py-3 px-8">
                             <div className="space-y-2">
-                              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">Exposed Tools ({server.tools!.length})</h4>
+                              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono">Exposed Tools ({server.tools!.length})</h4>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {server.tools!.map((tool) => (
                                   <div key={tool.name} className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-850/80 font-mono">
                                     <div className="text-xs font-bold text-emerald-400">{tool.name}</div>
                                     {tool.description && (
-                                      <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">{tool.description}</div>
+                                      <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">{tool.description}</div>
                                     )}
                                   </div>
                                 ))}
@@ -528,7 +547,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           {calls.length > 0 && (
             <button
               onClick={() => setCalls([])}
-              className="text-[10px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
+              className="text-[11px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
             >
               Clear Log
             </button>
@@ -543,7 +562,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800/50 text-[9px] uppercase tracking-wider text-slate-500 font-mono font-bold">
+                <tr className="border-b border-slate-800/50 text-[11px] uppercase tracking-wider text-slate-500 font-mono font-bold">
                   <th className="py-2 px-3">Timestamp</th>
                   <th className="py-2 px-3">Server</th>
                   <th className="py-2 px-3">Tool called</th>
@@ -555,7 +574,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
               <tbody className="divide-y divide-slate-800/20 text-xs font-mono">
                 {calls.map((call, idx) => (
                   <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
-                    <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                    <td className="py-2.5 px-3 text-[11px] text-slate-500">
                       {new Date(call.ts || Date.now()).toLocaleTimeString()}
                     </td>
                     <td className="py-2.5 px-3 font-bold text-slate-300">
@@ -572,11 +591,11 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       {call.status === 'ok' ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[9px] font-bold uppercase">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[11px] font-bold uppercase">
                           OK
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 text-[9px] font-bold uppercase">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 text-[11px] font-bold uppercase">
                           ERROR
                         </span>
                       )}
@@ -602,7 +621,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                 localStorage.removeItem('tylluan_sandbox_grants');
                 setGrants([]);
               }}
-              className="text-[10px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
+              className="text-[11px] text-slate-500 hover:text-slate-300 font-mono font-bold uppercase transition-colors"
             >
               Clear Log
             </button>
@@ -617,7 +636,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800/50 text-[9px] uppercase tracking-wider text-slate-500 font-mono font-bold">
+                <tr className="border-b border-slate-800/50 text-[11px] uppercase tracking-wider text-slate-500 font-mono font-bold">
                   <th className="py-2 px-3">Timestamp</th>
                   <th className="py-2 px-3">Request ID</th>
                   <th className="py-2 px-3">Guild</th>
@@ -629,7 +648,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
               <tbody className="divide-y divide-slate-800/20 text-xs font-mono">
                 {grants.map((g, idx) => (
                   <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
-                    <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                    <td className="py-2.5 px-3 text-[11px] text-slate-500">
                       {new Date(g.ts || Date.now()).toLocaleTimeString()}
                     </td>
                     <td className="py-2.5 px-3 text-slate-400">
@@ -646,7 +665,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       <span className={cn(
-                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase",
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold uppercase",
                         g.scope === 'once' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                         g.scope === 'session' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
                         'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
@@ -687,7 +706,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
             <form onSubmit={handleAddServer} className="space-y-4">
               {/* Server Name */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Server Alias</label>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Server Alias</label>
                 <input
                   type="text"
                   required
@@ -700,7 +719,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
               {/* Server Type selector */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Connection Protocol</label>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Connection Protocol</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -732,7 +751,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
               {/* Conditional Inputs */}
               {serverType === 'url' ? (
                 <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-150">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">SSE Server Endpoint URL</label>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">SSE Server Endpoint URL</label>
                   <input
                     type="url"
                     required={serverType === 'url'}
@@ -745,7 +764,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
               ) : (
                 <div className="space-y-3 animate-in slide-in-from-top-2 duration-150">
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Shell Executable Command</label>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Shell Executable Command</label>
                     <input
                       type="text"
                       required={serverType === 'command'}
@@ -757,8 +776,8 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Arguments (comma-separated)</label>
-                      <span className="text-[9px] text-slate-600 font-mono">Optional</span>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Arguments (comma-separated)</label>
+                      <span className="text-[11px] text-slate-600 font-mono">Optional</span>
                     </div>
                     <input
                       type="text"
@@ -822,7 +841,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
 
             {/* Token Info Banner */}
             <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1">
-              <div className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider">Active Connection Properties</div>
+              <div className="text-[11px] uppercase font-bold text-slate-500 font-mono tracking-wider">Active Connection Properties</div>
               <div className="grid grid-cols-2 gap-4 text-xs font-mono">
                 <div>
                   <span className="text-slate-500">Base URL:</span>{' '}
@@ -871,7 +890,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                   <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/10 p-3.5 rounded-xl">
                     <div>
                       <h4 className="text-xs font-bold text-emerald-400 uppercase">One-Click Configuration</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
                         Download pre-filled configuration file containing connection settings and authorization tokens.
                       </p>
                     </div>
@@ -914,7 +933,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                         <div className="text-xs text-slate-400 leading-relaxed">
                           Append this block to your Claude Desktop configuration file.
                         </div>
-                        <div className="text-[10px] text-slate-500 font-mono">
+                        <div className="text-[11px] text-slate-500 font-mono">
                           Location: <span className="text-slate-300">~/.claude/claude_desktop_config.json</span>
                         </div>
                         <div className="relative group">
@@ -940,15 +959,15 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                         </div>
                         <div className="p-3 bg-slate-950/80 border border-slate-850 rounded-xl space-y-2 text-xs">
                           <div>
-                            <span className="text-slate-500 block font-mono text-[10px]">NAME</span>
+                            <span className="text-slate-500 block font-mono text-[11px]">NAME</span>
                             <span className="text-slate-200 font-mono font-bold">Tylluan</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block font-mono text-[10px]">TYPE</span>
+                            <span className="text-slate-500 block font-mono text-[11px]">TYPE</span>
                             <span className="text-slate-200 font-mono font-bold">SSE</span>
                           </div>
                           <div className="relative group pr-8">
-                            <span className="text-slate-500 block font-mono text-[10px]">URL</span>
+                            <span className="text-slate-500 block font-mono text-[11px]">URL</span>
                             <span className="text-emerald-400 font-mono font-bold break-all">{finalSseUrl}</span>
                             <button
                               type="button"
@@ -1010,7 +1029,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                             For <span className="text-slate-50 font-bold">LM Studio (SSE)</span> client setup:
                           </div>
                           <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[11px] text-slate-300 break-all relative pr-10">
-                            <span className="text-slate-500 block text-[9px] uppercase font-mono mb-0.5">LM Studio Endpoint</span>
+                            <span className="text-slate-500 block text-[11px] uppercase font-mono mb-0.5">LM Studio Endpoint</span>
                             {finalSseUrl}
                             <button
                               type="button"

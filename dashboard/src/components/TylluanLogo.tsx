@@ -60,7 +60,7 @@ export function TylluanLogo({
         {/* Sovereign Card Base */}
         <div
           className={cn(
-            'relative w-full h-full rounded-2xl bg-[#0B0F17] border border-amber-500/30 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 group-hover:border-amber-500/60',
+            'relative w-full h-full rounded-2xl bg-slate-950 border border-amber-500/30 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 group-hover:border-amber-500/60',
             animated && 'animate-sovereign-aura',
             ringPadding[size]
           )}
@@ -77,7 +77,7 @@ export function TylluanLogo({
             ) : (
               <svg viewBox="0 0 30 30" className="w-full h-full text-slate-100">
                 <path
-                  fill="#0B0F17"
+                  fill="hsl(var(--slate-950))"
                   stroke={AMBER_GOLD}
                   strokeWidth="0.8"
                   d="M24.51,28.51H5.49c-2.21,0-4-1.79-4-4V5.49c0-2.21,1.79-4,4-4h19.03c2.21,0,4,1.79,4,4v19.03C28.51,26.72,26.72,28.51,24.51,28.51z"
@@ -101,11 +101,11 @@ export function TylluanLogo({
             <span className="text-amber-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(245,158,11,0.35)]">
               TYLLUAN
             </span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-widest font-extrabold">
+            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-widest font-extrabold">
               o3
             </span>
           </div>
-          <div className="text-[10px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1.5">
+          <div className="text-[11px] text-slate-400 tracking-widest uppercase font-semibold mt-1 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-beacon" />
             <span>Sovereign Substrate</span>
           </div>

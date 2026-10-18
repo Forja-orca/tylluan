@@ -43,7 +43,7 @@ function TacticalStatCard({
         </span>
       </div>
       <div className="text-2xl font-bold text-slate-100 font-mono tracking-tight">{value}</div>
-      {subtitle && <div className="mt-1 text-[10px] text-slate-500">{subtitle}</div>}
+      {subtitle && <div className="mt-1 text-[11px] text-slate-500">{subtitle}</div>}
     </div>
   );
 }
@@ -66,7 +66,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       setGate(gateStats);
       setSignal(signalStats);
     } catch (err: any) {
-      setError(err.message || 'Failed to reach Tylluan Kernel on :4000');
+      setError(err.message || 'Failed to reach Tylluan Kernel on :47004');
     } finally {
       setLoading(false);
     }
@@ -89,15 +89,15 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/60 rounded-2xl">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
+            <span role="status" className="px-2 py-0.5 text-[11px] font-semibold bg-amber-500/10 text-amber-400 rounded-md">
               ADR-011 Active
             </span>
-            <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-400 rounded-md">
+            <span role="status" className="px-2 py-0.5 text-[11px] font-semibold bg-rose-500/10 text-rose-400 rounded-md">
               3-Layer Defense
             </span>
           </div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-100 mt-2 flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-amber-400" />
+            <ShieldAlert className="w-5 h-5 text-amber-400" aria-hidden="true" />
             Coherence Gate &amp; Signal Loop Telemetry
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -105,17 +105,19 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
           </p>
         </div>
         <button
+          type="button"
+          aria-label="Sync Coherence Gate Stats"
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
         >
-          <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
+          <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} aria-hidden="true" />
           <span>{loading ? 'Polling...' : 'Sync Stats'}</span>
         </button>
       </div>
 
       {error && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs">
+        <div role="alert" className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs">
           ⚠️ {error}
         </div>
       )}
@@ -127,7 +129,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
             <Lock className="w-3.5 h-3.5 text-amber-400" />
             Coherence Gate — Live Memory Protection
           </h3>
-          <span className="text-[10px] text-slate-500">Live Session Counters</span>
+          <span className="text-[11px] text-slate-500">Live Session Counters</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -193,7 +195,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
             <Activity className="w-3.5 h-3.5 text-amber-400" />
             Signal Loop — LightReranker FFN Progress (ADR-011 §3)
           </h3>
-          <span className="text-[10px] text-slate-500">Threshold: 5,000 Resolved Rows</span>
+          <span className="text-[11px] text-slate-500">Threshold: 5,000 Resolved Rows</span>
         </div>
 
         <div className="p-5 bg-slate-900/60 rounded-2xl space-y-4">
@@ -208,7 +210,7 @@ export default function CoherenceGatePanel({ bridge }: CoherenceGatePanelProps) 
             </div>
             <div className="text-right">
               <div className="text-xl font-bold text-amber-400">{progressPct.toFixed(2)}%</div>
-              <div className="text-[10px] text-slate-500 font-medium">
+              <div className="text-[11px] text-slate-500 font-medium">
                 {resolvedCount >= threshold ? 'Ready to Train' : 'Accumulating Signal'}
               </div>
             </div>

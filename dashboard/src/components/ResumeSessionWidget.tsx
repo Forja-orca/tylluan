@@ -89,7 +89,7 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
           <History className="w-4 h-4 text-emerald-400" />
           <span className="text-xs font-bold uppercase tracking-wider font-mono text-slate-200">Resume Session Context</span>
         </div>
-        <span className="text-[9px] font-mono text-slate-500">Security Layer</span>
+        <span className="text-[11px] font-mono text-slate-500">Security Layer</span>
       </div>
 
       {/* Control Input */}
@@ -119,7 +119,7 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
         result.summary ? (
           <div className="space-y-3">
             <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl space-y-2.5">
-              <div className="flex justify-between items-center text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between items-center text-[11px] font-mono text-slate-500">
                 <span>Agent: @{agentId}</span>
                 {result.created_at && (
                   <span className="flex items-center gap-1">
@@ -136,14 +136,14 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
         ) : (
           <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl flex flex-col items-center justify-center text-center font-mono py-6">
             <AlertTriangle className="w-8 h-8 text-slate-600 mb-2" />
-            <p className="text-[10px] text-slate-400">No previous sessions found</p>
-            <p className="text-[9px] text-slate-600 mt-1">There are no memory consolidation logs registered for @{agentId}.</p>
+            <p className="text-[11px] text-slate-400">No previous sessions found</p>
+            <p className="text-[11px] text-slate-600 mt-1">There are no memory consolidation logs registered for @{agentId}.</p>
           </div>
         )
       ) : (
         <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl flex flex-col items-center justify-center text-center font-mono py-8">
           <HelpCircle className="w-8 h-8 text-slate-700 animate-pulse mb-2" />
-          <p className="text-[10px] text-slate-500">Enter agent ID to pull summary</p>
+          <p className="text-[11px] text-slate-500">Enter agent ID to pull summary</p>
         </div>
       )}
     </div>

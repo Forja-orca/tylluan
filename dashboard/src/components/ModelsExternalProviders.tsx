@@ -106,7 +106,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
               <Globe className="w-4 h-4 text-amber-400" /> External Providers
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Inference providers configured in <code className="text-slate-300 font-mono text-[10px]">tylluan.toml</code> under <code className="text-slate-300 font-mono text-[10px]">[[external_providers]]</code>.
+              Inference providers configured in <code className="text-slate-300 font-mono text-[11px]">tylluan.toml</code> under <code className="text-slate-300 font-mono text-[11px]">[[external_providers]]</code>.
             </p>
           </div>
           <button
@@ -143,12 +143,12 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-slate-200">{provider.name}</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
                             {providerTypeLabel(provider.provider_type)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1">
+                          <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
                             <ExternalLink className="w-2.5 h-2.5" />
                             {provider.base_url}
                           </span>
@@ -159,7 +159,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                     <div className="flex items-center gap-2">
                       {/* API Key status */}
                       <span className={cn(
-                        "text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1",
+                        "text-[11px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1",
                         provider.api_key_set
                           ? "bg-emerald-500/10 text-emerald-400"
                           : "bg-slate-800 text-slate-500"
@@ -179,7 +179,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       <span
                         key={model}
                         className={cn(
-                          "text-[10px] font-mono px-2 py-0.5 rounded cursor-pointer transition-colors",
+                          "text-[11px] font-mono px-2 py-0.5 rounded cursor-pointer transition-colors",
                           (selectedModels[provider.name] || provider.models[0]) === model
                             ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30"
                             : "bg-slate-800 text-slate-400 hover:text-slate-300"
@@ -190,7 +190,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
                       </span>
                     ))}
                     {(!provider.models || provider.models.length === 0) && (
-                      <span className="text-[10px] text-slate-600 font-mono">No models listed</span>
+                      <span className="text-[11px] text-slate-600 font-mono">No models listed</span>
                     )}
                   </div>
 

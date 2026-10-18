@@ -121,7 +121,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
           <div>
             <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
               HITL Push Dispatch Queue
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 BWC-2 Active
               </span>
             </h2>
@@ -196,7 +196,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                     <span className="text-slate-600 text-xs">←</span>
                     <span
                       className={cn(
-                        'px-2 py-0.5 rounded text-[10px] font-mono border',
+                        'px-2 py-0.5 rounded text-[11px] font-mono border',
                         authorStyle.bg,
                         authorStyle.color,
                         authorStyle.border
@@ -209,7 +209,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
                     <Clock className="w-3 h-3 text-slate-500" />
                     <span>{formatTime(d.queued_at)}</span>
                   </div>
@@ -217,7 +217,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
 
                 {/* Content Snapshot */}
                 <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3">
-                  <div className="text-[10px] font-mono uppercase text-slate-500 tracking-wider mb-1 font-bold">
+                  <div className="text-[11px] font-mono uppercase text-slate-500 tracking-wider mb-1 font-bold">
                     Message Snapshot (Exact Reviewer Context)
                   </div>
                   <p className="text-xs text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
@@ -236,7 +236,7 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Hash className="w-3 h-3 text-slate-500" />
-                    <span className="text-slate-400 text-[10px]" title={d.content_hash}>
+                    <span className="text-slate-400 text-[11px]" title={d.content_hash}>
                       SHA-256: {d.content_hash.substring(0, 12)}…
                     </span>
                     <button

@@ -230,7 +230,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             <Users className="w-4 h-4" />
             <span>Active Client Sessions</span>
             {activeSessions.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-[10px] font-mono text-emerald-400 border border-emerald-500/20">
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-[11px] font-mono text-emerald-400 border border-emerald-500/20">
                 {activeSessions.length}
               </span>
             )}
@@ -250,7 +250,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             <Cpu className="w-4 h-4" />
             <span>Capabilities Catalog</span>
             {capabilities && (
-              <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-[10px] font-mono text-blue-400 border border-blue-500/20">
+              <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-[11px] font-mono text-blue-400 border border-blue-500/20">
                 {capabilities.guilds.length} Guilds
               </span>
             )}
@@ -280,7 +280,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
             <div className="bg-slate-900/40 rounded-2xl border border-slate-800/80 overflow-hidden shadow-lg backdrop-blur-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-800/30 border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  <tr className="bg-slate-800/30 border-b border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
                     <th className="px-6 py-4">Client / Process</th>
                     <th className="px-6 py-4">Agent Identification</th>
                     <th className="px-6 py-4 text-center">Tools Called</th>
@@ -299,7 +299,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                           </div>
                           <div>
                             <div className="text-sm font-bold text-slate-200">{session.client_name}</div>
-                            <div className="text-[10px] font-mono text-slate-500">ID: {session.id.slice(0, 16)}...</div>
+                            <div className="text-[11px] font-mono text-slate-500">ID: {session.id.slice(0, 16)}...</div>
                           </div>
                         </div>
                       </td>
@@ -412,7 +412,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     {capabilities?.mcp.prompts.map((p) => (
                       <div key={p.name} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg space-y-1">
                         <div className="text-xs font-mono text-blue-400">{p.name}</div>
-                        <div className="text-[10px] text-slate-400">{p.description}</div>
+                        <div className="text-[11px] text-slate-400">{p.description}</div>
                       </div>
                     ))}
                   </div>
@@ -421,8 +421,8 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                     {capabilities?.mcp.resources.map((r) => (
                       <div key={r.uri} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg space-y-1">
                         <div className="text-xs font-mono text-violet-400 truncate">{r.uri}</div>
-                        <div className="text-[10px] text-slate-300 font-medium">{r.name}</div>
-                        <div className="text-[9px] text-slate-500">{r.description}</div>
+                        <div className="text-[11px] text-slate-300 font-medium">{r.name}</div>
+                        <div className="text-[11px] text-slate-500">{r.description}</div>
                       </div>
                     ))}
                   </div>
@@ -461,10 +461,10 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
                               g.running ? "bg-emerald-400 animate-pulse" : "bg-slate-600"
                             )} />
                           </div>
-                          <span className="text-[10px] font-mono text-slate-500 uppercase">{g.launcher_type} launcher</span>
+                          <span className="text-[11px] font-mono text-slate-500 uppercase">{g.launcher_type} launcher</span>
                         </div>
                         <span className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
+                          "px-2 py-0.5 rounded text-[11px] font-bold font-mono border",
                           g.running 
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
                             : "bg-slate-800 text-slate-500 border-slate-700"

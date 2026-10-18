@@ -24,24 +24,24 @@ export function ColoquioAgentsPanel({
   return (
     <div className="w-44 shrink-0 border-l border-slate-700/60 bg-slate-900/50 flex flex-col overflow-hidden">
       <div className="px-3 py-2.5 border-b border-slate-800/80">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agents</span>
+        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Agents</span>
       </div>
       <div className="flex-1 overflow-y-auto py-2">
         {agentPresence.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[10px] text-slate-700 italic">No activity</div>
+          <div className="px-4 py-6 text-center text-[11px] text-slate-700 italic">No activity</div>
         ) : (
           agentPresence.map(({ id, lastSeen, status }) => {
             const m = agentStyle(id);
             return (
               <div key={id} className="flex items-center gap-2 px-3 py-1.5">
                 <div className="relative shrink-0">
-                  <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border', m.bg, m.color, m.border)}>{m.initial}</div>
+                  <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold border', m.bg, m.color, m.border)}>{m.initial}</div>
                   <div className={cn('absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-900',
                     status === 'online' ? 'bg-emerald-500' : status === 'idle' ? 'bg-amber-500' : 'bg-slate-600')} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={cn('text-[10px] font-semibold truncate', m.color)}>{id}</div>
-                  <div className="text-[9px] text-slate-600 truncate">
+                  <div className={cn('text-[11px] font-semibold truncate', m.color)}>{id}</div>
+                  <div className="text-[11px] text-slate-600 truncate">
                     {typingStatuses[id] ? (
                       <span className="text-indigo-400 font-medium italic animate-pulse">{typingStatuses[id].status}</span>
                     ) : (
@@ -56,9 +56,9 @@ export function ColoquioAgentsPanel({
       </div>
       {selectedChannel && (
         <div className="border-t border-slate-800/80 p-3 space-y-1.5">
-          <div className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1">Channel</div>
+          <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Channel</div>
           {([['Messages', selectedChannel.message_count], ['Last turn', `#${selectedChannel.last_turn}`], ['Participants', agentPresence.length]] as [string, string | number][]).map(([k, v]) => (
-            <div key={k} className="flex justify-between text-[10px]">
+            <div key={k} className="flex justify-between text-[11px]">
               <span className="text-slate-600">{k}</span>
               <span className="text-slate-400 font-mono">{v}</span>
             </div>

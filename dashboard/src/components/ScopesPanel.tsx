@@ -55,7 +55,7 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
           return (
             <React.Fragment key={index}>
               {index > 0 && <span className="text-slate-700 text-xs font-bold">/</span>}
-              <span className={cn("px-2 py-0.5 rounded text-[10px] font-mono font-semibold border flex items-center gap-1", badgeColor)}>
+              <span className={cn("px-2 py-0.5 rounded text-[11px] font-mono font-semibold border flex items-center gap-1", badgeColor)}>
                 <Icon className="w-3 h-3" />
                 <span className="opacity-60">{key}:</span>
                 <span className="font-bold">{value}</span>
@@ -109,14 +109,14 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
           <div className="flex-grow flex flex-col items-center justify-center text-slate-600 py-12">
             <Folder className="w-8 h-8 opacity-30 mb-2" />
             <p className="text-xs font-medium">No nodes found for scope "{prefix || 'root'}"</p>
-            <p className="text-[10px] opacity-60 mt-1">Try "user:alice" or leave empty to view all.</p>
+            <p className="text-[11px] opacity-60 mt-1">Try "user:alice" or leave empty to view all.</p>
           </div>
         ) : (
           <div className="flex-grow overflow-y-auto">
             <div className="rounded-lg border border-slate-800/80 bg-slate-950 overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-900 border-b border-slate-800 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                  <tr className="bg-slate-900 border-b border-slate-800 text-[11px] uppercase tracking-widest text-slate-500 font-bold">
                     <th className="px-4 py-3 font-bold w-1/4">Identifier</th>
                     <th className="px-4 py-3 font-bold w-12 text-center">Type</th>
                     <th className="px-4 py-3 font-bold w-1/3">Hierarchy (owner_scope)</th>
@@ -128,12 +128,12 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
                     const nodeType = node.node_type || node.type || 'entity';
                     return (
                       <tr key={node.id} className="hover:bg-slate-900/40 transition-colors">
-                        <td className="px-4 py-3.5 text-[10px] font-mono text-violet-400 truncate max-w-[150px]" title={node.id}>
+                        <td className="px-4 py-3.5 text-[11px] font-mono text-violet-400 truncate max-w-[150px]" title={node.id}>
                           {node.id}
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <span className={cn(
-                            "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border",
+                            "px-1.5 py-0.5 rounded text-[11px] font-bold uppercase border",
                             nodeType === 'lesson' ? "bg-violet-500/10 text-violet-400 border-violet-500/20" :
                             nodeType === 'identity' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                             nodeType === 'concept' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :

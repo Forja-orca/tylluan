@@ -188,16 +188,16 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
               <h2 className="text-base font-bold text-slate-100 tracking-tight font-mono">
                 Cognitive Scheduler Confusion Matrix
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
+              <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
                 ADR-014 WS3
               </span>
               {isLive ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
+                <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-emerald-950/60 border border-emerald-800/50 text-emerald-300">
                   <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
                   Live Kernel Stream
                 </span>
               ) : (
-                <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-slate-800 border border-slate-700 text-slate-400">
+                <span className="px-2 py-0.5 text-[11px] font-mono uppercase rounded-full bg-slate-800 border border-slate-700 text-slate-400">
                   Observation Preview
                 </span>
               )}
@@ -249,7 +249,7 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
         )}>
           <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold uppercase tracking-wider text-[10px] text-amber-400 mr-2">
+            <span className="font-semibold uppercase tracking-wider text-[11px] text-amber-400 mr-2">
               Observation Mode:
             </span>
             <span>{data.note}</span>
@@ -428,7 +428,7 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
                         <h4 className="text-xs font-bold font-mono text-slate-200 group-hover:text-emerald-300 transition-colors">
                           {guildItem.guild}
                         </h4>
-                        <span className="text-[10px] font-mono text-slate-500">
+                        <span className="text-[11px] font-mono text-slate-500">
                           {guildItem.total} decision{guildItem.total === 1 ? '' : 's'} evaluated
                         </span>
                       </div>
@@ -436,16 +436,16 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
 
                     <div className="text-right">
                       {isHighConfusion ? (
-                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-md bg-rose-950/60 border border-rose-800/50 text-rose-300 flex items-center gap-1">
+                        <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded-md bg-rose-950/60 border border-rose-800/50 text-rose-300 flex items-center gap-1">
                           <AlertTriangle className="w-2.5 h-2.5" />
                           {guildItem.disagreement_rate.toFixed(1)}% Differ
                         </span>
                       ) : isModerateConfusion ? (
-                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-md bg-amber-950/60 border border-amber-800/50 text-amber-300">
+                        <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded-md bg-amber-950/60 border border-amber-800/50 text-amber-300">
                           {guildItem.disagreement_rate.toFixed(1)}% Differ
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-md bg-emerald-950/60 border border-emerald-800/50 text-emerald-300 flex items-center gap-1">
+                        <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase rounded-md bg-emerald-950/60 border border-emerald-800/50 text-emerald-300 flex items-center gap-1">
                           <CheckCircle2 className="w-2.5 h-2.5" />
                           {guildItem.agreement_rate.toFixed(1)}% Concordant
                         </span>
@@ -465,7 +465,7 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
                         className="h-full bg-rose-500 transition-all duration-300"
                       />
                     </div>
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
                       <span className="text-emerald-400">Agrees: {guildItem.agrees}</span>
                       <span className={guildItem.differ > 0 ? "text-rose-400" : "text-slate-500"}>
                         Differ: {guildItem.differ}
@@ -508,13 +508,13 @@ export function SchedulerConfusionPanel({ bridge, notify }: SchedulerConfusionPa
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
-                <span className="text-slate-500 text-[10px] uppercase">Concordance (Agrees)</span>
+                <span className="text-slate-500 text-[11px] uppercase">Concordance (Agrees)</span>
                 <p className="text-base font-bold text-emerald-400 mt-0.5">
                   {selectedGuild.agrees} <span className="text-xs text-slate-400">({selectedGuild.agreement_rate.toFixed(1)}%)</span>
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
-                <span className="text-slate-500 text-[10px] uppercase">Divergence (Differ)</span>
+                <span className="text-slate-500 text-[11px] uppercase">Divergence (Differ)</span>
                 <p className="text-base font-bold text-rose-400 mt-0.5">
                   {selectedGuild.differ} <span className="text-xs text-slate-400">({selectedGuild.disagreement_rate.toFixed(1)}%)</span>
                 </p>

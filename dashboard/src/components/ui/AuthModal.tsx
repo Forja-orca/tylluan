@@ -137,10 +137,10 @@ export function AuthModal({
             <p className="flex items-center gap-1 text-slate-300 font-medium">
               <span>📍</span> Ubicación del token en el sistema
             </p>
-            <p className="font-mono text-slate-500 text-[10px]">
+            <p className="font-mono text-slate-500 text-[11px]">
               En la raíz del proyecto Tylluan: <span className="text-slate-300">.tylluan-token</span>
             </p>
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[11px] text-slate-500">
               El token se conservará localmente en <span className="text-slate-400">localStorage</span> para mantener la sesión activa.
             </p>
           </div>

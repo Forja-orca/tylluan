@@ -11,24 +11,35 @@ import {
   Activity, 
   MessageSquare, 
   ShieldCheck,
-  CheckCircle2, 
-  Cpu
+  CheckCircle2
 } from 'lucide-react';
 import { TylluanLogo } from './TylluanLogo';
+import type {
+  GoldenSignals,
+  GuildsUtilization,
+  MemoryRetention,
+  SloSummary,
+  Guild,
+  Approval,
+  NexusBridge,
+  NexusEvent,
+  Interoception
+} from '../lib/nexus-bridge';
+import type { MemoryStats } from '../hooks/useNexus';
 
 interface OverviewConsolidatedProps {
-  bridge: any;
-  goldenSignals: any;
-  guildsUtilization: any;
-  memoryRetention: any;
-  sloSummary: any;
-  guilds: any[];
-  approvals: any[];
-  memoryStats: any;
-  healthDetailed: any;
-  sysStatus: any;
-  events: any[];
-  interoception: any;
+  bridge: NexusBridge | null;
+  goldenSignals: GoldenSignals | null;
+  guildsUtilization: GuildsUtilization | null;
+  memoryRetention: MemoryRetention | null;
+  sloSummary: SloSummary | null;
+  guilds: Guild[];
+  approvals: Approval[];
+  memoryStats: MemoryStats | null;
+  healthDetailed: Record<string, unknown> | null;
+  sysStatus: { version?: string; [key: string]: unknown } | null;
+  events: NexusEvent[];
+  interoception: Interoception | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
   onClearLogs: () => void;
   refreshData: () => Promise<void>;
@@ -40,29 +51,29 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
   return (
     <div className="space-y-6 font-sans">
       {/* Sovereign Substrate Telemetry Header */}
-      <div className="min-w-0 p-4 bg-[#0B0F17]/90 border border-slate-800/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="min-w-0 p-4 bg-slate-950/90 border border-slate-800/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="min-w-0 flex items-center gap-3">
           <TylluanLogo size="lg" animated={true} showText={false} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 font-mono">
               <span className="text-sm font-bold text-slate-100">Tylluan Cognitive Substrate</span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-slate-900 text-amber-400 border border-slate-700 rounded">
-                {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.0'}
+              <span className="px-2 py-0.5 text-[11px] font-bold uppercase bg-slate-900 text-amber-400 border border-slate-700 rounded">
+                {props.sysStatus?.version ? `v${props.sysStatus.version.replace(/^v/, '')}` : 'v0.17.1'}
               </span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="px-2 py-0.5 text-[11px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
                 CI Passing
               </span>
             </div>
-            <p className="break-words text-xs text-slate-400 mt-0.5 font-mono">
-              Sovereign Local Kernel on :4000 • Noise XK P2P Mesh • ADR-011 Signal Loop Active
+            <p className="break-words text-xs text-slate-300 mt-0.5 font-mono">
+              Sovereign Local Kernel on :47004 • Noise XK P2P Mesh • ADR-011 Signal Loop Active
             </p>
           </div>
         </div>
 
-        <div className="flex max-w-full flex-wrap items-center gap-3 font-mono text-xs text-slate-400">
+        <div className="flex max-w-full flex-wrap items-center gap-3 font-mono text-xs text-slate-300">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-850 rounded-xl">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
             <span>Coherence Gate:</span>
             <span className="text-slate-200 font-bold">Layer 1/2/3 Active</span>
           </div>
@@ -70,38 +81,41 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
       </div>
 
       {/* Sub Navigation */}
-      <div className="flex max-w-full overflow-x-auto border-b border-slate-800 pb-2 gap-2 font-mono scrollbar-thin">
+      <div role="group" aria-label="Overview Sections" className="flex max-w-full overflow-x-auto border-b border-slate-800 pb-2 gap-2 font-mono scrollbar-thin">
         <button
+          aria-pressed={subTab === 'summary'}
           onClick={() => setSubTab('summary')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
             subTab === 'summary'
               ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <LayoutDashboard className="w-3.5 h-3.5" />
+          <LayoutDashboard className="w-3.5 h-3.5" aria-hidden="true" />
           Summary Cockpit
         </button>
         <button
+          aria-pressed={subTab === 'interoception'}
           onClick={() => setSubTab('interoception')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
             subTab === 'interoception'
               ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Activity className="w-3.5 h-3.5" />
+          <Activity className="w-3.5 h-3.5" aria-hidden="true" />
           Interoception
         </button>
         <button
+          aria-pressed={subTab === 'system'}
           onClick={() => setSubTab('system')}
-          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all ${
+          className={`flex min-w-max items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg border transition-all focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
             subTab === 'system'
               ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
               : 'bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Wrench className="w-3.5 h-3.5" />
+          <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
           System Config
         </button>
       </div>
@@ -152,15 +166,23 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
   );
 }
 
-function TeamPulseWidget({ bridge }: { bridge: any }) {
-  const [messages, setMessages] = useState<any[]>([]);
+interface PulseMessage {
+  msg_id: string;
+  author_id: string;
+  role?: string;
+  content: string;
+  created_at: number;
+}
+
+function TeamPulseWidget({ bridge }: { bridge: NexusBridge | null }) {
+  const [messages, setMessages] = useState<PulseMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPulse = async () => {
+  const fetchPulse = useCallback(async () => {
     if (!bridge) return;
     try {
-      const data = await bridge.getColoquioThread("mision-activa");
-      const msgs = data.messages || [];
+      const data = (await bridge.getColoquioThread("mision-activa")) as { messages?: PulseMessage[] };
+      const msgs = data?.messages || [];
       const last3 = [...msgs].slice(-3).reverse();
       setMessages(last3);
     } catch (e) {
@@ -168,11 +190,11 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchPulse();
-  }, [bridge]);
+  }, [fetchPulse]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('overview-pulse', fetchPulse, { interval: 'medium', enabled: !!bridge });
@@ -205,28 +227,28 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
   const isIdle = messages.length === 0 || (nowSecs - messages[0].created_at) > 3600;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-[#0B0F17]/90 overflow-hidden font-sans">
+    <div className="rounded-xl border border-slate-800 bg-slate-950/90 overflow-hidden font-sans">
       <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between font-mono">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Team Pulse (Coloquio)</span>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400">Team Pulse (Coloquio)</span>
           {!isIdle && !loading && (
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" aria-hidden="true" />
           )}
         </div>
-        <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+        <MessageSquare className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
       </div>
 
       <div className="p-4">
         {loading ? (
-          <div className="text-center text-xs text-slate-500 font-mono py-2">Loading pulse...</div>
+          <div className="text-center text-xs text-slate-400 font-mono py-2">Loading pulse...</div>
         ) : isIdle ? (
-          <div className="text-center text-xs text-slate-500 font-mono py-4 flex flex-col items-center gap-1">
-            <span className="text-slate-400 font-semibold">Team Idle</span>
-            <span className="text-[10px] text-slate-600">No activity in the last 1 hour</span>
+          <div className="text-center text-xs text-slate-400 font-mono py-4 flex flex-col items-center gap-1">
+            <span className="text-slate-300 font-semibold">Team Idle</span>
+            <span className="text-[11px] text-slate-400">No activity in the last 1 hour</span>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/40">
-            {messages.map((msg: any) => {
+            {messages.map((msg) => {
               const secondsAgo = Math.max(0, nowSecs - msg.created_at);
               const authorColor = msg.role === 'human' ? 'text-blue-400' : 'text-amber-400';
               const textPreview = msg.content.length > 80 ? msg.content.slice(0, 80) + '...' : msg.content;
@@ -243,7 +265,7 @@ function TeamPulseWidget({ bridge }: { bridge: any }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className={`text-xs font-bold font-mono ${authorColor}`}>@{msg.author_id}</span>
-                      <span className="text-[9px] font-mono text-slate-500 flex-shrink-0">
+                      <span className="text-[11px] font-mono text-slate-500 flex-shrink-0">
                         {formatRelativeTime(secondsAgo)}
                       </span>
                     </div>

@@ -79,10 +79,10 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
     <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col justify-between h-full transition-all hover:border-indigo-500/30">
       <div>
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+          <div className="flex items-center gap-2 text-slate-400 text-[11px] uppercase tracking-widest font-bold">
             <Moon className="w-3.5 h-3.5 text-indigo-400 animate-pulse" /> Night Consolidation
           </div>
-          <span className="text-[10px] text-indigo-400 font-mono bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+          <span className="text-[11px] text-indigo-400 font-mono bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
             RUNS: {dreamStatus?.night_consolidation?.runs_completed ?? 0}
           </span>
         </div>
@@ -91,7 +91,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
           <div className="space-y-4">
             {/* Countdown / Status */}
             <div className="flex justify-between items-center bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 shadow-inner">
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wider font-mono">
                 <Clock className="w-3 h-3 text-indigo-400/80" /> Next run in
               </div>
               <span className="text-xs font-black text-indigo-300 font-mono">
@@ -100,7 +100,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
             </div>
 
             {/* Embedding Coverage */}
-            <div className="flex justify-between items-center text-[10px]">
+            <div className="flex justify-between items-center text-[11px]">
               <span className="text-slate-400 font-mono flex items-center gap-1">
                 <Database className="w-3 h-3 text-slate-500" /> Embeddings
               </span>
@@ -120,11 +120,11 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
 
             {/* Topic-key Coverage (legacy) */}
             {dreamStatus.graph?.topic_key_coverage !== undefined && (
-              <div className="flex justify-between items-center text-[10px] pr-1">
-                <span className="text-slate-500 font-mono flex items-center gap-1 text-[8px]">
+              <div className="flex justify-between items-center text-[11px] pr-1">
+                <span className="text-slate-500 font-mono flex items-center gap-1 text-[11px]">
                   <Database className="w-2 h-2 text-slate-600" /> topic_key
                 </span>
-                <span className="text-slate-500 font-mono text-[8px]">
+                <span className="text-slate-500 font-mono text-[11px]">
                   {dreamStatus.graph?.topic_key_coverage ?? 0}% ({dreamStatus.graph?.nodes_with_topic_key ?? 0})
                 </span>
               </div>
@@ -132,7 +132,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
 
             {/* Orphans Progress Bar */}
             <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-[10px]">
+              <div className="flex justify-between items-center text-[11px]">
                 <span className="text-slate-400 font-mono flex items-center gap-1">
                   <Database className="w-3 h-3 text-slate-500" /> Orphans
                 </span>
@@ -151,7 +151,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
             {/* Active Components list */}
             {dreamStatus.night_consolidation?.components && (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1 text-[9px] text-slate-500 uppercase tracking-widest font-bold">
+                <div className="flex items-center gap-1 text-[11px] text-slate-500 uppercase tracking-widest font-bold">
                   <Layers className="w-3 h-3 text-slate-500" /> Cognitive Process Flow
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -161,7 +161,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
                       <span 
                         key={name} 
                         title={c}
-                        className="text-[8px] font-semibold font-mono bg-slate-950/45 hover:bg-slate-800/40 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850 hover:text-slate-300 transition-colors cursor-help"
+                        className="text-[11px] font-semibold font-mono bg-slate-950/45 hover:bg-slate-800/40 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850 hover:text-slate-300 transition-colors cursor-help"
                       >
                         {name}
                       </span>
@@ -173,25 +173,25 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
 
             {/* Edges by Type Compact Table */}
             <div className="space-y-1.5">
-              <div className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">
+              <div className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">
                 Edges by Type
               </div>
-              <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[10px] border border-slate-850 rounded-lg p-2 bg-slate-950/40">
+              <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[11px] border border-slate-850 rounded-lg p-2 bg-slate-950/40">
                 {Object.entries(dreamStatus.graph?.edges_by_type ?? {}).length > 0 ? (
                   Object.entries(dreamStatus.graph.edges_by_type).map(([type, count]) => (
                     <div key={type} className="flex justify-between items-center py-0.5 border-b border-slate-900 last:border-b-0 text-slate-300">
-                      <span className="truncate mr-2 text-slate-400 text-[9px]">{type}</span>
+                      <span className="truncate mr-2 text-slate-400 text-[11px]">{type}</span>
                       <span className="text-slate-200 font-bold font-mono">{count as number}</span>
                     </div>
                   ))
                 ) : (
-                  <div className="text-slate-650 italic text-[10px] text-center py-2">No edges present</div>
+                  <div className="text-slate-650 italic text-[11px] text-center py-2">No edges present</div>
                 )}
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-[10px] text-slate-500 text-center py-4">No data received.</div>
+          <div className="text-[11px] text-slate-500 text-center py-4">No data received.</div>
         )}
       </div>
     </div>
