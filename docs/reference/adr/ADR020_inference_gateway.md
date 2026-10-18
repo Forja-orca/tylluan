@@ -43,16 +43,25 @@
 
 ---
 
-## 2. Estado real del código (VERIFICADO contra el árbol al 2026-10-16, HEAD `0cbed49`)
+## 2. Estado real del código (VERIFICADO contra el árbol al 2026-10-16, HEAD `0cbed49`; re-verificado 2026-10-18 sobre `0ac9dfb`)
 
 Cada afirmación ha sido contrastada con `git grep` sobre todo `crates/` (y lectura directa de `guilds/core/` para los guilds Python):
+
+> **Re-verificación (2026-10-18, agente Codex en worktree, base `0ac9dfb` = `origin/main`).** El inventario de §2 sigue sustancialmente correcto, pero derivó:
+> - La huella `compute_engine_fingerprint` ya no arranca en `embeddings.rs` 405-464: hoy lo hace en **`:443`** (§3.4 ya citaba `:443`). Queda corregido el anclaje en todo el documento.
+> - Desde la entrada del ADR han tocado `transport/http/auth.rs` 3 commits (`44d5828` sexta herramienta `tylluan_decide`, `6b9b177`, `abc8534` T1253): el inventario es anterior a T1253.
+> - **`generate` sigue sin existir como capacidad del kernel:** las únicas apariciones de `/v1/chat/completions` son cliente de prueba/proveedores registrados en `crates/tylluan-kernel/src/transport/http/api_v1/api_admin.rs`.
+> - **No hay registro único de proveedores:** `embed` resuelve por `default_embedding_model()` (`config.rs:1844`) y `decide` por `[decision.provider]` (`config.rs:1944`); dos cadenas de config sin abstracción común.
+> - **No hay clase de privacidad graduada:** lo implementado es un booleano duro de loopback, `is_loopback_endpoint` (`crates/tylluan-kernel/src/router/decision/systemone_http.rs:39`), no el par `ProviderLocality` × `DataSensitivity` de §3.2.
+> - **Choque de nombres `model_hash`:** `router/system_snapshot.rs:40` define `pub model_hash: String` que espeja `config.memory.embedding_model` (`:123`, test `:208`) — es un *nombre*, no un hash; convive con la huella real `engine_fingerprint_v1`. Habrá que renombrar uno antes de cablear el filtrado de §3.4.
+> - **El filtro por huella en búsqueda aún no existe:** `git grep "model_hash\|model_name"` sobre `memory/silva/search.rs` devuelve 0 coincidencias, y el trait `Embedder` no existe en el árbol. Es prerrequisito de un segundo espacio vectorial (§1.A.6) y sigue en `docs/roadmap/ROADMAP_O3.md`.
 
 | Componente | Estado en código | Fichero y línea (verificado) | Realidad en el código |
 |---|---|---|---|
 | **Proveedores externos existentes** | Struct `ExternalProvider` con 3 tipos | `crates/tylluan-kernel/src/config.rs:862-881` | Enum `ExternalProviderType`: `OpenAICompatible`, `AnthropicCompatible`, `OllamaCompatible`. Almacena `base_url`, `api_key_env`, `models`. |
 | **Prueba de proveedor externo** | Función `test_external_provider` | `crates/tylluan-kernel/src/transport/http/api_v1/api_admin.rs:125-185` | Implementa llamadas HTTP reales con `reqwest` (1 token de prueba) para `/v1/chat/completions`, `/v1/messages` y `/api/chat`. **Hoy solo prueba conectividad**; no sirve inferencia interna. |
 | **Bloqueo SSRF actual** | `check_external_provider`, comprobación `v4.is_private()` | `crates/tylluan-kernel/src/config.rs` L926–L947 (`is_private()` en L943) | Rechaza el host literal `169.254.169.254`, el wildcard `0.0.0.0` y las IPv4 RFC-1918 (`10.x`, `172.16-31.x`, `192.168.x`). Antes de esa comprobación **acepta** `localhost`, `127.0.0.1`, `::1` y cualquier IP con `is_loopback()` (todo `127.0.0.0/8`). No resuelve nombres de host (un nombre LAN no se comprueba) y no bloquea el resto de `169.254.0.0/16` ni rangos IPv6 privados. **Impide apuntar por IP a un modelo servido por otro nodo en la LAN.** |
-| **Huella canónica de embeddings** | Función `compute_engine_fingerprint` | `crates/tylluan-kernel/src/router/embeddings.rs:405-464` | Genera `engine_fingerprint_v1` (`sha256:<64 hex>`) combinando `model_type`, `revision`, `dims`, `norm`, `graph_sha256`, `tokenizer_sha256`, `weights_data_size`. |
+| **Huella canónica de embeddings** | Función `compute_engine_fingerprint` | `crates/tylluan-kernel/src/router/embeddings.rs:443` | Genera `engine_fingerprint_v1` (`sha256:<64 hex>`) combinando `model_type`, `revision`, `dims`, `norm`, `graph_sha256`, `tokenizer_sha256`, `weights_data_size`. |
 | **Descargador de modelos** | `ModelDownloader` y `get_model_registry` | `crates/tylluan-kernel/src/maintenance.rs:41-85,133` | Registro escrito en código Rust con URLs fijas a HuggingFace. Comprueba `size_expected`, pero **no verifica SHA-256** de los pesos descargados. |
 | **Almacenamiento de embeddings** | Tabla `node_embeddings` (1 vector/nodo) | `crates/tylluan-kernel/src/memory/silva/schema.rs:380-388` | `node_id TEXT PRIMARY KEY`, `embedding BLOB NOT NULL`, `model_id`, `model_name`, `model_hash`, `dimensions INTEGER DEFAULT 1024`. Un solo vector por nodo: **cambiar de modelo exige reindexar** (sobrescribe en sitio). |
 | **Reindexación existente** | `POST /api/v1/memory/reindex` → `reindex_handler` | `transport/http/api_v1/routes.rs` L66, `api_v1/api_memory.rs` L74 | Re-embebe en segundo plano los nodos "stale" (`get_stale_embeddings` por `model_id`/`model_hash`) y emite progreso por broadcast. Además existe un reindexador periódico de fondo en `main.rs` (≈L1796). No hay subcomando `reindex` en `crates/tylluan-cli`. |
@@ -217,7 +226,7 @@ pub trait VisionProvider: Send + Sync {
 
 ### 3.4 Identidad del Modelo: Reutilización de `engine_fingerprint_v1`
 
-En lugar de inventar una estructura paralela no probada, `ModelIdentity` **reutiliza formalmente el diseño de `engine_fingerprint_v1` ya implementado en `embeddings.rs:405-464`**:
+En lugar de inventar una estructura paralela no probada, `ModelIdentity` **reutiliza formalmente el diseño de `engine_fingerprint_v1` ya implementado en `embeddings.rs:443`**:
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -525,7 +534,7 @@ Al construir sobre la base existente (`reqwest`, `InferenceBudget`, `ExternalPro
   - Struct `ExternalProvider` con `OpenAICompatible`, `AnthropicCompatible`, `OllamaCompatible` en `config.rs:862-881`.
   - Código de prueba HTTP en `test_external_provider` (`api_admin.rs:125-185`).
   - Bloqueo SSRF de RFC-1918 en `config.rs:943` (`v4.is_private()`).
-  - Huella determinista `engine_fingerprint_v1` en `router/embeddings.rs:405-464`.
+  - Huella determinista `engine_fingerprint_v1` en `router/embeddings.rs:443`.
   - Esquema `node_embeddings` con `node_id TEXT PRIMARY KEY` y `dimensions INTEGER DEFAULT 1024` en `schema.rs:380-388`.
   - Dependencia `reqwest = 0.12` con `rustls-tls` en `Cargo.toml:106`.
   - Struct `EmbeddingEngine` (`router/embeddings.rs` L186) y `embed_batch_coalesced` (L820); recuento de call-sites en §2.
