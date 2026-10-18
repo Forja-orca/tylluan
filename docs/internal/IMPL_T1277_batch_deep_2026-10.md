@@ -9,13 +9,13 @@
 - `security/coherence_gate.rs:86-96` — lee `untrusted_content: true` del metadata JSON del nodo; `:321` lo aplica como penalización (no remoción) en layer 2; fix del blind spot: peer de federación fresco con peso 1.0 ya no queda sin penalizar. Test `:812` `layer2_penalizes_untrusted_content_metadata_flag`. Sin cambio de umbrales.
 
 **T1277-B — errores de storage propagados + límites**
-- `memory/silva/nodes.rs:631-638` — `get_conflicted_page` con `COUNT(*)` aparte (no carga el conjunto entero); test `:1787` verifica independencia page/total.
+- `memory/silva/nodes.rs:631-638` — `get_conflicted_page` con `COUNT(*)` aparte (no carga el conjunto entero); test (línea 1787) verifica independencia page/total.
 - `router/decision/service.rs:754-787` — `shadow_overview` propaga errores de storage (`read_shadow_log_checked`) en vez de `unwrap_or(0)`; `read_shadow_log` conserva el comportamiento tolerante para sus callers.
 - `transport/http/api_v1/mod.rs:655` — `sanitize_excerpt` elimina caracteres Unicode de formato (Cf) además de lo previo; `api_decide.rs` lo consume (+17 líneas de propagación).
 - Tests T1253 nº5/6 con las **mismas assertions** (solo se añaden casos nuevos).
 
 **T1277-C — e2e real del gate P2P dispatch (deuda declarada ADR-019 ≈L132)**
-- `transport/http/mod.rs:1038` `build_p2p_dispatch_gate_handler` y `:1112` `build_p2p_approved_peers` — **extracción** de los closures inline del spawn a `pub fn` (mismo comportamiento, habilita que el test conduzca EXACTAMENTE los closures de producción). El bloque spawn ahora las llama.
+- `transport/http/mod.rs:1038` `build_p2p_dispatch_gate_handler` y (línea 1112) `build_p2p_approved_peers` — **extracción** de los closures inline del spawn a `pub fn` (mismo comportamiento, habilita que el test conduzca EXACTAMENTE los closures de producción). El bloque spawn ahora las llama.
 - `transport/http/api_v1/api_mesh.rs:199-206` — rama `Ok` de `RemoteTcp` devuelve `let mut body` y añade `body["error"]` si el gate denegó: sin esto la denegación era invisible en HTTP (solo en logs).
 - `tests/mesh_audit.rs:702/755/818` — 3 tests e2e con listener Noise real (`start_p2p_listener_noise`), `PeerDb::open(":memory:")`, RegistryActor real y las closures de producción (rig en `:640-700`):
   - `c1` allow-list: pasa el gate, llega al registry (error esperado = "Guild not found" — montar guilds reales queda fuera de alcance), sin fila de auditoría del agente.
