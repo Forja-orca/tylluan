@@ -610,6 +610,148 @@ async fn v8_model_cannot_overturn_deterministic_rejection() {
     }
 }
 
+// ── Hueco de cobertura del vector 4bis (encargo TL, Coloquio T1244/T1241) ────
+// El v8 cubre el rechazo SIN valor (error del proveedor ⇒ valor NULL y
+// `agreed` NULL). Este test cubre el OTRO rechazo determinista:
+// `should_execute` con `risk >= 0.7` responde `false` — un rechazo CON VALOR
+// dentro del conjunto declarado (`allowed_values` boolean = ["true","false"]).
+// El modelo puntúa A FAVOR (`true`) y la auditoría debe registrar el
+// DESACUERDO (`agreed = 0`, no NULL): sí hay valor de reglas con el que
+// comparar. La respuesta final conserva `false` — el modelo no lo revierte.
+// Sobre el mecanismo de Deep (inyección + advisory/gate), sin tocar service.rs:
+// solo se añaden este test y su proveedor canario al fichero de tests.
+
+/// Proveedor canario que puntúa a favor de `true` (dentro de las opciones
+/// declaradas de una pregunta boolean) y cuenta las consultas.
+struct CannedTrueProvider {
+    hits: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl tylluan_kernel::router::decision::DecisionProvider for CannedTrueProvider {
+    async fn decide(
+        &self,
+        req: &tylluan_kernel::router::decision::DecisionRequest,
+    ) -> Result<
+        std::collections::HashMap<String, tylluan_kernel::router::decision::DecisionAnswer>,
+        tylluan_kernel::router::decision::DecisionError,
+    > {
+        self.hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(req
+            .questions
+            .keys()
+            .map(|name| {
+                (
+                    name.clone(),
+                    tylluan_kernel::router::decision::DecisionAnswer {
+                        distribution: std::collections::HashMap::from([
+                            ("true".to_string(), 0.9f32),
+                            ("false".to_string(), 0.1f32),
+                        ]),
+                        calibration: None,
+                    },
+                )
+            })
+            .collect())
+    }
+
+    fn provider_id(&self) -> &'static str {
+        "canned-true-v1"
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rejection_with_value_keeps_rules_answer_and_logs_disagreement() {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    use tokio::sync::RwLock;
+    use tylluan_kernel::memory::silva::SilvaDB;
+    use tylluan_kernel::router::decision::api_types::{
+        DecideRequest as WireRequest, QuestionKind, QuestionSpec,
+    };
+    use tylluan_kernel::router::decision::{DecisionMode, DecisionService};
+
+    for mode in [DecisionMode::Advisory, DecisionMode::Gate] {
+        let db = Arc::new(SilvaDB::in_memory().await.unwrap());
+        db.init().await.unwrap();
+        let mut cfg = tylluan_kernel::config::TylluanConfig::default();
+        cfg.decision
+            .contracts
+            .insert("scheduler_routing".to_string(), mode);
+        let mut svc = DecisionService::new(Arc::new(RwLock::new(cfg)), Some(db));
+        let canned = Arc::new(CannedTrueProvider {
+            hits: std::sync::atomic::AtomicUsize::new(0),
+        });
+        svc.inject_model_provider(canned.clone(), "canned-true-v1:test-model");
+
+        // risk 0.9 >= 0.7 (política HITL de rules.rs) → la regla responde
+        // `should_execute = false`: rechazo CON VALOR, sin abstención.
+        let req = WireRequest {
+            state: serde_json::json!({ "risk": 0.9 }),
+            questions: BTreeMap::from([(
+                "should_execute".to_string(),
+                QuestionSpec {
+                    kind: QuestionKind::Boolean,
+                    instructions: None,
+                    options: vec![],
+                    levels: vec![],
+                },
+            )]),
+            contract: Some("scheduler_routing".to_string()),
+            max_latency_ms: None,
+        };
+        let resp = svc.decide(req, "test").await;
+
+        // LA INVARIANTE: el `false` determinista es estado final y el
+        // desacuerdo del modelo queda medido como `agreed = 0`.
+        let ans = resp.answers.get("should_execute").expect("answered");
+        assert!(
+            !ans.abstained,
+            "modo {mode:?}: es un rechazo CON VALOR, no una abstención: {resp:?}"
+        );
+        assert_eq!(
+            ans.value.as_deref(),
+            Some("false"),
+            "modo {mode:?}: el rechazo determinista se conserva pese al modelo: {resp:?}"
+        );
+        assert!(
+            !resp.degraded,
+            "modo {mode:?}: las reglas respondieron dentro del conjunto: {resp:?}"
+        );
+        assert_eq!(
+            resp.model_identity.as_deref(),
+            Some("canned-true-v1:test-model"),
+            "modo {mode:?}: el modelo FUE consultado (advisory/gate)"
+        );
+
+        svc.drain_shadow_tasks().await;
+        assert_eq!(
+            canned.hits.load(Ordering::SeqCst),
+            1,
+            "modo {mode:?}: exactamente una consulta al modelo"
+        );
+        let rows = svc.read_shadow_log(5).await;
+        assert_eq!(rows.len(), 1, "modo {mode:?}: una fila de auditoría");
+        assert_eq!(
+            rows[0].rules_value.as_deref(),
+            Some("false"),
+            "modo {mode:?}: la fila registra el valor determinista"
+        );
+        assert_eq!(
+            rows[0].model_value.as_deref(),
+            Some("true"),
+            "modo {mode:?}: la opinión del modelo (a favor) queda registrada"
+        );
+        assert_eq!(
+            rows[0].agreed,
+            Some(0),
+            "modo {mode:?}: hay valor de reglas ⇒ el desacuerdo es agreed=0, no NULL"
+        );
+    }
+}
+
 // ── H1 (revisión de Buffy, turno 1234): JSON malformado → sobre canónico ─────
 // El endpoint no puede dejar escapar el rechazo en texto plano del extractor
 // `Json` de axum: mismo contrato que un fallo de límites (400 + `status:
