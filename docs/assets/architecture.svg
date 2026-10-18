@@ -99,7 +99,7 @@
     
     <text x="65" y="193" fill="#38bdf8" font-size="15" font-weight="800" letter-spacing="1">tylluan-nexus</text>
     <text x="65" y="210" fill="#38bdf8" font-size="12" font-weight="700" letter-spacing="0.5">(:47004)</text>
-    <text x="270" y="200" fill="#94a3b8" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
+    <text x="285" y="200" fill="#94a3b8" font-size="13" font-weight="500">— Single Sovereign Rust Process</text>
     
     <!-- Badges (positioned between Arrow 2 at 640 and Arrow 3 at 1035 for clean clearance) -->
     <rect x="705" y="183" width="160" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
