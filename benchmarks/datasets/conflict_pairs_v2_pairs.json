@@ -1,0 +1,199 @@
+{
+  "version": 2,
+  "kind": "real_pairs",
+  "note": "Pares de DOS nodos reales de data/silva.db (sin edicion). Los lados son el contenido CRUDO del pool; el saneado y los hashes se aplican al publicar. Ningun nid se repite dentro de este fichero ni con conflict_pairs_v2_contra.json (se verifica en finalize).",
+  "items": [
+    {
+      "label": "consistente",
+      "a": "hybrid:1367",
+      "b": "coloquio_general_223",
+      "reason": "Ambas afirmaciones registran el mismo recuento verificado de 46 unwraps en produccion (script tools/count_production_unwraps.py, commit 5faf50f) en dos mensajes distintos del mismo hecho: se confirman mutuamente sin tension."
+    },
+    {
+      "label": "consistente",
+      "a": "hybrid:1099",
+      "b": "coloquio_mision-activa_173",
+      "reason": "Las dos declaran el CI verde del commit 4cf128d cerrando la cadena de a505bb9 (ADR-012 Fase 2): mismo evento en dos registros, compatibles."
+    },
+    {
+      "label": "consistente",
+      "a": "routing_anchor:coloquio:aabd29db0f61",
+      "b": "coloquio_mision-activa_322",
+      "reason": "Ambas transmiten el mismo informe del CYCLE 3 de Buffy: fix 4223cf9, drift_ratio real 1.36 y 719 tests verificados; coexisten como ancla de enrutado y memoria del mismo mensaje."
+    },
+    {
+      "label": "consistente",
+      "a": "routing_anchor:coloquio:41831b787957",
+      "b": "coloquio_equipo_4",
+      "reason": "Los dos textos son el mismo aviso de bug de puerto resuelto (commit 75f37aa, kernel en :4000): la instruccion y su registro en memoria son compatibles."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_equipo_6",
+      "b": "coloquio_equipo_16",
+      "reason": "OpenCode y Qwen confirman por separado su presencia conectados al mismo kernel en el puerto 4000: dos confirmaciones de conexion al mismo sistema que coexisten sin conflicto."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_mision-activa_158",
+      "b": "hybrid:1071",
+      "reason": "Ambas registran el CI completo verde (CI + CodeQL + Docker Smoke) para los commits 5c58e91 y fbe5413: mismo resultado de pipeline descrito dos veces."
+    },
+    {
+      "label": "consistente",
+      "a": "routing_anchor:coloquio:78d11f394f34",
+      "b": "coloquio_general_45",
+      "reason": "Las dos contienen la misma aclaracion sobre el fix del puerto 75f37aa (resolucion dinamica via KERNEL_BASE, no hardcode): ancla de enrutado y memoria del mismo texto, se implican."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_general_229",
+      "b": "hybrid:1376",
+      "reason": "Ambas describen el inicio del bloque de Antigravity de normalizacion de ~85 strings del dashboard a ingles tecnico: la orden de arranque y su registro de ejecucion son consistentes."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_equipo_475",
+      "b": "hybrid:2610",
+      "reason": "Los dos textos reportan el kernel de test en :47005 reiniciado con embed_batching_enabled=true, PID 62768 y commit 0d46c4d: mismo estado de despliegue en dos canales."
+    },
+    {
+      "label": "consistente",
+      "a": "routing_anchor:coloquio:ecb013ce00f9",
+      "b": "coloquio_equipo_12",
+      "reason": "Ambas son el mismo mensaje de OpenCode: presente y verificado, whoami/register_identity operativos y canal #equipo funcional; idempotentes y compatibles."
+    },
+    {
+      "label": "consistente",
+      "a": "session_digest:mcp:1792206164",
+      "b": "session_digest:mcp-client:1791495571",
+      "reason": "Los dos resumenes de sesion mencionan el mismo item R11 (forja-proxy sidecar en :3030→:3031 con SSE keepalive): fragmentos complementarios de la misma infraestructura, sin tension."
+    },
+    {
+      "label": "consistente",
+      "a": "session_digest:anonymous:1786462473",
+      "b": "session_digest:anonymous:1786455993",
+      "reason": "Los dos digestos resumen el mismo test MCP Bridge del 11 de agosto de 2026 con el error 'Request URL is missing http://': dos registros del mismo fenomeno, compatibles."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_equipo_148",
+      "b": "coloquio_equipo_142",
+      "reason": "El primero confirma que el fix stdin=DEVNULL de Claude resuelve el timeout de git y el segundo espera ese reinicio antes de tocar bash.py: son dos momentos complementarios del mismo hilo de arreglo, se implican."
+    },
+    {
+      "label": "consistente",
+      "a": "coloquio_equipo_13",
+      "b": "coloquio_equipo_5",
+      "reason": "Los dos son informes de estado de Antigravity confirmando recepcion de actualizaciones y conexion activa al kernel local: afirmaciones compatibles del mismo agente en el mismo canal."
+    },
+    {
+      "label": "consistente",
+      "a": "hybrid:22",
+      "b": "hybrid:72",
+      "reason": "Dos instantaneas de system_metrics del mismo host (56 cores, 221.9GB RAM, disco ~59.7-59.8%) en momentos distintos: cifras compatibles que coexisten; ninguna niega a la otra."
+    },
+    {
+      "label": "consistente",
+      "a": "session_digest:anonymous:1786457613",
+      "b": "session_digest:anonymous:1786459818",
+      "reason": "Los dos resumen el mismo test de MCP Bridge con el mismo error de URL faltante: registros paralelos del mismo fallo, mutuamente confirmatorios."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:filesystem:e5f86aaafe40",
+      "b": "routing_anchor:search:466f8c5efc21",
+      "reason": "Pedir las primeras 100 y ultimas 50 lineas de main.rs para entender startup/shutdown frente a buscar citas emotivas de Drizzt Do'Urden en las novelas de Salvatore: tareas y dominios sin interseccion proposicional."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:bash:75191034e0c9",
+      "b": "routing_anchor:knowledge:af39d6b47904",
+      "reason": "Un curl POST a /api/v1/do con intent agent_check_inbox frente a un principio de UI/UX sobre jerarquia de informacion y frescura de datos: invocacion HTTP vs guia de diseno, sin relacion."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:coloquio:ca5197df46b7",
+      "b": "routing_anchor:bash:b84d4757e520",
+      "reason": "Prompt para Antigravity que ejecuta los bloques AG-1/AG-2/AG-3 del turno 39 frente a una consulta SQL de Python sobre recall_feedback: consigna de mision vs accion de base de datos, temas distintos."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:coloquio:51ac5f56484a",
+      "b": "routing_anchor:scrapling:d2c4948c98be",
+      "reason": "Aviso de Deep en linea sincronizado con 46b689b y con el loop runner fix frente a la extraccion de la documentacion de rmcp-macros en docs.rs: estado de agente vs scraping de documentacion externa."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:bash:d8e797e1262f",
+      "b": "coloquio_equipo_14",
+      "reason": "Un comando Invoke-RestMethod que recupera los ultimos 5 mensajes de mision-activa frente a la declaracion de identidad de Claude Code con sus 5 sovereign tools: consulta REST vs mensaje de presencia, sin relacion proposicional."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:filesystem:fa67f5d192ec",
+      "b": "coloquio_general_289",
+      "reason": "Buscar la ruta absoluta de ForjaMCPo3 (crates/forja-kernel y guilds) frente a la opinion detallada sobre el documento TEB-1.0: localizacion de proyecto vs evaluacion de un documento, temas distintos."
+    },
+    {
+      "label": "no relacionado",
+      "a": "routing_anchor:bash:c185e77c756a",
+      "b": "hybrid:953",
+      "reason": "Consulta SQL a mailbox.db de los ultimos mensajes frente a la nota documental de la prueba E2E del protocolo MCP del 19 de agosto: acceso a datos vs evidencia de prueba, sin interseccion."
+    },
+    {
+      "label": "no relacionado",
+      "a": "lesson:intent:post_to_coloquio",
+      "b": "lesson:intent:docker_status",
+      "reason": "Volcado de mensajes del canal general con el turno T1050 de Deep frente al estado del daemon de Docker (version 29.6.1, plugins): contenido de conversacion vs estado de infraestructura, asuntos distintos."
+    },
+    {
+      "label": "no relacionado",
+      "a": "hybrid:1677",
+      "b": "lesson:intent:evaluar_drift_semantico",
+      "reason": "Un episodio de ping a mcp_bridge que devuelve unreachable con error de URL frente al bloqueo bash del intent analizar retencion de nodos bajo modelo FSRS: resultado de conexion contra politica del allow-list, sin relacion proposicional."
+    },
+    {
+      "label": "no relacionado",
+      "a": "lesson:intent:read_coloquio_messages",
+      "b": "lesson:intent:analizar_retencion_de",
+      "reason": "Error de canal 'messages channel general' inexistente con la lista de canales disponibles frente al bloqueo del comando 'analizar' por el allow-list: fallo de enrutado de canal vs politica de bash."
+    },
+    {
+      "label": "no relacionado",
+      "a": "lesson:intent:lee_los_ultimos",
+      "b": "lesson:intent:verificar_lista_de",
+      "reason": "El canal general existe pero esta vacio (offset=874) frente al bloqueo de 'verificar' en la lista de proveedores de inferencia: estado de un canal vs regla de comandos permitidos."
+    },
+    {
+      "label": "no relacionado",
+      "a": "lesson:intent:lee_el_canal",
+      "b": "lesson:intent:sintetizar_resumen_de",
+      "reason": "El canal 'zzz-no-existe' no existe y se listan canales disponibles frente al bloqueo del intent de sintetizar un resumen multiagente: error de canal vs allow-list de bash, sin relacion."
+    },
+    {
+      "label": "no relacionado",
+      "a": "hybrid:2103",
+      "b": "268ad74b-7901-4a11-b9b3-324210725a50",
+      "reason": "Un episodio de recalibracion de parametros FSRS con resultado find_dead_code vacio frente al mapa de dependencias de ciclos Q1→Q2→Q4→R/T/S: evaluacion de memoria episodica vs plan de fases del proyecto."
+    },
+    {
+      "label": "no relacionado",
+      "a": "hybrid:1775",
+      "b": "hybrid:394",
+      "reason": "Listar guilds activos (devuelve un uuid de schedule) frente a la pregunta de como Tylluan almacena y recupera conocimiento con su respuesta de memoria unificada: operacion de scheduler vs explicacion de memoria."
+    },
+    {
+      "label": "no relacionado",
+      "a": "hybrid:270",
+      "b": "hybrid:903",
+      "reason": "Leer el canal equipo desde el turno 50 (canal mal formado, sin mensajes) frente al aviso de que el guild mcp_bridge esta STOPPED y necesita configuracion en tylluan.toml: lectura de coloquio vs incidencia de gateway."
+    },
+    {
+      "label": "no relacionado",
+      "a": "coloquio_mision-activa_493",
+      "b": "coloquio_demo-bwc_1",
+      "reason": "Estado de sistema con suite 799/799 y clippy limpio frente a la apertura de un contrato BWC con presupuesto de 5 ciclos y equipo researcher/engineer/reviewer: verificacion de build vs asignacion de contrato autonomo."
+    }
+  ]
+}

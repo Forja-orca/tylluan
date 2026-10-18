@@ -1,0 +1,211 @@
+{
+  "version": 2,
+  "kind": "synthetic_contradictions",
+  "note": "Cada item toma el contenido CRUDO de un nodo real de data/silva.db y sustituye UNA afirmacion (pat, unico match verificado) por su contrario (rep). El lado B sintetico de cada par sale de aqui. La clase contradictoria de v2 es SINTETICA por construccion: la declaracion obligatoria esta en la ficha de human_truth_conflict_pairs_v2.json.",
+  "items": [
+    {
+      "nid": "hybrid:88",
+      "pat": "CPU:\\s+66\\.6%\\s+\\(56 cores\\)",
+      "rep": "CPU:      4.6%  (56 cores)",
+      "reason": "A declara CPU 66.6% y B declara CPU 4.6% en la misma lectura de metricas del host: dos valores disjuntos para la misma instantanea no pueden ser ciertos a la vez."
+    },
+    {
+      "nid": "hybrid:2072",
+      "pat": "unreachable: mcp_bridge: connection failed.*",
+      "rep": "reachable: mcp_bridge: connection succeeded",
+      "reason": "A registra que mcp_bridge es inalcanzable y la conexion falla; B registra que responde y la conexion se establece: resultados opuestos del mismo ping MCP."
+    },
+    {
+      "nid": "hybrid:401",
+      "pat": "✅ Posted to 'example-chat' as @setup.*",
+      "rep": "❌ Not posted to 'example-chat' by @setup — publicacion rechazada",
+      "reason": "A afirma que el mensaje fue publicado en example-chat por @setup y B que no fue publicado y fue rechazado: la ocurrencia de la publicacion es incompatible entre las dos."
+    },
+    {
+      "nid": "hybrid:1423",
+      "pat": "CPU:\\s+100\\.0%\\s+\\(56 cores\\)",
+      "rep": "CPU:      3.9%  (56 cores)",
+      "reason": "A declara CPU al 100.0% y B declara 3.9% en la misma instantanea de system_metrics: valores mutuamente excluyentes."
+    },
+    {
+      "nid": "hybrid:2378",
+      "pat": "Channel 'tareas' exists but has no messages yet \\(offset=0\\)\\.",
+      "rep": "Channel 'tareas' does not exist; create it before reading messages.",
+      "reason": "A afirma que el canal 'tareas' existe y B afirma que no existe: existencia incompatible del mismo canal."
+    },
+    {
+      "nid": "hybrid:383",
+      "pat": "Memory:\\s+20\\.7% used \\(47097MB / 227207MB\\)",
+      "rep": "Memory:  71.2% used (161780MB / 227207MB)",
+      "reason": "A declara 20.7% de memoria usada (47097MB) y B declara 71.2% (161780MB) para la misma capacidad total: no pueden describir el mismo estado."
+    },
+    {
+      "nid": "hybrid:1044",
+      "pat": "CI verde confirmado para 248e7a7 \\(ADR-012\\)\\. CodeQL y CI pasando\\.",
+      "rep": "CI rojo fallido para 248e7a7 (ADR-012): CodeQL y CI fallando.",
+      "reason": "A afirma el CI verde del commit 248e7a7 con CodeQL pasando y B afirma el mismo CI rojo con CodeQL fallando: estado del pipeline incompatible."
+    },
+    {
+      "nid": "hybrid:1433",
+      "pat": "No files found matching '\\*\\.py' in",
+      "rep": "Found 12 files matching '*.py' in",
+      "reason": "A afirma que la busqueda no encontro ningun .py y B afirma que encontro 12 en el mismo directorio: recuento incompatible."
+    },
+    {
+      "nid": "hybrid:612",
+      "pat": "git shell timeout \\(>45s\\).*",
+      "rep": "git shell completed in 0.9s (no timeout)",
+      "reason": "A registra que el shell de git excedio el timeout de 45s y B que termino en 0.9s sin timeout: el desenlace de la misma ejecucion es opuesto."
+    },
+    {
+      "nid": "hybrid:58",
+      "pat": "Disk:\\s+59\\.7% used \\(556GB / 931GB\\)",
+      "rep": "Disk:  17.4% used (162GB / 931GB)",
+      "reason": "A declara 59.7% (556GB) de disco usado y B declara 17.4% (162GB) sobre el mismo total de 931GB: cifras incompatibles."
+    },
+    {
+      "nid": "hybrid:255",
+      "pat": "✅ State restored.*",
+      "rep": "❌ State restore failed (CWD unknown)",
+      "reason": "A afirma que el estado se restauro con CWD en el repo y B afirma que el restore fallo y el CWD es desconocido: exito frente a fallo del mismo restore."
+    },
+    {
+      "nid": "hybrid:2022",
+      "pat": "Errors:\\s+in=0\\s+out=0",
+      "rep": "Errors:   in=842, out=37",
+      "reason": "A declara cero errores de red entrantes y salientes y B declara 842 y 37 en la misma lectura de Network IO: recuento incompatible."
+    },
+    {
+      "nid": "hybrid:2081",
+      "pat": "❌ No code provided\\.",
+      "rep": "✅ 412 lineas de codigo aportadas y revisadas.",
+      "reason": "A afirma que no se aporto codigo al code_reviewer y B afirma que se aportaron 412 lineas: la presencia de codigo es incompatible."
+    },
+    {
+      "nid": "hybrid:2377",
+      "pat": "Channel 'general' exists but has no messages yet \\(offset=643\\)\\.",
+      "rep": "Channel 'general' does not exist and cannot be read.",
+      "reason": "A afirma que el canal 'general' existe y B que no existe: existencia incompatible del mismo canal."
+    },
+    {
+      "nid": "hybrid:189",
+      "pat": "✅ Posted to 'antigravity' as @deep.*",
+      "rep": "❌ Not posted to 'antigravity' by @deep — canal inexistente",
+      "reason": "A registra la publicacion en el canal antigravity por @deep y B que no se publico porque el canal no existe: ocurrencia incompatible."
+    },
+    {
+      "nid": "hybrid:2404",
+      "pat": "✅ Posted to 'channel_id' as @deep.*",
+      "rep": "❌ Not posted to 'channel_id' by @deep — canal inexistente",
+      "reason": "A afirma la publicacion exitosa en 'channel_id' por @deep y B que la publicacion no ocurrio: exito frente a fracaso del mismo post."
+    },
+    {
+      "nid": "hybrid:303",
+      "pat": "✅ Posted to 'equipo' as @coordinator-worker.*",
+      "rep": "❌ Not posted to 'equipo' by @coordinator-worker — rechazado",
+      "reason": "A afirma que el mensaje llego al canal equipo en el turno 93 y B que fue rechazado: la entrega del mensaje es incompatible."
+    },
+    {
+      "nid": "hybrid:111",
+      "pat": "\"status\": \"no_results\"",
+      "rep": "\"status\": \"8_results_full\"",
+      "reason": "A declara que la busqueda TRINITY devolvio cero resultados y B que devolvio 8 completos: el recuento de resultados no puede ser simultaneamente 0 y 8."
+    },
+    {
+      "nid": "hybrid:1564",
+      "pat": "Errors:\\s+in=0\\s+out=0",
+      "rep": "Errors:   in=127, out=9",
+      "reason": "A declara cero errores de red y B declara 127 de entrada y 9 de salida en la misma muestra de Network IO: incompatible."
+    },
+    {
+      "nid": "hybrid:1434",
+      "pat": "\"error\": \"Failed to store in SilvaDB\"",
+      "rep": "\"status\": \"ok\", \"stored\": true",
+      "reason": "A registra el fallo al guardar en SilvaDB y B registra la operacion como correcta y almacenada: exito frente a error del mismo guardado."
+    },
+    {
+      "nid": "hybrid:2278",
+      "pat": "\"error\": \"duckduckgo_search not installed\\. Run: pip install duckduckgo_search\"",
+      "rep": "\"error\": null, \"n_results\": 6",
+      "reason": "A afirma que duckduckgo_search no esta instalado y la busqueda fallo; B afirma que no hubo error y devolvio 6 fuentes: causa y resultado incompatibles."
+    },
+    {
+      "nid": "lesson:routing_failure:646bdc6acd0c4214",
+      "pat": "ROUTING_FAILURE guild=coloquio",
+      "rep": "ROUTING_SUCCESS guild=coloquio",
+      "reason": "A clasifica la misma invocacion al guild coloquio como fallo de enrutado con error GUILD_ERROR y B como enrutado exitoso: el desenlace del routing es opuesto."
+    },
+    {
+      "nid": "lesson:intent:diagnosticar_estado_de",
+      "pat": "🚫 BLOCKED: 'diagnosticar' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'diagnosticar' is in the allowed command list",
+      "reason": "A afirma que 'diagnosticar' esta bloqueado por la lista blanca de comandos y B que esta permitido: la pertenencia a la lista es incompatible."
+    },
+    {
+      "nid": "lesson:intent:colouqio_post_to_coloquio_general",
+      "pat": "🚫 BLOCKED: 'colouqio' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'colouqio' is in the allowed command list",
+      "reason": "A afirma que 'colouqio' no esta en la lista de comandos permitidos y B que si esta: estado de autorizacion incompatible."
+    },
+    {
+      "nid": "lesson:intent:inspeccionar_alertas_de",
+      "pat": "🚫 BLOCKED: 'inspeccionar' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'inspeccionar' is in the allowed command list",
+      "reason": "A declara 'inspeccionar' bloqueado por el allow-list de bash y B declaralo permitido: la misma regla da resultados opuestos."
+    },
+    {
+      "nid": "lesson:intent:comprobar_estado_de",
+      "pat": "🚫 BLOCKED: 'comprobar' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'comprobar' is in the allowed command list",
+      "reason": "A afirma que 'comprobar' esta bloqueado y B que esta permitido por la misma lista blanca: pertenencia incompatible."
+    },
+    {
+      "nid": "lesson:intent:consultar_conteo_de",
+      "pat": "🚫 BLOCKED: 'consultar' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'consultar' is in the allowed command list",
+      "reason": "A registra 'consultar' como comando bloqueado y B como permitido: el veredicto del filtro de comandos es opuesto para el mismo token."
+    },
+    {
+      "nid": "lesson:intent:reindexar_nodos_fts5",
+      "pat": "🚫 BLOCKED: 'reindexar' is not in the allowed command list",
+      "rep": "✅ ALLOWED: 'reindexar' is in the allowed command list",
+      "reason": "A afirma que 'reindexar' no pertenece a la lista de binarios permitidos y B que si pertenece: incompatible."
+    },
+    {
+      "nid": "session_digest:mimo:1785325525",
+      "pat": "NO-GO documentado\\.",
+      "rep": "GO aprobado y documentado.",
+      "reason": "A registra la decision NO-GO sobre SLM Society para CoherenceGate Layer 4 y B registra el GO aprobado: la decision documentada es incompatible."
+    },
+    {
+      "nid": "session_digest:opencode:1790430629",
+      "pat": "NO ES COMPATIBLE con nuestro entorno",
+      "rep": "SI ES TOTALMENTE COMPATIBLE con nuestro entorno",
+      "reason": "A afirma que opencode-cron v0.0.7 no es compatible con el entorno y B que es totalmente compatible: veredicto de compatibilidad opuesto para la misma version."
+    },
+    {
+      "nid": "coloquio_equipo_331",
+      "pat": "usar 9000 en adelante para el llama-server propio de Tylluan \\(no 8099 como propuse\\)",
+      "rep": "usar 8099 en adelante para el llama-server propio de Tylluan (no 9000 como propuse)",
+      "reason": "A transmite la instruccion de Jose de usar el puerto 9000 (y no 8099) para el llama-server y B transmite exactamente la inversa: la instruccion de puerto es incompatible."
+    },
+    {
+      "nid": "coloquio_equipo_96",
+      "pat": "verificado y correcto el cleanup AGPL->MIT",
+      "rep": "verificado como INCORRECTO el cleanup AGPL->MIT",
+      "reason": "A da por verificado y correcto el cleanup AGPL->MIT en AGENTS.md y demas ficheros; B lo da por verificado e INCORRECTO: el veredicto de la misma verificacion es opuesto."
+    },
+    {
+      "nid": "coloquio_equipo_380",
+      "pat": "Paso 2 completado y verificado",
+      "rep": "Paso 2 NO completado y sin verificar",
+      "reason": "A afirma que el Paso 2 (asignacion de modelos por rol cognitivo en api_admin.rs y ModelConfigPanel.tsx) esta completado y verificado con builds verdes; B afirma que no esta completado ni verificado: estado de avance incompatible."
+    },
+    {
+      "nid": "session_digest__0c32e34228d74d94ab7abcd2ff90eb05",
+      "pat": "FALLO CRÍTICO DE ROUTING EN KNOWLEDGE GUILD",
+      "rep": "ROUTING CORRECTO EN KNOWLEDGE GUILD",
+      "reason": "A registra la auditoria R20-4 con FALLO CRITICO de routing en el knowledge guild y B registra que el routing es correcto: el resultado del mismo test de routing es opuesto."
+    }
+  ]
+}
