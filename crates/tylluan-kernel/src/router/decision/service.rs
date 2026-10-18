@@ -731,48 +731,70 @@ impl DecisionService {
         }
     }
 
-    /// Lectura de auditoría (tests y Fase 2). Más recientes primero.
-    pub async fn read_shadow_log(&self, limit: usize) -> Vec<ShadowLogRow> {
+    /// Lectura de auditoría que PROPAGA errores de la BD (T1277-B3): a
+    /// diferencia de [`Self::read_shadow_log`], una tabla ausente/corrupta no
+    /// se enmascara como "cero filas". Más recientes primero.
+    async fn read_shadow_log_checked(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<ShadowLogRow>, DecisionError> {
         let Some(silva) = &self.silva else {
-            return Vec::new();
+            // Sin storage no se escribe sombra: ventana vacía legítima.
+            return Ok(Vec::new());
         };
         let g = silva.conn_lock();
         let conn = g.lock().await;
-        let mut stmt = match conn.prepare(
-            "SELECT id, ts, contract, request_hash, rules_value, model_value, model_probs_json,
-                    provider, latency_ms, agreed, mode, model_identity, model_latency_ms
-             FROM decision_shadow_log ORDER BY id DESC LIMIT ?1",
-        ) {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
+        let map_err = |e: rusqlite::Error| {
+            DecisionError::Storage(format!("decision_shadow_log: {e}"))
         };
-        stmt.query_map(rusqlite::params![limit as i64], |r| {
-            Ok(ShadowLogRow {
-                id: r.get(0)?,
-                ts: r.get(1)?,
-                contract: r.get(2)?,
-                request_hash: r.get(3)?,
-                rules_value: r.get(4)?,
-                model_value: r.get(5)?,
-                model_probs_json: r.get(6)?,
-                provider: r.get(7)?,
-                latency_ms: r.get(8)?,
-                agreed: r.get(9)?,
-                mode: r.get(10)?,
-                model_identity: r.get(11)?,
-                model_latency_ms: r.get(12)?,
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, ts, contract, request_hash, rules_value, model_value, model_probs_json,
+                        provider, latency_ms, agreed, mode, model_identity, model_latency_ms
+                 FROM decision_shadow_log ORDER BY id DESC LIMIT ?1",
+            )
+            .map_err(map_err)?;
+        let rows = stmt
+            .query_map(rusqlite::params![limit as i64], |r| {
+                Ok(ShadowLogRow {
+                    id: r.get(0)?,
+                    ts: r.get(1)?,
+                    contract: r.get(2)?,
+                    request_hash: r.get(3)?,
+                    rules_value: r.get(4)?,
+                    model_value: r.get(5)?,
+                    model_probs_json: r.get(6)?,
+                    provider: r.get(7)?,
+                    latency_ms: r.get(8)?,
+                    agreed: r.get(9)?,
+                    mode: r.get(10)?,
+                    model_identity: r.get(11)?,
+                    model_latency_ms: r.get(12)?,
+                })
             })
-        })
-        .map(|it| it.filter_map(Result::ok).collect())
-        .unwrap_or_default()
+            .map_err(map_err)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_err)?);
+        }
+        Ok(out)
+    }
+
+    /// Lectura de auditoría (tests y Fase 2). Degradada por diseño: un fallo
+    /// de BD devuelve vacío — quien necesita distinguir "sin filas" de "BD
+    /// rota" usa [`Self::shadow_overview`]. Más recientes primero.
+    pub async fn read_shadow_log(&self, limit: usize) -> Vec<ShadowLogRow> {
+        self.read_shadow_log_checked(limit).await.unwrap_or_default()
     }
 
     /// Página de auditoría + resumen por contrato + total de filas en una sola
-    /// pasada lógica (T1253). El resumen se calcula SOBRE la ventana devuelta
-    /// (las `limit` filas más recientes); `total` es el COUNT(*) de la tabla
-    /// entera, independiente del límite. Solo lectura.
-    pub async fn shadow_overview(&self, limit: usize) -> ShadowOverview {
-        let rows = self.read_shadow_log(limit).await;
+    /// pasada lógica (T1253; endurecido T1277-B3: los errores de la BD se
+    /// PROPAGAN — `total` nunca es un `unwrap_or(0)` silencioso que convierta
+    /// una BD rota en "sin actividad"). El resumen se calcula SOBRE la ventana
+    /// devuelta (las `limit` filas más recientes); `total` es el COUNT(*) de
+    /// la tabla entera, independiente del límite. Solo lectura.
+    pub async fn shadow_overview(&self, limit: usize) -> Result<ShadowOverview, DecisionError> {
+        let rows = self.read_shadow_log_checked(limit).await?;
         let mut by_contract: std::collections::BTreeMap<String, (i64, i64, i64)> =
             std::collections::BTreeMap::new();
         for r in &rows {
@@ -797,16 +819,19 @@ impl DecisionService {
             Some(silva) => {
                 let g = silva.conn_lock();
                 let conn = g.lock().await;
-                conn.query_row("SELECT COUNT(*) FROM decision_shadow_log", [], |r| r.get(0))
-                    .unwrap_or(0)
+                conn.query_row("SELECT COUNT(*) FROM decision_shadow_log", [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .map_err(|e| DecisionError::Storage(format!("decision_shadow_log COUNT: {e}")))?
             }
+            // Sin storage la sombra nunca escribe: total 0 es verdad, no error.
             None => 0,
         };
-        ShadowOverview {
+        Ok(ShadowOverview {
             rows,
             summary,
             total,
-        }
+        })
     }
 }
 
@@ -873,6 +898,33 @@ mod tests {
         assert!(resp.answers.is_empty());
         assert_eq!(resp.provider, "none");
         assert!(svc.read_shadow_log(10).await.is_empty());
+    }
+
+    /// T1277-B3: si la tabla de sombra desaparece (o la BD falla),
+    /// `shadow_overview` PROPAGA el error — un `total` enmascarado a 0
+    /// engañaría al panel de operador. `read_shadow_log` (API de evals)
+    /// sigue degradando a vacío por diseño.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shadow_overview_propagates_storage_errors() {
+        let db = silva_mem().await;
+        let svc = DecisionService::new(cfg_default(), Some(db.clone()));
+        // Tabla intacta y vacía → Ok(total = 0): sin storage no hay error.
+        let ok = svc.shadow_overview(5).await.expect("intact table");
+        assert_eq!(ok.total, 0);
+        assert!(ok.rows.is_empty());
+        {
+            let g = db.conn_lock();
+            let conn = g.lock().await;
+            conn.execute("DROP TABLE decision_shadow_log", [])
+                .expect("drop shadow table");
+        }
+        let err = svc
+            .shadow_overview(5)
+            .await
+            .expect_err("dropped table must surface the error");
+        assert!(matches!(err, DecisionError::Storage(_)), "got {err:?}");
+        // La API degradada de evals no cambia de contrato.
+        assert!(svc.read_shadow_log(5).await.is_empty());
     }
 
     /// §1217: pregunta libre sin proveedor de modelo → abstain

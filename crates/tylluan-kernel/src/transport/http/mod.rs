@@ -1001,91 +1001,15 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
             }
         };
         let identity = p2p_state.node_identity.clone();
-        let registry = p2p_state.registry.clone();
-        // ADR-019 step 2: the handler receives the caller's X25519 static key
-        // (revealed by the Noise handshake and already approval-checked in
-        // tylluan-link) and enforces the peer's dispatch allow-list
-        // (deny-by-default; denials are audited).
-        let gate_peers = p2p_state.peer_db.clone();
-        let handler: P2pHandlerFn = {
-            let gate_peers = gate_peers.clone();
-            Arc::new(move |req: tylluan_link::dispatch::GuildDispatchRequest, caller_x25519: String| {
-                let reg = registry.clone();
-                let gate_peers = gate_peers.clone();
-                Box::pin(async move {
-                    let (peer_label, allowed) = {
-                        let peers = gate_peers.load_all().unwrap_or_default();
-                        crate::federation::permissions::dispatch_gate_decision(
-                            &peers,
-                            &caller_x25519,
-                            &req.guild,
-                            &req.tool,
-                        )
-                    };
-                    if !allowed {
-                        crate::federation::permissions::audit_permission_denied(
-                            &peer_label,
-                            "dispatch",
-                            &req.guild,
-                            &req.tool,
-                            "tool not allowed by peer policy",
-                        );
-                        return tylluan_link::dispatch::GuildDispatchResponse {
-                            request_id: req.request_id,
-                            success: false,
-                            result: serde_json::Value::Null,
-                            error: Some("tool not allowed by peer policy".to_string()),
-                            executor_id: "local".to_string(),
-                            duration_ms: 0,
-                        };
-                    }
-                    let tool_req = CallToolRequestParam {
-                        name: req.tool.clone().into(),
-                        arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
-                    };
-                    let start = std::time::Instant::now();
-                    match reg.call_tool(&req.guild, tool_req).await {
-                        Ok(res) => {
-                            let dur = start.elapsed().as_millis() as u64;
-                            tylluan_link::dispatch::GuildDispatchResponse {
-                                request_id: req.request_id,
-                                success: !res.is_error.unwrap_or(false),
-                                result: serde_json::json!(res.content),
-                                error: None,
-                                executor_id: "local".to_string(),
-                                duration_ms: dur,
-                            }
-                        }
-                        Err(e) => {
-                            let dur = start.elapsed().as_millis() as u64;
-                            tylluan_link::dispatch::GuildDispatchResponse {
-                                request_id: req.request_id,
-                                success: false,
-                                result: serde_json::Value::Null,
-                                error: Some(e.to_string()),
-                                executor_id: "local".to_string(),
-                                duration_ms: dur,
-                            }
-                        }
-                    }
-                })
-            })
-        };
-        // M14-F Phase 3: P2P dispatch listener. Peer authorization (fix of the
-        // 2026-08-12 RCE audit): only peers whose Ed25519 pubkey is stored AND
-        // approved in peers.db can execute guilds. The Noise XK handshake
-        // reveals the initiator's X25519 static key; we compare it against the
-        // X25519 form of every approved peer's Ed25519 pubkey. Empty set =
-        // fail-closed: nothing executes even if the listener is force-enabled.
-        let p2p_peers = p2p_state.peer_db.clone();
-        let approved_x25519: tylluan_link::p2p::ApprovedPeersFn = Arc::new(move || {
-            let peers = p2p_peers.load_all().unwrap_or_default();
-            peers
-                .iter()
-                .filter(|p| p.approved && !p.ed25519_pubkey.is_empty())
-                .filter_map(|p| tylluan_link::noise::x25519_from_ed25519_hex(&p.ed25519_pubkey))
-                .collect::<Vec<[u8; 32]>>()
-        });
+        // ADR-019 step 2 gate + 2026-08-12 RCE-audit approval check — built by
+        // the shared factories below so the T1277-C e2e test drives THE SAME
+        // closures production runs (exact guild.tool allow-list, deny-by-default,
+        // denials audited, fail-closed on empty approved set).
+        let handler = build_p2p_dispatch_gate_handler(
+            p2p_state.registry.clone(),
+            p2p_state.peer_db.clone(),
+        );
+        let approved_x25519 = build_p2p_approved_peers(p2p_state.peer_db.clone());
         match start_p2p_listener_noise(addr, identity, handler, approved_x25519).await {
             Ok((handle, bound_addr)) => {
                 tracing::info!("P2P dispatch listener started on {}", bound_addr);
@@ -1103,6 +1027,99 @@ let capability_registry: Arc<std::sync::Mutex<tylluan_link::capability::Capabili
     start_http_server(host, port, state)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// T1277-C: the production P2P dispatch handler, extracted from the listener
+/// spawn so the e2e integration test (ADR-019 step 2 debt: "sin test
+/// end-to-end del dispatch P2P") wires THE SAME closure the kernel runs.
+/// The handler receives the caller's X25519 static key (revealed by the Noise
+/// handshake and already approval-checked in tylluan-link) and enforces the
+/// peer's dispatch allow-list (deny-by-default; denials are audited).
+pub fn build_p2p_dispatch_gate_handler(
+    registry: RegistryHandle,
+    gate_peers: std::sync::Arc<crate::federation::PeerDb>,
+) -> P2pHandlerFn {
+    Arc::new(move |req: tylluan_link::dispatch::GuildDispatchRequest, caller_x25519: String| {
+        let reg = registry.clone();
+        let gate_peers = gate_peers.clone();
+        Box::pin(async move {
+            let (peer_label, allowed) = {
+                let peers = gate_peers.load_all().unwrap_or_default();
+                crate::federation::permissions::dispatch_gate_decision(
+                    &peers,
+                    &caller_x25519,
+                    &req.guild,
+                    &req.tool,
+                )
+            };
+            if !allowed {
+                crate::federation::permissions::audit_permission_denied(
+                    &peer_label,
+                    "dispatch",
+                    &req.guild,
+                    &req.tool,
+                    "tool not allowed by peer policy",
+                );
+                return tylluan_link::dispatch::GuildDispatchResponse {
+                    request_id: req.request_id,
+                    success: false,
+                    result: serde_json::Value::Null,
+                    error: Some("tool not allowed by peer policy".to_string()),
+                    executor_id: "local".to_string(),
+                    duration_ms: 0,
+                };
+            }
+            let tool_req = CallToolRequestParam {
+                name: req.tool.clone().into(),
+                arguments: Some(req.args.as_object().cloned().unwrap_or_default()),
+            };
+            let start = std::time::Instant::now();
+            match reg.call_tool(&req.guild, tool_req).await {
+                Ok(res) => {
+                    let dur = start.elapsed().as_millis() as u64;
+                    tylluan_link::dispatch::GuildDispatchResponse {
+                        request_id: req.request_id,
+                        success: !res.is_error.unwrap_or(false),
+                        result: serde_json::json!(res.content),
+                        error: None,
+                        executor_id: "local".to_string(),
+                        duration_ms: dur,
+                    }
+                }
+                Err(e) => {
+                    let dur = start.elapsed().as_millis() as u64;
+                    tylluan_link::dispatch::GuildDispatchResponse {
+                        request_id: req.request_id,
+                        success: false,
+                        result: serde_json::Value::Null,
+                        error: Some(e.to_string()),
+                        executor_id: "local".to_string(),
+                        duration_ms: dur,
+                    }
+                }
+            }
+        })
+    })
+}
+
+/// T1277-C: production approved-peer closure, extracted for the same reason
+/// (the listener spawn and the e2e test must share ONE implementation).
+/// Peer authorization (fix of the 2026-08-12 RCE audit): only peers whose
+/// Ed25519 pubkey is stored AND approved in peers.db can execute guilds. The
+/// Noise XK handshake reveals the initiator's X25519 static key; we compare it
+/// against the X25519 form of every approved peer's Ed25519 pubkey. Empty set =
+/// fail-closed: nothing executes even if the listener is force-enabled.
+pub fn build_p2p_approved_peers(
+    p2p_peers: std::sync::Arc<crate::federation::PeerDb>,
+) -> tylluan_link::p2p::ApprovedPeersFn {
+    Arc::new(move || {
+        let peers = p2p_peers.load_all().unwrap_or_default();
+        peers
+            .iter()
+            .filter(|p| p.approved && !p.ed25519_pubkey.is_empty())
+            .filter_map(|p| tylluan_link::noise::x25519_from_ed25519_hex(&p.ed25519_pubkey))
+            .collect::<Vec<[u8; 32]>>()
+    })
 }
 
 /// True iff `file_path` canonicalizes to somewhere inside `base` — the containment

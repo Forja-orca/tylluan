@@ -503,3 +503,350 @@ async fn test_kernel_remote_dispatch_routes_via_real_noise_xk_p2p() {
     listener_handle.abort();
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
+
+// ─── T1277-C: P2P dispatch gate end-to-end (ADR-019 step 2 debt) ────────────
+//
+// ADR-019 declared the debt itself: "sin test end-to-end del dispatch P2P"
+// (docs/reference/adr/ADR019_team_scoped_networks.md). The Noise listener
+// test above proves the transport with a STUB handler — the production gate
+// (dispatch_gate_decision over the responder's peers.db, plus the
+// approval-checked handshake) was never driven end-to-end.
+//
+// These three tests wire the PRODUCTION closures
+// (transport::http::build_p2p_dispatch_gate_handler /
+// build_p2p_approved_peers — the exact code the listener spawn uses) into a
+// real Noise XK listener on an ephemeral port, then drive it through
+// POST /api/v1/guilds/dispatch/remote with a real peer identity. Production
+// config is untouched: `[p2p] enabled` stays at its default (off); the
+// listener is started directly, exactly like the M21-P4 test above.
+//
+// Topology mirrors production: the responder owns identity + peers.db +
+// registry + gate; the initiator owns the HTTP entry point + p2p_pool. One
+// test = one fresh state = one fresh session pool, so every request performs
+// a fresh handshake (no pooled-session reuse across approval changes).
+
+/// Point `TYLLUAN_AUDIT_DB` at a per-process temp file before the first
+/// denial audit write, so the crate's real `./data/audit.db` is never touched
+/// (same pattern as federation_audit.rs).
+fn ensure_p2p_audit_env() {
+    if std::env::var("TYLLUAN_AUDIT_DB").is_err() {
+        let p = std::env::temp_dir().join(format!(
+            "tylluan_audit_p2p_gate_{}.db",
+            std::process::id()
+        ));
+        // Safety: set once, before any audit write in this test process.
+        unsafe { std::env::set_var("TYLLUAN_AUDIT_DB", p); }
+    }
+}
+
+/// `(result_preview, intent)` of audit rows written for `agent_id`.
+/// Missing DB/table (nothing audited yet) => no rows.
+fn p2p_audit_rows(agent: &str) -> Vec<(String, String)> {
+    let Ok(path) = std::env::var("TYLLUAN_AUDIT_DB") else {
+        return Vec::new();
+    };
+    let Ok(conn) = rusqlite::Connection::open(&path) else {
+        return Vec::new();
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT result_preview, intent FROM guild_audit_log WHERE agent_id = ?1",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(rusqlite::params![agent], |r| {
+        Ok((
+            r.get::<_, Option<String>>(0)
+                .unwrap_or_default()
+                .unwrap_or_default(),
+            r.get::<_, Option<String>>(1)
+                .unwrap_or_default()
+                .unwrap_or_default(),
+        ))
+    }) else {
+        return Vec::new();
+    };
+    rows.flatten().collect()
+}
+
+/// Count of denial rows whose peer could NOT be resolved by key (gate label
+/// `x25519:<key>`): only possible if the handler ran for an unapproved caller.
+fn p2p_audit_x25519_rows() -> usize {
+    let Ok(path) = std::env::var("TYLLUAN_AUDIT_DB") else {
+        return 0;
+    };
+    let Ok(conn) = rusqlite::Connection::open(&path) else {
+        return 0;
+    };
+    conn.query_row(
+        "SELECT COUNT(*) FROM guild_audit_log WHERE agent_id LIKE 'x25519:%'",
+        [],
+        |r| r.get::<_, i64>(0),
+    )
+    .unwrap_or(0) as usize
+}
+
+/// Responder-side peer row: the initiator identity as the responder's
+/// peers.db knows it (Ed25519 pubkey + approval + ADR-019 permissions).
+fn gate_peer_row(
+    name: &str,
+    initiator_pubkey: &str,
+    perms_json: &str,
+) -> tylluan_kernel::federation::FederationPeer {
+    tylluan_kernel::federation::FederationPeer {
+        name: name.to_string(),
+        url: "http://127.0.0.1:0".to_string(),
+        auth_token: "test-token".to_string(),
+        shared_secret: String::new(),
+        last_sync: None,
+        approved: true,
+        added_at: 0,
+        ed25519_pubkey: initiator_pubkey.to_string(),
+        external_address: String::new(),
+        permissions: tylluan_kernel::federation::permissions::parse_permissions(perms_json),
+    }
+}
+
+/// The responder half of the topology: identity + peers.db + registry actor,
+/// wired through the PRODUCTION gate closures, listening on an ephemeral port.
+async fn start_gate_listener(
+    responder_identity: Arc<NodeIdentity>,
+    peer_db: Arc<PeerDb>,
+) -> (tokio::task::JoinHandle<()>, std::net::SocketAddr) {
+    use tylluan_link::p2p::start_p2p_listener_noise;
+    let registry_raw = GuildRegistry::new(
+        std::env::current_dir().unwrap_or_default(),
+        5,
+        TimeoutsConfig::default(),
+        5,
+    );
+    let registry_arc = Arc::new(RwLock::new(registry_raw));
+    let (registry_actor, registry_handle) = RegistryActor::new(registry_arc);
+    tokio::spawn(async move { registry_actor.run().await; });
+    let handler = tylluan_kernel::transport::http::build_p2p_dispatch_gate_handler(
+        registry_handle,
+        peer_db.clone(),
+    );
+    let approved = tylluan_kernel::transport::http::build_p2p_approved_peers(peer_db);
+    let (handle, bound) = start_p2p_listener_noise(
+        "127.0.0.1:0".parse().unwrap(),
+        responder_identity,
+        handler,
+        approved,
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    (handle, bound)
+}
+
+/// Initiator kernel state whose dispatch_router routes `test-guild` to the
+/// responder's bound address over RemoteTcp (same ingestion as the M21-P4
+/// test: node_id MUST be the responder's real pubkey for Noise auth).
+async fn gate_initiator_state(
+    responder_pubkey: &str,
+    bound: std::net::SocketAddr,
+    local_identity: Arc<NodeIdentity>,
+) -> Arc<HttpState> {
+    use tylluan_link::gossip::HardwareCaps;
+    let shared_registry = Arc::new(std::sync::Mutex::new(
+        tylluan_link::capability::CapabilityRegistry::new(std::time::Duration::from_secs(300)),
+    ));
+    let hw = HardwareCaps {
+        ram_mb: 8192,
+        has_gpu: false,
+        load_avg: 0.1,
+        supports_p2p: true,
+        tcp_port: Some(bound.port()),
+    };
+    shared_registry.lock().unwrap().ingest(
+        responder_pubkey,
+        &bound.to_string(),
+        &hw,
+        &["test-guild".to_string()],
+        1,
+    );
+    dst_test_state(shared_registry, local_identity).await
+}
+
+/// One dispatch through the real router; status is asserted inside (these
+/// endpoints answer 200 with success=false for both denial and failure).
+async fn post_remote_dispatch(
+    state: &Arc<HttpState>,
+    bound: std::net::SocketAddr,
+    tool: &str,
+) -> serde_json::Value {
+    let app = api_v1_routes().with_state(state.clone());
+    let body = serde_json::json!({
+        "guild": "test-guild",
+        "tool": tool,
+        "args": {"cmd": "echo hi"},
+        "peer_addr": bound.to_string(),
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/guilds/dispatch/remote")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let resp_body = axum::body::to_bytes(response.into_body(), 8192).await.unwrap();
+    serde_json::from_slice(&resp_body).unwrap()
+}
+
+/// T1277-C case 1 — approved peer, guild.tool IN the allow-list: the gate
+/// lets the request through and the REAL registry answers ("Guild ... not
+/// found": the test registry is empty; spawning real guilds in tests is out
+/// of scope, same reasoning as audit_latency_endpoint_test.rs).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_t1277_c1_gate_allows_listed_guild_tool() {
+    ensure_p2p_audit_env();
+    let local_path = tmp_identity_path("gate_allow_a");
+    let responder_path = tmp_identity_path("gate_allow_r");
+    let local_identity = Arc::new(NodeIdentity::load_or_create(&local_path).unwrap());
+    let responder_identity = Arc::new(NodeIdentity::load_or_create(&responder_path).unwrap());
+    let responder_pubkey = responder_identity.public_key_hex().to_string();
+    let local_pubkey = local_identity.public_key_hex().to_string();
+
+    let peer_db = Arc::new(PeerDb::open(":memory:").unwrap());
+    peer_db
+        .insert(&gate_peer_row(
+            "remote-initiator-allow",
+            &local_pubkey,
+            r#"{"dispatch_allow":["test-guild.execute"]}"#,
+        ))
+        .unwrap();
+
+    let (listener, bound) = start_gate_listener(responder_identity, peer_db).await;
+    let state = gate_initiator_state(&responder_pubkey, bound, local_identity).await;
+    let json = post_remote_dispatch(&state, bound, "execute").await;
+
+    let err = json["error"].as_str().unwrap_or("");
+    assert!(
+        err.contains("Guild 'test-guild' not found"),
+        "allowed request must reach the real registry past the gate: {json}"
+    );
+    assert!(
+        !err.contains("tool not allowed"),
+        "gate must allow the exact guild.tool entry: {json}"
+    );
+    assert_eq!(json["success"], false, "registry has no such guild: {json}");
+    let executor = json["executor"].as_str().unwrap_or("");
+    assert!(
+        executor.starts_with(&format!("p2p://{responder_pubkey}:")),
+        "must route via RemoteTcp, never local: executor={executor}"
+    );
+    assert!(
+        p2p_audit_rows("remote-initiator-allow").is_empty(),
+        "the allow path must not audit a denial"
+    );
+
+    listener.abort();
+    let _ = std::fs::remove_file(local_path);
+    let _ = std::fs::remove_file(responder_path);
+}
+
+/// T1277-C case 2 — approved peer, empty allow-list (deny-by-default): the
+/// gate denies BEFORE the registry and audits the denial with the peer's name
+/// (resolved Ed25519→X25519→row). Relies on the `error` field added by the
+/// T1277-C api_mesh change; without it a policy denial was indistinguishable
+/// from an execution failure at the HTTP layer.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_t1277_c2_gate_denies_unlisted_tool_and_audits() {
+    ensure_p2p_audit_env();
+    let local_path = tmp_identity_path("gate_deny_a");
+    let responder_path = tmp_identity_path("gate_deny_r");
+    let local_identity = Arc::new(NodeIdentity::load_or_create(&local_path).unwrap());
+    let responder_identity = Arc::new(NodeIdentity::load_or_create(&responder_path).unwrap());
+    let responder_pubkey = responder_identity.public_key_hex().to_string();
+    let local_pubkey = local_identity.public_key_hex().to_string();
+
+    let peer_db = Arc::new(PeerDb::open(":memory:").unwrap());
+    peer_db
+        .insert(&gate_peer_row(
+            "remote-initiator-deny",
+            &local_pubkey,
+            "{}", // deny-all: no dispatch_allow entries
+        ))
+        .unwrap();
+
+    let (listener, bound) = start_gate_listener(responder_identity, peer_db).await;
+    let state = gate_initiator_state(&responder_pubkey, bound, local_identity).await;
+    let json = post_remote_dispatch(&state, bound, "execute").await;
+
+    assert_eq!(json["success"], false, "{json}");
+    let err = json["error"].as_str().unwrap_or("");
+    assert_eq!(
+        err, "tool not allowed by peer policy",
+        "the gate's own denial must reach the requester: {json}"
+    );
+    assert!(
+        !err.contains("not found"),
+        "denied request must never reach the registry: {json}"
+    );
+    let executor = json["executor"].as_str().unwrap_or("");
+    assert!(
+        executor.starts_with(&format!("p2p://{responder_pubkey}:")),
+        "must route via RemoteTcp: executor={executor}"
+    );
+
+    let rows = p2p_audit_rows("remote-initiator-deny");
+    assert_eq!(rows.len(), 1, "exactly one denial audited: {rows:?}");
+    assert!(
+        rows[0].0.contains("tool not allowed by peer policy"),
+        "audit preview: {}",
+        rows[0].0
+    );
+    assert!(
+        rows[0].1.contains("dispatch denied"),
+        "audit intent: {}",
+        rows[0].1
+    );
+
+    listener.abort();
+    let _ = std::fs::remove_file(local_path);
+    let _ = std::fs::remove_file(responder_path);
+}
+
+/// T1277-C case 3 — NO approved peer at all (fail-closed on empty set): the
+/// listener's approval check rejects the connection BEFORE any request is
+/// read, so neither the gate handler nor the registry ever runs. The Noise
+/// layer may surface this as an encrypted `peer not approved` response or as
+/// a transport error depending on socket timing — both mean pre-handler
+/// rejection, and both must be visible to the requester.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_t1277_c3_unapproved_peer_rejected_before_handler() {
+    ensure_p2p_audit_env();
+    let local_path = tmp_identity_path("gate_unappr_a");
+    let responder_path = tmp_identity_path("gate_unappr_r");
+    let local_identity = Arc::new(NodeIdentity::load_or_create(&local_path).unwrap());
+    let responder_identity = Arc::new(NodeIdentity::load_or_create(&responder_path).unwrap());
+    let responder_pubkey = responder_identity.public_key_hex().to_string();
+
+    // Empty peers.db — fail-closed: nothing is approved.
+    let peer_db = Arc::new(PeerDb::open(":memory:").unwrap());
+
+    let (listener, bound) = start_gate_listener(responder_identity, peer_db).await;
+    let state = gate_initiator_state(&responder_pubkey, bound, local_identity).await;
+    let json = post_remote_dispatch(&state, bound, "execute").await;
+
+    assert_eq!(json["success"], false, "{json}");
+    let err = json["error"].as_str().unwrap_or("");
+    assert!(
+        err.contains("peer not approved") || err.contains("P2P dispatch failed"),
+        "must be rejected by the approval check before the handler: {json}"
+    );
+    assert!(
+        !err.contains("tool not allowed") && !err.contains("not found"),
+        "gate/registry must never run for an unapproved peer: {json}"
+    );
+    assert_eq!(
+        p2p_audit_x25519_rows(),
+        0,
+        "no gate denial may be audited — the handshake was rejected first"
+    );
+
+    listener.abort();
+    let _ = std::fs::remove_file(local_path);
+    let _ = std::fs::remove_file(responder_path);
+}

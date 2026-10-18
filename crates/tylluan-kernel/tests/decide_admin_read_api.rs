@@ -361,3 +361,42 @@ async fn conflicted_limit_and_excerpt_cap() {
     let v = get_json(&app, "/api/v1/silva/conflicted?limit=9999").await;
     assert_eq!(v["limit"], 200, "hard cap at 200");
 }
+
+/// T1277-B1: los caracteres Unicode de FORMATO (Cf — zero-width, bidi
+/// overrides, BOM) NO sobreviven en el excerpt: pueden ocultar o reordenar
+/// texto en el panel de operador. Los de control (Cc) siguen siendo espacio.
+#[tokio::test(flavor = "multi_thread")]
+async fn conflicted_excerpt_strips_format_chars() {
+    let state = support::test_state("t1277_cf_strip").await;
+    state
+        .silva
+        .upsert_node(
+            "t1277_bidi",
+            "fact",
+            "pago\u{202E}GNP.exe\u{202C} ok\u{200B}fin\u{FEFF}",
+            "{}",
+        )
+        .await
+        .unwrap();
+    state
+        .silva
+        .mark_conflicted("t1277_bidi", true)
+        .await
+        .unwrap();
+    let app = support::build_test_app(state);
+
+    let v = get_json(&app, "/api/v1/silva/conflicted?limit=50").await;
+    let nodes = v["nodes"].as_array().unwrap();
+    let node = nodes
+        .iter()
+        .find(|n| n["id"] == "t1277_bidi")
+        .expect("bidi node present");
+    let excerpt = node["content_excerpt"].as_str().unwrap();
+    for bad in ['\u{202E}', '\u{202C}', '\u{200B}', '\u{FEFF}'] {
+        assert!(
+            !excerpt.contains(bad),
+            "Cf {bad:?} must be stripped: {excerpt:?}"
+        );
+    }
+    assert_eq!(excerpt, "pagoGNP.exe okfin", "Cf removed, visible text intact");
+}

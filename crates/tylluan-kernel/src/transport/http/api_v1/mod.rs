@@ -619,12 +619,47 @@ struct ConflictedQuery {
     limit: Option<usize>,
 }
 
-/// Excerpt para el panel (T1253): caracteres de control sustituidos por
-/// espacio y máximo 300 chars Unicode (no bytes).
+/// ¿Carácter Unicode de FORMATO (Cf)? Zero-width, bidi overrides, BOM, tags…
+/// Pueden ocultar o reordenar texto en el panel, así que el excerpt los
+/// ELIMINA (T1277-B1). Rangos Cf de Unicode 15.0.
+const fn is_format_char(c: char) -> bool {
+    matches!(c,
+        '\u{00AD}'
+        | '\u{0600}'..='\u{0605}'
+        | '\u{061C}'
+        | '\u{06DD}'
+        | '\u{070F}'
+        | '\u{0890}'..='\u{0891}'
+        | '\u{08E2}'
+        | '\u{180E}'
+        | '\u{200B}'..='\u{200F}'
+        | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{2064}'
+        | '\u{2066}'..='\u{2069}'
+        | '\u{FEFF}'
+        | '\u{FFF9}'..='\u{FFFB}'
+        | '\u{110BD}'
+        | '\u{110CD}'
+        | '\u{13430}'..='\u{1343F}'
+        | '\u{1BCA0}'..='\u{1BCA3}'
+        | '\u{1D173}'..='\u{1D17A}'
+        | '\u{E0001}'
+        | '\u{E0020}'..='\u{E007F}'
+    )
+}
+
+/// Excerpt para el panel (T1253, endurecido T1277-B1): caracteres de control
+/// (Cc) sustituidos por espacio, caracteres de formato Unicode (Cf) fuera —
+/// no ocultan texto ni consumen presupuesto — y máximo 300 chars Unicode
+/// (no bytes).
 fn sanitize_excerpt(content: &str) -> String {
     let cleaned: String = content
         .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
+        .filter_map(|c| match c {
+            c if c.is_control() => Some(' '),
+            c if is_format_char(c) => None,
+            c => Some(c),
+        })
         .collect();
     cleaned.chars().take(300).collect()
 }
@@ -632,8 +667,9 @@ fn sanitize_excerpt(content: &str) -> String {
 /// `GET /api/v1/silva/conflicted?limit=N` (T1253, D2 del sync T1255) —
 /// nodos con `conflicted = 1`, clase OPERADOR, solo lectura. A diferencia de
 /// `/api/v1/silva/contradictions` (que lista los DEPRECATED — otra cosa),
-/// ésta es la lista real de nodos en conflicto que `get_all_conflicted`
-/// devuelve. Shape CONGELADO: `{nodes, total_conflicted, limit}` con
+/// ésta es la lista real de nodos en conflicto que `get_conflicted_page`
+/// devuelve (página LIMITada en SQL, T1277-B2). Shape CONGELADO:
+/// `{nodes, total_conflicted, limit}` con
 /// `content_excerpt` acotado a 300 chars saneados. `conflicted_since` es una
 /// aproximación (`updated_at` del nodo — el esquema no guarda cuándo se
 /// marcó el flag). Límite por defecto 50, tope 200 (0 o ausente → 50).
@@ -645,12 +681,10 @@ async fn silva_conflicted_handler(
         None | Some(0) => 50,
         Some(n) => n.min(200),
     };
-    match state.silva.get_all_conflicted().await {
-        Ok(nodes) => {
-            let total_conflicted = nodes.len();
+    match state.silva.get_conflicted_page(limit).await {
+        Ok((nodes, total_conflicted)) => {
             let rows: Vec<serde_json::Value> = nodes
                 .into_iter()
-                .take(limit)
                 .map(|n| {
                     serde_json::json!({
                         "id": n.id,

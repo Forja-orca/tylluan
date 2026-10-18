@@ -94,7 +94,22 @@ pub async fn decide_shadow_handler(
             .into_response();
     };
     let service = server_arc.read().await.decision_service.clone();
-    let overview = service.shadow_overview(limit).await;
+    let overview = match service.shadow_overview(limit).await {
+        Ok(o) => o,
+        Err(e) => {
+            // T1277-B3: una BD de auditoría rota se reporta como 500 — nunca
+            // como un resumen creíble de "cero actividad".
+            tracing::warn!("shadow_overview failed: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "shadow_overview_failed",
+                    "detail": e.to_string(),
+                })),
+            )
+                .into_response();
+        }
+    };
     let rows: Vec<serde_json::Value> = overview
         .rows
         .iter()
