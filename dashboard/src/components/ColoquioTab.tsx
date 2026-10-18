@@ -42,13 +42,14 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
   const [newChannelName, setNewChannelName] = useState('');
   const [needsScrollToBottom, setNeedsScrollToBottom] = useState(false);
   const [showAgentPanel, setShowAgentPanel] = useState(true);
-  const [showCanvas, setShowCanvas] = useState(true);
+  const [showCanvas, setShowCanvas] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   const [showTemplates, setShowTemplates] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [typingStatuses, setTypingStatuses] = useState<Record<string, { ts: number; status: string }>>({});
   const [chatWidth, setChatWidth] = useState(650);
   const [compactMode, setCompactMode] = useState(false);
 
+  const hasSelectedInitial = useRef(false);
   const isAtBottom = useRef(true);
   const lastChRef = useRef<string | null>(null);
   const lastCntRef = useRef(0);
@@ -114,7 +115,14 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
       const d = await bridge.getColoquioChannels() as { channels?: ColoquioChannel[] };
       const chs = d.channels ?? [];
       setChannels(chs);
-      if (!selectedId && chs.length > 0) setSelectedId(chs[0].channel_id);
+      // Auto-select first channel only on initial desktop mount if user hasn't selected/deselected
+      if (!hasSelectedInitial.current && chs.length > 0) {
+        hasSelectedInitial.current = true;
+        const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+        if (isDesktop && !selectedId) {
+          setSelectedId(chs[0].channel_id);
+        }
+      }
     } catch {}
   }, [bridge, selectedId]);
 
@@ -427,32 +435,41 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
       {/* 3-panel body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Channels */}
-        <ColoquioChannelsPanel
-          channels={channels}
-          selectedId={selectedId}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          collapsedGroups={collapsedGroups}
-          setCollapsedGroups={setCollapsedGroups}
-          unreadMap={unreadMap}
-          selectChannel={selectChannel}
-          showNewChannel={showNewChannel}
-          setShowNewChannel={setShowNewChannel}
-          newChannelId={newChannelId}
-          setNewChannelId={setNewChannelId}
-          newChannelName={newChannelName}
-          setNewChannelName={setNewChannelName}
-          createChannel={createChannel}
-          creating={creating}
-          onDeleteChannel={deleteChannel}
-        />
+        <div className={cn("shrink-0 h-full", selectedId ? "hidden md:flex md:w-52" : "w-full md:w-52")}>
+          <ColoquioChannelsPanel
+            channels={channels}
+            selectedId={selectedId}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            collapsedGroups={collapsedGroups}
+            setCollapsedGroups={setCollapsedGroups}
+            unreadMap={unreadMap}
+            selectChannel={selectChannel}
+            showNewChannel={showNewChannel}
+            setShowNewChannel={setShowNewChannel}
+            newChannelId={newChannelId}
+            setNewChannelId={setNewChannelId}
+            newChannelName={newChannelName}
+            setNewChannelName={setNewChannelName}
+            createChannel={createChannel}
+            creating={creating}
+            onDeleteChannel={deleteChannel}
+          />
+        </div>
 
         {/* Central Area: Split screen between Chat (Thread) and Canvas */}
-        <div ref={splitContainerRef} className="flex-1 flex overflow-hidden">
+        <div ref={splitContainerRef} className={cn("flex-1 flex overflow-hidden", !selectedId ? "hidden md:flex" : "flex")}>
           {/* Thread (Chat) */}
           <div
-            className="flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800"
-            style={{ width: showCanvas && selectedId ? chatWidth : '100%', flexShrink: 0 }}
+            className={cn(
+              "flex flex-col overflow-hidden bg-slate-900/40 border-r border-slate-800",
+              showCanvas && selectedId ? "w-full md:w-1/2 lg:w-auto min-w-0" : "w-full"
+            )}
+            style={
+              showCanvas && selectedId && typeof window !== 'undefined' && window.innerWidth >= 1024
+                ? { width: chatWidth, flexShrink: 0, maxWidth: '100%' }
+                : undefined
+            }
           >
             {!selectedId ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-600">
@@ -492,22 +509,23 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
                 hasMoreOlder={hasMoreOlder}
                 loadingOlder={loadingOlder}
                 onLoadOlder={fetchOlderMessages}
+                onBackToChannels={() => setSelectedId(null)}
               />
             )}
           </div>
 
-          {/* Resizable Divider Splitter Bar */}
+          {/* Resizable Divider Splitter Bar (desktop >= 1024px) */}
           {showCanvas && selectedId && (
             <div
               onMouseDown={startResizing}
-              className="w-1 bg-slate-800/85 hover:bg-indigo-500 transition-colors cursor-col-resize select-none shrink-0"
+              className="hidden lg:block w-1 bg-slate-800/85 hover:bg-indigo-500 transition-colors cursor-col-resize select-none shrink-0"
               title="Drag to resize"
             />
           )}
 
           {/* Canvas View */}
           {showCanvas && selectedId && (
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-500 text-xs">Loading canvas...</div>}>
                 <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
               </Suspense>
@@ -517,11 +535,13 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
 
         {/* Agent panel */}
         {showAgentPanel && (
-          <ColoquioAgentsPanel
-            agentPresence={agentPresence}
-            typingStatuses={typingStatuses}
-            selectedChannel={selectedChannel}
-          />
+          <div className="hidden lg:flex shrink-0">
+            <ColoquioAgentsPanel
+              agentPresence={agentPresence}
+              typingStatuses={typingStatuses}
+              selectedChannel={selectedChannel}
+            />
+          </div>
         )}
       </div>
     </div>

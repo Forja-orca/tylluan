@@ -93,7 +93,7 @@ export function ColoquioChannelsPanel({
   };
 
   return (
-    <div className="w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden">
+    <div className="w-full md:w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80">
         <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
         <input className="flex-1 bg-transparent text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none"

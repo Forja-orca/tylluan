@@ -1,6 +1,6 @@
 import {
   MessageSquare, Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
-  Check, Copy, Quote, FileText, Network, ChevronDown, ChevronRight, ChevronUp
+  Check, Copy, Quote, FileText, Network, ChevronDown, ChevronRight, ChevronUp, ChevronLeft
 } from 'lucide-react';
 import { useRef, useLayoutEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
@@ -171,6 +171,7 @@ interface ColoquioMessagesPanelProps {
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
+  onBackToChannels?: () => void;
 }
 
 export function ColoquioMessagesPanel({
@@ -205,6 +206,7 @@ export function ColoquioMessagesPanel({
   hasMoreOlder = false,
   loadingOlder = false,
   onLoadOlder,
+  onBackToChannels,
 }: ColoquioMessagesPanelProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [highlightedTurn, setHighlightedTurn] = useState<number | null>(null);
@@ -452,10 +454,21 @@ export function ColoquioMessagesPanel({
 
   return (
     <>
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-700/60 bg-slate-900/60 shrink-0">
-        <Hash className="w-4 h-4 text-slate-500" />
-        <span className="text-sm font-semibold text-slate-200">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[11px] text-slate-600 font-mono">{allMessages.length} mensajes</span>
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-slate-700/60 bg-slate-900/60 shrink-0">
+        {onBackToChannels && (
+          <button
+            type="button"
+            onClick={onBackToChannels}
+            className="md:hidden p-2.5 -ml-2.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none rounded"
+            title="Volver a lista de canales"
+            aria-label="Volver a lista de canales"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
+        <Hash className="w-4 h-4 text-slate-500 shrink-0" />
+        <span className="text-sm font-semibold text-slate-200 truncate">{selectedChannel?.name ?? selectedId}</span>
+        <span className="text-[11px] text-slate-600 font-mono hidden sm:inline">{allMessages.length} mensajes</span>
         <button
           onClick={() => setCompactMode(v => !v)}
           className={cn(
