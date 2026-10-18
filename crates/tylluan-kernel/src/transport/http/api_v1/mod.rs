@@ -614,6 +614,67 @@ async fn list_contradictions_handler(State(state): State<Arc<HttpState>>) -> imp
     }
 }
 
+#[derive(serde::Deserialize)]
+struct ConflictedQuery {
+    limit: Option<usize>,
+}
+
+/// Excerpt para el panel (T1253): caracteres de control sustituidos por
+/// espacio y máximo 300 chars Unicode (no bytes).
+fn sanitize_excerpt(content: &str) -> String {
+    let cleaned: String = content
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    cleaned.chars().take(300).collect()
+}
+
+/// `GET /api/v1/silva/conflicted?limit=N` (T1253, D2 del sync T1255) —
+/// nodos con `conflicted = 1`, clase OPERADOR, solo lectura. A diferencia de
+/// `/api/v1/silva/contradictions` (que lista los DEPRECATED — otra cosa),
+/// ésta es la lista real de nodos en conflicto que `get_all_conflicted`
+/// devuelve. Shape CONGELADO: `{nodes, total_conflicted, limit}` con
+/// `content_excerpt` acotado a 300 chars saneados. `conflicted_since` es una
+/// aproximación (`updated_at` del nodo — el esquema no guarda cuándo se
+/// marcó el flag). Límite por defecto 50, tope 200 (0 o ausente → 50).
+async fn silva_conflicted_handler(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<ConflictedQuery>,
+) -> impl IntoResponse {
+    let limit = match q.limit {
+        None | Some(0) => 50,
+        Some(n) => n.min(200),
+    };
+    match state.silva.get_all_conflicted().await {
+        Ok(nodes) => {
+            let total_conflicted = nodes.len();
+            let rows: Vec<serde_json::Value> = nodes
+                .into_iter()
+                .take(limit)
+                .map(|n| {
+                    serde_json::json!({
+                        "id": n.id,
+                        "node_type": n.node_type,
+                        "content_excerpt": sanitize_excerpt(&n.content),
+                        "conflicted_since": n.updated_at,
+                    })
+                })
+                .collect();
+            Json(serde_json::json!({
+                "nodes": rows,
+                "total_conflicted": total_conflicted,
+                "limit": limit,
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
 async fn silva_add_edge_handler(State(state): State<Arc<HttpState>>, Json(p): Json<EdgePayload>) -> impl IntoResponse {
     let weight = p.weight.unwrap_or(1.0);
     match state.silva.add_edge(&p.source, &p.target, &p.edge_type, weight, &p.metadata).await {
