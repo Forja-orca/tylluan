@@ -186,7 +186,11 @@ function AgentCard({ a }: { a: AgentActivity }) {
         <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ring-1', s.bg, s.color, s.ring)}>
           {s.initial}
         </div>
-        <div className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900', STATUS_DOT[status])} />
+        <div
+          aria-hidden="true"
+          className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900', STATUS_DOT[status])}
+        />
+        <span className="sr-only">{`Agent status: ${status}`}</span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-1">
@@ -206,7 +210,7 @@ function AgentCard({ a }: { a: AgentActivity }) {
           <div className="text-[11px] text-slate-600">{a.totalTurns} turns</div>
           {status === 'online' && <StatusPill status="online" label="active" />}
           {status === 'idle'   && <StatusPill status="idle" label="idle" />}
-          {status === 'offline' && a.lastTs > 0 && <StatusPill status="offline" label="offline" />}
+          {status === 'offline' && <StatusPill status="offline" label={a.lastTs > 0 ? "offline" : "inactive"} />}
         </div>
       </div>
     </div>
@@ -270,7 +274,21 @@ export function FleetTab() {
     </div>
   );
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-3">
+        <Users className="w-10 h-10 text-slate-700" aria-hidden="true" />
+        <div className="text-sm font-semibold text-slate-300">Fleet telemetry unavailable</div>
+        <p className="text-xs text-slate-500 max-w-sm">Unable to load fleet agent activity from kernel or no active channels found.</p>
+        <button
+          onClick={refresh}
+          className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   const onlineCount = data.agents.filter(a => agentStatus(a.lastTs) === 'online').length;
 
@@ -300,7 +318,13 @@ export function FleetTab() {
       <div>
         <div className="text-[11px] font-medium text-slate-500 mb-2 px-0.5">Agents</div>
         <div className="grid grid-cols-1 gap-2">
-          {data.agents.map(a => <AgentCard key={a.id} a={a} />)}
+          {data.agents.length === 0 ? (
+            <div className="px-4 py-8 text-center text-xs text-slate-500 italic border border-dashed border-slate-800 rounded-xl">
+              No registered fleet agent activity detected
+            </div>
+          ) : (
+            data.agents.map(a => <AgentCard key={a.id} a={a} />)
+          )}
         </div>
       </div>
     </div>

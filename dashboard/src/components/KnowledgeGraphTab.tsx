@@ -513,7 +513,43 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {view === 'grid' && (
+            {searching ? (
+              <div className="h-64 flex flex-col items-center justify-center gap-3 text-slate-400">
+                <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
+                <span className="text-xs">Cargando nodos de SilvaDB...</span>
+              </div>
+            ) : filteredResults.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center my-6">
+                <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mb-3">
+                  <Database className="w-5 h-5 text-slate-400" />
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300">
+                  {results.length === 0 ? "No hay memorias en SilvaDB" : `No hay nodos con estado "${lifecycleFilter}"`}
+                </h3>
+                <p className="text-[11px] text-slate-500 max-w-sm mt-1 leading-relaxed">
+                  {results.length === 0 
+                    ? "Usa la herramienta soberana tylluan_remember o el panel de ingesta para incorporar conocimiento al grafo."
+                    : `Prueba seleccionando otro filtro de ciclo de vida o "all" para ver los ${results.length} nodos disponibles.`}
+                </p>
+                {results.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void loadRecent()}
+                    className="mt-4 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition-all border border-emerald-500/30 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reintentar carga
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLifecycleFilter('all')}
+                    className="mt-4 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 transition-all border border-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none cursor-pointer"
+                  >
+                    Mostrar todos ({results.length})
+                  </button>
+                )}
+              </div>
+            ) : view === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredResults.map((node, i) => {
                   const nodeType = node.node_type || node.type || 'entity';
@@ -524,7 +560,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                       nodeType === 'consolidated_summary' ? "bg-indigo-950/10 hover:bg-indigo-900/20" : "bg-slate-900/50 hover:bg-slate-800/50"
                     )}>
                       <div className="flex items-center gap-2 mb-3">
-                        <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
+                        <div aria-hidden="true" className={cn("w-2 h-2 rounded-full flex-shrink-0",
                           nodeType === 'consolidated_summary' ? "bg-indigo-400" :
                           nodeType === 'lesson' ? "bg-violet-500" :
                           nodeType === 'identity' ? "bg-emerald-500" :
@@ -653,9 +689,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   );
                 })}
               </div>
-            )}
-
-            {view === 'table' && (
+            ) : (
               <div className="rounded-lg bg-slate-900/50 overflow-hidden overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -797,22 +831,6 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     })
                   )}
                 </div>
-              </div>
-            )}
-
-            {results.length === 0 && !searching && (
-              <div className="py-20 text-center flex flex-col items-center">
-                <Database className="w-12 h-12 text-slate-800 mb-4" />
-                <p className="text-slate-600 font-medium">No neural patterns match your scan</p>
-                <button type="button" onClick={loadRecent} className="mt-4 text-xs text-amber-400 hover:text-amber-300 hover:underline cursor-pointer">Reset Scan</button>
-              </div>
-            )}
-
-            {results.length > 0 && filteredResults.length === 0 && !searching && (
-              <div className="py-16 text-center flex flex-col items-center">
-                <Database className="w-10 h-10 text-slate-800 mb-3" />
-                <p className="text-slate-500 text-xs font-medium">No hay nodos en estado <span className="font-mono font-bold text-slate-400 uppercase">"{lifecycleFilter}"</span></p>
-                <button type="button" onClick={() => setLifecycleFilter('all')} className="mt-3 text-xs text-amber-400 hover:text-amber-300 hover:underline cursor-pointer">Ver todos los nodos ({results.length})</button>
               </div>
             )}
           </div>

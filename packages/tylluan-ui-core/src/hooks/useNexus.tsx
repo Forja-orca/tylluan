@@ -78,7 +78,6 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshData = useCallback(async () => {
     if (!bridgeRef.current) return;
     setLoading(true);
-    setError(null);
     try {
       const results = await Promise.allSettled([
         bridgeRef.current.getGuilds(),
@@ -118,6 +117,17 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setAgentProfiles(Array.isArray(profiles) ? profiles : []);
       setSessions(Array.isArray(sess) ? sess : []);
       setSysStatus(sysStat);
+
+      // Check for communication failures across settled promises
+      const rejections = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejections.length === results.length) {
+        // Complete outage: all queries failed
+        const firstReason = rejections[0].reason;
+        const msg = firstReason instanceof Error ? firstReason.message : String(firstReason || 'Failed to connect to the Tylluan kernel');
+        setError(msg);
+      } else {
+        setError(null);
+      }
     } catch (e) {
       console.error('Failed to refresh data:', e);
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -183,6 +193,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       (status) => {
         setOnline(status);
         if (status) {
+          setError(null);
           refreshData();
           refreshGraph();
         }
