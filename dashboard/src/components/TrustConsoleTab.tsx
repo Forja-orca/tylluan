@@ -3,6 +3,8 @@ import { Shield, Activity, CheckCircle, AlertTriangle, RefreshCw, Terminal, Laye
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 
+// Mirrors the real `/health?verbose=true` body built in
+// crates/tylluan-kernel/src/transport/http/mod.rs:1381-1402 (components block).
 interface HealthData {
   status: string;
   version: string;
@@ -12,18 +14,10 @@ interface HealthData {
       ok: boolean;
       count: number;
     };
-    silva_db?: {
-      ok: boolean;
-    };
-    embeddings?: {
-      ok: boolean;
-      loaded?: boolean;
-      circuit_open?: boolean;
-    };
-    guild_supervisor?: {
-      ok: boolean;
-      active?: number;
-    };
+    kernel?: { ok: boolean };
+    embeddings?: { ok: boolean; model?: string };
+    silva?: { ok: boolean; nodes?: number; edges?: number };
+    guilds?: { ok: boolean; active?: number; total?: number };
   };
 }
 

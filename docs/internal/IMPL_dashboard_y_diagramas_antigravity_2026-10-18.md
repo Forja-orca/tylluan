@@ -193,3 +193,54 @@ Se contrastaron las dos fuentes reales del sistema:
 5. **Puertas de Documentación del Repositorio (`check_docs_reality.sh` y `check_doc_links.py`):**
    - Comando: `SKIP_TEST_RUN=1 bash scripts/check_docs_reality.sh && python scripts/check_doc_links.py` (en `E:\tylluan-wt-antigravity`)
    - Salida: `ALL DOCS REALITY CHECKS PASSED` (`REALITY_EXIT=0`) y `OK: 112 markdown files checked, all relative links resolve.` (`LINKS_EXIT=0`).
+
+---
+
+## Lote Adicional: D4, D5, D6 y Verificación en Navegador (Modo Claro + Scroll Auditoría)
+
+### 1. D4 — Evaluación Exhaustiva de Endpoints Huérfanos
+Tras inspeccionar los handlers en `crates/tylluan-kernel/src/transport/http/` y las referencias en el frontend y repositorios externos:
+
+| Endpoint | Archivo Kernel | Decisión | Motivo / Justificación |
+|---|---|---|---|
+| `GET /api/v1/capability-registry` y `/{guild}` | `api_guilds.rs:200,207` | **solo-API** | Índice declarativo estático sobre `TOOL_METADATA` para agentes y `TaskContext v2` (ADR-014); el dashboard usa la vista dinámica en `/api/v1/capabilities`. |
+| `GET /api/v1/journal` + `/{agent_id}/checkin` + `/{agent_id}/recover` | `api_journal.rs:281,296,318` | **solo-API** | Mecanismo de persistencia y recuperación de contexto para agentes de fondo (ej. `bootstrap.rs:252`); no requiere vista manual de operador en dashboard. |
+| `GET /api/v1/mesh/peers` | `api_mesh.rs:31` | **solo-API** | Telemetría interna de buckets y peers DHT Kademlia para diagnóstico de red P2P; el dashboard ya monitoriza nodos federados vía `/api/v1/federation/peers`. |
+| `GET /api/v1/federation/nodes` | `api_federation.rs:762` | **solo-API** | Endpoint documentado en `README.md:518` (`M11-C`) para consultas de procedencia CLI (`?source={peer\|local}`); no es consumido por la UI. |
+| `GET/POST /api/v1/routing/anchors` + `/reembed` | `api_federation.rs:898,910,920` | **solo-API** | Ingesta, listado y re-embedding de anclas semánticas para enrutamiento heurístico; usado por scripts batch y testing de router. |
+| `POST /api/v1/eval/run` y `GET /api/v1/eval/results` | `api_eval.rs:51,100` | **solo-API** | Ejecución de benchmarks sintéticos aislados (`longmemeval-s`); consumido por `tylluan-cli` (`crates/tylluan-cli/src/main.rs:534,571`). |
+| `POST /api/v1/stigmergy/traces` | `api_silva.rs:258` | **solo-API** | Ingesta mutante de trazas de difusión estigmérgica por agentes en runtime; el dashboard consume exclusivamente la lectura agregada en `/api/v1/stigmergy/zones` (`StigmergyHeatmapPanel.tsx`). |
+| `GET /api/v1/system/signals` | `api_ops.rs:111` | **solo-API (Alias)** | Registrado en `routes.rs:113` como alias exacto de `golden_signals_handler`, consumido por el cliente UI mediante la ruta canónica `/api/v1/health/golden-signals` (`routes.rs:136`). |
+| `GET/POST /api/v1/inference/providers` + `/{name}/test` | `api_admin.rs:877,878,907` | **solo-API / Candidato a Deprecación** | Stubs `StatusCode::OK` vacíos excepto `{name}/test`. El frontend utiliza `/api/v1/external-providers` y `/api/v1/external-providers/{name}/test` para la gestión real de proveedores. |
+
+---
+
+### 2. D5 — Contador de Sovereign Tools en Salud
+- **Contrato Backend (`http/mod.rs:1394-1397`):** `/health?verbose=true` devuelve `"sovereign_tools": { "ok": count == 6, "count": 6 }`.
+- **Implementación Frontend (`TrustConsoleTab.tsx`):**
+  - Muestra `6 / 6 VERIFIED` cuando `count === 6 && ok === true`.
+  - Muestra alerta roja `DRIFT ALERT` con mensaje de violación si `count !== 6` o `ok === false`.
+  - Mantiene estado honesto `— / 6 PENDING` si la telemetría no incluye el campo.
+  - Tipado de `HealthData` alineado fielmente con el bloque real `components` del kernel (`sovereign_tools`, `kernel`, `embeddings`, `silva`, `guilds`).
+- **Test Unitario:** `dashboard/src/components/__tests__/TrustConsoleTab.test.tsx` (4 tests pasando limpios).
+
+---
+
+### 3. D6 — Política de Invocación en Canvas de Coloquio
+- **Bloqueo en Puente de Canvas:** En [`ColoquioCanvasWorkspace.tsx`](file:///e:/tylluan-wt-antigravity/dashboard/src/components/ColoquioCanvasWorkspace.tsx), el allowlist estricto autoriza 5 herramientas soberanas (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`) y rechaza deliberadamente `tylluan_decide`.
+- **Aviso Visible en Pantalla:** Se actualizó la barra de estado superior del canvas con explicación transparente:
+  - *"Canvas bridge: 5 of 6 sovereign tools authorized (`do`, `remember`, `recall`, `think`, `graph`)"*.
+  - Pill descriptiva: *"tylluan_decide: not exposed (provisional, pending TL decision)"* con tooltip detallado aclarando que un canvas ejecuta código pegado en un canal y no debe emitir veredictos de políticas, señalando además que el iframe ejecuta con `allow-same-origin`.
+
+---
+
+### 4. Comprobación en Navegador en Vivo (Chrome DevTools MCP)
+- **Modo Claro (Tema Moonlit Sovereign):**
+  - Se inspeccionó la activación del tema claro (`document.documentElement.classList.contains('light')`).
+  - **Hallazgo verificado:** Los tokens CSS para modo claro (`--slate-50` a `--slate-950`, `--emerald-*`, `--amber-*`) están definidos en `:root` de `dashboard/src/index.css`. Sin embargo, los tokens de fondo oscuro para el tema por defecto viven bajo la clase `.dark`, mientras que las clases utilitarias de Tailwind como `bg-slate-950` resuelven la variable HSL `--slate-950`. Al no estar activa la clase `.dark`, `:root` define `--slate-950: 222 33% 6%` (diseñado originalmente como color de texto/contraste claro en la paleta invertida, según commit `e161c16`). El switch de tema funciona sin errores de script ni roturas de maquetación.
+- **Scroll Vertical en Pestaña Auditoría (`Audit Trail`):**
+  - Contenedor verificado: `div.overflow-y-auto` en `App.tsx:457`.
+  - Altura del contenido (`scrollHeight`): **`6,502 px`** frente a `clientHeight` de **`769 px`**.
+  - Ejecución de scroll suave comprobada en navegador (`scrollTop = 1200 px` y `scrollTop = 2800 px` verificados y capturados visualmente).
+  - Los 5 paneles apilados (`TrustConsoleTab`, `DecisionServicePanel`, `AuditTrailPanel`, `CoherenceGatePanel`, `FrictionPanel`) se desplazan fluidamente sin desbordamientos horizontales ni bloqueos.
+
