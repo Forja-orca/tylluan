@@ -28,7 +28,10 @@ use std::time::Duration;
 use crate::config::SystemoneHttpConfig;
 
 use super::api_types::ABSTAIN_STATE_TOO_LONG;
-use super::{DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest};
+use super::{
+    CoreQuestion, DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion,
+    DecisionRequest,
+};
 
 pub const PROVIDER_ID: &str = "systemone-http-v1";
 
@@ -250,7 +253,7 @@ impl DecisionProvider for SystemOneHttpProvider {
                 );
                 continue;
             };
-            let distribution = distribution_for(q, ans);
+            let distribution = distribution_for(&q.kind, ans);
             if distribution.is_empty() {
                 tracing::debug!("decision: systemone '{name}' answered with no probabilities — skipped");
                 continue;
@@ -279,13 +282,52 @@ impl DecisionProvider for SystemOneHttpProvider {
     }
 }
 
-/// Mapeo puro `DecisionQuestion` → spec System One (idéntico al del spike
+/// Tope propio de instructions en esta frontera (T1252, defensa en
+/// profundidad): el wire ya aplica `MAX_INSTRUCTIONS_BYTES` en
+/// `validate_request`, pero aquí el contenido se trata como NO confiable
+/// aunque venga de dentro de la propia casa.
+const MAX_PROVIDER_INSTRUCTIONS_BYTES: usize = 1024;
+
+/// Resuelve el campo `instructions` del spec System One desde el canal del
+/// wire (T1252). Tratamiento no-confiable:
+/// - ausente/vacío tras saneado → texto por defecto EXACTAMENTE idéntico al
+///   previo a T1252 (el comportamiento sin instructions no cambia);
+/// - caracteres de control se eliminan (se conservan `\t`, `\n`, `\r` —
+///   formato legítimo de prompt);
+/// - longitud > `MAX_PROVIDER_INSTRUCTIONS_BYTES` (bytes UTF-8) → se ignora
+///   y cae al texto por defecto (nunca se trunca: un recorte a medias es un
+///   prompt partido), con `warn` en tracing.
+fn resolve_instructions(name: &str, wire: Option<&str>) -> String {
+    let fallback = format!("Answer the {name} question about this state.");
+    let Some(raw) = wire else {
+        return fallback;
+    };
+    let sanitized: String = raw
+        .trim()
+        .chars()
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    if sanitized.is_empty() {
+        return fallback;
+    }
+    if sanitized.len() > MAX_PROVIDER_INSTRUCTIONS_BYTES {
+        tracing::warn!(
+            "decision: instructions for question '{name}' exceed {MAX_PROVIDER_INSTRUCTIONS_BYTES} bytes — ignored (untrusted)"
+        );
+        return fallback;
+    }
+    sanitized
+}
+
+/// Mapeo puro `CoreQuestion` → spec System One (idéntico al del spike
 /// probado contra servidor real). `Noul` viaja como choice de dos opciones
 /// para que la distribución por opción sea siempre la única fuente de
 /// verdad (el campo `noul` tipado de la respuesta se prefiere si viene).
-fn question_spec(name: &str, q: &DecisionQuestion) -> Result<serde_json::Value, DecisionError> {
-    let instructions = format!("Answer the {name} question about this state.");
-    Ok(match q {
+/// T1252: `instructions` sale del canal del wire vía [`resolve_instructions`];
+/// sin canal (o descartado por no-confiable) → texto por defecto.
+fn question_spec(name: &str, q: &CoreQuestion) -> Result<serde_json::Value, DecisionError> {
+    let instructions = resolve_instructions(name, q.instructions.as_deref());
+    Ok(match &q.kind {
         DecisionQuestion::Choice { options } => {
             if options.len() < 2 {
                 return Err(DecisionError::EmptyQuestion(name.to_string()));
@@ -352,9 +394,9 @@ mod tests {
     fn question_spec_covers_all_variants() {
         let choice = question_spec(
             "route",
-            &DecisionQuestion::Choice {
+            &CoreQuestion::without_instructions(DecisionQuestion::Choice {
                 options: vec!["billing".into(), "technical".into()],
-            },
+            }),
         )
         .unwrap();
         assert_eq!(choice["type"], "choice");
@@ -363,15 +405,15 @@ mod tests {
 
         let score = question_spec(
             "urgency",
-            &DecisionQuestion::Score {
+            &CoreQuestion::without_instructions(DecisionQuestion::Score {
                 levels: vec!["low".into(), "high".into()],
-            },
+            }),
         )
         .unwrap();
         assert_eq!(score["type"], "score");
         assert_eq!(score["criteria"].as_array().unwrap().len(), 2);
 
-        let noul = question_spec("should_i", &DecisionQuestion::Noul).unwrap();
+        let noul = question_spec("should_i", &CoreQuestion::without_instructions(DecisionQuestion::Noul)).unwrap();
         assert_eq!(noul["type"], "choice");
         assert!(noul["criteria"].get("true").is_some());
         assert!(noul["criteria"].get("false").is_some());
@@ -383,16 +425,156 @@ mod tests {
             options: vec!["only".into()],
         };
         assert!(matches!(
-            question_spec("q", &one_opt),
+            question_spec("q", &CoreQuestion::without_instructions(one_opt)),
             Err(DecisionError::EmptyQuestion(..))
         ));
         let one_level = DecisionQuestion::Score {
             levels: vec!["only".into()],
         };
         assert!(matches!(
-            question_spec("q", &one_level),
+            question_spec("q", &CoreQuestion::without_instructions(one_level)),
             Err(DecisionError::EmptyQuestion(..))
         ));
+    }
+
+    /// T1252 — el canal reabierto: las instructions del wire llegan al spec
+    /// del modelo EXACTAMENTE como llegaron (el proveedor no las reescribe)
+    /// y el resto del spec queda intacto.
+    #[test]
+    fn wire_instructions_reach_the_model_spec_verbatim() {
+        let text = "Prefer the billing path unless the cache layer is implicated.";
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some(text.to_string()),
+            ),
+        )
+        .unwrap();
+        assert_eq!(spec["instructions"], text);
+        assert_eq!(spec["type"], "choice");
+        assert_eq!(spec["criteria"]["billing"], serde_json::Value::Null);
+    }
+
+    /// T1252 — SIN instructions el texto por defecto es idéntico al previo
+    /// a T1252 en los tres tipos de pregunta (comportamiento no cambia).
+    #[test]
+    fn absent_instructions_keep_the_pre_t1252_default() {
+        let choice = question_spec(
+            "route",
+            &CoreQuestion::without_instructions(DecisionQuestion::Choice {
+                options: vec!["billing".into(), "technical".into()],
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            choice["instructions"],
+            "Answer the route question about this state."
+        );
+        let score = question_spec(
+            "urgency",
+            &CoreQuestion::without_instructions(DecisionQuestion::Score {
+                levels: vec!["low".into(), "high".into()],
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            score["instructions"],
+            "Answer the urgency question about this state."
+        );
+        let noul = question_spec(
+            "should_i",
+            &CoreQuestion::without_instructions(DecisionQuestion::Noul),
+        )
+        .unwrap();
+        assert_eq!(
+            noul["instructions"],
+            "Answer the should_i question about this state."
+        );
+    }
+
+    /// T1252 — no-confiable, longitud: por encima del tope se IGNORA y cae
+    /// al texto por defecto (nunca se trunca: un recorte a medias es un
+    /// prompt partido); justo en el tope, pasa.
+    #[test]
+    fn oversized_instructions_fall_back_instead_of_truncating() {
+        let over = "a".repeat(MAX_PROVIDER_INSTRUCTIONS_BYTES + 1);
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some(over),
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            spec["instructions"],
+            "Answer the route question about this state."
+        );
+
+        let exact = "b".repeat(MAX_PROVIDER_INSTRUCTIONS_BYTES);
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some(exact.clone()),
+            ),
+        )
+        .unwrap();
+        assert_eq!(spec["instructions"], exact.as_str());
+    }
+
+    /// T1252 — no-confiable, saneado: caracteres de control fuera (quedan
+    /// `\t`/`\n`/`\r`); instructions vacías o de solo-controles → por defecto.
+    #[test]
+    fn control_characters_are_stripped_and_blank_falls_back() {
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some("AB\u{0}CD\nEF\u{7}GH".into()),
+            ),
+        )
+        .unwrap();
+        assert_eq!(spec["instructions"], "ABCD\nEFGH");
+
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some("\u{0}\u{1}".into()),
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            spec["instructions"],
+            "Answer the route question about this state."
+        );
+
+        let spec = question_spec(
+            "route",
+            &CoreQuestion::new(
+                DecisionQuestion::Choice {
+                    options: vec!["billing".into(), "technical".into()],
+                },
+                Some("   ".into()),
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            spec["instructions"],
+            "Answer the route question about this state."
+        );
     }
 
     #[test]

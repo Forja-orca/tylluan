@@ -49,7 +49,10 @@ impl DecisionProvider for RulesDecisionProvider {
     ) -> Result<HashMap<String, DecisionAnswer>, DecisionError> {
         let mut out = HashMap::new();
         for (name, question) in &req.questions {
-            let distribution = match question {
+            // T1252: `question` es un `CoreQuestion`; las reglas deciden
+            // SOLO sobre el tipo tipado — `instructions` no participa
+            // (canal no-confiable exclusivo del proveedor de modelo).
+            let distribution = match &question.kind {
                 DecisionQuestion::Choice { options } => {
                     let dist = match name.as_str() {
                         "provider_selection" => {
@@ -183,6 +186,12 @@ mod tests {
     use crate::router::decision::rules::RulesDecisionProvider;
 
     fn req_with(state: serde_json::Value, questions: HashMap<String, DecisionQuestion>) -> DecisionRequest {
+        // Los tests construyen sobre el tipo tipado; el canal `instructions`
+        // queda cerrado (None) — así las reglas se prueban sin variar.
+        let questions = questions
+            .into_iter()
+            .map(|(k, q)| (k, CoreQuestion::without_instructions(q)))
+            .collect();
         DecisionRequest { state, questions }
     }
 

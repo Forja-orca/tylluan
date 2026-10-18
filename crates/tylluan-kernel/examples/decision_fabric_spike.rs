@@ -555,7 +555,8 @@ use ndarray::{Array1, Array2};
 use ort::session::Session;
 use ort::value::TensorRef;
 use tylluan_kernel::router::decision::{
-    DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest,
+    CoreQuestion, DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion,
+    DecisionRequest,
 };
 
 const QTYPE_CHOICE: i64 = 0;
@@ -887,7 +888,7 @@ impl DecisionProvider for LayaOnnxDecisionProvider {
         names.sort();
         let qs: Vec<LayaQuestion> = names
             .iter()
-            .map(|name| match &req.questions[*name] {
+            .map(|name| match &req.questions[*name].kind {
                 DecisionQuestion::Choice { options } => LayaQuestion {
                     qtype: QTYPE_CHOICE,
                     instructions: format!("Answer the {name} question about this state."),
@@ -1250,19 +1251,19 @@ async fn run_variant_c_inner(
     let mut route = ChoiceDecisionStats::new();
     let mut decide_errors = 0usize;
     for it in &items {
-        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut questions: HashMap<String, CoreQuestion> = HashMap::new();
         let mut want_route = false;
         let mut want_hitl = false;
         if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
             let options: Vec<String> =
                 opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
             if !options.is_empty() {
-                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                questions.insert("route_guild".into(), CoreQuestion::without_instructions(DecisionQuestion::Choice { options }));
                 want_route = true;
             }
         }
         if it["questions"].get("hitl_resolve").is_some() {
-            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            questions.insert("hitl_resolve".into(), CoreQuestion::without_instructions(DecisionQuestion::Noul));
             want_hitl = true;
         }
         if questions.is_empty() {
@@ -1512,7 +1513,7 @@ impl DecisionProvider for SystemOneDecisionProvider {
         // fail the call only if EVERY question in it turned out invalid.
         let mut questions = serde_json::Map::new();
         for (name, q) in &req.questions {
-            match systemone_question_spec(name, q) {
+            match systemone_question_spec(name, &q.kind) {
                 Ok(spec) => {
                     questions.insert(name.clone(), spec);
                 }
@@ -1572,7 +1573,7 @@ impl DecisionProvider for SystemOneDecisionProvider {
                 );
                 continue;
             };
-            let distribution = systemone_distribution(q, ans);
+            let distribution = systemone_distribution(&q.kind, ans);
             if distribution.is_empty() {
                 tracing::debug!("[variant-b] '{name}' answered with no probabilities — skipping it");
                 continue;
@@ -1723,19 +1724,19 @@ async fn run_variant_b_inner(
     let mut route = ChoiceDecisionStats::new();
     let mut decide_errors = 0usize;
     for it in &items {
-        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut questions: HashMap<String, CoreQuestion> = HashMap::new();
         let mut want_route = false;
         let mut want_hitl = false;
         if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
             let options: Vec<String> =
                 opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
             if !options.is_empty() {
-                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                questions.insert("route_guild".into(), CoreQuestion::without_instructions(DecisionQuestion::Choice { options }));
                 want_route = true;
             }
         }
         if it["questions"].get("hitl_resolve").is_some() {
-            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            questions.insert("hitl_resolve".into(), CoreQuestion::without_instructions(DecisionQuestion::Noul));
             want_hitl = true;
         }
         if questions.is_empty() {
@@ -2108,7 +2109,7 @@ impl DecisionProvider for DecimaOnnxDecisionProvider {
         names.sort();
         let mut out = HashMap::new();
         for name in names {
-            let (options, keys): (Vec<String>, Vec<String>) = match &req.questions[name] {
+            let (options, keys): (Vec<String>, Vec<String>) = match &req.questions[name].kind {
                 DecisionQuestion::Choice { options } => (options.clone(), options.clone()),
                 DecisionQuestion::Score { levels } => (
                     levels.iter().enumerate().map(|(i, c)| format!("level {i}: {c}")).collect(),
@@ -2201,19 +2202,19 @@ async fn run_variant_d_inner(dir: &str, split: &str, source: &str, limit: Option
     let mut route = ChoiceDecisionStats::new();
     let mut decide_errors = 0usize;
     for it in &items {
-        let mut questions: HashMap<String, DecisionQuestion> = HashMap::new();
+        let mut questions: HashMap<String, CoreQuestion> = HashMap::new();
         let mut want_route = false;
         let mut want_hitl = false;
         if let Some(opts) = it["questions"]["route_guild"]["options"].as_array() {
             let options: Vec<String> =
                 opts.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect();
             if !options.is_empty() {
-                questions.insert("route_guild".into(), DecisionQuestion::Choice { options });
+                questions.insert("route_guild".into(), CoreQuestion::without_instructions(DecisionQuestion::Choice { options }));
                 want_route = true;
             }
         }
         if it["questions"].get("hitl_resolve").is_some() {
-            questions.insert("hitl_resolve".into(), DecisionQuestion::Noul);
+            questions.insert("hitl_resolve".into(), CoreQuestion::without_instructions(DecisionQuestion::Noul));
             want_hitl = true;
         }
         if questions.is_empty() {

@@ -421,6 +421,23 @@ pub struct BoundingBox {
 
 ---
 
+### 3.9 Canal de `instructions` por pregunta (T1252, 2026-10-18)
+
+**Estado previo (hallazgo del duelo P2, 2026-10-18):** `QuestionSpec.instructions` ya existía en el wire (§1217: 1 KiB por pregunta, validado en `validate_request`), pero el canal estaba CORTADO: `to_core_question` (`api_types.rs`) lo descartaba al traducir al núcleo y `question_spec` del proveedor (`systemone_http.rs`) generaba un texto fijo propio ("Answer the {name} question about this state."). Es decir: el wire aceptaba instructions, validaba su longitud… y jamás llegaban al modelo.
+
+**Decisión (T1252):** reabrir el canal extremo a extremo **sin cambiar el comportamiento cuando no hay instructions**.
+
+1. **Núcleo (`decision/mod.rs`):** nuevo struct `CoreQuestion { kind: DecisionQuestion, instructions: Option<String> }`. `DecisionRequest.questions` pasa a `HashMap<String, CoreQuestion>`. El enum `DecisionQuestion` queda INTACTO (las reglas deterministas de `rules.rs` solo cambian el acceso de campo: deciden sobre `kind`, jamás sobre `instructions`).
+2. **Traducción (`to_core_question`):** las instructions crudas del wire viajan SIN interpretar hasta la frontera del proveedor — sin validar ni sustituir aquí.
+3. **Frontera no-confiable (`systemone_http::resolve_instructions`):**
+   - ausente/vacío tras saneado → texto por defecto **byte idéntico** al previo a T1252 (los tres tipos de pregunta);
+   - caracteres de control eliminados (se conservan `\t`, `\n`, `\r` — formato legítimo de prompt);
+   - longitud > `MAX_PROVIDER_INSTRUCTIONS_BYTES` (1024 bytes UTF-8, tope propio independiente del del wire, defensa en profundidad) → se IGNORA y cae al texto por defecto con `warn` en tracing — **nunca se trunca** (un recorte a medias es un prompt partido);
+   - el resto del spec System One (`type`, `criteria`) no se toca.
+4. **Alcance:** carril libre y sombra de contrato (`to_core_question` en ambos) — la respuesta, la autoridad de reglas, el rechazo de valores fuera de opciones y el invariante v8 (la sombra jamás altera la respuesta emitida) quedan SIN cambio. Los tests nuevos lo blindan: passthrough verbatim, defecto pre-T1252 exacto, sobre-tope→defecto, saneado de controles (unidad) + E2E carril libre con captura del body en el mock (con y sin instructions).
+
+---
+
 ## 4. Origen y Ciclo de Vida de Modelos
 
 ### 4.1 Catálogo Declarativo como Fichero de Datos
@@ -518,7 +535,8 @@ Al construir sobre la base existente (`reqwest`, `InferenceBudget`, `ExternalPro
   - `PeerPermissions { sync_spaces, dispatch_allow }` en `federation/permissions.rs` (no se reutiliza para inferencia).
   - Rutas HITL `/api/v1/dispatches/{id}/approve` y `/reject` (`routes.rs` L286–L287).
   - Toolchain fijada `1.88` en `rust-toolchain.toml`.
-  - Wire SystemOne (`model`, `state`, `questions` como mapa, `instructions` obligatorio, `criteria`) en `examples/decision_fabric_spike.rs`.
+   - Wire SystemOne (`model`, `state`, `questions` como mapa, `instructions` obligatorio, `criteria`) en `examples/decision_fabric_spike.rs`.
+   - Canal `instructions` reabierto T1252 (2026-10-18): `CoreQuestion` en `decision/mod.rs`, `to_core_question` con passthrough en `api_types.rs`, `resolve_instructions` con tope 1024 B y saneado en `systemone_http.rs`, E2E con captura de body en `tests/decide_systemone_http.rs` (`free_lane_forwards_wire_instructions_to_the_model`, `free_lane_without_instructions_keeps_the_default_body`) — todo verde con `cargo test` + `cargo clippy -D warnings`.
   - Nombres de campo de OpenAI Decisions según la guía oficial (leída 2026-10-16).
 - **SIN VERIFICAR (solo fuente secundaria):**
   - Límites 1–128 preguntas / 255 opciones / 2–10 niveles, y `images`/`assets` en SystemOne (nota de investigación, vía LiteLLM).
@@ -533,3 +551,15 @@ Al construir sobre la base existente (`reqwest`, `InferenceBudget`, `ExternalPro
 ## 9. Decisiones que Siguen Abiertas para José
 
 1. **Federación con Dimensiones Vectoriales Dispares:** ¿Aprobar que nodos federados con perfiles dispares (ej. hospital 1024d vs portátil 384d) sincronicen exclusivamente contenido textual (`sync_spaces`), computando cada nodo sus vectores locales de forma independiente?
+
+---
+
+## Impact
+
+> Apartado exigido por el TL para el cierre de T1252 (Coloquio turno 1252).
+
+- **Qué cambia:** solo el canal de prompt `instructions` del Decision Fabric: `CoreQuestion` (núcleo), passthrough en `to_core_question`, `resolve_instructions` en la frontera del proveedor `systemone_http`. Ficheros: `crates/tylluan-kernel/src/router/decision/{mod,api_types,systemone_http,rules,service}.rs`, `examples/decision_fabric_spike.rs` (solo acomodos mecánicos de tipo), `tests/decide_systemone_http.rs` (mock captura body + 2 tests nuevos).
+- **Qué NO cambia (verificado con la batería de tests):** comportamiento sin instructions (texto por defecto byte idéntico, test `absent_instructions_keep_the_pre_t1252_default` + E2E `free_lane_without_instructions_keeps_the_default_body`); reglas deterministas (deciden sobre `kind`, sin tocar umbrales ni lógica); invariante v8 (sombra jamás altera la respuesta — `decide_systemone_http` v8/rejection en verde); esquema wire §1217 intacto (sin cambios en `DecideRequest`/`QuestionSpec`); cero cambio en la superficie MCP/REST.
+- **Seguridad:** instructions se tratan como contenido NO confiable en la frontera del proveedor — saneado de caracteres de control y tope de 1024 bytes propio (defensa en profundidad frente al tope de wire), con fallback al defecto (nunca truncado). Sin ruta de escape del spec JSON: el texto viaja como valor serializado por `serde_json`.
+- **Verificación:** `cargo check -p tylluan-kernel --all-targets`, `cargo test` (lib decision 40 + `decide_systemone_http` 13 + `decide_adversarial` 4 + `decide_parity_e2e` 20, todos en verde), `cargo clippy -p tylluan-kernel --all-targets -- -D warnings` sin avisos.
+- **Fuera de alcance (orden del TL):** NO se re-miden redacciones de P2 (esperando Buffy v2); ninguna medición del duelo se toca.

@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{DecisionAnswer, DecisionQuestion};
+use super::{CoreQuestion, DecisionAnswer, DecisionQuestion};
 
 /// Límites del contrato (§1217). Constantes del esquema, no configurables.
 pub const MAX_QUESTIONS: usize = 16;
@@ -270,8 +270,11 @@ pub fn validate_request(req: &DecideRequest) -> Result<(), String> {
 }
 
 /// Traduce una pregunta al tipo interno del Decision Fabric (`Boolean`→`Noul`).
-pub fn to_core_question(spec: &QuestionSpec) -> DecisionQuestion {
-    match spec.kind {
+/// T1252: el canal `instructions` del wire viaja SIN interpretar hasta el
+/// proveedor — aquí no se valida ni se sustituye (la desconfianza vive en
+/// la frontera del proveedor y el tope ya lo puso `validate_request`).
+pub fn to_core_question(spec: &QuestionSpec) -> CoreQuestion {
+    let kind = match spec.kind {
         QuestionKind::Choice => DecisionQuestion::Choice {
             options: spec.options.clone(),
         },
@@ -279,7 +282,8 @@ pub fn to_core_question(spec: &QuestionSpec) -> DecisionQuestion {
             levels: spec.levels.clone(),
         },
         QuestionKind::Boolean => DecisionQuestion::Noul,
-    }
+    };
+    CoreQuestion::new(kind, spec.instructions.clone())
 }
 
 /// Respuesta del proveedor → esquema wire (argmax como `value`).
@@ -447,6 +451,30 @@ mod tests {
 
         // Boolean ↔ Noul
         let q = to_core_question(&QuestionSpec { kind: QuestionKind::Boolean, instructions: None, options: vec![], levels: vec![] });
-        assert!(matches!(q, DecisionQuestion::Noul));
+        assert!(matches!(q.kind, DecisionQuestion::Noul));
+        assert!(q.instructions.is_none(), "sin instructions = canal cerrado");
+    }
+
+    /// T1252: el canal reabierto — las instructions del wire llegan crudas
+    /// al núcleo (el proveedor decide confianza/límite), y su ausencia
+    /// mantiene el canal cerrado tal cual estaba.
+    #[test]
+    fn to_core_question_carries_wire_instructions_verbatim() {
+        let text = "Pick billing unless the cache layer is implicated.";
+        let q = to_core_question(&QuestionSpec {
+            kind: QuestionKind::Choice,
+            instructions: Some(text.to_string()),
+            options: vec!["billing".into(), "technical".into()],
+            levels: vec![],
+        });
+        assert_eq!(q.instructions.as_deref(), Some(text));
+
+        let none = to_core_question(&QuestionSpec {
+            kind: QuestionKind::Choice,
+            instructions: None,
+            options: vec!["billing".into(), "technical".into()],
+            levels: vec![],
+        });
+        assert!(none.instructions.is_none());
     }
 }

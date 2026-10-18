@@ -39,7 +39,7 @@ use super::api_types::{
     answer_from_core, to_core_question, validate_request,
 };
 use super::systemone_http::SystemOneHttpProvider;
-use super::{DecisionAnswer, DecisionError, DecisionProvider, DecisionQuestion, DecisionRequest, rules::RulesDecisionProvider};
+use super::{CoreQuestion, DecisionAnswer, DecisionError, DecisionProvider, DecisionRequest, rules::RulesDecisionProvider};
 
 /// Motivo de abstención del carril síncrono cuando el modelo excede su deadline.
 const ABSTAIN_PROVIDER_TIMEOUT: &str = "provider_timeout";
@@ -640,7 +640,7 @@ impl DecisionService {
             return;
         };
         let handle = tokio::spawn(async move {
-            let questions: std::collections::HashMap<String, DecisionQuestion> = targets
+            let questions: std::collections::HashMap<String, CoreQuestion> = targets
                 .iter()
                 .map(|t| (t.name.clone(), to_core_question(&t.spec)))
                 .collect();
