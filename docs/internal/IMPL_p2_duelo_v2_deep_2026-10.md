@@ -178,7 +178,7 @@ de la máquina (kernel + serve residentes), no del modelo; no usar para comparar
 Corrida completa y verificada (todos exit 0):
 
 ```
-# kernel de pruebas (usuario lo arranca): test-run-p2\boot-p2-deep.bat  → :47011
+# kernel de pruebas (usuario lo arranca): test-run-p2\boot-p2-deep.bat  → puerto de pruebas 47011 (nunca el de producción)
 cd E:\tylluan-wt-deep\test-run-p2\harness
 python run_decima_v2.py                                          # 3 variantes, 198/198
 python run_nli_v2.py                                             # fp32
