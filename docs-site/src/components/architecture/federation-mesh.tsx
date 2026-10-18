@@ -67,11 +67,13 @@ export function FederationMesh() {
               pero el modelo de olvido es LOCAL (soberanía)
             </text>
 
-            {/* Guilds */}
-            <SvgNode x={40} y={340} width={100} height={28} label="tylluan_do" sublabel="execute" style={NODE_STYLES.process} />
-            <SvgNode x={150} y={340} width={100} height={28} label="tylluan_recall" sublabel="search" style={NODE_STYLES.process} />
-            <SvgNode x={260} y={340} width={110} height={28} label="tylluan_remember" sublabel="persist" style={NODE_STYLES.process} />
-            <SvgNode x={380} y={340} width={110} height={28} label="tylluan_think" sublabel="reason + reflect" style={NODE_STYLES.process} />
+            {/* 6 Sovereign Tools */}
+            <SvgNode x={40} y={335} width={72} height={28} label="tylluan_do" sublabel="execute" style={NODE_STYLES.process} />
+            <SvgNode x={118} y={335} width={76} height={28} label="tylluan_recall" sublabel="search" style={NODE_STYLES.process} />
+            <SvgNode x={200} y={335} width={86} height={28} label="tylluan_remember" sublabel="persist" style={NODE_STYLES.process} />
+            <SvgNode x={292} y={335} width={72} height={28} label="tylluan_think" sublabel="reason" style={NODE_STYLES.process} />
+            <SvgNode x={370} y={335} width={68} height={28} label="tylluan_graph" sublabel="graph" style={NODE_STYLES.process} />
+            <SvgNode x={444} y={335} width={68} height={28} label="tylluan_decide" sublabel="decide" style={NODE_STYLES.process} />
 
             <text x={40} y={390} fill="#475569" fontSize="8" fontFamily="ui-monospace, monospace">
               Profiles: portable (Pi 4) · clinic (local server) · server (full mesh)

@@ -85,7 +85,7 @@ export function SleepCycle() {
             <Connection x1={530} y1={138} x2={530} y2={155} markerId="sleep-arrow" label="batch embed" strokeWidth={0.8} />
 
             <PhaseBox x={100} y={155} width={420} height={100} title="Step 1: Embedding Comparison" color="#14B8A6">
-              <SvgNode x={120} y={190} width={130} height={28} label="BGE-M3 Encode" sublabel="all episodes" style={NODE_STYLES.core} />
+              <SvgNode x={120} y={190} width={130} height={28} label="mxbai Encode" sublabel="all episodes" style={NODE_STYLES.core} />
               <SvgNode x={270} y={190} width={130} height={28} label="Pairwise Cosine" sublabel="O(n^2) compare" style={NODE_STYLES.core} />
               <Connection x1={250} y1={204} x2={270} y2={204} markerId="sleep-arrow" strokeWidth={0.8} />
 

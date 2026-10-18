@@ -25,7 +25,7 @@ export function RetrievalPipeline() {
 
           {/* Embedding step */}
           <Connection x1={200} y1={62} x2={200} y2={85} markerId="rp-arrow-gray" label="embed" />
-          <SvgNode x={120} y={85} width={160} height={32} label="BGE-M3 Encode" sublabel="1024d embedding" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 1 }} />
+          <SvgNode x={120} y={85} width={160} height={32} label="mxbai Encode" sublabel="1024d embedding" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 1 }} />
 
           {/* ═══════ THREE PARALLEL RETRIEVAL PATHS ═══════ */}
           <SectionLabel x={30} y={142} text="PARALLEL RETRIEVAL (3 paths)" color="#14B8A6" />
@@ -49,8 +49,8 @@ export function RetrievalPipeline() {
             </text>
           </PhaseBox>
 
-          {/* Path 2: BGE-M3 (Semantic) */}
-          <PhaseBox x={380} y={155} width={330} height={130} title="Path 2 — BGE-M3 (Semantic)" color="#3B82F6">
+          {/* Path 2: mxbai-embed-large (Semantic) */}
+          <PhaseBox x={380} y={155} width={330} height={130} title="Path 2 — mxbai-embed-large (Semantic)" color="#3B82F6">
             <SvgNode x={400} y={195} width={120} height={30} label="HNSW Search" sublabel="cosine similarity" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 1 }} />
             <SvgNode x={400} y={235} width={120} height={30} label="Re-score" sublabel="normalize" style={{ fill: '#0F1520', stroke: '#3B82F6', strokeWidth: 1 }} />
             <Connection x1={460} y1={225} x2={460} y2={235} markerId="rp-arrow-blue" strokeWidth={0.8} />
