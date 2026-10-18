@@ -36,7 +36,7 @@
 
 ## C. Diagramas públicos (prioridad alta: es lo que ve un visitante)
 
-- [ ] **G1. `docs/assets/architecture.png` está obsoleto** (28-ago): dice `:4000`, "5 Sovereign Tools", "49 Python Guilds" y no tiene el Decision Service. No lo referencia el README (usa el SVG), pero está en el repo y se puede enlazar desde fuera. Regenerarlo desde el SVG actual o borrarlo.
+- [ ] **G1. `docs/assets/architecture.png` está obsoleto** (28-ago): dice el puerto antiguo (cuatro mil), "5 Sovereign Tools", "49 Python Guilds" y no tiene el Decision Service. No lo referencia el README (usa el SVG), pero está en el repo y se puede enlazar desde fuera. Regenerarlo desde el SVG actual o borrarlo.
 - [ ] **G2. Cifras incoherentes entre diagramas:** SVG dice "45 Python Guilds", el interactivo "46 Python guilds", el PNG "49". Derivar el número de una sola fuente (`/health?verbose=true` o el registro de guilds) y usarlo en los tres. No inventar: citar el comando que lo dio.
 - [ ] **G3. Elementos "[Roadmap]" en el SVG** (Retrieval Gate, Postcard Serde, Sparse Vectors, Coloquio Watch): comprobar en `ROADMAP.md`/`STATUS.md` cuáles siguen pendientes y quitar o actualizar los entregados. Un diagrama público no debe prometer lo ya hecho ni ocultar lo no hecho.
 - [ ] **G4. `architecture_interactive.spec.json`:** el subtítulo cita `main 8c9287b` (commit antiguo) y `Decision (rules)` no refleja el proveedor de modelo opt-in. Actualizar revisión y rótulo; el rótulo debe decir "reglas + modelo opcional en sombra".
