@@ -3,26 +3,14 @@ import {
   LayoutDashboard,
   Cpu,
   Database,
-  Settings,
   Wifi, WifiOff,
-  TrendingUp,
   Users,
-  Clock,
   AlertTriangle,
-  Network,
-  Terminal,
-  Wrench,
   Zap,
   ShieldCheck,
-  MessageSquare,
-  Search,
   Radio,
-  Camera,
-  Activity,
-  Plug,
   Beaker,
   Bell,
-  Link2,
   Sun,
   Moon,
   Monitor,
@@ -53,9 +41,10 @@ const AuditTrailPanel = lazy(() => import('./components/AuditTrailPanel'))
 const CoherenceGatePanel = lazy(() => import('./components/CoherenceGatePanel'))
 const FrictionPanel = lazy(() => import('./components/FrictionPanel'))
 const TrustConsoleTab = lazy(() => import('./components/TrustConsoleTab').then(m => ({ default: m.TrustConsoleTab })))
+const DecisionServicePanel = lazy(() => import('./components/DecisionServicePanel'))
 
 function App() {
-  const { activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, removeToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
+  const { activeTab, setActiveTab: setTab, mountedTabs, toasts, addToast, kernelUptime, incrementUptime, coloquioUnread, setColoquioUnread, activeMentions, showMentionsDropdown, setShowMentionsDropdown } = useAppStore()
   const setActiveTab = useCallback((id: string) => {
     setTab(id)
   }, [setTab])
@@ -64,7 +53,7 @@ function App() {
 
   const {
     online, events, guilds, stats, memoryStats, approvals,
-    loading, error,
+    error,
     goldenSignals, guildsUtilization, memoryRetention, sloSummary,
     healthDetailed, sysStatus, interoception,
     bridge, refreshData, clearLogs
@@ -156,8 +145,8 @@ function App() {
       const active = Array.from(new Set(
         msgs
           .filter((m) => (nowSecs - m.created_at) < 1800)
-          .map((m: any) => m.author_id)
-      )) as string[];
+          .map((m) => m.author_id)
+      ));
       setActiveAgents(active);
     } catch {}
   }, { interval: 'medium', enabled: !!bridge && online });
@@ -178,12 +167,10 @@ function App() {
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const VISION_ENABLED = true;
-
   const tabs: Array<{
     id: string;
     name: string;
-    icon: any;
+    icon: React.ComponentType<{ className?: string }>;
     badge?: number | null;
   }> = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
@@ -197,28 +184,33 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-amber-500/30">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-slate-800/80 bg-[#0B0F17]/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
+      <header className="h-16 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 group cursor-pointer" onClick={() => handleTabChange('overview')}>
+          <button
+            type="button"
+            aria-label="Go to Overview"
+            className="flex items-center gap-2 group cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            onClick={() => handleTabChange('overview')}
+          >
             <TylluanLogo size="md" showText={true} animated={true} />
-          </div>
+          </button>
         </div>
 
         <div className="flex min-w-0 items-center gap-2 md:gap-4 lg:gap-6">
-          <div className="hidden lg:flex items-center gap-4 text-[10px] font-mono text-slate-500">
+          <div className="hidden lg:flex items-center gap-4 text-[11px] font-mono text-slate-400">
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-50 tracking-widest text-[8px]">Uptime</span>
+               <span className="uppercase opacity-70 tracking-widest text-[11px]">Uptime</span>
                <span className="text-slate-300">{online ? formatUptime(kernelUptime) : '—'}</span>
              </div>
              <div className="h-6 w-px bg-slate-800" />
              <div className="flex flex-col items-end">
-               <span className="uppercase opacity-50 tracking-widest text-[8px]">Last Refresh</span>
+               <span className="uppercase opacity-70 tracking-widest text-[11px]">Last Refresh</span>
                <span className="text-slate-300">{lastRefresh.toLocaleTimeString()}</span>
              </div>
           </div>
           
           {activeAgents.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
               <span className="text-slate-300">{activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'} active</span>
               <div className="flex gap-1">
                 {activeAgents.map(agent => (
@@ -236,20 +228,24 @@ function App() {
             <DeviceStatusBadge bridge={bridge} />
           </div>
 
-          <div className={cn(
-            'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
-            connectionStatus === 'connected'
-              ? 'bg-slate-900 border-slate-800'
-              : connectionStatus === 'reconnecting'
-              ? 'bg-amber-950/40 border-amber-500/30 animate-pulse'
-              : 'bg-red-950/40 border-red-500/30'
-          )}>
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
+              connectionStatus === 'connected'
+                ? 'bg-slate-900 border-slate-800'
+                : connectionStatus === 'reconnecting'
+                ? 'bg-amber-950/40 border-amber-500/30 animate-pulse'
+                : 'bg-red-950/40 border-red-500/30'
+            )}
+          >
             {connectionStatus === 'connected'
-              ? <Wifi className="w-3 h-3 text-emerald-400" />
+              ? <Wifi className="w-3 h-3 text-emerald-400" aria-hidden="true" />
               : connectionStatus === 'reconnecting'
-              ? <Radio className="w-3 h-3 text-amber-400" />
-              : <WifiOff className="w-3 h-3 text-red-400" />}
-            <span className="text-[10px] font-bold uppercase tracking-wider">
+              ? <Radio className="w-3 h-3 text-amber-400" aria-hidden="true" />
+              : <WifiOff className="w-3 h-3 text-red-400" aria-hidden="true" />}
+            <span className="text-[11px] font-bold uppercase tracking-wider">
               {connectionStatus === 'connected'
                 ? 'Secure Link'
                 : connectionStatus === 'reconnecting'
@@ -259,52 +255,64 @@ function App() {
           </div>
           
           {/* Theme Selector Toggle */}
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
+          <div role="group" aria-label="Theme Selector" className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-full p-0.5">
             <button
+              type="button"
+              aria-label="Light Theme"
+              aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer",
-                theme === 'light' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+                theme === 'light' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
               title="Light Theme"
             >
-              <Sun className="w-3.5 h-3.5" />
+              <Sun className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
             <button
+              type="button"
+              aria-label="Dark Theme"
+              aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer",
-                theme === 'dark' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+                theme === 'dark' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
               title="Dark Theme"
             >
-              <Moon className="w-3.5 h-3.5" />
+              <Moon className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
             <button
+              type="button"
+              aria-label="System Theme"
+              aria-pressed={theme === 'system'}
               onClick={() => setTheme('system')}
               className={cn(
-                "p-1.5 rounded-full transition-all cursor-pointer",
-                theme === 'system' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-350"
+                "p-1.5 rounded-full transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
+                theme === 'system' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-400 hover:text-slate-200"
               )}
               title="System Theme"
             >
-              <Monitor className="w-3.5 h-3.5" />
+              <Monitor className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
 
           {/* Notifications Bell */}
           <div className="relative">
             <button
+              type="button"
+              aria-label="Recent Mentions"
+              aria-expanded={showMentionsDropdown}
               onClick={() => setShowMentionsDropdown(!showMentionsDropdown)}
               className={cn(
-                "p-2 rounded-full border transition-all relative cursor-pointer",
+                "p-2 rounded-full border transition-all relative cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none",
                 activeMentions.length > 0 
                   ? "bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse animate-duration-1000" 
                   : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
               )}
               title="Menciones Recientes"
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-4 h-4" aria-hidden="true" />
               {activeMentions.length > 0 && (
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-slate-950" />
               )}
@@ -316,11 +324,13 @@ function App() {
                   <span className="text-xs font-bold text-slate-300 uppercase">Menciones (@yo)</span>
                   {activeMentions.length > 0 && (
                     <button 
+                      type="button"
+                      aria-label="Clear Mentions"
                       onClick={() => {
                         useAppStore.getState().clearMentions();
                         setShowMentionsDropdown(false);
                       }}
-                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold uppercase cursor-pointer"
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none rounded"
                     >
                       Limpiar
                     </button>
@@ -328,7 +338,7 @@ function App() {
                 </div>
                 <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/50">
                   {activeMentions.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-500">
+                    <div className="px-4 py-6 text-center text-xs text-slate-400">
                       Sin menciones recientes
                     </div>
                   ) : (
@@ -336,10 +346,10 @@ function App() {
                       <div key={m.id} className="p-3 hover:bg-slate-800/30 transition-colors">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-bold text-emerald-400">@{m.sender}</span>
-                          <span className="text-[9px] font-mono text-slate-500">#{m.channel}</span>
+                          <span className="text-[11px] font-mono text-slate-400">#{m.channel}</span>
                         </div>
                         <p className="text-xs text-slate-300 line-clamp-2">{m.message}</p>
-                        <span className="text-[8px] font-mono text-slate-600 block mt-1">
+                        <span className="text-[11px] font-mono text-slate-400 block mt-1">
                           {m.ts.toLocaleTimeString()}
                         </span>
                       </div>
@@ -352,15 +362,19 @@ function App() {
 
           {/* Bearer Token Config Button */}
           <button
+            type="button"
+            aria-label="Configure Bearer Token"
             onClick={() => setAuthModalOpen(true)}
-            className="p-2 rounded-full border bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all cursor-pointer"
+            className="p-2 rounded-full border bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
             title="Configurar Bearer Token"
           >
-            <Key className="w-4 h-4" />
+            <Key className="w-4 h-4" aria-hidden="true" />
           </button>
 
           {online && healthDetailed && (
             <div 
+              role="status"
+              aria-live="polite"
               className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 cursor-help group relative"
               title={`Embeddings: ${healthDetailed.components?.embeddings?.ok ? '✓' : '✗'} | Reranker: ${healthDetailed.components?.reranker?.ok ? '✓' : '✗'} | Guilds: ${healthDetailed.components?.guilds?.active}/${healthDetailed.components?.guilds?.total} | Silva: ${healthDetailed.components?.silva?.nodes}n/${healthDetailed.components?.silva?.edges}e`}
             >
@@ -369,7 +383,7 @@ function App() {
                 healthDetailed.score >= 80 ? "bg-emerald-500" :
                 healthDetailed.score >= 50 ? "bg-amber-500" : "bg-red-500"
               )} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">
+              <span className="text-[11px] font-bold uppercase tracking-wider">
                 {healthDetailed.status}
               </span>
             </div>
@@ -379,7 +393,7 @@ function App() {
 
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         {/* Sidebar Navigation */}
-        <aside className="w-16 md:w-64 border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
+        <aside aria-label="Primary Navigation" className="w-16 md:w-64 border-r border-slate-800 bg-slate-950 flex flex-col shrink-0 overflow-y-auto transition-all duration-300">
           <div className="p-2 md:p-4 space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -387,20 +401,23 @@ function App() {
               return (
                 <button
                   key={tab.id}
+                  type="button"
+                  aria-label={tab.name}
+                  aria-current={active ? 'page' : undefined}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group",
+                    "w-full flex items-center justify-between p-2 md:px-3 md:py-2.5 rounded-xl text-sm font-medium transition-all group focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
                     active 
                       ? "bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-500/5" 
                       : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={cn("w-4 h-4 transition-colors shrink-0", active ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300")} />
+                    <Icon className={cn("w-4 h-4 transition-colors shrink-0", active ? "text-emerald-400" : "text-slate-400 group-hover:text-slate-300")} aria-hidden="true" />
                     <span className="hidden md:inline">{tab.name}</span>
                   </div>
                   {tab.badge && (
-                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-bold min-w-[1.2rem] text-center border border-amber-500/30">
+                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[11px] font-bold min-w-[1.2rem] text-center border border-amber-500/30">
                       {tab.badge}
                     </span>
                   )}
@@ -413,8 +430,8 @@ function App() {
              <div className="flex items-center gap-3 mb-1 md:mb-3">
                <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700 shrink-0">o3</div>
                <div className="overflow-hidden hidden md:block">
-                 <p className="text-[10px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
-                 <p className="text-[9px] text-slate-500 font-mono truncate">ID: 0x4F...7A</p>
+                 <p className="text-[11px] font-bold text-slate-300 uppercase truncate">SilvaDB Cortex</p>
+                 <p className="text-[11px] text-slate-400 font-mono truncate">ID: 0x4F...7A</p>
                </div>
              </div>
              <div className="h-1 bg-slate-800 rounded-full overflow-hidden w-full hidden md:block">
@@ -436,8 +453,8 @@ function App() {
           )}
 
           {/* Consolidated Tab Panels */}
-          <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-500">Loading module...</div>}>
-            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab') ? "overflow-y-auto p-6" : "p-6")}>
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Loading module...</div>}>
+            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab' || activeTab === 'audit') ? "overflow-y-auto p-6" : "p-6")}>
               {activeTab === 'overview' && (
                 <ErrorBoundary>
                   <OverviewConsolidated
@@ -496,6 +513,9 @@ function App() {
                 <ErrorBoundary>
                   <div className="space-y-8">
                     <TrustConsoleTab />
+                    <DecisionServicePanel
+                      bridge={bridge}
+                    />
                     <AuditTrailPanel
                       bridge={bridge}
                     />
@@ -521,7 +541,7 @@ function App() {
               <ShieldCheck className="w-6 h-6 text-amber-500 animate-pulse" />
               <div>
                 <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">Authorization Required</h3>
-                <p className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-tight">HITL Sandbox Gateway Clearance</p>
+                <p className="text-[11px] text-amber-500 font-mono font-bold uppercase tracking-tight">HITL Sandbox Gateway Clearance</p>
               </div>
             </div>
             <div className="p-6 space-y-4 font-mono text-[11px]">
@@ -541,35 +561,35 @@ function App() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-slate-500 uppercase font-black text-[9px]">Blocked Reason:</span>
+                <span className="text-slate-500 uppercase font-black text-[11px]">Blocked Reason:</span>
                 <p className="p-3 bg-red-950/15 border border-red-500/20 text-red-400 rounded leading-normal">
                   {pendingGrant.blockedReason}
                 </p>
               </div>
 
               <div className="space-y-2 pt-2">
-                <span className="text-slate-500 uppercase font-black text-[9px] block">Authorize Scope Option:</span>
+                <span className="text-slate-500 uppercase font-black text-[11px] block">Authorize Scope Option:</span>
                 <div className="grid grid-cols-1 gap-2">
                   <button
                     onClick={() => handleApproveGrant('once')}
                     className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
                   >
                     <span>Authorize Only This Time</span>
-                    <span className="text-[9px] opacity-60">scope: once</span>
+                    <span className="text-[11px] opacity-60">scope: once</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('session')}
                     className="w-full py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
                   >
                     <span>Authorize For Current Session</span>
-                    <span className="text-[9px] opacity-60">scope: session</span>
+                    <span className="text-[11px] opacity-60">scope: session</span>
                   </button>
                   <button
                     onClick={() => handleApproveGrant('always')}
                     className="w-full py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-colors text-left px-4 flex items-center justify-between"
                   >
                     <span>Always Authorize For This Guild</span>
-                    <span className="text-[9px] opacity-60">scope: always</span>
+                    <span className="text-[11px] opacity-60">scope: always</span>
                   </button>
                 </div>
               </div>
@@ -603,7 +623,7 @@ function App() {
           )}>
             {t.type === 'error' ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <Zap className="w-5 h-5 text-emerald-400" />}
             <div>
-              {t.guild && <span className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">{t.guild}</span>}
+              {t.guild && <span className="block text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">{t.guild}</span>}
               <p className="text-sm">{t.msg}</p>
             </div>
           </div>
