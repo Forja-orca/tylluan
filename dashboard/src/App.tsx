@@ -14,7 +14,8 @@ import {
   Sun,
   Moon,
   Monitor,
-  Key
+  Key,
+  Loader2
 } from 'lucide-react'
 import { useNexus } from './hooks/useNexus'
 import { useNexusSSE } from './hooks/useNexusSSE'
@@ -58,6 +59,17 @@ function App() {
     healthDetailed, sysStatus, interoception,
     bridge, refreshData, clearLogs
   } = useNexus();
+
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    try {
+      await refreshData();
+    } finally {
+      setRetrying(false);
+    }
+  }, [refreshData]);
   
   const handleTabChange = useCallback((id: string) => {
     setActiveTab(id);
@@ -371,7 +383,7 @@ function App() {
             <Key className="w-4 h-4" aria-hidden="true" />
           </button>
 
-          {online && healthDetailed && (
+          {online && healthDetailed ? (
             <div 
               role="status"
               aria-live="polite"
@@ -387,7 +399,17 @@ function App() {
                 {healthDetailed.status}
               </span>
             </div>
-          )}
+          ) : !online ? (
+            <div 
+              role="status"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-950/40 border border-rose-800/60 text-rose-300"
+            >
+              <div className="w-2 h-2 rounded-full bg-rose-500" />
+              <span className="text-[11px] font-bold uppercase tracking-wider">
+                OFFLINE
+              </span>
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -443,21 +465,33 @@ function App() {
         {/* Main Content Area */}
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-950">
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-bold text-red-400">Communication Error</h4>
-                <p className="text-xs text-red-500/80 mt-1">{error}</p>
+            <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-bold text-red-400">Communication Error</h4>
+                  <p className="text-xs text-red-500/80 mt-1">{error}</p>
+                </div>
               </div>
+              <button
+                type="button"
+                disabled={retrying}
+                onClick={handleRetry}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-300 text-xs font-semibold shrink-0 cursor-pointer disabled:cursor-not-allowed transition-all focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+              >
+                {retrying && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                <span>{retrying ? 'Reintentando...' : 'Reintentar'}</span>
+              </button>
             </div>
           )}
 
           {/* Consolidated Tab Panels */}
           <Suspense fallback={<div className="flex-1 flex items-center justify-center font-mono text-xs text-slate-400">Loading module...</div>}>
-            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab' || activeTab === 'audit') ? "overflow-y-auto p-6" : "p-6")}>
+            <div className={cn("flex-1 min-h-0 flex flex-col", (activeTab === 'overview' || activeTab === 'guilds' || activeTab === 'lab' || activeTab === 'audit') ? "overflow-y-auto p-3 sm:p-6" : "p-3 sm:p-6")}>
               {activeTab === 'overview' && (
                 <ErrorBoundary>
                   <OverviewConsolidated
+                    online={online}
                     bridge={bridge}
                     goldenSignals={goldenSignals}
                     guildsUtilization={guildsUtilization}

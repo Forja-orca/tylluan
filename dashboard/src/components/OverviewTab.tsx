@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   Wifi,
@@ -72,6 +72,7 @@ interface OverviewTabProps {
   events: NexusEvent[];
   notify: (msg: string, type?: 'info' | 'error') => void;
   refreshData: () => Promise<void>;
+  online: boolean;
 }
 
 export function OverviewTab({ 
@@ -87,7 +88,8 @@ export function OverviewTab({
   sysStatus,
   events,
   notify,
-  refreshData
+  refreshData,
+  online
 }: OverviewTabProps) {
   const [_refreshTrigger, setRefreshTrigger] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<{
@@ -102,6 +104,46 @@ export function OverviewTab({
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
   const [showHeartbeats, setShowHeartbeats] = useState(false);
+
+  const kernelHealth = useMemo(() => {
+    // Offline wins over any cached data: healthDetailed/sysStatus are never cleared on disconnect.
+    if (!online) {
+      return { label: 'OFFLINE', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+    }
+    if (healthDetailed) {
+      const s = typeof healthDetailed.status === 'string' ? healthDetailed.status.toLowerCase() : null;
+      if (s === 'healthy') {
+        return { label: 'HEALTHY', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' };
+      }
+      if (s === 'degraded') {
+        return { label: 'DEGRADED', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+      }
+      if (s === 'critical') {
+        return { label: 'CRITICAL', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+      }
+      if (s === 'warming_up') {
+        return { label: 'WARMING UP', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+      }
+      if (typeof healthDetailed.score === 'number') {
+        // Fallback to kernel's canonical score thresholds from api_admin.rs:992-994
+        if (healthDetailed.score >= 80) {
+          return { label: 'HEALTHY', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' };
+        } else if (healthDetailed.score >= 50) {
+          return { label: 'DEGRADED', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+        } else {
+          return { label: 'CRITICAL', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+        }
+      }
+    }
+    // Connected but no detailed telemetry received yet: honest UNKNOWN state.
+    return { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' };
+  }, [online, healthDetailed]);
+  const embeddingsKnown = online && typeof sysStatus?.embeddings_loaded === 'boolean';
+  const embeddingsState = !embeddingsKnown
+    ? { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' }
+    : sysStatus?.embeddings_loaded
+      ? { label: 'LOADED', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' }
+      : { label: 'FALLBACK', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
   useEffect(() => {
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
@@ -305,13 +347,13 @@ export function OverviewTab({
 
       {/* Hub Status Pills */}
       <div role="status" aria-label="System Telemetry Summary" className="flex flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true"></div>
-          <span className="text-[11px] font-semibold text-slate-300">Kernel</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+          <div className={cn("w-2 h-2 rounded-full", kernelHealth.dotClass)} aria-hidden="true"></div>
+          <span className="text-[11px] font-semibold text-slate-300">Kernel: <span className={cn("font-mono", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <div className={cn("w-2 h-2 rounded-full", sysStatus?.embeddings_loaded ? "bg-emerald-500" : "bg-amber-500")} aria-hidden="true"></div>
-          <span className="text-[11px] font-semibold text-slate-300">mxbai-embed-large</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+          <div className={cn("w-2 h-2 rounded-full", embeddingsState.dotClass)} aria-hidden="true"></div>
+          <span className="text-[11px] font-semibold text-slate-300">Embeddings: <span className={cn("font-mono", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <span className="text-[11px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>

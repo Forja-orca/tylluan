@@ -28,6 +28,7 @@ import type {
 import type { MemoryStats } from '../hooks/useNexus';
 
 interface OverviewConsolidatedProps {
+  online: boolean;
   bridge: NexusBridge | null;
   goldenSignals: GoldenSignals | null;
   guildsUtilization: GuildsUtilization | null;
@@ -138,6 +139,7 @@ export function OverviewConsolidated(props: OverviewConsolidatedProps) {
               events={props.events}
               notify={props.notify}
               refreshData={props.refreshData}
+              online={props.online}
             />
             {/* Team Pulse Widget */}
             <TeamPulseWidget bridge={props.bridge} />

@@ -22,12 +22,12 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Sub-navigation */}
-      <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl w-max">
+      <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl max-w-full overflow-x-auto scrollbar-thin">
         <button
           type="button"
           onClick={() => setView('doctor')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'doctor'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
@@ -40,7 +40,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('maintenance')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'maintenance'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
@@ -53,7 +53,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('logs')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'logs'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
@@ -66,7 +66,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('models')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'models'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
@@ -79,7 +79,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('scopes')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'scopes'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
@@ -92,7 +92,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
           type="button"
           onClick={() => setView('a2a')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'a2a'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
