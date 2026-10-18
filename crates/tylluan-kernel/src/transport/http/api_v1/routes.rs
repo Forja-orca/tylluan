@@ -301,5 +301,11 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // /api/v1/capabilities (runtime view). Zero behavior change.
         .route("/api/v1/capability-registry", get(capability_registry_handler))
         .route("/api/v1/capability-registry/{guild}", get(capability_registry_guild_handler))
+
+        // T1253 (sync T1255): operator-class diagnostic READS — frozen JSON
+        // shapes for the dashboard panels. Both gated by
+        // `operator_class_required` (master token by header only).
+        .route("/api/v1/decide/shadow", get(decide_shadow_handler))
+        .route("/api/v1/silva/conflicted", get(silva_conflicted_handler))
 }
 

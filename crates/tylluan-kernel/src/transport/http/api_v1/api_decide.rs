@@ -10,7 +10,12 @@
 //! aquí — un JSON malformado debe producir el sobre canónico, nunca el
 //! rechazo en texto plano del extractor `Json` de axum.
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use std::sync::Arc;
 
 use crate::router::decision::{DecideRequest, DecideResponse, DecideStatus};
@@ -49,4 +54,71 @@ pub async fn decide_handler(
         StatusCode::OK
     };
     (code, Json(resp)).into_response()
+}
+
+// ── T1253: vista de auditoría del shadow log (clase OPERADOR) ────────────────
+
+#[derive(serde::Deserialize)]
+pub struct ShadowQuery {
+    limit: Option<usize>,
+}
+
+/// `GET /api/v1/decide/shadow?limit=N` (T1253) — lectura del
+/// `decision_shadow_log` para el panel de operador. Clase OPERADOR (ver
+/// `operator_class_required`): token maestro por CABECERA; un JWT OAuth, un
+/// token por query-string o un bypass de par no la satisfacen (403).
+///
+/// Shape CONGELADO (sync T1255): `{rows, summary, limit, total}` — sin alias.
+/// - `rows`: los 11 campos públicos de la tabla (sin `model_probs_json`, sin
+///   `model_latency_ms`; NUNCA `state` ni texto de preguntas — solo su
+///   `request_hash`).
+/// - `summary`: resumen por contrato SOBRE la ventana devuelta.
+/// - `limit`: efectivo (por defecto 50; 0 ausente o 0 → 50; tope duro 500).
+/// - `total`: COUNT(*) de la tabla entera.
+pub async fn decide_shadow_handler(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<ShadowQuery>,
+) -> impl IntoResponse {
+    let limit = match q.limit {
+        None | Some(0) => 50,
+        Some(n) => n.min(500),
+    };
+    let Some(server_arc) = state.server.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "service_unavailable",
+                "detail": "sovereign server not initialized",
+            })),
+        )
+            .into_response();
+    };
+    let service = server_arc.read().await.decision_service.clone();
+    let overview = service.shadow_overview(limit).await;
+    let rows: Vec<serde_json::Value> = overview
+        .rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.id,
+                "ts": r.ts,
+                "contract": r.contract,
+                "request_hash": r.request_hash,
+                "rules_value": r.rules_value,
+                "model_value": r.model_value,
+                "provider": r.provider,
+                "latency_ms": r.latency_ms,
+                "agreed": r.agreed,
+                "mode": r.mode,
+                "model_identity": r.model_identity,
+            })
+        })
+        .collect();
+    Json(serde_json::json!({
+        "rows": rows,
+        "summary": overview.summary,
+        "limit": limit,
+        "total": overview.total,
+    }))
+    .into_response()
 }

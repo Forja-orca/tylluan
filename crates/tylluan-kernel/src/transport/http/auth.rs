@@ -272,6 +272,9 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
         || path == "/api/v1/guilds/request"
         || path == "/api/v1/guilds/dispatch/execute"
         || path == "/api/v1/guilds/dispatch/remote"
+        // T1253: operator-class diagnostic reads (audit + conflict views)
+        || path == "/api/v1/decide/shadow"
+        || path == "/api/v1/silva/conflicted"
     {
         return true;
     }
@@ -892,6 +895,15 @@ mod fase1_operator_tests {
         assert!(operator_class_required("POST", "/api/v1/silva/edge"));
         assert!(operator_class_required("POST", "/api/v1/silva/consolidate"));
         assert!(operator_class_required("POST", "/api/v1/dispatches/42/approve"));
+        // T1253: operator-class diagnostic reads:
+        assert!(
+            operator_class_required("GET", "/api/v1/decide/shadow"),
+            "shadow audit read is operator-class"
+        );
+        assert!(
+            operator_class_required("GET", "/api/v1/silva/conflicted"),
+            "conflicted-nodes read is operator-class"
+        );
         // NOT operator (agent-class surfaces):
         assert!(!operator_class_required("GET", "/api/v1/federation/peers"));
         assert!(!operator_class_required("POST", "/api/v1/memory/write"));

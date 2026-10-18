@@ -114,6 +114,27 @@ pub struct ShadowLogRow {
     pub model_latency_ms: Option<i64>,
 }
 
+/// Resumen de acuerdo por contrato sobre una ventana de `decision_shadow_log`
+/// (T1253). `n_null` = filas sin `agreed` calculable (sin valor de reglas, o
+/// sin respuesta de modelo aún — la sombra UPDATEa después).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ShadowContractSummary {
+    pub contract: String,
+    pub n: i64,
+    pub n_agreed: i64,
+    pub n_disagreed: i64,
+    pub n_null: i64,
+}
+
+/// Página devuelta por [`DecisionService::shadow_overview`] (T1253).
+#[derive(Debug, Clone)]
+pub struct ShadowOverview {
+    pub rows: Vec<ShadowLogRow>,
+    pub summary: Vec<ShadowContractSummary>,
+    /// COUNT(*) de la tabla entera (independiente del límite).
+    pub total: i64,
+}
+
 /// Resuelve el proveedor de modelo Fase 2 desde `[decision.provider]`.
 /// Fuera de la impl: se llama en construcción (sin lock retenido más allá del
 /// `try_read`). Cualquier config inválida o endpoint no-loopback avisa y cae
@@ -744,6 +765,48 @@ impl DecisionService {
         })
         .map(|it| it.filter_map(Result::ok).collect())
         .unwrap_or_default()
+    }
+
+    /// Página de auditoría + resumen por contrato + total de filas en una sola
+    /// pasada lógica (T1253). El resumen se calcula SOBRE la ventana devuelta
+    /// (las `limit` filas más recientes); `total` es el COUNT(*) de la tabla
+    /// entera, independiente del límite. Solo lectura.
+    pub async fn shadow_overview(&self, limit: usize) -> ShadowOverview {
+        let rows = self.read_shadow_log(limit).await;
+        let mut by_contract: std::collections::BTreeMap<String, (i64, i64, i64)> =
+            std::collections::BTreeMap::new();
+        for r in &rows {
+            let entry = by_contract.entry(r.contract.clone()).or_insert((0, 0, 0));
+            match r.agreed {
+                Some(1) => entry.0 += 1,
+                Some(0) => entry.1 += 1,
+                _ => entry.2 += 1,
+            }
+        }
+        let summary = by_contract
+            .into_iter()
+            .map(|(contract, (n_agreed, n_disagreed, n_null))| ShadowContractSummary {
+                contract,
+                n: n_agreed + n_disagreed + n_null,
+                n_agreed,
+                n_disagreed,
+                n_null,
+            })
+            .collect();
+        let total = match &self.silva {
+            Some(silva) => {
+                let g = silva.conn_lock();
+                let conn = g.lock().await;
+                conn.query_row("SELECT COUNT(*) FROM decision_shadow_log", [], |r| r.get(0))
+                    .unwrap_or(0)
+            }
+            None => 0,
+        };
+        ShadowOverview {
+            rows,
+            summary,
+            total,
+        }
     }
 }
 
