@@ -29,19 +29,27 @@ use tylluan_kernel::router::decision::api_types::{
 struct MockServer {
     url: String,
     hits: Arc<AtomicUsize>,
+    /// Último body recibido en `POST /v1/systemone` (T1252: aserción de que
+    /// el canal de `instructions` llega intacto al wire del modelo).
+    last_body: Arc<RwLock<Option<serde_json::Value>>>,
 }
 
 /// Mock de `POST /v1/systemone`: responde `{"answers": <responses>}` (o el
-/// `status` pedido, con retardo opcional). Cuenta las peticiones recibidas.
+/// `status` pedido, con retardo opcional). Cuenta las peticiones recibidas
+/// y conserva el último body.
 async fn start_mock(responses: serde_json::Value, status: StatusCode, delay_ms: u64) -> MockServer {
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_for_handler = hits.clone();
+    let last_body = Arc::new(RwLock::new(None));
+    let last_body_for_handler = last_body.clone();
     let app = Router::new().route(
         "/v1/systemone",
-        post(move |_body: Json<serde_json::Value>| {
+        post(move |body: Json<serde_json::Value>| {
             let responses = responses.clone();
             let hits = hits_for_handler.clone();
+            let last_body = last_body_for_handler.clone();
             async move {
+                *last_body.write().await = Some(body.0);
                 hits.fetch_add(1, Ordering::SeqCst);
                 if delay_ms > 0 {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
@@ -62,6 +70,7 @@ async fn start_mock(responses: serde_json::Value, status: StatusCode, delay_ms: 
     MockServer {
         url: format!("http://127.0.0.1:{}", addr.port()),
         hits,
+        last_body,
     }
 }
 
@@ -308,6 +317,69 @@ async fn free_question_is_answered_by_the_model_sync() {
     assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
 }
 
+/// T1252 — el canal reabierto EXTREMO A EXTREMO: las instructions del
+/// `QuestionSpec` del wire salen intactas en el body POST del proveedor
+/// (carril libre, consulta síncrona) sin alterar la respuesta.
+#[tokio::test(flavor = "multi_thread")]
+async fn free_lane_forwards_wire_instructions_to_the_model() {
+    let mock = start_mock(
+        serde_json::json!({ "should_i": { "probabilities": { "true": 0.9, "false": 0.1 } } }),
+        StatusCode::OK,
+        0,
+    )
+    .await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "")).await;
+
+    let text = "Decide strictly from the cached risk band.";
+    let req = DecideRequest {
+        state: serde_json::json!({ "anything": 1 }),
+        questions: std::collections::BTreeMap::from([(
+            "should_i".to_string(),
+            QuestionSpec {
+                kind: QuestionKind::Boolean,
+                instructions: Some(text.to_string()),
+                options: vec![],
+                levels: vec![],
+            },
+        )]),
+        contract: None,
+        max_latency_ms: None,
+    };
+    let resp = svc.decide(req, "test").await;
+    assert_eq!(resp.status, DecideStatus::Ok, "el canal no cambia la respuesta");
+    assert!(!resp.answers["should_i"].abstained);
+
+    let body = mock.last_body.read().await.clone().expect("el mock recibió un body");
+    assert_eq!(
+        body["questions"]["should_i"]["instructions"], text,
+        "instructions del wire → spec del modelo, verbatim"
+    );
+    assert_eq!(body["model"], "test-model");
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
+}
+
+/// T1252 — SIN instructions: el body lleva el texto por defecto EXACTO del
+/// previo a T1252 (el comportamiento con el canal cerrado no cambia).
+#[tokio::test(flavor = "multi_thread")]
+async fn free_lane_without_instructions_keeps_the_default_body() {
+    let mock = start_mock(
+        serde_json::json!({ "should_i": { "probabilities": { "true": 0.9, "false": 0.1 } } }),
+        StatusCode::OK,
+        0,
+    )
+    .await;
+    let (svc, _db) = svc_for(cfg_with_endpoint(&mock.url, 5000, "")).await;
+
+    let resp = svc.decide(free_bool(), "test").await;
+    assert_eq!(resp.status, DecideStatus::Ok);
+
+    let body = mock.last_body.read().await.clone().expect("el mock recibió un body");
+    assert_eq!(
+        body["questions"]["should_i"]["instructions"],
+        "Answer the should_i question about this state."
+    );
+}
+
 /// Fuera de opciones en consulta libre → abstención explícita + degradado.
 #[tokio::test(flavor = "multi_thread")]
 async fn free_question_outside_options_abstains() {
@@ -494,6 +566,7 @@ async fn start_mock_raw(status: StatusCode, body: &'static str) -> MockServer {
     MockServer {
         url: format!("http://127.0.0.1:{}", addr.port()),
         hits,
+        last_body: Arc::new(RwLock::new(None)),
     }
 }
 

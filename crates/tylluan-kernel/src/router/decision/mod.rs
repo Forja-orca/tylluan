@@ -29,12 +29,45 @@ pub enum DecisionQuestion {
     Noul,
 }
 
+/// Pregunta del núcleo: el tipo tipado + el canal `instructions` del wire
+/// (T1252, ADR-020). `instructions` llega de `QuestionSpec.instructions` y
+/// viaja SIN interpretar hasta la frontera del proveedor, que la trata como
+/// contenido NO confiable (tope de longitud propio + saneado). Ausente =
+/// canal cerrado = el proveedor genera su texto por defecto — idéntico al
+/// comportamiento previo a T1252.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreQuestion {
+    pub kind: DecisionQuestion,
+    pub instructions: Option<String>,
+}
+
+impl CoreQuestion {
+    /// Pregunta con el canal `instructions` cerrado (caso por defecto).
+    pub fn without_instructions(kind: DecisionQuestion) -> Self {
+        Self {
+            kind,
+            instructions: None,
+        }
+    }
+
+    /// Pregunta con las instructions crudas del wire: sin validar aquí —
+    /// la desconfianza se aplica en la frontera del proveedor (§1217 ya
+    /// las tope a 1 KiB en `validate_request`; el proveedor repite el
+    /// tope por defensa en profundidad).
+    pub fn new(kind: DecisionQuestion, instructions: Option<String>) -> Self {
+        Self {
+            kind,
+            instructions,
+        }
+    }
+}
+
 /// Estado observable arbitrario (task, agent, memory, risk, budget...)
 /// más el conjunto de preguntas a responder sobre él.
 #[derive(Debug, Clone)]
 pub struct DecisionRequest {
     pub state: serde_json::Value,
-    pub questions: HashMap<String, DecisionQuestion>,
+    pub questions: HashMap<String, CoreQuestion>,
 }
 
 /// Distribución de probabilidad sobre las opciones/niveles de UNA
@@ -116,14 +149,14 @@ mod tests {
         let mut questions = HashMap::new();
         questions.insert(
             "route".to_string(),
-            DecisionQuestion::Choice {
+            CoreQuestion::without_instructions(DecisionQuestion::Choice {
                 options: vec![
                     "local_fast".into(),
                     "local_deep".into(),
                     "guild".into(),
                     "human".into(),
                 ],
-            },
+            }),
         );
         DecisionRequest {
             state: serde_json::json!({ "risk": 0.2 }),
@@ -151,8 +184,10 @@ mod tests {
     async fn unknown_question_is_an_explicit_error() {
         let provider = rules::RulesDecisionProvider::new();
         let mut req = choice_req();
-        req.questions
-            .insert("nope".to_string(), DecisionQuestion::Noul);
+        req.questions.insert(
+            "nope".to_string(),
+            CoreQuestion::without_instructions(DecisionQuestion::Noul),
+        );
         let err = provider.decide(&req).await.unwrap_err();
         assert!(matches!(err, DecisionError::UnknownDecision(..)));
     }
