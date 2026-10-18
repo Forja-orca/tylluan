@@ -123,3 +123,27 @@ posible. Tres notas cosméticas no bloqueantes al final.
   ejecutar la verificación (mismo parche byte a byte); no lo modifiqué.
 - No toco código de producción, config, ni la BD. El TL decide si el test
   adversarial viaja en el mismo commit que el diff de Deep o se descarta.
+
+## Impact (retroactivo — commit `abc8534`, T1253)
+
+> Nota exigida por ADR-013 §1 (gate `scripts/check_no_predation.sh`, T1275):
+> `abc8534` toca `crates/tylluan-kernel/src/transport/` sin sección
+> `## Impact` en su mensaje y ya está publicado en `origin/main` — no se
+> reescribe historia; esta nota retroactiva queda como registro del
+> contrato sobre el cambio evaluado (revisión original de Buffy: APTO).
+
+- **Dos rutas GET nuevas clase operador:** `GET /api/v1/decide/shadow` y
+  `GET /api/v1/silva/conflicted` (registradas en
+  `transport/http/api_v1/routes.rs`, gate `operator_class_required` en
+  `transport/http/auth.rs`).
+- **Sin escrituras:** ambas son solo-lectura sobre `decision_shadow_log` y
+  `nodes.conflicted = 1`; ningún estado del kernel se modifica.
+- **Ninguna ruta existente cambia de clase:** el gate añade las dos entradas
+  nuevas a la tabla `operator_class_required`; las rutas ya clasificadas
+  conservan idéntico tratamiento (verificado por tests `decide_admin_read_api`
+  5/5, `oauth_operator_gate` 6/6 y la suite adversarial 6/6).
+- **DevBypass:** con `dev_mode=true` ambas rutas quedan abiertas sin token
+  (`auth.rs` `operator_gate_allows`), el mismo trato que el resto de rutas
+  operador; con `dev_mode=false` exigen token maestro por CABECERA (JWT,
+  query-string y maestro-por-query → 403/401, matriz cubierta en los tests
+  anteriores).

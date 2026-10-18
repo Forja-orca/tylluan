@@ -254,9 +254,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0 # the gate inspects the HEAD commit and the working
-                         # tree it left behind; full history keeps it robust
-                         # if it ever needs ancestry (cheap, already the
+          fetch-depth: 0 # the gate evaluates EVERY commit of the pushed
+                         # range (origin/main..HEAD, T1275) plus the working
+                         # tree it left behind; full history is required for
+                         # the range to resolve (cheap, already the
                          # pattern docs-head-sync-check needs anyway)
       - name: Run ADR-013 non-predation gate (report-only)
         run: bash scripts/check_no_predation.sh
