@@ -120,6 +120,22 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     fetchConflicted();
   }, [fetchConflicted]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && loading) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+        setLoading(false);
+        setError('Consulta cancelada por el usuario.');
+        setEndpointStatus('error');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loading]);
+
   const filteredNodes = useMemo(() => {
     if (!searchQuery.trim()) return nodes;
     const q = searchQuery.toLowerCase();
@@ -206,7 +222,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
                 setEndpointStatus('error');
               }}
               aria-label="Cancel conflicted nodes query"
-              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
               Cancel
             </button>

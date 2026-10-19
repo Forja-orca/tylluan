@@ -2,7 +2,7 @@ import {
   Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
   Check, Copy, Quote, FileText, Network, ChevronUp, ChevronLeft
 } from 'lucide-react';
-import { useRef, useLayoutEffect, useCallback, useMemo, useState } from 'react';
+import { useRef, useLayoutEffect, useEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { agentStyle } from '../lib/agent-meta';
@@ -213,6 +213,16 @@ export function ColoquioMessagesPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingTimeRef = useRef<number>(0);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showTemplates) {
+        setShowTemplates(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showTemplates, setShowTemplates]);
+
   // Merge database messages with real-time active streaming channels
   const allMessages = useMemo(() => {
     const list = [...messages];
@@ -314,12 +324,18 @@ export function ColoquioMessagesPanel({
               </div>
             )}
           </div>
-          <div className={cn('flex flex-col gap-0.5 max-w-[85%]', isHuman ? 'items-end' : 'items-start')}>
+          <div className={cn('flex flex-col gap-0.5 max-w-[85%] min-w-0', isHuman ? 'items-end' : 'items-start')}>
             {!cont && (
               <div className={cn('flex items-center gap-2', isHuman ? 'flex-row-reverse' : '')}>
                 <span className={cn('text-[11px] font-semibold', m.color)}>{isHuman ? msg.author_id : `@${msg.author_id}`}</span>
-                <button onClick={() => scrollToTurn(msg.turn)} className="text-[11px] text-slate-600 font-mono hover:text-amber-400 transition-colors">#{msg.turn}</button>
-                <span className="text-[11px] text-slate-600">{fmtTime(msg.created_at)}</span>
+                <button
+                  type="button"
+                  onClick={() => scrollToTurn(msg.turn)}
+                  className="text-[11px] text-slate-400 dark:text-slate-400 font-mono hover:text-amber-400 focus-visible:ring-1 focus-visible:ring-amber-400 focus-visible:outline-none rounded transition-colors"
+                >
+                  #{msg.turn}
+                </button>
+                <span className="text-[11px] text-slate-400 dark:text-slate-400">{fmtTime(msg.created_at)}</span>
                 {isStreaming && (
                   <span className="text-[11px] text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-1.5 py-0.5 rounded flex items-center gap-1.5 font-medium">
                     <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
@@ -328,7 +344,7 @@ export function ColoquioMessagesPanel({
                 )}
               </div>
             )}
-            <div className="relative w-full">
+            <div className="relative w-full min-w-0">
               <div className={cn(
                 'rounded-2xl shadow-sm leading-relaxed relative',
                 compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
@@ -336,7 +352,7 @@ export function ColoquioMessagesPanel({
                         : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
                 highlight ? 'ring-2 ring-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.4)]' : ''
               )}>
-                <div onClick={handleThreadClick} dangerouslySetInnerHTML={{
+                <div onClick={handleThreadClick} className="break-words" dangerouslySetInnerHTML={{
                   __html: msgSearch.trim()
                     ? parseMarkdown(mainContent).replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark class="bg-amber-400/30 text-amber-200 rounded px-0.5">$1</mark>')
                     : parseMarkdown(mainContent)

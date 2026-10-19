@@ -267,6 +267,16 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     fetchAuditTrail();
   }, [fetchAuditTrail]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showRawLogs) {
+        setShowRawLogs(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showRawLogs]);
+
   // Synthesize actionable diagnostic/security events from /api/v1/security/events (DiagnosticReport)
   const securityEventItems: Array<{ kind: 'WARNING' | 'GUILD_ISSUE' | 'CONFIG' | 'SUGGESTION' | 'EVENT'; text: string }> = [];
   if (securityReport) {
@@ -354,7 +364,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           <button
             type="button"
             onClick={() => setShowRawLogs((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             <FileText className="w-3.5 h-3.5 text-amber-400" />
             {showRawLogs ? 'Hide Kernel Log Tail' : `Kernel Log Tail (${rawLogs.length})`}
@@ -364,7 +374,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             onClick={fetchAuditTrail}
             disabled={loading}
             aria-label="Refresh security and audit logs"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 font-medium rounded-xl transition-all disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             {loading ? 'Refreshing...' : 'Refresh Logs'}
@@ -381,7 +391,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
                 setError('Consulta de auditoría cancelada por el usuario.');
               }}
               aria-label="Cancel audit trail query"
-              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-all cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
             >
               Cancel
             </button>

@@ -104,8 +104,17 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   const [peerToken, setPeerToken] = useState('');
   const [submittingPeer, setSubmittingPeer] = useState(false);
   
-  // Delete confirm state
   const [confirmDeletePeer, setConfirmDeletePeer] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && confirmDeletePeer !== null) {
+        setConfirmDeletePeer(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmDeletePeer]);
 
   const meshAbortRef = useRef<AbortController | null>(null);
   const nodesAbortRef = useRef<AbortController | null>(null);
@@ -497,18 +506,20 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
 
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={handleRefreshAll}
             disabled={peersLoading || nodesLoading}
-            className="p-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition-all active:scale-95 disabled:opacity-50"
+            className="p-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-300 transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
             title="Refresh details"
           >
             <RefreshCw className={cn("w-4 h-4 text-amber-400", (peersLoading || nodesLoading) && "animate-spin")} />
           </button>
 
           <button
+            type="button"
             onClick={handleSyncAll}
             disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-all disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
             <Share2 className={cn("w-4 h-4", syncing && "animate-spin")} />
             <span>{syncing ? 'Syncing Mesh...' : 'Sync Federation Mesh'}</span>
@@ -616,9 +627,10 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
             {/* Right side: Prominent Toggle Button */}
             <div className="flex-shrink-0 self-center">
               <button
+                type="button"
                 onClick={handleToggleSharing}
                 className={cn(
-                  "flex items-center gap-2 px-6 py-3 rounded-lg text-xs font-medium transition-all active:scale-95 text-slate-950",
+                  "flex items-center gap-2 px-6 py-3 rounded-lg text-xs font-medium transition-all active:scale-95 text-slate-950 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none",
                   sharingStatus.enabled
                     ? "bg-red-500 hover:bg-red-400"
                     : "bg-emerald-500 hover:bg-emerald-600"
@@ -671,7 +683,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                       setMeshError('Consulta Mesh cancelada por el usuario.');
                       setMeshEndpointStatus('error');
                     }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
                   >
                     Cancel
                   </button>
@@ -870,22 +882,25 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                             {confirmDeletePeer === peer.name ? (
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
+                                  type="button"
                                   onClick={() => handleDeletePeer(peer.name)}
-                                  className="px-2 py-1 bg-red-500 hover:bg-red-400 text-slate-950 font-medium rounded-lg text-[11px] transition-all active:scale-95"
+                                  className="px-2 py-1 bg-red-500 hover:bg-red-400 text-slate-950 font-medium rounded-lg text-[11px] transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none cursor-pointer"
                                 >
                                   OK
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => setConfirmDeletePeer(null)}
-                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg text-[11px] transition-all"
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg text-[11px] transition-all focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none cursor-pointer"
                                 >
                                   Cancel
                                 </button>
                               </div>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => setConfirmDeletePeer(peer.name)}
-                                className="p-2 text-slate-500 hover:text-red-400 bg-slate-950 hover:bg-red-500/10 rounded-lg transition-all active:scale-95"
+                                className="p-2 text-slate-500 hover:text-red-400 bg-slate-950 hover:bg-red-500/10 rounded-lg transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none cursor-pointer"
                                 title="Remove peer node"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -962,7 +977,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               <button
                 type="submit"
                 disabled={submittingPeer}
-                className="w-full py-2.5 mt-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-2.5 mt-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
               >
                 {submittingPeer ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1011,7 +1026,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                   setFedNodesError('Consulta de nodos cancelada por el usuario.');
                   setFedNodesEndpointStatus('error');
                 }}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
               >
                 Cancel
               </button>
@@ -1112,7 +1127,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                               onClick={() => handleToggleShareable(node.id, isShareable)}
                               disabled={togglingNodeId === node.id}
                               className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-95 disabled:opacity-50",
+                                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
                                 isShareable
                                   ? "bg-emerald-500/10 text-emerald-400"
                                   : "bg-slate-950 text-slate-500 hover:bg-slate-800"
