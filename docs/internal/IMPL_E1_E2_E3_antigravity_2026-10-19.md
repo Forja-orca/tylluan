@@ -112,3 +112,12 @@ Se ejecutó `chrome.exe` (`C:\Program Files\Google\Chrome\Application\chrome.exe
 | **Vitest Test Suite** | `npx vitest run` en `dashboard` | **10 archivos pasados (10/10), 62 tests en verde (62/62)** |
 | **Diff del Worktree** | `git diff --stat` | **11 archivos modificados, 1 nuevo (+118 / -117)** |
 | **Áreas Excluidas** | `crates/`, `dist`, `useNexus` | **0 modificaciones (intactas)** |
+
+
+## Impact retroactivo del commit 92b6516 (retirada de stubs, TL)
+
+- **Rutas críticas tocadas:** `crates/tylluan-kernel/src/transport/http/api_v1/api_admin.rs` (se eliminan `list_inference_providers_handler` y `add_inference_provider_handler`, ambos `StatusCode::OK` sin cuerpo) y `routes.rs` (se elimina la ruta `/api/v1/inference/providers`).
+- **Consumidores:** ninguno en el repo (grep sobre `.rs`, `.ts`, `.tsx`, `.md`, `.json`, `.py`); el dashboard usa `/api/v1/external-providers`.
+- **No cambia:** `POST /api/v1/inference/providers/{name}/test` (ping real) ni la clasificación de clase operador en `auth.rs`.
+- **Verificación:** `cargo clippy -p tylluan-kernel --all-targets -- -D warnings` exit 0 y `cargo test -p tylluan-kernel --lib` 1059 passed.
+- **Riesgo:** bajo; un cliente externo que llamase a GET o POST de esa ruta pasa de recibir 200 vacío a un 404/405.
