@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
           components: clippy
 
       - run: cargo check -p tylluan-kernel
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Bans + licenses + sources
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
       - name: Install ripgrep
         run: |
           sudo apt-get update -q
@@ -140,7 +140,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
           target: aarch64-unknown-linux-gnu
 
       - name: Install cross-compilation toolchain
@@ -163,7 +163,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
       - name: Verify README.md's claimed test count against a live run
         run: bash scripts/check_test_count.sh
 
@@ -320,7 +320,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
       - name: Build release binary
         run: cargo build --release -p tylluan-kernel --bin tylluan-nexus
       - name: Generate minimal BM25-only config
@@ -395,7 +395,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
 
       - name: Generate DB Encryption Key for CI
         run: |
@@ -420,7 +420,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          toolchain: stable
+          toolchain: 1.99.1
       - name: Install Linux dependencies for Tauri
         run: |
           sudo apt-get update -q

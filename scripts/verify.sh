@@ -67,16 +67,16 @@ else
 fi
 echo
 
-# ── Rust: kernel + tylluan-link, pinned to `stable` (CI's exact toolchain) ──
+# ── Rust: kernel + tylluan-link, pinned to 1.99.1 (CI exact toolchain, see rust-toolchain.toml) ──
 # Never use the ambient default toolchain here — that mismatch is the
-# single most repeated real bug this project has hit. `rustup run stable`
+# single most repeated real bug this project has hit. `rustup run 1.99.1`
 # is not optional decoration.
 if [ "$RUN_RUST" = "1" ]; then
-    echo "── Rust (toolchain: stable, same as CI) ──"
+    echo "── Rust (toolchain: 1.99.1, same as CI) ──"
     if command -v rustup >/dev/null 2>&1; then
-        RUST_CARGO="rustup run stable cargo"
+        RUST_CARGO="rustup run 1.99.1 cargo"
     elif command -v rustup.exe >/dev/null 2>&1; then
-        RUST_CARGO="rustup.exe run stable cargo"
+        RUST_CARGO="rustup.exe run 1.99.1 cargo"
     elif command -v cargo >/dev/null 2>&1; then
         RUST_CARGO="cargo"
     elif command -v cargo.exe >/dev/null 2>&1; then
