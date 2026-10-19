@@ -108,7 +108,7 @@ Medido en vivo la noche del 2026-08-30: `tylluan-nexus.exe` consumiendo ~4257% C
 ## Estado actual — v0.17.1 (v0.17.0 tagged 2026-08-23; v0.17.1 corta los fixes de seguridad e instalador del 2026-10-05/12)
 
 **Tests:** 1048 kernel lib + 74 link lib + 12 fsrs = 1134 en verde (vigilado por `scripts/check_test_count.sh`) — verifica con `cargo test -p tylluan-kernel --lib` antes de fiarte de cualquier cifra escrita aquí.
-**Cargo.toml:** `version = "0.17.1"`, Rust edition 2024, toolchain 1.88 (`rust-toolchain.toml`).
+**Cargo.toml:** `version = "0.17.1"`, Rust edition 2024, toolchain 1.99.1 (`rust-toolchain.toml`, fijado también en los workflows y en `verify.sh`).
 
 ### Cerrado en v0.17.0 (2026-08-24; trabajo del 2026-08-11 al 2026-08-14):
 - **A2A F1-F4 completo** — cliente outbound real, exposición REST + intent con ACL, streaming SSE, hardening (Deep)
@@ -260,8 +260,8 @@ ejecute solo antes de cada `git push` (el equipo no se lo salta: nada de `--no-v
 bash scripts/install_hooks.sh
 ```
 
-El script fija el toolchain a `stable` explícitamente (`rustup run stable`) —
-igual que `.github/workflows/ci.yml` — porque el toolchain local por defecto de
+El script fija el toolchain a 1.99.1 explícitamente (`rustup run 1.99.1`, mismo valor que `rust-toolchain.toml`) —
+igual que `.github/workflows/ci.yml` (`toolchain: 1.99.1`) — porque el toolchain local por defecto de
 esta máquina puede ir por delante o detrás del que usa CI, y esa diferencia ya
 ha producido falsos positivos reales más de una vez.
 
