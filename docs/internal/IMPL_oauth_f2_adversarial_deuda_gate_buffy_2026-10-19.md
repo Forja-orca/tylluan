@@ -50,7 +50,7 @@ Los tres primeros reescriben en cada run porque los percentiles de latencia son 
 |---|---|---|---|---|
 | C1 authorize sin credencial de operador | :155 | 403, sin Location, sin code intercambiable | cierra T1 (dispensador JWT LAN→RCE); F2 debe preservarlo cuando falte el consentimiento | **PASA** (F1 ya cumple) |
 | C2a redirect_uri hostil | :195 | 400 en todos los vectores (attacker domain, lookalike, nip.io→loopback, LAN IP, file:, javascript:) | T2: el 302 entregaría el code al atacante, que eligió su propio challenge PKCE | **PASA** |
-| C2b redirect_uri userinfo | :241 | 400 en `http://127.0.0.1:9999@evil.example/cb` | host real = evil.example; el código solo hace `split(':')` y no mira el '@' | **FALLA — hallazgo real (ver abajo)** |
+| C2b redirect_uri userinfo | :241 | 400 en `http://127.0.0.1:<puerto>@evil.example/cb` | host real = evil.example; el código solo hace `split(':')` y no mira el '@' | **FALLA — hallazgo real (ver abajo)** |
 | C2c redirect no registrada sin consentimiento | :281 | 403, ningún code; registro+consentimiento son la cota suficiente de F2 | sin esto, "es loopback" ≡ "emito" (estado T1) | **PASA** |
 | C3 scope mcp→operator | :321 | 403 en clase operador aunque `default_role=admin`; rol SIEMPRE derivado del scope | T3: cualquier bearer hereda admin por defecto hoy | **PASA** (belt F1(b): `auth.rs:338-358` rechaza `OAuthJwt`) |
 | C4a replay de code | :355 | 1er canje 200; replay 400 `invalid_grant` | uso único (RFC 6749 §4.1.2); sin eso, code filtrado = token de 1h | **PASA** |
@@ -64,7 +64,7 @@ Los tres primeros reescriben en cada run porque los percentiles de latencia son 
 
 ### Hallazgo (C2b): `is_loopback_redirect_uri` acepta userinfo con apariencia loopback
 
-`oauth.rs:173-184` parte la autoridad con `host_port.split(':').next()` — para `http://127.0.0.1:9999@evil.example/cb` ve "127.0.0.1" y devuelve true, pero en la gramática RFC 3986 el host real es `evil.example` (`127.0.0.1:9999` es userinfo). El Location 307 generado (verificado en vivo: **left: 307**) entregaría el code al atacante. Igual con `http://localhost:8080@evil.example/cb`.
+`oauth.rs:173-184` parte la autoridad con `host_port.split(':').next()` — para `http://127.0.0.1:<puerto>@evil.example/cb` ve "127.0.0.1" y devuelve true, pero en la gramática RFC 3986 el host real es `evil.example` (`127.0.0.1:<puerto>` es userinfo). El Location 307 generado (verificado en vivo: **left: 307**) entregaría el code al atacante. Igual con `http://localhost:<puerto>@evil.example/cb`.
 
 - **Acotación honesta:** solo emite con `dev_mode=true` (F1 ya cierra `dev_mode=false`, y con `dev_mode=true` el kernel se ata a 127.0.0.1), así que el explotador real es un proceso local o una página web que fuerza la petición — no un host de LAN contra un kernel en loopback. Gravedad **media**, no crítica.
 - **Corrección propuesta (para F2, en kernel src — fuera de mi alcance por la exclusión de la asignación):** rechazar '@' en la autoridad, o parsear con el crate `url` en vez de `split`. El test C2b ya está escrito con el resultado correcto: quien lo arregle lo activa y pasa.
