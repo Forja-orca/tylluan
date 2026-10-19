@@ -99,7 +99,6 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // WS3 (observation-only): Scheduler-vs-cascade tallies for the
         // eventual cutover decision. Read-only; dispatch never reads this.
         .route("/api/v1/scheduler/confusion", get(scheduler_confusion_handler))
-        .route("/api/v1/inference/providers", get(list_inference_providers_handler).post(add_inference_provider_handler))
         .route("/api/v1/inference/providers/{name}/test", post(test_inference_provider_handler))
         .route("/api/v1/external-providers", get(list_external_providers_handler))
         .route("/api/v1/external-providers/{name}/test", post(test_external_provider_handler))
