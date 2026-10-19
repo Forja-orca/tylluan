@@ -23,7 +23,7 @@ export function DispatchFlow() {
           <SectionLabel x={30} y={30} text="STEP 1: Intent Arrival" color="#94A3B8" />
 
           <SvgNode x={200} y={18} width={240} height={38} label="User Input" sublabel="natural language / command" style={NODE_STYLES.subsystem} />
-            <SvgNode x={500} y={18} width={200} height={38} label="Guild Call" sublabel="tylluan_do / recall / remember" style={NODE_STYLES.process} />
+            <SvgNode x={500} y={18} width={200} height={38} label="Guild Call" sublabel="6 sovereign tools (CONTRACT-01)" style={NODE_STYLES.process} />
 
           <Connection x1={440} y1={37} x2={500} y2={37} markerId="disp-arrow-gray" strokeWidth={0.8} />
 

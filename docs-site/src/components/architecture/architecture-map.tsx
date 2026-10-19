@@ -248,7 +248,7 @@ export function ArchitectureMap() {
               Per-memory stability model + CoherenceGate L1-L4 hybrid memory firewall (ADR-011).
             </text>
             <text x={76} y={760} fill="#64748B" fontSize="9" fontFamily="ui-monospace, monospace">
-              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,139 tests passing (1053+74+12)
+              R = 2^(-Δt/S)  ·  touch_node → review(Good)  ·  1,146 tests passing (1059+75+12)
             </text>
           </g>
 
