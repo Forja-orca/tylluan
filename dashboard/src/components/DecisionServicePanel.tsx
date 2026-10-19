@@ -111,13 +111,13 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       const msg = err instanceof Error ? err.message : String(err || '');
       if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
         setEndpointStatus('pending_backend');
-        setError('GET /api/v1/decide/shadow is not mounted on the running kernel yet (Phase 2 shadow endpoint).');
-      } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+        setError('GET /api/v1/decide/shadow no está montado aún en el kernel en ejecución (endpoint de sombra Fase 2).');
+      } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setEndpointStatus('forbidden');
-        setError('Operator clearance required (401/403) to inspect decision_shadow_log.');
+        setError('Requiere credencial de operador (HTTP 403). Token maestro requerido para inspeccionar decision_shadow_log.');
       } else {
         setEndpointStatus('error');
-        setError(msg || 'Failed to query /api/v1/decide/shadow on :47004');
+        setError(msg || 'Error al consultar /api/v1/decide/shadow en :47004');
       }
       setRows([]);
       setRawSummary([]);
@@ -250,41 +250,44 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <div className="text-xs text-slate-200 leading-relaxed">
           <span className="font-bold text-amber-300 uppercase tracking-wide mr-1.5">
-            Sin verdad humana: el acuerdo reglas↔modelo no mide precisión.
+            Sin verdad humana: acuerdo con reglas no es precisión.
           </span>
           Coincidir con las reglas deterministas solo mide consistencia entre el clasificador en sombra y las heurísticas actuales. Cuando las reglas se abstienen (`abstain`), el modelo en sombra no se consulta para evitar decisiones no auditables.
         </div>
       </div>
 
-      {/* Endpoint status banner when offline / 404 / 403 */}
+      {/* Endpoint status banner when offline / 404 / 403 (sin aria-live en contenido sondeado) */}
       {error && (
         <div
-          role="status"
-          aria-live="polite"
           className={cn(
             'p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs',
-            endpointStatus === 'pending_backend'
+            endpointStatus === 'forbidden'
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+              : endpointStatus === 'pending_backend'
               ? 'bg-slate-950/90 border-slate-700 text-slate-300'
               : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
           )}
         >
           <div className="flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" aria-hidden="true" />
+            <ShieldAlert className={cn('w-4 h-4 shrink-0 mt-0.5', endpointStatus === 'forbidden' ? 'text-amber-400' : 'text-rose-400')} aria-hidden="true" />
             <div>
-              <p className="font-semibold">{error}</p>
-              <p className="text-slate-400 mt-0.5">
-                {endpointStatus === 'pending_backend'
-                  ? 'Showing the 4 canonical ADR-021 decision contracts below; shadow rows will populate automatically once GET /api/v1/decide/shadow responds.'
-                  : 'Check your operator Bearer token or kernel status on :47004.'}
+              <p className="font-semibold text-slate-100">{error}</p>
+              <p className="text-slate-300 mt-0.5">
+                {endpointStatus === 'forbidden'
+                  ? 'Configura la credencial de operador en tu sesión para consultar el decision_shadow_log.'
+                  : endpointStatus === 'pending_backend'
+                  ? 'Mostrando los contratos canónicos de decisión; las filas de sombra se poblarán al responder GET /api/v1/decide/shadow.'
+                  : 'Comprueba el token Bearer de operador o el estado del kernel en :47004.'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={fetchShadowLog}
-            className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer"
+            aria-label="Reintentar consulta de log en sombra"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
-            Retry
+            Reintentar
           </button>
         </div>
       )}
@@ -460,9 +463,29 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
               ) : (
                 <tr>
                   <td colSpan={9} className="py-8 px-4 text-center text-slate-400 font-sans text-xs">
-                    {loading
-                      ? 'Loading shadow evaluations...'
-                      : 'No shadow evaluations recorded yet. Evaluations appear here when [decision] shadow mode logs comparisons.'}
+                    {loading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" aria-hidden="true" />
+                        <span>Cargando evaluaciones en sombra...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                        <p className="text-slate-300">
+                          {endpointStatus === 'forbidden'
+                            ? 'Requiere credencial de operador para acceder al log de decisiones en sombra.'
+                            : 'No hay evaluaciones en sombra registradas aún. Las evaluaciones aparecerán aquí cuando [decision] registre comparaciones.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={fetchShadowLog}
+                          aria-label="Reintentar consulta de evaluaciones en sombra"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}

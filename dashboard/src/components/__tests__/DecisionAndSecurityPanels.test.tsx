@@ -48,7 +48,7 @@ describe('DecisionServicePanel (D1)', () => {
     render(<DecisionServicePanel bridge={mockBridge} />);
 
     expect(
-      screen.getByText(/Sin verdad humana: el acuerdo reglas↔modelo no mide precisión/i)
+      screen.getByText(/Sin verdad humana: acuerdo con reglas no es precisión/i)
     ).toBeDefined();
 
     await waitFor(() => {
@@ -61,6 +61,46 @@ describe('DecisionServicePanel (D1)', () => {
     expect(screen.getByText('n=3')).toBeDefined();
   });
 
+  it('shows clear operator clearance state when /api/v1/decide/shadow returns 403', async () => {
+    const mockBridge = {
+      fetchRaw: vi.fn().mockRejectedValue(new Error('HTTP 403 Forbidden')),
+    } as unknown as NexusBridge;
+
+    render(<DecisionServicePanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Requiere credencial de operador \(HTTP 403\)/i)
+      ).toBeDefined();
+    });
+    expect(screen.getAllByRole('button', { name: /Reintentar/i }).length).toBeGreaterThan(0);
+  });
+
+  it('renders empty state with Reintentar button when shadow evaluations are empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      rows: [],
+      summary: [],
+      total: 0,
+      limit: 50,
+    });
+    const mockBridge = {
+      fetchRaw: fetchMock,
+    } as unknown as NexusBridge;
+
+    render(<DecisionServicePanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No hay evaluaciones en sombra registradas aún/i)
+      ).toBeDefined();
+    });
+
+    const retryBtn = screen.getByRole('button', { name: /Reintentar consulta de evaluaciones en sombra/i });
+    expect(retryBtn).toBeDefined();
+    fireEvent.click(retryBtn);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('gracefully handles 404 when /api/v1/decide/shadow is not mounted yet', async () => {
     const mockBridge = {
       fetchRaw: vi.fn().mockRejectedValue(new Error('HTTP 404 Not Found')),
@@ -70,7 +110,7 @@ describe('DecisionServicePanel (D1)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/GET \/api\/v1\/decide\/shadow is not mounted on the running kernel yet/i)
+        screen.getByText(/GET \/api\/v1\/decide\/shadow no está montado aún en el kernel/i)
       ).toBeDefined();
     });
     expect(screen.getAllByText('write_relevance').length).toBeGreaterThan(0);
@@ -102,7 +142,7 @@ describe('ContradictionsPanel (D2)', () => {
 
     render(<ContradictionsPanel bridge={mockBridge} />);
 
-    expect(screen.getByText(/91% falsos positivos en muestra v1/i)).toBeDefined();
+    expect(screen.getByText(/la detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy/i)).toBeDefined();
 
     await waitFor(() => {
       expect(screen.getByText('node-conf-1')).toBeDefined();
@@ -120,6 +160,43 @@ describe('ContradictionsPanel (D2)', () => {
     });
   });
 
+  it('shows clear operator clearance state when /api/v1/silva/conflicted returns 403', async () => {
+    const mockBridge = {
+      fetchRaw: vi.fn().mockRejectedValue(new Error('HTTP 403 Forbidden')),
+    } as unknown as NexusBridge;
+
+    render(<ContradictionsPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Requiere credencial de operador \(HTTP 403\)/i).length
+      ).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByRole('button', { name: /Reintentar/i }).length).toBeGreaterThan(0);
+  });
+
+  it('renders empty state with Reintentar button when no conflicted nodes exist', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      nodes: [],
+      total_conflicted: 0,
+      limit: 50,
+    });
+    const mockBridge = {
+      fetchRaw: fetchMock,
+    } as unknown as NexusBridge;
+
+    render(<ContradictionsPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No se encontraron nodos en conflicto/i)).toBeDefined();
+    });
+
+    const retryBtn = screen.getByRole('button', { name: /Reintentar consulta de nodos en conflicto/i });
+    expect(retryBtn).toBeDefined();
+    fireEvent.click(retryBtn);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('shows honest pending state when GET /api/v1/silva/conflicted returns 404', async () => {
     const mockBridge = {
       fetchRaw: vi.fn().mockRejectedValue(new Error('HTTP 404 Not Found')),
@@ -129,7 +206,7 @@ describe('ContradictionsPanel (D2)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/GET \/api\/v1\/silva\/conflicted is not mounted on the running kernel yet/i)
+        screen.getByText(/GET \/api\/v1\/silva\/conflicted no está montado aún en el kernel/i)
       ).toBeDefined();
     });
   });
