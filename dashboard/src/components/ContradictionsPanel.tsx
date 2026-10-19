@@ -67,15 +67,15 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
         setEndpointStatus('pending_backend');
         setError(
-          'GET /api/v1/silva/conflicted is not mounted on the running kernel yet (assigned in T1253/T1255). Do not confuse with /api/v1/silva/contradictions, which returns deprecated_nodes.'
+          'GET /api/v1/silva/conflicted no está montado aún en el kernel en ejecución.'
         );
-      } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+      } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setEndpointStatus('forbidden');
-        setError('Operator clearance required (403) to query GET /api/v1/silva/conflicted.');
+        setError('Requiere credencial de operador (HTTP 403). Token maestro requerido para consultar GET /api/v1/silva/conflicted.');
       } else {
         setEndpointStatus('error');
-        setError(msg || 'Failed to query GET /api/v1/silva/conflicted');
-        if (notify) notify('Error querying SilvaDB conflicted nodes', 'error');
+        setError(msg || 'Error al consultar GET /api/v1/silva/conflicted');
+        if (notify) notify('Error consultando nodos en conflicto en SilvaDB', 'error');
       }
       setNodes([]);
       setTotalConflicted(0);
@@ -174,9 +174,9 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
         <div className="text-xs text-slate-200 leading-relaxed space-y-1">
           <p>
             <span className="font-bold text-amber-300 uppercase tracking-wide mr-1.5">
-              Aviso de calibración (~91% falsos positivos en muestra v1):
+              Nota de calibración:
             </span>
-            La detección estructural actual (`conflicted = 1`) presenta ~91% de falsos positivos sobre la muestra auditada (`benchmarks/human_truth_conflict_pairs_v1.json`: 41 compatibles vs 4 contradicciones reales en 45 pares etiquetados).
+            La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (`benchmarks/human_truth_conflict_pairs_v1.json`: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
           </p>
           <p className="text-slate-300">
             Este panel consulta exclusivamente `GET /api/v1/silva/conflicted?limit=N` (nodos con `conflicted = 1`). Los nodos obsoletos con marcador `[DEPRECATED by …]` de `/api/v1/silva/contradictions` no son contradicciones y se excluyen deliberadamente.
@@ -184,28 +184,29 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
         </div>
       </div>
 
-      {/* Honest Pending / Forbidden / Error Banner */}
+      {/* Honest Pending / Forbidden / Error Banner (sin aria-live en contenido sondeado) */}
       {error && (
         <div
-          role="status"
-          aria-live="polite"
           className={cn(
             'p-4 rounded-xl border text-xs flex items-center justify-between gap-3',
-            endpointStatus === 'pending_backend'
+            endpointStatus === 'forbidden'
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+              : endpointStatus === 'pending_backend'
               ? 'bg-slate-950/90 border-slate-700 text-slate-300'
               : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
           )}
         >
           <div className="flex items-center gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
-            <span className="font-mono">{error}</span>
+            <ShieldAlert className={cn('w-4 h-4 shrink-0', endpointStatus === 'forbidden' ? 'text-amber-400' : 'text-rose-400')} aria-hidden="true" />
+            <span className="font-mono text-slate-100">{error}</span>
           </div>
           <button
             type="button"
             onClick={fetchConflicted}
-            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+            aria-label="Reintentar consulta de nodos en conflicto"
+            className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none shrink-0"
           >
-            Retry
+            Reintentar
           </button>
         </div>
       )}
@@ -262,20 +263,36 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             </div>
           ))
         ) : (
-          <div className="py-10 px-4 text-center rounded-xl bg-slate-950/40 border border-slate-800/70 space-y-2">
+          <div className="py-10 px-4 text-center rounded-xl bg-slate-950/40 border border-slate-800/70 space-y-3 max-w-lg mx-auto">
             <GitCompare className="w-8 h-8 text-slate-400 mx-auto" aria-hidden="true" />
             <p className="text-sm font-semibold text-slate-200">
-              {loading
-                ? 'Querying SilvaDB conflicted nodes...'
-                : endpointStatus === 'pending_backend'
-                ? 'Waiting for GET /api/v1/silva/conflicted on the running kernel'
-                : endpointStatus === 'forbidden'
-                ? 'Operator role required (HTTP 403)'
-                : 'No conflicted nodes matched your filter'}
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-rose-400 animate-spin" aria-hidden="true" />
+                  Consultando nodos en conflicto en SilvaDB...
+                </span>
+              ) : endpointStatus === 'pending_backend' ? (
+                'Esperando montaje de GET /api/v1/silva/conflicted en el kernel'
+              ) : endpointStatus === 'forbidden' ? (
+                'Requiere credencial de operador (HTTP 403)'
+              ) : (
+                'No se encontraron nodos en conflicto'
+              )}
             </p>
             <p className="text-xs text-slate-400 max-w-lg mx-auto">
-              Only nodes with `conflicted = 1` from `GET /api/v1/silva/conflicted` are displayed here. Superseded `[DEPRECATED by …]` records are intentionally excluded.
+              Solo se muestran nodos con `conflicted = 1` de `GET /api/v1/silva/conflicted`. Los registros obsoletos con `[DEPRECATED by …]` se excluyen deliberadamente.
             </p>
+            {!loading && (
+              <button
+                type="button"
+                onClick={fetchConflicted}
+                aria-label="Reintentar consulta de nodos en conflicto"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-rose-400" aria-hidden="true" />
+                Reintentar
+              </button>
+            )}
           </div>
         )}
       </div>
