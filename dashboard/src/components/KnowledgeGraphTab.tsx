@@ -78,6 +78,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
   const [results, setResults] = useState<ExtendedGraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [searching, setSearching] = useState(false);
+  const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [view, setView] = useState<'grid' | 'table'>('grid');
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -134,9 +137,15 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
     }, 400);
   }, [bridge]);
 
-  const loadRecent = useCallback(async () => {
+  const loadRecent = useCallback(async (isBackground = false) => {
     if (!bridge) return;
-    setSearching(true);
+    if (isBackground) {
+      setIsBackgroundRefreshing(true);
+    } else {
+      setSearching(true);
+      setFetchState('loading');
+    }
+    setFetchError(null);
     try {
       const res = await bridge.getSilvaGraph(500, false);
       const loadedNodes = (res.nodes || []) as ExtendedGraphNode[];
@@ -147,12 +156,16 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
       }
       setResults(loadedNodes);
       setEdges(loadedEdges);
-    } catch {
+      setFetchState('success');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err || 'Failed to load knowledge graph');
       notify('Failed to load knowledge graph', 'error');
-      setResults([]);
-      setEdges([]);
+      setFetchError(errMsg);
+      setFetchState('error');
+    } finally {
+      setSearching(false);
+      setIsBackgroundRefreshing(false);
     }
-    setSearching(false);
   }, [bridge, notify]);
 
   const runClustering = async () => {
@@ -160,12 +173,12 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
     setLoading(true);
     try {
       await bridge.maintenance_reindex();
-      notify('Reindexacion y clustering iniciados en background', 'info');
+      notify('Reindexing and clustering started in background', 'info');
       setTimeout(() => {
         void loadRecent();
       }, 2000);
     } catch {
-      notify('Fallo al iniciar reindexacion', 'error');
+      notify('Failed to initiate reindexing', 'error');
     }
     setLoading(false);
   };
@@ -296,7 +309,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             <div className="h-full rounded-xl bg-slate-900/60 flex items-center justify-center">
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Esperando conexion con SilvaDB
+                Waiting for SilvaDB connection
               </div>
             </div>
           )}
@@ -316,7 +329,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowSearchPanel(true)}
-                  placeholder="Buscar en memoria..."
+                  placeholder="Search in memory..."
                   className="w-full pl-10 pr-10 py-2 bg-slate-900/80 rounded-lg text-sm focus:ring-1 ring-emerald-500 transition-all"
                 />
                 {searchQuery && (
@@ -353,17 +366,17 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               </button>
               <button
                 type="button"
-                onClick={loadRecent}
-                disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                onClick={() => void loadRecent(false)}
+                disabled={loading || isBackgroundRefreshing}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
               >
-                <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} aria-hidden="true" /> Actualizar
+                <RefreshCw className={cn("w-3.5 h-3.5", (loading || isBackgroundRefreshing) && "animate-spin")} aria-hidden="true" /> Refresh
               </button>
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
               >
                 {searching ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Database className="w-4 h-4" aria-hidden="true" />} Explore
               </button>
@@ -389,7 +402,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
           {showSearchPanel && searchResults.length > 0 && (
             <div className="absolute z-20 mt-12 w-80 max-h-96 overflow-y-auto bg-slate-900 rounded-xl shadow-2xl">
               <div className="sticky top-0 bg-slate-800 px-3 py-2 flex items-center justify-between">
-                <span className="text-[11px] font-medium text-slate-400">Resultados</span>
+                <span className="text-[11px] font-medium text-slate-400">Results</span>
                 <button type="button" aria-label="Close search results" onClick={() => setShowSearchPanel(false)}><X className="w-3 h-3 text-slate-400" aria-hidden="true" /></button>
               </div>
               {searchResults.map((node, i) => (
@@ -466,14 +479,14 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
               </span>
             </div>
             {!memoryStats?.ivf_ready && (memoryStats?.node_count ?? 0) < 50 && (
-              <span className="ml-auto text-[11px] text-slate-400 italic">&lt;50 embeddings — linear scan activo</span>
+              <span className="ml-auto text-[11px] text-slate-400 italic">&lt;50 embeddings — linear scan active</span>
             )}
           </div>
 
           {/* Lifecycle Filter & Summary Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Ciclo de Vida:</span>
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Lifecycle:</span>
               <div role="group" aria-label="Lifecycle Filter" className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded-md border border-slate-800">
                 {(['all', 'active', 'quiet', 'consolidated', 'archived'] as const).map((filterKey) => {
                   const count = lifecycleCounts[filterKey];
@@ -507,16 +520,35 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
             </div>
             {lifecycleFilter !== 'all' && (
               <span className="text-[11px] text-slate-400 italic">
-                Mostrando {filteredResults.length} de {results.length} nodos
+                Showing {filteredResults.length} of {results.length} nodes
               </span>
             )}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {searching ? (
+            {fetchState === 'loading' && results.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center gap-3 text-slate-400">
                 <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
-                <span className="text-xs">Cargando nodos de SilvaDB...</span>
+                <span className="text-xs">Loading SilvaDB memories...</span>
+              </div>
+            ) : fetchState === 'error' && results.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-rose-900/60 bg-rose-950/20 p-8 text-center flex flex-col items-center justify-center my-6">
+                <div className="w-10 h-10 rounded-full bg-rose-900/40 flex items-center justify-center mb-3">
+                  <AlertCircle className="w-5 h-5 text-rose-400" />
+                </div>
+                <h3 className="text-xs font-semibold text-rose-300">
+                  Failed to load SilvaDB memories
+                </h3>
+                <p className="text-[11px] text-slate-400 max-w-sm mt-1 leading-relaxed">
+                  {fetchError || 'Unable to connect to the SilvaDB knowledge graph endpoint.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadRecent(false)}
+                  className="mt-4 px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-medium hover:bg-rose-500/30 transition-all border border-rose-500/40 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Retry
+                </button>
               </div>
             ) : filteredResults.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center my-6">
@@ -524,20 +556,20 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                   <Database className="w-5 h-5 text-slate-400" />
                 </div>
                 <h3 className="text-xs font-semibold text-slate-300">
-                  {results.length === 0 ? "No hay memorias en SilvaDB" : `No hay nodos con estado "${lifecycleFilter}"`}
+                  {results.length === 0 ? "No memories found in SilvaDB" : `No nodes match filter "${lifecycleFilter}"`}
                 </h3>
                 <p className="text-[11px] text-slate-500 max-w-sm mt-1 leading-relaxed">
                   {results.length === 0 
-                    ? "Usa la herramienta soberana tylluan_remember o el panel de ingesta para incorporar conocimiento al grafo."
-                    : `Prueba seleccionando otro filtro de ciclo de vida o "all" para ver los ${results.length} nodos disponibles.`}
+                    ? "Use the sovereign tool tylluan_remember or the ingestion panel to add knowledge to the graph."
+                    : `Try selecting a different lifecycle filter or "all" to view the ${results.length} available nodes.`}
                 </p>
                 {results.length === 0 ? (
                   <button
                     type="button"
-                    onClick={() => void loadRecent()}
+                    onClick={() => void loadRecent(false)}
                     className="mt-4 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition-all border border-emerald-500/30 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none cursor-pointer"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" /> Reintentar carga
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry
                   </button>
                 ) : (
                   <button
@@ -545,7 +577,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                     onClick={() => setLifecycleFilter('all')}
                     className="mt-4 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 transition-all border border-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none cursor-pointer"
                   >
-                    Mostrar todos ({results.length})
+                    Show all ({results.length})
                   </button>
                 )}
               </div>
@@ -588,7 +620,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                   }}
                                   className="text-amber-400 hover:text-amber-300 mt-1 font-semibold text-[11px] underline cursor-pointer"
                                 >
-                                  [Ver completo: {node.id.split(':').pop()?.slice(0, 8)}]
+                                  [View full: {node.id.split(':').pop()?.slice(0, 8)}]
                                 </button>
                               </>
                             );
@@ -598,7 +630,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                 <span className="whitespace-pre-wrap">{nodeContent}</span>
                                 {nodeType === 'consolidated_summary' && (
                                   <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
-                                    <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Fuentes Originales:</span>
+                                    <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Original Sources:</span>
                                     <ul className="space-y-1">
                                       {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
                                         edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).map((edge, j) => (
@@ -608,7 +640,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           </li>
                                         ))
                                       ) : (
-                                        <li className="text-[11px] text-slate-500 italic">No se encontraron fuentes cargadas</li>
+                                        <li className="text-[11px] text-slate-500 italic">No loaded sources found</li>
                                       )}
                                     </ul>
                                   </div>
@@ -621,7 +653,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                   }}
                                    className="text-slate-500 hover:text-slate-300 mt-1 font-medium text-[11px] underline cursor-pointer self-start"
                                 >
-                                  [Minimizar]
+                                  [Collapse]
                                 </button>
                               </div>
                             );
@@ -631,7 +663,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                 <span className={cn(compactMode && "block")}>{nodeContent}</span>
                                 {nodeType === 'consolidated_summary' && (
                                   <div className="mt-2 p-2 rounded-md bg-indigo-500/5 border border-indigo-500/20">
-                                    <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Fuentes Originales:</span>
+                                    <span className="text-[11px] font-bold text-indigo-400 uppercase block mb-1">Original Sources:</span>
                                     <ul className="space-y-1">
                                       {edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).length > 0 ? (
                                         edges.filter(e => e.target === node.id && (e.type === 'consolidated_into' || e.edge_type === 'consolidated_into')).map((edge, j) => (
@@ -641,7 +673,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           </li>
                                         ))
                                       ) : (
-                                        <li className="text-[11px] text-slate-500 italic">No se encontraron fuentes cargadas</li>
+                                        <li className="text-[11px] text-slate-500 italic">No loaded sources found</li>
                                       )}
                                     </ul>
                                   </div>
@@ -655,7 +687,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                     }}
                                     className="text-amber-400 hover:text-amber-300 mt-1 font-medium text-[11px] underline cursor-pointer"
                                   >
-                                    [Ver menos]
+                                    [Show less]
                                   </button>
                                 )}
                               </div>
@@ -736,9 +768,9 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           e.stopPropagation();
                                           setExpandedNodeIds(prev => ({ ...prev, [node.id]: true }));
                                         }}
-                                         className="text-amber-400 hover:text-amber-300 font-medium text-[11px] underline whitespace-nowrap cursor-pointer"
+                                          className="text-amber-400 hover:text-amber-300 font-medium text-[11px] underline whitespace-nowrap cursor-pointer"
                                       >
-                                        [Ver completo]
+                                        [View full]
                                       </button>
                                     </div>
                                   );
@@ -755,7 +787,7 @@ export function KnowledgeGraphTab({ bridge, notify, memoryStats }: Props) {
                                           }}
                                           className="text-amber-400 hover:text-amber-300 ml-1.5 font-semibold text-[11px] underline whitespace-nowrap cursor-pointer"
                                         >
-                                          [Ver menos]
+                                          [Show less]
                                         </button>
                                       )}
                                     </div>
