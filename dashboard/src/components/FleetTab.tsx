@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Activity, Cpu, Database, Users, AlertTriangle, CheckCircle, Clock, Zap, Radio } from 'lucide-react';
+import { Activity, Cpu, Database, Users, AlertTriangle, CheckCircle, Clock, Zap, Radio, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 import { useNexus } from '../hooks/useNexus';
@@ -248,16 +248,19 @@ export function FleetTab() {
   const { bridge } = useNexus();
   const [data, setData] = useState<FleetData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(0);
 
   const refresh = async () => {
     if (!bridge) return;
+    setRefreshing(true);
     try {
       const d = await fetchFleetData(bridge);
       setData(d);
       setLastRefresh(Date.now());
     } catch { /* ignore */ } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -281,10 +284,13 @@ export function FleetTab() {
         <div className="text-sm font-semibold text-slate-300">Fleet telemetry unavailable</div>
         <p className="text-xs text-slate-500 max-w-sm">Unable to load fleet agent activity from kernel or no active channels found.</p>
         <button
+          type="button"
           onClick={refresh}
-          className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
         >
-          Reintentar
+          <RefreshCw className={cn("w-3.5 h-3.5 text-slate-400", refreshing && "animate-spin text-emerald-400")} />
+          <span>{refreshing ? 'Retrying...' : 'Retry'}</span>
         </button>
       </div>
     );
@@ -303,8 +309,14 @@ export function FleetTab() {
             {onlineCount} active
           </span>
         </div>
-        <button onClick={refresh} className="text-[11px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none">
-          refresh · {lastRefresh > 0 ? fmtAgo(Math.floor(lastRefresh / 1000)) : '—'}
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 disabled:opacity-60 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none px-2 py-0.5 rounded-md hover:bg-slate-800/40"
+        >
+          <RefreshCw className={cn("w-3 h-3 text-slate-400", refreshing && "animate-spin text-emerald-400")} />
+          <span>{refreshing ? 'refreshing...' : `refresh · ${lastRefresh > 0 ? fmtAgo(Math.floor(lastRefresh / 1000)) : '—'}`}</span>
         </button>
       </div>
 
