@@ -64,7 +64,7 @@ Verificación contra el código fuente real:
 | `Tests: 1,139 (1053 kernel + 74 tylluan-link + 12 FSRS)` | **1,144** pruebas (1057 kernel + 75 link + 12 fsrs) según `STATUS.md:10`, `README.md:198` y `architecture.svg:106`. En `AGENTS.md`: 1,146 tras T-DSH-1. | `docs-site/src/app/page.tsx:43` | **CORREGIDO**: Actualizado a `1,144` (`1057 kernel + 75 tylluan-link + 12 FSRS — all passing`). |
 | `Guild Call: tylluan_do / recall / remember` | Existen **6 herramientas soberanas** invariantes bajo CONTRACT-01 (`tylluan_do`, `tylluan_remember`, `tylluan_recall`, `tylluan_think`, `tylluan_graph`, `tylluan_decide`). | `docs-site/src/components/architecture/dispatch-flow.tsx:26` | **CORREGIDO**: Actualizado el sublabel a `"6 sovereign tools (CONTRACT-01)"`. |
 | `Guilds (45)` | Coincide con `STATUS.md:11` (45 enrutables por defecto en `router/catalog.rs` de 46 módulos FastMCP). | `docs-site/src/app/page.tsx:39` | Sin cambios requeridos (verificado exacto). |
-| Puertos de Red | En `docs-site/` no existen menciones a puertos obsoletos (`:4000`, `:3030`). El kernel escucha directamente en `:47004` sin proxy. | `docs-site/src/**/*.tsx` | Sin cambios requeridos (limpio de drift). |
+| Puertos de Red | En `docs-site/` no existen menciones a puertos obsoletos (los antiguos 4000 y 3030). El kernel escucha directamente en `:47004` sin proxy. | `docs-site/src/**/*.tsx` | Sin cambios requeridos (limpio de drift). |
 | `LinearRAG: PageRank with Degree Penalty / (1 + deg * 0.1)` | Invariante verificado en `graph.rs:188` (`/ (1 + deg * 0.1)`, penaliza hubs genéricos). | `docs-site/src/components/architecture/architecture-map.tsx:88` | Sin cambios requeridos (exacto y verificado). |
 
 ---
