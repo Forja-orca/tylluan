@@ -60,6 +60,86 @@ impl super::SilvaDB {
         self.search_vector_linear(query_embedding, limit).await
     }
 
+    /// T1277-E: fingerprint gate for index-backed candidate sets (HNSW / IVF).
+    ///
+    /// Neither in-memory index stores engine metadata per node (HNSW keeps
+    /// `node_ids + points`, IVF/mmap keeps ids + quantized vectors), so a
+    /// candidate's provenance can only come from `node_embeddings`. This
+    /// resolves it with ONE bounded query over the candidate ids (top-k, never
+    /// a table scan) and returns the ids the gate DROPS, feeding the same three
+    /// counters as the linear path.
+    ///
+    /// Inert (no expected fingerprint declared) => returns empty without
+    /// touching the DB at all. Ids with no `node_embeddings` row are never
+    /// judged (kept): absence is not evidence of a foreign engine.
+    fn fingerprint_dropped_ids(
+        &self,
+        conn: &rusqlite::Connection,
+        ids: &[String],
+        expected_bytes: usize,
+    ) -> Vec<String> {
+        let Some(expected) = self.expected_embedding_snapshot() else {
+            return Vec::new();
+        };
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let filter = self.fingerprint_filter_enabled();
+
+        // Bounded IN(...) lookup, chunked under SQLite's bound-parameter cap.
+        const CHUNK: usize = 400;
+        let mut verdicts: HashMap<String, (Option<String>, Option<String>, i64)> = HashMap::new();
+        for chunk in ids.chunks(CHUNK) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql = format!(
+                "SELECT node_id, model_name, model_hash, length(embedding) \
+                 FROM node_embeddings WHERE node_id IN ({placeholders})"
+            );
+            let Ok(mut stmt) = conn.prepare(&sql) else { continue };
+            let Ok(rows) = stmt.query_map(rusqlite::params_from_iter(chunk.iter()), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1).unwrap_or(None),
+                    r.get::<_, Option<String>>(2).unwrap_or(None),
+                    r.get::<_, Option<i64>>(3).unwrap_or(None).unwrap_or(-1),
+                ))
+            }) else {
+                continue;
+            };
+            for row in rows.flatten() {
+                verdicts.insert(row.0, (row.1, row.2, row.3));
+            }
+        }
+
+        let mut dropped = Vec::new();
+        for id in ids {
+            let Some((model_name, model_hash, bytes)) = verdicts.get(id) else {
+                continue;
+            };
+            // Dimension precedence mirrors the linear path (dim check first).
+            if *bytes != expected_bytes as i64 {
+                self.fp_would_exclude_dim
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            } else if !embedding_row_matches_engine(
+                model_name.as_deref().unwrap_or(""),
+                model_hash.as_deref(),
+                &expected,
+            ) {
+                self.fp_would_exclude_model
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            } else {
+                continue;
+            }
+            // Observation keeps the candidate; only the flag actually drops it.
+            if filter {
+                self.fp_excluded
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                dropped.push(id.clone());
+            }
+        }
+        dropped
+    }
+
     /// HNSW approximate nearest neighbor search via instant-distance.
     /// Returns empty results if no HNSW index is loaded or if it returns nothing.
     async fn search_vector_hnsw(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(GraphNode, f32)>> {
@@ -77,8 +157,23 @@ impl super::SilvaDB {
 
         let results: Vec<(GraphNode, f32)> = tokio::task::block_in_place(|| {
             let conn = self.conn_timed();
+            // T1277-E: judge the index-backed candidates by provenance. Inert
+            // (no declared fingerprint) => no extra query at all.
+            let dropped: std::collections::HashSet<String> =
+                if self.expected_embedding_snapshot().is_some() {
+                    let ids: Vec<String> =
+                        hnsw_results.iter().map(|(id, _)| id.clone()).collect();
+                    self.fingerprint_dropped_ids(&conn, &ids, query_embedding.len() * 4)
+                        .into_iter()
+                        .collect()
+                } else {
+                    std::collections::HashSet::new()
+                };
             let mut results = Vec::new();
             for (id, dist) in &hnsw_results {
+                if dropped.contains(id) {
+                    continue;
+                }
                 if let Ok(Some(node)) = self.get_node_sync(id, &conn) {
                     let score = 1.0 - dist;
                     results.push((node, score));
@@ -252,9 +347,23 @@ impl super::SilvaDB {
         if let Some(scored) = scored_opt {
             let result: std::result::Result<Vec<(GraphNode, f32)>, anyhow::Error> = tokio::task::block_in_place(|| {
                 let conn = self.conn_timed();
+                // T1277-E: same provenance gate as HNSW — the IVF index stores
+                // no engine metadata either. Inert => no extra query.
+                let dropped: std::collections::HashSet<String> =
+                    if self.expected_embedding_snapshot().is_some() {
+                        let ids: Vec<String> = scored.iter().map(|(id, _)| id.clone()).collect();
+                        self.fingerprint_dropped_ids(&conn, &ids, query_embedding.len() * 4)
+                            .into_iter()
+                            .collect()
+                    } else {
+                        std::collections::HashSet::new()
+                    };
 
                 let mut results = Vec::new();
                 for (id, score) in scored {
+                    if dropped.contains(&id) {
+                        continue;
+                    }
                     if let Ok(Some(node)) = self.get_node_sync(&id, &conn) {
                         results.push((node, score));
                     }
@@ -1303,5 +1412,224 @@ mod embedding_fingerprint_tests {
         let no_hash = ExpectedEmbedding { model_name: "engA".to_string(), model_hash: None };
         assert!(embedding_row_matches_engine("engA", Some("whatever"), &no_hash));
         assert!(!embedding_row_matches_engine("engB", Some("whatever"), &no_hash));
+    }
+}
+
+/// T1277-E: the same fingerprint gate on the index-backed candidate paths
+/// (HNSW and IVF). Neither index stores engine metadata — HNSW keeps
+/// `node_ids + points`, the IVF/mmap store keeps ids + quantized vectors — so
+/// candidate provenance comes from ONE bounded `node_embeddings` lookup over
+/// the candidate ids. Inert (no declared fingerprint) => no query at all.
+#[cfg(test)]
+mod embedding_fingerprint_index_tests {
+    use super::super::hnsw::{EmbPoint, HnswIndex};
+    use super::super::{GraphNode, SilvaDB};
+    use crate::memory::ivf_index::IVFSearcher;
+    use crate::memory::mmap_store::MmapEmbeddingStore;
+
+    const IDS: [&str; 4] = ["same_engine", "other_model", "sentinel_hash", "other_dim"];
+
+    /// 4-dim query `[1,0,0,0]`. `other_dim` carries an 8-float row in
+    /// `node_embeddings` (foreign dimension) while the index vectors stay 4-dim.
+    async fn seeded() -> SilvaDB {
+        let db = SilvaDB::in_memory().await.unwrap();
+        for id in IDS {
+            db.upsert_node(id, "note", "index fingerprint gate", "{}").await.unwrap();
+        }
+        db.save_embedding("same_engine", &[1.0, 0.0, 0.0, 0.0], "engA", Some("hash1"))
+            .await
+            .unwrap();
+        db.save_embedding("other_model", &[0.9, 0.1, 0.0, 0.0], "engB", Some("hash1"))
+            .await
+            .unwrap();
+        db.save_embedding("sentinel_hash", &[0.95, 0.05, 0.0, 0.0], "engA", Some("unknown-pre-hash"))
+            .await
+            .unwrap();
+        db.save_embedding("other_dim", &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "engA", None)
+            .await
+            .unwrap();
+        db
+    }
+
+    fn ids(results: &[(GraphNode, f32)]) -> Vec<String> {
+        results.iter().map(|(n, _)| n.id.clone()).collect()
+    }
+
+    fn index_vectors() -> Vec<Vec<f32>> {
+        vec![
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![0.9, 0.1, 0.0, 0.0],
+            vec![0.95, 0.05, 0.0, 0.0],
+            vec![1.0, 0.0, 0.0, 0.0],
+        ]
+    }
+
+    /// Real `HnswIndex` built directly: the 12_000 guard lives in
+    /// `build_hnsw()`, not in the type, so a 4-point index is valid here.
+    async fn install_hnsw(db: &SilvaDB) {
+        let node_ids: Vec<String> = IDS.iter().map(|s| s.to_string()).collect();
+        let points: Vec<EmbPoint> =
+            index_vectors().iter().map(|v| EmbPoint(v.clone())).collect();
+        let map = instant_distance::Builder::default().build(points.clone(), node_ids.clone());
+        *db.hnsw.write().await = Some(HnswIndex { map, node_ids, points });
+    }
+
+    /// Installs a real IVF store + searcher over a temp file. Returns the path
+    /// so the test can clean it up (Windows rejects deleting a mapped file).
+    fn install_ivf(db: &SilvaDB) -> std::path::PathBuf {
+        let node_ids: Vec<String> = IDS.iter().map(|s| s.to_string()).collect();
+        let centroids = vec![vec![1.0f32, 0.0, 0.0, 0.0]];
+        let assignments = vec![0u32, 0, 0, 0];
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("t1277e_ivf_{}_{nonce}.fjv1", std::process::id()));
+        let store =
+            MmapEmbeddingStore::create(&path, &node_ids, &index_vectors(), 4, 1, &centroids, &assignments)
+                .unwrap();
+        *db.mmap_store.write().unwrap_or_else(|p| p.into_inner()) = Some(store);
+        *db.ivf_searcher.write().unwrap_or_else(|p| p.into_inner()) =
+            Some(IVFSearcher::new(centroids, &assignments, 1));
+        path
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hnsw_observation_counts_without_changing_results() {
+        let db = seeded().await;
+        install_hnsw(&db).await;
+        let q = [1.0f32, 0.0, 0.0, 0.0];
+
+        // No expected fingerprint => gate fully inert on the HNSW path too.
+        let before = ids(&db.search_vector(&q, 10).await.unwrap());
+        assert_eq!(before.len(), 4, "all four index candidates: {before:?}");
+        assert_eq!(db.fingerprint_observation(), (0, 0, 0), "inert => no counters");
+
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        let after = ids(&db.search_vector(&q, 10).await.unwrap());
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "observation mode must not change HNSW results: before={before:?} after={after:?}"
+        );
+        assert!(
+            after.contains(&"other_model".to_string()),
+            "observer counts the foreign model but still returns it: {after:?}"
+        );
+        assert_eq!(db.fingerprint_observation(), (1, 1, 0), "(model, dim, excluded)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hnsw_enabled_filter_drops_foreign_candidates() {
+        let db = seeded().await;
+        install_hnsw(&db).await;
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        db.set_fingerprint_filter_enabled(true);
+
+        let got = ids(&db.search_vector(&[1.0f32, 0.0, 0.0, 0.0], 10).await.unwrap());
+        assert!(got.contains(&"same_engine".to_string()));
+        assert!(got.contains(&"sentinel_hash".to_string()), "sentinel never a mismatch: {got:?}");
+        assert!(!got.contains(&"other_model".to_string()), "flag ON drops foreign model: {got:?}");
+        assert!(!got.contains(&"other_dim".to_string()), "flag ON drops foreign dim: {got:?}");
+        assert_eq!(db.fingerprint_observation(), (1, 1, 2));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ivf_observation_counts_without_changing_results() {
+        let db = seeded().await;
+        let path = install_ivf(&db);
+        let q = [1.0f32, 0.0, 0.0, 0.0];
+
+        let before = ids(&db.search_vector(&q, 10).await.unwrap());
+        assert_eq!(before.len(), 4, "all four IVF candidates: {before:?}");
+        assert_eq!(db.fingerprint_observation(), (0, 0, 0), "inert => no counters");
+
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        let after = ids(&db.search_vector(&q, 10).await.unwrap());
+        assert_eq!(
+            before, after,
+            "observation mode must not change IVF results (order included)"
+        );
+        assert_eq!(db.fingerprint_observation(), (1, 1, 0), "(model, dim, excluded)");
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ivf_enabled_filter_drops_foreign_candidates() {
+        let db = seeded().await;
+        let path = install_ivf(&db);
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        db.set_fingerprint_filter_enabled(true);
+
+        let got = ids(&db.search_vector(&[1.0f32, 0.0, 0.0, 0.0], 10).await.unwrap());
+        assert!(got.contains(&"same_engine".to_string()));
+        assert!(got.contains(&"sentinel_hash".to_string()));
+        assert!(!got.contains(&"other_model".to_string()), "flag ON drops foreign model: {got:?}");
+        assert!(!got.contains(&"other_dim".to_string()), "flag ON drops foreign dim: {got:?}");
+        assert_eq!(db.fingerprint_observation(), (1, 1, 2));
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Cost probe for the added bounded lookup. Run with:
+    ///   cargo test -p tylluan-kernel --lib fingerprint_gate_cost -- --nocapture
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fingerprint_gate_cost() {
+        const ROWS: usize = 1000;
+        const CANDIDATES: usize = 300; // HNSW window at limit=100 (limit * 3)
+        const ITERS: usize = 100;
+
+        let db = SilvaDB::in_memory().await.unwrap();
+        for i in 0..ROWS {
+            let id = format!("row_{i:05}");
+            db.upsert_node(&id, "note", "cost probe", "{}").await.unwrap();
+            db.save_embedding(&id, &[1.0, 0.0, 0.0, 0.0], "engA", Some("hash1"))
+                .await
+                .unwrap();
+        }
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        let candidate_ids: Vec<String> = (0..CANDIDATES).map(|i| format!("row_{i:05}")).collect();
+
+        let mut samples = Vec::with_capacity(ITERS);
+        tokio::task::block_in_place(|| {
+            let conn = db.conn_timed();
+            for _ in 0..ITERS {
+                let t0 = std::time::Instant::now();
+                let dropped = db.fingerprint_dropped_ids(&conn, &candidate_ids, 16);
+                samples.push(t0.elapsed().as_micros() as u64);
+                assert!(dropped.is_empty(), "all candidates share the declared engine");
+            }
+        });
+        samples.sort_unstable();
+        let p50 = samples[ITERS / 2];
+        let p95 = samples[ITERS * 95 / 100];
+
+        // Reference point: the pre-existing per-candidate resolution the gate
+        // sits next to in the HNSW/IVF loops.
+        let mut baseline = Vec::with_capacity(ITERS);
+        tokio::task::block_in_place(|| {
+            let conn = db.conn_timed();
+            for _ in 0..ITERS {
+                let t0 = std::time::Instant::now();
+                for id in &candidate_ids {
+                    let _ = db.get_node_sync(id, &conn);
+                }
+                baseline.push(t0.elapsed().as_micros() as u64);
+            }
+        });
+        baseline.sort_unstable();
+        let base_p50 = baseline[ITERS / 2];
+
+        println!(
+            "T1277-E fingerprint_gate_cost: rows={ROWS} candidates={CANDIDATES} iters={ITERS} \
+             gate_p50={p50}us gate_p95={p95}us (min={}us max={}us) — \
+             reference get_node_sync loop p50={base_p50}us",
+            samples[0],
+            samples[ITERS - 1]
+        );
+        assert!(p95 < 50_000, "bounded candidate lookup should stay sub-50ms (got {p95}us)");
     }
 }

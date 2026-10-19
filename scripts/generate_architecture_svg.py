@@ -113,7 +113,7 @@ def generate_svg():
     
     <!-- Badges (positioned between Arrow 2 at 640 and Arrow 3 at 1035 for clean clearance) -->
     <rect x="705" y="183" width="160" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-    <text x="720" y="199" fill="#34d399" font-size="11" font-weight="700">1,149 TESTS GREEN</text>
+    <text x="720" y="199" fill="#34d399" font-size="11" font-weight="700">1,154 TESTS GREEN</text>
     
     <rect x="875" y="183" width="125" height="24" rx="12" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
     <text x="890" y="199" fill="#38bdf8" font-size="11" font-weight="700">MIT SOBERANO</text>
