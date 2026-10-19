@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import { resolveCanvasColor } from './ui/MetricPrimitives';
 
 interface SparklineChartProps {
   data: number[];       // values 0–100
-  color: string;        // hex color for the line
+  color: string;        // hex or css variable (e.g. hsl(var(--blue-400)))
   label: string;        // text top-left
   unit?: string;        // "%", "ms", etc.
   height?: number;      // px, default 48
@@ -89,12 +90,9 @@ export function SparklineChart({
 
     // Fill gradient
     const grad = ctx.createLinearGradient(0, PAD_T, 0, H - PAD_B);
-    // Parse hex color to rgba
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
-    grad.addColorStop(0, `rgba(${r},${g},${b},0.25)`);
-    grad.addColorStop(1, `rgba(${r},${g},${b},0.02)`);
+    const { stroke, fill } = resolveCanvasColor(color, canvas);
+    grad.addColorStop(0, fill(0.25));
+    grad.addColorStop(1, fill(0.02));
     ctx.fillStyle = grad;
     ctx.fill();
 
@@ -111,7 +109,7 @@ export function SparklineChart({
         );
       }
     }
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = stroke;
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';

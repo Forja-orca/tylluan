@@ -283,7 +283,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           {metricsHistory ? (
             <SparklineChart
               data={metricsHistory.snapshots.map(s => s.cpu)}
-              color="#60a5fa"
+              color="hsl(var(--blue-400))"
               label="CPU"
               unit="%"
               height={48}
@@ -309,7 +309,7 @@ export function MaintenanceTab({ bridge, notify }: Props) {
           {metricsHistory ? (
             <SparklineChart
               data={metricsHistory.snapshots.map(s => s.mem)}
-              color="#34d399"
+              color="hsl(var(--emerald-400))"
               label="RAM"
               unit="%"
               height={48}
