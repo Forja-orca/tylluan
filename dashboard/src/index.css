@@ -66,7 +66,7 @@
     --slate-700: 49 10% 78%;      /* Warm Secondary Border / Divider */
 
     /* Intermediate Muted & Border classes */
-    --slate-600: 49 7% 67%;       /* #b0aea5 Mid Gray Muted Element / Inactive */
+    --slate-600: 49 8% 40%;       /* Accessible Muted Element / Text (4.81:1 on #e8e6dc, 5.72:1 on #faf9f5) */
     --slate-500: 49 8% 37%;       /* Accessible Muted Text (5.72:1 on #faf9f5, 4.81:1 on #e8e6dc) */
     --slate-400: 50 8% 28%;       /* Secondary Text / Labels (8.30:1 on #faf9f5, 6.99:1 on #e8e6dc) */
 
@@ -85,6 +85,7 @@
     --emerald-950: 86 35% 95%;    /* Light Green Tint #F3F6EF */
 
     /* Claude Orange (Primary Accent Light) — Base #d97757 */
+    --amber-100: 15 63% 18%;      /* Accessible Text AA for Human Bubbles (12.5:1 on light) */
     --amber-200: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
     --amber-300: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
     --amber-400: 15 63% 40%;      /* #a64626 Accessible Text AA (5.65:1 on bg, 4.76:1 on surface) */
@@ -109,13 +110,31 @@
     --blue-500: 210 49% 61%;      /* #6a9bcc Secondary Accent Fill */
     --blue-600: 210 49% 41%;      /* Accessible Text AA (5.46:1 on bg, 4.60:1 on surface) */
     --blue-700: 210 55% 30%;      /* Accessible Text AAA (8.42:1 on bg, 7.09:1 on surface) */
+    --blue-950: 210 50% 96%;      /* Soft Light Blue Tint Surface */
 
+    --indigo-300: 210 50% 36%;    /* Accessible Text AA */
+    --indigo-400: 210 49% 41%;    /* Accessible Text AA */
     --indigo-500: 210 49% 41%;    /* Mapped to accessible Claude Blue AA */
     --indigo-600: 210 55% 30%;    /* Mapped to accessible Claude Blue AAA */
+    --indigo-950: 210 50% 96%;    /* Soft Light Indigo Tint Surface */
     
+    --violet-300: 260 40% 32%;    /* Accessible Text AA (6.8:1) */
     --violet-400: 260 40% 34%;    /* Accessible Text AA (6.5:1) */
     --violet-500: 260 35% 44%;
     --violet-600: 260 40% 34%;
+    --violet-950: 260 40% 96%;    /* Soft Light Violet Tint Surface */
+
+    --rose-950: 350 50% 96%;      /* Soft Light Rose Tint Surface */
+
+    --cyan-300: 190 70% 26%;      /* Accessible Text AA (6.8:1) */
+    --cyan-400: 190 60% 32%;      /* Accessible Text AA */
+    --cyan-500: 190 50% 45%;
+    --cyan-950: 190 50% 96%;      /* Soft Light Cyan Tint Surface */
+
+    --teal-300: 175 60% 28%;      /* Accessible Text AA (6.2:1) */
+    --teal-400: 175 55% 34%;      /* Accessible Text AA */
+    --teal-500: 175 45% 45%;
+    --teal-950: 175 50% 96%;      /* Soft Light Teal Tint Surface */
   }
 
   .dark {
@@ -162,6 +181,7 @@
     --emerald-950: 158 46% 11%;   /* Dark Mint Tint #0F291E */
 
     /* Sovereign Amber (CPU Active Dark) */
+    --amber-100: 48 96% 89%;
     --amber-200: 48 97% 77%;
     --amber-300: 46 97% 65%;
     --amber-400: 37 90% 61%;     /* #F5B041 (WCAG AAA pass 8.04:1) */
@@ -179,19 +199,36 @@
     --rose-500: 350 89% 60%;
     --rose-600: 347 77% 50%;
     --rose-700: 345 83% 41%;
+    --rose-950: 343 88% 16%;
     
+    --indigo-300: 230 94% 82%;
+    --indigo-400: 234 89% 74%;
     --indigo-500: 239 84% 67%;
     --indigo-600: 243 75% 59%;
+    --indigo-950: 243 47% 20%;
     
+    --violet-300: 252 95% 85%;
     --violet-400: 255 92% 76%;
     --violet-500: 258 90% 66%;
     --violet-600: 262 83% 58%;
+    --violet-950: 261 73% 23%;
     
     --blue-300: 212 96% 78%;
     --blue-400: 213 94% 68%;
     --blue-500: 217 91% 60%;
     --blue-600: 221 83% 53%;
     --blue-700: 224 76% 48%;
+    --blue-950: 226 57% 21%;
+
+    --cyan-300: 187 92% 69%;
+    --cyan-400: 189 86% 53%;
+    --cyan-500: 189 95% 43%;
+    --cyan-950: 198 79% 15%;
+
+    --teal-300: 171 77% 64%;
+    --teal-400: 173 66% 50%;
+    --teal-500: 173 80% 40%;
+    --teal-950: 179 84% 10%;
   }
 }
  
@@ -204,6 +241,22 @@
     background-image: 
       radial-gradient(at 0% 0%, rgba(212, 160, 48, 0.03) 0px, transparent 50%),
       radial-gradient(at 100% 0%, rgba(148, 163, 184, 0.03) 0px, transparent 50%);
+  }
+
+  /* V1: Tipografía Claude para tema claro exclusivamente (offline fallback, cero descargas) */
+  :root:not(.dark),
+  :root:not(.dark) body,
+  :root:not(.dark) .font-sans {
+    font-family: 'Lora', Georgia, serif;
+  }
+
+  :root:not(.dark) h1,
+  :root:not(.dark) h2,
+  :root:not(.dark) h3,
+  :root:not(.dark) h4,
+  :root:not(.dark) h5,
+  :root:not(.dark) h6 {
+    font-family: 'Poppins', Arial, sans-serif;
   }
 }
 
