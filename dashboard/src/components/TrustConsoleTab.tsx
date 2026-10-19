@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Activity, CheckCircle, AlertTriangle, RefreshCw, Terminal, Layers, FileCode, Wrench } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
+import { cn } from '../lib/utils';
 
 // Mirrors the real `/health?verbose=true` body built in
 // crates/tylluan-kernel/src/transport/http/mod.rs:1381-1402 (components block).
@@ -32,7 +33,7 @@ interface GuildContract {
   total_calls: number;
   last_latency_ms?: number | null;
   launcher_type: string;
-  capabilities?: Record<string, any>;
+  capabilities?: Record<string, unknown>;
   agent_roles: string[];
 }
 
@@ -123,7 +124,6 @@ export const TrustConsoleTab: React.FC = () => {
 
         {/* Sovereign Tools Invariant (CONTRACT-01 / ADR-021 / D5) */}
         <div
-          role="status"
           aria-label="Sovereign tools CONTRACT-01 status"
           className={`rounded-lg p-4 border ${
             sovereignOk === false
@@ -145,7 +145,16 @@ export const TrustConsoleTab: React.FC = () => {
             }`}
           >
             {sovereignCount !== null ? `${sovereignCount} / 6` : '— / 6'}
-            <span className="ml-2 text-xs font-semibold uppercase">
+            <span
+              className={cn(
+                'ml-2 px-2 py-0.5 text-xs font-semibold uppercase rounded-full border',
+                sovereignOk === false
+                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                  : sovereignOk === true
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              )}
+            >
               {sovereignOk === false ? 'DRIFT ALERT' : sovereignOk === true ? 'VERIFIED' : 'PENDING'}
             </span>
           </div>

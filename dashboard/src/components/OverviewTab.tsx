@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Activity,
   Wifi,
@@ -144,6 +144,54 @@ export function OverviewTab({
     : sysStatus?.embeddings_loaded
       ? { label: 'LOADED', colorClass: 'text-emerald-400', dotClass: 'bg-emerald-500' }
       : { label: 'FALLBACK', colorClass: 'text-amber-400', dotClass: 'bg-amber-500' };
+
+  // D5: Sovereign tools invariant ({ok, count}) from /health?verbose=true
+  const [sovereignToolsData, setSovereignToolsData] = useState<{ ok: boolean; count: number } | null>(null);
+
+  const fetchSovereignTools = useCallback(async () => {
+    if (!bridge || !online) return;
+    try {
+      const res = (await bridge.fetchRaw('/health?verbose=true')) as {
+        components?: { sovereign_tools?: { ok: boolean; count: number } };
+      };
+      if (res?.components?.sovereign_tools) {
+        setSovereignToolsData(res.components.sovereign_tools);
+      }
+    } catch {
+      setSovereignToolsData(null);
+    }
+  }, [bridge, online]);
+
+  useEffect(() => {
+    fetchSovereignTools();
+  }, [fetchSovereignTools]);
+
+  usePolling('overview-sovereign-tools', fetchSovereignTools, {
+    interval: 'medium',
+    enabled: !!bridge && online,
+  });
+
+  const sovereignToolsState = useMemo(() => {
+    if (!online) {
+      return { label: 'OFFLINE', colorClass: 'text-rose-400', dotClass: 'bg-rose-500' };
+    }
+    if (!sovereignToolsData) {
+      return { label: 'UNKNOWN', colorClass: 'text-slate-400', dotClass: 'bg-slate-500' };
+    }
+    const isDrift = !sovereignToolsData.ok || sovereignToolsData.count !== 6;
+    if (isDrift) {
+      return {
+        label: `${sovereignToolsData.count}/6 DRIFT`,
+        colorClass: 'text-rose-400',
+        dotClass: 'bg-rose-500',
+      };
+    }
+    return {
+      label: '6/6 VERIFIED',
+      colorClass: 'text-emerald-400',
+      dotClass: 'bg-emerald-500',
+    };
+  }, [online, sovereignToolsData]);
   useEffect(() => {
     const fetchMetricsHistory = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
@@ -345,8 +393,8 @@ export function OverviewTab({
         </div>
       )}
 
-      {/* Hub Status Pills */}
-      <div role="status" aria-label="System Telemetry Summary" className="flex flex-wrap gap-2">
+      {/* Hub Status Pills (sin role=status / aria-live en contenido sondeado) */}
+      <div aria-label="System Telemetry Summary" className="flex flex-wrap gap-2">
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
           <div className={cn("w-2 h-2 rounded-full", kernelHealth.dotClass)} aria-hidden="true"></div>
           <span className="text-[11px] font-semibold text-slate-300">Kernel: <span className={cn("font-mono", kernelHealth.colorClass)}>{kernelHealth.label}</span></span>
@@ -354,6 +402,10 @@ export function OverviewTab({
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
           <div className={cn("w-2 h-2 rounded-full", embeddingsState.dotClass)} aria-hidden="true"></div>
           <span className="text-[11px] font-semibold text-slate-300">Embeddings: <span className={cn("font-mono", embeddingsState.colorClass)}>{embeddingsState.label}</span></span>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+          <div className={cn("w-2 h-2 rounded-full", sovereignToolsState.dotClass)} aria-hidden="true"></div>
+          <span className="text-[11px] font-semibold text-slate-300">Sovereign Tools: <span className={cn("font-mono", sovereignToolsState.colorClass)}>{sovereignToolsState.label}</span></span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
           <span className="text-[11px] font-bold text-emerald-400">{liveMetrics?.activeAgents || 0}</span>
@@ -393,10 +445,10 @@ export function OverviewTab({
       )}
       {sysStatus && (
         <div className="mt-4 flex gap-3 flex-wrap">
-          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.silva_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
             SilvaDB: {sysStatus.silva_healthy ? 'OK' : 'ERROR'}
           </span>
-          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.mailbox_healthy ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
             Mailbox: {sysStatus.mailbox_healthy ? 'OK' : 'ERROR'}
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
@@ -405,7 +457,7 @@ export function OverviewTab({
           <span className="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">
             Uptime: {Math.floor((sysStatus.uptime_secs ?? 0) / 60)}m
           </span>
-          <span role="status" className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
+          <span className={`text-xs px-2 py-1 rounded-full ${sysStatus.embeddings_loaded
             ? 'bg-blue-500/20 text-blue-300'
             : 'bg-amber-500/20 text-amber-400'}`}>
             Embeddings: {sysStatus.embeddings_loaded ? 'mxbai-embed-large' : 'FTS5 fallback'}
@@ -428,7 +480,7 @@ export function OverviewTab({
           </div>
         </div>
         <div className="text-right relative z-10">
-          <div role="status" className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-400")}>
+          <div className={cn("text-xs font-semibold tracking-tight", sloSummary ? getStatusColor(sloSummary.status) : "text-slate-400")}>
             {sloSummary?.status ? sloSummary.status.toUpperCase() : 'TELEMETRY IDLE'}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Availability: {sloSummary?.current_availability !== undefined ? `${sloSummary.current_availability.toFixed(3)}%` : '—'}</div>
