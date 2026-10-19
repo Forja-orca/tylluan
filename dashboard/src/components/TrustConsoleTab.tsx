@@ -207,14 +207,14 @@ export const TrustConsoleTab: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
-                      {g.launcher_type || <span className="text-slate-600">—</span>}
+                      {g.launcher_type || <span className="text-slate-600 dark:text-slate-400">—</span>}
                     </td>
                     <td className="py-2.5 px-3 text-emerald-400">
                       {g.tools_count}
                       {g.always_on && <span className="text-[11px] text-slate-500 ml-1">always_on</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
-                      {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600">all</span>}
+                      {g.agent_roles && g.agent_roles.length > 0 ? g.agent_roles.join(', ') : <span className="text-slate-600 dark:text-slate-400">all</span>}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300">
                       {g.restarts_5m}

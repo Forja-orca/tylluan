@@ -357,10 +357,10 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     <section
       ref={containerRef}
       aria-labelledby="audit-telemetry-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-6 font-sans"
+      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-6 font-sans min-w-0 max-w-full overflow-hidden"
     >
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 min-w-0">
         <div>
           <h2 id="audit-telemetry-heading" className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-500" />
@@ -370,7 +370,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             Cryptographic HMAC chain verification (`/api/v1/audit/verify`), dispatch latency percentiles (`/api/v1/audit/latency`), security diagnostics (`/api/v1/security/events`), and authorization trail.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={() => setShowRawLogs((v) => !v)}

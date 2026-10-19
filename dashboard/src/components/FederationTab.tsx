@@ -493,13 +493,13 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   return (
     <div ref={containerRef} className="space-y-8 font-sans">
       {/* Sovereign Substrate Header Panel */}
-      <div className="flex items-center justify-between gap-4 flex-wrap bg-slate-900/60 p-6 rounded-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center">
+      <div className="flex items-center justify-between gap-4 flex-wrap bg-slate-900/60 p-4 sm:p-6 rounded-lg min-w-0 max-w-full overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center shrink-0">
             <Network className="w-6 h-6 text-amber-400" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="px-2 py-0.5 text-[11px] font-medium bg-amber-500/10 text-amber-400 rounded-md">
                 Noise XK Encrypted
               </span>
@@ -512,7 +512,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={handleRefreshAll}
@@ -538,10 +538,10 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       {/* Sharing Policy Panel */}
       {sharingStatus && (
         <div className={cn(
-          "bg-slate-900/40 p-6 rounded-lg backdrop-blur-md transition-all duration-300",
+          "bg-slate-900/40 p-4 sm:p-6 rounded-lg backdrop-blur-md transition-all duration-300 min-w-0 max-w-full overflow-hidden",
           sharingStatus.enabled ? "border-emerald-700/40" : "border-red-500/40"
         )}>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 min-w-0">
             
             {/* Left side: Status badge and info */}
             <div className="space-y-4 flex-1">

@@ -222,7 +222,7 @@ function App() {
           </div>
           
           {activeAgents.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
               <span className="text-slate-300">{activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'} active</span>
               <div className="flex gap-1">
                 {activeAgents.map(agent => (
@@ -439,7 +439,7 @@ function App() {
                     <span className="hidden md:inline">{tab.name}</span>
                   </div>
                   {tab.badge && (
-                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[11px] font-bold min-w-[1.2rem] text-center border border-amber-500/30">
+                    <span className="hidden md:inline-block px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-500 dark:border-amber-500/30 text-[11px] font-bold min-w-[1.2rem] text-center border">
                       {tab.badge}
                     </span>
                   )}
