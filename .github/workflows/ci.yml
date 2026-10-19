@@ -28,6 +28,11 @@ jobs:
       - run: cargo test -p tylluan-kernel --lib
       - run: cargo clippy -p tylluan-kernel --all-targets -- -D warnings
       - run: cargo test -p tylluan-cli
+      # Optional features get no --features anywhere else in CI, so tylluan-link's
+      # mainline-dht code never compiled: it was written against the mainline 0.x
+      # client API while the dependency has been "version = 2" since M14-A birth
+      # (found 2026-10-19). This step keeps it compiling from now on.
+      - run: cargo check -p tylluan-link --features mainline-dht
 
       - name: Check reproducible build (debug, fast)
         run: |
