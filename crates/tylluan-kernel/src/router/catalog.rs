@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use crate::config::GuildWeight;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// Describes a guild that the kernel can load.
@@ -576,40 +576,96 @@ pub fn scan_guilds_directory(guilds_root: &Path) -> Vec<GuildDescriptor> {
 }
 
 /// Returns the guild catalog auto-discovered from the filesystem.
-/// Falls back to scanning relative to workspace root.
+///
+/// Resolution order lives in [`guild_root_candidates`] (T-DSH-1, piloto DSH
+/// 2026-10-19 — see `docs/internal/IMPL_piloto_dsh_2026-10-19.md`): the old
+/// inline heuristic silently yielded an empty catalog whenever the running
+/// executable sat outside the repo (external `CARGO_TARGET_DIR`), because
+/// its only fallback walked up from `current_exe()`.
 static CATALOG_CACHE: OnceLock<Vec<GuildDescriptor>> = OnceLock::new();
 
 pub fn builtin_catalog() -> Vec<GuildDescriptor> {
     CATALOG_CACHE.get_or_init(|| {
-        // Try workspace root relative to the binary's working directory,
-        // then walk up looking for Cargo.toml / guilds/ directory.
-        let mut candidate = std::env::current_dir().unwrap_or_default();
-        if !candidate.join("guilds").is_dir()
-            && let Some(parent) = candidate.parent() {
-                candidate = parent.to_path_buf();
-            }
-        if !candidate.join("guilds").is_dir() {
-            candidate = std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_default();
-            // Walk up looking for guilds/
-            for _ in 0..6 {
-                if candidate.join("guilds").is_dir() {
-                    break;
-                }
-                if let Some(parent) = candidate.parent().map(|p| p.to_path_buf()) {
-                    candidate = parent;
-                } else {
-                    break;
-                }
-            }
-        }
-        let guilds_dir = candidate.join("guilds");
+        let env_root = std::env::var_os("TYLLUAN_REPO_ROOT").map(PathBuf::from);
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+
+        let candidates = guild_root_candidates(&cwd, exe_dir.as_deref(), env_root.as_deref());
+        // First candidate that really contains a `guilds/` directory wins.
+        // When none does (installed binary with no checkout visible), keep
+        // the previous behavior: scan the last candidate anyway, which
+        // yields an empty catalog.
+        let guilds_dir = candidates
+            .iter()
+            .find(|root| root.join("guilds").is_dir())
+            .or_else(|| candidates.last())
+            .map(|root| root.join("guilds"))
+            .unwrap_or_else(|| PathBuf::from("guilds"));
+
         let mut catalog = scan_guilds_directory(&guilds_dir);
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
         catalog
     }).clone()
+}
+
+/// Roots to probe, in priority order, for a directory containing `guilds/`:
+///
+/// 1. `TYLLUAN_REPO_ROOT` when the env var is set — explicit override; an
+///    env root without a `guilds/` directory is probed first but skipped by
+///    the caller's existence check (it never hijacks resolution).
+/// 2. The process working directory and its parent — production runs from
+///    the repo root, and `cargo test` sets the CWD to the crate directory,
+///    so the parent probe keeps that case working. Order preserved from the
+///    pre-T-DSH-1 implementation on purpose.
+/// 3. The executable's directory walked up 6 levels — binaries built
+///    *inside* the repo (`repo/target/debug/…`).
+/// 4. Compile-time anchor `env!("CARGO_MANIFEST_DIR")` + `../..` (the repo
+///    root as seen from `crates/tylluan-kernel`). This is what keeps the
+///    catalog resolving when the executable sits *outside* the repo — e.g.
+///    `cargo test` with an external `CARGO_TARGET_DIR`, where the old
+///    exe-based walk-up found nothing and the catalog came back empty
+///    (41 false test failures, piloto DSH 2026-10-19).
+///
+/// Pure candidate list — no filesystem access — so tests can pin the order
+/// with simulated paths; resolution itself is the caller's
+/// `candidate.join("guilds").is_dir()` check.
+fn guild_root_candidates(
+    cwd: &Path,
+    exe_dir: Option<&Path>,
+    env_root: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Some(root) = env_root {
+        candidates.push(root.to_path_buf());
+    }
+
+    candidates.push(cwd.to_path_buf());
+    if let Some(parent) = cwd.parent() {
+        candidates.push(parent.to_path_buf());
+    }
+
+    if let Some(dir) = exe_dir {
+        let mut candidate = dir.to_path_buf();
+        for _ in 0..6 {
+            candidates.push(candidate.clone());
+            match candidate.parent() {
+                Some(parent) => candidate = parent.to_path_buf(),
+                None => break,
+            }
+        }
+    }
+
+    // crates/tylluan-kernel → two levels up is the repo root, baked in at
+    // compile time. Same anchoring pattern already used by this module's
+    // own tests (`repo_root` via CARGO_MANIFEST_DIR).
+    candidates.push(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(".."),
+    );
+
+    candidates
 }
 #[cfg(test)]
 mod tests {
@@ -626,6 +682,100 @@ mod tests {
         assert!(names.contains(&"bash"), "bash guild missing");
         assert!(names.contains(&"filesystem"), "filesystem guild missing");
         assert!(names.contains(&"memory"), "memory guild missing");
+    }
+
+    /// T-DSH-1 (piloto DSH 2026-10-19): pin the candidate order for the
+    /// `guilds/` directory — explicit env override first, then cwd/parent
+    /// (the production order, deliberately unchanged), then the exe
+    /// walk-up, then the compile-time CARGO_MANIFEST_DIR anchor last.
+    /// Simulated paths only; no filesystem access needed for the order.
+    #[test]
+    fn test_guild_root_candidates_order_env_first_anchor_last() {
+        let candidates = guild_root_candidates(
+            Path::new("/sim/cwd/inside"),
+            Some(Path::new("/sim/external-target/debug/deps")),
+            Some(Path::new("/sim/env-root")),
+        );
+        assert_eq!(
+            candidates.first().map(|p| p.as_path()),
+            Some(Path::new("/sim/env-root")),
+            "TYLLUAN_REPO_ROOT must be probed first"
+        );
+        assert_eq!(
+            candidates.get(1).map(|p| p.as_path()),
+            Some(Path::new("/sim/cwd/inside")),
+            "cwd must keep its pre-T-DSH-1 production position"
+        );
+        assert_eq!(
+            candidates.get(2).map(|p| p.as_path()),
+            Some(Path::new("/sim/cwd")),
+            "cwd's parent must come right after cwd (cargo test sets CWD to the crate dir)"
+        );
+        assert_eq!(
+            candidates.get(3).map(|p| p.as_path()),
+            Some(Path::new("/sim/external-target/debug/deps")),
+            "the exe walk-up must start at the executable's directory"
+        );
+
+        let anchor = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+        assert_eq!(
+            candidates.last().map(|p| p.as_path()),
+            Some(anchor.as_path()),
+            "the compile-time anchor must be the final fallback"
+        );
+        // And it must actually resolve inside this checkout — that is exactly
+        // what an external CARGO_TARGET_DIR run depends on.
+        assert!(
+            anchor.join("guilds").is_dir(),
+            "manifest anchor does not resolve to this repo: {anchor:?}"
+        );
+    }
+
+    /// T-DSH-1: with neither cwd nor the executable sitting inside a repo
+    /// (external `CARGO_TARGET_DIR` — the piloto failure where 41 catalog
+    /// tests saw an empty guild list), resolution must still land on the
+    /// compile-time anchor. `TYLLUAN_REPO_ROOT` wins when it exists and
+    /// must not hijack when its `guilds/` is missing.
+    #[test]
+    fn test_resolve_guilds_root_external_exe_falls_back_to_anchor() {
+        let anchor = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+        let tmp = tempfile::tempdir().unwrap();
+        let fake_repo = tmp.path().join("fake-repo");
+        std::fs::create_dir_all(fake_repo.join("guilds")).unwrap();
+        let nowhere = tmp.path().join("nowhere");
+        let external_exe = tmp
+            .path()
+            .join("external-target")
+            .join("debug")
+            .join("deps");
+
+        // Same resolution the cache performs: first candidate holding guilds/.
+        let resolve =
+            |cwd: &Path, exe: Option<&Path>, env: Option<&Path>| -> Option<PathBuf> {
+                guild_root_candidates(cwd, exe, env)
+                    .into_iter()
+                    .find(|root| root.join("guilds").is_dir())
+            };
+
+        // Env override wins when it points at a real repo root.
+        assert_eq!(
+            resolve(&nowhere, Some(&external_exe), Some(&fake_repo)).as_deref(),
+            Some(fake_repo.as_path())
+        );
+
+        // No repo visible from cwd/exe (exe outside the repo): the anchor saves it.
+        assert_eq!(
+            resolve(&nowhere, Some(&external_exe), None).as_deref(),
+            Some(anchor.as_path())
+        );
+
+        // Env set but bogus (no guilds/ under it): probed first yet never hijacks.
+        let bogus = tmp.path().join("not-a-repo");
+        std::fs::create_dir_all(&bogus).unwrap();
+        assert_eq!(
+            resolve(&nowhere, None, Some(&bogus)).as_deref(),
+            Some(anchor.as_path())
+        );
     }
 
     #[test]
