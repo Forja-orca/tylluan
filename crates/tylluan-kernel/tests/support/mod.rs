@@ -55,7 +55,14 @@ pub async fn test_state(identity_tag: &str) -> Arc<HttpState> {
 
 /// Parameterized variant for auth/middleware tests (Fase 1: OAuth gate).
 pub async fn test_state_custom(identity_tag: &str, auth_token: Option<String>, dev_mode: bool) -> Arc<HttpState> {
-    let workspace_root = std::env::current_dir().unwrap_or_default();
+    // T-DSH-2: GuildRegistry persists registry.json into its root on every
+    // register()/save(), so rooting it at CWD littered crates/tylluan-kernel/
+    // with runtime state that later tests read as if it were config
+    // (order-dependent false failures). Root the test registry in a unique
+    // temp dir; repo_map keeps its own real cwd below.
+    let workspace_root = std::env::temp_dir()
+        .join(format!("tylluan_test_reg_{identity_tag}_{}", test_counter_next()));
+    std::fs::create_dir_all(&workspace_root).unwrap();
     let registry_raw = GuildRegistry::new(workspace_root.clone(), 5, TimeoutsConfig::default(), 5);
     let registry_arc = Arc::new(RwLock::new(registry_raw));
     let (registry_actor, registry_handle) = RegistryActor::new(registry_arc.clone());
