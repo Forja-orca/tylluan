@@ -115,6 +115,68 @@ describe('DecisionServicePanel (D1)', () => {
     });
     expect(screen.getAllByText('write_relevance').length).toBeGreaterThan(0);
   });
+
+  it('shows filter-specific empty state and reset button when total > 0 but 0 filtered rows match', async () => {
+    const mockBridge = {
+      fetchRaw: vi.fn().mockResolvedValue({
+        rows: [
+          {
+            id: 2116,
+            ts: '2026-10-18T05:00:00Z',
+            contract: '',
+            request_hash: 'e4a909d1ea2338379ceb44ec2c811e95',
+            rules_value: null,
+            model_value: 'false',
+            provider: 'systemone-http-v1',
+            latency_ms: 51,
+            agreed: null,
+            mode: 'off',
+            model_identity: 'decima-small',
+          },
+        ],
+        summary: [
+          { contract: '', n: 1, n_agreed: 0, n_disagreed: 0, n_null: 1 },
+        ],
+        total: 2116,
+        limit: 50,
+      }),
+    } as unknown as NexusBridge;
+
+    render(<DecisionServicePanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 1 of 1 rows \(total: 2116\)/i)).toBeDefined();
+      expect(screen.getAllByText('(unspecified)').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Click recall_gate contract card to filter by a contract with 0 rows
+    const recallCard = screen.getByRole('button', { name: /recall_gate/i });
+    fireEvent.click(recallCard);
+
+    // Header updates to 0 rows
+    expect(screen.getByText(/Showing 0 of 1 rows \(total: 2116\)/i)).toBeDefined();
+
+    // Table body shows clear filter empty state with total count, NOT the global empty-store message
+    expect(
+      screen.getByText(/No hay evaluaciones que coincidan con el contrato/i)
+    ).toBeDefined();
+    expect(
+      screen.getByText(/2116 evaluaciones registradas en total/i)
+    ).toBeDefined();
+    expect(
+      screen.queryByText(/No hay evaluaciones en sombra registradas aún/i)
+    ).toBeNull();
+
+    // Click button to reset filter
+    const resetBtn = screen.getByRole('button', { name: /Mostrar todas las evaluaciones/i });
+    expect(resetBtn).toBeDefined();
+    fireEvent.click(resetBtn);
+
+    // Rows restored
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 1 of 1 rows \(total: 2116\)/i)).toBeDefined();
+    });
+  });
 });
 
 describe('ContradictionsPanel (D2)', () => {

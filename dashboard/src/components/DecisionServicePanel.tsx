@@ -175,13 +175,14 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
 
     if (rawSummary.length > 0) {
       for (const s of rawSummary) {
-        map.set(s.contract, s);
+        const key = (s.contract && s.contract.trim()) ? s.contract : '(unspecified)';
+        map.set(key, { ...s, contract: key });
       }
       return Array.from(map.values());
     }
 
     for (const r of rows) {
-      const key = r.contract || 'unknown';
+      const key = (r.contract && r.contract.trim()) ? r.contract : '(unspecified)';
       const entry = map.get(key) ?? { contract: key, n: 0, n_agreed: 0, n_disagreed: 0, n_null: 0 };
       entry.n += 1;
       const state = normalizeAgreed(r.agreed);
@@ -195,7 +196,10 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
 
   const filteredRows = useMemo(() => {
     if (contractFilter === 'all') return rows;
-    return rows.filter((r) => r.contract === contractFilter);
+    return rows.filter((r) => {
+      const rowContract = (r.contract && r.contract.trim()) ? r.contract : '(unspecified)';
+      return rowContract === contractFilter;
+    });
   }, [rows, contractFilter]);
 
   const activeProviderSummary = useMemo(() => {
@@ -488,7 +492,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                   const cmp = normalizeAgreed(row.agreed);
                   return (
                     <tr key={row.id ?? idx} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-amber-300">{row.contract}</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-300">{row.contract || '(unspecified)'}</td>
                       <td className="py-2.5 px-3 text-slate-300">{row.mode || 'shadow'}</td>
                       <td className="py-2.5 px-3">
                         <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-200 border border-slate-700">
@@ -549,12 +553,59 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                         <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" aria-hidden="true" />
                         <span>Cargando evaluaciones en sombra...</span>
                       </div>
+                    ) : endpointStatus === 'forbidden' ? (
+                      <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                        <p className="text-slate-300">
+                          Requiere credencial de operador para acceder al log de decisiones en sombra.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={fetchShadowLog}
+                          aria-label="Reintentar consulta de evaluaciones en sombra"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                          Reintentar
+                        </button>
+                      </div>
+                    ) : contractFilter !== 'all' ? (
+                      <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                        <p className="text-slate-300">
+                          No hay evaluaciones que coincidan con el contrato &ldquo;{contractFilter}&rdquo;.
+                          {(totalCount > 0 || rows.length > 0) && (
+                            <span className="block text-slate-400 text-[11px] mt-0.5">
+                              ({totalCount || rows.length} evaluaciones registradas en total).
+                            </span>
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setContractFilter('all')}
+                          aria-label="Mostrar todas las evaluaciones"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                        >
+                          Mostrar todas las evaluaciones
+                        </button>
+                      </div>
+                    ) : totalCount > 0 && rows.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                        <p className="text-slate-300">
+                          No se cargaron evaluaciones en sombra para esta página ({totalCount} evaluaciones registradas en total).
+                        </p>
+                        <button
+                          type="button"
+                          onClick={fetchShadowLog}
+                          aria-label="Reintentar consulta de evaluaciones en sombra"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                          Reintentar
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
                         <p className="text-slate-300">
-                          {endpointStatus === 'forbidden'
-                            ? 'Requiere credencial de operador para acceder al log de decisiones en sombra.'
-                            : 'No hay evaluaciones en sombra registradas aún. Las evaluaciones aparecerán aquí cuando [decision] registre comparaciones.'}
+                          No hay evaluaciones en sombra registradas aún. Las evaluaciones aparecerán aquí cuando [decision] registre comparaciones.
                         </p>
                         <button
                           type="button"

@@ -166,10 +166,10 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     <section
       ref={containerRef}
       aria-labelledby="contradictions-panel-heading"
-      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-5 font-sans"
+      className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5 font-sans min-w-0 max-w-full overflow-hidden"
     >
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 min-w-0">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md">
@@ -191,7 +191,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <label htmlFor="conflicted-limit-select" className="text-xs font-mono text-slate-300 flex items-center gap-1">
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             Limit:
@@ -318,7 +318,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                  <span className="font-bold text-amber-300">{node.id}</span>
+                  <span className="font-bold text-amber-300 break-all">{node.id}</span>
                   <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
                     {node.node_type}
                   </span>

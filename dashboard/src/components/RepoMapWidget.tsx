@@ -201,7 +201,7 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
             >
               <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
               <span className="truncate">{f.path}</span>
-              <span className="text-slate-600 ml-auto">{f.kind}</span>
+              <span className="text-slate-600 dark:text-slate-400 ml-auto">{f.kind}</span>
             </div>
           ))}
         </div>
