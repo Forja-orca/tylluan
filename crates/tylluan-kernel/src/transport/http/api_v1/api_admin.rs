@@ -874,8 +874,6 @@ pub async fn test_connection_handler(
 
 pub async fn update_wsl_config_handler() -> impl IntoResponse { StatusCode::OK }
 
-pub async fn list_inference_providers_handler() -> impl IntoResponse { StatusCode::OK }
-pub async fn add_inference_provider_handler() -> impl IntoResponse { StatusCode::OK }
 
 /// GET /api/v1/external-providers
 pub async fn list_external_providers_handler(
