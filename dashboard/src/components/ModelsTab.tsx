@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import { ModelsLocalInference } from './ModelsLocalInference';
 import { ModelsRoleAssignment } from './ModelsRoleAssignment';
 import { ModelsExternalProviders } from './ModelsExternalProviders';
-import { ModelsEmbeddingsDisk } from './ModelsEmbeddingsDisk';
+import { ModelsEmbeddingsDisk, type ModelsConfigData, type ModelsResponseData } from './ModelsEmbeddingsDisk';
 
 interface Props {
   bridge: NexusBridge | null;
@@ -15,8 +15,8 @@ type SubTab = 'inference' | 'roles' | 'external' | 'embeddings';
 
 export function ModelsTab({ bridge }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('inference');
-  const [config, setConfig] = useState<any>(null);
-  const [models, setModels] = useState<any>(null);
+  const [config, setConfig] = useState<ModelsConfigData | null>(null);
+  const [models, setModels] = useState<ModelsResponseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState('cpu');
   const [initialDevice, setInitialDevice] = useState('cpu');

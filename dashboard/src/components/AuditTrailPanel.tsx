@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { withTimeout } from '../lib/timeout';
 
 export interface AuditEntry {
   agent_id: string;
@@ -147,13 +148,17 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     setLatencyError(null);
     setSecurityError(null);
     try {
-      const [trailRes, verifyRes, latencyRes, secRes, logsRes] = await Promise.allSettled([
-        bridge.getAuditTrail(agentIdFilter || undefined, limit),
-        bridge.fetchRaw('/api/v1/audit/verify'),
-        bridge.fetchRaw('/api/v1/audit/latency?window_minutes=60'),
-        bridge.fetchRaw('/api/v1/security/events'),
-        bridge.fetchRaw('/api/v1/audit/logs'),
-      ]);
+      const [trailRes, verifyRes, latencyRes, secRes, logsRes] = await withTimeout(
+        Promise.allSettled([
+          bridge.getAuditTrail(agentIdFilter || undefined, limit),
+          bridge.fetchRaw('/api/v1/audit/verify'),
+          bridge.fetchRaw('/api/v1/audit/latency?window_minutes=60'),
+          bridge.fetchRaw('/api/v1/security/events'),
+          bridge.fetchRaw('/api/v1/audit/logs'),
+        ]),
+        10000,
+        'Request timed out after 10s. Security & audit endpoints took too long.'
+      );
 
       if (trailRes.status === 'fulfilled' && trailRes.value) {
         const data = trailRes.value;
@@ -225,6 +230,8 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       setTotal(0);
       if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
         setError('Requiere credencial de operador (HTTP 403).');
+      } else if (msg.includes('timed out') || msg.includes('timeout')) {
+        setError('Request timed out after 10s. Los endpoints de auditoría excedieron el tiempo límite.');
       } else {
         setError(`Error querying audit trail records: ${msg}`);
       }
@@ -336,6 +343,19 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             {loading ? 'Refreshing...' : 'Refresh Logs'}
           </button>
+          {loading && (
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(false);
+                setError('Consulta de auditoría cancelada por el usuario.');
+              }}
+              aria-label="Cancel audit trail query"
+              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 

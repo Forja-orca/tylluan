@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { NexusBridge, GraphNode } from '../lib/nexus-bridge';
 import { Search, Layers, Folder, User, Terminal, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -13,23 +13,24 @@ export function ScopesPanel({ bridge, notify: _notify }: Props) {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchNodes = async (searchPrefix: string) => {
+  const fetchNodes = useCallback(async (searchPrefix: string) => {
     if (!bridge) return;
     setLoading(true);
     try {
       const res = await bridge.getNodesByScopePrefix(searchPrefix);
       setNodes(res || []);
-    } catch (e: any) {
-      console.error("Error consultando nodos por ámbito:", e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Error querying nodes by scope prefix:", msg);
       setNodes([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchNodes(prefix);
-  }, [bridge, prefix]);
+  }, [fetchNodes, prefix]);
 
   const renderScopeBreadcrumbs = (scope?: string) => {
     if (!scope) return <span className="text-slate-600 italic">No scope owner</span>;

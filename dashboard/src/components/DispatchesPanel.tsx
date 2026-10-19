@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, Check, X, Clock, Terminal, Hash, User, AlertTriangle, RefreshCw, Loader2, Copy } from 'lucide-react';
+import { ShieldCheck, Check, X, Clock, Terminal, Hash, User, RefreshCw, Loader2, Copy } from 'lucide-react';
+import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 import { agentStyle } from '../lib/agent-meta';
@@ -18,7 +19,7 @@ export interface PendingDispatch {
 }
 
 interface DispatchesPanelProps {
-  bridge: any;
+  bridge: NexusBridge | null;
 }
 
 export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
@@ -69,8 +70,9 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
       } else {
         setFeedback({ id: d.id, message: res.error || 'Approval failed', type: 'error' });
       }
-    } catch (e: any) {
-      setFeedback({ id: d.id, message: e.message || String(e), type: 'error' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setFeedback({ id: d.id, message: msg, type: 'error' });
     } finally {
       setActionLoading(p => ({ ...p, [d.id]: false }));
     }
@@ -93,8 +95,9 @@ export function DispatchesPanel({ bridge }: DispatchesPanelProps) {
       } else {
         setFeedback({ id: d.id, message: res.error || 'Rejection failed', type: 'error' });
       }
-    } catch (e: any) {
-      setFeedback({ id: d.id, message: e.message || String(e), type: 'error' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setFeedback({ id: d.id, message: msg, type: 'error' });
     } finally {
       setActionLoading(p => ({ ...p, [d.id]: false }));
     }

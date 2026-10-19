@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { withTimeout } from '../lib/timeout';
 
 interface PeerInfo {
   name: string;
@@ -194,7 +195,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     if (!silent) setPeersLoading(true);
     setMeshError(null);
     try {
-      const data = await bridge.fetchRaw('/api/v1/mesh/peers') as MeshStatusResponse;
+      const data = (await withTimeout(
+        bridge.fetchRaw('/api/v1/mesh/peers'),
+        10000,
+        'Request timed out after 10s. GET /api/v1/mesh/peers took too long.'
+      )) as MeshStatusResponse;
       if (data && Array.isArray(data.peers)) {
         setMeshPeers(data.peers);
         setMeshStatus(data);
@@ -208,6 +213,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setMeshEndpointStatus('forbidden');
         setMeshError('Requiere credencial de operador (HTTP 403). Token maestro requerido para inspeccionar DHT routing table.');
+      } else if (msg.includes('timed out') || msg.includes('timeout')) {
+        setMeshEndpointStatus('error');
+        setMeshError('Request timed out after 10s. La consulta a /api/v1/mesh/peers excedió el tiempo límite.');
       } else {
         setMeshEndpointStatus('error');
         setMeshError(msg || 'Error al consultar /api/v1/mesh/peers en :47004');
@@ -224,7 +232,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     if (!silent) setNodesLoading(true);
     setFedNodesError(null);
     try {
-      const data = await bridge.fetchRaw('/api/v1/federation/nodes') as FederationNodesResponse;
+      const data = (await withTimeout(
+        bridge.fetchRaw('/api/v1/federation/nodes'),
+        10000,
+        'Request timed out after 10s. GET /api/v1/federation/nodes took too long.'
+      )) as FederationNodesResponse;
       if (data && Array.isArray(data.nodes)) {
         setFedNodes(data.nodes);
         setFedNodesCount(typeof data.count === 'number' ? data.count : data.nodes.length);
@@ -239,6 +251,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setFedNodesEndpointStatus('forbidden');
         setFedNodesError('Requiere credencial de operador (HTTP 403). Token maestro requerido para consultar nodos de federación.');
+      } else if (msg.includes('timed out') || msg.includes('timeout')) {
+        setFedNodesEndpointStatus('error');
+        setFedNodesError('Request timed out after 10s. La consulta a /api/v1/federation/nodes excedió el tiempo límite.');
       } else {
         setFedNodesEndpointStatus('error');
         setFedNodesError(msg || 'Error al consultar /api/v1/federation/nodes en :47004');
@@ -595,14 +610,29 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                   </span>
                 )}
               </h3>
-              <button
-                type="button"
-                onClick={() => fetchMeshPeers(false)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
-              >
-                <RefreshCw className="w-3 h-3 text-amber-400" />
-                <span>Reintentar Mesh</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fetchMeshPeers(false)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                >
+                  <RefreshCw className={cn("w-3 h-3 text-amber-400", peersLoading && "animate-spin")} />
+                  <span>Reintentar Mesh</span>
+                </button>
+                {peersLoading && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPeersLoading(false);
+                      setMeshError('Consulta Mesh cancelada por el usuario.');
+                      setMeshEndpointStatus('error');
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
             </div>
 
             {meshEndpointStatus === 'forbidden' ? (
@@ -916,14 +946,29 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Federated memory candidates queried from /api/v1/federation/nodes across peer connections.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => fetchNodes(false)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
-          >
-            <RefreshCw className="w-3 h-3 text-violet-400" />
-            <span>Reintentar Nodos</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => fetchNodes(false)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+            >
+              <RefreshCw className={cn("w-3 h-3 text-violet-400", nodesLoading && "animate-spin")} />
+              <span>Reintentar Nodos</span>
+            </button>
+            {nodesLoading && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNodesLoading(false);
+                  setFedNodesError('Consulta de nodos cancelada por el usuario.');
+                  setFedNodesEndpointStatus('error');
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
         </div>
 
         {fedNodesEndpointStatus === 'forbidden' ? (

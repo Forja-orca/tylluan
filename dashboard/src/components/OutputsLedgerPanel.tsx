@@ -14,13 +14,10 @@ import {
   FileCode,
   Hash,
   Layers,
-  ArrowUpDown,
   Filter,
   Eye,
   FileBox,
-  ShieldCheck,
-  Activity,
-  ChevronDown
+  Activity
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -58,7 +55,7 @@ export interface RunSummary {
 
 interface OutputsLedgerPanelProps {
   bridge: {
-    fetchRaw: (url: string, init?: RequestInit) => Promise<any>;
+    fetchRaw: (url: string, init?: RequestInit) => Promise<unknown>;
   } | null;
   notify?: (msg: string, type?: 'info' | 'error') => void;
 }
@@ -106,15 +103,16 @@ export function OutputsLedgerPanel({ bridge, notify }: OutputsLedgerPanelProps) 
     setError(null);
     try {
       const query = guildFilter !== 'all' ? `?guild=${encodeURIComponent(guildFilter)}&limit=100` : '?limit=100';
-      const res = await bridge.fetchRaw(`/api/v1/outputs${query}`);
+      const res = (await bridge.fetchRaw(`/api/v1/outputs${query}`)) as { runs?: RunSummary[] } | null;
       if (res && Array.isArray(res.runs)) {
         setRuns(res.runs);
       } else {
         setRuns([]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to fetch outputs ledger:', err);
-      setError(err.message || 'Failed to fetch outputs ledger');
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || 'Failed to fetch outputs ledger');
     } finally {
       setLoading(false);
     }
@@ -133,15 +131,16 @@ export function OutputsLedgerPanel({ bridge, notify }: OutputsLedgerPanelProps) 
     setManifestError(null);
     setSelectedManifest(null);
     try {
-      const data = await bridge.fetchRaw(`/api/v1/outputs/${encodeURIComponent(runId)}/manifest`);
+      const data = (await bridge.fetchRaw(`/api/v1/outputs/${encodeURIComponent(runId)}/manifest`)) as OutputManifest | null;
       if (data && data.run_id) {
         setSelectedManifest(data);
       } else {
         setManifestError('Invalid manifest format returned from server');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`Failed to fetch manifest for ${runId}:`, err);
-      setManifestError(err.message || `Failed to fetch manifest for ${runId}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      setManifestError(msg || `Failed to fetch manifest for ${runId}`);
     } finally {
       setManifestLoading(false);
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, Layers, ChevronDown, ChevronUp, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, Clock, CheckCircle2, Layers } from 'lucide-react';
 import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -8,6 +8,24 @@ interface Props {
   bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
   onIngestComplete?: () => void;
+}
+
+interface IngestRawNode {
+  id: string;
+  node_type?: string;
+  content?: string;
+  metadata?: string | Record<string, unknown>;
+  updated_at?: string | number;
+}
+
+interface IngestParsedMeta {
+  kind?: string;
+  name?: string;
+  source_file?: string;
+  chunk_index?: number;
+  chunk_total?: number;
+  url?: string;
+  triples_extracted?: number;
 }
 
 interface RecentNode {
@@ -48,24 +66,24 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
     try {
       const nodesList = await bridge.getRecentNodes(15);
       // Filter for nodes that are likely from the ingest/code pipeline
-      const filtered = (nodesList || []).filter((n: any) => 
+      const filtered = ((nodesList || []) as IngestRawNode[]).filter((n) => 
         n.node_type === 'episode' || 
         n.node_type === 'document' || 
         n.node_type === 'code_entity' ||
         n.node_type === 'note'
       );
 
-      const mapped: RecentNode[] = filtered.map((n: any) => {
-        let meta: any = {};
+      const mapped: RecentNode[] = filtered.map((n) => {
+        let meta: IngestParsedMeta = {};
         try {
-          meta = typeof n.metadata === 'string' ? JSON.parse(n.metadata) : (n.metadata || {});
+          meta = typeof n.metadata === 'string' ? JSON.parse(n.metadata) : ((n.metadata || {}) as IngestParsedMeta);
         } catch {}
 
         let preview = n.content || '';
         if (n.node_type === 'code_entity') {
           preview = `[Code] ${meta.kind || ''} ${meta.name || n.id}`;
         } else if (meta.source_file) {
-          preview = `${meta.source_file} (Chunk ${meta.chunk_index + 1}/${meta.chunk_total}): ${n.content}`;
+          preview = `${meta.source_file} (Chunk ${(meta.chunk_index ?? 0) + 1}/${meta.chunk_total ?? 1}): ${n.content}`;
         } else if (meta.url) {
           preview = `[URL] ${meta.url}: ${n.content}`;
         }
@@ -129,7 +147,7 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
         const trimmedUrl = urlText.trim();
         const res = await bridge.ingestUrl(trimmedUrl, tags);
         
-        let parsedResult: any = null;
+        let parsedResult: { chunks?: number; nodes_created?: number } | null = null;
         try {
           const responseText = res.response || '';
           const match = responseText.match(/text:\s*"(.*)"\s*}/s);
@@ -156,8 +174,9 @@ export function IngestPanel({ bridge, notify, onIngestComplete }: Props) {
         onIngestComplete?.();
         fetchRecentNodes();
       }
-    } catch (e: any) {
-      notify(`Ingest failed: ${e?.message ?? 'unknown error'}`, 'error');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e ?? 'unknown error');
+      notify(`Ingest failed: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }

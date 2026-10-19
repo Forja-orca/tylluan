@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
+import { withTimeout } from '../lib/timeout';
 
 export interface ConflictedNodeItem {
   id: string;
@@ -47,7 +48,11 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     setError(null);
     try {
       const safeLimit = Math.min(200, Math.max(1, limit));
-      const res = (await bridge.fetchRaw(`/api/v1/silva/conflicted?limit=${safeLimit}`)) as SilvaConflictedResponse;
+      const res = (await withTimeout(
+        bridge.fetchRaw(`/api/v1/silva/conflicted?limit=${safeLimit}`),
+        10000,
+        'Request timed out after 10s. GET /api/v1/silva/conflicted took too long.'
+      )) as SilvaConflictedResponse;
       const validNodes = Array.isArray(res?.nodes)
         ? res.nodes.map((n) => ({
             id: String(n.id),
@@ -72,6 +77,9 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setEndpointStatus('forbidden');
         setError('Requiere credencial de operador (HTTP 403). Token maestro requerido para consultar GET /api/v1/silva/conflicted.');
+      } else if (msg.includes('timed out') || msg.includes('timeout')) {
+        setEndpointStatus('error');
+        setError('Request timed out after 10s. La consulta a /api/v1/silva/conflicted excedió el tiempo límite.');
       } else {
         setEndpointStatus('error');
         setError(msg || 'Error al consultar GET /api/v1/silva/conflicted');
@@ -161,6 +169,20 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             <RefreshCw className={cn('w-3.5 h-3.5 text-rose-400', loading && 'animate-spin')} aria-hidden="true" />
             <span>{loading ? 'Loading...' : 'Refresh'}</span>
           </button>
+          {loading && (
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(false);
+                setError('Consulta cancelada por el usuario.');
+                setEndpointStatus('error');
+              }}
+              aria-label="Cancelar consulta de nodos en conflicto"
+              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+          )}
         </div>
       </div>
 
