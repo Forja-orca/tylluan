@@ -194,30 +194,30 @@ export function InteroceptionTab({ interoception, memoryStats: _memoryStats }: P
           <span className="text-[11px] font-medium text-slate-400">Biological Signal Ambient</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <HormoneBar label="Stress (Cortisol)" value={hormones?.stress ?? 0} color="#ef4444" />
-          <HormoneBar label="Novelty (Dopamine)" value={hormones?.novelty ?? 0} color="#22c55e" />
-          <HormoneBar label="Saturation (Serotonin)" value={hormones?.saturation ?? 0} color="#eab308" />
-          <HormoneBar label="Energy (ATP)" value={hormones?.energy ?? 0} color="#60a5fa" />
-          <HormoneBar label="Homeostasis" value={hormones?.homeostasis ?? 0} color="#a78bfa" />
+          <HormoneBar label="Stress (Cortisol)" value={hormones?.stress ?? 0} color="hsl(var(--destructive))" />
+          <HormoneBar label="Novelty (Dopamine)" value={hormones?.novelty ?? 0} color="hsl(var(--emerald-500))" />
+          <HormoneBar label="Saturation (Serotonin)" value={hormones?.saturation ?? 0} color="hsl(var(--amber-500))" />
+          <HormoneBar label="Energy (ATP)" value={hormones?.energy ?? 0} color="hsl(var(--blue-500))" />
+          <HormoneBar label="Homeostasis" value={hormones?.homeostasis ?? 0} color="hsl(var(--violet-500))" />
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-lg bg-slate-900/50 p-3">
           <div className="text-[11px] text-slate-500 mb-1">Homeostasis</div>
-          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.homeostasis > 0.7 ? '#34d399' : interoception.homeostasis > 0.4 ? '#fbbf24' : '#ef4444') : '#64748b' }}>
+          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.homeostasis > 0.7 ? 'hsl(var(--emerald-600))' : interoception.homeostasis > 0.4 ? 'hsl(var(--amber-600))' : 'hsl(var(--destructive))') : 'hsl(var(--slate-500))' }}>
             {interoception ? `${(interoception.homeostasis * 100).toFixed(0)}%` : '—'}
           </div>
         </div>
         <div className="rounded-lg bg-slate-900/50 p-3">
           <div className="text-[11px] text-slate-500 mb-1">Stress</div>
-          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.stress_level < 0.3 ? '#34d399' : interoception.stress_level < 0.6 ? '#fbbf24' : '#ef4444') : '#64748b' }}>
+          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.stress_level < 0.3 ? 'hsl(var(--emerald-600))' : interoception.stress_level < 0.6 ? 'hsl(var(--amber-600))' : 'hsl(var(--destructive))') : 'hsl(var(--slate-500))' }}>
             {interoception ? `${(interoception.stress_level * 100).toFixed(0)}%` : '—'}
           </div>
         </div>
         <div className="rounded-lg bg-slate-900/50 p-3">
           <div className="text-[11px] text-slate-500 mb-1">Knowledge Hunger</div>
-          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.knowledge_hunger > 0.7 ? '#fbbf24' : '#34d399') : '#64748b' }}>
+          <div className="text-2xl font-bold font-mono" style={{ color: interoception ? (interoception.knowledge_hunger > 0.7 ? 'hsl(var(--amber-600))' : 'hsl(var(--emerald-600))') : 'hsl(var(--slate-500))' }}>
             {interoception ? `${(interoception.knowledge_hunger * 100).toFixed(0)}%` : '—'}
           </div>
         </div>

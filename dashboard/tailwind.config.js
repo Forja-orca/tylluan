@@ -31,22 +31,27 @@ export default {
           950: "hsl(var(--slate-950) / <alpha-value>)",
         },
         emerald: {
+          300: "hsl(var(--emerald-300) / <alpha-value>)",
           400: "hsl(var(--emerald-400) / <alpha-value>)",
           500: "hsl(var(--emerald-500) / <alpha-value>)",
           600: "hsl(var(--emerald-600) / <alpha-value>)",
           700: "hsl(var(--emerald-700) / <alpha-value>)",
         },
         amber: {
+          200: "hsl(var(--amber-200) / <alpha-value>)",
+          300: "hsl(var(--amber-300) / <alpha-value>)",
           400: "hsl(var(--amber-400) / <alpha-value>)",
           500: "hsl(var(--amber-500) / <alpha-value>)",
           600: "hsl(var(--amber-600) / <alpha-value>)",
           700: "hsl(var(--amber-700) / <alpha-value>)",
         },
         red: {
+          300: "hsl(var(--red-300) / <alpha-value>)",
           400: "hsl(var(--red-400) / <alpha-value>)",
           500: "hsl(var(--red-500) / <alpha-value>)",
         },
         rose: {
+          300: "hsl(var(--rose-300) / <alpha-value>)",
           400: "hsl(var(--rose-400) / <alpha-value>)",
           500: "hsl(var(--rose-500) / <alpha-value>)",
           600: "hsl(var(--rose-600) / <alpha-value>)",
@@ -57,12 +62,16 @@ export default {
           600: "hsl(var(--indigo-600) / <alpha-value>)",
         },
         violet: {
+          400: "hsl(var(--violet-400) / <alpha-value>)",
           500: "hsl(var(--violet-500) / <alpha-value>)",
           600: "hsl(var(--violet-600) / <alpha-value>)",
         },
         blue: {
+          300: "hsl(var(--blue-300) / <alpha-value>)",
           400: "hsl(var(--blue-400) / <alpha-value>)",
           500: "hsl(var(--blue-500) / <alpha-value>)",
+          600: "hsl(var(--blue-600) / <alpha-value>)",
+          700: "hsl(var(--blue-700) / <alpha-value>)",
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",

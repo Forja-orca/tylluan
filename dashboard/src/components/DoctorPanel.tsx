@@ -123,18 +123,18 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-xl font-bold font-sans tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
+          <h2 className="text-xl font-bold font-sans tracking-tight text-slate-100 flex items-center gap-2">
             <Stethoscope className="w-5 h-5 text-emerald-500" />
             System Doctor
           </h2>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Global diagnostics and auto-repair utilities
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={loadReport}
-            className="p-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none cursor-pointer"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none cursor-pointer"
             title="Refresh Diagnostics"
           >
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -144,30 +144,30 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Global Status Card */}
-        <div className="p-4 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-2 font-mono text-[11px] font-medium">
+        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl flex flex-col justify-between">
+          <div className="flex items-center gap-2 text-slate-400 mb-2 font-mono text-[11px] font-medium">
             <Activity className="w-4 h-4" /> Global Status
           </div>
           <div className={cn("text-2xl font-bold flex items-center gap-2 capitalize", statusColor)}>
             <StatusIcon className="w-6 h-6" /> {report.status}
           </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+          <p className="text-xs text-slate-400 mt-2">
             Last checked: {new Date(report.timestamp).toLocaleTimeString()}
           </p>
         </div>
 
         {/* System Load Card */}
-        <div className="p-4 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-xl md:col-span-2 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-2 font-mono text-[11px] font-medium">
+        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl md:col-span-2 flex flex-col justify-between">
+          <div className="flex items-center gap-2 text-slate-400 mb-2 font-mono text-[11px] font-medium">
             <Cpu className="w-4 h-4" /> Hardware Utilization
           </div>
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-700 dark:text-slate-300">CPU Usage</span>
-                <span className="font-mono text-slate-600 dark:text-slate-400">{report.system.cpu_usage_percent.toFixed(1)}%</span>
+                <span className="text-slate-300">CPU Usage</span>
+                <span className="font-mono text-slate-400">{report.system.cpu_usage_percent.toFixed(1)}%</span>
               </div>
-              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div 
                   className={cn("h-full", report.system.cpu_usage_percent > 80 ? "bg-red-500" : "bg-emerald-500")} 
                   style={{ width: `${Math.min(100, report.system.cpu_usage_percent)}%` }} 
@@ -176,10 +176,10 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
             </div>
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-700 dark:text-slate-300">Memory ({report.system.used_memory_mb}MB / {report.system.total_memory_mb}MB)</span>
-                <span className="font-mono text-slate-600 dark:text-slate-400">{report.system.memory_percent.toFixed(1)}%</span>
+                <span className="text-slate-300">Memory ({report.system.used_memory_mb}MB / {report.system.total_memory_mb}MB)</span>
+                <span className="font-mono text-slate-400">{report.system.memory_percent.toFixed(1)}%</span>
               </div>
-              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div 
                   className={cn("h-full", report.system.memory_percent > 85 ? "bg-red-500" : "bg-emerald-500")} 
                   style={{ width: `${Math.min(100, report.system.memory_percent)}%` }} 
@@ -187,12 +187,12 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
               </div>
             </div>
             {/* GPU EP Real Hardware Telemetry Badge */}
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-400 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Execution Provider:
               </span>
-              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300">
+              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400">
                 {report.system.warnings?.length ? 'System Inspection OK' : 'Default Hardware Engine'}
               </span>
             </div>
@@ -203,20 +203,20 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Guilds Status */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/60 pb-2">
-            <h3 className="text-sm font-medium text-slate-900 dark:text-slate-200">Guild Subsystems</h3>
+          <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
+            <h3 className="text-sm font-medium text-slate-100">Guild Subsystems</h3>
           </div>
           {report.guilds.length === 0 ? (
-            <p className="text-xs text-slate-600 dark:text-slate-400">No guilds registered</p>
+            <p className="text-xs text-slate-400">No guilds registered</p>
           ) : (
             <div className="space-y-2">
               {report.guilds.map(g => (
-                <div key={g.name} className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-lg">
+                <div key={g.name} className="flex items-center justify-between p-3 bg-slate-900/60 border border-slate-800/80 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={cn("w-2 h-2 rounded-full", g.running ? "bg-emerald-500" : "bg-red-500")} />
                     <div>
-                      <p className="text-sm font-mono text-slate-800 dark:text-slate-200">{g.name}</p>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400">{g.tools_count} tools</p>
+                      <p className="text-sm font-mono text-slate-100">{g.name}</p>
+                      <p className="text-[11px] text-slate-400">{g.tools_count} tools</p>
                       {g.issues.length > 0 && (
                         <p className="text-xs text-red-500 dark:text-red-400 mt-1">{g.issues[0]}</p>
                       )}
@@ -226,7 +226,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
                     <button
                       onClick={() => handleRepair('guild', g.name)}
                       disabled={repairing}
-                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
                     >
                       <RotateCcw className="w-3 h-3" />
                       Restart
@@ -240,24 +240,24 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
 
         {/* Storage Health */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/60 pb-2">
-            <h3 className="text-sm font-medium text-slate-900 dark:text-slate-200">Storage Integrity</h3>
+          <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
+            <h3 className="text-sm font-medium text-slate-100">Storage Integrity</h3>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            <div className="p-3 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-lg flex items-center justify-between">
+            <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-lg flex items-center justify-between">
               <div>
-                <p className="text-sm font-mono text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                  <Server className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                <p className="text-sm font-mono text-slate-100 flex items-center gap-2">
+                  <Server className="w-4 h-4 text-slate-400" />
                   SilvaDB (Unified Knowledge Graph)
                 </p>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {report.storage.nodes_count.toLocaleString()} nodes • {formatBytes(report.storage.silva_bytes)}
                 </p>
               </div>
               {report.storage.silva_db_ok ? (
-                <span className="text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded">OK</span>
+                <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold px-2 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded">OK</span>
               ) : (
-                <span className="text-red-700 dark:text-red-300 text-xs font-bold px-2 py-1 bg-red-500/15 border border-red-500/30 rounded">CORRUPT</span>
+                <span className="text-red-600 dark:text-red-400 text-xs font-bold px-2 py-1 bg-red-500/15 border border-red-500/30 rounded">CORRUPT</span>
               )}
             </div>
 
@@ -277,13 +277,13 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
 
       {/* Issues & Warnings */}
       {(report.system.warnings.length > 0 || report.suggestions.length > 0) && (
-        <div className="p-4 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-xl space-y-4">
+        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-4">
           {report.system.warnings.length > 0 && (
             <div>
               <h4 className="text-xs font-medium text-amber-500 flex items-center gap-1.5 mb-2">
                 <AlertTriangle className="w-3.5 h-3.5" /> System Warnings
               </h4>
-              <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-1">
+              <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
                 {report.system.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
@@ -294,7 +294,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
               <h4 className="text-xs font-medium text-emerald-500 flex items-center gap-1.5 mb-2">
                 <Wrench className="w-3.5 h-3.5" /> Recommended Actions
               </h4>
-              <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-1">
+              <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
                 {report.suggestions.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
             </div>
@@ -313,3 +313,4 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     </div>
   );
 }
+
