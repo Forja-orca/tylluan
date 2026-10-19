@@ -102,25 +102,25 @@ const QUICK_TEMPLATES = [
 function parseMarkdown(text: string): string {
   let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   h = h.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) =>
-    `<pre class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-300">` +
+    `<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">` +
     `<div class="text-[11px] text-slate-400 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
     `<code>${code}</code></pre>`
   );
-  h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-950 border border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-300">$1</code>');
+  h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-200/80 dark:bg-slate-950 border border-slate-300/80 dark:border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-700 dark:text-indigo-300">$1</code>');
   h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>');
   h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   h = h.replace(/_([^_]+)_/g, '<em>$1</em>');
   h = h.replace(/(?:^|\n)&gt;\s?(.*)/g, (_, q) =>
-    `<blockquote class="border-l-2 border-indigo-500/40 pl-3 italic text-slate-400 my-1.5">${q}</blockquote>`
+    `<blockquote class="border-l-2 border-indigo-500/40 pl-3 italic text-slate-600 dark:text-slate-400 my-1.5">${q}</blockquote>`
   );
   h = h.replace(/(?:^|\n)[-*]\s(.*)/g, (_, item) =>
-    `<li class="list-disc ml-4 my-0.5 text-slate-300">${item}</li>`
+    `<li class="list-disc ml-4 my-0.5 text-slate-700 dark:text-slate-300">${item}</li>`
   );
   h = h.replace(/(^|[\s,;().!?])#(\d{1,4})\b/g,
-    '$1<span class="cursor-pointer text-amber-400 hover:text-amber-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
+    '$1<span class="cursor-pointer text-amber-700 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
   );
   h = h.replace(/(^|[\s,;()>.!?])@([A-Za-z0-9_][A-Za-z0-9_-]*)/g,
-    '$1<span class="text-amber-300 bg-amber-950/50 border border-amber-800/40 rounded px-1 font-semibold">@$2</span>'
+    '$1<span class="text-amber-700 dark:text-amber-300 bg-amber-950 dark:bg-amber-950/50 border border-amber-400/50 dark:border-amber-800/40 rounded px-1 font-semibold">@$2</span>'
   );
   return h;
 }
@@ -356,7 +356,7 @@ export function ColoquioMessagesPanel({
               <div className={cn(
                 'rounded-2xl shadow-sm leading-relaxed relative',
                 compactMode ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-[12px]',
-                isHuman ? 'bg-amber-950/30 border border-amber-700/40 text-amber-100 rounded-tr-sm'
+                isHuman ? 'bg-amber-950/60 dark:bg-amber-950/30 border border-amber-400/40 dark:border-amber-700/40 text-amber-100 rounded-tr-sm'
                         : `${m.bg} border ${m.border} text-slate-100 rounded-tl-sm`,
                 highlight ? 'ring-2 ring-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.4)]' : ''
               )}>
