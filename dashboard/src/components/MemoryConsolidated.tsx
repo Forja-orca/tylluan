@@ -3,16 +3,18 @@ import { KnowledgeGraphTab } from './KnowledgeGraphTab';
 import { NodesTab } from './NodesTab';
 import { ContradictionsPanel } from './ContradictionsPanel';
 import { Network, Radio, GitCompare } from 'lucide-react';
+import type { NexusBridge, MemoryStats } from '../lib/nexus-bridge';
 
 interface MemoryConsolidatedProps {
-  bridge: any;
+  bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
-  memoryStats: any;
+  memoryStats: MemoryStats | null;
 }
 
 export function MemoryConsolidated(props: MemoryConsolidatedProps) {
   const [subTab, setSubTab] = useState<'graph' | 'nodes' | 'contradictions'>('graph');
-  const contradictedCount = props.memoryStats?.contradicted_count ?? props.memoryStats?.conflicted_count ?? null;
+  const stats = props.memoryStats as (MemoryStats & { contradicted_count?: number; conflicted_count?: number }) | null;
+  const contradictedCount = stats?.contradicted_count ?? stats?.conflicted_count ?? null;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-4 h-full">

@@ -24,6 +24,13 @@ interface AnalysisResult {
   ocr?: string;
 }
 
+interface VisionKernelConfig {
+  vision?: {
+    model_path?: string;
+  };
+  [key: string]: unknown;
+}
+
 export function VisionTab({ bridge, notify }: Props) {
   const { guilds, refreshData } = useNexus();
   const [imagePath, setImagePath] = useState('');
@@ -34,10 +41,10 @@ export function VisionTab({ bridge, notify }: Props) {
   const [starting, setStarting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [kernelConfig, setKernelConfig] = useState<any>(null);
+  const [kernelConfig, setKernelConfig] = useState<VisionKernelConfig | null>(null);
 
   React.useEffect(() => {
-    bridge?.fetchRaw('/api/v1/config').then(setKernelConfig).catch(() => {});
+    bridge?.fetchRaw('/api/v1/config').then((data) => setKernelConfig(data as VisionKernelConfig)).catch(() => {});
   }, [bridge]);
 
   const visionGuild = guilds.find(g => g.name === 'vision');
@@ -58,15 +65,15 @@ export function VisionTab({ bridge, notify }: Props) {
                    mode === 'ocr' ? { image_path: imagePath } : 
                    { image_path: imagePath, schema: prompt };
 
-      const res = await bridge.fetchRaw(`/api/v1/guilds/vision/call/${endpoint}`, {
+      const res = (await bridge.fetchRaw(`/api/v1/guilds/vision/call/${endpoint}`, {
         method: 'POST',
         body: JSON.stringify(body)
-      });
+      })) as { content?: Array<{ text?: string }>; result?: string; output?: string } | null;
       // MCP response: { content: [{type:"text", text:"..."}] }
       // Extract innermost text regardless of nesting
       let text: string;
       if (Array.isArray(res?.content) && res.content.length > 0) {
-        text = res.content.map((c: any) => c.text ?? '').join('\n').trim();
+        text = res.content.map((c: { text?: string }) => c.text ?? '').join('\n').trim();
       } else {
         text = res?.result ?? res?.output ?? JSON.stringify(res, null, 2);
       }

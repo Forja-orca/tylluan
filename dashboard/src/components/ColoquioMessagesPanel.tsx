@@ -426,7 +426,7 @@ export function ColoquioMessagesPanel({
                     const meta = JSON.parse(msg.metadata || '{}');
                     if (meta.attachments?.length > 0) return (
                       <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-700/30">
-                        {meta.attachments.map((att: any, idx: number) => {
+                        {meta.attachments.map((att: { file: string; name: string }, idx: number) => {
                           const isImg = /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(att.file);
                           const url = bridge ? `${bridge.getBaseUrl()}/api/v1/ingest/files/${att.file}` : '';
                           if (isImg) return <img key={idx} src={url} alt={att.name} className="max-w-[180px] max-h-[180px] rounded border border-slate-700 cursor-pointer hover:opacity-90" onClick={() => window.open(url, '_blank')} />;

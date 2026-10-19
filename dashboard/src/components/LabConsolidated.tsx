@@ -5,9 +5,10 @@ import PlanModePanel from './PlanModePanel';
 import ProjectSkillsPanel from './ProjectSkillsPanel';
 import BackgroundJobsPanel from './BackgroundJobsPanel';
 import { Beaker, Camera, ShieldCheck, FileCode, Cpu } from 'lucide-react';
+import type { NexusBridge } from '../lib/nexus-bridge';
 
 interface LabConsolidatedProps {
-  bridge: any;
+  bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
 }
 

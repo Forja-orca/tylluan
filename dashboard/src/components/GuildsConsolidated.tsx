@@ -1,5 +1,6 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { Cpu, Link2, Plug, Network, Loader2, FolderArchive } from 'lucide-react';
+import type { NexusBridge, NexusEvent } from '../lib/nexus-bridge';
 
 const GuildsTab = lazy(() => import('./GuildsTab').then(m => ({ default: m.GuildsTab })));
 const OutputsLedgerPanel = lazy(() => import('./OutputsLedgerPanel').then(m => ({ default: m.OutputsLedgerPanel })));
@@ -8,9 +9,9 @@ const McpRegistryPanel = lazy(() => import('./McpRegistryPanel').then(m => ({ de
 const FederationTab = lazy(() => import('./FederationTab').then(m => ({ default: m.FederationTab })));
 
 interface GuildsConsolidatedProps {
-  bridge: any;
+  bridge: NexusBridge | null;
   notify: (msg: string, type?: 'info' | 'error') => void;
-  events: any[];
+  events: NexusEvent[];
 }
 
 export function GuildsConsolidated(props: GuildsConsolidatedProps) {

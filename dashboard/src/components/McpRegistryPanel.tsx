@@ -913,7 +913,7 @@ export function McpRegistryPanel({ bridge, notify, events }: McpRegistryPanelPro
                       <button
                         key={tab.id}
                         type="button"
-                        onClick={() => setSetupHint((prev: any) => ({ ...prev, active_tab: tab.id }))}
+                        onClick={() => setSetupHint((prev) => (prev ? { ...prev, active_tab: tab.id } : null))}
                         className={cn(
                           "py-2 px-3 text-xs font-bold uppercase rounded-lg border font-mono transition-all text-center",
                           (setupHint?.active_tab || 'desktop') === tab.id
