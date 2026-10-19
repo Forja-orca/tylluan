@@ -443,6 +443,65 @@ describe('AuditTrailPanel (D3)', () => {
       expect(screen.getByText(/Consulta de auditoría cancelada por el usuario/i)).toBeDefined();
     });
   });
+
+  it('scopes Escape key listener so it does not cross between co-mounted panels (T2)', async () => {
+    let decisionSignal: AbortSignal | undefined;
+    let contradictionsSignal: AbortSignal | undefined;
+
+    const mockBridgeDecision = {
+      fetchRaw: vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes('/api/v1/decide/shadow')) {
+          decisionSignal = init?.signal as AbortSignal;
+          return new Promise(() => {}); // pending
+        }
+        return Promise.resolve({});
+      }),
+    } as unknown as NexusBridge;
+
+    const mockBridgeContradictions = {
+      fetchRaw: vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes('/api/v1/silva/conflicted')) {
+          contradictionsSignal = init?.signal as AbortSignal;
+          return new Promise(() => {}); // pending
+        }
+        return Promise.resolve({});
+      }),
+    } as unknown as NexusBridge;
+
+    render(
+      <div>
+        <DecisionServicePanel bridge={mockBridgeDecision} />
+        <ContradictionsPanel bridge={mockBridgeContradictions} />
+      </div>
+    );
+
+    await waitFor(() => {
+      expect(decisionSignal).toBeDefined();
+      expect(contradictionsSignal).toBeDefined();
+    });
+
+    expect(decisionSignal?.aborted).toBe(false);
+    expect(contradictionsSignal?.aborted).toBe(false);
+
+    // 1. Focus element inside DecisionServicePanel and press Escape
+    const cancelDecisionBtn = screen.getByRole('button', { name: /Cancel shadow log query/i });
+    cancelDecisionBtn.focus();
+    fireEvent.keyDown(cancelDecisionBtn, { key: 'Escape' });
+
+    // DecisionServicePanel must abort
+    expect(decisionSignal?.aborted).toBe(true);
+
+    // ContradictionsPanel must NOT abort (Escape must not leak across panels)
+    expect(contradictionsSignal?.aborted).toBe(false);
+
+    // 2. Now focus element inside ContradictionsPanel and press Escape
+    const cancelContradictionsBtn = screen.getByRole('button', { name: /Cancel conflicted nodes query/i });
+    cancelContradictionsBtn.focus();
+    fireEvent.keyDown(cancelContradictionsBtn, { key: 'Escape' });
+
+    // Now ContradictionsPanel must abort
+    expect(contradictionsSignal?.aborted).toBe(true);
+  });
 });
 
 

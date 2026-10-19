@@ -1,5 +1,5 @@
 import { Search, ChevronRight, ChevronDown, Plus, Hash, Trash2, AlertTriangle } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { cn } from '../lib/utils';
 import { ColoquioChannel } from './coloquio-types';
 
@@ -43,10 +43,18 @@ export function ColoquioChannelsPanel({
   onDeleteChannel
 }: ColoquioChannelsPanelProps) {
   const [deleteTarget, setDeleteTarget] = useState<ColoquioChannel | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = containerRef.current && (
+          containerRef.current.contains(active) || containerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         if (deleteTarget) {
           setDeleteTarget(null);
         } else if (showNewChannel) {
@@ -112,7 +120,7 @@ export function ColoquioChannelsPanel({
   };
 
   return (
-    <div className="w-full md:w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden h-full">
+    <div ref={containerRef} className="w-full md:w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80">
         <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         <input

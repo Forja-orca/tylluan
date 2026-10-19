@@ -210,9 +210,18 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
     };
   }, [rows]);
 
+  const containerRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = containerRef.current && (
+          containerRef.current.contains(active) || containerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         if (loading) {
           if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -232,6 +241,7 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
 
   return (
     <section
+      ref={containerRef}
       aria-labelledby="decision-service-heading"
       className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-6 font-sans"
     >
