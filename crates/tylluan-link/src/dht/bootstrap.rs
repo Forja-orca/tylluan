@@ -283,9 +283,15 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    /// Unique per process AND per call: the counter alone restarts at 0 in every
+    /// run, so a `dht_peers.json` left by an earlier run (peers < 24 h old are
+    /// reloaded) made `test_bootstrap_empty_config` fail intermittently.
     fn tmp_dir(label: &str) -> std::path::PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("tylluan_{label}_{id}"))
+        let dir = std::env::temp_dir()
+            .join(format!("tylluan_{label}_{}_{id}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
     }
 
     fn test_identity() -> NodeIdentity {
