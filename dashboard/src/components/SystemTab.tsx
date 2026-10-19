@@ -22,7 +22,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Sub-navigation */}
-      <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl max-w-full overflow-x-auto scrollbar-thin">
+      <div role="group" aria-label="System sub-navigation" className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl max-w-full overflow-x-auto scrollbar-thin">
         <button
           type="button"
           onClick={() => setView('doctor')}
@@ -30,7 +30,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'doctor'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Stethoscope className="w-4 h-4" />
@@ -43,7 +43,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'maintenance'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Wrench className="w-4 h-4" />
@@ -56,7 +56,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'logs'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Terminal className="w-4 h-4" />
@@ -69,7 +69,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'models'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Cpu className="w-4 h-4" />
@@ -82,7 +82,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'scopes'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Layers className="w-4 h-4" />
@@ -95,7 +95,7 @@ export function SystemTab({ bridge, notify, events, onClearLogs }: Props) {
             "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none shrink-0",
             view === 'a2a'
               ? "bg-slate-800 text-slate-200 shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           )}
         >
           <Globe className="w-4 h-4" />

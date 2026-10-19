@@ -251,7 +251,7 @@ export function FleetTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(0);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!bridge) return;
     setRefreshing(true);
     try {
@@ -262,11 +262,11 @@ export function FleetTab() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
-    refresh();
-  }, [bridge]);
+    void refresh();
+  }, [refresh]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('fleet-refresh', refresh, { interval: 'medium', enabled: true });

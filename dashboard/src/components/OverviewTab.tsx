@@ -634,19 +634,22 @@ export function OverviewTab({
             {approvals.length === 0 ? (
               <>
                 <CheckCircle className="w-10 h-10 text-emerald-500/20 mb-2" />
-                <p className="text-xs text-slate-500">Security Clearance High</p>
-                <p className="text-[11px] text-slate-600">No pending approvals required.</p>
+                <p className="text-xs text-slate-400">Security Clearance High</p>
+                <p className="text-[11px] text-slate-400">No pending approvals required.</p>
               </>
             ) : (
               <div className="w-full space-y-2">
                 <p className="text-xs font-bold text-amber-400 mb-3">{approvals.length} ACTIONS BLOCKED</p>
                 {approvals.slice(0, 3).map((a) => (
                   <div key={a.id} className="p-2 bg-amber-500/5 border border-amber-500/20 rounded text-left overflow-hidden">
-                    <div className="text-[11px] font-mono text-amber-500 truncate">{a.id}</div>
-                    <div className="text-[11px] text-slate-400 truncate">{a.tool}</div>
+                    <div className="text-[11px] font-mono text-amber-400 truncate">{a.id}</div>
+                    <div className="text-[11px] text-slate-300 truncate">{a.tool}</div>
                   </div>
                 ))}
-                <button className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors">
+                <button
+                  type="button"
+                  className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[11px] font-bold border border-amber-500/30 mt-2 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                >
                   MANAGE APPROVALS
                 </button>
               </div>
@@ -663,10 +666,10 @@ export function OverviewTab({
             <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium">
               <Cpu className="w-3.5 h-3.5 text-amber-400" /> Guild Utilization
             </div>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] text-slate-400">
               {guildsUtilization?.active || 0} / {guildsUtilization?.total || 0} active
-              <span className="ml-2 text-slate-600">·</span>
-              <span className="ml-2 text-slate-500">
+              <span className="ml-2 text-slate-500">·</span>
+              <span className="ml-2 text-slate-400">
                 {guilds?.reduce((s, g) => s + (g.total_calls || 0), 0) || 0} calls
               </span>
             </span>
@@ -680,21 +683,21 @@ export function OverviewTab({
               return (
                 <div key={guild.name} className="space-y-1.5">
                   <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-slate-300 font-mono truncate mr-2">{guild.name}</span>
-                    <span className="text-slate-500 font-mono">{utilPct}%</span>
+                    <span className="text-slate-200 font-mono truncate mr-2">{guild.name}</span>
+                    <span className="text-slate-400 font-mono">{utilPct}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-slate-800/50 rounded-full overflow-hidden">
                     <div 
                       className={cn("h-full transition-all duration-700 ease-out", barColor)} 
                       style={{ width: `${utilPct}%` }} 
-                    />
+                     />
                   </div>
                 </div>
               );
             })}
             {(!guildsUtilization?.active_guilds || guildsUtilization.active_guilds.length === 0) && (
               <div className="py-6 text-center">
-                <p className="text-[11px] text-slate-600 italic">No active guilds monitored</p>
+                <p className="text-[11px] text-slate-400 italic">No active guilds monitored</p>
               </div>
             )}
           </div>
@@ -702,7 +705,7 @@ export function OverviewTab({
 
         {/* Tarjeta 2 — Memory Retention */}
         <div className="p-4 rounded-xl bg-slate-900/50 flex flex-col items-center justify-center text-center">
-          <div className="flex items-center gap-2 text-slate-400 text-[11px] font-medium mb-6">
+          <div className="flex items-center gap-2 text-slate-300 text-[11px] font-medium mb-6">
             <Database className="w-3.5 h-3.5 text-violet-400" /> Memory Retention
           </div>
           
@@ -719,7 +722,7 @@ export function OverviewTab({
                 <div className="text-sm font-bold text-slate-200 tracking-tight">
                   {memoryRetention.silva.total_nodes.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-500 font-medium">
+                <div className="text-[11px] text-slate-400 font-medium">
                   Total Sovereign Nodes
                 </div>
               </div>
@@ -779,11 +782,11 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
   }, [bridge]);
 
   if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-600 animate-pulse">Analyzing hippocampus...</div>;
+    return <div className="p-8 text-center text-xs text-slate-400 animate-pulse">Analyzing hippocampus...</div>;
   }
 
   if (digests.length === 0) {
-    return <div className="p-8 text-center text-xs text-slate-600 italic">No session digests available.</div>;
+    return <div className="p-8 text-center text-xs text-slate-400 italic">No session digests available.</div>;
   }
 
   return (
@@ -792,7 +795,7 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
         <div key={i} className="p-4 hover:bg-slate-800/20 transition-colors">
           <div className="flex justify-between items-start mb-2">
             <div className="text-[11px] font-bold text-blue-400 font-mono">@{d.agent_id || 'anon'}</div>
-            <div className="text-[11px] text-slate-600 font-mono">{d.created_at}</div>
+            <div className="text-[11px] text-slate-400 font-mono">{d.created_at}</div>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 italic">
             "{d.content || d.summary}"
