@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Database, Clock, Activity, Trash2, Save,
-  RefreshCw, Download, Network, HardDrive, Cpu, WifiOff, Settings, ShieldCheck
+  RefreshCw, Download, Network, HardDrive, Cpu, WifiOff, ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { NexusBridge, MetricsHistory } from '../lib/nexus-bridge';
@@ -25,12 +25,18 @@ interface MaintenanceStatus {
   orphan_node_count?: number;
 }
 
+interface ProbeResult {
+  kernel_version?: string;
+  port?: number | string;
+  detected_dialect?: string;
+}
+
 export function MaintenanceTab({ bridge, notify }: Props) {
   const { sysStatus } = useNexus();
   const [loading, setLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<MaintenanceStatus | null>(null);
   const [lastOp, setLastOp] = useState<{ action: string; time: string } | null>(null);
-  const [probe, setProbe] = useState<any>(null);
+  const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [metricsHistory, setMetricsHistory] = useState<MetricsHistory | null>(null);
 
   const loadStatus = useCallback(async () => {

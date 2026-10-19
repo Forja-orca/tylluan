@@ -5,9 +5,9 @@ import {
   RefreshCw, 
   Clock, 
   HelpCircle,
-  AlertTriangle,
-  ServerOff
+  AlertTriangle
 } from 'lucide-react';
+import type { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 
 export interface AgentMemorySummary {
@@ -17,7 +17,7 @@ export interface AgentMemorySummary {
 }
 
 interface ResumeSessionWidgetProps {
-  bridge: any;
+  bridge: NexusBridge | null;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -54,10 +54,11 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
     try {
       const data = await bridge.getAgentMemorySummary(agentId.trim());
       setResult(data);
-    } catch (err: any) {
-      console.error("Session summary fetch error:", err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Session summary fetch error:", msg);
       setResult(null);
-      setError(`Failed to retrieve session context (${agentId.trim()}): ${err.message}`);
+      setError(`Failed to retrieve session context (${agentId.trim()}): ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -113,6 +114,12 @@ export default function ResumeSessionWidget({ bridge }: ResumeSessionWidgetProps
           Check
         </button>
       </div>
+
+      {error && (
+        <div className="p-3 bg-red-950/20 border border-red-500/30 rounded-xl text-[11px] font-mono text-red-400">
+          {error}
+        </div>
+      )}
 
       {/* Results Display */}
       {result ? (

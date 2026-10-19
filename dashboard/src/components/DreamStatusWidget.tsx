@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Moon, Database, Clock, RefreshCw, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Moon, Database, Clock, Layers } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { usePolling } from '../hooks/usePolling';
 
@@ -7,8 +7,27 @@ interface DreamStatusWidgetProps {
   bridge: NexusBridge | null;
 }
 
+interface DreamStatusData {
+  status: string;
+  night_consolidation?: {
+    next_run_in_secs?: number;
+    runs_completed?: number;
+    components?: string[];
+  };
+  graph?: {
+    embedding_coverage?: number;
+    nodes_with_embedding?: number;
+    nodes?: number;
+    topic_key_coverage?: number;
+    nodes_with_topic_key?: number;
+    orphan_pct?: number;
+    orphans?: number;
+    edges_by_type?: Record<string, number>;
+  };
+}
+
 export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
-  const [dreamStatus, setDreamStatus] = useState<any | null>(null);
+  const [dreamStatus, setDreamStatus] = useState<DreamStatusData | null>(null);
   const [nextRunCountdown, setNextRunCountdown] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +35,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
     const fetchDreamStatus = async () => {
       if (!bridge || document.visibilityState === 'hidden') return;
       try {
-        const raw = await bridge.fetchRaw('/api/v1/dream/status', {}) as any;
+        const raw = (await bridge.fetchRaw('/api/v1/dream/status', {})) as DreamStatusData;
         if (raw && raw.status === 'ok') {
           setDreamStatus(raw);
           if (raw.night_consolidation && raw.night_consolidation.next_run_in_secs !== undefined) {
@@ -37,7 +56,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
   usePolling('dream-status', async () => {
     if (!bridge) return;
     try {
-      const raw = await bridge.fetchRaw('/api/v1/dream/status', {}) as any;
+      const raw = (await bridge.fetchRaw('/api/v1/dream/status', {})) as DreamStatusData;
       if (raw && raw.status === 'ok') {
         setDreamStatus(raw);
         if (raw.night_consolidation?.next_run_in_secs !== undefined) {
@@ -108,7 +127,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
                 {dreamStatus.graph?.embedding_coverage ?? 0}% ({dreamStatus.graph?.nodes_with_embedding ?? 0} / {dreamStatus.graph?.nodes ?? 0})
               </span>
             </div>
-            {dreamStatus.graph?.embedding_coverage > 50 ? (
+            {(dreamStatus.graph?.embedding_coverage ?? 0) > 50 ? (
               <div className="h-1.5 w-full bg-slate-950/80 rounded-full overflow-hidden p-0.5 border border-slate-800/40">
                 <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out shadow-[0_0_6px_rgba(52,211,153,0.4)]" style={{ width: `${dreamStatus.graph?.embedding_coverage ?? 0}%` }} />
               </div>
@@ -178,7 +197,7 @@ export function DreamStatusWidget({ bridge }: DreamStatusWidgetProps) {
               </div>
               <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[11px] border border-slate-850 rounded-lg p-2 bg-slate-950/40">
                 {Object.entries(dreamStatus.graph?.edges_by_type ?? {}).length > 0 ? (
-                  Object.entries(dreamStatus.graph.edges_by_type).map(([type, count]) => (
+                  Object.entries(dreamStatus.graph?.edges_by_type ?? {}).map(([type, count]) => (
                     <div key={type} className="flex justify-between items-center py-0.5 border-b border-slate-900 last:border-b-0 text-slate-300">
                       <span className="truncate mr-2 text-slate-400 text-[11px]">{type}</span>
                       <span className="text-slate-200 font-bold font-mono">{count as number}</span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, CheckCircle2, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -28,7 +28,7 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchCanary = async () => {
+  const fetchCanary = useCallback(async () => {
     if (!bridge || document.visibilityState === 'hidden') return;
     setRefreshing(true);
     try {
@@ -36,17 +36,17 @@ export function CanaryStatusWidget({ bridge }: CanaryStatusWidgetProps) {
       if (raw && raw.status) {
         setCanary(raw);
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to fetch canary status:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchCanary();
-  }, [bridge]);
+  }, [fetchCanary]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('canary-status', fetchCanary, { interval: 'slow', enabled: !!bridge });
