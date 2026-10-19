@@ -127,7 +127,10 @@ describe('FederationTab — W1 Mesh & Federation Read-Only Wiring', () => {
     expect(retryButtons.length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(retryButtons[0]);
-    expect(fetchRawMock).toHaveBeenCalledWith('/api/v1/mesh/peers');
+    expect(fetchRawMock).toHaveBeenCalledWith(
+      '/api/v1/mesh/peers',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 
   it('renders empty states when mesh peers and federation nodes are empty', async () => {
@@ -170,6 +173,44 @@ describe('FederationTab — W1 Mesh & Federation Read-Only Wiring', () => {
     const retryNodesBtn = screen.getByRole('button', { name: /^Reintentar$/i });
     expect(retryNodesBtn).toBeDefined();
     fireEvent.click(retryNodesBtn);
-    expect(fetchRawMock).toHaveBeenCalledWith('/api/v1/federation/nodes');
+    expect(fetchRawMock).toHaveBeenCalledWith(
+      '/api/v1/federation/nodes',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it('passes AbortSignal to mesh and nodes queries and aborts signal on cancel', async () => {
+    let capturedMeshSignal: AbortSignal | undefined;
+    const fetchRawMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/mesh/peers') {
+        capturedMeshSignal = init?.signal as AbortSignal;
+        return new Promise(() => {}); // pending
+      }
+      return Promise.resolve({});
+    });
+
+    const mockBridge = {
+      fetchRaw: fetchRawMock,
+      listPeers: vi.fn().mockResolvedValue([]),
+      listFederationPeers: vi.fn().mockImplementation(() => new Promise(() => {})),
+      getFederationStatus: vi.fn().mockResolvedValue({ enabled: false, peers_count: 0 }),
+    } as unknown as NexusBridge;
+
+    render(<FederationTab bridge={mockBridge} notify={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(capturedMeshSignal).toBeDefined();
+    });
+    expect(capturedMeshSignal?.aborted).toBe(false);
+
+    // Click Cancel button for mesh query
+    const cancelBtn = screen.getByRole('button', { name: /^Cancel$/i });
+    expect(cancelBtn).toBeDefined();
+    fireEvent.click(cancelBtn);
+
+    expect(capturedMeshSignal?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByText(/Consulta Mesh cancelada por el usuario/i)).toBeDefined();
+    });
   });
 });

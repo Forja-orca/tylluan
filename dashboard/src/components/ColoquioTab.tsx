@@ -234,7 +234,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     const ev = events[0];
 
     if (ev.type === 'coloquio:new_turn') {
-      const d = ev.data as any;
+      const d = ev.data as { channel_id?: string; author_id?: string };
       if (d.channel_id === selectedId) {
         fetchNewMessages();
         // Remove completed streaming frames if database registers new turn
@@ -251,14 +251,24 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
       fetchChannels();
     }
     if (ev.type === 'coloquio:typing') {
-      const d = ev.data as any;
+      const d = ev.data as { author_id: string; status?: string };
       setTypingStatuses(p => ({
         ...p,
         [d.author_id]: { ts: Date.now(), status: d.status || 'escribiendo...' }
       }));
     }
     if (ev.type === 'coloquio:stream') {
-      const d = ev.data as any;
+      const d = ev.data as {
+        channel_id?: string;
+        author_id?: string;
+        msg_id: string;
+        delta?: string;
+        state?: string;
+        role?: string;
+        turn?: number;
+        created_at?: number;
+        metadata?: string;
+      };
       if (d.channel_id === selectedId) {
         setActiveStreams(prev => {
           const existing = prev[d.msg_id];
@@ -275,8 +285,8 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
             ...prev,
             [d.msg_id]: {
               msg_id: d.msg_id,
-              channel_id: d.channel_id,
-              author_id: d.author_id,
+              channel_id: d.channel_id || selectedId,
+              author_id: d.author_id || 'unknown',
               role: d.role || 'agent',
               content: content,
               turn: d.turn || 0,

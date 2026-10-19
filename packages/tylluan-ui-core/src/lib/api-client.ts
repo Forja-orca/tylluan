@@ -423,7 +423,9 @@ export class NexusBridge {
   async fetch(path: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${path}`;
     const method = (options.method || 'GET').toUpperCase();
-    const useCache = method === 'GET';
+    // A request carrying its own AbortSignal must not share a cached promise:
+    // aborting it would reject every other caller of the same URL.
+    const useCache = method === 'GET' && !options.signal;
     const cacheKey = `${url}:${this.token}`;
 
     if (useCache) {
@@ -445,7 +447,15 @@ export class NexusBridge {
     const isVision = path.includes('/vision/');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), isVision ? 180000 : 15000);
-    
+    // Chain a caller-provided signal so views can cancel the real request
+    // (the internal controller still enforces the timeout above).
+    const callerSignal = options.signal ?? undefined;
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+    }
+
     const promise = (async () => {
       try {
         const resp = await window.fetch(url, {
@@ -467,6 +477,7 @@ export class NexusBridge {
         return await resp.json();
       } finally {
         clearTimeout(timeout);
+        callerSignal?.removeEventListener('abort', onCallerAbort);
       }
     })();
 

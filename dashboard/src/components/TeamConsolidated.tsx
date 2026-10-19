@@ -12,8 +12,10 @@ const CollectiveTab = lazy(() => import('./CollectiveTab').then(m => ({ default:
 const DispatchesPanel = lazy(() => import('./DispatchesPanel').then(m => ({ default: m.DispatchesPanel })));
 
 
+import type { NexusBridge } from '../lib/nexus-bridge';
+
 interface TeamConsolidatedProps {
-  bridge: any;
+  bridge: NexusBridge | null;
 }
 
 export function TeamConsolidated(props: TeamConsolidatedProps) {

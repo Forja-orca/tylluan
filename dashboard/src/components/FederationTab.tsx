@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePolling } from '../hooks/usePolling';
 import { 
   Network, 
@@ -107,6 +107,16 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   // Delete confirm state
   const [confirmDeletePeer, setConfirmDeletePeer] = useState<string | null>(null);
 
+  const meshAbortRef = useRef<AbortController | null>(null);
+  const nodesAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      meshAbortRef.current?.abort();
+      nodesAbortRef.current?.abort();
+    };
+  }, []);
+
   // Helper to check peer health status & get node count
   const checkSinglePeerStatus = useCallback(async (url: string): Promise<{ online: boolean; nodesCount: number | null }> => {
     // Try detailed health first to get nodes count
@@ -192,11 +202,16 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
 
   const fetchMeshPeers = useCallback(async (silent = false) => {
     if (!bridge) return;
+    if (meshAbortRef.current) {
+      meshAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    meshAbortRef.current = controller;
     if (!silent) setPeersLoading(true);
     setMeshError(null);
     try {
       const data = (await withTimeout(
-        bridge.fetchRaw('/api/v1/mesh/peers'),
+        bridge.fetchRaw('/api/v1/mesh/peers', { signal: controller.signal }),
         10000,
         'Request timed out after 10s. GET /api/v1/mesh/peers took too long.'
       )) as MeshStatusResponse;
@@ -209,6 +224,13 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       }
       setMeshEndpointStatus('ready');
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setMeshError('Consulta Mesh cancelada por el usuario.');
+        setMeshEndpointStatus('error');
+        setMeshPeers([]);
+        setMeshStatus(null);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err || '');
       if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setMeshEndpointStatus('forbidden');
@@ -223,17 +245,25 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       setMeshPeers([]);
       setMeshStatus(null);
     } finally {
+      if (meshAbortRef.current === controller) {
+        meshAbortRef.current = null;
+      }
       if (!silent) setPeersLoading(false);
     }
   }, [bridge]);
 
   const fetchNodes = useCallback(async (silent = false) => {
     if (!bridge) return;
+    if (nodesAbortRef.current) {
+      nodesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    nodesAbortRef.current = controller;
     if (!silent) setNodesLoading(true);
     setFedNodesError(null);
     try {
       const data = (await withTimeout(
-        bridge.fetchRaw('/api/v1/federation/nodes'),
+        bridge.fetchRaw('/api/v1/federation/nodes', { signal: controller.signal }),
         10000,
         'Request timed out after 10s. GET /api/v1/federation/nodes took too long.'
       )) as FederationNodesResponse;
@@ -247,6 +277,13 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       }
       setFedNodesEndpointStatus('ready');
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setFedNodesError('Consulta de nodos cancelada por el usuario.');
+        setFedNodesEndpointStatus('error');
+        setFedNodes([]);
+        setFedNodesCount(0);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err || '');
       if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setFedNodesEndpointStatus('forbidden');
@@ -261,6 +298,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       setFedNodes([]);
       setFedNodesCount(0);
     } finally {
+      if (nodesAbortRef.current === controller) {
+        nodesAbortRef.current = null;
+      }
       if (!silent) setNodesLoading(false);
     }
   }, [bridge]);
@@ -585,7 +625,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 )}
               >
                 <Power className="w-4 h-4 text-slate-950" />
-                {sharingStatus.enabled ? "Desactivar sharing" : "Activar sharing"}
+                {sharingStatus.enabled ? "Disable sharing" : "Enable sharing"}
               </button>
             </div>
 
@@ -614,22 +654,26 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                 <button
                   type="button"
                   onClick={() => fetchMeshPeers(false)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-855 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
                 >
                   <RefreshCw className={cn("w-3 h-3 text-amber-400", peersLoading && "animate-spin")} />
-                  <span>Reintentar Mesh</span>
+                  <span>Retry Mesh</span>
                 </button>
                 {peersLoading && (
                   <button
                     type="button"
                     onClick={() => {
+                      if (meshAbortRef.current) {
+                        meshAbortRef.current.abort();
+                        meshAbortRef.current = null;
+                      }
                       setPeersLoading(false);
                       setMeshError('Consulta Mesh cancelada por el usuario.');
                       setMeshEndpointStatus('error');
                     }}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
                   >
-                    Cancelar
+                    Cancel
                   </button>
                 )}
               </div>
@@ -953,19 +997,23 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
             >
               <RefreshCw className={cn("w-3 h-3 text-violet-400", nodesLoading && "animate-spin")} />
-              <span>Reintentar Nodos</span>
+              <span>Retry Nodes</span>
             </button>
             {nodesLoading && (
               <button
                 type="button"
                 onClick={() => {
+                  if (nodesAbortRef.current) {
+                    nodesAbortRef.current.abort();
+                    nodesAbortRef.current = null;
+                  }
                   setNodesLoading(false);
                   setFedNodesError('Consulta de nodos cancelada por el usuario.');
                   setFedNodesEndpointStatus('error');
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-[11px] text-rose-300 border border-rose-500/20 cursor-pointer"
               >
-                Cancelar
+                Cancel
               </button>
             )}
           </div>

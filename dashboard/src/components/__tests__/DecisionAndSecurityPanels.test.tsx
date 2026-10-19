@@ -364,6 +364,86 @@ describe('AuditTrailPanel (D3)', () => {
     fireEvent.click(retryBtn);
     expect(getAuditTrailMock).toHaveBeenCalledTimes(2);
   });
+
+  it('passes AbortSignal and aborts active query on Cancel in DecisionServicePanel', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const mockBridge = {
+      fetchRaw: vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        capturedSignal = init?.signal as AbortSignal;
+        return new Promise(() => {}); // pending
+      }),
+    } as unknown as NexusBridge;
+
+    render(<DecisionServicePanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(capturedSignal).toBeDefined();
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancel shadow log query/i });
+    expect(cancelBtn).toBeDefined();
+    fireEvent.click(cancelBtn);
+
+    expect(capturedSignal?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByText(/Consulta cancelada por el usuario/i)).toBeDefined();
+    });
+  });
+
+  it('passes AbortSignal and aborts active query on Cancel in ContradictionsPanel', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const mockBridge = {
+      fetchRaw: vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        capturedSignal = init?.signal as AbortSignal;
+        return new Promise(() => {}); // pending
+      }),
+    } as unknown as NexusBridge;
+
+    render(<ContradictionsPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(capturedSignal).toBeDefined();
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancel conflicted nodes query/i });
+    expect(cancelBtn).toBeDefined();
+    fireEvent.click(cancelBtn);
+
+    expect(capturedSignal?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByText(/Consulta cancelada por el usuario/i)).toBeDefined();
+    });
+  });
+
+  it('passes AbortSignal and aborts active queries on Cancel in AuditTrailPanel', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const mockBridge = {
+      getAuditTrail: vi.fn().mockImplementation(() => new Promise(() => {})),
+      fetchRaw: vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        capturedSignal = init?.signal as AbortSignal;
+        return new Promise(() => {}); // pending
+      }),
+    } as unknown as NexusBridge;
+
+    render(<AuditTrailPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(capturedSignal).toBeDefined();
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancel audit trail query/i });
+    expect(cancelBtn).toBeDefined();
+    fireEvent.click(cancelBtn);
+
+    expect(capturedSignal?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByText(/Consulta de auditoría cancelada por el usuario/i)).toBeDefined();
+    });
+  });
 });
+
 
 

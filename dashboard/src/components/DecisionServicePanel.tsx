@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Scale,
   AlertTriangle,
@@ -83,14 +83,28 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
   const [endpointStatus, setEndpointStatus] = useState<'ready' | 'pending_backend' | 'forbidden' | 'error'>('ready');
   const [limit, setLimit] = useState<number>(50);
   const [contractFilter, setContractFilter] = useState<string>('all');
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const fetchShadowLog = useCallback(async () => {
     if (!bridge) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
     try {
       const res = (await withTimeout(
-        bridge.fetchRaw(`/api/v1/decide/shadow?limit=${limit}`),
+        bridge.fetchRaw(`/api/v1/decide/shadow?limit=${limit}`, { signal: controller.signal }),
         10000,
         'Request timed out after 10s. GET /api/v1/decide/shadow took too long.'
       )) as DecisionShadowResponse;
@@ -113,6 +127,14 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       }
       setEndpointStatus('ready');
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Consulta cancelada por el usuario.');
+        setEndpointStatus('error');
+        setRows([]);
+        setRawSummary([]);
+        setTotalCount(0);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err || '');
       if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
         setEndpointStatus('pending_backend');
@@ -131,6 +153,9 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       setRawSummary([]);
       setTotalCount(0);
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setLoading(false);
     }
   }, [bridge, limit]);
@@ -250,6 +275,10 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
             <button
               type="button"
               onClick={() => {
+                if (abortControllerRef.current) {
+                  abortControllerRef.current.abort();
+                  abortControllerRef.current = null;
+                }
                 setLoading(false);
                 setError('Consulta cancelada por el usuario.');
                 setEndpointStatus('error');

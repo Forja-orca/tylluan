@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ShieldCheck,
   Search,
@@ -139,9 +139,23 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [rawLogs, setRawLogs] = useState<AuditRawLogItem[]>([]);
   const [showRawLogs, setShowRawLogs] = useState<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const fetchAuditTrail = useCallback(async () => {
     if (!bridge) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
     setVerifyError(null);
@@ -151,10 +165,10 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       const [trailRes, verifyRes, latencyRes, secRes, logsRes] = await withTimeout(
         Promise.allSettled([
           bridge.getAuditTrail(agentIdFilter || undefined, limit),
-          bridge.fetchRaw('/api/v1/audit/verify'),
-          bridge.fetchRaw('/api/v1/audit/latency?window_minutes=60'),
-          bridge.fetchRaw('/api/v1/security/events'),
-          bridge.fetchRaw('/api/v1/audit/logs'),
+          bridge.fetchRaw('/api/v1/audit/verify', { signal: controller.signal }),
+          bridge.fetchRaw('/api/v1/audit/latency?window_minutes=60', { signal: controller.signal }),
+          bridge.fetchRaw('/api/v1/security/events', { signal: controller.signal }),
+          bridge.fetchRaw('/api/v1/audit/logs', { signal: controller.signal }),
         ]),
         10000,
         'Request timed out after 10s. Security & audit endpoints took too long.'
@@ -224,6 +238,12 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         );
       }
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Consulta de auditoría cancelada por el usuario.');
+        setEntries([]);
+        setTotal(0);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Audit Trail fetch error:', msg);
       setEntries([]);
@@ -236,6 +256,9 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         setError(`Error querying audit trail records: ${msg}`);
       }
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setLoading(false);
     }
   }, [bridge, agentIdFilter, limit]);
@@ -347,6 +370,10 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             <button
               type="button"
               onClick={() => {
+                if (abortControllerRef.current) {
+                  abortControllerRef.current.abort();
+                  abortControllerRef.current = null;
+                }
                 setLoading(false);
                 setError('Consulta de auditoría cancelada por el usuario.');
               }}
@@ -365,10 +392,10 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
           <button
             type="button"
             onClick={fetchAuditTrail}
-            aria-label="Reintentar consulta de auditoría"
+            aria-label="Retry audit trail query"
             className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
           >
-            Reintentar
+            Retry
           </button>
         </div>
       )}

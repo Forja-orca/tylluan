@@ -52,8 +52,8 @@ describe('OutputsLedgerPanel', () => {
     window_scan_started_unix: 1789998995,
   };
 
-  let mockBridge: any;
-  let mockNotify: any;
+  let mockBridge: { fetchRaw: ReturnType<typeof vi.fn> };
+  let mockNotify: (msg: string, type?: 'info' | 'error') => void;
 
   beforeEach(() => {
     mockNotify = vi.fn();

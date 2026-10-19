@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   AlertTriangle,
   RefreshCw,
@@ -41,15 +41,29 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
   const [endpointStatus, setEndpointStatus] = useState<'ready' | 'pending_backend' | 'forbidden' | 'error'>('ready');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const fetchConflicted = useCallback(async () => {
     if (!bridge) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
     try {
       const safeLimit = Math.min(200, Math.max(1, limit));
       const res = (await withTimeout(
-        bridge.fetchRaw(`/api/v1/silva/conflicted?limit=${safeLimit}`),
+        bridge.fetchRaw(`/api/v1/silva/conflicted?limit=${safeLimit}`, { signal: controller.signal }),
         10000,
         'Request timed out after 10s. GET /api/v1/silva/conflicted took too long.'
       )) as SilvaConflictedResponse;
@@ -68,6 +82,13 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       setEndpointStatus('ready');
       setPage(1);
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Consulta cancelada por el usuario.');
+        setEndpointStatus('error');
+        setNodes([]);
+        setTotalConflicted(0);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err || '');
       if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
         setEndpointStatus('pending_backend');
@@ -88,6 +109,9 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
       setNodes([]);
       setTotalConflicted(0);
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setLoading(false);
     }
   }, [bridge, limit, notify]);
@@ -173,14 +197,18 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
             <button
               type="button"
               onClick={() => {
+                if (abortControllerRef.current) {
+                  abortControllerRef.current.abort();
+                  abortControllerRef.current = null;
+                }
                 setLoading(false);
                 setError('Consulta cancelada por el usuario.');
                 setEndpointStatus('error');
               }}
-              aria-label="Cancelar consulta de nodos en conflicto"
+              aria-label="Cancel conflicted nodes query"
               className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer"
             >
-              Cancelar
+              Cancel
             </button>
           )}
         </div>
