@@ -28,7 +28,7 @@ interface CapabilitiesData {
     tools: Array<{
       name: string;
       description: string;
-      inputSchema?: any;
+      inputSchema?: Record<string, unknown>;
     }>;
   };
   guilds: Array<{
@@ -41,13 +41,33 @@ interface CapabilitiesData {
   all_guild_tools: Array<{
     name: string;
     description: string;
-    inputSchema?: any;
+    inputSchema?: Record<string, unknown>;
   }>;
   mcp: {
     prompts: Array<{ name: string; description: string }>;
     resources: Array<{ uri: string; name: string; description: string; mimeType: string }>;
   };
   sessions: McpSession[];
+}
+
+interface SetupHintData {
+  mcp_clients?: {
+    claude_desktop?: {
+      config?: {
+        mcpServers?: {
+          tylluan?: {
+            url?: string;
+          };
+        };
+      };
+    };
+    [key: string]: unknown;
+  };
+  verify?: {
+    dashboard?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 }
 
 export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' | 'error') => void }) {
@@ -58,7 +78,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
   const [guideTab, setGuideTab] = useState<'cursor' | 'vscode' | 'claude' | 'custom'>('cursor');
   const [revokingIds, setRevokingIds] = useState<Set<string>>(new Set());
   const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [hint, setHint] = useState<any>(null);
+  const [hint, setHint] = useState<SetupHintData | null>(null);
 
   const fetchCapabilities = useCallback(async () => {
     if (!bridge) return;
@@ -69,7 +89,7 @@ export function ConnectorsTab({ notify }: { notify: (msg: string, type?: 'info' 
         bridge.fetchRaw('/api/v1/setup-hint'),
       ]);
       if (data.status === 'fulfilled') setCapabilities(data.value as CapabilitiesData);
-      if (hintData.status === 'fulfilled') setHint(hintData.value);
+      if (hintData.status === 'fulfilled') setHint(hintData.value as SetupHintData);
     } catch (e) {
       console.error('Failed to fetch capabilities:', e);
       notify('Failed to load server capabilities', 'error');

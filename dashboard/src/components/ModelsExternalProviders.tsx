@@ -24,7 +24,7 @@ interface TestResult {
 export function ModelsExternalProviders({ bridge }: Props) {
   const [providers, setProviders] = useState<ExternalProvider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [testResults, setTestResults] = useState<Record<string, TestResult | undefined>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>({});
 
@@ -49,7 +49,7 @@ export function ModelsExternalProviders({ bridge }: Props) {
     if (!bridge) return;
     const model = selectedModels[provider.name] || provider.models[0] || '';
     setTesting(provider.name);
-    setTestResults(prev => ({ ...prev, [provider.name]: undefined as any }));
+    setTestResults(prev => ({ ...prev, [provider.name]: undefined }));
     try {
       const res = await bridge.fetchRaw(`/api/v1/external-providers/${encodeURIComponent(provider.name)}/test?model=${encodeURIComponent(model)}`);
       setTestResults(prev => ({
@@ -60,10 +60,11 @@ export function ModelsExternalProviders({ bridge }: Props) {
           error: res?.error,
         }
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || 'Connection failed');
       setTestResults(prev => ({
         ...prev,
-        [provider.name]: { ok: false, error: err.message || 'Connection failed' }
+        [provider.name]: { ok: false, error: msg }
       }));
     }
     setTesting(null);

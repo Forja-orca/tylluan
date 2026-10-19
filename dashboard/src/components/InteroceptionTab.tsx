@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Zap, 
-  Activity, 
-  Clock 
+  Zap 
 } from 'lucide-react';
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
@@ -140,7 +138,7 @@ interface Props {
   memoryStats: MemoryStats | null;
 }
 
-export function InteroceptionTab({ interoception, memoryStats }: Props) {
+export function InteroceptionTab({ interoception, memoryStats: _memoryStats }: Props) {
   const { bridge, guilds } = useNexus();
   const [hormones, setHormones] = useState<HormoneAmbient | null>(null);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);

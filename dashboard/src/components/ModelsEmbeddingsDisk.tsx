@@ -1,12 +1,34 @@
 import React, { useState } from 'react';
 import type { NexusBridge } from '../lib/nexus-bridge';
-import { Save, AlertTriangle, RefreshCw, Database, Image as ImageIcon } from 'lucide-react';
+import { Save, RefreshCw, Database, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 
+export interface DetectedLocalModel {
+  id: string;
+  name: string;
+  model_type: 'embedding' | 'vision' | 'generative' | string;
+  path: string;
+  size_bytes?: number;
+  size_mb?: number;
+}
+
+export interface ModelsConfigData {
+  memory?: { embedding_model?: string };
+  embedding?: { model_name?: string };
+  embeddings?: { model?: string };
+  vision?: { model_path?: string };
+  inference?: { primary_model?: string };
+  [key: string]: unknown;
+}
+
+export interface ModelsResponseData {
+  detected_local_models?: DetectedLocalModel[];
+  [key: string]: unknown;
+}
 
 interface Props {
   bridge: NexusBridge | null;
-  config: any;
-  models: any;
+  config: ModelsConfigData | null;
+  models: ModelsResponseData | null;
 }
 
 export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
@@ -28,8 +50,9 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
       });
       if (res?.error) throw new Error(res.error);
       alert('Embedding configuration saved. Restart the kernel and reindex SilvaDB to apply.');
-    } catch (e: any) {
-      alert(`Error saving configuration: ${e.message || String(e)}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Error saving configuration: ${msg}`);
     }
     setSaving(false);
   };
@@ -87,8 +110,8 @@ export function ModelsEmbeddingsDisk({ bridge, config, models }: Props) {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {models?.detected_local_models?.length > 0 ? (
-            models.detected_local_models.map((m: any) => (
+          {models?.detected_local_models && models.detected_local_models.length > 0 ? (
+            models.detected_local_models.map((m: DetectedLocalModel) => (
               <div key={m.id} className="p-3 bg-slate-950 rounded-lg flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">

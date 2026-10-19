@@ -10,23 +10,6 @@ interface Props {
 
 const EVENT_TYPES = ['tool_call', 'memory', 'guild_progress', 'error', 'sse'];
 
-const EVENT_COLOR_MAP: Record<string, string> = {
-  'tool_call': 'text-slate-400',
-  'started': 'text-slate-400',
-  'finished': 'text-emerald-400',
-  'memory_added': 'text-blue-400',
-  'memory_updated': 'text-blue-400',
-  'guild_spawned': 'text-amber-400',
-  'guild_killed': 'text-amber-400',
-  'guild_progress': 'text-amber-400',
-  'error': 'text-red-400',
-  'failed': 'text-red-400',
-  'sse_connect': 'text-violet-400',
-  'sse_disconnect': 'text-violet-400',
-  'heartbeat': 'text-violet-400',
-  'edge_added': 'text-violet-400',
-};
-
 function eventColor(type: string): string {
   if (type.includes('error') || type.includes('failed')) return 'text-red-400';
   if (type.includes('sse_connect') || type.includes('sse_disconnect')) return 'text-violet-400';
@@ -65,13 +48,6 @@ export function LogsTab({ events, onClear }: Props) {
     });
   };
 
-  const clearLogs = () => {
-    // Cannot modify the events prop directly, but we can signal the parent
-    // by clearing via localStorage or emitting a custom event
-    // For now, just clear local display — the parent controls the actual events
-    // We'll use a custom event that the parent can listen to
-    window.dispatchEvent(new CustomEvent('tylluan-clear-logs'));
-  };
 
   const toggleAll = () => {
     if (activeFilters.size === EVENT_TYPES.length) {
@@ -107,7 +83,7 @@ export function LogsTab({ events, onClear }: Props) {
             type="text"
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            placeholder="Buscar en logs..."
+            placeholder="Search logs..."
             className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-300 placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 outline-none"
           />
         </div>
@@ -156,7 +132,7 @@ export function LogsTab({ events, onClear }: Props) {
             onClick={() => onClear?.()}
             className="flex items-center gap-1 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[11px] font-bold transition-colors"
           >
-            <Trash2 className="w-3 h-3" /> Limpiar
+            <Trash2 className="w-3 h-3" /> Clear
           </button>
         </div>
       </div>

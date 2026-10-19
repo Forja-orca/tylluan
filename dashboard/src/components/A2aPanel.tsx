@@ -46,7 +46,7 @@ export default function A2aPanel({ notify }: Props) {
       setCard(data);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("Error al cargar agent-card.json:", msg);
+      console.error("Error loading agent-card.json:", msg);
       setCard(null);
     } finally {
       setLoadingCard(false);

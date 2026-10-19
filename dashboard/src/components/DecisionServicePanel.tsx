@@ -14,6 +14,7 @@ import {
 import { NexusBridge } from '../lib/nexus-bridge';
 import { usePolling } from '../hooks/usePolling';
 import { cn } from '../lib/utils';
+import { withTimeout } from '../lib/timeout';
 
 export interface DecisionShadowRow {
   id: number | string;
@@ -88,7 +89,11 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = (await bridge.fetchRaw(`/api/v1/decide/shadow?limit=${limit}`)) as DecisionShadowResponse;
+      const res = (await withTimeout(
+        bridge.fetchRaw(`/api/v1/decide/shadow?limit=${limit}`),
+        10000,
+        'Request timed out after 10s. GET /api/v1/decide/shadow took too long.'
+      )) as DecisionShadowResponse;
       const validRows = Array.isArray(res?.rows) ? res.rows : [];
       setRows(validRows);
       setTotalCount(typeof res?.total === 'number' ? res.total : validRows.length);
@@ -115,6 +120,9 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
       } else if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
         setEndpointStatus('forbidden');
         setError('Requiere credencial de operador (HTTP 403). Token maestro requerido para inspeccionar decision_shadow_log.');
+      } else if (msg.includes('timed out') || msg.includes('timeout')) {
+        setEndpointStatus('error');
+        setError('Request timed out after 10s. El endpoint tardó más de 10 segundos en responder.');
       } else {
         setEndpointStatus('error');
         setError(msg || 'Error al consultar /api/v1/decide/shadow en :47004');
@@ -238,6 +246,20 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
             <RefreshCw className={cn('w-3.5 h-3.5 text-amber-400', loading && 'animate-spin')} />
             <span>{loading ? 'Syncing...' : 'Refresh'}</span>
           </button>
+          {loading && (
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(false);
+                setError('Consulta cancelada por el usuario.');
+                setEndpointStatus('error');
+              }}
+              aria-label="Cancel shadow log query"
+              className="flex items-center gap-1 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Send, Radio, Users, Cpu, ShieldCheck, Inbox, MessageSquare } from 'lucide-react';
+import { RefreshCw, Send, Radio, Users, Cpu, Inbox, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
 import { useNexus } from '../hooks/useNexus';
@@ -13,7 +13,7 @@ interface NodeInfo {
   last_active: number;
 }
 
-export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; notify: (msg: string, t?: any) => void }) {
+export function NodesTab({ bridge: _bridgeProp, notify }: { bridge: unknown; notify: (msg: string, t?: 'info' | 'error') => void }) {
   const { bridge } = useNexus();
   const effectiveBridge: NexusBridge | null = bridge ?? (_bridgeProp as NexusBridge | null);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
