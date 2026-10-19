@@ -163,19 +163,33 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
         const msg = trailRes.reason instanceof Error ? trailRes.reason.message : String(trailRes.reason);
         setEntries([]);
         setTotal(0);
-        setError(`Error querying audit trail records: ${msg}`);
+        if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+          setError('Requiere credencial de operador (HTTP 403).');
+        } else {
+          setError(`Error querying audit trail records: ${msg}`);
+        }
       }
 
       if (verifyRes.status === 'fulfilled' && verifyRes.value) {
         const v = verifyRes.value as AuditVerifyResult;
         if (v.ok === false && v.error) {
-          setVerifyError(v.error);
+          const errMsg = v.error;
+          if (errMsg.includes('403') || errMsg.includes('401') || errMsg.toLowerCase().includes('forbidden')) {
+            setVerifyError('Requiere credencial de operador (HTTP 403).');
+          } else {
+            setVerifyError(errMsg);
+          }
           setVerifyReport(v);
         } else {
           setVerifyReport(v);
         }
       } else if (verifyRes.status === 'rejected') {
-        setVerifyError(verifyRes.reason instanceof Error ? verifyRes.reason.message : String(verifyRes.reason));
+        const msg = verifyRes.reason instanceof Error ? verifyRes.reason.message : String(verifyRes.reason);
+        if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+          setVerifyError('Requiere credencial de operador (HTTP 403).');
+        } else {
+          setVerifyError(msg);
+        }
       }
 
       if (latencyRes.status === 'fulfilled' && latencyRes.value) {
@@ -187,7 +201,12 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       if (secRes.status === 'fulfilled' && secRes.value) {
         setSecurityReport(secRes.value as SecurityEventsReport);
       } else if (secRes.status === 'rejected') {
-        setSecurityError(secRes.reason instanceof Error ? secRes.reason.message : String(secRes.reason));
+        const msg = secRes.reason instanceof Error ? secRes.reason.message : String(secRes.reason);
+        if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+          setSecurityError('Requiere credencial de operador (HTTP 403).');
+        } else {
+          setSecurityError(msg);
+        }
       }
 
       if (logsRes.status === 'fulfilled' && logsRes.value) {
@@ -204,7 +223,11 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       console.error('Audit Trail fetch error:', msg);
       setEntries([]);
       setTotal(0);
-      setError(`Error querying audit trail records: ${msg}`);
+      if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden')) {
+        setError('Requiere credencial de operador (HTTP 403).');
+      } else {
+        setError(`Error querying audit trail records: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -244,7 +267,9 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
   const verifyPillLabel = loading && !verifyReport && !verifyError
     ? 'VERIFYING...'
     : verifyError
-    ? 'ERROR — UNVERIFIED'
+    ? verifyError.includes('403') || verifyError.toLowerCase().includes('operador')
+      ? 'OPERADOR REQUERIDO (403)'
+      : 'ERROR — UNVERIFIED'
     : verifyReport?.status === 'tampered'
     ? 'TAMPERED — BROKEN'
     : verifyReport?.status === 'clean'
@@ -257,7 +282,9 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
   const securityPillLabel = loading && !securityReport && !securityError
     ? 'CHECKING...'
     : securityError
-    ? 'ERROR — UNREACHABLE'
+    ? securityError.includes('403') || securityError.toLowerCase().includes('operador')
+      ? 'OPERADOR REQUERIDO (403)'
+      : 'ERROR — UNREACHABLE'
     : securityStatusRaw === 'critical'
     ? 'CRITICAL — ALERT'
     : securityStatusRaw === 'degraded'
@@ -313,8 +340,16 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       </div>
 
       {error && (
-        <div role="alert" className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-          {error}
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span className="font-mono">{error}</span>
+          <button
+            type="button"
+            onClick={fetchAuditTrail}
+            aria-label="Reintentar consulta de auditoría"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs transition-colors shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+          >
+            Reintentar
+          </button>
         </div>
       )}
 
@@ -322,7 +357,6 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1: Audit Chain Integrity (/api/v1/audit/verify) */}
         <div
-          role="status"
           aria-label="HMAC Audit Chain Integrity"
           className={cn(
             'p-4 rounded-xl border',
@@ -497,7 +531,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
             Loading security diagnostic events from `/api/v1/security/events`...
           </p>
         ) : securityError ? (
-          <div role="alert" className="text-xs font-mono text-rose-300 py-2">
+          <div className="text-xs font-mono text-rose-300 py-2">
             Failed to query `/api/v1/security/events`: {securityError}
           </div>
         ) : securityEventItems.length > 0 ? (
@@ -663,7 +697,23 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
               ) : (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-mono text-xs leading-normal">
-                    No audit records matching filters found.
+                    {loading ? (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" aria-hidden="true" />
+                        <span>Cargando registros de auditoría...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span>No audit records matching filters found.</span>
+                        <button
+                          type="button"
+                          onClick={() => { void fetchAuditTrail(); }}
+                          className="mt-1 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}

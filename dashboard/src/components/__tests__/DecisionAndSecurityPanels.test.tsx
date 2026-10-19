@@ -317,6 +317,53 @@ describe('AuditTrailPanel (D3)', () => {
       expect(screen.getByText('[browser] Guild process exited')).toBeDefined();
     });
   });
+
+  it('handles 403 Forbidden with operator clearance message and 403 pill', async () => {
+    const mockBridge = {
+      getAuditTrail: vi.fn().mockRejectedValue(new Error('HTTP 403 Forbidden')),
+      fetchRaw: vi.fn().mockImplementation((url: string) => {
+        if (url === '/api/v1/audit/verify') {
+          return Promise.resolve({
+            ok: false,
+            error: 'HTTP 403 Forbidden: operator credentials required',
+          });
+        }
+        if (url === '/api/v1/security/events') {
+          return Promise.reject(new Error('HTTP 403 Forbidden'));
+        }
+        return Promise.resolve({});
+      }),
+    } as unknown as NexusBridge;
+
+    render(<AuditTrailPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Requiere credencial de operador \(HTTP 403\)/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText('OPERADOR REQUERIDO (403)').length).toBeGreaterThan(0);
+    });
+
+    const retryBtns = screen.getAllByRole('button', { name: /Reintentar/i });
+    expect(retryBtns.length).toBeGreaterThan(0);
+  });
+
+  it('renders table empty state with Reintentar button when audit trail entries are empty', async () => {
+    const getAuditTrailMock = vi.fn().mockResolvedValue({ entries: [], total: 0 });
+    const mockBridge = {
+      getAuditTrail: getAuditTrailMock,
+      fetchRaw: vi.fn().mockResolvedValue({}),
+    } as unknown as NexusBridge;
+
+    render(<AuditTrailPanel bridge={mockBridge} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No audit records matching filters found/i)).toBeDefined();
+    });
+
+    const retryBtn = screen.getByRole('button', { name: /Reintentar/i });
+    expect(retryBtn).toBeDefined();
+    fireEvent.click(retryBtn);
+    expect(getAuditTrailMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 
