@@ -1,5 +1,5 @@
 import { Search, ChevronRight, ChevronDown, Plus, Hash, Trash2, AlertTriangle } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
 import { ColoquioChannel } from './coloquio-types';
 
@@ -43,6 +43,20 @@ export function ColoquioChannelsPanel({
   onDeleteChannel
 }: ColoquioChannelsPanelProps) {
   const [deleteTarget, setDeleteTarget] = useState<ColoquioChannel | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (deleteTarget) {
+          setDeleteTarget(null);
+        } else if (showNewChannel) {
+          setShowNewChannel(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteTarget, showNewChannel, setShowNewChannel]);
   const [archiveOnDelete, setArchiveOnDelete] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
@@ -131,10 +145,16 @@ export function ColoquioChannelsPanel({
           <div className="flex flex-col gap-1.5">
             <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
               placeholder="Channel ID" value={newChannelId} autoFocus
-              onChange={e => setNewChannelId(e.target.value)} onKeyDown={e => e.key === 'Enter' && createChannel()} />
+              onChange={e => setNewChannelId(e.target.value)} onKeyDown={e => {
+                if (e.key === 'Enter') createChannel();
+                if (e.key === 'Escape') setShowNewChannel(false);
+              }} />
             <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
               placeholder="Name (optional)" value={newChannelName}
-              onChange={e => setNewChannelName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createChannel()} />
+              onChange={e => setNewChannelName(e.target.value)} onKeyDown={e => {
+                if (e.key === 'Enter') createChannel();
+                if (e.key === 'Escape') setShowNewChannel(false);
+              }} />
             <div className="flex gap-1">
               <button
                 type="button"
