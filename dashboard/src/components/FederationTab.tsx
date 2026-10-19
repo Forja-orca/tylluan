@@ -33,6 +33,35 @@ interface PeerStatus {
   checking: boolean;
 }
 
+export interface MeshPeerEntry {
+  node_id: string;
+  addr: string;
+  capabilities: string[];
+  last_seen: number;
+}
+
+export interface MeshStatusResponse {
+  enabled: boolean;
+  peer_count: number;
+  buckets: number;
+  peers: MeshPeerEntry[];
+}
+
+export interface FederationNodeItem {
+  id: string;
+  node_type?: string;
+  content?: string;
+  weight?: number;
+  shareable?: boolean;
+  topic_key?: string | null;
+}
+
+export interface FederationNodesResponse {
+  source: string;
+  count: number;
+  nodes: FederationNodeItem[];
+}
+
 interface SilvaNode {
   id: string;
   node_type?: string;
@@ -56,7 +85,18 @@ interface FederationTabProps {
 export function FederationTab({ bridge, notify }: FederationTabProps) {
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [peerStatuses, setPeerStatuses] = useState<Record<string, PeerStatus>>({});
+  const [meshPeers, setMeshPeers] = useState<MeshPeerEntry[]>([]);
+  const [meshStatus, setMeshStatus] = useState<MeshStatusResponse | null>(null);
+  const [meshError, setMeshError] = useState<string | null>(null);
+  const [meshEndpointStatus, setMeshEndpointStatus] = useState<'ready' | 'forbidden' | 'error'>('ready');
+  
   const [nodes, setNodes] = useState<SilvaNode[]>([]);
+  const [fedNodes, setFedNodes] = useState<FederationNodeItem[]>([]);
+  const [fedNodesCount, setFedNodesCount] = useState<number>(0);
+  const [fedNodesSource, setFedNodesSource] = useState<string>('local');
+  const [fedNodesError, setFedNodesError] = useState<string | null>(null);
+  const [fedNodesEndpointStatus, setFedNodesEndpointStatus] = useState<'ready' | 'forbidden' | 'error'>('ready');
+  
   const [sharingStatus, setSharingStatus] = useState<SharingStatus | null>(null);
   const [sharingStatusLoading, setSharingStatusLoading] = useState(true);
   
@@ -158,18 +198,71 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     }
   }, [bridge, checkSinglePeerStatus]);
 
+  const fetchMeshPeers = useCallback(async (silent = false) => {
+    if (!bridge) return;
+    if (!silent) setPeersLoading(true);
+    setMeshError(null);
+    try {
+      const data = await bridge.fetchRaw('/api/v1/mesh/peers') as MeshStatusResponse;
+      if (data && Array.isArray(data.peers)) {
+        setMeshPeers(data.peers);
+        setMeshStatus(data);
+      } else {
+        setMeshPeers([]);
+        setMeshStatus(null);
+      }
+      setMeshEndpointStatus('ready');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
+        setMeshEndpointStatus('forbidden');
+        setMeshError('Requiere credencial de operador (HTTP 403). Token maestro requerido para inspeccionar DHT routing table.');
+      } else {
+        setMeshEndpointStatus('error');
+        setMeshError(msg || 'Error al consultar /api/v1/mesh/peers en :47004');
+      }
+      setMeshPeers([]);
+      setMeshStatus(null);
+    } finally {
+      if (!silent) setPeersLoading(false);
+    }
+  }, [bridge]);
+
   const fetchNodes = useCallback(async (silent = false) => {
     if (!bridge) return;
     if (!silent) setNodesLoading(true);
+    setFedNodesError(null);
     try {
-      const data = await bridge.fetchRaw('/api/v1/silva/graph?limit=100');
+      const data = await bridge.fetchRaw('/api/v1/federation/nodes') as FederationNodesResponse;
       if (data && Array.isArray(data.nodes)) {
-        setNodes(data.nodes);
+        setFedNodes(data.nodes);
+        setFedNodesCount(typeof data.count === 'number' ? data.count : data.nodes.length);
+        setFedNodesSource(data.source || 'local');
+        // keep nodes in sync for shareable toggle state
+        setNodes(data.nodes.map(n => ({
+          id: n.id,
+          node_type: n.node_type,
+          content: n.content,
+          shareable: n.shareable,
+        })));
       } else {
+        setFedNodes([]);
+        setFedNodesCount(0);
         setNodes([]);
       }
-    } catch (err) {
-      console.error('Failed to list silva nodes for sharing:', err);
+      setFedNodesEndpointStatus('ready');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      if (msg.includes('403') || msg.includes('401') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('unauthorized')) {
+        setFedNodesEndpointStatus('forbidden');
+        setFedNodesError('Requiere credencial de operador (HTTP 403). Token maestro requerido para consultar nodos de federación.');
+      } else {
+        setFedNodesEndpointStatus('error');
+        setFedNodesError(msg || 'Error al consultar /api/v1/federation/nodes en :47004');
+      }
+      setFedNodes([]);
+      setFedNodesCount(0);
+      setNodes([]);
     } finally {
       if (!silent) setNodesLoading(false);
     }
@@ -219,16 +312,17 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
 
   const handleRefreshAll = useCallback(() => {
     fetchPeers();
+    fetchMeshPeers();
     fetchNodes();
     fetchSharingStatus();
-  }, [fetchPeers, fetchNodes, fetchSharingStatus]);
+  }, [fetchPeers, fetchMeshPeers, fetchNodes, fetchSharingStatus]);
 
   useEffect(() => {
     handleRefreshAll();
-  }, [bridge, handleRefreshAll, fetchPeers, fetchNodes]);
+  }, [bridge, handleRefreshAll, fetchPeers, fetchMeshPeers, fetchNodes]);
 
   // Polling via centralized coordinator (replaces 2 scattered setInterval calls)
-  usePolling('fed-peers-nodes', () => { fetchPeers(true); fetchNodes(true); }, { interval: 'quick', enabled: !!bridge });
+  usePolling('fed-peers-nodes', () => { fetchPeers(true); fetchMeshPeers(true); fetchNodes(true); }, { interval: 'quick', enabled: !!bridge });
   usePolling('fed-sharing', () => fetchSharingStatus(true), { interval: 'medium', enabled: !!bridge });
 
   const handleAddPeer = async (e: React.FormEvent) => {
@@ -504,26 +598,135 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Peers List Column */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <h3 className="text-sm font-medium font-sans text-slate-200 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-emerald-400" />
-              Connected Peer Nodes ({peers.length})
-            </h3>
+        <div className="lg:col-span-2 space-y-6">
+          {/* Mesh DHT Peer Discovery (GET /api/v1/mesh/peers) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <h3 className="text-sm font-medium font-sans text-slate-200 flex items-center gap-2">
+                <Network className="w-4 h-4 text-amber-400" />
+                Mesh DHT Peer Discovery ({meshPeers.length})
+                {meshStatus && (
+                  <span className="text-[11px] font-mono text-slate-400 font-normal">
+                    (buckets: {meshStatus.buckets}, total: {meshStatus.peer_count})
+                  </span>
+                )}
+              </h3>
+              <button
+                type="button"
+                onClick={() => fetchMeshPeers(false)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+              >
+                <RefreshCw className="w-3 h-3 text-amber-400" />
+                <span>Reintentar Mesh</span>
+              </button>
+            </div>
+
+            {meshEndpointStatus === 'forbidden' ? (
+              <div className="p-6 border border-rose-500/30 bg-rose-950/20 rounded-lg text-center space-y-2">
+                <ShieldAlert className="w-6 h-6 text-rose-400 mx-auto" />
+                <p className="text-xs font-semibold text-rose-300">Requiere credencial de operador (HTTP 403)</p>
+                <p className="text-[11px] text-slate-400 max-w-md mx-auto">{meshError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchMeshPeers(false)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none mt-1"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Reintentar</span>
+                </button>
+              </div>
+            ) : meshEndpointStatus === 'error' ? (
+              <div className="p-6 border border-red-500/30 bg-red-950/20 rounded-lg text-center space-y-2">
+                <WifiOff className="w-6 h-6 text-red-400 mx-auto" />
+                <p className="text-xs font-semibold text-red-300">Error en telemetría Mesh</p>
+                <p className="text-[11px] text-slate-400 max-w-md mx-auto">{meshError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchMeshPeers(false)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none mt-1"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Reintentar</span>
+                </button>
+              </div>
+            ) : meshPeers.length === 0 ? (
+              <div className="p-6 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center space-y-1">
+                <p className="text-xs text-slate-400">No active DHT mesh peers discovered in local routing table.</p>
+                <p className="text-[11px] text-slate-500">Peers appear here when discovered via mDNS LAN or DHT bootstrap.</p>
+              </div>
+            ) : (
+              <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60">
+                        <th className="py-2.5 px-4">Node ID</th>
+                        <th className="py-2.5 px-4">Socket Address</th>
+                        <th className="py-2.5 px-4">Capabilities</th>
+                        <th className="py-2.5 px-4 text-right">Last Seen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850 text-xs font-mono">
+                      {meshPeers.map((mp) => (
+                        <tr key={mp.node_id} className="hover:bg-slate-900/30 transition-colors">
+                          <td className="py-2.5 px-4 text-slate-200 truncate max-w-[180px]" title={mp.node_id}>
+                            {mp.node_id}
+                          </td>
+                          <td className="py-2.5 px-4 text-slate-400">{mp.addr}</td>
+                          <td className="py-2.5 px-4">
+                            <div className="flex flex-wrap gap-1">
+                              {mp.capabilities && mp.capabilities.length > 0 ? (
+                                mp.capabilities.map((c) => (
+                                  <span key={c} className="px-1.5 py-0.5 rounded text-[11px] bg-slate-800 text-slate-300 font-sans">
+                                    {c}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-slate-600 font-sans italic text-[11px]">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-slate-400">
+                            {formatLastSync(mp.last_seen)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
-          {peersLoading && peers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-lg">
-              <RefreshCw className="w-8 h-8 animate-spin text-emerald-500/40 mb-3" />
-              <p className="text-xs">Querying network topology...</p>
+          {/* Configured Peer Nodes */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <h3 className="text-sm font-medium font-sans text-slate-200 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-emerald-400" />
+                Configured Peer Nodes ({peers.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => fetchPeers(false)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+              >
+                <RefreshCw className="w-3 h-3 text-emerald-400" />
+                <span>Reintentar Peers</span>
+              </button>
             </div>
-          ) : peers.length === 0 ? (
-            <div className="p-12 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center flex flex-col items-center justify-center">
-              <WifiOff className="w-8 h-8 text-slate-600 mb-3" />
-              <p className="text-xs text-slate-500">No peer nodes currently configured.</p>
-              <p className="text-[11px] text-slate-600 mt-1">Register a peer node on the right to begin federation.</p>
-            </div>
-          ) : (
+
+            {peersLoading && peers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-500 bg-slate-900/10 rounded-lg">
+                <RefreshCw className="w-8 h-8 animate-spin text-emerald-500/40 mb-3" />
+                <p className="text-xs">Querying network topology...</p>
+              </div>
+            ) : peers.length === 0 ? (
+              <div className="p-8 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center flex flex-col items-center justify-center gap-2">
+                <WifiOff className="w-8 h-8 text-slate-600" />
+                <p className="text-xs text-slate-500">No peer nodes currently configured.</p>
+                <p className="text-[11px] text-slate-600">Register a peer node on the right to begin federation.</p>
+              </div>
+            ) : (
             <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -639,6 +842,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Register Manual Peer Form Column */}
@@ -721,20 +925,67 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
           <div>
             <h3 className="text-sm font-medium font-sans text-slate-200 flex items-center gap-2">
               <Database className="w-4 h-4 text-violet-400" />
-              SilvaDB Shareable Nodes Control
+              SilvaDB Shareable Nodes Control ({fedNodesCount})
+              <span className="text-[11px] font-mono text-slate-400 font-normal">
+                (source: {fedNodesSource})
+              </span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Toggle sharing flags. Only flagged memories are federated across peer connections.</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Federated memory candidates queried from /api/v1/federation/nodes across peer connections.</p>
           </div>
+          <button
+            type="button"
+            onClick={() => fetchNodes(false)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-850 hover:bg-slate-800 text-[11px] text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+          >
+            <RefreshCw className="w-3 h-3 text-violet-400" />
+            <span>Reintentar Nodos</span>
+          </button>
         </div>
 
-        {nodesLoading && nodes.length === 0 ? (
+        {fedNodesEndpointStatus === 'forbidden' ? (
+          <div className="p-8 border border-rose-500/30 bg-rose-950/20 rounded-lg text-center space-y-2">
+            <ShieldAlert className="w-8 h-8 text-rose-400 mx-auto" />
+            <p className="text-sm font-semibold text-rose-300">Requiere credencial de operador (HTTP 403)</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">{fedNodesError}</p>
+            <button
+              type="button"
+              onClick={() => fetchNodes(false)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none mt-2"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>Reintentar</span>
+            </button>
+          </div>
+        ) : fedNodesEndpointStatus === 'error' ? (
+          <div className="p-8 border border-red-500/30 bg-red-950/20 rounded-lg text-center space-y-2">
+            <WifiOff className="w-8 h-8 text-red-400 mx-auto" />
+            <p className="text-sm font-semibold text-red-300">Error al cargar nodos de federación</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">{fedNodesError}</p>
+            <button
+              type="button"
+              onClick={() => fetchNodes(false)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none mt-2"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>Reintentar</span>
+            </button>
+          </div>
+        ) : nodesLoading && fedNodes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-500 bg-slate-900/10 rounded-lg">
             <RefreshCw className="w-8 h-8 animate-spin text-violet-500/40 mb-3" />
             <p className="text-xs">Loading SilvaDB nodes...</p>
           </div>
-        ) : nodes.length === 0 ? (
-          <div className="p-10 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center">
+        ) : fedNodes.length === 0 ? (
+          <div className="p-10 border-2 border-dashed border-slate-800/80 bg-slate-900/10 rounded-lg text-center space-y-2">
             <p className="text-xs text-slate-500">No nodes found in SilvaDB.</p>
+            <button
+              type="button"
+              onClick={() => fetchNodes(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>Reintentar</span>
+            </button>
           </div>
         ) : (
           <div className="bg-slate-900/20 rounded-lg overflow-hidden backdrop-blur-md shadow-xl">
@@ -744,11 +995,12 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                   <tr className="border-b border-slate-800/80 text-[11px] text-slate-400 font-medium bg-slate-950/60 sticky top-0 z-10 backdrop-blur">
                     <th className="py-3 px-5">Node ID / Type</th>
                     <th className="py-3 px-5">Memory Content</th>
+                    <th className="py-3 px-5 text-center">Weight</th>
                     <th className="py-3 px-5 text-center">Sharing Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-850 text-sm">
-                  {nodes.map((node: SilvaNode) => {
+                  {fedNodes.map((node: FederationNodeItem) => {
                     const isShareable = !!node.shareable;
                     return (
                       <tr key={node.id} className={cn(
@@ -770,6 +1022,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
                         </td>
                         <td className="py-4 px-5 text-xs text-slate-400 font-sans max-w-[480px] break-words line-clamp-2">
                           {node.content || <span className="italic text-slate-500">No content snippet</span>}
+                        </td>
+                        <td className="py-4 px-5 text-center font-mono text-xs text-slate-400">
+                          {typeof node.weight === 'number'
+                            ? (node.weight > 0.001 ? node.weight.toFixed(3) : node.weight.toExponential(2))
+                            : '—'}
                         </td>
                         <td className="py-4 px-5 text-center">
                           <div className="flex items-center justify-center">

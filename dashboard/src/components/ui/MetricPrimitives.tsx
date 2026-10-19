@@ -39,7 +39,43 @@ export function RelativeTime({ ts }: { ts: number }) {
   return <>{Math.floor(diff / 60)}m</>;
 }
 
-export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
+export function resolveCanvasColor(
+  color: string,
+  targetEl?: HTMLElement | null
+): { stroke: string; fill: (alpha: number) => string } {
+  if (color.startsWith('#')) {
+    const hex = color.length === 4
+      ? `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`
+      : color;
+    const r = parseInt(hex.slice(1, 3), 16) || 0;
+    const g = parseInt(hex.slice(3, 5), 16) || 0;
+    const b = parseInt(hex.slice(5, 7), 16) || 0;
+    return {
+      stroke: color,
+      fill: (alpha: number) => `rgba(${r}, ${g}, ${b}, ${alpha})`,
+    };
+  }
+
+  const varMatch = color.match(/var\((--[^)]+)\)/);
+  if (varMatch && typeof window !== 'undefined') {
+    const varName = varMatch[1];
+    const el = targetEl || document.documentElement;
+    const rawVal = window.getComputedStyle(el).getPropertyValue(varName).trim();
+    if (rawVal) {
+      return {
+        stroke: `hsl(${rawVal})`,
+        fill: (alpha: number) => `hsl(${rawVal} / ${alpha})`,
+      };
+    }
+  }
+
+  return {
+    stroke: color,
+    fill: () => color,
+  };
+}
+
+export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h = 28 }: {
   data: number[];
   color?: string;
   w?: number;
@@ -52,6 +88,8 @@ export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
+
+    const { stroke, fill } = resolveCanvasColor(color, canvas);
 
     const pts = data.length > 0 ? data : [0];
     const minV = Math.min(...pts);
@@ -73,7 +111,7 @@ export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
     ctx.lineTo(pad + (pts.length - 1) * xStep, h - pad);
     ctx.lineTo(pad, h - pad);
     ctx.closePath();
-    ctx.fillStyle = color + '33';
+    ctx.fillStyle = fill(0.2);
     ctx.fill();
 
     // stroke line
@@ -83,7 +121,7 @@ export function MiniSparkline({ data, color = '#60a5fa', w = 80, h = 28 }: {
       const y = toY(v);
       if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = stroke;
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.stroke();

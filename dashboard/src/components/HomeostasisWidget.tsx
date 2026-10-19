@@ -44,21 +44,21 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
   let statusColor = "text-emerald-400";
   let statusBg = "bg-emerald-500/10";
   let statusBorder = "border-emerald-500/20";
-  let strokeColor = "#34d399";
-  let glowColor = "rgba(52, 211, 153, 0.4)";
+  let strokeColor = "hsl(var(--emerald-400))";
+  let glowColor = "hsl(var(--emerald-400) / 0.4)";
 
   if (score < 50) {
     statusColor = "text-red-400 animate-pulse";
     statusBg = "bg-red-500/10";
     statusBorder = "border-red-500/20";
-    strokeColor = "#f87171";
-    glowColor = "rgba(248, 113, 113, 0.4)";
+    strokeColor = "hsl(var(--red-400))";
+    glowColor = "hsl(var(--red-400) / 0.4)";
   } else if (score < 80) {
     statusColor = "text-amber-400";
     statusBg = "bg-amber-500/10";
     statusBorder = "border-amber-500/20";
-    strokeColor = "#fbbf24";
-    glowColor = "rgba(251, 191, 36, 0.4)";
+    strokeColor = "hsl(var(--amber-400))";
+    glowColor = "hsl(var(--amber-400) / 0.4)";
   }
 
   // SVG circle calculations
