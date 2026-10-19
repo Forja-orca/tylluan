@@ -28,7 +28,7 @@ Esto causaba dos problemas críticos:
 2. **Falta de blindaje de código inline y bloques de código:** Si bien se generaban etiquetas `<code>`, el procesamiento de cursivas y negritas se ejecutaba después sin proteger el contenido interno ya transformado, permitiendo que subguiones dentro de snippets de código sufrieran transformaciones accidentales.
 
 ### Solución Implementada:
-1. **Extracción y Modularización:** Se extrajo la lógica a [`dashboard/src/lib/coloquio-markdown.ts`](file:///E:/tylluan-wt-antigravity/dashboard/src/lib/coloquio-markdown.ts) para evitar violaciones de ESLint (`react-refresh/only-export-components`).
+1. **Extracción y Modularización:** Se extrajo la lógica a `dashboard/src/lib/coloquio-markdown.ts` para evitar violaciones de ESLint (`react-refresh/only-export-components`).
 2. **Shielding de Código:** Antes de procesar cualquier regla de formato de texto (negrita, cursiva, menciones, enlaces), se extraen y reemplazan los bloques de código (```` ```...``` ````) y el código inline (`` `...` ``) por tokens únicos inviolables (`%%CODE_BLOCK_i%%` y `%%INLINE_CODE_i%%`).
 3. **Límites de Palabra para Subguiones:**
    ```typescript
@@ -41,7 +41,7 @@ Esto causaba dos problemas críticos:
 
 ## 3. Cobertura de Pruebas Unitarias
 
-Se ha creado la suite [`dashboard/src/components/__tests__/ColoquioMarkdown.test.ts`](file:///E:/tylluan-wt-antigravity/dashboard/src/components/__tests__/ColoquioMarkdown.test.ts) con **10 nuevos tests** específicos que validan exhaustivamente los requisitos de X1 y X2:
+Se ha creado la suite `dashboard/src/components/__tests__/ColoquioMarkdown.test.ts` con **10 nuevos tests** específicos que validan exhaustivamente los requisitos de X1 y X2:
 
 1. **Rutas de archivo con múltiples subguiones:** Preserva intacto `scripts/check_test_count.sh`.
 2. **Variables snake_case:** Preserva intacto `snake_case_variable` sin cursivas espurias.
