@@ -6,6 +6,7 @@ import { useRef, useLayoutEffect, useEffect, useCallback, useMemo, useState } fr
 import { cn } from '../lib/utils';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { agentStyle } from '../lib/agent-meta';
+import { parseMarkdown } from '../lib/coloquio-markdown';
 
 import { ColoquioChannel, ColoquioMessage } from './coloquio-types';
 
@@ -99,31 +100,6 @@ const QUICK_TEMPLATES = [
   { label: '🧬 Reindex', text: 'Reindex SilvaDB and regenerate embeddings' },
 ];
 
-function parseMarkdown(text: string): string {
-  let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  h = h.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) =>
-    `<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">` +
-    `<div class="text-[11px] text-slate-400 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
-    `<code>${code}</code></pre>`
-  );
-  h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-200/80 dark:bg-slate-950 border border-slate-300/80 dark:border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-700 dark:text-indigo-300">$1</code>');
-  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>');
-  h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  h = h.replace(/_([^_]+)_/g, '<em>$1</em>');
-  h = h.replace(/(?:^|\n)&gt;\s?(.*)/g, (_, q) =>
-    `<blockquote class="border-l-2 border-indigo-500/40 pl-3 italic text-slate-600 dark:text-slate-400 my-1.5">${q}</blockquote>`
-  );
-  h = h.replace(/(?:^|\n)[-*]\s(.*)/g, (_, item) =>
-    `<li class="list-disc ml-4 my-0.5 text-slate-700 dark:text-slate-300">${item}</li>`
-  );
-  h = h.replace(/(^|[\s,;().!?])#(\d{1,4})\b/g,
-    '$1<span class="cursor-pointer text-amber-700 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 underline font-mono font-semibold" data-jump-turn="$2">#$2</span>'
-  );
-  h = h.replace(/(^|[\s,;()>.!?])@([A-Za-z0-9_][A-Za-z0-9_-]*)/g,
-    '$1<span class="text-amber-700 dark:text-amber-300 bg-amber-950 dark:bg-amber-950/50 border border-amber-400/50 dark:border-amber-800/40 rounded px-1 font-semibold">@$2</span>'
-  );
-  return h;
-}
 
 function parsePlanTasks(content: string): string[] {
   const lines = content.split('\n');
