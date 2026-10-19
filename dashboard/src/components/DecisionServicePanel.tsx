@@ -392,18 +392,18 @@ export function DecisionServicePanel({ bridge }: DecisionServicePanelProps) {
                   <p className="text-xs text-slate-400 mb-3 line-clamp-1">{meta.description}</p>
                 )}
 
-                <div className="grid grid-cols-3 gap-1.5 text-xs font-mono pt-2 border-t border-slate-800/80">
-                  <div className="p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-center">
-                    <span className="block text-emerald-300 font-bold">{c.n_agreed}</span>
-                    <span className="text-[11px] text-slate-300">Agreed</span>
+                <div className="grid grid-cols-3 gap-1 text-xs font-mono pt-2 border-t border-slate-800/80">
+                  <div className="p-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-center min-w-0">
+                    <span className="block text-emerald-300 font-bold truncate">{c.n_agreed}</span>
+                    <span className="text-[10px] text-slate-300 block truncate">Agreed</span>
                   </div>
-                  <div className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-center">
-                    <span className="block text-rose-300 font-bold">{c.n_disagreed}</span>
-                    <span className="text-[11px] text-slate-300">Disagreed</span>
+                  <div className="p-1 rounded bg-rose-500/10 border border-rose-500/20 text-center min-w-0">
+                    <span className="block text-rose-300 font-bold truncate">{c.n_disagreed}</span>
+                    <span className="text-[10px] text-slate-300 block truncate">Disagreed</span>
                   </div>
-                  <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-center">
-                    <span className="block text-slate-300 font-bold">{c.n_null}</span>
-                    <span className="text-[11px] text-slate-400">Abstain/Null</span>
+                  <div className="p-1 rounded bg-slate-900 border border-slate-800 text-center min-w-0">
+                    <span className="block text-slate-300 font-bold truncate">{c.n_null}</span>
+                    <span className="text-[10px] text-slate-400 block truncate" title="Abstain/Null">Abstain/Null</span>
                   </div>
                 </div>
 

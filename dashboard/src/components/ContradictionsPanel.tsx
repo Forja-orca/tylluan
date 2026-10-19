@@ -144,7 +144,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="px-2 py-0.5 text-xs font-mono font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md">
               SilvaDB Epistemic Audit
@@ -155,10 +155,10 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
           </div>
           <h2
             id="contradictions-panel-heading"
-            className="text-xl font-bold text-slate-100 flex items-center gap-2"
+            className="text-lg sm:text-xl font-bold text-slate-100 flex items-center gap-2 flex-wrap"
           >
-            <GitCompare className="w-5 h-5 text-rose-400" aria-hidden="true" />
-            Conflicted Nodes (`/api/v1/silva/conflicted`)
+            <GitCompare className="w-5 h-5 text-rose-400 shrink-0" aria-hidden="true" />
+            <span>Conflicted Nodes <span className="text-xs sm:text-sm font-mono text-slate-300 font-normal">(`/api/v1/silva/conflicted`)</span></span>
           </h2>
           <p className="text-xs text-slate-300 mt-1">
             Read-only operator view of SilvaDB nodes with `conflicted = 1` (`get_all_conflicted`, excerpt &le; 300 chars).
@@ -221,15 +221,15 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
         className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
       >
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-        <div className="text-xs text-slate-200 leading-relaxed space-y-1">
+        <div className="min-w-0 text-xs text-slate-200 leading-relaxed space-y-1 break-words">
           <p>
             <span className="font-bold text-amber-300 uppercase tracking-wide mr-1.5">
               Nota de calibración:
             </span>
-            La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (`benchmarks/human_truth_conflict_pairs_v1.json`: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
+            La detección actual es estructural; sin contradicciones reales en la muestra etiquetada a mano por Buffy (<code className="break-all font-mono">benchmarks/human_truth_conflict_pairs_v1.json</code>: 100 pares = 91 consistentes, 9 no relacionados, 0 que se contradigan).
           </p>
           <p className="text-slate-300">
-            Este panel consulta exclusivamente `GET /api/v1/silva/conflicted?limit=N` (nodos con `conflicted = 1`). Los nodos obsoletos con marcador `[DEPRECATED by …]` de `/api/v1/silva/contradictions` no son contradicciones y se excluyen deliberadamente.
+            Este panel consulta exclusivamente <code className="break-all font-mono">GET /api/v1/silva/conflicted?limit=N</code> (nodos con <code className="font-mono">conflicted = 1</code>). Los nodos obsoletos con marcador <code className="font-mono">[DEPRECATED by …]</code> de <code className="break-all font-mono">/api/v1/silva/contradictions</code> no son contradicciones y se excluyen deliberadamente.
           </p>
         </div>
       </div>
