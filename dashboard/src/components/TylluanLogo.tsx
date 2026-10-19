@@ -33,7 +33,7 @@ export function TylluanLogo({
   };
 
   // Sovereign Color Tokens (Nocturnal Observatory Amber/Gold)
-  const AMBER_GOLD = '#F59E0B';
+  const AMBER_GOLD = 'hsl(var(--amber-500))';
 
   return (
     <div className={cn('flex items-center gap-3 select-none', className)}>

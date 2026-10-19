@@ -778,13 +778,21 @@ export function GuildsTab({ bridge, notify, events }: Props) {
 
           {/* Main Guild Cards Sections */}
           {filteredGuilds.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-600">
-              <Cpu className="w-10 h-10 mb-3 opacity-30" />
-              <p className="text-sm font-mono">
+            <div className="flex flex-col items-center justify-center py-16 text-slate-600 gap-3">
+              <Cpu className="w-10 h-10 opacity-30" />
+              <p className="text-sm font-mono text-slate-400">
                 {activeCategory === 'all'
                   ? 'No guilds registered yet'
                   : `No ${activeCategory} guilds found`}
               </p>
+              <button
+                type="button"
+                onClick={() => refreshData()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                <span>Refresh Guilds</span>
+              </button>
             </div>
           ) : (
             <div className="space-y-8">
