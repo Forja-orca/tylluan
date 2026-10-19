@@ -44,7 +44,7 @@ impl Default for BootstrapConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiscoveredPeer {
     pub node_id: String,
     pub addr: String,
@@ -129,56 +129,102 @@ impl BootstrapConfig {
 
     /// Mainline DHT bootstrap via the `mainline` crate.
     /// Announces this node and looks up other Tylluan peers.
+    ///
+    /// Written against mainline 2.x's low-level synchronous API (`Dht::client`,
+    /// `announce_peer`, `get_peers`) — the 0.x `ClientBuilder` with
+    /// `on_announce`/`on_query` callbacks this code originally used no longer
+    /// exists. mainline 2.x iteration is blocking, so the whole exchange runs
+    /// in `spawn_blocking`: peers are drained within a 5 s window (the query's
+    /// channel disconnects when the DHT actor completes it, and `shutdown()`
+    /// forces that disconnect if the window closes first), and the whole call
+    /// is hard-capped at 10 s in case the actor stalls on an unreachable
+    /// network — then bootstrap degrades to the manual seed layer instead of
+    /// hanging.
     #[cfg(feature = "mainline-dht")]
-    async fn bootstrap_mainline(local_node_id: &str, _port: u16) -> anyhow::Result<Vec<DiscoveredPeer>> {
-        use std::sync::Arc;
-        use tokio::sync::Mutex;
+    async fn bootstrap_mainline(local_node_id: &str, listen_port: u16) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
 
-        let discovered = Arc::new(Mutex::new(Vec::new()));
+        let node_id = local_node_id.to_string();
+        let joined = tokio::time::timeout(
+            Duration::from_secs(10),
+            tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<std::net::SocketAddr>> {
+                // Client mode starts bootstrapped from the crate's default
+                // mainline nodes on its own.
+                let mut dht = mainline::Dht::client()
+                    .map_err(|e| anyhow::anyhow!("mainline DHT client: {e}"))?;
 
-        let announce = |info_hash: [u8; 20], peer_addr: std::net::SocketAddr| {
-            let disc = discovered.clone();
-            let nid = local_node_id.to_string();
-            async move {
-                let peer = DiscoveredPeer {
-                    node_id: nid,
-                    addr: peer_addr.to_string(),
-                    source: PeerSource::MainlineDht,
-                };
-                disc.lock().await.push(peer);
-            }
-        };
+                let hash = sha256_of(&node_id);
+                let info_hash = mainline::Id::from_bytes(&hash[..20])
+                    .map_err(|e| anyhow::anyhow!("mainline info hash: {e}"))?;
 
-        let lookup = |info_hash: [u8; 20], peers: Vec<std::net::SocketAddr>| {
-            let disc = discovered.clone();
-            async move {
-                for peer_addr in peers {
-                    let peer = DiscoveredPeer {
-                        node_id: format!("dht-{}", peer_addr),
-                        addr: peer_addr.to_string(),
-                        source: PeerSource::MainlineDht,
-                    };
-                    disc.lock().await.push(peer);
+                // Advertise ourselves so other Tylluan nodes can find us (BEP 5).
+                if let Err(e) = dht.announce_peer(info_hash, Some(listen_port)) {
+                    tracing::warn!("DHT: mainline announce failed: {e}");
                 }
+
+                // Collect peers found for our info hash. The iterator blocks
+                // per batch, so it runs on a drain thread whose sender is
+                // dropped either when the query completes or when our window
+                // ends and `rx` goes out of scope below.
+                let mut peers: Vec<std::net::SocketAddr> = Vec::new();
+                match dht.get_peers(info_hash) {
+                    Ok(pending) => {
+                        let (tx, rx) = mpsc::channel();
+                        std::thread::spawn(move || {
+                            for batch in pending {
+                                if tx.send(batch).is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                        let deadline = Instant::now() + Duration::from_secs(5);
+                        loop {
+                            let remaining = deadline.saturating_duration_since(Instant::now());
+                            if remaining.is_zero() {
+                                break;
+                            }
+                            match rx.recv_timeout(remaining) {
+                                Ok(batch) => peers.extend(batch),
+                                Err(mpsc::RecvTimeoutError::Timeout) => break,
+                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                            }
+                        }
+                    }
+                    Err(e) => tracing::warn!("DHT: mainline get_peers failed: {e}"),
+                }
+
+                // Stops the DHT actor; also disconnects the query channel so
+                // the drain thread above always terminates.
+                let _ = dht.shutdown();
+                Ok(peers)
+            }),
+        )
+        .await;
+
+        // joined nests three Results: Elapsed (timeout) / JoinError (task) /
+        // the closure's own anyhow result — destructure all of them.
+        let peers = match joined {
+            Ok(Ok(Ok(peers))) => peers,
+            Ok(Ok(Err(e))) => return Err(e),
+            Ok(Err(join_err)) => {
+                return Err(anyhow::anyhow!("mainline bootstrap task join failed: {join_err}"));
+            }
+            Err(_) => {
+                return Err(anyhow::anyhow!(
+                    "mainline bootstrap exceeded its 10 s budget (unreachable network?)"
+                ));
             }
         };
 
-        let info_hash_bytes = Sha256_of(local_node_id);
-        let mut info_hash_arr = [0u8; 20];
-        info_hash_arr.copy_from_slice(&info_hash_bytes[..20]);
-
-        let client = mainline::ClientBuilder::new()
-            .on_announce(announce)
-            .on_query(lookup)
-            .build()
-            .map_err(|e| anyhow::anyhow!("mainline client build failed: {}", e))?;
-
-        let local_addr: std::net::SocketAddr = format!("0.0.0.0:{}", _port).parse()?;
-        let _ = client.announce(info_hash_arr, local_addr.port()).await;
-        tokio::time::sleep(Duration::from_secs(5)).await;
-
-        let result = discovered.lock().await.clone();
-        Ok(result)
+        Ok(peers
+            .into_iter()
+            .map(|addr| DiscoveredPeer {
+                node_id: format!("dht-{addr}"),
+                addr: addr.to_string(),
+                source: PeerSource::MainlineDht,
+            })
+            .collect())
     }
 
     fn load_persisted(path: &Path) -> anyhow::Result<DhtPersistedPeers> {
@@ -219,7 +265,7 @@ impl BootstrapConfig {
 }
 
 #[cfg(feature = "mainline-dht")]
-fn Sha256_of(input: &str) -> [u8; 32] {
+fn sha256_of(input: &str) -> [u8; 32] {
     use sha2::Digest;
     let hash = sha2::Sha256::digest(input.as_bytes());
     let mut result = [0u8; 32];
@@ -284,6 +330,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // With `mainline-dht` the bootstrap reaches the public BitTorrent DHT, so the
+    // "no peers" assertion depends on the machine's internet access.
+    #[cfg_attr(feature = "mainline-dht", ignore = "contacts the public mainline DHT")]
     #[tokio::test]
     async fn test_bootstrap_empty_config() {
         let identity = test_identity();
