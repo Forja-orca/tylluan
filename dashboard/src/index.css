@@ -36,71 +36,86 @@
  
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 222 33% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 33% 11%;
+    --background: 48 33% 97%;          /* Claude Light #faf9f5 */
+    --foreground: 60 3% 8%;            /* Claude Dark #141413 */
+    --card: 0 0% 100%;                 /* Warm White #ffffff */
+    --card-foreground: 60 3% 8%;       /* Claude Dark #141413 */
     --popover: 0 0% 100%;
-    --popover-foreground: 222 33% 11%;
-    --primary: 222 33% 11%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 218 25% 91%;
-    --secondary-foreground: 222 33% 11%;
-    --muted: 218 25% 91%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 218 25% 91%;
-    --accent-foreground: 222 33% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 215 20% 82%;
-    --input: 215 20% 82%;
-    --ring: 222 33% 11%;
+    --popover-foreground: 60 3% 8%;
+    --primary: 15 63% 60%;             /* Claude Orange #d97757 */
+    --primary-foreground: 60 3% 8%;    /* Claude Dark #141413 (5.90:1 PASS AA sobre naranja) */
+    --secondary: 50 21% 89%;           /* Claude Light Gray #e8e6dc */
+    --secondary-foreground: 60 3% 8%;  /* Claude Dark #141413 */
+    --muted: 50 21% 89%;               /* Claude Light Gray #e8e6dc */
+    --muted-foreground: 49 8% 37%;     /* Muted text passing WCAG AA (5.72:1) */
+    --accent: 50 21% 89%;              /* Claude Light Gray #e8e6dc */
+    --accent-foreground: 60 3% 8%;
+    --destructive: 0 60% 44%;          /* Warm Terracotta / Red AA */
+    --destructive-foreground: 48 33% 97%;
+    --border: 49 7% 67%;               /* Claude Mid Gray #b0aea5 */
+    --input: 49 7% 67%;                /* Claude Mid Gray #b0aea5 */
+    --ring: 15 63% 60%;                /* Claude Orange #d97757 */
     --radius: 0.5rem;
 
-    /* Light Mode Tokens (Moonlit Sovereign Theme) */
-    --slate-50: 220 20% 97%;      /* Moonlit Frost #F4F6F9 */
-    --slate-100: 220 14% 94%;     /* Light Surface #EBF0F5 */
-    --slate-200: 218 25% 91%;     /* Ashen Feather #E2E7F0 */
-    --slate-300: 215 20% 82%;     /* Soft Border */
-    --slate-400: 215 16% 60%;     /* Medium Muted */
-    --slate-500: 215 16% 47%;     /* Void Muted #64748B */
-    --slate-600: 215 25% 35%;     /* Text Secondary */
-    --slate-700: 218 30% 25%;     /* Dark Slate */
-    --slate-800: 220 33% 16%;     /* Contrast Surface */
-    --slate-850: 220 33% 12%;     /* Deep Border */
-    --slate-900: 220 33% 11%;     /* Obsidian Text Light */
-    --slate-950: 222 33% 6%;      /* Deep Canvas Light Text */
-    
-    /* Signal Mint (GPU Active Light) */
-    --emerald-400: 161 94% 30%;
-    --emerald-500: 160 84% 39%;
-    --emerald-600: 163 94% 24%;
-    --emerald-700: 164 82% 20%;   /* #047857 (WCAG AA pass 5.2:1) */
-    --emerald-950: 152 81% 96%;   /* Light Mint Background #ECFDF5 */
+    /* Inverted Slate Scale for Dark-First Architecture in Claude Light Theme */
+    /* Surface and Container classes (bg-slate-950, bg-slate-900, bg-slate-850, bg-slate-800) -> Light Warm Surfaces */
+    --slate-950: 48 33% 97%;      /* #faf9f5 Base Light Canvas */
+    --slate-900: 0 0% 100%;       /* #ffffff Crisp Card Surface / Container */
+    --slate-850: 50 21% 94%;      /* Warm Elevated Card / Panel #f4f3ee */
+    --slate-800: 50 21% 89%;      /* #e8e6dc Light Gray Container / Subtle Border */
+    --slate-700: 49 10% 78%;      /* Warm Secondary Border / Divider */
 
-    /* Sovereign Amber (CPU Active Light) */
-    --amber-400: 39 77% 57%;
-    --amber-500: 37 90% 48%;
-    --amber-600: 36 93% 38%;
-    --amber-700: 32 87% 37%;     /* #B45309 (WCAG AA pass 4.8:1) */
-    --amber-950: 45 100% 96%;    /* Light Amber Background #FFFBEB */
+    /* Intermediate Muted & Border classes */
+    --slate-600: 49 7% 67%;       /* #b0aea5 Mid Gray Muted Element / Inactive */
+    --slate-500: 49 8% 37%;       /* Accessible Muted Text (5.72:1 on #faf9f5, 4.81:1 on #e8e6dc) */
+    --slate-400: 50 8% 28%;       /* Secondary Text / Labels (8.30:1 on #faf9f5, 6.99:1 on #e8e6dc) */
+
+    /* Typography and High-Contrast Text classes (text-slate-300, text-slate-200, text-slate-100, text-slate-50) -> Dark Text */
+    --slate-300: 55 5% 20%;       /* Dark Neutral Text (11.67:1 on #faf9f5) */
+    --slate-200: 60 4% 14%;       /* Deep Neutral Text (14.59:1 on #faf9f5) */
+    --slate-100: 60 3% 8%;        /* #141413 Dark Primary Text (17.34:1 on #faf9f5) */
+    --slate-50: 60 3% 5%;         /* Deepest Obsidian Dark Text (20.5:1 on #faf9f5) */
     
-    --red-400: 0 84% 60%;
-    --red-500: 0 84% 60%;
+    /* Claude Green (Tertiary / Success Light) — Base #788c5d */
+    --emerald-300: 86 25% 32%;    /* Accessible Text AA (6.2:1) */
+    --emerald-400: 86 25% 34%;    /* Accessible Text AA (5.71:1 on bg, 4.81:1 on surface) */
+    --emerald-500: 86 20% 46%;    /* #788c5d Fill/Indicator */
+    --emerald-600: 86 20% 34%;    /* Accessible Text AA (5.71:1 on bg, 4.81:1 on surface) */
+    --emerald-700: 86 25% 26%;    /* Accessible Text AAA (7.86:1 on bg, 6.62:1 on surface) */
+    --emerald-950: 86 35% 95%;    /* Light Green Tint #F3F6EF */
+
+    /* Claude Orange (Primary Accent Light) — Base #d97757 */
+    --amber-200: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
+    --amber-300: 15 63% 38%;      /* Accessible Text AA (5.90:1) */
+    --amber-400: 15 63% 40%;      /* #a64626 Accessible Text AA (5.65:1 on bg, 4.76:1 on surface) */
+    --amber-500: 15 63% 60%;      /* #d97757 Primary Accent Fill / Ring / Large Text */
+    --amber-600: 15 63% 40%;      /* #a64626 Accessible Text AA (5.65:1 on bg, 4.76:1 on surface) */
+    --amber-700: 15 63% 30%;      /* #8e3b20 Accessible Text AAA (8.38:1 on bg, 7.05:1 on surface) */
+    --amber-950: 15 80% 96%;      /* Light Orange Tint #FDF5F2 */
     
-    --rose-400: 347 77% 50%;
-    --rose-500: 345 83% 41%;
-    --rose-600: 345 83% 41%;
-    --rose-700: 345 83% 41%;
+    --red-300: 0 60% 36%;
+    --red-400: 0 60% 40%;
+    --red-500: 0 60% 44%;         /* Accessible Destructive AA (5.94:1 on bg, 5.00:1 on surface) */
     
-    --indigo-500: 243 75% 59%;
-    --indigo-600: 243 75% 59%;
+    --rose-300: 350 65% 36%;
+    --rose-400: 350 65% 38%;
+    --rose-500: 350 60% 44%;
+    --rose-600: 350 65% 38%;
+    --rose-700: 350 70% 28%;
     
-    --violet-500: 262 83% 58%;
-    --violet-600: 262 83% 58%;
+    /* Claude Blue (Secondary Accent Light) — Base #6a9bcc */
+    --blue-300: 210 50% 36%;
+    --blue-400: 210 49% 41%;      /* Accessible Text AA (5.46:1 on bg, 4.60:1 on surface) */
+    --blue-500: 210 49% 61%;      /* #6a9bcc Secondary Accent Fill */
+    --blue-600: 210 49% 41%;      /* Accessible Text AA (5.46:1 on bg, 4.60:1 on surface) */
+    --blue-700: 210 55% 30%;      /* Accessible Text AAA (8.42:1 on bg, 7.09:1 on surface) */
+
+    --indigo-500: 210 49% 41%;    /* Mapped to accessible Claude Blue AA */
+    --indigo-600: 210 55% 30%;    /* Mapped to accessible Claude Blue AAA */
     
-    --blue-400: 217 91% 60%;
-    --blue-500: 217 91% 60%;
+    --violet-400: 260 40% 34%;    /* Accessible Text AA (6.5:1) */
+    --violet-500: 260 35% 44%;
+    --violet-600: 260 40% 34%;
   }
 
   .dark {
@@ -139,6 +154,7 @@
     --slate-950: 222 33% 6%;      /* Obsidian Nocturne Canvas #0A0D14 */
 
     /* Signal Mint (GPU Active Dark) */
+    --emerald-300: 156 72% 67%;
     --emerald-400: 160 64% 52%;   /* #34D399 (WCAG AAA pass 8.05:1) */
     --emerald-500: 160 84% 39%;   /* #10B981 */
     --emerald-600: 161 94% 30%;   /* #059669 */
@@ -146,15 +162,19 @@
     --emerald-950: 158 46% 11%;   /* Dark Mint Tint #0F291E */
 
     /* Sovereign Amber (CPU Active Dark) */
+    --amber-200: 48 97% 77%;
+    --amber-300: 46 97% 65%;
     --amber-400: 37 90% 61%;     /* #F5B041 (WCAG AAA pass 8.04:1) */
     --amber-500: 39 77% 57%;     /* #E5A93C Sovereign Amber */
     --amber-600: 36 80% 40%;
     --amber-700: 32 65% 32%;
     --amber-950: 36 60% 10%;
     
+    --red-300: 0 94% 82%;
     --red-400: 0 91% 71%;
     --red-500: 0 84% 60%;
     
+    --rose-300: 351 95% 71%;
     --rose-400: 351 95% 71%;
     --rose-500: 350 89% 60%;
     --rose-600: 347 77% 50%;
@@ -163,11 +183,15 @@
     --indigo-500: 239 84% 67%;
     --indigo-600: 243 75% 59%;
     
+    --violet-400: 255 92% 76%;
     --violet-500: 258 90% 66%;
     --violet-600: 262 83% 58%;
     
+    --blue-300: 212 96% 78%;
     --blue-400: 213 94% 68%;
     --blue-500: 217 91% 60%;
+    --blue-600: 221 83% 53%;
+    --blue-700: 224 76% 48%;
   }
 }
  

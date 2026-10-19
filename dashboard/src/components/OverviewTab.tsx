@@ -81,15 +81,15 @@ export function OverviewTab({
   guildsUtilization, 
   memoryRetention, 
   sloSummary, 
-  guilds, 
-  approvals, 
+  guilds = [], 
+  approvals = [], 
   memoryStats,
   healthDetailed,
   sysStatus,
-  events,
+  events = [],
   notify,
   refreshData,
-  online
+  online = true
 }: OverviewTabProps) {
   const [_refreshTrigger, setRefreshTrigger] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<{
@@ -416,11 +416,11 @@ export function OverviewTab({
           <span className="text-[11px] font-semibold text-slate-300">Silva Nodes</span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <MiniSparkline data={cpuHistory} color="#60a5fa" />
+          <MiniSparkline data={cpuHistory} color="hsl(var(--blue-500))" />
           <span className="text-[11px] font-semibold text-slate-300">CPU</span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900">
-          <MiniSparkline data={memHistory} color="#34d399" />
+          <MiniSparkline data={memHistory} color="hsl(var(--emerald-500))" />
           <span className="text-[11px] font-semibold text-slate-300">RAM</span>
         </div>
       </div>
@@ -525,13 +525,14 @@ export function OverviewTab({
             { label: 'Pheromone Activity', value: interoceptionData.active_pheromones / 20, good: (v: number) => v < 0.5, warn: (v: number) => v < 0.9 },
           ].map(({ label, value, good, warn, invert }) => {
             const pct = Math.min(100, value * 100);
-            const color = good(value) ? '#34d399' : warn(value) ? '#fbbf24' : '#ef4444';
+            const colorClass = good(value) ? 'text-emerald-600 dark:text-emerald-400' : warn(value) ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const bgClass = good(value) ? 'bg-emerald-500' : warn(value) ? 'bg-amber-500' : 'bg-red-500';
             return (
               <div key={label} className="p-3 rounded-xl bg-slate-900/40">
                 <div className="text-[11px] font-medium text-slate-400 mb-1">{label}</div>
-                <div className="text-lg font-black font-mono" style={{ color }}>{pct.toFixed(0)}%</div>
+                <div className={cn("text-lg font-black font-mono", colorClass)}>{pct.toFixed(0)}%</div>
                 <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${invert ? 100 - pct : pct}%`, backgroundColor: color }} />
+                  <div className={cn("h-full rounded-full transition-all duration-1000", bgClass)} style={{ width: `${invert ? 100 - pct : pct}%` }} />
                 </div>
               </div>
             );
@@ -630,7 +631,7 @@ export function OverviewTab({
               </div>
               );
             })}
-            {events.length === 0 && !silvaDelta && !blackboard?.pending.length && (
+            {events.length === 0 && !silvaDelta && !blackboard?.pending?.length && (
               <div className="p-12 text-center flex flex-col items-center justify-center gap-2">
                 <Zap className="w-6 h-6 text-slate-800 animate-pulse" />
                 <span className="text-[11px] text-slate-400">Silent Mode — Awaiting Signal</span>

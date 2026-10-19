@@ -246,7 +246,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
       </div>
 
       {error && (
-        <div className="p-4 bg-[#FF2E93]/10 border border-[#FF2E93]/30 text-[#FF2E93] rounded-xl text-xs font-mono">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-mono">
           ⚠️ {error}
         </div>
       )}
@@ -274,8 +274,8 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
                 className={cn(
                   'px-2.5 py-1 text-xs font-bold rounded-lg border',
                   planResult.would_execute.destructive
-                    ? 'bg-[#FF2E93]/10 text-[#FF2E93] border-[#FF2E93]/40'
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/40'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                 )}
               >
                 {planResult.would_execute.destructive ? '⚠️ DESTRUCTIVE ACTION' : 'READ-ONLY / SAFE'}
@@ -313,7 +313,7 @@ export default function PlanModePanel({ bridge, notify }: PlanModePanelProps) {
               className={cn(
                 'flex items-center gap-2 px-6 py-2.5 font-mono text-xs font-bold rounded-xl transition-all disabled:opacity-50 shadow-lg',
                 planResult.would_execute.destructive
-                  ? 'bg-[#FF2E93] hover:bg-[#FF2E93]/90 text-slate-50 shadow-[#FF2E93]/20'
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-900/20'
                   : 'bg-amber-500 hover:bg-amber-500/90 text-slate-950 shadow-amber-500/20'
               )}
             >
