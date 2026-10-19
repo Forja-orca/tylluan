@@ -6,7 +6,7 @@
 #   docker run -d --name tylluan -p 3030:3030 -v ~/.tylluan:/data tylluan:latest
 
 # ── Stage 1: Builder ──────────────────────────────────────────────────────────
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.99.1-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config libssl-dev libsqlite3-dev \
