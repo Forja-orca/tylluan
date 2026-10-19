@@ -1633,3 +1633,226 @@ mod embedding_fingerprint_index_tests {
         assert!(p95 < 50_000, "bounded candidate lookup should stay sub-50ms (got {p95}us)");
     }
 }
+
+/// T1277-F (cola D-1): escala del filtro de huella por encima de HNSW_THRESHOLD.
+///
+/// Corpus sintético de 12.500 nodos en una base en memoria (ningún dato de
+/// producción): 20 % con huella de motor B, 5 % con dimensión distinta (16 en
+/// vez de 12), disjuntos por construcción (`i % 5 == 0` y `i % 20 == 2` no
+/// pueden solaparse). Construye el HNSW REAL por la ruta de producción
+/// (`rebuild_hnsw_if_needed`, que exige >= 12.000 filas) y comprueba tres cosas
+/// con el flag en false y en true:
+///   1. ranking con flag=false IDÉNTICO al de antes de la puerta (sin huella
+///      declarada), top-20 y en el mismo orden, en 50 consultas;
+///   2. contadores observados == composición EXACTA de la ventana de candidatos
+///      (el top-`limit*3` que devuelve el propio índice), consulta a consulta;
+///   3. con flag=true, `fp_excluded` == (modelo ajeno + dimensión ajena) de esa
+///      misma consulta, y el resultado es la ventana sin los ajenos, truncada.
+///
+/// Además mide latencia p50/p95 de `search_vector` con la puerta inerte y activa.
+///
+/// Es `#[ignore]`: tarda minutos y no debe estar en la suite por defecto.
+/// Reproducir con:
+///   cargo test -p tylluan-kernel --lib t1277f_scale -- --ignored --nocapture
+#[cfg(test)]
+mod embedding_fingerprint_scale_tests {
+    use super::super::SilvaDB;
+
+    const N: usize = 12_500;
+    const DIM: usize = 12;
+    const DIM_FOREIGN: usize = 16;
+    const QUERIES: usize = 50;
+    const TOP: usize = 20;
+
+    fn node_index(id: &str) -> usize {
+        id[1..].parse().unwrap_or(usize::MAX)
+    }
+    /// 20 % del corpus: `i % 5 == 0`.
+    fn is_engine_b(id: &str) -> bool {
+        node_index(id).is_multiple_of(5)
+    }
+    /// 5 % del corpus: `i % 20 == 2` (nunca divisible por 5, así que disjunto).
+    fn is_foreign_dim(id: &str) -> bool {
+        node_index(id) % 20 == 2
+    }
+
+    fn vec_of(i: usize, dim: usize) -> Vec<f32> {
+        (0..dim)
+            .map(|j| (((i * 31 + j * 7) % 101) as f32) / 101.0 + 0.01)
+            .collect()
+    }
+
+    /// Vector de un nodo con dimensión ajena: las mismas `DIM` componentes que
+    /// su variante válida, rellenadas con ceros hasta `DIM_FOREIGN`. El relleno
+    /// en ceros no altera ni la norma ni el producto escalar, así que el nodo
+    /// compite en igualdad dentro del HNSW. Sin ese relleno la métrica coseno
+    /// (`hnsw.rs`: producto sobre el mínimo de longitudes, norma sobre la
+    /// longitud completa) penaliza sistemáticamente a los nodos de 16 dims y
+    /// jamás aparecerían como candidatos — que es exactamente lo que hay que
+    /// poder medir aquí.
+    fn vec_of_foreign(i: usize) -> Vec<f32> {
+        let mut v = vec_of(i, DIM);
+        v.resize(DIM_FOREIGN, 0.0);
+        v
+    }
+
+    fn ids(results: &[(super::super::GraphNode, f32)]) -> Vec<String> {
+        results.iter().map(|(n, _)| n.id.clone()).collect()
+    }
+
+    fn pct(sorted: &[u64], p: usize) -> u64 {
+        sorted[(sorted.len() * p / 100).min(sorted.len() - 1)]
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "T1277-F: corpus de 12.5k nodos con HNSW real; minutos. Correr con --ignored"]
+    async fn t1277f_scale_ranking_and_counters() {
+        let db = SilvaDB::in_memory().await.unwrap();
+
+        // ── Corpus ────────────────────────────────────────────────────────
+        let t_corpus = std::time::Instant::now();
+        for i in 0..N {
+            let id = format!("n{i:05}");
+            db.upsert_node(&id, "note", "escala del filtro de huella", "{}")
+                .await
+                .unwrap();
+            if is_engine_b(&id) {
+                db.save_embedding(&id, &vec_of(i, DIM), "engB", Some("hashB"))
+                    .await
+                    .unwrap();
+            } else if is_foreign_dim(&id) {
+                db.save_embedding(&id, &vec_of_foreign(i), "engA", Some("hashA"))
+                    .await
+                    .unwrap();
+            } else {
+                db.save_embedding(&id, &vec_of(i, DIM), "engA", Some("hashA"))
+                    .await
+                    .unwrap();
+            }
+        }
+        let corpus_secs = t_corpus.elapsed().as_secs_f32();
+
+        // ── HNSW real, por la ruta de producción ──────────────────────────
+        let t_hnsw = std::time::Instant::now();
+        db.rebuild_hnsw_if_needed().await.unwrap();
+        let hnsw_secs = t_hnsw.elapsed().as_secs_f32();
+        assert!(
+            db.hnsw.read().await.is_some(),
+            "con {N} filas (> HNSW_THRESHOLD) rebuild_hnsw_if_needed debe construir el índice"
+        );
+
+        // ── Fase 1: sin huella declarada (comportamiento pre-T1277-D) ──────
+        assert!(db.expected_embedding_snapshot().is_none());
+        let mut base_ids: Vec<Vec<String>> = Vec::with_capacity(QUERIES);
+        let mut base_us: Vec<u64> = Vec::with_capacity(QUERIES);
+        for q in 0..QUERIES {
+            let query = vec_of(q, DIM);
+            let t0 = std::time::Instant::now();
+            let res = db.search_vector(&query, TOP).await.unwrap();
+            base_us.push(t0.elapsed().as_micros() as u64);
+            let got = ids(&res);
+            assert!(!got.is_empty(), "query {q}: el HNSW debe devolver candidatos");
+            base_ids.push(got);
+        }
+        assert_eq!(
+            db.fingerprint_observation(),
+            (0, 0, 0),
+            "sin huella declarada la puerta es inerte"
+        );
+
+        // ── Fase 2: huella declarada, flag false (observación) ───────────
+        db.set_expected_embedding("engA".to_string(), Some("hashA".to_string()));
+        let mut gate_us: Vec<u64> = Vec::with_capacity(QUERIES);
+        let mut identical = 0usize;
+        let mut counters_exact = 0usize;
+        let mut excluded_exact = 0usize;
+        let (mut total_model, mut total_dim, mut total_window) = (0u64, 0u64, 0u64);
+
+        for (q, base) in base_ids.iter().enumerate() {
+            let query = vec_of(q, DIM);
+
+            // Ventana real de candidatos: el mismo top-`TOP*3` que usa la ruta
+            // HNSW (llamada determinista al mismo índice).
+            let win: Vec<String> = {
+                let guard = db.hnsw.read().await;
+                let state = guard.as_ref().expect("HNSW construido arriba");
+                crate::memory::silva::hnsw::search_hnsw(state, &query, TOP * 3)
+                    .into_iter()
+                    .map(|(id, _)| id)
+                    .collect()
+            };
+            assert!(win.len() >= TOP, "ventana demasiado corta para juzgar: {}", win.len());
+            let exp_model = win.iter().filter(|id| is_engine_b(id)).count() as u64;
+            let exp_dim = win.iter().filter(|id| is_foreign_dim(id)).count() as u64;
+
+            let before = db.fingerprint_observation();
+            let t0 = std::time::Instant::now();
+            let res = db.search_vector(&query, TOP).await.unwrap();
+            gate_us.push(t0.elapsed().as_micros() as u64);
+            let after = db.fingerprint_observation();
+            let got = ids(&res);
+
+            // (1) ranking idéntico al de antes de la puerta, mismo orden.
+            if got == *base {
+                identical += 1;
+            }
+            // (2) contadores == composición exacta de la ventana.
+            if after.0 - before.0 == exp_model && after.1 - before.1 == exp_dim {
+                counters_exact += 1;
+            }
+            total_model += after.0 - before.0;
+            total_dim += after.1 - before.1;
+            total_window += win.len() as u64;
+            assert_eq!(after.2, before.2, "flag false no debe excluir nada");
+
+            // (3) flag true: excluye exactamente los ajenos y devuelve la
+            // ventana sin ellos truncada a TOP.
+            db.set_fingerprint_filter_enabled(true);
+            let before_t = db.fingerprint_observation();
+            let filtered = ids(&db.search_vector(&query, TOP).await.unwrap());
+            let after_t = db.fingerprint_observation();
+            db.set_fingerprint_filter_enabled(false);
+
+            let expected_filtered: Vec<String> = win
+                .iter()
+                .filter(|id| !is_engine_b(id) && !is_foreign_dim(id))
+                .take(TOP)
+                .cloned()
+                .collect();
+            let dropped_foreign = (exp_model + exp_dim) as u64;
+            if after_t.2 - before_t.2 == dropped_foreign && filtered == expected_filtered {
+                excluded_exact += 1;
+            }
+        }
+
+        base_us.sort_unstable();
+        gate_us.sort_unstable();
+        let (b50, b95) = (pct(&base_us, 50), pct(&base_us, 95));
+        let (g50, g95) = (pct(&gate_us, 50), pct(&gate_us, 95));
+
+        let mix_b = (0..N).filter(|i| i % 5 == 0).count();
+        let mix_dim = (0..N).filter(|i| i % 20 == 2).count();
+        println!(
+            "T1277-F escala: nodes={N} dim={DIM} (ajenos {DIM_FOREIGN}) window={} queries={QUERIES} top={TOP}\n  \
+             corpus: motor B={mix_b} ({:.1}%) · dim ajena={mix_dim} ({:.1}%) · build {corpus_secs:.1}s + HNSW {hnsw_secs:.1}s\n  \
+             ranking flag=false idéntico a pre-puerta: {identical}/{QUERIES}\n  \
+             contadores == ventana exacta: {counters_exact}/{QUERIES} (modelo {total_model} esperado, dim {total_dim} — sobre {total_window} candidatos juzgados)\n  \
+             flag=true excluded == modelo+dim y resultado = ventana filtrada: {excluded_exact}/{QUERIES}\n  \
+             latencia search_vector p50/p95: inerte {b50}us/{b95}us · puerta activa {g50}us/{g95}us (delta p50 {}us)",
+            TOP * 3,
+            100.0 * mix_b as f32 / N as f32,
+            100.0 * mix_dim as f32 / N as f32,
+            g50 as i64 - b50 as i64
+        );
+
+        assert_eq!(identical, QUERIES, "flag=false no debe alterar el ranking ni el orden");
+        assert_eq!(
+            counters_exact, QUERIES,
+            "los contadores deben clavar la composición de la ventana, consulta a consulta"
+        );
+        assert_eq!(
+            excluded_exact, QUERIES,
+            "con flag=true se excluye exactamente lo ajeno: (modelo + dimensión)"
+        );
+    }
+}
