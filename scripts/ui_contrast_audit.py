@@ -7,7 +7,7 @@ USO DE scripts/ui_contrast_audit.py:
 3. Parámetros opcionales:
    --vite-port PORT    Puerto del dev server Vite (por defecto: 5188 o auto-spawn)
    --mock-port PORT    Puerto del servidor mock (por defecto: 48123)
-   --output-dir DIR    Directorio para guardar capturas (por defecto: visual_reviews/batch_claude)
+   --output-dir DIR    Directorio para guardar capturas (por defecto: <tmp>/tylluan_ui_audit, fuera del repo)
 4. El script inicia automáticamente el mock server local con 12 mensajes reales de Coloquio,
    monta el arnés efímero de componentes, evalúa el DOM renderizado en 14 vistas y limpia
    todo fichero temporal al salir (cero residuos en git status).
@@ -21,6 +21,7 @@ import json
 import socket
 import threading
 import subprocess
+import tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -46,7 +47,7 @@ MOCK_MESSAGES = {
             "msg_id": "msg-1340",
             "channel_id": "general",
             "author_id": "jose",
-            "role": "user",
+            "role": "human",
             "content": "Equipo: aprobada la migración al tema corporativo Claude en el dashboard. Procedan según el plan acordado manteniendo disciplina estricta.",
             "turn": 1340,
             "created_at": NOW - 3600,
@@ -96,7 +97,7 @@ MOCK_MESSAGES = {
             "msg_id": "msg-1345",
             "channel_id": "general",
             "author_id": "jose",
-            "role": "user",
+            "role": "human",
             "content": "¿Cómo se comporta el contraste en pantallas móviles compactas a 390px de ancho?",
             "turn": 1345,
             "created_at": NOW - 2100,
@@ -146,7 +147,7 @@ MOCK_MESSAGES = {
             "msg_id": "msg-1350",
             "channel_id": "general",
             "author_id": "jose",
-            "role": "user",
+            "role": "human",
             "content": "Excelente trabajo de coordinación. Procedan con la entrega formal del lote V y la integración del script de auditoría.",
             "turn": 1350,
             "created_at": NOW - 600,
@@ -327,11 +328,16 @@ import './index.css';
 import { NexusProvider, useNexus } from './hooks/useNexus';
 import { OverviewTab } from './components/OverviewTab';
 import { ColoquioTab } from './components/ColoquioTab';
+import { ColoquioChannel, ColoquioMessage } from './components/coloquio-types';
+import { NexusBridge } from './lib/nexus-bridge';
 import { SystemTab } from './components/SystemTab';
 import { DecisionServicePanel } from './components/DecisionServicePanel';
 import { ContradictionsPanel } from './components/ContradictionsPanel';
 import AuditTrailPanel from './components/AuditTrailPanel';
 import { FederationTab } from './components/FederationTab';
+
+const MOCK_CHANNELS_DATA: ColoquioChannel[] = __MOCK_CHANNELS_JSON__;
+const MOCK_MESSAGES_DATA: ColoquioMessage[] = __MOCK_MESSAGES_JSON__;
 
 const params = new URLSearchParams(window.location.search);
 const panel = params.get('panel') || 'overview';
@@ -469,11 +475,13 @@ function runContrastAudit() {
     panel,
     theme,
     viewport: vp,
+    bodyInnerText: document.body.innerText.slice(0, 1000),
     totalNodes,
     passedNodes,
     passPercentage,
     below3Count,
-    worst10
+    worst10,
+    failures: details.filter(d => !d.passes)
   };
 
   try {
@@ -500,6 +508,10 @@ function TestContainer() {
   const { bridge, online, goldenSignals, guildsUtilization, memoryRetention, sloSummary, guilds, approvals, memoryStats, healthDetailed, sysStatus, events, refreshData } = useNexus();
   const notify = (_msg: string, _type?: 'info' | 'error') => {};
 
+  const customBridge = React.useMemo(() => {
+    return new NexusBridge(() => {}, () => {}, `http://127.0.0.1:${port}`);
+  }, []);
+
   React.useLayoutEffect(() => {
     try {
       runContrastAudit();
@@ -520,7 +532,7 @@ function TestContainer() {
       case 'overview':
         return <OverviewTab bridge={bridge} online={online} goldenSignals={goldenSignals} guildsUtilization={guildsUtilization} memoryRetention={memoryRetention} sloSummary={sloSummary} guilds={guilds} approvals={approvals} memoryStats={memoryStats} healthDetailed={healthDetailed} sysStatus={sysStatus} events={events} notify={notify} refreshData={refreshData} />;
       case 'coloquio':
-        return <ColoquioTab bridge={bridge} />;
+        return <ColoquioTab bridge={customBridge} initialChannels={MOCK_CHANNELS_DATA} initialMessages={MOCK_MESSAGES_DATA} />;
       case 'system':
         return <SystemTab bridge={bridge} events={events} notify={notify} onClearLogs={() => {}} />;
       case 'decision':
@@ -574,7 +586,7 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
     dashboard_dir = os.path.join(repo_root, "dashboard")
     
     if output_dir is None:
-        output_dir = os.path.join(repo_root, "visual_reviews", "batch_claude")
+        output_dir = os.path.join(tempfile.gettempdir(), "tylluan_ui_audit")
     os.makedirs(output_dir, exist_ok=True)
 
     harness_html_path = os.path.join(dashboard_dir, "audit-test.html")
@@ -587,8 +599,15 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
     try:
         with open(harness_html_path, "w", encoding="utf-8") as f:
             f.write(HARNESS_HTML)
+        tsx_content = HARNESS_TSX.replace(
+            "__MOCK_CHANNELS_JSON__",
+            json.dumps(MOCK_CHANNELS["channels"])
+        ).replace(
+            "__MOCK_MESSAGES_JSON__",
+            json.dumps(MOCK_MESSAGES["messages"])
+        )
         with open(harness_tsx_path, "w", encoding="utf-8") as f:
-            f.write(HARNESS_TSX)
+            f.write(tsx_content)
 
         mock_srv = start_mock_server(mock_port)
 
@@ -599,8 +618,9 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
 
         if not vite_running:
             print(f"[Audit] Iniciando Vite dev server en 127.0.0.1:{vite_port}...")
+            npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
             vite_proc = subprocess.Popen(
-                ["npx", "vite", "--port", str(vite_port), "--host", "127.0.0.1"],
+                [npx_cmd, "vite", "--port", str(vite_port), "--host", "127.0.0.1"],
                 cwd=dashboard_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
@@ -636,7 +656,7 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
             for w, h, vp in viewports:
                 png_name = f"{p_id}_light_{vp}.png"
                 png_path = os.path.join(output_dir, png_name)
-                url = f"http://127.0.0.1:{vite_port}/audit-test.html?panel={p_id}&theme=light&port={mock_port}&vp={vp}"
+                url = f"http://127.0.0.1:{vite_port}/audit-test.html?panel={p_id}&theme=light&port={mock_port}&vp={vp}&channel=general"
 
                 cmd = [
                     chrome_bin,
@@ -663,8 +683,20 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
                 if not summary:
                     summary = DOM_REPORTS.get(key)
                 if not summary:
-                    time.sleep(0.3)
+                    time.sleep(1.0)
                     summary = DOM_REPORTS.get(key)
+                if not summary:
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=35)
+                    dom_html = res.stdout or ""
+                    if 'id="rendered-dom-audit"' in dom_html:
+                        try:
+                            part = dom_html.split('id="rendered-dom-audit" type="application/json">')[1]
+                            json_str = part.split('</script>')[0]
+                            summary = json.loads(json_str)
+                        except Exception:
+                            pass
+                    if not summary:
+                        summary = DOM_REPORTS.get(key)
 
                 if summary:
                     all_summaries.append(summary)
@@ -674,6 +706,15 @@ def run_audit(vite_port=5188, mock_port=48123, output_dir=None):
                     all_details.extend(summary.get("worst10", []))
                     status_str = "PASS AA" if summary["below3Count"] == 0 and summary["passPercentage"] >= 97.0 else "FAIL"
                     print(f"[{p_name:<16} {vp:>6}px] -> PNG: {os.path.getsize(png_path):>7} B | Nodos: {summary['totalNodes']:>4} | Pasan: {summary['passedNodes']:>4} ({summary['passPercentage']:>5.1f}%) | <3.0: {summary['below3Count']} | {status_str}")
+
+                    if p_id == "coloquio":
+                        print(f"\n--- COLOQUIO RENDERED PROOF ({vp}px) ---")
+                        print(f"Ruta de la captura: {png_path}")
+                        print(f"Nº de nodos de texto evaluados: {summary['totalNodes']}")
+                        print("document.body.innerText (primeros 600 caracteres):")
+                        print("-" * 60)
+                        print(summary.get("bodyInnerText", "")[:600])
+                        print("-" * 60 + "\\n")
                 else:
                     png_size = os.path.getsize(png_path) if os.path.exists(png_path) else 0
                     print(f"[{p_name:<16} {vp:>6}px] -> PNG: {png_size:>7} B | Await report fallback")

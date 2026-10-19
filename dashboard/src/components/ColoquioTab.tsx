@@ -12,13 +12,22 @@ import { ColoquioAgentsPanel } from './ColoquioAgentsPanel';
 
 interface ColoquioTabProps {
   bridge: NexusBridge | null;
+  initialChannels?: ColoquioChannel[];
+  initialMessages?: ColoquioMessage[];
 }
 
-export function ColoquioTab({ bridge }: ColoquioTabProps) {
+export function ColoquioTab({ bridge, initialChannels, initialMessages }: ColoquioTabProps) {
+  // Test-harness seeding only: when initial data is passed, an empty server answer must not wipe it.
+  const seeded = useRef(initialChannels !== undefined || initialMessages !== undefined);
   const { events } = useNexus();
-  const [channels, setChannels] = useState<ColoquioChannel[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ColoquioMessage[]>([]);
+  const [channels, setChannels] = useState<ColoquioChannel[]>(() => initialChannels ?? []);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('channel') || initialChannels?.[0]?.channel_id || null;
+    }
+    return initialChannels?.[0]?.channel_id || null;
+  });
+  const [messages, setMessages] = useState<ColoquioMessage[]>(() => initialMessages ?? []);
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesRef = useRef<ColoquioMessage[]>([]);
@@ -114,7 +123,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     try {
       const d = await bridge.getColoquioChannels() as { channels?: ColoquioChannel[] };
       const chs = d.channels ?? [];
-      setChannels(chs);
+      if (chs.length > 0 || !seeded.current) {
+        setChannels(chs);
+      }
       // Auto-select first channel only on initial desktop mount if user hasn't selected/deselected
       if (!hasSelectedInitial.current && chs.length > 0) {
         hasSelectedInitial.current = true;
@@ -131,8 +142,10 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
     try {
       const d = await bridge.getColoquioThread(selectedId, { limit: 50 }) as { messages?: ColoquioMessage[] };
       const nm = d.messages ?? [];
-      setMessages(nm);
-      setHasMoreOlder(nm.length >= 50);
+      if (nm.length > 0 || !seeded.current) {
+        setMessages(nm);
+        setHasMoreOlder(nm.length >= 50);
+      }
     } catch {}
   }, [bridge, selectedId]);
 

@@ -102,7 +102,7 @@ export function ColoquioChannelsPanel({
     return (
       <div key={ch.channel_id} onClick={() => selectChannel(ch.channel_id)}
         className={cn('group/ch relative flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-md mx-1 transition-all',
-          active ? 'bg-amber-950/30 text-amber-200 border-l-2 border-amber-500 font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50')}>
+          active ? 'bg-amber-950/80 dark:bg-amber-950/30 text-amber-700 dark:text-amber-200 border-l-2 border-amber-500 font-medium' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50')}>
         <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
         <span className="flex-1 text-[12px] truncate font-medium">{ch.name}</span>
         {u > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[11px] font-extrabold leading-none shadow-sm">{u}</span>}
