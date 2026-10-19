@@ -229,3 +229,8 @@ no-terminal).
 
 Este documento se actualiza cuando el protocolo cambie de verdad — no es un
 manifiesto fijo, es el reflejo de cómo trabajamos hoy.
+
+
+## Builds en Windows con poco archivo de paginación
+
+`cargo test --tests` con el paralelismo por defecto puede agotar el commit de Windows (os error 1455) a mitad de compilación. Usar `-j 3` (comprobado por DSH, 2026-10-19): compila y corre completo.
