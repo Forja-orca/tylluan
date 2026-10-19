@@ -203,10 +203,12 @@ describe('FederationTab — W1 Mesh & Federation Read-Only Wiring', () => {
     });
     expect(capturedMeshSignal?.aborted).toBe(false);
 
-    // Click Cancel button for mesh query
-    const cancelBtn = screen.getByRole('button', { name: /^Cancel$/i });
-    expect(cancelBtn).toBeDefined();
-    fireEvent.click(cancelBtn);
+    // Click Cancel for the mesh query. Mesh and nodes can both be pending at
+    // the same time on a slow runner, so there may be two Cancel buttons:
+    // click them all (the test only asserts the mesh signal and its message).
+    const cancelBtns = await screen.findAllByRole('button', { name: /^Cancel$/i });
+    expect(cancelBtns.length).toBeGreaterThan(0);
+    cancelBtns.forEach((btn) => fireEvent.click(btn));
 
     expect(capturedMeshSignal?.aborted).toBe(true);
     await waitFor(() => {
