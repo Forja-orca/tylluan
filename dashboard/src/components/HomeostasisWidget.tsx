@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Activity, ShieldAlert, Cpu, Database, Heart, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, Cpu, Database, Heart } from 'lucide-react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -83,7 +83,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           </div>
           <div>
             <h3 className="text-lg font-black text-slate-100 tracking-tight">TylluanNexus o3 Cortex</h3>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-sm mt-1">
+            <p className="text-xs text-slate-400 leading-relaxed max-w-sm mt-1">
               Unified local hub integrity indicator. Monitors guilds, databases, and errors in real-time.
             </p>
           </div>
@@ -125,7 +125,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
             {/* Score inside circular gauge */}
             <div className="absolute flex flex-col items-center justify-center">
               <span className="text-xl font-black font-mono text-slate-100">{loading ? "—" : score}</span>
-              <span className="text-[7px] text-slate-600 font-bold uppercase tracking-widest">Score</span>
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Score</span>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           <div className="text-xs font-bold font-mono text-slate-200">
             {loading ? "—" : `${health?.components?.guilds?.active ?? 0} / ${health?.components?.guilds?.total ?? 0}`}
           </div>
-          <div className="text-[7px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">Active Guilds</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">Active Guilds</div>
         </div>
         {/* Metric 2: Memory (SilvaDB) */}
         <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl p-2.5 text-center">
@@ -147,7 +147,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           <div className="text-xs font-bold font-mono text-slate-200 truncate">
             {loading ? "—" : `${health?.components?.silva?.nodes ?? 0} Nodes`}
           </div>
-          <div className="text-[7px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">SilvaDB Nodes</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">SilvaDB Nodes</div>
         </div>
         {/* Metric 3: System Status */}
         <div className="bg-slate-950/40 border border-slate-800/40 rounded-xl p-2.5 text-center">
@@ -155,7 +155,7 @@ export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
           <div className={cn("text-xs font-bold font-mono truncate", statusColor)}>
             {loading ? "—" : health?.status?.toUpperCase() ?? "UNKNOWN"}
           </div>
-          <div className="text-[7px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">Cortex Status</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">Cortex Status</div>
         </div>
       </div>
     </div>

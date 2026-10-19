@@ -1,4 +1,4 @@
-import { MessageSquare, Sparkles, Users, Check } from 'lucide-react';
+import { MessageSquare, Sparkles, Users } from 'lucide-react';
 import { useMemo, useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { NexusBridge } from '../lib/nexus-bridge';
 import { cn } from '../lib/utils';
@@ -407,7 +407,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         <div className="flex items-center gap-2.5">
           <MessageSquare className="w-4 h-4 text-indigo-400" />
           <span className="text-sm font-semibold text-slate-100">Coloquio</span>
-          <span className="text-[11px] text-slate-500 hidden sm:block">frontier research group chat</span>
+          <span className="text-[11px] text-slate-400 hidden sm:block">frontier research group chat</span>
           {totalUnread > 0 && (
             <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-semibold">
               {totalUnread} unread
@@ -416,17 +416,36 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
         </div>
         <div className="flex items-center gap-1.5">
           {totalUnread > 0 && (
-            <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-all cursor-pointer">
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="flex items-center gap-1 text-[11px] text-slate-300 hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+            >
               Mark all read
             </button>
           )}
-          <button onClick={() => setShowCanvas(v => !v)}
-            className={cn('p-1.5 rounded-lg transition-all mr-1.5 cursor-pointer', showCanvas ? 'bg-violet-500/10 text-violet-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300')}
-            title="Blackboard Canvas">
+          <button
+            type="button"
+            onClick={() => setShowCanvas(v => !v)}
+            aria-label={showCanvas ? "Hide Blackboard Canvas" : "Show Blackboard Canvas"}
+            title="Blackboard Canvas"
+            className={cn(
+              'p-1.5 rounded-lg transition-all mr-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:outline-none',
+              showCanvas ? 'bg-violet-500/10 text-violet-400' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            )}
+          >
             <Sparkles className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => setShowAgentPanel(v => !v)}
-            className={cn('p-1.5 rounded-lg transition-all cursor-pointer', showAgentPanel ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300')}>
+          <button
+            type="button"
+            onClick={() => setShowAgentPanel(v => !v)}
+            aria-label={showAgentPanel ? "Hide Agent Presence Panel" : "Show Agent Presence Panel"}
+            title="Agent Panel"
+            className={cn(
+              'p-1.5 rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none',
+              showAgentPanel ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            )}
+          >
             <Users className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -472,9 +491,9 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
             }
           >
             {!selectedId ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-600">
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
                 <MessageSquare className="w-10 h-10 opacity-20" />
-                <p className="text-[13px]">Selecciona un canal</p>
+                <p className="text-[13px] font-medium text-slate-300">Select a channel</p>
               </div>
             ) : (
               <ColoquioMessagesPanel
@@ -526,7 +545,7 @@ export function ColoquioTab({ bridge }: ColoquioTabProps) {
           {/* Canvas View */}
           {showCanvas && selectedId && (
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-500 text-xs">Loading canvas...</div>}>
+              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400 text-xs">Loading canvas...</div>}>
                 <ColoquioCanvasWorkspace channelId={selectedId} messages={messages} />
               </Suspense>
             </div>

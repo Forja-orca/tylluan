@@ -84,8 +84,13 @@ export function ColoquioChannelsPanel({
         <Hash className="w-3.5 h-3.5 shrink-0 opacity-60" />
         <span className="flex-1 text-[12px] truncate font-medium">{ch.name}</span>
         {u > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[11px] font-extrabold leading-none shadow-sm">{u}</span>}
-        <button onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
-          className="opacity-0 group/ch:opacity-100 p-0.5 text-slate-600 hover:text-rose-400 transition-all rounded cursor-pointer">
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setDeleteTarget(ch); }}
+          aria-label={`Delete channel ${ch.name}`}
+          title="Delete channel"
+          className="opacity-0 group-hover/ch:opacity-100 p-0.5 text-slate-400 hover:text-rose-400 transition-all rounded cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none focus:opacity-100"
+        >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -95,39 +100,65 @@ export function ColoquioChannelsPanel({
   return (
     <div className="w-full md:w-52 shrink-0 border-r border-slate-700/60 flex flex-col bg-slate-900/50 overflow-hidden h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80">
-        <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-        <input className="flex-1 bg-transparent text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none"
-          placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+        <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <input
+          className="flex-1 bg-transparent text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none"
+          placeholder="Search channels..."
+          aria-label="Search channels"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
       </div>
       <div className="flex-1 overflow-y-auto py-2">
         {Object.entries(groupedChannels).map(([group, chs]) => (
           <div key={group}>
-            <button onClick={() => setCollapsedGroups(p => ({ ...p, [group]: !p[group] }))}
-              className="w-full flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider hover:text-slate-400 transition-colors">
+            <button
+              type="button"
+              onClick={() => setCollapsedGroups(p => ({ ...p, [group]: !p[group] }))}
+              aria-label={`Toggle channel group ${group}`}
+              className="w-full flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none rounded"
+            >
               {collapsedGroups[group] ? <ChevronRight className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-              {group}<span className="ml-auto text-slate-700 font-mono">{chs.length}</span>
+              {group}<span className="ml-auto text-slate-400 font-mono">{chs.length}</span>
             </button>
             {!collapsedGroups[group] && chs.map(renderChannelItem)}
           </div>
         ))}
-        {filteredChannels.length === 0 && <div className="px-4 py-6 text-center text-[11px] text-slate-600 italic">No channels</div>}
+        {filteredChannels.length === 0 && <div className="px-4 py-6 text-center text-[11px] text-slate-400 italic">No channels</div>}
       </div>
       <div className="border-t border-slate-800/80 p-2">
         {showNewChannel ? (
           <div className="flex flex-col gap-1.5">
-            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-600 w-full"
+            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
               placeholder="Channel ID" value={newChannelId} autoFocus
               onChange={e => setNewChannelId(e.target.value)} onKeyDown={e => e.key === 'Enter' && createChannel()} />
-            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-600 w-full"
+            <input className="bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-600 w-full"
               placeholder="Name (optional)" value={newChannelName}
               onChange={e => setNewChannelName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createChannel()} />
             <div className="flex gap-1">
-              <button onClick={() => setShowNewChannel(false)} className="flex-1 py-1 text-[11px] text-slate-500 hover:text-slate-300 border border-slate-700 rounded transition-colors">Cancel</button>
-              <button onClick={createChannel} disabled={creating || !newChannelId.trim()} className="flex-1 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 rounded transition-colors">{creating ? '...' : 'Create'}</button>
+              <button
+                type="button"
+                onClick={() => setShowNewChannel(false)}
+                className="flex-1 py-1 text-[11px] text-slate-300 hover:text-slate-100 border border-slate-700 rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={createChannel}
+                disabled={creating || !newChannelId.trim()}
+                className="flex-1 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+              >
+                {creating ? '...' : 'Create'}
+              </button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowNewChannel(true)} className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all">
+          <button
+            type="button"
+            onClick={() => setShowNewChannel(true)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          >
             <Plus className="w-3.5 h-3.5" /> New channel
           </button>
         )}
@@ -146,11 +177,22 @@ export function ColoquioChannelsPanel({
             </p>
             <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors">
               <input type="checkbox" checked={archiveOnDelete} onChange={e => setArchiveOnDelete(e.target.checked)} className="rounded accent-indigo-500" />
-              Archive to memory before deleting<span className="text-[11px] text-indigo-600">(SilvaDB)</span>
+              Archive to memory before deleting<span className="text-[11px] text-indigo-400 font-mono">(SilvaDB)</span>
             </label>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
-              <button onClick={handleDeleteConfirm} disabled={deleting} className="px-4 py-2 text-xs text-slate-50 bg-rose-700 hover:bg-rose-600 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-xs text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="px-4 py-2 text-xs text-slate-50 bg-rose-700 hover:bg-rose-600 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+              >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>

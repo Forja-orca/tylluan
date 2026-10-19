@@ -1,6 +1,6 @@
 import {
-  MessageSquare, Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
-  Check, Copy, Quote, FileText, Network, ChevronDown, ChevronRight, ChevronUp, ChevronLeft
+  Sparkles, Hash, Search, X, Paperclip, Loader2, Send, Clock,
+  Check, Copy, Quote, FileText, Network, ChevronUp, ChevronLeft
 } from 'lucide-react';
 import { useRef, useLayoutEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
@@ -103,7 +103,7 @@ function parseMarkdown(text: string): string {
   let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   h = h.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) =>
     `<pre class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-300">` +
-    `<div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
+    `<div class="text-[11px] text-slate-400 uppercase tracking-widest font-bold mb-1 border-b border-slate-800 pb-1">${lang || 'code'}</div>` +
     `<code>${code}</code></pre>`
   );
   h = h.replace(/`([^`]+)`/g, '<code class="bg-slate-950 border border-slate-700/50 px-1 py-0.5 rounded font-mono text-[11px] text-indigo-300">$1</code>');
@@ -403,9 +403,10 @@ export function ColoquioMessagesPanel({
                   <div className="mt-3.5 pt-2.5 border-t border-slate-700/30 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-semibold">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      Plan aprobado por el humano
+                      Plan approved by human
                     </div>
                     <button
+                      type="button"
                       onClick={() => {
                         const tasks = parsePlanTasks(mainContent);
                         if (tasks.length > 0) {
@@ -414,9 +415,9 @@ export function ColoquioMessagesPanel({
                           }));
                         }
                       }}
-                      className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[11px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer"
+                      className="px-3 py-1 bg-violet-600/40 hover:bg-violet-500/60 text-slate-200 font-bold text-[11px] rounded-lg shadow-lg transition-all flex items-center gap-1 border border-violet-500/30 cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:outline-none"
                     >
-                      <Network className="w-3 h-3" /> Visualizar en Pizarra
+                      <Network className="w-3 h-3" /> Visualize on Whiteboard
                     </button>
                   </div>
                 )}
@@ -438,10 +439,22 @@ export function ColoquioMessagesPanel({
               </div>
               <div className={cn('absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-slate-900 border border-slate-700 rounded-lg p-1 shadow-xl opacity-0 group-hover/msg:opacity-100 transition-opacity z-20',
                 isHuman ? 'right-full mr-2' : 'left-full ml-2')}>
-                <button onClick={() => handleCopy(msg.msg_id, msg.content)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors" title="Copiar">
+                <button
+                  type="button"
+                  onClick={() => handleCopy(msg.msg_id, msg.content)}
+                  aria-label="Copy message"
+                  title="Copy message"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                >
                   {copiedId === msg.msg_id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
-                <button onClick={() => handleQuote(msg.author_id, msg.content)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors" title="Citar">
+                <button
+                  type="button"
+                  onClick={() => handleQuote(msg.author_id, msg.content)}
+                  aria-label="Quote message"
+                  title="Quote message"
+                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+                >
                   <Quote className="w-3 h-3" />
                 </button>
               </div>
@@ -468,27 +481,41 @@ export function ColoquioMessagesPanel({
         )}
         <Hash className="w-4 h-4 text-slate-500 shrink-0" />
         <span className="text-sm font-semibold text-slate-200 truncate">{selectedChannel?.name ?? selectedId}</span>
-        <span className="text-[11px] text-slate-600 font-mono hidden sm:inline">{allMessages.length} mensajes</span>
+        <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">{allMessages.length} messages</span>
         <button
+          type="button"
           onClick={() => setCompactMode(v => !v)}
           className={cn(
-            "ml-auto text-[11px] px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer mr-1.5",
+            "ml-auto text-[11px] px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer mr-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none",
             compactMode 
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)]" 
-              : "border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              : "border-slate-700 text-slate-300 hover:text-slate-100 hover:bg-slate-800/50"
           )}
-          title="Alternar densidad compacta"
+          title="Toggle compact view density"
+          aria-label="Toggle compact view density"
         >
-          Compacto
+          Compact
         </button>
         <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-lg px-2.5 py-1">
-          <Search className="w-3 h-3 text-slate-500 shrink-0" />
-          <input className="w-32 bg-transparent text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none"
-            placeholder="Buscar en el hilo..." value={msgSearch} onChange={e => setMsgSearch(e.target.value)} />
+          <Search className="w-3 h-3 text-slate-400 shrink-0" />
+          <input
+            className="w-32 bg-transparent text-[11px] text-slate-200 placeholder-slate-400 focus:outline-none"
+            placeholder="Search thread..."
+            aria-label="Search thread messages"
+            value={msgSearch}
+            onChange={e => setMsgSearch(e.target.value)}
+          />
           {msgSearch && (
             <>
               <span className="text-[11px] text-amber-400 font-mono">{filteredMessages.length}/{allMessages.length}</span>
-              <button onClick={() => setMsgSearch('')} className="text-slate-500 hover:text-slate-300"><X className="w-3 h-3" /></button>
+              <button
+                type="button"
+                onClick={() => setMsgSearch('')}
+                aria-label="Clear message search"
+                className="text-slate-400 hover:text-slate-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none rounded"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </>
           )}
         </div>
@@ -510,29 +537,39 @@ export function ColoquioMessagesPanel({
         />
       )}
       {Object.keys(typingStatuses).length > 0 && (
-        <div className="px-5 py-1.5 text-[11px] text-slate-500 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
+        <div className="px-5 py-1.5 text-[11px] text-slate-400 flex items-center gap-2 shrink-0 bg-slate-950/20 border-t border-slate-900">
           <span className="flex gap-1">{[0, 180, 360].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-typing-wave" style={{ animationDelay: `${d}ms` }} />)}</span>
           <div className="flex flex-col gap-0.5">
             {Object.entries(typingStatuses).map(([agent, val]) => (
-              <span key={agent} className="font-mono text-[11px]"><strong className="text-slate-400">@{agent}</strong>: <span className="italic text-slate-500">{val.status}</span></span>
+              <span key={agent} className="font-mono text-[11px]"><strong className="text-slate-300">@{agent}</strong>: <span className="italic text-slate-400">{val.status}</span></span>
             ))}
           </div>
         </div>
       )}
       <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider shrink-0">As:</span>
+          <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider shrink-0">As:</span>
           <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"
             value={authorId} onChange={e => setAuthorId(e.target.value)} placeholder="jose" />
-          <button onClick={() => setShowTemplates(v => !v)} className="ml-auto text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
+          <button
+            type="button"
+            onClick={() => setShowTemplates(v => !v)}
+            className="ml-auto text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none rounded px-1.5 py-0.5"
+          >
             <Sparkles className="w-3 h-3" />{showTemplates ? 'Hide' : 'Templates'}
           </button>
         </div>
         {showTemplates && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {QUICK_TEMPLATES.map(t => (
-              <button key={t.label} onClick={() => { setDraft(t.text); setShowTemplates(false); }}
-                className="text-[11px] font-bold bg-slate-800/60 hover:bg-indigo-950/30 text-slate-400 hover:text-indigo-300 px-2 py-1 rounded border border-slate-800 hover:border-indigo-500/30 transition-all">{t.label}</button>
+              <button
+                type="button"
+                key={t.label}
+                onClick={() => { setDraft(t.text); setShowTemplates(false); }}
+                className="text-[11px] font-bold bg-slate-800/60 hover:bg-indigo-950/30 text-slate-300 hover:text-indigo-200 px-2 py-1 rounded border border-slate-700/60 hover:border-indigo-500/40 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+              >
+                {t.label}
+              </button>
             ))}
           </div>
         )}
@@ -542,19 +579,32 @@ export function ColoquioMessagesPanel({
               <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-300">
                 <Paperclip className="w-2.5 h-2.5" />
                 <span className="truncate max-w-[120px]">{att.name}</span>
-                <button onClick={() => setAttachments(p => p.filter((_, j) => j !== i))} className="text-slate-500 hover:text-rose-400 ml-1"><X className="w-2.5 h-2.5" /></button>
+                <button
+                  type="button"
+                  onClick={() => setAttachments(p => p.filter((_, j) => j !== i))}
+                  aria-label={`Remove attachment ${att.name}`}
+                  className="text-slate-400 hover:text-rose-400 ml-1 p-0.5 rounded cursor-pointer focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:outline-none"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
               </div>
             ))}
           </div>
         )}
         <div className="flex gap-2 items-end">
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-xl text-slate-400 hover:text-slate-200 transition-all shrink-0" title="Attach">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            aria-label="Attach files"
+            title="Attach files"
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-xl text-slate-300 hover:text-slate-100 transition-all shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
           </button>
           <input type="file" ref={fileInputRef} className="hidden" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <textarea
-            className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
+            className={cn('flex-1 bg-slate-800/60 border rounded-xl px-3.5 py-2.5 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-600/60 resize-none font-sans transition-colors',
               isDragging ? 'border-amber-500 bg-amber-950/20 ring-2 ring-amber-500/30' : 'border-slate-700/60')}
             rows={3} placeholder="Write a message... Shift+Enter for new line" value={draft}
             onChange={e => {
@@ -570,13 +620,18 @@ export function ColoquioMessagesPanel({
             onDragLeave={() => setIsDragging(false)}
             onDrop={e => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) handleFileUpload(e.dataTransfer.files); }}
           />
-          <button onClick={postMessage} disabled={posting || (!draft.trim() && !attachments.length)}
-            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-slate-50 transition-all shrink-0 shadow-lg shadow-indigo-900/30">
+          <button
+            type="button"
+            onClick={postMessage}
+            disabled={posting || (!draft.trim() && !attachments.length)}
+            aria-label="Send message"
+            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-slate-50 transition-all shrink-0 shadow-lg shadow-indigo-900/30 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          >
             <Send className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex justify-between items-center mt-1.5 text-[11px] text-slate-700">
-          <span>Enter para enviar, Shift+Enter nueva linea</span>
+        <div className="flex justify-between items-center mt-1.5 text-[11px] text-slate-400">
+          <span>Press Enter to send, Shift+Enter for new line</span>
           <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Auto-refresh 5s</span>
         </div>
       </div>

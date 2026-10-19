@@ -1210,13 +1210,14 @@ export function ColoquioCanvasWorkspace({ channelId, messages }: ColoquioCanvasW
           const badge = tab.badge ? tab.badge(messages) : 0;
           return (
             <button
+              type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors cursor-pointer border-b-2 -mb-px',
+                'flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors cursor-pointer border-b-2 -mb-px focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none',
                 activeTab === tab.id
                   ? 'border-indigo-500 text-indigo-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
               )}
             >
               {tab.icon}
