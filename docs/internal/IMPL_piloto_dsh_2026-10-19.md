@@ -23,7 +23,7 @@ segundo plano, kernel intocado (`:47004` solo GET /health informativo).
 | RUN3 | `50b880c` (tip) | idem, warm | **0** ✅ | 6/6 gates ✅ — detalle abajo |
 
 **RUN3 (el representativo del tip `50b880c`), salida real del log
-[`../../piloto_verify_rust3_2026-10-19.log`](../../piloto_verify_rust3_2026-10-19.log):**
+`piloto_verify_rust3_2026-10-19.log` (log local de DSH, no versionado):**
 
 - `cargo check -p tylluan-kernel` ✅ (51.84 s)
 - `cargo test -p tylluan-kernel --lib` ✅ — `test result: ok. 1057 passed; 0 failed; 3 ignored` (25.17 s)
