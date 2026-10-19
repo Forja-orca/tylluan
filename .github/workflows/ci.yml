@@ -261,6 +261,15 @@ jobs:
                          # pattern docs-head-sync-check needs anyway)
       - name: Run ADR-013 non-predation gate (report-only)
         run: bash scripts/check_no_predation.sh
+      # T1281/B3: the gate's range semantics (T1275) are locked by fixtures;
+      # without them a silent regression of the gate itself would go
+      # unnoticed precisely because the gate is report-only. The fixtures
+      # are hermetic (throwaway repos under mktemp with their own git
+      # config, no network, no cargo), so they need neither a live kernel
+      # nor this job's fetch-depth. Non-blocking together with the rest of
+      # the job by the same ADR-013 §2 contract.
+      - name: Run non-predation gate fixtures (meta-test, report-only)
+        run: bash scripts/test_check_no_predation.sh
 
   verify-semantics-test:
     name: Docs — verify.sh gate semantics (report-only stays report-only)

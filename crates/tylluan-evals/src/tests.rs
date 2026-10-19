@@ -1,8 +1,23 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tylluan_kernel::memory::silva::SilvaDB;
 use tylluan_kernel::mlp::MlpScorer;
 use tylluan_kernel::router::complexity;
+
+/// Destination for benchmark JSON reports produced by tests.
+///
+/// ADR-013 anti-predation debt fix (B2): these tests used to write into the
+/// tracked `benchmarks/` directory, so every `cargo test -p tylluan-evals`
+/// rewrote committed artifacts (the latency percentiles are nondeterministic)
+/// and the non-predation gate flagged them as foreign WIP in every agent's
+/// worktree. Reports now land in a per-process temp dir; the path is printed
+/// by each test so a maintainer can copy one deliberately when a new record
+/// is warranted. The tracked JSONs in `benchmarks/` are immutable records.
+fn bench_report_path(file_name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("tylluan-evals-bench-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("Failed to create temp bench dir");
+    dir.join(file_name)
+}
 
 const NODES: &[(&str, &str, &str, &str)] = &[
     ("concept:tylluan", "concept", "TylluanNexus is an open-source sovereign MCP kernel written in Rust. It provides 5 sovereign tools to AI agents via the Model Context Protocol.", "{\"topic\":\"tylluan\"}"),
@@ -125,13 +140,7 @@ async fn baseline_v090_benchmark() {
         }).collect::<Vec<_>>(),
     });
 
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(manifest_dir);
-    let bench_dir = workspace_root.join("benchmarks");
-    if !bench_dir.exists() {
-        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
-    }
-    let json_path = bench_dir.join("baseline_v0.9.0.json");
+    let json_path = bench_report_path("baseline_v0.9.0.json");
     let json_str = serde_json::to_string_pretty(&baseline).expect("Failed to serialize JSON");
     std::fs::write(&json_path, &json_str).expect("Failed to write baseline JSON");
 
@@ -381,13 +390,7 @@ async fn benchmark_v0_10_0_quality_delta() {
         "notes": "P3 LightRAG quality delta. Deterministic fake embeddings. Graph traversal enabled via local_query_graph (PPR + degree centrality). skip_graph=true disables the graph path entirely.",
     });
 
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(manifest_dir);
-    let bench_dir = workspace_root.join("benchmarks");
-    if !bench_dir.exists() {
-        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
-    }
-    let json_path = bench_dir.join("benchmark_v0.10.0.json");
+    let json_path = bench_report_path("benchmark_v0.10.0.json");
     let json_str = serde_json::to_string_pretty(&report).expect("Failed to serialize JSON");
     std::fs::write(&json_path, &json_str).expect("Failed to write benchmark JSON");
 
@@ -537,13 +540,7 @@ async fn mlp_routing_accuracy_benchmark() {
         "per_case": results,
     });
 
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(manifest_dir);
-    let bench_dir = workspace_root.join("benchmarks");
-    if !bench_dir.exists() {
-        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
-    }
-    let json_path = bench_dir.join("benchmark_v0.13.0_mlp_routing.json");
+    let json_path = bench_report_path("benchmark_v0.13.0_mlp_routing.json");
     let json_str = serde_json::to_string_pretty(&report).expect("Failed to serialize JSON");
     std::fs::write(&json_path, &json_str).expect("Failed to write benchmark JSON");
 
@@ -764,16 +761,7 @@ async fn ab_embedding_models_benchmark() {
         "models": per_model,
     });
 
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .unwrap_or(manifest_dir);
-    let bench_dir = workspace_root.join("benchmarks");
-    if !bench_dir.exists() {
-        std::fs::create_dir_all(&bench_dir).expect("Failed to create benchmarks dir");
-    }
-    let json_path = bench_dir.join("benchmark_ab_embedding_models.json");
+    let json_path = bench_report_path("benchmark_ab_embedding_models.json");
     let json_str = serde_json::to_string_pretty(&report).expect("Failed to serialize JSON");
     std::fs::write(&json_path, &json_str).expect("Failed to write A/B JSON");
 
