@@ -54,7 +54,7 @@ Recuentos al día: `README.md` (1144), `AGENTS.md` (1057 + **75** + 12 = **1144*
 - **Código de producción tocado:** `crates/tylluan-link/src/identity.rs` — identidad Ed25519 del mesh/federación. Sin cambio de formato (68 B, MAGIC `TLID`), sin cambio de comportamiento observable en el camino de un solo escritor (escribe y vuelve a leer exactamente esos bytes), sin auto-heal (el hard error ante corrupción sigue siendo un hard error).
 - **Seguridad:** no se debilita; se refuerza. Los permisos `0600` se aplican ahora **también en la creación del temp**, no solo con un `set_permissions` post-hoc sobre el fichero final (que dejaba una ventana con el umask por defecto). Ganancia neta.
 - **Dependencias:** ninguna nueva (solo `std`: `Mutex`, `AtomicU64`, `OpenOptionsExt`/`PermissionsExt` ya usados bajo `cfg(unix)`).
-- **CI:** `scripts/ci/claims/*.sh` (solo CI: no afecta a producción ni a usuarios). Elimina el veneno cruzado de identidad/db entre claims.
+- **CI:** (revertido el aislamiento de data-dir de los claims: obliga a cada kernel a descargar el modelo de embeddings y supera los 120 s de espera del puerto; la corrupcion la resuelve la escritura atomica).
 - **Consumidores afectados:** ninguno roto — 75 link + 1057 kernel + 12 fsrs verdes, clippy limpio, `mesh_audit` (que ejercita identidad real) 14/14.
 - **No depredación (ADR-013):** no toco ficheros ajenos ni WIP de otro agente; trabajo en mi worktree; entrego diff sin commitear + este informe al TL.
 - **Riesgo:** bajo en producción (una escritura, en arranque). Punto abierto para el TL: si se quiere arbitraje inter-proceso real (lockfile con detección de stale), no implementado a propósito.
