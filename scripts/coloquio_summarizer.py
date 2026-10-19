@@ -25,7 +25,7 @@ import hashlib, json, os, re, sqlite3, time, urllib.request, urllib.error, urlli
 from datetime import datetime, timezone
 from pathlib import Path
 
-KERNEL_BASE = "http://127.0.0.1:3030"
+KERNEL_BASE = "http://127.0.0.1:47004"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKPOINT_DB = REPO_ROOT / "data" / "summarizer_checkpoints.db"
 HASH_DB = REPO_ROOT / "data" / "summarizer_hashes.db"
