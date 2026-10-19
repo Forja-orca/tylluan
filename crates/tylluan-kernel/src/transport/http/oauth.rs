@@ -176,6 +176,11 @@ fn is_loopback_redirect_uri(uri: &str) -> bool {
         None => return false,
     };
     let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // RFC 3986: anything before '@' is userinfo, so `http://127.0.0.1:9@evil/` has host evil.
+    // No legitimate loopback redirect carries userinfo; reject it (and backslash tricks).
+    if host_port.contains('@') || host_port.contains('\\') {
+        return false;
+    }
     let host = if let Some(after_bracket) = host_port.strip_prefix('[') {
         after_bracket.split(']').next().unwrap_or("")
     } else {
