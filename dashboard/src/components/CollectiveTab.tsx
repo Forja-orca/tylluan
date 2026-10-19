@@ -491,7 +491,19 @@ export function CollectiveTab() {
   }, [fetchAll]);
 
   if (error) return (
-    <div className="p-6 text-red-400 text-sm">{error}</div>
+    <div className="flex flex-col items-center justify-center p-12 text-center gap-3">
+      <WifiOff className="w-10 h-10 text-slate-700" aria-hidden="true" />
+      <div className="text-sm font-semibold text-slate-300">Collective telemetry unavailable</div>
+      <p className="text-xs text-slate-500 max-w-sm">{error}. Ensure the Tylluan kernel is running on port 47004.</p>
+      <button
+        type="button"
+        onClick={fetchAll}
+        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+      >
+        <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+        <span>Retry</span>
+      </button>
+    </div>
   );
 
   return (

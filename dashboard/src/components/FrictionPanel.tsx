@@ -59,11 +59,11 @@ function ScoreRing({ score, max }: { score: number; max: number }) {
   const r = 28;
   const circ = 2 * Math.PI * r;
   const offset = circ - (pct / 100) * circ;
-  const color = pct < 30 ? '#10b981' : pct < 60 ? '#f59e0b' : '#ef4444';
+  const color = pct < 30 ? 'hsl(var(--emerald-500))' : pct < 60 ? 'hsl(var(--amber-500))' : 'hsl(var(--red-500))';
   return (
     <div className="relative w-[72px] h-[72px]" role="img" aria-label={`Friction score ${formatScore(score)}`}>
       <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={r} fill="none" stroke="#1e293b" strokeWidth="5" />
+        <circle cx="36" cy="36" r={r} fill="none" stroke="hsl(var(--slate-800))" strokeWidth="5" />
         <circle
           cx="36" cy="36" r={r} fill="none" stroke={color}
           strokeWidth="5" strokeDasharray={circ} strokeDashoffset={offset}

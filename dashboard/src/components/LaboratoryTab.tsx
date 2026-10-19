@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { NexusBridge, AutoResearchSummary } from '../lib/nexus-bridge';
 import { 
   Beaker, Play, Square, GitBranch, GitCommit, TrendingUp, Zap, Clock, ShieldCheck, 
-  Cpu, RotateCcw, AlertTriangle, ArrowRight, Settings
+  Cpu, RotateCcw, AlertTriangle, ArrowRight, Settings, RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -99,6 +99,15 @@ export function LaboratoryTab({ bridge, notify }: Props) {
           <p className="text-sm font-bold text-slate-400">AutoResearch unavailable</p>
           <p className="text-xs text-slate-500">The AutoResearch endpoint did not respond or is not enabled in this kernel.</p>
         </div>
+        <button
+          type="button"
+          onClick={fetchData}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-200 text-xs font-medium cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+        >
+          <RefreshCw className={cn("w-3.5 h-3.5 text-slate-400", loading && "animate-spin text-emerald-400")} />
+          <span>{loading ? 'Retrying...' : 'Retry'}</span>
+        </button>
       </div>
     );
   }
