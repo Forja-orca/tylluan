@@ -41,7 +41,7 @@ if ! command -v cargo >/dev/null 2>&1; then
     if command -v cargo.exe >/dev/null 2>&1; then
         CARGO_CMD="cargo.exe"
     elif command -v rustup >/dev/null 2>&1; then
-        CARGO_CMD="rustup run stable cargo"
+        CARGO_CMD="rustup run 1.99.1 cargo"
     fi
 fi
 

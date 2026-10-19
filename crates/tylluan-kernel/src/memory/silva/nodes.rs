@@ -1362,7 +1362,7 @@ impl super::SilvaDB {
             if deleted > 0 {
                 tracing::info!("🌲 SilvaDB: pruned {deleted} superseded '{node_type}' nodes older than {min_age_days} days");
             }
-            Ok(deleted as usize)
+            Ok(deleted)
         })
     }
 
