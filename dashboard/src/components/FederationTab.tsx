@@ -62,13 +62,6 @@ export interface FederationNodesResponse {
   nodes: FederationNodeItem[];
 }
 
-interface SilvaNode {
-  id: string;
-  node_type?: string;
-  content?: string;
-  shareable?: boolean;
-}
-
 interface SharingStatus {
   enabled: boolean;
   node_types: string[];
@@ -90,7 +83,6 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   const [meshError, setMeshError] = useState<string | null>(null);
   const [meshEndpointStatus, setMeshEndpointStatus] = useState<'ready' | 'forbidden' | 'error'>('ready');
   
-  const [nodes, setNodes] = useState<SilvaNode[]>([]);
   const [fedNodes, setFedNodes] = useState<FederationNodeItem[]>([]);
   const [fedNodesCount, setFedNodesCount] = useState<number>(0);
   const [fedNodesSource, setFedNodesSource] = useState<string>('local');
@@ -98,7 +90,6 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   const [fedNodesEndpointStatus, setFedNodesEndpointStatus] = useState<'ready' | 'forbidden' | 'error'>('ready');
   
   const [sharingStatus, setSharingStatus] = useState<SharingStatus | null>(null);
-  const [sharingStatusLoading, setSharingStatusLoading] = useState(true);
   
   // Loaders
   const [peersLoading, setPeersLoading] = useState(true);
@@ -238,17 +229,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
         setFedNodes(data.nodes);
         setFedNodesCount(typeof data.count === 'number' ? data.count : data.nodes.length);
         setFedNodesSource(data.source || 'local');
-        // keep nodes in sync for shareable toggle state
-        setNodes(data.nodes.map(n => ({
-          id: n.id,
-          node_type: n.node_type,
-          content: n.content,
-          shareable: n.shareable,
-        })));
       } else {
         setFedNodes([]);
         setFedNodesCount(0);
-        setNodes([]);
       }
       setFedNodesEndpointStatus('ready');
     } catch (err: unknown) {
@@ -262,22 +245,18 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       }
       setFedNodes([]);
       setFedNodesCount(0);
-      setNodes([]);
     } finally {
       if (!silent) setNodesLoading(false);
     }
   }, [bridge]);
 
-  const fetchSharingStatus = useCallback(async (silent = false) => {
+  const fetchSharingStatus = useCallback(async (_silent = false) => {
     if (!bridge) return;
-    if (!silent) setSharingStatusLoading(true);
     try {
-      const data = await bridge.fetchRaw('/api/v1/federation/sharing/status');
+      const data = await bridge.fetchRaw('/api/v1/federation/sharing/status') as SharingStatus;
       setSharingStatus(data);
     } catch (err) {
       console.error('Failed to fetch federation sharing status:', err);
-    } finally {
-      if (!silent) setSharingStatusLoading(false);
     }
   }, [bridge]);
 
@@ -297,7 +276,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
         ? '/api/v1/federation/sharing/enable' 
         : '/api/v1/federation/sharing/disable';
       
-      const res = await bridge.fetchRaw(endpoint, { method: 'POST' });
+      const res = await bridge.fetchRaw(endpoint, { method: 'POST' }) as { status?: string; sharing_enabled?: boolean; message?: string };
       if (res.status === 'ok' || res.sharing_enabled !== undefined) {
         notify(`Federation sharing ${isActivating ? 'enabled' : 'disabled'} successfully.`, 'info');
         setSharingStatus(prev => prev ? { ...prev, enabled: isActivating } : null);
@@ -305,8 +284,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       } else {
         notify(`Failed to toggle sharing: ${res.message || 'Unknown error'}`, 'error');
       }
-    } catch (err: any) {
-      notify(err.message || 'Error toggling sharing state', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      notify(msg || 'Error toggling sharing state', 'error');
     }
   };
 
@@ -352,8 +332,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       setPeerToken('');
       
       fetchPeers();
-    } catch (err: any) {
-      notify(err.message || 'Failed to register peer node.', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      notify(msg || 'Failed to register peer node.', 'error');
     } finally {
       setSubmittingPeer(false);
     }
@@ -367,8 +348,9 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
       notify(`Removed peer node: ${name}`, 'info');
       setConfirmDeletePeer(null);
       fetchPeers();
-    } catch (err: any) {
-      notify(err.message || 'Failed to remove peer node.', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      notify(msg || 'Failed to remove peer node.', 'error');
     }
   };
 
@@ -377,12 +359,13 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     setSyncing(true);
     try {
       // POST /api/v1/federation/sync triggers synchronization and returns total nodes_synced
-      const result = await bridge.fetchRaw('/api/v1/federation/sync', { method: 'POST' });
+      const result = await bridge.fetchRaw('/api/v1/federation/sync', { method: 'POST' }) as { nodes_synced?: number; synced?: number };
       const nodesSynced = result.nodes_synced ?? result.synced ?? 0;
       notify(`Federation sync complete. Synced ${nodesSynced} knowledge nodes!`, 'info');
       fetchPeers(true);
-    } catch (err: any) {
-      notify(err.message || 'Federation sync failed', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      notify(msg || 'Federation sync failed', 'error');
     } finally {
       setSyncing(false);
     }
@@ -394,10 +377,11 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
     const targetState = !currentShareable;
     try {
       await bridge.setSilvaShareable(nodeId, targetState);
-      setNodes((prev: SilvaNode[]) => prev.map((n: SilvaNode) => n.id === nodeId ? { ...n, shareable: targetState } : n));
+      setFedNodes(prev => prev.map(n => n.id === nodeId ? { ...n, shareable: targetState } : n));
       notify(`Node ${nodeId.substring(0, 8)} set to ${targetState ? 'Shareable' : 'Private'}`, 'info');
-    } catch (err: any) {
-      notify(err.message || 'Failed to update shareable flag.', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      notify(msg || 'Failed to update shareable flag.', 'error');
     } finally {
       setTogglingNodeId(null);
     }

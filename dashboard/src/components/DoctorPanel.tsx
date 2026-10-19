@@ -24,24 +24,25 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async () => {
     if (!bridge) return;
     setLoading(true);
     try {
       const data = await bridge.getDoctorReport();
       setReport(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.warn("Doctor API not available:", err);
-      setError(`Doctor API unavailable: ${err.message}`);
+      setError(`Doctor API unavailable: ${msg}`);
       setReport(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     loadReport();
-  }, [bridge, loadReport]);
+  }, [loadReport]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('doctor-report', loadReport, { interval: 'standard', enabled: !!bridge });
@@ -57,8 +58,9 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
       } else {
         notify(res?.message || `Failed to repair ${name || target}`, 'error');
       }
-    } catch (err: any) {
-      notify(`Error executing repair: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`Error executing repair: ${msg}`, 'error');
     } finally {
       setRepairing(false);
     }
@@ -69,7 +71,7 @@ export default function DoctorPanel({ bridge, notify }: DoctorPanelProps) {
     setRepairing(true);
     
     // Iterate over everything broken
-    const promises: Promise<any>[] = [];
+    const promises: Promise<void>[] = [];
     
     if (!report.storage.silva_db_ok) {
       promises.push(handleRepair('storage'));

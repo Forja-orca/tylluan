@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FolderGit2,
   FileCode2,
   FileCheck2,
-  ServerOff,
   Clock,
   Check
 } from 'lucide-react';
+import type { NexusBridge } from '../lib/nexus-bridge';
 
 // Real backend contract (crates/tylluan-kernel/src/repo_map.rs, M31-P4).
 interface TopLevelDir {
@@ -40,7 +40,7 @@ interface RepoMapData {
 }
 
 interface RepoMapWidgetProps {
-  bridge: any;
+  bridge: NexusBridge | null;
 }
 
 function formatRelativeTime(unixSecs: number): string {
@@ -66,7 +66,7 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRepoMap = async () => {
+  const fetchRepoMap = useCallback(async () => {
     if (!bridge) return;
     setLoading(true);
     setError(null);
@@ -77,23 +77,32 @@ export default function RepoMapWidget({ bridge }: RepoMapWidgetProps) {
       } else {
         throw new Error("Invalid repository map response from server");
       }
-    } catch (err: any) {
-      console.error("Repo Map API error:", err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Repo Map API error:", msg);
       setData(null);
-      setError(`Failed to fetch project topology (GET /api/v1/repo-map): ${err.message}`);
+      setError(`Failed to fetch project topology (GET /api/v1/repo-map): ${msg}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchRepoMap();
-  }, [bridge]);
+  }, [fetchRepoMap]);
 
   if (loading) {
     return (
       <div className="bg-slate-900/60 border border-slate-850 rounded-2xl p-4 flex items-center justify-center py-12">
         <FolderGit2 className="w-8 h-8 text-slate-700 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="bg-slate-900/60 border border-red-500/30 rounded-2xl p-4 text-center text-xs text-red-400 font-mono">
+        {error}
       </div>
     );
   }

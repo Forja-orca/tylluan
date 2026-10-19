@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { resolveCanvasColor } from './ui/MetricPrimitives';
+import { resolveCanvasColor } from '../lib/canvas-color';
 
 interface SparklineChartProps {
   data: number[];       // values 0–100

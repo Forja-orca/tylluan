@@ -39,41 +39,7 @@ export function RelativeTime({ ts }: { ts: number }) {
   return <>{Math.floor(diff / 60)}m</>;
 }
 
-export function resolveCanvasColor(
-  color: string,
-  targetEl?: HTMLElement | null
-): { stroke: string; fill: (alpha: number) => string } {
-  if (color.startsWith('#')) {
-    const hex = color.length === 4
-      ? `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`
-      : color;
-    const r = parseInt(hex.slice(1, 3), 16) || 0;
-    const g = parseInt(hex.slice(3, 5), 16) || 0;
-    const b = parseInt(hex.slice(5, 7), 16) || 0;
-    return {
-      stroke: color,
-      fill: (alpha: number) => `rgba(${r}, ${g}, ${b}, ${alpha})`,
-    };
-  }
-
-  const varMatch = color.match(/var\((--[^)]+)\)/);
-  if (varMatch && typeof window !== 'undefined') {
-    const varName = varMatch[1];
-    const el = targetEl || document.documentElement;
-    const rawVal = window.getComputedStyle(el).getPropertyValue(varName).trim();
-    if (rawVal) {
-      return {
-        stroke: `hsl(${rawVal})`,
-        fill: (alpha: number) => `hsl(${rawVal} / ${alpha})`,
-      };
-    }
-  }
-
-  return {
-    stroke: color,
-    fill: () => color,
-  };
-}
+import { resolveCanvasColor } from '../../lib/canvas-color';
 
 export function MiniSparkline({ data, color = 'hsl(var(--blue-400))', w = 80, h = 28 }: {
   data: number[];

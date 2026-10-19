@@ -8,17 +8,25 @@ interface HomeostasisWidgetProps {
   bridge: NexusBridge | null;
 }
 
+interface HomeostasisHealth {
+  status?: string;
+  components?: {
+    guilds?: { ok?: boolean; active?: number; total?: number };
+    silva?: { ok?: boolean; nodes?: number };
+  };
+}
+
 export function HomeostasisWidget({ bridge }: HomeostasisWidgetProps) {
-  const [health, setHealth] = useState<any>(null);
+  const [health, setHealth] = useState<HomeostasisHealth | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!bridge) return;
     const fetchHealth = async () => {
       try {
-        const h = await bridge.health_detailed();
+        const h = (await bridge.health_detailed()) as HomeostasisHealth;
         setHealth(h);
-      } catch (e) {
+      } catch (e: unknown) {
         console.error('Failed to fetch detailed health in HomeostasisWidget:', e);
       } finally {
         setLoading(false);

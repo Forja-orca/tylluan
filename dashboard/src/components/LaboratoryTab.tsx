@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NexusBridge, AutoResearchSummary } from '../lib/nexus-bridge';
 import { 
-  Beaker, Play, Square, GitBranch, GitCommit, TrendingUp, Zap, Clock, ShieldCheck, 
-  Cpu, RotateCcw, AlertTriangle, ArrowRight, Settings, RefreshCw
+  Beaker, Play, Square, GitBranch, TrendingUp, Zap, Clock, ShieldCheck, 
+  Cpu, ArrowRight, Settings, RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePolling } from '../hooks/usePolling';
@@ -16,7 +16,7 @@ export function LaboratoryTab({ bridge, notify }: Props) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AutoResearchSummary | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!bridge) return;
     try {
       const summary = await bridge.getAutoResearchSummary();
@@ -25,11 +25,11 @@ export function LaboratoryTab({ bridge, notify }: Props) {
       console.error("Failed to fetch AutoResearch summary", err);
       setData(null);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     fetchData();
-  }, [bridge]);
+  }, [fetchData]);
 
   // Polling via centralized coordinator (replaces 1 scattered setInterval)
   usePolling('lab-data', fetchData, { interval: 'fast', enabled: !!bridge });
