@@ -166,6 +166,17 @@ pub struct ThinkAnalysis {
     pub node_count: usize,
 }
 
+/// T1277-D: the engine fingerprint this process compares every stored
+/// `node_embeddings` row against — `(model_name, model_hash)` exactly as the
+/// reindexer builds it (`engine_id()` + `engine_hash()`, main.rs). `model_hash`
+/// is `None` when the on-disk engine identity is not verifiable (original /
+/// no-fingerprint build): any known stored hash is then accepted.
+#[derive(Debug, Clone)]
+pub struct ExpectedEmbedding {
+    pub model_name: String,
+    pub model_hash: Option<String>,
+}
+
 /// The SilvaDB knowledge graph engine.
 pub struct SilvaDB {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -218,6 +229,27 @@ pub struct SilvaDB {
     /// as `embedding_fetch_batch_size` — lets tests prove "one batch round
     /// trip for N results" deterministically instead of relying on timing.
     pub confidence_source_batch_size: std::sync::atomic::AtomicUsize,
+    /// T1277-D: engine fingerprint of the dense embeddings this process
+    /// produces. `None` = gate inert (never set / no engine). Read on the
+    /// vector-search hot path once per query, written once per boot and on
+    /// hot-swap.
+    pub(crate) expected_embedding: std::sync::RwLock<Option<ExpectedEmbedding>>,
+    /// T1277-D: false = observation (count only), true = actually exclude
+    /// fingerprint-incompatible candidates in the linear path. Fed from
+    /// `[silva] embedding_fingerprint_filter`.
+    pub(crate) fingerprint_filter_enabled: std::sync::atomic::AtomicBool,
+    /// T1277-D observability: candidates skipped because their `model_name` /
+    /// known `model_hash` differs from `expected_embedding` (sum of the two
+    /// modes: in observation they still pass through, with the flag ON they
+    /// are dropped).
+    pub(crate) fp_would_exclude_model: std::sync::atomic::AtomicU64,
+    /// T1277-D observability: rows skipped because their stored blob length
+    /// differs from the query vector's dimension — today this `continue` is
+    /// silent, so the counter is the only way to see them.
+    pub(crate) fp_would_exclude_dim: std::sync::atomic::AtomicU64,
+    /// T1277-D observability: candidates actually dropped (only when the
+    /// filter flag is ON).
+    pub(crate) fp_excluded: std::sync::atomic::AtomicU64,
 }
 
 impl SilvaDB {
@@ -285,6 +317,11 @@ impl SilvaDB {
             confidence_source_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
+            expected_embedding: std::sync::RwLock::new(None),
+            fingerprint_filter_enabled: std::sync::atomic::AtomicBool::new(false),
+            fp_would_exclude_model: std::sync::atomic::AtomicU64::new(0),
+            fp_would_exclude_dim: std::sync::atomic::AtomicU64::new(0),
+            fp_excluded: std::sync::atomic::AtomicU64::new(0),
         };
         Ok(db)
     }
@@ -330,6 +367,64 @@ impl SilvaDB {
     ) -> Option<std::sync::Arc<crate::router::embeddings::EmbeddingEngine>> {
         self.dense_engine
             .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// T1277-D: declare the engine fingerprint every stored embedding row is
+    /// judged against. `None` (never called) leaves the gate inert.
+    pub fn set_expected_embedding(&self, model_name: String, model_hash: Option<String>) {
+        *self
+            .expected_embedding
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(ExpectedEmbedding {
+            model_name,
+            model_hash,
+        });
+    }
+
+    /// T1277-D: derive `expected_embedding` from the currently-installed dense
+    /// engine — the same source the reindexer uses (`engine_id()` +
+    /// `engine_hash()`). No engine installed => the gate stays inert. Call
+    /// after `install_dense_engine` at boot and after a hot-swap.
+    pub fn set_expected_embedding_from_dense_engine(&self) {
+        if let Some(eng) = self.dense_engine_ref() {
+            self.set_expected_embedding(eng.engine_id(), eng.engine_hash());
+        }
+    }
+
+    /// T1277-D: turn the observation-only gate into a real filter. Fed from
+    /// `[silva] embedding_fingerprint_filter` at boot.
+    pub fn set_fingerprint_filter_enabled(&self, enabled: bool) {
+        self.fingerprint_filter_enabled
+            .store(enabled, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// T1277-D: whether the fingerprint gate drops candidates (true) or only
+    /// counts them (false = observation).
+    pub fn fingerprint_filter_enabled(&self) -> bool {
+        self.fingerprint_filter_enabled
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// T1277-D observability snapshot: (would_exclude_model, would_exclude_dim,
+    /// excluded). Global counters shared by every query since boot — deltas,
+    /// never per-request values.
+    pub fn fingerprint_observation(&self) -> (u64, u64, u64) {
+        (
+            self.fp_would_exclude_model
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.fp_would_exclude_dim
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.fp_excluded
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    /// T1277-D: current expected fingerprint, if any (test/inspection).
+    pub fn expected_embedding_snapshot(&self) -> Option<ExpectedEmbedding> {
+        self.expected_embedding
+            .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
@@ -388,6 +483,11 @@ impl SilvaDB {
             confidence_source_batch_size: std::sync::atomic::AtomicUsize::new(0),
             sqlite_lock_wait_nanos: std::sync::atomic::AtomicU64::new(0),
             sqlite_lock_acqs: std::sync::atomic::AtomicU64::new(0),
+            expected_embedding: std::sync::RwLock::new(None),
+            fingerprint_filter_enabled: std::sync::atomic::AtomicBool::new(false),
+            fp_would_exclude_model: std::sync::atomic::AtomicU64::new(0),
+            fp_would_exclude_dim: std::sync::atomic::AtomicU64::new(0),
+            fp_excluded: std::sync::atomic::AtomicU64::new(0),
         };
         db.init_schema().await?;
         tokio::task::block_in_place(|| {

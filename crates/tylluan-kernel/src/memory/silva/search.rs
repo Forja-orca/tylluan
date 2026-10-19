@@ -3,7 +3,29 @@ use chrono::Utc;
 use rusqlite::params;
 use std::collections::HashMap;
 
-use super::GraphNode;
+use super::{ExpectedEmbedding, GraphNode};
+
+/// T1277-D: per-candidate mirror of the `get_stale_embeddings` freshness
+/// predicate. A stored row is compatible with THIS process's engine iff its
+/// `model_name` matches and its `model_hash` is either unknown (NULL or the
+/// `unknown-pre-hash` sentinel — pre-traceability rows, never invalidated just
+/// for lacking a fingerprint) or equal to the expected fingerprint. An expected
+/// `None` hash accepts any known stored hash (nothing to compare against).
+pub(crate) fn embedding_row_matches_engine(
+    model_name: &str,
+    model_hash: Option<&str>,
+    expected: &ExpectedEmbedding,
+) -> bool {
+    if model_name != expected.model_name {
+        return false;
+    }
+    match model_hash {
+        None => true,
+        Some(h) if h == super::nodes::MODEL_HASH_UNKNOWN => true,
+        Some(_) if expected.model_hash.is_none() => true,
+        Some(h) => Some(h) == expected.model_hash.as_deref(),
+    }
+}
 
 /// ADR-011 §Fase 3: per-recall retrieval-quality features, recorded alongside
 /// `rank_position` in `recall_feedback` so the LightReranker trains on real
@@ -75,10 +97,11 @@ impl super::SilvaDB {
             return Err(anyhow::anyhow!("Vector search circuit breaker is open"));
         }
 
+        let expected = self.expected_embedding_snapshot();
         let result = tokio::task::block_in_place(|| {
             let conn = self.conn_timed();
             let mut stmt = conn.prepare(
-                "SELECT node_id, embedding FROM node_embeddings ORDER BY rowid DESC LIMIT 5000"
+                "SELECT node_id, embedding, model_name, model_hash FROM node_embeddings ORDER BY rowid DESC LIMIT 5000"
             )?;
 
             let q_norm_sq: f32 = query_embedding.iter().map(|&v| v * v).sum();
@@ -97,7 +120,36 @@ impl super::SilvaDB {
                     _ => continue,
                 };
                 if blob.len() != expected_bytes {
+                    // T1277-D: this drop was silent until now — the only way
+                    // to see how many rows carry a foreign dimension. Counted
+                    // only when the gate is declared, so "no expected
+                    // fingerprint" stays a fully inert no-op.
+                    if expected.is_some() {
+                        self.fp_would_exclude_dim
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
                     continue;
+                }
+
+                // T1277-D observation gate: a row embedded by a different
+                // engine is not comparable with this query vector. Default
+                // (flag OFF) counts it and lets it through — no ranking change.
+                if let Some(expected) = &expected {
+                    let row_model: Option<String> = row.get(2).ok().flatten();
+                    let row_hash: Option<String> = row.get(3).ok().flatten();
+                    if !embedding_row_matches_engine(
+                        row_model.as_deref().unwrap_or(""),
+                        row_hash.as_deref(),
+                        expected,
+                    ) {
+                        self.fp_would_exclude_model
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if self.fingerprint_filter_enabled() {
+                            self.fp_excluded
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            continue;
+                        }
+                    }
                 }
 
                 // Single-pass dot product + stored norm without allocating Vec<f32>
@@ -1150,5 +1202,106 @@ mod ci_roundtrip_regression {
             "el leg silva solo debe encontrar el marcador sin embedding denso (F1 cerró el dual-write híbrido); resultados={}",
             results.len()
         );
+    }
+}
+
+/// T1277-D: the embedding-fingerprint gate, observation by default.
+/// Corpus written by one engine, queried by another: the foreign-model row is
+/// counted (and, flag OFF, still returned); the sentinel-hash row is never a
+/// mismatch; the foreign-dimension row is dropped as it already was.
+#[cfg(test)]
+mod embedding_fingerprint_tests {
+    use super::super::SilvaDB;
+
+    async fn seeded() -> SilvaDB {
+        let db = SilvaDB::in_memory().await.unwrap();
+        for id in ["same_engine", "other_model", "sentinel_hash", "other_dim"] {
+            db.upsert_node(id, "note", "embedding fingerprint gate", "{}").await.unwrap();
+        }
+        // 4-dim query is [1,0,0,0] => cosine 1.0, far above the 0.05 cut.
+        db.save_embedding("same_engine", &[1.0, 0.0, 0.0, 0.0], "engA", Some("hash1")).await.unwrap();
+        db.save_embedding("other_model", &[1.0, 0.0, 0.0, 0.0], "engB", Some("hash1")).await.unwrap();
+        db.save_embedding("sentinel_hash", &[1.0, 0.0, 0.0, 0.0], "engA", Some("unknown-pre-hash")).await.unwrap();
+        db.save_embedding("other_dim", &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "engA", None).await.unwrap();
+        db
+    }
+
+    fn ids(results: &[(super::super::GraphNode, f32)]) -> Vec<String> {
+        results.iter().map(|(n, _)| n.id.clone()).collect()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn observation_mode_counts_without_excluding() {
+        let db = seeded().await;
+        let q = [1.0f32, 0.0, 0.0, 0.0];
+
+        // No expected fingerprint declared => gate fully inert.
+        assert!(db.expected_embedding_snapshot().is_none());
+        let _ = db.search_vector(&q, 10).await.unwrap();
+        assert_eq!(db.fingerprint_observation(), (0, 0, 0), "no expected fingerprint => inert");
+
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        let got = ids(&db.search_vector(&q, 10).await.unwrap());
+
+        assert!(got.contains(&"same_engine".to_string()), "own-engine row present: {got:?}");
+        assert!(
+            got.contains(&"other_model".to_string()),
+            "observation mode must NOT exclude the foreign model: {got:?}"
+        );
+        assert!(
+            got.contains(&"sentinel_hash".to_string()),
+            "unknown-pre-hash sentinel is never a mismatch: {got:?}"
+        );
+        assert!(
+            !got.contains(&"other_dim".to_string()),
+            "foreign-dimension row keeps its pre-existing drop: {got:?}"
+        );
+
+        let (by_model, by_dim, excluded) = db.fingerprint_observation();
+        assert_eq!(by_model, 1, "exactly one foreign-model candidate");
+        assert_eq!(by_dim, 1, "exactly one foreign-dimension row");
+        assert_eq!(excluded, 0, "flag OFF must never exclude");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn enabled_filter_excludes_foreign_model_only() {
+        let db = seeded().await;
+        db.set_expected_embedding("engA".to_string(), Some("hash1".to_string()));
+        db.set_fingerprint_filter_enabled(true);
+        assert!(db.fingerprint_filter_enabled());
+
+        let got = ids(&db.search_vector(&[1.0f32, 0.0, 0.0, 0.0], 10).await.unwrap());
+        assert!(
+            !got.contains(&"other_model".to_string()),
+            "flag ON must drop the foreign model: {got:?}"
+        );
+        assert!(got.contains(&"same_engine".to_string()));
+        assert!(got.contains(&"sentinel_hash".to_string()));
+
+        let (by_model, by_dim, excluded) = db.fingerprint_observation();
+        assert_eq!(by_model, 1);
+        assert_eq!(by_dim, 1);
+        assert_eq!(excluded, 1, "the dropped candidate must be counted");
+    }
+
+    #[test]
+    fn predicate_mirrors_get_stale_embeddings_semantics() {
+        use super::embedding_row_matches_engine;
+        use super::super::ExpectedEmbedding;
+
+        let expected = ExpectedEmbedding {
+            model_name: "engA".to_string(),
+            model_hash: Some("hash1".to_string()),
+        };
+        assert!(embedding_row_matches_engine("engA", Some("hash1"), &expected));
+        assert!(embedding_row_matches_engine("engA", None, &expected));
+        assert!(embedding_row_matches_engine("engA", Some("unknown-pre-hash"), &expected));
+        assert!(!embedding_row_matches_engine("engB", Some("hash1"), &expected));
+        assert!(!embedding_row_matches_engine("engA", Some("hash2"), &expected));
+
+        // No expected hash => nothing to compare, any known stored hash is fine.
+        let no_hash = ExpectedEmbedding { model_name: "engA".to_string(), model_hash: None };
+        assert!(embedding_row_matches_engine("engA", Some("whatever"), &no_hash));
+        assert!(!embedding_row_matches_engine("engB", Some("whatever"), &no_hash));
     }
 }
