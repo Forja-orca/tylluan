@@ -33,6 +33,19 @@ set -m
 BINARY="${TYLLUAN_BINARY:-./target/release/tylluan-nexus}"
 PROBE="${UNAPPROVED_PEER_PROBE:-./target/release/unapproved_peer_probe}"
 CONFIG_DIR=$(mktemp -d)
+
+# Isolate the kernel's data dir per claim (real CI flake, 2026-10-18): without
+# this, every claim kernel boots with data_dir = <repo>/data (default
+# `./data/tylluan.db`, resolved relative to cwd = repo root) and therefore
+# shares ONE identity.key with every other dynamic claim in this job. A boot
+# interrupted in its first instants -- identity.key is written very early,
+# before the HTTP listener binds -- could leave that shared file truncated,
+# and the next claim's kernel then aborts at startup with "identity.key
+# corrupted" (load_or_create deliberately never regenerates a corrupt key).
+# Pointing TYLLUAN_DATA_DIR at the per-run mktemp dir moves both the db paths
+# and the identity file into the directory cleanup() already removes, so no
+# claim can poison another.
+export TYLLUAN_DATA_DIR="$CONFIG_DIR"
 KERNEL_PID=""
 cleanup() {
   if [ -n "$KERNEL_PID" ]; then
