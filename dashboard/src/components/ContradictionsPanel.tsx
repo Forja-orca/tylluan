@@ -120,9 +120,18 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
     fetchConflicted();
   }, [fetchConflicted]);
 
+  const containerRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && loading) {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = containerRef.current && (
+          containerRef.current.contains(active) || containerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
           abortControllerRef.current = null;
@@ -155,6 +164,7 @@ export function ContradictionsPanel({ bridge, notify }: ContradictionsPanelProps
 
   return (
     <section
+      ref={containerRef}
       aria-labelledby="contradictions-panel-heading"
       className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-5 font-sans"
     >

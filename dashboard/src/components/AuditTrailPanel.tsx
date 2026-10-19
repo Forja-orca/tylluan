@@ -267,9 +267,18 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
     fetchAuditTrail();
   }, [fetchAuditTrail]);
 
+  const containerRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && showRawLogs) {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = containerRef.current && (
+          containerRef.current.contains(active) || containerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         setShowRawLogs(false);
       }
     };
@@ -346,6 +355,7 @@ export default function AuditTrailPanel({ bridge }: AuditTrailPanelProps) {
 
   return (
     <section
+      ref={containerRef}
       aria-labelledby="audit-telemetry-heading"
       className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-6 font-sans"
     >

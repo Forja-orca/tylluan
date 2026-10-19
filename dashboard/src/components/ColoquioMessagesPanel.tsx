@@ -212,10 +212,18 @@ export function ColoquioMessagesPanel({
   const [highlightedTurn, setHighlightedTurn] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingTimeRef = useRef<number>(0);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && showTemplates) {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = composerRef.current && (
+          composerRef.current.contains(active) || composerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         setShowTemplates(false);
       }
     };
@@ -562,7 +570,7 @@ export function ColoquioMessagesPanel({
           </div>
         </div>
       )}
-      <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
+      <div ref={composerRef} className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/80 shrink-0">
         <div className="flex items-center gap-3 mb-2">
           <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider shrink-0">As:</span>
           <input className="w-24 bg-slate-800/80 border border-slate-700/60 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-600 transition-colors"

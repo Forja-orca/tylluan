@@ -105,10 +105,18 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   const [submittingPeer, setSubmittingPeer] = useState(false);
   
   const [confirmDeletePeer, setConfirmDeletePeer] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && confirmDeletePeer !== null) {
+        const active = document.activeElement;
+        const target = e.target as Node;
+        const isInside = containerRef.current && (
+          containerRef.current.contains(active) || containerRef.current.contains(target)
+        );
+        if (!isInside) return;
+
         setConfirmDeletePeer(null);
       }
     };
@@ -483,7 +491,7 @@ export function FederationTab({ bridge, notify }: FederationTabProps) {
   //  emerald-400 on emerald-500/10: 8.14:1 (slate-900) / 9.00:1 (slate-950) · emerald-400 on emerald-700/40: 6.31-6.88:1
   //  slate-950 on red-500 5.14:1 · hover red-400 7.07:1 · red-400 on red-500/10-20: 5.32-5.80:1
   return (
-    <div className="space-y-8 font-sans">
+    <div ref={containerRef} className="space-y-8 font-sans">
       {/* Sovereign Substrate Header Panel */}
       <div className="flex items-center justify-between gap-4 flex-wrap bg-slate-900/60 p-6 rounded-lg">
         <div className="flex items-center gap-3">
