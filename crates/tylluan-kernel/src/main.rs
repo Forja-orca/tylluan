@@ -852,6 +852,11 @@ async fn main() -> anyhow::Result<()> {
     if let Some(eng) = matcher.engine_arc() {
         silva.install_dense_engine(eng);
     }
+    // T1277-D: declare the engine fingerprint every stored embedding row is
+    // judged against (observation mode by default — see [silva]
+    // embedding_fingerprint_filter).
+    silva.set_expected_embedding_from_dense_engine();
+    silva.set_fingerprint_filter_enabled(config.silva.embedding_fingerprint_filter);
 
     // T206 (2026-08-22) wrapped this in catch_unwind believing it made the boot
     // panic-proof when libonnxruntime is missing. Verified WRONG 2026-08-23 by
@@ -1425,6 +1430,9 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(eng) = bg_matcher.engine_arc() {
                         bg_silva.install_dense_engine(eng);
                     }
+                    // T1277-D: refresh the expected fingerprint so the gate
+                    // judges rows against the NEW engine after the hot-swap.
+                    bg_silva.set_expected_embedding_from_dense_engine();
                     // Cache correction: with the query-embedding cache wired at
                     // the search_hybrid choke point (ff205b1), every recall path
                     // now caches — a stale cache after model swap would serve

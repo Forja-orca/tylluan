@@ -1125,6 +1125,19 @@ pub struct SilvaConfig {
     #[serde(default = "default_cascade_enabled")]
     pub cascade_enabled: bool,
 
+    /// Observation-first embedding-fingerprint gate (T1277-D). A stored
+    /// `node_embeddings` row written by a different engine than the one
+    /// embedding this query (different `model_name`, or a known `model_hash`
+    /// different from the current fingerprint) is not comparable with the
+    /// query vector; today the linear path silently drops dimension
+    /// mismatches and lets model mismatches through to pollute the ranking.
+    /// Default OFF = observation only: count how many candidates WOULD be
+    /// excluded, never exclude. ON = the linear path actually skips them.
+    /// Hash semantics mirror `get_stale_embeddings` exactly: NULL and the
+    /// `unknown-pre-hash` sentinel are never a mismatch.
+    #[serde(default = "default_embedding_fingerprint_filter")]
+    pub embedding_fingerprint_filter: bool,
+
     /// Opt-in honest-abstention floor for tylluan_recall: if the top fused
     /// score is below this value, recall returns "no sufficiently relevant
     /// memory" instead of forcing noise through as memory. 0.0 (default) =
@@ -1174,6 +1187,7 @@ impl Default for SilvaConfig {
             sync_interval_ms: default_sync_interval(),
             hybrid_sparse_enabled: default_hybrid_sparse_enabled(),
             cascade_enabled: default_cascade_enabled(),
+            embedding_fingerprint_filter: default_embedding_fingerprint_filter(),
             embed_batching_enabled: false,
             embed_batching_routing_enabled: false,
             embed_warm_start: true,
@@ -1865,6 +1879,8 @@ pub fn default_decay_half_life_hours() -> u64 { 336 }  // 14 dÃ­as
 pub fn default_hybrid_sparse_enabled() -> bool { false }
 
 pub fn default_cascade_enabled() -> bool { false }
+/// T1277-D: default OFF — observation mode. See `SilvaConfig::embedding_fingerprint_filter`.
+pub fn default_embedding_fingerprint_filter() -> bool { false }
 
 pub fn default_recall_abstain_min_score() -> f64 { 0.0 }
 fn default_system_guild_ms() -> u64 { 15_000 }
