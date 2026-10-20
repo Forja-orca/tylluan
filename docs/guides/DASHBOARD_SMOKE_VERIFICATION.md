@@ -13,12 +13,15 @@ Esta guía documenta el uso de la herramienta de verificación automatizada `scr
 4. **Descubrimiento Dinámico de Todas las Pestañas y Subpestañas:**
    - Inspecciona el DOM de `App.tsx` y la barra lateral para identificar todas las pestañas principales (`Overview`, `Memory`, `Team`, `Guilds`, `Laboratory`, `Audit Trail`).
    - Descubre dinámicamente las barras de subnavegación dentro de cada módulo, alcanzando un total de 26 vistas y subpestañas navegables sin necesidad de listas estáticas manuales.
-5. **Criterios de Aceptación por Vista:**
-   - Renderizado íntegro del shell HTML (`#root` y `<header>`).
-   - Cero errores en la consola de JavaScript (`console.error`).
-   - Cero peticiones fallidas (códigos HTTP 4xx o 5xx) hacia `/api`.
-   - Presencia de textos y elementos clave esperados en el DOM.
-   - Generación de captura de pantalla en formato PNG almacenada fuera del repositorio.
+5. **Criterios Endurecidos de Aceptación por Vista (Lote AJ):**
+   - **Renderizado íntegro del shell:** Confirmación de `#root`, `<header>` y `<main>`.
+   - **Verificación de pestaña activa tras clic:** Confirmación de que el botón de la subpestaña o pestaña recibe `aria-pressed="true"`, `aria-selected="true"`, `aria-current="page"` o estilos de clase activos en el DOM.
+   - **Contenido específico dentro de `<main>` (no en body):** Validación de palabras clave o selectores semánticos descubiertos del código fuente del componente para cada una de las 26 vistas.
+   - **Detección de pantallas de error y fugas JS:** Inspección de `<main>` buscando ErrorBoundaries (`Tab Error`, `An error occurred`), banners de fallo en alertas rojas (`Failed to...`, `Error al cargar...`), y fugas directas de JS sin procesar (`undefined`, `NaN`, `[object Object]`).
+   - **Exclusión de texto libre de usuario:** Se descartan explícitamente contenedores de mensajes, logs y bloques markdown (`.break-words`, `.whitespace-pre-wrap`, `pre`, `code`, `mark`, `[data-user-content]`, `.prose`, `details > div`) para que el detector solo analice el cromo estructural de la UI (cabeceras, badges, contadores, estados).
+   - **Cero errores en consola:** Cero excepciones no capturadas ni llamadas a `console.error`.
+   - **Cero peticiones API fallidas:** Cero respuestas HTTP 4xx o 5xx hacia `/api`, con arrastre de errores durante la fase de arranque (`bootApiErrors`).
+   - **Capturas PNG:** Generación de captura de pantalla en formato PNG almacenada fuera del repositorio.
 
 ---
 
@@ -43,6 +46,25 @@ El script detectará automáticamente:
 - El token de autenticación desde `.tylluan-token`.
 - La ruta del ejecutable de Chrome en el sistema operativo.
 - Puertos libres disponibles tanto para el servidor web como para el puerto de depuración CDP.
+
+### Suite de Pruebas Negativas Automáticas (`--negative-test`)
+Para comprobar de forma automática que el arnés detecta anomalías, tolera texto libre y captura fugas JS:
+
+```bash
+node scripts/dashboard_smoke.mjs --negative-test
+```
+
+Esta suite ejecuta 3 subtests automatizados contra Mock Kernels aislados:
+1. **Subtest 1 (Fallo HTTP 500):** Responde con error 500 en `/api/v1/guilds` y verifica que el smoke test falla con código 1 y marca `❌ FAIL`.
+2. **Subtest 2 (Caso A — Inmunidad en Texto Libre):** Sirve mensajes en Coloquio conteniendo `undefined`, `NaN` y `[object Object]` en texto libre, y verifica que el smoke test pasa limpiamente con código 0 (`✅ OK`).
+3. **Subtest 3 (Caso B — Detección de Fuga Real en Cromo):** Sirve métricas inválidas en `/api/v1/decide/shadow` provocando un valor `NaN` en una tarjeta de cromo estructural, y verifica que el smoke test falla con código 1, reporta `❌ FAIL` y nombra la causa `Fuga JS: NaN`.
+
+### Pruebas Específicas de Discriminación de Fugas (`--test-leak-detection`)
+Para ejecutar únicamente los subtests de discriminación de fugas JS (Caso A y Caso B):
+
+```bash
+node scripts/dashboard_smoke.mjs --test-leak-detection
+```
 
 ### Filtrar por Pestaña Específica
 Si se desea auditar únicamente una sección (por ejemplo, `Team` y todas sus 9 subpestañas):
@@ -83,45 +105,45 @@ node scripts/dashboard_smoke.mjs --chrome /ruta/hacia/chrome
 
 ## 4. Interpretación de Resultados
 
-Al finalizar, la herramienta imprime la tabla exhaustiva de las 26 vistas y subpestañas auditadas:
+Al finalizar, la herramienta imprime la tabla exhaustiva y endurecida de las 26 vistas y subpestañas auditadas:
 
 ```text
-===============================================================================================
-  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE TODAS LAS VISTAS Y SUBPESTAÑAS
-===============================================================================================
-Vista                              Estado    Consola     API Errs    Texto     Motivo
------------------------------------------------------------------------------------------------
-Overview > SUMMARY COCKPIT         ✅ OK      0           0           OK        —
-Overview > INTEROCEPTION           ✅ OK      0           0           OK        —
-Overview > SYSTEM CONFIG           ✅ OK      0           0           OK        —
-Memory > KNOWLEDGE GRAPH           ✅ OK      0           0           OK        —
-Memory > NODES                     ✅ OK      0           0           OK        —
-Memory > CONTRADICTIONS            ✅ OK      0           0           OK        —
-Team > FLEET STATUS                ✅ OK      0           0           OK        —
-Team > LOOP HEALTH                 ✅ OK      0           0           OK        —
-Team > WORK CONTRACTS              ✅ OK      0           0           OK        —
-Team > COMPETENCIES                ✅ OK      0           0           OK        —
-Team > CONFUSION                   ✅ OK      0           0           OK        —
-Team > HEATMAP                     ✅ OK      0           0           OK        —
-Team > COLOQUIO CHAT               ✅ OK      0           0           OK        —
-Team > AGENT COLLECTIVE            ✅ OK      0           0           OK        —
-Team > HITL DISPATCHES             ✅ OK      0           0           OK        —
-Guilds > GUILDS                    ✅ OK      0           0           OK        —
-Guilds > OUTPUTS LEDGER            ✅ OK      0           0           OK        —
-Guilds > CONNECTORS                ✅ OK      0           0           OK        —
-Guilds > MCP REGISTRY              ✅ OK      0           0           OK        —
-Guilds > FEDERATION                ✅ OK      0           0           OK        —
-Laboratory > LABORATORY            ✅ OK      0           0           OK        —
-Laboratory > VISION                ✅ OK      0           0           OK        —
-Laboratory > PLAN MODE             ✅ OK      0           0           OK        —
-Laboratory > PROJECT SKILLS        ✅ OK      0           0           OK        —
-Laboratory > BACKGROUND JOBS       ✅ OK      0           0           OK        —
-Audit Trail                        ✅ OK      0           0           OK        —
-===============================================================================================
+==============================================================================================================
+  📊 RESUMEN DE RESULTADOS: AUDITORÍA ENDURECIDA DE TODAS LAS VISTAS Y SUBPESTAÑAS
+==============================================================================================================
+Vista                              Estado    Activa    Errs Main     Consola   API Errs  Contenido   Motivo
+--------------------------------------------------------------------------------------------------------------
+Overview > SUMMARY COCKPIT         ✅ OK      OK        0             0         0         OK          —
+Overview > INTEROCEPTION           ✅ OK      OK        0             0         0         OK          —
+Overview > SYSTEM CONFIG           ✅ OK      OK        0             0         0         OK          —
+Memory > KNOWLEDGE GRAPH           ✅ OK      OK        0             0         0         OK          —
+Memory > NODES                     ✅ OK      OK        0             0         0         OK          —
+Memory > CONTRADICTIONS            ✅ OK      OK        0             0         0         OK          —
+Team > FLEET STATUS                ✅ OK      OK        0             0         0         OK          —
+Team > LOOP HEALTH                 ✅ OK      OK        0             0         0         OK          —
+Team > WORK CONTRACTS              ✅ OK      OK        0             0         0         OK          —
+Team > COMPETENCIES                ✅ OK      OK        0             0         0         OK          —
+Team > CONFUSION                   ✅ OK      OK        0             0         0         OK          —
+Team > HEATMAP                     ✅ OK      OK        0             0         0         OK          —
+Team > COLOQUIO CHAT               ✅ OK      OK        0             0         0         OK          —
+Team > AGENT COLLECTIVE            ✅ OK      OK        0             0         0         OK          —
+Team > HITL DISPATCHES             ✅ OK      OK        0             0         0         OK          —
+Guilds > GUILDS                    ✅ OK      OK        0             0         0         OK          —
+Guilds > OUTPUTS LEDGER            ✅ OK      OK        0             0         0         OK          —
+Guilds > CONNECTORS                ✅ OK      OK        0             0         0         OK          —
+Guilds > MCP REGISTRY              ✅ OK      OK        0             0         0         OK          —
+Guilds > FEDERATION                ✅ OK      OK        0             0         0         OK          —
+Laboratory > LABORATORY            ✅ OK      OK        0             0         0         OK          —
+Laboratory > VISION                ✅ OK      OK        0             0         0         OK          —
+Laboratory > PLAN MODE             ✅ OK      OK        0             0         0         OK          —
+Laboratory > PROJECT SKILLS        ✅ OK      OK        0             0         0         OK          —
+Laboratory > BACKGROUND JOBS       ✅ OK      OK        0             0         0         OK          —
+Audit Trail                        ✅ OK      OK        0             0         0         OK          —
+==============================================================================================================
 ```
 
-- **Código de Salida 0:** Todas las 26 vistas y subpestañas superaron los chequeos de renderizado, consola, red y textos.
-- **Código de Salida 1:** Al menos una vista presentó errores en consola, peticiones 4xx/5xx o fallo de renderizado.
+- **Código de Salida 0:** Todas las 26 vistas y subpestañas superaron los chequeos de renderizado, activación, contenido semántico en `<main>`, detección de errores y ausencia de fallos en consola y red.
+- **Código de Salida 1:** Al menos una vista presentó errores en consola, peticiones 4xx/5xx, fallos de renderizado, fugas JS o falta del contenido esperado.
 
 ---
 
