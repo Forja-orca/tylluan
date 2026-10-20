@@ -211,6 +211,34 @@ impl TylluanServer {
                 if !resolved && approved
                     && let Some(plan) = crate::security::grants::get_plan(request_id).await
                 {
+                    // D-13: an agent must not approve its own plan. Before this
+                    // check the approver was never compared with the author, so
+                    // `tylluan_do(record_experience)`-style loops could plan and
+                    // approve themselves with no human in the loop. The plan is
+                    // NOT consumed on refusal: it stays pending for a real
+                    // approver. Operator credentials (master token / dev bypass)
+                    // are exempt — a human can always approve anything.
+                    let operator = crate::transport::http::auth::operator_gate_allows(
+                        crate::transport::http::auth::current_auth_kind(),
+                    );
+                    let is_anonymous = |who: &str| who.is_empty() || who == "anonymous";
+                    let is_self = plan.agent_id == agent_id
+                        || (is_anonymous(&plan.agent_id) && is_anonymous(&agent_id));
+                    if is_self && !operator {
+                        return Ok(CallToolResult {
+                            content: vec![Content::text(
+                                serde_json::json!({
+                                    "error": "self_approval",
+                                    "request_id": request_id,
+                                    "author": plan.agent_id,
+                                    "approver": agent_id,
+                                    "hint": "another agent, or the operator token, must approve this plan",
+                                })
+                                .to_string(),
+                            )],
+                            is_error: Some(true),
+                        });
+                    }
                     let approval_t0 = std::time::Instant::now();
                     let call_params = rmcp::model::CallToolRequestParam {
                         name: plan.tool.clone().into(),
@@ -243,11 +271,24 @@ impl TylluanServer {
                     let audit_intent = plan.intent.clone();
                     let audit_guild = plan.guild.clone();
                     let audit_tool = plan.tool.clone();
-                    let audit_agent = plan.agent_id.clone();
+                    // D-13: audit the APPROVER, not the plan author — the author
+                    // was the only id recorded before, so the log attributed the
+                    // action to whoever wrote the plan. The author is kept in the
+                    // preview so the trail is not lost.
+                    let audit_agent = agent_id.clone();
+                    let audit_preview = if plan.agent_id != audit_agent {
+                        format!("[plan author: {}] {preview}", plan.agent_id)
+                    } else {
+                        preview
+                    };
+                    // `human_intervention` is only true with an operator
+                    // credential: it used to be hardcoded `true`, which claimed a
+                    // human approved even when another agent had.
+                    let human_intervention = operator;
                     tokio::task::spawn_blocking(move || {
                         let _ = handler_do::audit::log_audit_entry(
                             &audit_intent, &audit_guild, &audit_tool, &audit_agent,
-                            is_success, &preview, approval_latency_ms, true,
+                            is_success, &audit_preview, approval_latency_ms, human_intervention,
                         );
                     });
                     return Ok(result);
@@ -619,6 +660,186 @@ mod tests {
         assert!(text.contains("status"), "should contain 'status' field");
         assert!(text.contains("guilds"), "should contain 'guilds' field");
         assert!(text.contains("storage"), "should contain 'storage' field");
+    }
+
+    // ── D-13: approve_action must not let an agent approve its own plan ──────
+
+    async fn call_approve(server: &TylluanServer, request_id: &str, agent: Option<&str>) -> CallToolResult {
+        let mut args = serde_json::Map::new();
+        args.insert("requestId".to_string(), serde_json::json!(request_id));
+        args.insert("approved".to_string(), serde_json::json!(true));
+        if let Some(a) = agent {
+            args.insert("agent_id".to_string(), serde_json::json!(a));
+        }
+        server
+            .handle_kernel_tool("approve_action", Some(args))
+            .await
+            .expect("approve_action must not fail at the transport level")
+    }
+
+    fn tool_text(result: &CallToolResult) -> String {
+        result
+            .content
+            .iter()
+            .filter_map(|c| c.as_text())
+            .map(|t| t.text.clone())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    async fn seed_plan(id: &str, author: Option<&str>, intent: &str) {
+        // `approve_action` calls `resolve()` before the plan lookup, and the
+        // registry is only initialized by the real bootstrap. Both inits are
+        // OnceLock::set, so calling them from every test is safe.
+        crate::security::grants::init();
+        crate::security::grants::init_plan_store();
+        let args = serde_json::json!({ "command": "echo d13" });
+        crate::security::grants::store_plan(
+            id,
+            "d13-no-such-guild",
+            "d13_noop",
+            &args,
+            author.unwrap_or("anonymous"),
+            intent,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_refuses_self_approval_and_keeps_plan_pending() {
+        let server = test_server().await;
+        seed_plan("d13-self", Some("agent-a"), "d13:test:self").await;
+
+        let result = call_approve(&server, "d13-self", Some("agent-a")).await;
+        assert_eq!(result.is_error, Some(true), "self-approval must be an error");
+        let text = tool_text(&result);
+        assert!(text.contains("self_approval"), "must name the reason: {text}");
+
+        // The plan must NOT be consumed: a real approver can still take it.
+        assert!(
+            crate::security::grants::get_plan("d13-self").await.is_some(),
+            "a refused self-approval must leave the plan pending"
+        );
+        crate::security::grants::remove_plan("d13-self").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_accepts_another_agent() {
+        let server = test_server().await;
+        seed_plan("d13-other", Some("agent-a"), "d13:test:other").await;
+
+        let result = call_approve(&server, "d13-other", Some("agent-b")).await;
+        let text = tool_text(&result);
+        assert!(!text.contains("self_approval"), "another agent is a valid approver: {text}");
+        assert!(
+            crate::security::grants::get_plan("d13-other").await.is_none(),
+            "an accepted approval consumes the plan"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_blocks_anonymous_self_approval() {
+        // No agent_id at all on both sides: previously indistinguishable, and
+        // exactly the shape of an unattended loop.
+        let server = test_server().await;
+        seed_plan("d13-anon", None, "d13:test:anon").await;
+
+        let blocked = call_approve(&server, "d13-anon", None).await;
+        assert_eq!(blocked.is_error, Some(true));
+        assert!(tool_text(&blocked).contains("self_approval"));
+        assert!(crate::security::grants::get_plan("d13-anon").await.is_some());
+
+        // A named agent breaks the tie and the plan goes through.
+        let ok = call_approve(&server, "d13-anon", Some("agent-b")).await;
+        assert!(!tool_text(&ok).contains("self_approval"));
+        assert!(crate::security::grants::get_plan("d13-anon").await.is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_operator_may_self_approve() {
+        use crate::transport::http::auth::{ACL_AUTH_KIND, AclAuthKind};
+
+        let server = test_server().await;
+        seed_plan("d13-operator", Some("agent-a"), "d13:test:operator").await;
+
+        let result = ACL_AUTH_KIND
+            .scope(AclAuthKind::MasterToken, async {
+                call_approve(&server, "d13-operator", Some("agent-a")).await
+            })
+            .await;
+        assert!(
+            !tool_text(&result).contains("self_approval"),
+            "the operator token must be able to approve anything"
+        );
+        assert!(
+            crate::security::grants::get_plan("d13-operator").await.is_none(),
+            "the operator's approval executes the plan"
+        );
+    }
+
+    /// Poll the audit store for the row of a given intent. The write is
+    /// fire-and-forget and other tests write to the same file, so this waits
+    /// rather than assuming a fixed position.
+    async fn audit_row(intent: &str) -> Option<(String, i64)> {
+        use crate::transport::server::handler_do::audit::audit_db_path;
+        let path = audit_db_path();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let found = tokio::task::spawn_blocking({
+                let path = path.clone();
+                let intent = intent.to_string();
+                move || -> Option<(String, i64)> {
+                    let conn = crate::config::open_db(&path).ok()?;
+                    conn.query_row(
+                        "SELECT agent_id, human_intervention FROM guild_audit_log
+                         WHERE intent = ?1 ORDER BY id DESC LIMIT 1",
+                        rusqlite::params![intent],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .ok()
+                }
+            })
+            .await
+            .ok()
+            .flatten();
+            if found.is_some() {
+                return found;
+            }
+            if std::time::Instant::now() >= deadline {
+                return None;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn approve_action_audit_names_the_approver_and_human_only_for_operator() {
+        use crate::transport::http::auth::{ACL_AUTH_KIND, AclAuthKind};
+
+        let server = test_server().await;
+
+        // Agent-to-agent approval: the log must name the approver, and it must
+        // NOT claim a human intervened (that was hardcoded `true` before D-13).
+        seed_plan("d13-audit-agent", Some("agent-a"), "d13:audit:agent").await;
+        let _ = call_approve(&server, "d13-audit-agent", Some("agent-b")).await;
+        let (who, human) = audit_row("d13:audit:agent")
+            .await
+            .expect("the agent approval must be audited");
+        assert_eq!(who, "agent-b", "the audit must name the approver, not the author");
+        assert_eq!(human, 0, "an agent approval is not human intervention");
+
+        // Operator approval: same, but human_intervention must be true.
+        seed_plan("d13-audit-operator", Some("agent-a"), "d13:audit:operator").await;
+        let _ = ACL_AUTH_KIND
+            .scope(AclAuthKind::MasterToken, async {
+                call_approve(&server, "d13-audit-operator", Some("agent-a")).await
+            })
+            .await;
+        let (who, human) = audit_row("d13:audit:operator")
+            .await
+            .expect("the operator approval must be audited");
+        assert_eq!(who, "agent-a");
+        assert_eq!(human, 1, "the operator credential IS human intervention");
     }
 
     #[tokio::test(flavor = "multi_thread")]
