@@ -154,7 +154,11 @@ export async function deleteAgentMemories(client: Fetcher, agentId: string): Pro
 
 export async function getAgentProfiles(client: Fetcher): Promise<AgentProfile[]> {
   try {
-    return await client.fetch('/api/v1/agent-profiles');
+    const res = await client.fetch<{ profiles?: AgentProfile[] } | AgentProfile[]>('/api/v1/agent-profiles');
+    if (res && typeof res === 'object' && 'profiles' in res && Array.isArray(res.profiles)) {
+      return res.profiles;
+    }
+    return Array.isArray(res) ? res : [];
   } catch {
     return [];
   }

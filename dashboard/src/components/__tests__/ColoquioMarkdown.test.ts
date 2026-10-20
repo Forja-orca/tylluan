@@ -128,4 +128,40 @@ describe('Coloquio Markdown Renderer — Lote X (X1 + X2)', () => {
       }
     });
   });
+
+  describe('Z2: CRLF Windows line breaks in code fences', () => {
+    it('parses code fence with Windows CRLF (\\r\\n) into pre/code block', () => {
+      const crlfInput = '```rust\r\nfn test() {\r\n    assert!(true);\r\n}\r\n```';
+      const output = parseMarkdown(crlfInput);
+      expect(output).toContain('<pre class="bg-slate-950/90 border border-slate-700/50 rounded-lg p-3 my-2 font-mono text-[11px] overflow-x-auto text-slate-200">');
+      expect(output).toContain('>rust</div>');
+      expect(output).toContain('<code>fn test() {\r\n    assert!(true);\r\n}</code>');
+    });
+
+    it('produces equivalent markup between Unix LF and Windows CRLF code blocks', () => {
+      const lfInput = '```typescript\nconst a = 1;\nconst b = 2;\n```';
+      const crlfInput = '```typescript\r\nconst a = 1;\r\nconst b = 2;\r\n```';
+      const lfOutput = parseMarkdown(lfInput);
+      const crlfOutput = parseMarkdown(crlfInput);
+
+      expect(lfOutput).toContain('>typescript</div>');
+      expect(crlfOutput).toContain('>typescript</div>');
+      // Normalized code body content matches
+      expect(crlfOutput.replace(/\r\n/g, '\n')).toBe(lfOutput);
+    });
+
+    it('handles language tags with trailing whitespace and CRLF properly', () => {
+      const input = '```python   \r\ndef hello():\r\n    return "world"\r\n```';
+      const output = parseMarkdown(input);
+      expect(output).toContain('>python</div>');
+      expect(output).toContain('def hello():\r\n    return "world"');
+    });
+
+    it('handles empty language tag with CRLF defaulting to code', () => {
+      const input = '```\r\nhello world\r\n```';
+      const output = parseMarkdown(input);
+      expect(output).toContain('>code</div>');
+      expect(output).toContain('hello world');
+    });
+  });
 });

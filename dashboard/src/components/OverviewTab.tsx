@@ -313,12 +313,15 @@ export function OverviewTab({
   };
 
   const { agentProfiles } = useNexus();
-  const isProfileResolved = agentProfiles && agentProfiles.length > 0;
-  const isModelLoaded = sysStatus?.embeddings_loaded || sysStatus?.silva_healthy;
+  const isProfileResolved = Boolean(agentProfiles && agentProfiles.length > 0);
 
-  const isFirstStart = (memoryStats?.node_count === 0 || liveMetrics?.graphNodes === 0) &&
-    !(isProfileResolved && isModelLoaded) &&
-    !(localStorage.getItem('tylluan_wizard_query') === 'true' && localStorage.getItem('tylluan_wizard_mcp') === 'true');
+  const totalNodes = memoryStats?.node_count ?? goldenSignals?.saturation?.node_count ?? liveMetrics?.graphNodes ?? 0;
+  const hasKernelData = totalNodes > 0 || isProfileResolved;
+
+  // The welcome onboarding checklist should appear ONLY when the kernel has zero data,
+  // unless the wizard was already marked completed in localStorage.
+  const isWizardCompleted = localStorage.getItem('tylluan_wizard_query') === 'true' && localStorage.getItem('tylluan_wizard_mcp') === 'true';
+  const isFirstStart = !hasKernelData && !isWizardCompleted;
 
   if (isFirstStart) {
     return (
@@ -824,7 +827,7 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
     const load = async () => {
       try {
         const data = await bridge.fetchSessionDigests(3);
-        setDigests(data);
+        setDigests(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Failed to load session digests:', err);
       } finally {
@@ -838,7 +841,7 @@ function RecentSessions({ bridge }: { bridge: NexusBridge | null }) {
     return <div className="p-8 text-center text-xs text-slate-400 animate-pulse">Analyzing hippocampus...</div>;
   }
 
-  if (digests.length === 0) {
+  if (!digests || digests.length === 0) {
     return <div className="p-8 text-center text-xs text-slate-400 italic">No session digests available.</div>;
   }
 
