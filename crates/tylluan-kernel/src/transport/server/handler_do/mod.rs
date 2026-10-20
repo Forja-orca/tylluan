@@ -1778,11 +1778,17 @@ mod tests {
         let _result = resolve_guild_name(&server, intent, None, None).await;
 
         // Since the lesson is 31 days old, it should expire (decay) and the resolve should fall through.
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await; // wait for spawned decay task to complete
-
-        let node = silva.get_node(lesson_key).await.unwrap().unwrap();
+        // D-8: the decay happens in a spawned task. A fixed 150ms sleep flaked
+        // under the full parallel suite (ONNX/embedding contention elsewhere in
+        // the binary can starve that task), so poll for the observable effect.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut weight = silva.get_node(lesson_key).await.unwrap().unwrap().weight;
+        while weight >= 1.0 && std::time::Instant::now() < deadline {
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            weight = silva.get_node(lesson_key).await.unwrap().unwrap().weight;
+        }
         // Weight should have been decayed (Ebbinghaus exponential decay or apply_node_decay)
-        assert!(node.weight < 1.0, "Old lesson weight should have decayed, got {}", node.weight);
+        assert!(weight < 1.0, "Old lesson weight should have decayed, got {weight}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1807,7 +1813,11 @@ mod tests {
         // tests) a flat 150ms was intermittently too short and made this test
         // flaky (observed failing under a full `cargo test --lib` run,
         // always passing in isolation).
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        // D-8: the trace is written by a spawned task. 2s was still too tight
+        // under the full parallel suite (the pre-dispatch embedding can block on
+        // the ONNX mutex held by other tests), so the deadline is 10s while the
+        // poll stays at 20ms -- the common case is still ~20ms.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut has_rejected = false;
         while std::time::Instant::now() < deadline {
             let traces = silva.get_node_traces(lesson_key, 10).await.unwrap();
@@ -1858,10 +1868,19 @@ mod tests {
         // 4. Call resolve_guild_name — should deprecate and fall through to matcher
         let _result = resolve_guild_name(&server, intent, None, None).await;
 
-        // 5. Verify lesson was marked as deprecated in background
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        let traces = silva.get_node_traces(lesson_key, 20).await.unwrap();
-        let has_deprecated = traces.iter().any(|t| t.trace_type == "deprecated");
+        // 5. Verify lesson was marked as deprecated in background.
+        // D-8: poll instead of sleeping a fixed 300ms -- the deprecation is a
+        // spawned write and 300ms flaked under the full parallel suite.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut has_deprecated = false;
+        while std::time::Instant::now() < deadline {
+            let traces = silva.get_node_traces(lesson_key, 20).await.unwrap();
+            if traces.iter().any(|t| t.trace_type == "deprecated") {
+                has_deprecated = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
         assert!(has_deprecated, "Lesson should have a 'deprecated' trace after low success-rate check");
     }
 

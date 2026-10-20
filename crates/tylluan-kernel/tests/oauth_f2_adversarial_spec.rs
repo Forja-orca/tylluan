@@ -4,18 +4,30 @@
 //! Cada caso afirma el resultado ESPERADO y el POR QUÉ, con referencia al
 //! diseño (`docs/internal/DESIGN_oauth_operator_2026-10.md`, §§2/5, números
 //! R*) y al código F1 verificado hoy (`transport/http/oauth.rs`,
-//! `transport/http/auth.rs`). Todos están `#[ignore]` mientras T1281 no
-//! aterrice: son el contrato que F2 debe cumplir, no una afirmación de que
-//! F2 ya existe. Se ejecutan a mano con:
+//! `transport/http/auth.rs`).
+//!
+//! ACTIVACIÓN (B-5, 2026-10-20, tras las fases A y B de F2 en `d88512d`):
+//!   ACTIVOS (corren en la corrida normal de cada CI): C2b, C3, C4a, C4b, C5.
+//!   C3 se activó porque los claims de scope YA existen (`sign_jwt` lleva
+//!   `scope: mcp` desde `d88512d`); C4a/C4b/C5 porque su condición declarada
+//!   era "comportamiento F1 que F2 debe preservar" y F2 ya existe.
+//!   Siguen `#[ignore]` porque su condición NO se ha cumplido:
+//!     C1, C2a — "activar cuando el contrato de consentimiento esté
+//!               congelado": el plan (`docs/internal/
+//!               PLAN_oauth_f2_consentimiento_deep_2026-10.md`) se commitó
+//!               en `d88512d` SIN IMPLEMENTAR (5 decisiones de José pendientes).
+//!     C2c     — "el registro de clientes llega con el diseño de
+//!               consentimiento": el registro aún no existe.
+//!
+//!   Los ignorados se ejecutan a mano con:
 //!
 //!   cargo test -p tylluan-kernel --test oauth_f2_adversarial_spec -- --ignored --nocapture
 //!
-//! Estado real al escribir esto (ejecutado en vivo, no supuesto):
-//!   C1/C2a/C2c/C3/C4/C5 pasan HOY (F1 ya cumple el invariante) — se dejan
-//!   `#[ignore]` para no interferir con el desarrollo de T1281; activarlos
-//!   cuando el contrato F2 esté congelado.
-//!   C2b FALLA hoy: encontró un agujero real en `is_loopback_redirect_uri`
-//!   (ver doc del caso). Es un hallazgo, no un test roto.
+//! Estado verificado EN VIVO el 2026-10-20 (exit capturado, sin pipe):
+//!   corrida normal → 5 passed, 0 failed, 3 ignored (EXIT 0);
+//!   `--ignored` → 3 passed, 0 failed (EXIT 0).
+//!   Historial: al escribir la suite (2026-10-19) solo C2b FALLABA — hallazgo
+//!   real en `is_loopback_redirect_uri` (ver doc del caso), cerrado en `1a2b6a0`.
 //!
 //! Lo que YA está cubierto por F1 y NO se duplica aquí: R12/R13/R14/R15 y E1
 //! (token maestro por query no satisface la clase operador) viven en
@@ -215,7 +227,7 @@ async fn c2a_hostile_redirect_uris_rejected() {
     }
 }
 
-/// CASO C2b (DESIGN §3 Fase 1-c; amenaza T2) — HALLAZGO: falla hoy.
+/// CASO C2b (DESIGN §3 Fase 1-c; amenaza T2) — hallazgo original de esta suite, CERRADO en `1a2b6a0`.
 ///
 /// ESPERADO: `http://127.0.0.1:9999@evil.example/cb` (y su variante
 /// `localhost`) → 400 `invalid_request`.
@@ -227,15 +239,17 @@ async fn c2a_hostile_redirect_uris_rejected() {
 /// fuga T2 que el allowlist de loopback existe para cerrar. PKCE no ayuda:
 /// el atacante eligió su propio challenge.
 ///
-/// HOY (F1): **FALLA** — `is_loopback_redirect_uri` (`oauth.rs`, Fase 1-c)
-/// parte la autoridad con `split(':').next()` y ve "127.0.0.1" sin nunca
-/// mirar el '@', así que acepta el URI. Verificado en vivo al escribir este
-/// fichero (el test devolvió 307, `Redirect::temporary`). Acotación del
-/// riesgo: solo emite con `dev_mode=true` (F1 ya cierra dev_mode=false), y el intercambio del code
-/// exige alcanzar el endpoint de token en loopback — explota desde un
+/// HISTORIAL (2026-10-19): **FALLABA** — `is_loopback_redirect_uri` (`oauth.rs`, Fase 1-c)
+/// partía la autoridad con `split(':').next()` y veía "127.0.0.1" sin nunca
+/// mirar el '@', así que aceptaba el URI (verificado en vivo: el test devolvió
+/// 307, `Redirect::temporary`). Acotación del riesgo: solo emitía con
+/// `dev_mode=true` (F1 ya cierra dev_mode=false), y el intercambio del code
+/// exige alcanzar el endpoint de token en loopback — explotaba desde un
 /// proceso local o una página web que fuerce la petición, no desde la LAN a
-/// un kernel en 127.0.0.1. Corrección esperada en F2: parsear la autoridad de
-/// verdad (rechazar '@' en la autoridad o usar el crate `url`), no un split.
+/// un kernel en 127.0.0.1.
+/// CERRADO en `1a2b6a0` (la autoridad se parsea de verdad: '@' y backslash
+/// rechazados). El test está ACTIVO (sin `#[ignore]`) desde entonces; pasa,
+/// verificado en vivo el 2026-10-20.
 #[tokio::test(flavor = "multi_thread")]
 async fn c2b_userinfo_redirect_uri_rejected() {
     let state = support::test_state("f2_c2b").await; // dev_mode=true
@@ -316,11 +330,10 @@ async fn c2c_unregistered_redirect_without_consent_issues_nothing() {
 /// claims (r14 en la batería F1). El test afirma el MISMO resultado 403 con
 /// un JWT minteado en directo, más el control positivo del token maestro.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): activar cuando existan los claims de scope"]
 async fn c3_mcp_scope_never_satisfies_operator_class() {
     let state = support::test_state_custom("f2_c3", Some(MASTER.to_string()), false).await;
-    // JWT con el formato actual (sin claim scope): post-F2 el de scope=mcp
-    // debe producir exactamente el mismo 403.
+    // JWT firmado por el kernel con claim `scope=mcp` (desde d88512d): debe
+    // producir exactamente el mismo 403 que cualquier otro JWT OAuth.
     let jwt = state.oauth.sign_jwt("f2-spec-jti-c3", 60);
     let app = build_router(state);
 
@@ -350,7 +363,6 @@ async fn c3_mcp_scope_never_satisfies_operator_class() {
 ///
 /// HOY (F1): pasa — `token_handler` hace `remove()` atómico del code.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): comportamiento F1 que F2 debe preservar"]
 async fn c4a_auth_code_is_single_use() {
     let state = support::test_state("f2_c4a").await; // dev_mode=true
     let app = build_router(state);
@@ -379,7 +391,6 @@ async fn c4a_auth_code_is_single_use() {
 ///
 /// HOY (F1): pasa — `token_handler` compara contra `pending.redirect_uri`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): comportamiento F1 que F2 debe preservar"]
 async fn c4b_auth_code_bound_to_original_redirect() {
     let state = support::test_state("f2_c4b").await; // dev_mode=true
     let app = build_router(state);
@@ -409,7 +420,6 @@ async fn c4b_auth_code_bound_to_original_redirect() {
 /// maestro (`has_valid_query`, auth.rs); un JWT por query no autentica y la
 /// petición cae en 401 del bearer middleware.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "spec F2 (T1281): comportamiento F1 que F2 debe preservar"]
 async fn c5_oauth_jwt_in_query_never_authenticates() {
     let state = support::test_state_custom("f2_c5", Some(MASTER.to_string()), false).await;
     let jwt = state.oauth.sign_jwt("f2-spec-jti-c5", 60);

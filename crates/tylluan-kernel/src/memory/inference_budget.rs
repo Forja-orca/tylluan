@@ -558,29 +558,39 @@ mod tests {
     fn condvar_waiter_does_not_poll_while_parked() {
         let budget = std::sync::Arc::new(InferenceBudget::legacy_unbounded());
         let holder = budget.acquire_sync().expect("holder admitted");
-        let entered = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let waiter = {
             let b = Arc::clone(&budget);
-            let entered = Arc::clone(&entered);
-            std::thread::spawn(move || {
-                entered.store(true, std::sync::atomic::Ordering::SeqCst);
-                b.acquire_sync().expect("legacy waiter must be admitted")
-            })
+            std::thread::spawn(move || b.acquire_sync().expect("legacy waiter must be admitted"))
         };
-        // Deterministic overlap: wait until the waiter is provably past the
-        // fast path and parked inside the Condvar wait, then hold 50ms.
-        while !entered.load(std::sync::atomic::Ordering::SeqCst) {
+        // Deterministic overlap, load-tolerant (D-8): wait until BOTH fast paths
+        // have been attempted (holder's + waiter's failed one) instead of
+        // assuming that 50ms after a "thread started" flag the waiter must
+        // already be parked. The old `assert_eq!(.., 2)` flaked inside the full
+        // parallel suite: under load the waiter had not attempted admission yet
+        // and the counter read 1.
+        let park_deadline = Instant::now() + Duration::from_secs(5);
+        while budget.sem.try_take_attempts() < 2 {
+            assert!(
+                Instant::now() < park_deadline,
+                "waiter never attempted admission (attempts={})",
+                budget.sem.try_take_attempts()
+            );
             std::thread::sleep(Duration::from_millis(1));
         }
-        std::thread::sleep(Duration::from_millis(50));
-        // The parked waiter must have made NO further try_take attempts.
-        // Exactly 2 are expected ever: the holder's fast path + the waiter's
-        // single failed fast path before it started blocking. The old code
-        // would show ~12+ by now (one per 5ms tick for 50ms+).
-        assert_eq!(
-            budget.sem.try_take_attempts(),
-            2,
-            "a parked legacy waiter must NOT poll try_take (old busy-wait made ~1 attempt/5ms)"
+        // Observation window: while the waiter is parked, the counter must NOT
+        // grow. A busy-wait loop (one attempt per 5ms tick) would add ~10-20 in
+        // this window; a Condvar-parked waiter adds 0. One spare attempt is
+        // tolerated because a spurious wakeup is allowed to retry once -- it is
+        // still not polling.
+        let before_window = budget.sem.try_take_attempts();
+        std::thread::sleep(Duration::from_millis(100));
+        let after_window = budget.sem.try_take_attempts();
+        assert!(
+            after_window <= before_window + 1,
+            "a parked legacy waiter must NOT poll try_take: {} -> {} in 100ms \
+             (old busy-wait made ~1 attempt/5ms)",
+            before_window,
+            after_window
         );
         let t_give = Instant::now();
         drop(holder); // InferenceGuard::drop -> give() -> notify_one
@@ -597,11 +607,16 @@ mod tests {
             woken < Duration::from_secs(2),
             "waiter must be woken by give(), not hang until a timeout, got {woken:?}"
         );
-        // Still zero polling attempts after the whole cycle.
-        assert_eq!(
-            budget.sem.try_take_attempts(),
-            2,
-            "admission after give must come from the Condvar wakeup, not a new poll attempt"
+        // Admission must come from the Condvar wakeup, not from a new poll
+        // streak: the woken waiter retries once (that is the wake path, by
+        // design), so the bound allows that single retry and nothing more.
+        let after_join = budget.sem.try_take_attempts();
+        assert!(
+            after_join <= after_window + 1,
+            "admission after give must come from the Condvar wakeup, not a poll loop: \
+             {} -> {} after wake",
+            after_window,
+            after_join
         );
     }
 

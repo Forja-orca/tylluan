@@ -392,8 +392,17 @@ mod tests {
             "",
         )
         .expect("read through seam must succeed");
-        assert_eq!(rows.len(), 1, "exactly the row just written: {rows:?}");
-        assert_eq!(rows[0], (Some(42), "ok".to_string()));
+        // D-8: the property under test is "write and read resolve to the SAME
+        // file", not "this database contains exactly one row". While the seam is
+        // set, TYLLUAN_AUDIT_DB is process-global, so any other test in this
+        // binary that logs an audit entry lands in this same file -- which is
+        // exactly how the old `assert_eq!(rows.len(), 1)` flaked under the full
+        // parallel suite (observed 3 rows: ours + two from concurrent tests).
+        // The guard above only excludes a second *seam user*, not those writers.
+        assert!(
+            rows.iter().any(|r| *r == (Some(42), "ok".to_string())),
+            "the row written through the seam must be visible through the reader: {rows:?}"
+        );
 
         unsafe { std::env::remove_var("TYLLUAN_AUDIT_DB") };
         let _ = std::fs::remove_file(&db);
