@@ -89,9 +89,34 @@ Compilado a petición explícita de José tras dos ciclos de auditoría en el mi
 - [ ] Re-sellar el HTML de la biblia con los cierres de este ciclo.
 
 **Producción (decisión de José)**
-- [ ] Reinicio del kernel: **José reinició el 2026-10-19**: producción corre `2458b4a` con la Fase 1 de OAuth (`61bc97e`). Los cambios posteriores (D-2/D-3 de OAuth F2, arreglo SSRF) necesitan otro reinicio.
+- [ ] Reinicio del kernel: **José reinició el 2026-10-20 (20:01)**: producción corre `8001d23` (OAuth F2 A+B, arreglo SSRF, juez de ASI06 corregido, rotación de `kernel.log`, telemetría de recall). Lo posterior (endpoints de cuarentena, desafío OAuth con origen de loopback, dependencias de TLS, D-13/D-14 del juez) necesita otro reinicio, que José hará al volver.
 - [x] `[p2p] enabled = false` en `tylluan.toml`: **José decidió (2026-10-15) dejarlo en `false` como contención, sin dar por bueno retroactivamente quién lo cambió** (fichero en `.gitignore`, sin línea base). Activar P2P sería decisión de exposición de red. Surte efecto al reiniciar; nadie toca ese fichero.
 - [ ] Rotación del token maestro (expuesto en una transcripción): recomendada al pasar a `dev_mode=false`.
+
+### 🟢 CICLO 2026-10-20/21 — Auditoría externa de arquitectura y análisis MCP/Skills (lo aprovechable)
+
+Fuentes, ambas **no vinculantes** y contrastadas con el código antes de aceptar nada: una auditoría externa de `Forja-orca/tylluan` sobre `0f323e4` (compilación y 1110 tests de la lib reproducidos por el auditor; el resto estático) y un análisis sobre si las guilds deberían sustituirse por Skills o Plugins. Lo que el código desmiente queda aquí también, para no repetirlo.
+
+**Aceptado como trabajo (pendiente, sin asignar salvo indicación)**
+- [ ] **Carril de CI programado y no bloqueante** (semanal más disparo manual) para los tests ignorados: inferencia real (`test_real_inference_bge_m3`, `test_real_inference_minilm`), prueba de escala `t1277f_scale_*` y el benchmark de PageRank. Hoy las afirmaciones más fuertes (calidad de embeddings, rendimiento a escala) no corren de forma continua.
+- [ ] **Quickstart en inglés**, destilado de la documentación de gobierno ya existente: es la crítica más barata de corregir y mejora la adopción externa.
+- [ ] **Portabilidad del e2e:** el auditor dice que `tests/e2e/harness.py` fija una ruta de Windows; en el HEAD actual no se reproduce (sin rutas absolutas). Que Buffy lo ejecute desde otro directorio y lo confirme.
+- [ ] **Trocear los ficheros monolíticos** por sus costuras implícitas: `handler_do/mod.rs` (2.734 líneas), `config.rs` (2.847), `api_v1/mod.rs` (2.009), `api_admin.rs` (1.969), `silva/nodes.rs` (1.985), `silva/search.rs` (1.858). Techo blando de la casa: 800.
+- [ ] **Auditar cada bloque `[agents.<id>.wake]`**: dejar `auto_approve` desactivado donde la ejecución sin supervisión no sea aceptable (recomendación operativa; la función es *fail-closed* por defecto).
+- [ ] **Spike MCP + Skills** (tamaño pequeño, no una arquitectura nueva): importador de ficheros de skill del estándar abierto Agent Skills (carpetas con un SKILL.md) hacia `@skill:` con la misma puerta de escritura que `tylluan_remember`, probado con dos skills reales. Una skill es texto que se inyecta en el contexto de un agente, es decir, contenido no confiable: no se cargan skills de terceros sin pasar por la capa 1 y el juez de ASI06.
+- [ ] **Pulir el consumo de servidores MCP externos** sobre la API que ya existe (`/api/v1/mcp/external`: alta, baja, edición, descubrimiento): descubrimiento, autenticación y políticas de permisos.
+- [ ] **Lenguaje de la documentación:** presentar el modelo como «MCP + Skills + guilds del kernel». No renombrar las guilds como «Skills»: una skill no ejecuta procesos y una guild sí.
+
+**Decisiones de José (no se toman sin él)**
+- [ ] **Docker como perfil por defecto** para las guilds de ejecución (`bash`, exec): aísla mucho más que la allowlist de nombres de comando, a cambio de fricción y de depender de Docker.
+- [ ] **Vínculo token→`agent_id` obligatorio:** es la frontera real de memoria entre agentes, pero hoy es opcional y el 63 % del recall real es `anonymous`; choca con la premisa de que la seguridad no estorbe. Todo cambio de autenticación sigue sujeto a la regla de no generar ni rotar tokens sin que José lo sepa.
+
+**Correcciones al informe externo (verificadas en el código, ya existe o no se reproduce)**
+- Las herramientas soberanas son **6** (`tylluan_do`, `remember`, `recall`, `think`, `graph`, `decide`), con un test que lo vigila; el informe cita dos.
+- Hay **29** plugins en `guilds/core/` y el catálogo cuenta **46** guilds; el informe dice 5.
+- Las excepciones RUSTSEC de `deny.toml` son ahora **nueve** (se añadió RUSTSEC-2026-0381 con su motivo escrito el 2026-10-21).
+- Ya existen el consumo de MCP externos y las skills a nivel de proyecto (`@skill:`), que el análisis de Skills da por construir.
+- Se confirman y ya estaban documentados: autor único visible, guilds con allowlist y no con sandbox del sistema operativo, vínculo de agente opcional, y que OAuth de `mcp-remote` / Claude Desktop no funciona fuera de `dev_mode` hasta F2.
 
 ### ADR-017 — resultado real de la Fase 1 (2026-10-04)
 
