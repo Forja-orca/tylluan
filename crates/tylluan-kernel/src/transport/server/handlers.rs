@@ -820,24 +820,42 @@ mod tests {
 
         // Agent-to-agent approval: the log must name the approver, and it must
         // NOT claim a human intervened (that was hardcoded `true` before D-13).
-        seed_plan("d13-audit-agent", Some("agent-a"), "d13:audit:agent").await;
-        let _ = call_approve(&server, "d13-audit-agent", Some("agent-b")).await;
-        let (who, human) = audit_row("d13:audit:agent")
-            .await
-            .expect("the agent approval must be audited");
+        //
+        // The audit path is process-global (`TYLLUAN_AUDIT_DB`): while
+        // `audit_store_seam_write_and_read_land_on_same_file` has the seam set,
+        // a write from this test lands in that test's temp file and is deleted
+        // with it (flaky in CI on 043eb71). Retry with a fresh plan so one
+        // attempt falls outside the seam window.
+        let mut agent_row = None;
+        for attempt in 0..4 {
+            let (id, intent) = (format!("d13-audit-agent-{attempt}"), format!("d13:audit:agent:{attempt}"));
+            seed_plan(&id, Some("agent-a"), &intent).await;
+            let _ = call_approve(&server, &id, Some("agent-b")).await;
+            agent_row = audit_row(&intent).await;
+            if agent_row.is_some() {
+                break;
+            }
+        }
+        let (who, human) = agent_row.expect("the agent approval must be audited");
         assert_eq!(who, "agent-b", "the audit must name the approver, not the author");
         assert_eq!(human, 0, "an agent approval is not human intervention");
 
         // Operator approval: same, but human_intervention must be true.
-        seed_plan("d13-audit-operator", Some("agent-a"), "d13:audit:operator").await;
-        let _ = ACL_AUTH_KIND
-            .scope(AclAuthKind::MasterToken, async {
-                call_approve(&server, "d13-audit-operator", Some("agent-a")).await
-            })
-            .await;
-        let (who, human) = audit_row("d13:audit:operator")
-            .await
-            .expect("the operator approval must be audited");
+        let mut operator_row = None;
+        for attempt in 0..4 {
+            let (id, intent) = (format!("d13-audit-operator-{attempt}"), format!("d13:audit:operator:{attempt}"));
+            seed_plan(&id, Some("agent-a"), &intent).await;
+            let _ = ACL_AUTH_KIND
+                .scope(AclAuthKind::MasterToken, async {
+                    call_approve(&server, &id, Some("agent-a")).await
+                })
+                .await;
+            operator_row = audit_row(&intent).await;
+            if operator_row.is_some() {
+                break;
+            }
+        }
+        let (who, human) = operator_row.expect("the operator approval must be audited");
         assert_eq!(who, "agent-a");
         assert_eq!(human, 1, "the operator credential IS human intervention");
     }
