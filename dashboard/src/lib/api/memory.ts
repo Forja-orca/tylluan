@@ -372,7 +372,7 @@ export async function recall(client: Fetcher, query: string, limit = 10): Promis
 }
 
 export async function deleteNode(client: Fetcher, nodeId: string): Promise<void> {
-  await client.fetch(`/api/v1/silva/node/${encodeURIComponent(nodeId)}`, { method: 'DELETE' });
+  await client.fetch(`/api/v1/silva/nodes/${encodeURIComponent(nodeId)}`, { method: 'DELETE' });
 }
 
 export async function getRecentNodes(client: Fetcher, limit = 10): Promise<GraphNode[]> {
