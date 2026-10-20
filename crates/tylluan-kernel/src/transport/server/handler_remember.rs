@@ -241,12 +241,9 @@ pub async fn handle_tylluan_remember(
             mgr.record_memory(aid, &content, importance).await
         };
 
-        // ASI06 Layer 2: fire-and-forget LLM judge, runs after the node already
-        // exists. Does not block this response and never fails the write --
-        // Layer 1 (above, before any write) already rejected known injection
-        // patterns hard; this is the softer, slower net for content that isn't
-        // a known pattern but still reads as manipulative to a real judge.
-        crate::security::write_gate::spawn_write_gate_judge(server.silva.clone(), nid.clone(), content.clone());
+        // ASI06 Layer 2 runs once for every remember, after the node exists --
+        // see the single call site below the node_id block (D-9/H2: it used to
+        // live in here, so anonymous writes skipped the judge entirely).
 
         if importance > 0.7
             && let Ok(mut h) = server.hormones.lock() {
@@ -304,6 +301,20 @@ pub async fn handle_tylluan_remember(
         }
         nid
     };
+    // ASI06 Layer 2: fire-and-forget LLM judge, runs after the node already
+    // exists. Does not block this response and never fails the write -- Layer 1
+    // (above, before any write) already rejected known injection patterns hard;
+    // this is the softer, slower net for content that isn't a known pattern but
+    // still reads as manipulative to a real judge.
+    //
+    // D-9/H2: one call site for BOTH paths. Before this, the call lived inside
+    // the `if let Some(agent_id)` branch, so every anonymous write -- no
+    // agent_id -- was stored with no Layer 2 at all.
+    crate::security::write_gate::spawn_write_gate_judge(
+        server.silva.clone(),
+        node_id.clone(),
+        content.clone(),
+    );
     let aid = rem_agent_id.as_deref().unwrap_or("anonymous");
     if let Some(ref profiles) = server.agent_profiles {
         let is_new = {

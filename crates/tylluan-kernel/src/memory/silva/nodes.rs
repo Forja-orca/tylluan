@@ -1231,6 +1231,45 @@ impl super::SilvaDB {
         })
     }
 
+    /// ASI06 (D-9/H5): de `ids`, cuáles están en cuarentena (`quarantined = 1`).
+    ///
+    /// Un solo `SELECT ... IN (...)` en vez de N consultas: la consolidación
+    /// filtra hasta 15 candidatos y no queremos 15 round-trips bajo el mismo
+    /// mutex. Devuelve solo los que están marcados; el llamante resta.
+    pub async fn quarantined_subset(&self, ids: &[String]) -> Vec<String> {
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let placeholders = ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id FROM nodes WHERE quarantined = 1 AND id IN ({placeholders})"
+        );
+        tokio::task::block_in_place(|| {
+            let conn = self.conn.blocking_lock();
+            let mut stmt = match conn.prepare(&sql) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("quarantined_subset: prepare failed: {e}");
+                    return Vec::new();
+                }
+            };
+            let params_vec: Vec<&dyn rusqlite::ToSql> =
+                ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            match stmt.query_map(params_vec.as_slice(), |row| row.get::<_, String>(0)) {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(e) => {
+                    tracing::warn!("quarantined_subset: query failed: {e}");
+                    Vec::new()
+                }
+            }
+        })
+    }
+
     /// Count traces for a node since the given unix timestamp.
     pub async fn get_trace_count_since(&self, node_id: &str, since_unix: i64) -> Result<u32> {
         tokio::task::block_in_place(|| {
