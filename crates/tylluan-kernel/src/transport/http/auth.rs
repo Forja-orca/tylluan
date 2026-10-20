@@ -317,6 +317,11 @@ pub fn operator_class_required(method: &str, path: &str) -> bool {
     if m == "DELETE" && path.starts_with("/api/v1/silva/nodes/") {
         return true;
     }
+    // D-12: ASI06 quarantine. The GET exposes text the write gate judged
+    // hostile and the POST undoes a security decision — both operator class.
+    if path.starts_with("/api/v1/memory/quarantine") {
+        return true;
+    }
     if m == "POST" && (path == "/api/v1/silva/edge" || path == "/api/v1/silva/consolidate") {
         return true;
     }
@@ -941,6 +946,16 @@ mod fase1_operator_tests {
         assert!(operator_class_required("POST", "/api/v1/silva/edge"));
         assert!(operator_class_required("POST", "/api/v1/silva/consolidate"));
         assert!(operator_class_required("POST", "/api/v1/dispatches/42/approve"));
+        // D-12: quarantine list exposes hostile text, release undoes a security
+        // decision — both operator-class, GET included.
+        assert!(
+            operator_class_required("GET", "/api/v1/memory/quarantine"),
+            "quarantine list must require the operator class"
+        );
+        assert!(
+            operator_class_required("POST", "/api/v1/memory/quarantine/abc/release"),
+            "quarantine release must require the operator class"
+        );
         // T1253: operator-class diagnostic reads:
         assert!(
             operator_class_required("GET", "/api/v1/decide/shadow"),

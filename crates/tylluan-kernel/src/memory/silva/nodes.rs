@@ -16,6 +16,17 @@ use super::{GraphNode, NodeTrace};
 /// (1.0, None, None, None) — same fallback as the per-id getters.
 pub type ConfidenceSourceRow = (f64, Option<String>, Option<String>, Option<String>);
 
+/// One quarantined node as the operator panel sees it (D-12).
+/// `created_at` is already epoch seconds: the column is TEXT, the contract is int.
+pub struct QuarantinedNodeRow {
+    pub id: String,
+    pub content: String,
+    pub quarantine_reason: String,
+    pub provenance: String,
+    pub agent_id: Option<String>,
+    pub created_at: i64,
+}
+
 fn read_timestamp(row: &rusqlite::Row, idx: usize) -> rusqlite::Result<Option<String>> {
     match row.get::<_, rusqlite::types::Value>(idx)? {
         rusqlite::types::Value::Text(s) => Ok(Some(s)),
@@ -1210,6 +1221,69 @@ impl super::SilvaDB {
             )?;
             Ok(new_weight)
         })
+    }
+
+    /// Read side of the ASI06 quarantine (D-12), for the operator panel.
+    ///
+    /// `created_at` is a `DATETIME` stored as TEXT, but the frozen API contract
+    /// with the dashboard says integer epoch seconds — so it is cast here, not
+    /// in the handler, to keep one source of truth for the shape.
+    ///
+    /// `agent_id` lives inside the `metadata` JSON blob; corrupt or missing
+    /// metadata degrades to `None` instead of failing the whole page.
+    pub async fn list_quarantined(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(i64, Vec<QuarantinedNodeRow>)> {
+        let conn = self.conn.lock().await;
+        let total: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM nodes WHERE quarantined = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        let mut stmt = conn.prepare(
+            "SELECT id, content, quarantine_reason, provenance, metadata,
+                    CAST(strftime('%s', created_at) AS INTEGER)
+             FROM nodes
+             WHERE quarantined = 1
+             ORDER BY created_at DESC, id ASC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![limit, offset], |row| {
+                let metadata: Option<String> = row.get(4)?;
+                let agent_id = metadata
+                    .as_deref()
+                    .and_then(|m| serde_json::from_str::<serde_json::Value>(m).ok())
+                    .and_then(|v| v.get("agent_id").and_then(|a| a.as_str()).map(str::to_string));
+                Ok(QuarantinedNodeRow {
+                    id: row.get(0)?,
+                    content: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    quarantine_reason: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    provenance: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    agent_id,
+                    created_at: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok((total, rows))
+    }
+
+    /// Lift a node out of ASI06 quarantine.
+    ///
+    /// `Ok(false)` means "there was nothing to release" — unknown id, or a node
+    /// that was never quarantined — which the endpoint renders as the same 404.
+    /// Clearing `quarantine_reason` matters: leaving a stale reason behind would
+    /// let a later bug re-quarantine with an unrelated explanation.
+    pub async fn release_quarantine(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let changed = conn.execute(
+            "UPDATE nodes SET quarantined = 0, quarantine_reason = NULL
+             WHERE id = ?1 AND quarantined = 1",
+            params![id],
+        )?;
+        Ok(changed > 0)
     }
 
     /// Get node access traces (stigmergy).

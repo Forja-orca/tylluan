@@ -199,3 +199,113 @@ pub async fn agent_memories_delete_handler(
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "ok": false, "error": e.to_string(), "agent_id": agent_id }))).into_response(),
     }
 }
+
+// ── D-12: ASI06 quarantine (operator class) ─────────────────────────────────
+//
+// Contract frozen with Antigravity (lote AE). Field names are consumed by the
+// dashboard panel; do not rename without telling the TL.
+//
+//   GET  /api/v1/memory/quarantine?limit=50&offset=0
+//        -> {"total":N,"nodes":[{"id","content_preview","quarantine_reason",
+//            "provenance","agent_id"|null,"created_at"(int)}]}
+//   POST /api/v1/memory/quarantine/{id}/release
+//        -> {"released":true,"id"} | 404 {"error":"not_found"}
+//
+// Both are operator class (master token by header): release undoes a security
+// decision, and the list exposes text the gate decided was hostile.
+
+#[derive(serde::Deserialize)]
+pub struct QuarantineListQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+/// Contract: `limit` max 200. Clamped instead of rejected — a panel asking for
+/// 500 gets 200, not an error it has to special-case.
+const QUARANTINE_MAX_LIMIT: i64 = 200;
+const QUARANTINE_DEFAULT_LIMIT: i64 = 50;
+const QUARANTINE_PREVIEW_CHARS: usize = 200;
+
+pub async fn quarantine_list_handler(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<QuarantineListQuery>,
+) -> impl IntoResponse {
+    let limit = q
+        .limit
+        .unwrap_or(QUARANTINE_DEFAULT_LIMIT)
+        .clamp(1, QUARANTINE_MAX_LIMIT);
+    let offset = q.offset.unwrap_or(0).max(0);
+    match state.silva.list_quarantined(limit, offset).await {
+        Ok((total, rows)) => {
+            let nodes: Vec<serde_json::Value> = rows
+                .into_iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "id": r.id,
+                        "content_preview": r.content.chars().take(QUARANTINE_PREVIEW_CHARS).collect::<String>(),
+                        "quarantine_reason": r.quarantine_reason,
+                        "provenance": r.provenance,
+                        "agent_id": r.agent_id,
+                        "created_at": r.created_at,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(serde_json::json!({ "total": total, "nodes": nodes }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn quarantine_release_handler(
+    State(state): State<Arc<HttpState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.silva.release_quarantine(&id).await {
+        Ok(true) => {
+            // Audit with the operator's real identity. `human_intervention` is
+            // true only when the credential really was the master token: D-11
+            // flagged that this field must not claim a human when it wasn't one.
+            let actor = crate::transport::http::auth::current_bound_agent_id()
+                .or_else(|| {
+                    crate::transport::http::auth::current_acl_role()
+                        .map(|r| format!("operator:{r}"))
+                })
+                .unwrap_or_else(|| "operator".to_string());
+            let by_human = matches!(
+                crate::transport::http::auth::current_auth_kind(),
+                Some(crate::transport::http::auth::AclAuthKind::MasterToken)
+            );
+            // Fire-and-forget on purpose: `log_audit_entry` opens a second
+            // SQLite file and must never sit in the request path (a blocking
+            // write there deadlocks the test harness and stalls the caller).
+            let node_id = id.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::transport::server::handler_do::log_audit_entry(
+                    "quarantine:release",
+                    "memory",
+                    "quarantine_release",
+                    &actor,
+                    true,
+                    &format!("released {node_id} from ASI06 quarantine"),
+                    0,
+                    by_human,
+                )
+            });
+            (StatusCode::OK, Json(serde_json::json!({ "released": true, "id": id }))).into_response()
+        }
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "not_found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
