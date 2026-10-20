@@ -4,7 +4,7 @@
 
 ## Qué se entregó
 
-[crates/tylluan-kernel/tests/approve_action_self_approval.rs](../crates/tylluan-kernel/tests/approve_action_self_approval.rs) — un único test secuencial `d13_self_approval_requires_operator_credential`, marcado **`#[ignore = "D-13"]`** (mismo patrón que la suite OAuth F2: la suite normal lo salta y CI sigue verde; la corrida con `-- --ignored` es la demostración del bug y posteriormente la verificación de D-13).
+`crates/tylluan-kernel/tests/approve_action_self_approval.rs` — un único test secuencial `d13_self_approval_requires_operator_credential`, marcado **`#[ignore = "D-13"]`** (mismo patrón que la suite OAuth F2: la suite normal lo salta y CI sigue verde; la corrida con `-- --ignored` es la demostración del bug y posteriormente la verificación de D-13).
 
 ### Contrato que codifica (los 4 casos de la cola)
 
