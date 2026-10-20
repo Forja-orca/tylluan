@@ -1,4 +1,4 @@
-﻿//! D-12 — endpoints de cuarentena ASI06 sobre el router REAL (`build_router`).
+//! D-12 — endpoints de cuarentena ASI06 sobre el router REAL (`build_router`).
 //!
 //! Contrato fijado con Antigravity (lote AE); el panel del dashboard ya esta
 //! escrito contra estos nombres de campo:
