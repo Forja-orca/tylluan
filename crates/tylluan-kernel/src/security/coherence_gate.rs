@@ -139,14 +139,107 @@ pub(crate) fn resolve_self_auth_token() -> Option<String> {
 /// costs nothing.
 pub(crate) const JUDGE_MAX_TOKENS: u32 = 16;
 
+/// Timeout del juez (D-14/C1). B-4 midio generaciones de 36,8 s a 59,8 s contra
+/// un `llama-server` de una sola ranura: 30 s cortaba la mitad larga de la
+/// distribucion y el fallo era invisible (solo `tracing::debug!`). 90 s deja
+/// margen para un modelo mas lento o para la contencion de CPU del reindexador
+/// (D-10/C5) sin llegar a "timeout eterno": una generacion que no termina en
+/// 90 s ya no es una generacion.
+pub const JUDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// D-14/C2: `llama_backend` arranca el servidor SIN `--parallel`, o sea una sola
+/// ranura de generacion. Lanzar N juicios a la vez no los acelera: los encola
+/// dentro del modelo y cada uno espera la suma de los anteriores. El semaforo
+/// replica el recurso real (1) en vez de fingir paralelismo.
+pub const JUDGE_MAX_CONCURRENCY: usize = 1;
+
+/// D-14/C2: cuanto espera un juicio por la ranura antes de rendirse. Un juicio
+/// que espera mas de una generacion completa ya llega tarde al nodo que iba a
+/// proteger, asi que se salta y se cuenta (`busy_skip`) en lugar de encolarse
+/// indefinidamente. Nunca es silencioso: el panel de C4 lo muestra.
+pub const JUDGE_QUEUE_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+static JUDGE_SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+
+pub(crate) fn judge_semaphore() -> &'static tokio::sync::Semaphore {
+    JUDGE_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(JUDGE_MAX_CONCURRENCY))
+}
+
+/// Lo que la telemetria reporta en `/health?verbose=true`.
+pub fn judge_timeout() -> std::time::Duration {
+    JUDGE_TIMEOUT
+}
+
+pub fn judge_max_concurrency() -> usize {
+    JUDGE_MAX_CONCURRENCY
+}
+
+/// Pide la ranura del juez con espera acotada. `None` = el juez esta ocupado y
+/// este juicio se salta (contabilizado como `busy_skip`).
+pub(crate) async fn acquire_judge_permit(
+    wait: std::time::Duration,
+) -> Option<tokio::sync::SemaphorePermit<'static>> {
+    match tokio::time::timeout(wait, judge_semaphore().acquire()).await {
+        Ok(Ok(permit)) => Some(permit),
+        _ => {
+            crate::security::judge_telemetry::judge_telemetry().note_busy_skip();
+            None
+        }
+    }
+}
+
 /// Call llama_backend with grammar-constrained output for hybrid classification.
 /// `pub(crate)`: reused by ASI06's write-path judge (`security::write_gate`) so
 /// it doesn't duplicate the self-auth-token HTTP-call plumbing and risk
 /// re-introducing the missing-Authorization-header bug fixed on this exact
 /// function 2026-08-12.
+///
+/// D-14/C4: cada llamada queda contada (ok / timeout / http / transporte /
+/// parse) con su latencia, sin registrar prompt ni veredicto.
 pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &str) -> Result<String, String> {
     let kernel_base = std::env::var("TYLLUAN_KERNEL_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:47004".to_string());
+    // C1+C2: una sola ranura, espera acotada. Si el juez esta saturado nos
+    // saltamos NUESTRO juicio (no el del otro), y queda contado.
+    let Some(_permit) = acquire_judge_permit(JUDGE_QUEUE_WAIT).await else {
+        return Err("judge busy: no slot within queue wait (skipped)".to_string());
+    };
+    call_judge(&kernel_base, prompt, grammar, JUDGE_TIMEOUT).await
+}
+
+/// Cuerpo separado del wrapper para poder apuntarlo a un servidor local en tests
+/// (y, en C1+C2, para envolverlo con el semáforo) sin mutar variables de entorno
+/// globales del proceso.
+pub(crate) async fn call_judge(
+    kernel_base: &str,
+    prompt: &str,
+    grammar: &str,
+    timeout: std::time::Duration,
+) -> Result<String, String> {
+    call_judge_inner(
+        crate::security::judge_telemetry::judge_telemetry(),
+        kernel_base,
+        prompt,
+        grammar,
+        timeout,
+    )
+    .await
+}
+
+/// Igual que `call_judge` pero con una instancia de telemetría explícita: los
+/// tests necesitan contadores propios (el global es compartido por todo el
+/// proceso y otras pruebas escribirían en él en paralelo).
+pub(crate) async fn call_judge_inner(
+    telemetry: &crate::security::judge_telemetry::JudgeTelemetry,
+    kernel_base: &str,
+    prompt: &str,
+    grammar: &str,
+    timeout: std::time::Duration,
+) -> Result<String, String> {
+    use crate::security::judge_telemetry::JudgeOutcome;
+
+    let _in_flight = telemetry.enter();
+    let started = std::time::Instant::now();
 
     let body = serde_json::json!({
         "intent": "query_model",
@@ -164,25 +257,59 @@ pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &
     let mut req = client
         .post(format!("{kernel_base}/api/v1/guilds/llama_backend/tools/query_model"))
         .json(&body)
-        .timeout(std::time::Duration::from_secs(30));
+        .timeout(timeout);
     if let Some(token) = resolve_self_auth_token() {
         req = req.header("Authorization", format!("Bearer {token}"));
     }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {e}"))?;
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("JSON parse error: {e}"))?;
+    let outcome = |o: JudgeOutcome| {
+        telemetry.observe(started.elapsed(), o);
+    };
 
-    json["content"][0]["text"]
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) if e.is_timeout() => {
+            outcome(JudgeOutcome::Timeout);
+            return Err(format!("HTTP error: {e}"));
+        }
+        Err(e) => {
+            // Distinguir "no llegó" de "llegó mal" era justo lo que faltaba en B-4.
+            outcome(if e.is_connect() || e.is_request() {
+                JudgeOutcome::TransportError
+            } else {
+                JudgeOutcome::HttpError
+            });
+            return Err(format!("HTTP error: {e}"));
+        }
+    };
+
+    if !resp.status().is_success() {
+        outcome(JudgeOutcome::HttpError);
+        return Err(format!("HTTP error: judge returned status {}", resp.status().as_u16()));
+    }
+
+    let json: serde_json::Value = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            outcome(JudgeOutcome::ParseError);
+            return Err(format!("JSON parse error: {e}"));
+        }
+    };
+
+    let verdict = json["content"][0]["text"]
         .as_str()
         .map(|s| s.to_string())
-        .or_else(|| json["text"].as_str().map(|s| s.to_string()))
-        .ok_or_else(|| "Empty response from llama_backend".to_string())
+        .or_else(|| json["text"].as_str().map(|s| s.to_string()));
+    match verdict {
+        Some(v) => {
+            outcome(JudgeOutcome::Ok);
+            Ok(v)
+        }
+        None => {
+            outcome(JudgeOutcome::ParseError);
+            Err("Empty response from llama_backend".to_string())
+        }
+    }
 }
 
 /// 3-way classification grammar for hybrid Layer 4 (from design §4).
@@ -1176,5 +1303,177 @@ mod tests {
         // Different queries should produce different IDs
         // (different hash + different counter)
         assert_ne!(id_alpha, id_beta, "different queries must produce different workflow_ids");
+    }
+}
+
+// ── D-14/C4: la telemetría del juez cuenta lo que antes se perdía ─────────────
+//
+// Un `llama-server` local en proceso hace de juez falso: así se ejercitan las
+// cuatro formas de fallo (timeout, status no-2xx, body no-JSON, body sin texto)
+// sin depender de un modelo real ni de variables de entorno globales.
+#[cfg(test)]
+mod judge_call_tests {
+    use super::call_judge_inner;
+    use crate::security::judge_telemetry::JudgeTelemetry;
+    use axum::response::IntoResponse;
+    use axum::{routing::post, Json, Router};
+    use std::time::Duration;
+
+    #[derive(Clone, Copy)]
+    enum Mode {
+        Ok,
+        Slow,
+        ServerError,
+        Garbage,
+        NoText,
+    }
+
+    async fn spawn_judge(mode: Mode) -> String {
+        let app = Router::new().route(
+            "/api/v1/guilds/llama_backend/tools/query_model",
+            post(move || async move {
+                let ok_body = || {
+                    Json(serde_json::json!({ "content": [{ "text": "CLEAN" }] })).into_response()
+                };
+                match mode {
+                    Mode::Ok => ok_body(),
+                    Mode::Slow => {
+                        tokio::time::sleep(Duration::from_millis(800)).await;
+                        ok_body()
+                    }
+                    Mode::ServerError => (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({ "error": "boom" })),
+                    )
+                        .into_response(),
+                    Mode::Garbage => (axum::http::StatusCode::OK, "not-json").into_response(),
+                    Mode::NoText => Json(serde_json::json!({ "content": [] })).into_response(),
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn ok_call_is_counted_with_latency() {
+        let base = spawn_judge(Mode::Ok).await;
+        let t = JudgeTelemetry::default();
+
+        let verdict = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_secs(5))
+            .await
+            .expect("un juez que responde CLEAN no debe fallar");
+        assert_eq!(verdict, "CLEAN");
+        assert_eq!(t.calls(), 1);
+        assert_eq!(t.ok(), 1);
+        assert_eq!(t.failures(), 0);
+        assert_eq!(t.in_flight(), 0, "el guard debe soltarse al terminar");
+        assert!(t.avg_ms().is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn timeout_is_counted_as_timeout_not_as_generic_error() {
+        // C1 en pequeño: este es exactamente el fallo que B-4 no pudo atribuir.
+        let base = spawn_judge(Mode::Slow).await;
+        let t = JudgeTelemetry::default();
+
+        let err = call_judge_inner(&t, &base, "prompt", "grammar", Duration::from_millis(100))
+            .await
+            .expect_err("un juez más lento que el timeout debe fallar");
+        assert!(err.contains("HTTP error"), "got: {err}");
+        assert_eq!(t.calls(), 1);
+        assert_eq!(t.ok(), 0);
+        assert_eq!(t.to_json()["by_kind"]["timeout"], 1);
+        assert_eq!(t.to_json()["by_kind"]["transport"], 0);
+        assert_eq!(t.failures(), 1);
+        assert_eq!(t.in_flight(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn http_error_status_is_counted_as_http() {
+        let base = spawn_judge(Mode::ServerError).await;
+        let t = JudgeTelemetry::default();
+
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        assert!(err.contains("500"), "el error debe decir el status: {err}");
+        assert_eq!(t.to_json()["by_kind"]["http"], 1);
+        assert_eq!(t.to_json()["by_kind"]["timeout"], 0);
+        assert_eq!(t.in_flight(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn non_json_body_is_counted_as_parse_error() {
+        let base = spawn_judge(Mode::Garbage).await;
+        let t = JudgeTelemetry::default();
+
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        assert!(err.contains("JSON parse error"), "got: {err}");
+        assert_eq!(t.to_json()["by_kind"]["parse"], 1);
+        assert_eq!(t.failures(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn response_without_text_is_a_parse_error_not_a_silent_empty_verdict() {
+        // Un body válido sin texto NO puede pasar por veredicto vacío: eso era
+        // otra forma de "juez mudo" indistinguible de "limpio".
+        let base = spawn_judge(Mode::NoText).await;
+        let t = JudgeTelemetry::default();
+
+        let err = call_judge_inner(&t, &base, "p", "g", Duration::from_secs(5)).await.unwrap_err();
+        assert!(err.contains("Empty response"), "got: {err}");
+        assert_eq!(t.to_json()["by_kind"]["parse"], 1);
+        assert_eq!(t.ok(), 0);
+    }
+}
+// -- D-14/C1+C2: timeout coherente con la generacion medida + una sola ranura --
+#[cfg(test)]
+mod judge_concurrency_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn timeout_covers_the_slowest_measured_generation() {
+        // B-4 §5 (A/B real, mismo prompt): 36,8 / 40,5 / 56,0 / 59,8 s.
+        // El timeout anterior (30 s) cortaba TRES de las cuatro.
+        let slowest_measured = Duration::from_secs_f64(59.8);
+        assert!(
+            JUDGE_TIMEOUT > slowest_measured,
+            "el timeout ({JUDGE_TIMEOUT:?}) debe superar la generacion mas lenta medida (59,8 s)"
+        );
+        assert_eq!(JUDGE_TIMEOUT, Duration::from_secs(90));
+    }
+
+    #[test]
+    fn one_slot_matches_the_server_started_without_parallel() {
+        assert_eq!(judge_max_concurrency(), 1, "llama-server sin --parallel = 1 ranura");
+        assert_eq!(judge_semaphore().available_permits(), JUDGE_MAX_CONCURRENCY);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bounded_wait_skips_and_counts_instead_of_queueing_forever() {
+        use crate::security::judge_telemetry::judge_telemetry;
+
+        let permit = acquire_judge_permit(Duration::from_millis(10))
+            .await
+            .expect("con el semaforo libre el permiso es inmediato");
+        let before = judge_telemetry().busy_skips();
+
+        let denied = acquire_judge_permit(Duration::from_millis(50)).await;
+        assert!(denied.is_none(), "no existe una segunda ranura");
+        assert_eq!(
+            judge_telemetry().busy_skips(),
+            before + 1,
+            "un salto por juez ocupado se cuenta, no se pierde"
+        );
+
+        drop(permit);
+        assert!(
+            acquire_judge_permit(Duration::from_millis(50)).await.is_some(),
+            "al liberarse la ranura el siguiente juicio entra"
+        );
     }
 }
