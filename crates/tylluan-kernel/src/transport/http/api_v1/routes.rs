@@ -306,5 +306,11 @@ pub fn api_v1_routes() -> Router<Arc<HttpState>> {
         // `operator_class_required` (master token by header only).
         .route("/api/v1/decide/shadow", get(decide_shadow_handler))
         .route("/api/v1/silva/conflicted", get(silva_conflicted_handler))
+
+        // D-12: ASI06 quarantine visibility + release (operator class).
+        // Contract frozen with Antigravity (lote AE): the dashboard panel is
+        // already written against these exact field names.
+        .route("/api/v1/memory/quarantine", get(quarantine_list_handler))
+        .route("/api/v1/memory/quarantine/{id}/release", post(quarantine_release_handler))
 }
 
