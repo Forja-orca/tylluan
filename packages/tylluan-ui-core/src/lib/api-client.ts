@@ -248,6 +248,25 @@ export interface AgentProfile {
   competencies: Record<string, number>;
 }
 
+export interface QuarantineNode {
+  id: string;
+  content_preview: string;
+  quarantine_reason: string;
+  provenance: string;
+  agent_id: string | null;
+  created_at: number;
+}
+
+export interface QuarantineResponse {
+  total: number;
+  nodes: QuarantineNode[];
+}
+
+export interface ReleaseQuarantineResponse {
+  released: boolean;
+  id: string;
+}
+
 export interface ProbeResult {
   detected_dialect: string;
   detected_from: string;
@@ -681,6 +700,8 @@ export class NexusBridge {
   async getCollectiveHeatmap() { return memory.getCollectiveHeatmap(this); }
   async getCollectivePulse() { return memory.getCollectivePulse(this); }
   async getCollectiveSuggest(domain: string) { return memory.getCollectiveSuggest(this, domain); }
+  async getQuarantine(limit = 50, offset = 0) { return memory.getQuarantine(this, limit, offset); }
+  async releaseQuarantine(id: string) { return memory.releaseQuarantine(this, id); }
 }
 
 // Standalone Helper functions (delegating to a NexusBridge instance)
