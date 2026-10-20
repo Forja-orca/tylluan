@@ -1422,6 +1422,9 @@ async fn health_handler(
                 // D-5: uso real del recall (llamadas, vacías, latencia). En
                 // memoria del proceso: se reinicia con el kernel, por diseño.
                 "recall": crate::recall_telemetry::recall_telemetry().to_json(),
+                // D-14/C4: el juez (Layer 4 + puerta de escritura) por fin deja
+                // rastro: llamadas, fallos por tipo y latencia. Sin texto.
+                "judge": crate::security::judge_telemetry::judge_telemetry().to_json(),
                 // WS5: canonical identity of this running system — every
                 // benchmark/audit result can cite this instead of prose.
                 "system_snapshot": crate::router::system_snapshot::global_json()
