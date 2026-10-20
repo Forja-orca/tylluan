@@ -298,7 +298,7 @@ fn audience_matches(aud: &serde_json::Value, canonical: &str) -> bool {
 /// idéntico a la URL que usó (RFC 9728/8414 lo exigen). Cualquier otro `Host`
 /// (no loopback, otro puerto, ausente) se ignora y vale la URI canónica: un
 /// `Host` hostil no puede hacer que el servidor se anuncie como otro.
-fn request_origin(oauth: &OAuthState, headers: &HeaderMap) -> String {
+pub(crate) fn request_origin(oauth: &OAuthState, headers: &HeaderMap) -> String {
     let canonical = oauth.canonical_resource();
     let Some(host) = headers.get(HOST).and_then(|v| v.to_str().ok()) else {
         return canonical;
