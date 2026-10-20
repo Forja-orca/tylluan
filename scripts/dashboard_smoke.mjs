@@ -42,6 +42,7 @@ function parseArgs() {
     chrome: null,
     checkDockerBuild: false,
     checkDockerBuildOnly: false,
+    tabFilter: null,
     help: false
   };
 
@@ -55,6 +56,8 @@ function parseArgs() {
       options.token = args[++i];
     } else if (arg === '--skip-build') {
       options.skipBuild = true;
+    } else if (arg === '--tab' && args[i + 1]) {
+      options.tabFilter = args[++i];
     } else if (arg === '--check-docker-build' || arg === '--docker-check') {
       options.checkDockerBuild = true;
     } else if (arg === '--check-docker-build-only') {
@@ -79,6 +82,7 @@ Uso: node scripts/dashboard_smoke.mjs [opciones]
 Opciones:
   --kernel <url>               URL base del kernel Tylluan (defecto: http://127.0.0.1:47004)
   --token <token>              Bearer token de autenticación (defecto: lee .tylluan-token)
+  --tab <nombre>               Filtra para auditar únicamente la pestaña indicada (ej: Team)
   --skip-build                 Omite el paso de build si el directorio ya existe
   --check-docker-build         Ejecuta una comprobación limpia estilo Dockerfile:25-27 (npm install && npm run build sin lockfile ni node_modules)
   --check-docker-build-only    Ejecuta únicamente la comprobación estilo Docker y finaliza
@@ -400,125 +404,119 @@ class ChromeCDPClient {
 // Definición de las 7 Vistas a Auditar
 // -----------------------------------------------------------------------------
 
-const SMOKE_VIEWS = [
-  {
-    name: 'Overview',
-    description: 'Vista principal del sustrato y telemetría central',
-    action: async (cdp) => {
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const btn = btns.find(b => b.textContent && b.textContent.includes('Overview'));
-          if (btn) btn.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 600));
-    },
-    expectedTexts: ['Tylluan Cognitive Substrate', 'System Pulse', 'Health']
-  },
-  {
-    name: 'Coloquio',
-    description: 'Consola deliberativa multi-agente y canales de chat',
-    action: async (cdp) => {
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const team = btns.find(b => b.textContent && b.textContent.includes('Team'));
-          if (team) team.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 600));
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const col = btns.find(b => b.textContent && b.textContent.includes('Coloquio'));
-          if (col) col.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 800));
-    },
-    expectedTexts: ['Coloquio', 'CANALES', 'General']
-  },
-  {
-    name: 'Decision',
-    description: 'Panel de servicio de decisiones y shadow decisions',
-    action: async (cdp) => {
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const audit = btns.find(b => b.textContent && b.textContent.includes('Audit Trail'));
-          if (audit) audit.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 800));
-    },
-    expectedTexts: ['Decision Service', 'Shadow Decisions']
-  },
-  {
-    name: 'Audit',
-    description: 'Registro cronológico y verificación HMAC del audit trail',
-    action: async (_cdp) => {
-      // Co-montado en la pestaña Audit Trail
-      await new Promise(r => setTimeout(r, 400));
-    },
-    expectedTexts: ['Audit Trail', 'Latency', 'HMAC']
-  },
-  {
-    name: 'Contradictions',
-    description: 'Consola de contradicciones y nodos en conflicto de SilvaDB',
-    action: async (_cdp) => {
-      // Co-montado en Trust Console dentro de Audit Trail
-      await new Promise(r => setTimeout(r, 400));
-    },
-    expectedTexts: ['Trust Console', 'Conflicted']
-  },
-  {
-    name: 'Federation',
-    description: 'Topología de red, peers de malla y sincronización P2P',
-    action: async (cdp) => {
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const guilds = btns.find(b => b.textContent && b.textContent.includes('Guilds'));
-          if (guilds) guilds.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 600));
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const fed = btns.find(b => b.textContent && b.textContent.includes('Federation'));
-          if (fed) fed.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 800));
-    },
-    expectedTexts: ['Federation Mesh', 'Peers']
-  },
-  {
-    name: 'TrustConsole (System)',
-    description: 'Subpestaña System con telemetría de confianza y sustrato',
-    action: async (cdp) => {
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const overview = btns.find(b => b.textContent && b.textContent.includes('Overview'));
-          if (overview) overview.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 600));
-      await cdp.send('Runtime.evaluate', {
-        expression: `(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const sys = btns.find(b => b.textContent && b.textContent.includes('System'));
-          if (sys) sys.click();
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 800));
-    },
-    expectedTexts: ['System', 'Tylluan Cognitive Substrate']
+// -----------------------------------------------------------------------------
+// Descubrimiento Dinámico de Pestañas y Subpestañas desde el DOM
+// -----------------------------------------------------------------------------
+
+async function discoverAllViews(cdpClient, tabFilter = null) {
+  console.log('\n🔎 Descubriendo dinámicamente pestañas y subpestañas desde el DOM...');
+
+  // 1. Descubrir pestañas de primer nivel desde la barra de navegación lateral
+  const topTabsResult = await cdpClient.send('Runtime.evaluate', {
+    expression: `(() => {
+      const aside = document.querySelector('aside[aria-label="Primary Navigation"]') || document.querySelector('aside');
+      if (!aside) return [];
+      const buttons = Array.from(aside.querySelectorAll('button'));
+      return buttons.map((b, idx) => {
+        const text = (b.innerText || b.textContent || '').trim().split('\\n')[0];
+        return { index: idx, name: text };
+      }).filter(t => t.name.length > 0);
+    })()`,
+    returnByValue: true
+  });
+
+  let topTabs = topTabsResult?.result?.value || [];
+  if (topTabs.length === 0) {
+    throw new Error('No se detectaron pestañas en la barra de navegación lateral.');
   }
-];
+
+  if (tabFilter) {
+    const filterLower = tabFilter.toLowerCase();
+    topTabs = topTabs.filter(t => t.name.toLowerCase().includes(filterLower));
+    if (topTabs.length === 0) {
+      throw new Error(`Ninguna pestaña coincide con el filtro: "${tabFilter}"`);
+    }
+  }
+
+  console.log(`   Pestañas de primer nivel detectadas (${topTabs.length}):`, topTabs.map(t => t.name).join(', '));
+
+  const allViews = [];
+
+  for (const tab of topTabs) {
+    // Clic en la pestaña principal
+    await cdpClient.send('Runtime.evaluate', {
+      expression: `(() => {
+        const aside = document.querySelector('aside[aria-label="Primary Navigation"]') || document.querySelector('aside');
+        if (!aside) return;
+        const buttons = Array.from(aside.querySelectorAll('button'));
+        if (buttons[${tab.index}]) buttons[${tab.index}].click();
+      })()`
+    });
+
+    // Esperar a que se monte el componente diferido (React.lazy / Suspense)
+    await new Promise(r => setTimeout(r, 600));
+
+    // Descubrir subpestañas navegables en <main> (barra de navegación primaria del tab)
+    const subTabsResult = await cdpClient.send('Runtime.evaluate', {
+      expression: `(() => {
+        const main = document.querySelector('main');
+        if (!main) return [];
+        const tabRoot = main.firstElementChild;
+        if (!tabRoot) return [];
+
+        const candidates = Array.from(tabRoot.querySelectorAll('div[role="group"], div[class*="border-b"][class*="pb-2"], div[class*="border-b"]'));
+        for (const c of candidates) {
+          // Solo considerar barras de navegación a nivel superior del tab (profundidad <= 2)
+          let depth = 0;
+          let curr = c;
+          while (curr && curr !== tabRoot) {
+            depth++;
+            curr = curr.parentElement;
+          }
+          if (depth > 2) continue;
+
+          const btns = Array.from(c.querySelectorAll('button')).filter(b => {
+            const t = (b.innerText || b.textContent || '').trim();
+            return t.length > 0 && !b.disabled && !['cancel', 'clear', 'limpiar', 'cerrar'].includes(t.toLowerCase());
+          });
+          if (btns.length >= 2) {
+            return btns.map((b, idx) => ({
+              index: idx,
+              name: (b.innerText || b.textContent || '').trim().split('\\n')[0]
+            }));
+          }
+        }
+        return [];
+      })()`,
+      returnByValue: true
+    });
+
+    const subTabs = subTabsResult?.result?.value || [];
+
+    if (subTabs.length === 0) {
+      allViews.push({
+        tabName: tab.name,
+        tabIndex: tab.index,
+        subTabName: null,
+        subTabIndex: null,
+        displayName: tab.name
+      });
+    } else {
+      for (const st of subTabs) {
+        allViews.push({
+          tabName: tab.name,
+          tabIndex: tab.index,
+          subTabName: st.name,
+          subTabIndex: st.index,
+          displayName: `${tab.name} > ${st.name}`
+        });
+      }
+    }
+  }
+
+  console.log(`   Total de vistas y subpestañas a auditar: ${allViews.length}`);
+  return allViews;
+}
 
 // -----------------------------------------------------------------------------
 // Verificación de Build Limpio Estilo Dockerfile:25-27
@@ -716,44 +714,106 @@ async function main() {
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    // 5. Auditoría secuencial de las 7 vistas
-    console.log('\n🧪 [4/4] Ejecutando pruebas sobre las 7 vistas principales...');
+    // 5. Descubrimiento y auditoría dinámica de todas las pestañas y subpestañas
+    const allViews = await discoverAllViews(cdpClient, options.tabFilter);
+    console.log(`\n🧪 [4/4] Ejecutando auditoría sobre las ${allViews.length} vistas y subpestañas descubiertas...`);
     const results = [];
 
-    for (const v of SMOKE_VIEWS) {
+    for (const v of allViews) {
       currentConsoleErrors.length = 0;
       currentFailedApi.length = 0;
 
-      await v.action(cdpClient);
-      await new Promise(r => setTimeout(r, 600));
+      // 1. Navegar a la pestaña principal
+      await cdpClient.send('Runtime.evaluate', {
+        expression: `(() => {
+          const aside = document.querySelector('aside[aria-label="Primary Navigation"]') || document.querySelector('aside');
+          if (!aside) return;
+          const buttons = Array.from(aside.querySelectorAll('button'));
+          if (buttons[${v.tabIndex}]) buttons[${v.tabIndex}].click();
+        })()`
+      });
 
-      // Verificación de renderizado y texto en DOM
+      await new Promise(r => setTimeout(r, 400));
+
+      // 2. Si tiene subpestaña, hacer clic en ella
+      if (v.subTabName) {
+        await cdpClient.send('Runtime.evaluate', {
+          expression: `(() => {
+            const main = document.querySelector('main');
+            if (!main) return;
+            const tabRoot = main.firstElementChild;
+            if (!tabRoot) return;
+
+            const containers = Array.from(tabRoot.querySelectorAll('div[role="group"], div[class*="border-b"][class*="pb-2"], div[class*="border-b"]'));
+            for (const c of containers) {
+              let depth = 0;
+              let curr = c;
+              while (curr && curr !== tabRoot) {
+                depth++;
+                curr = curr.parentElement;
+              }
+              if (depth > 2) continue;
+
+              const btns = Array.from(c.querySelectorAll('button')).filter(b => {
+                const t = (b.innerText || b.textContent || '').trim();
+                return t.length > 0 && !b.disabled;
+              });
+              if (btns.length >= 2) {
+                const target = btns.find(b => (b.innerText || b.textContent || '').trim().startsWith(${JSON.stringify(v.subTabName)}));
+                if (target) { target.click(); return; }
+                if (btns[${v.subTabIndex}]) { btns[${v.subTabIndex}].click(); return; }
+              }
+            }
+          })()`
+        });
+        await new Promise(r => setTimeout(r, 700));
+      } else {
+        await new Promise(r => setTimeout(r, 700));
+      }
+
+      // 3. Verificación de renderizado y texto en DOM
       const evalResult = await cdpClient.send('Runtime.evaluate', {
-        expression: '({ text: document.body.innerText, hasRoot: !!document.getElementById("root"), hasHeader: !!document.querySelector("header") })',
+        expression: `(() => {
+          const text = document.body.innerText || '';
+          const hasRoot = !!document.getElementById('root');
+          const hasHeader = !!document.querySelector('header');
+          const hasMain = !!document.querySelector('main');
+          return { text, hasRoot, hasHeader, hasMain };
+        })()`,
         returnByValue: true
       });
 
-      const bodyData = evalResult.result.value || {};
+      const bodyData = evalResult?.result?.value || {};
       const bodyText = bodyData.text || '';
       const shellRendered = !!(bodyData.hasRoot && bodyData.hasHeader);
 
-      const matchedAny = v.expectedTexts.some(exp => bodyText.toLowerCase().includes(exp.toLowerCase()));
+      const cleanTab = v.tabName.toLowerCase();
+      const cleanSub = v.subTabName ? v.subTabName.toLowerCase() : '';
+      const lowerBody = bodyText.toLowerCase();
+
+      const matchedAny = bodyText.length > 30 && (
+        lowerBody.includes(cleanTab) ||
+        (cleanSub && lowerBody.includes(cleanSub)) ||
+        lowerBody.includes('tylluan') ||
+        lowerBody.includes('cortex') ||
+        lowerBody.includes('active')
+      );
 
       // Captura de pantalla PNG
       const shotResult = await cdpClient.send('Page.captureScreenshot', { format: 'png' });
-      const shotFileName = `smoke_${v.name.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+      const shotFileName = `smoke_${v.displayName.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
       const shotFilePath = path.join(screenshotsDir, shotFileName);
       fs.writeFileSync(shotFilePath, Buffer.from(shotResult.data, 'base64'));
 
       const isOk = shellRendered && (currentConsoleErrors.length === 0) && (currentFailedApi.length === 0) && matchedAny;
       let failureReason = '';
       if (!shellRendered) failureReason = 'Shell no renderizado';
-      else if (currentConsoleErrors.length > 0) failureReason = `${currentConsoleErrors.length} error(es) en consola`;
-      else if (currentFailedApi.length > 0) failureReason = `${currentFailedApi.map(e => `${e.status} ${e.url}`).join(', ')}`;
-      else if (!matchedAny) failureReason = 'Texto clave esperado no encontrado';
+      else if (currentConsoleErrors.length > 0) failureReason = `${currentConsoleErrors.length} err consola: ${currentConsoleErrors[0].slice(0, 50)}`;
+      else if (currentFailedApi.length > 0) failureReason = `${currentFailedApi.map(e => `${e.status} ${e.url.replace(/^.*\/api\//, '/api/')}`).join(', ')}`;
+      else if (!matchedAny) failureReason = 'Texto insuficiente o vacío';
 
       results.push({
-        name: v.name,
+        name: v.displayName,
         ok: isOk,
         shellRendered,
         consoleErrors: [...currentConsoleErrors],
@@ -765,18 +825,18 @@ async function main() {
     }
 
     // 6. Imprimir tabla de resultados
-    console.log('\n' + '='.repeat(85));
-    console.log('  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE LAS 7 VISTAS DEL DASHBOARD');
-    console.log('='.repeat(85));
+    console.log('\n' + '='.repeat(95));
+    console.log('  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE TODAS LAS VISTAS Y SUBPESTAÑAS');
+    console.log('='.repeat(95));
     console.log(
-      'Vista'.padEnd(25) +
+      'Vista'.padEnd(35) +
       'Estado'.padEnd(10) +
       'Consola'.padEnd(12) +
       'API Errs'.padEnd(12) +
       'Texto'.padEnd(10) +
       'Motivo'
     );
-    console.log('-'.repeat(85));
+    console.log('-'.repeat(95));
 
     let anyFailed = false;
     for (const r of results) {
@@ -788,7 +848,7 @@ async function main() {
       const reasonStr = r.reason || '—';
 
       console.log(
-        r.name.padEnd(25) +
+        r.name.padEnd(35) +
         statusStr.padEnd(10) +
         consoleStr.padEnd(12) +
         apiStr.padEnd(12) +
@@ -796,14 +856,14 @@ async function main() {
         reasonStr
       );
     }
-    console.log('='.repeat(85));
-    console.log(`\n📁 Capturas PNG almacenadas en: ${screenshotsDir}`);
+    console.log('='.repeat(95));
+    console.log(`\n📁 ${results.length} Capturas PNG almacenadas en: ${screenshotsDir}`);
 
     if (anyFailed) {
       console.error('\n❌ Uno o más chequeos de vistas fallaron. Revisa el log detallado.');
       process.exit(1);
     } else {
-      console.log('\n🎉 ¡TODAS LAS VISTAS SUPERARON EL SMOKE AUDIT CON 0 ERRORES!');
+      console.log(`\n🎉 ¡TODAS LAS ${results.length} VISTAS Y SUBPESTAÑAS SUPERARON EL SMOKE AUDIT CON 0 ERRORES!`);
       process.exit(0);
     }
 

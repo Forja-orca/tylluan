@@ -10,14 +10,9 @@ Esta guía documenta el uso de la herramienta de verificación automatizada `scr
 1. **Compilación Aislada:** Construye el dashboard en un directorio temporal del sistema operativo, garantizando que el `dist/` integrado en el kernel de producción permanezca 100% intacto.
 2. **Servidor HTTP con Proxy Read-Only:** Levanta un servidor local en un puerto dinámico libre (`<puerto-libre>`) y redirige las peticiones a la API del kernel (`<puerto-kernel>`) en modo estrictamente de solo lectura (GET/HEAD y búsquedas idempotentes).
 3. **Auditoría en Navegador Real (Chrome Headless vía CDP):** Controla una instancia headless de Google Chrome a través del protocolo nativo Chrome DevTools Protocol (sin dependencias de frameworks externos como Puppeteer o Playwright).
-4. **Verificación de 7 Vistas Principales:**
-   - `Overview` (Telemetría central y estado del sustrato)
-   - `Coloquio` (Consola deliberativa y canales de chat)
-   - `Decision` (Panel de Decision Service y shadow decisions)
-   - `Audit` (Historial y verificación HMAC del audit trail)
-   - `Contradictions` (Nodos en conflicto y consistencia SilvaDB)
-   - `Federation` (Malla de nodos y peers P2P)
-   - `TrustConsole (System)` (Subpestaña System de gobernanza y salud)
+4. **Descubrimiento Dinámico de Todas las Pestañas y Subpestañas:**
+   - Inspecciona el DOM de `App.tsx` y la barra lateral para identificar todas las pestañas principales (`Overview`, `Memory`, `Team`, `Guilds`, `Laboratory`, `Audit Trail`).
+   - Descubre dinámicamente las barras de subnavegación dentro de cada módulo, alcanzando un total de 26 vistas y subpestañas navegables sin necesidad de listas estáticas manuales.
 5. **Criterios de Aceptación por Vista:**
    - Renderizado íntegro del shell HTML (`#root` y `<header>`).
    - Cero errores en la consola de JavaScript (`console.error`).
@@ -48,6 +43,13 @@ El script detectará automáticamente:
 - El token de autenticación desde `.tylluan-token`.
 - La ruta del ejecutable de Chrome en el sistema operativo.
 - Puertos libres disponibles tanto para el servidor web como para el puerto de depuración CDP.
+
+### Filtrar por Pestaña Específica
+Si se desea auditar únicamente una sección (por ejemplo, `Team` y todas sus 9 subpestañas):
+
+```bash
+node scripts/dashboard_smoke.mjs --tab Team
+```
 
 ### Ejecución contra un Kernel Específico
 Si el kernel se ejecuta en una URL o interfaz distinta:
@@ -81,25 +83,44 @@ node scripts/dashboard_smoke.mjs --chrome /ruta/hacia/chrome
 
 ## 4. Interpretación de Resultados
 
-Al finalizar, la herramienta imprime una tabla resumen:
+Al finalizar, la herramienta imprime la tabla exhaustiva de las 26 vistas y subpestañas auditadas:
 
 ```text
-=====================================================================================
-  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE LAS 7 VISTAS DEL DASHBOARD
-=====================================================================================
-Vista                    Estado    Consola     API Errs    Texto     Motivo
--------------------------------------------------------------------------------------
-Overview                 ✅ OK      0           0           OK        —
-Coloquio                 ✅ OK      0           0           OK        —
-Decision                 ✅ OK      0           0           OK        —
-Audit                    ✅ OK      0           0           OK        —
-Contradictions           ✅ OK      0           0           OK        —
-Federation               ✅ OK      0           0           OK        —
-TrustConsole (System)    ✅ OK      0           0           OK        —
-=====================================================================================
+===============================================================================================
+  📊 RESUMEN DE RESULTADOS: AUDITORÍA DE TODAS LAS VISTAS Y SUBPESTAÑAS
+===============================================================================================
+Vista                              Estado    Consola     API Errs    Texto     Motivo
+-----------------------------------------------------------------------------------------------
+Overview > SUMMARY COCKPIT         ✅ OK      0           0           OK        —
+Overview > INTEROCEPTION           ✅ OK      0           0           OK        —
+Overview > SYSTEM CONFIG           ✅ OK      0           0           OK        —
+Memory > KNOWLEDGE GRAPH           ✅ OK      0           0           OK        —
+Memory > NODES                     ✅ OK      0           0           OK        —
+Memory > CONTRADICTIONS            ✅ OK      0           0           OK        —
+Team > FLEET STATUS                ✅ OK      0           0           OK        —
+Team > LOOP HEALTH                 ✅ OK      0           0           OK        —
+Team > WORK CONTRACTS              ✅ OK      0           0           OK        —
+Team > COMPETENCIES                ✅ OK      0           0           OK        —
+Team > CONFUSION                   ✅ OK      0           0           OK        —
+Team > HEATMAP                     ✅ OK      0           0           OK        —
+Team > COLOQUIO CHAT               ✅ OK      0           0           OK        —
+Team > AGENT COLLECTIVE            ✅ OK      0           0           OK        —
+Team > HITL DISPATCHES             ✅ OK      0           0           OK        —
+Guilds > GUILDS                    ✅ OK      0           0           OK        —
+Guilds > OUTPUTS LEDGER            ✅ OK      0           0           OK        —
+Guilds > CONNECTORS                ✅ OK      0           0           OK        —
+Guilds > MCP REGISTRY              ✅ OK      0           0           OK        —
+Guilds > FEDERATION                ✅ OK      0           0           OK        —
+Laboratory > LABORATORY            ✅ OK      0           0           OK        —
+Laboratory > VISION                ✅ OK      0           0           OK        —
+Laboratory > PLAN MODE             ✅ OK      0           0           OK        —
+Laboratory > PROJECT SKILLS        ✅ OK      0           0           OK        —
+Laboratory > BACKGROUND JOBS       ✅ OK      0           0           OK        —
+Audit Trail                        ✅ OK      0           0           OK        —
+===============================================================================================
 ```
 
-- **Código de Salida 0:** Todas las vistas pasaron los chequeos de renderizado, consola, red y textos.
+- **Código de Salida 0:** Todas las 26 vistas y subpestañas superaron los chequeos de renderizado, consola, red y textos.
 - **Código de Salida 1:** Al menos una vista presentó errores en consola, peticiones 4xx/5xx o fallo de renderizado.
 
 ---
