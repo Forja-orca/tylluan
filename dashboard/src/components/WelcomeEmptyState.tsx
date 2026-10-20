@@ -22,7 +22,7 @@ export function WelcomeEmptyState({
   notify,
   onRefresh
 }: WelcomeEmptyStateProps) {
-  const { agentProfiles, bridge: ctxBridge } = useNexus();
+  const { agentProfiles, bridge: ctxBridge, sessions: hookSessions } = useNexus();
   const [firstQueryText, setFirstQueryText] = useState('What is Tylluan?');
   const [noteText, setNoteText] = useState('Tylluan is running local RAG.');
   const [copied, setCopied] = useState(false);
@@ -51,17 +51,20 @@ export function WelcomeEmptyState({
   
   // MCP is connected if there is at least one session, or if they checked the box
   const [mcpChecked, setMcpChecked] = useState(() => localStorage.getItem('tylluan_wizard_mcp') === 'true');
-  const isMcpConnected = sessions?.length > 0 || mcpChecked;
+  const effectiveSessions = React.useMemo(() => {
+    return (sessions && sessions.length > 0) ? sessions : (hookSessions ?? []);
+  }, [sessions, hookSessions]);
+  const isMcpConnected = effectiveSessions.length > 0 || mcpChecked;
 
   // First query completed state
   const [firstQueryDone, setFirstQueryDone] = useState(() => localStorage.getItem('tylluan_wizard_query') === 'true');
 
   useEffect(() => {
-    if (sessions?.length > 0 && !mcpChecked) {
+    if (effectiveSessions.length > 0 && !mcpChecked) {
       setMcpChecked(true);
       localStorage.setItem('tylluan_wizard_mcp', 'true');
     }
-  }, [sessions, mcpChecked]);
+  }, [effectiveSessions, mcpChecked]);
 
   const handleCopyMcp = () => {
     const config = {
