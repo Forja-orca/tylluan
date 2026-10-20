@@ -22,6 +22,6 @@ Deep implementará la capa 1 en `ingest` y `memory/write` (D-17 de su cola). Esc
 La auditoría externa afirma que `tests/e2e/harness.py` fija una ruta de Windows; en el HEAD actual no se reproduce. Ejecuta el harness desde otro directorio y desde un clon limpio en una ruta con espacios, y entrega qué falla, con `archivo:línea` de cada suposición de ruta o de entorno. Sin arreglos: tabla.
 
 ## B-14 — Verificar el quickstart de Hermes (cuando exista)
-Cuando Hermes entregue `docs/QUICKSTART.md`, síguelo paso a paso en un clon limpio con un kernel de prueba en puerto propio, sin saltarte ninguno, y entrega tabla `paso -> comando -> resultado real -> ¿funciona?`, con el tiempo total hasta el primer `tylluan_recall`. Lo que no se pueda ejecutar queda marcado, no supuesto.
+Cuando Hermes entregue (reescritura del quickstart existente, decisión del TL; Antigravity sin cuota) `docs/getting-started/QUICKSTART.md`, síguelo paso a paso en un clon limpio con un kernel de prueba en puerto propio, sin saltarte ninguno, y entrega tabla `paso -> comando -> resultado real -> ¿funciona?`, con el tiempo total hasta el primer `tylluan_recall`. Lo que no se pueda ejecutar queda marcado, no supuesto.
 
 **Exclusiones:** no tocar `src/`; no bajar umbrales de los gates; no `--no-verify`; no escribir en el checkout compartido.
