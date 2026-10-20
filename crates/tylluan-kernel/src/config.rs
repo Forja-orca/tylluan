@@ -955,33 +955,59 @@ pub fn check_external_provider(provider: &ExternalProvider) -> ExternalProviderR
         if !base.starts_with("http://") && !base.starts_with("https://") {
             return Err(format!("base_url '{}' must start with http:// or https://", provider.base_url));
         }
-        // Extract host: between :// and next / or end
-        let after_scheme = base.split("://").nth(1).unwrap_or("");
-        let host = after_scheme.split('/').next().unwrap_or("")
-            .split(':').next().unwrap_or("") // strip port
-            .trim_start_matches('[').trim_end_matches(']'); // strip IPv6 brackets
+        // Parse with a real URL parser: hand-splitting on ':' and '/' treats
+        // `http://x@169.254.169.254/` as host `x@169.254.169.254`, which no deny
+        // rule matches while the HTTP client still connects to 169.254.169.254.
+        let parsed = reqwest::Url::parse(base)
+            .map_err(|e| format!("base_url '{}' is not a valid URL: {e}", provider.base_url))?;
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err("credentials (userinfo) in base_url are not allowed".into());
+        }
+        let raw_host = parsed
+            .host_str()
+            .ok_or_else(|| "base_url has no host".to_string())?;
+        // `host_str` keeps the brackets of an IPv6 literal.
+        let host = raw_host.trim_start_matches('[').trim_end_matches(']');
 
-        // Always deny cloud metadata IP
-        if host == "169.254.169.254" {
-            return Err("cloud metadata endpoint (169.254.169.254)".into());
-        }
-        // Deny 0.0.0.0 (wildcard bind)
-        if host == "0.0.0.0" {
-            return Err("wildcard address 0.0.0.0".into());
-        }
         // Allow localhost/loopback freely (Ollama, LM Studio, local llama.cpp)
-        if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+        if host.eq_ignore_ascii_case("localhost") {
             return Ok(());
         }
-        // Parse as IP and check private ranges
         if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            // IPv4-mapped IPv6 is judged by the embedded IPv4 address.
+            let ip = match ip {
+                std::net::IpAddr::V6(v6) => v6
+                    .to_ipv4_mapped()
+                    .map(std::net::IpAddr::V4)
+                    .unwrap_or(ip),
+                v4 => v4,
+            };
             if ip.is_loopback() {
                 return Ok(());
             }
-            if let std::net::IpAddr::V4(v4) = ip
-                && v4.is_private()
-            {
-                return Err(format!("private RFC-1918 IP range ('{host}')"));
+            if ip.is_unspecified() {
+                return Err(format!("wildcard address ('{host}')"));
+            }
+            match ip {
+                std::net::IpAddr::V4(v4) if v4.octets() == [169, 254, 169, 254] => {
+                    return Err("cloud metadata endpoint (169.254.169.254)".into());
+                }
+                std::net::IpAddr::V4(v4) if v4.is_link_local() => {
+                    return Err(format!("link-local IP range ('{host}')"));
+                }
+                std::net::IpAddr::V4(v4) if v4.is_private() => {
+                    return Err(format!("private RFC-1918 IP range ('{host}')"));
+                }
+                std::net::IpAddr::V6(v6) => {
+                    let first = v6.segments()[0];
+                    if (first & 0xfe00) == 0xfc00 {
+                        return Err(format!("IPv6 unique-local range ('{host}')"));
+                    }
+                    if (first & 0xffc0) == 0xfe80 {
+                        return Err(format!("IPv6 link-local range ('{host}')"));
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -2549,6 +2575,61 @@ code = "permissive"
     }
 
     // â”€â”€â”€ External provider SSRF + env-var exfiltration tests â”€â”€â”€â”€â”€â”€â”€â”€
+
+    fn provider_with_url(url: &str) -> ExternalProvider {
+        ExternalProvider {
+            name: "p".into(),
+            provider_type: ExternalProviderType::OpenAICompatible,
+            base_url: url.into(),
+            api_key_env: "OPENAI_API_KEY".into(),
+            models: vec![],
+        }
+    }
+
+    /// Same class as the OAuth `redirect_uri` userinfo bug: the host the HTTP
+    /// client connects to is not the text before the first ':' or '/'.
+    #[test]
+    fn test_external_provider_rejects_userinfo_and_hidden_internal_hosts() {
+        for url in [
+            "http://x@169.254.169.254/latest/meta-data/",
+            "http://x:y@10.0.0.5/",
+            "https://api.openai.com@evil.example/",
+            "http://[fd00::1]:8080/",
+            "http://[fe80::1]/",
+            "http://[::ffff:169.254.169.254]/",
+            "http://[::ffff:10.0.0.1]/",
+            "http://169.254.10.10/",
+            "http://0.0.0.0:80/",
+            "http://[::]/",
+        ] {
+            assert!(
+                matches!(
+                    check_external_provider(&provider_with_url(url)),
+                    ExternalProviderRisk::DangerousUrl(_)
+                ),
+                "must flag {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_external_provider_still_accepts_loopback_forms() {
+        for url in [
+            "http://localhost:11434",
+            "http://LOCALHOST:11434/v1",
+            "http://127.0.0.1:1234",
+            "http://[::1]:8080",
+            "https://api.openai.com/v1",
+        ] {
+            assert!(
+                matches!(
+                    check_external_provider(&provider_with_url(url)),
+                    ExternalProviderRisk::Safe
+                ),
+                "must accept {url}"
+            );
+        }
+    }
 
     #[test]
     fn test_external_provider_accepts_https_public_url() {
