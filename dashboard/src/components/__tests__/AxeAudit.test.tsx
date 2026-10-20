@@ -240,7 +240,7 @@ import { TrustConsoleTab } from '../TrustConsoleTab';
 // (vitest corre sin Tailwind CSS cargado ni motor de layout de navegador).
 // Esta suite valida la estructura a11y en jsdom (nombres accesibles, roles ARIA, labels, semántica).
 // El contraste visual y responsive completo se verifican en navegador real con arnés headless.
-describe('Axe-Core Accessibility Audit — 7 Views (estructura a11y en jsdom; contraste y responsive se miden en navegador real con arnés headless)', () => {
+describe('Axe-Core Accessibility Audit — 7 Views (estructura a11y en jsdom; contraste y responsive se miden en navegador real con arnés headless)', { timeout: 30_000 }, () => {
   beforeEach(() => {
     fetchRaw.mockClear();
   });

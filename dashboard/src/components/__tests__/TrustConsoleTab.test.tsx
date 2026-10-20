@@ -63,4 +63,50 @@ describe('TrustConsoleTab — sovereign tools counter (D5)', () => {
     await waitFor(() => expect(screen.getByText('PENDING')).toBeDefined());
     expect(screen.getByText(/— \/ 6/)).toBeDefined();
   });
+
+  describe('Salud del recall integration (LOTE AD)', () => {
+    it('shows "kernel sin telemetría de recall (actualiza)" when recall field is absent in components', async () => {
+      fetchRaw.mockImplementation((url: string) => {
+        if (url === '/health?verbose=true') {
+          return Promise.resolve({
+            status: 'healthy',
+            version: '0.17.1',
+            commit: '69061e5abcdef',
+            components: { sovereign_tools: { ok: true, count: 6 } }, // No recall field
+          });
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<TrustConsoleTab />);
+      await waitFor(() => expect(screen.getByText('kernel sin telemetría de recall (actualiza)')).toBeDefined());
+    });
+
+    it('shows recall metrics when components.recall is provided', async () => {
+      fetchRaw.mockImplementation((url: string) => {
+        if (url === '/health?verbose=true') {
+          return Promise.resolve({
+            status: 'healthy',
+            version: '0.17.1',
+            commit: '69061e5abcdef',
+            components: {
+              sovereign_tools: { ok: true, count: 6 },
+              recall: {
+                calls: 150,
+                empty_calls: 15,
+                empty_ratio: 0.1,
+                mean_latency_ms: 22.5,
+                latency_histogram: { '<=5ms': 10, '<=10ms': 20 },
+              },
+            },
+          });
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<TrustConsoleTab />);
+      await waitFor(() => expect(screen.getByText('10.0%')).toBeDefined());
+      expect(screen.getByText('22.5 ms')).toBeDefined();
+    });
+  });
 });
