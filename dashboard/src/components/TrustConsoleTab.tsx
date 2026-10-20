@@ -3,6 +3,7 @@ import { Shield, Activity, CheckCircle, AlertTriangle, RefreshCw, Terminal, Laye
 import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 import { cn } from '../lib/utils';
+import { RecallHealthCard, RecallTelemetryData } from './RecallHealthCard';
 
 // Mirrors the real `/health?verbose=true` body built in
 // crates/tylluan-kernel/src/transport/http/mod.rs:1381-1402 (components block).
@@ -19,6 +20,7 @@ interface HealthData {
     embeddings?: { ok: boolean; model?: string };
     silva?: { ok: boolean; nodes?: number; edges?: number };
     guilds?: { ok: boolean; active?: number; total?: number };
+    recall?: RecallTelemetryData;
   };
 }
 
@@ -175,6 +177,12 @@ export const TrustConsoleTab: React.FC = () => {
           <div className="text-xs text-slate-300 mt-2">Endpoint: <span className="font-mono text-emerald-400">/sse</span> · Extensions: <span className="text-emerald-400">tasks: &#123;&#125;, apps: &#123;&#125;</span></div>
         </div>
       </div>
+
+      {/* Salud del recall (LOTE AD — D-5 telemetry) */}
+      <RecallHealthCard
+        recall={health?.components?.recall}
+        isAbsent={health?.components !== undefined && !('recall' in health.components)}
+      />
 
       {/* Guild Self-Documented Contracts (M40-P1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
