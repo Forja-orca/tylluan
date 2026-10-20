@@ -4,6 +4,7 @@ import { useNexus } from '../hooks/useNexus';
 import { usePolling } from '../hooks/usePolling';
 import { cn } from '../lib/utils';
 import { RecallHealthCard, RecallTelemetryData } from './RecallHealthCard';
+import { QuarantinePanel } from './QuarantinePanel';
 
 // Mirrors the real `/health?verbose=true` body built in
 // crates/tylluan-kernel/src/transport/http/mod.rs:1381-1402 (components block).
@@ -183,6 +184,9 @@ export const TrustConsoleTab: React.FC = () => {
         recall={health?.components?.recall}
         isAbsent={health?.components !== undefined && !('recall' in health.components)}
       />
+
+      {/* Cuarentena de Memoria (LOTE AE — ASI06 Judge & D-12) */}
+      <QuarantinePanel bridge={bridge} />
 
       {/* Guild Self-Documented Contracts (M40-P1) */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">

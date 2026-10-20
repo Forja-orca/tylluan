@@ -8,4 +8,5 @@ export type {
   ProjectSkill, BackgroundJob, AgentProfile, ProbeResult,
   DiagnosticReport, SetupHint, MetricsSnapshot, MetricsHistory,
   DashboardSummary, AutoResearchSummary, CollectiveSuggestResult,
+  QuarantineNode, QuarantineResponse, ReleaseQuarantineResponse,
 } from '@tylluan/ui-core';

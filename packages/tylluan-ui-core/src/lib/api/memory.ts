@@ -11,7 +11,9 @@ import type {
   AgentProfile, 
   ProjectSkill, 
   CollectivePulse,
-  GraphNode
+  GraphNode,
+  QuarantineResponse,
+  ReleaseQuarantineResponse
 } from '../api-client';
 import type { ApiFetcher, BackgroundJobInfo } from './types';
 
@@ -423,3 +425,14 @@ export async function getCollectivePulse(client: Fetcher): Promise<CollectivePul
     return { active_agents: [], active_count: 0, broadcasts_last_hour: 0, graph: { nodes: 0, edges: 0 }, ts: '' };
   }
 }
+
+export async function getQuarantine(client: Fetcher, limit = 50, offset = 0): Promise<QuarantineResponse> {
+  return await client.fetch(`/api/v1/memory/quarantine?limit=${limit}&offset=${offset}`);
+}
+
+export async function releaseQuarantine(client: Fetcher, id: string): Promise<ReleaseQuarantineResponse> {
+  return await client.fetch(`/api/v1/memory/quarantine/${encodeURIComponent(id)}/release`, {
+    method: 'POST',
+  });
+}
+
