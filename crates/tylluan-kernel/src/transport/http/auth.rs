@@ -342,21 +342,31 @@ pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
 /// Fase 2 (D-3): desafío de un 401 (RFC 6750 + RFC 9728). Apunta al documento
 /// del recurso protegido para que el cliente descubra el AS sin configuración
 /// previa, y pide el único scope que un cliente MCP necesita.
-pub fn bearer_challenge(oauth: &OAuthState) -> String {
+///
+/// El origen del `resource_metadata` es el de la petición cuando llegó por un
+/// alias de loopback (`127.0.0.1`, `[::1]`): si anunciáramos `localhost`, un
+/// cliente que se configuró con `127.0.0.1` seguiría el enlace a `localhost`,
+/// que en Windows resuelve primero a `::1` mientras el kernel solo escucha en
+/// IPv4, y no podría reconectar tras un reinicio (se invalidan los JWT).
+pub fn bearer_challenge(oauth: &OAuthState, headers: &HeaderMap) -> String {
     format!(
         "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource\", scope=\"{SCOPE_MCP}\"",
-        oauth.canonical_resource()
+        crate::transport::http::oauth::request_origin(oauth, headers)
     )
 }
 
 /// Fase 2 (D-3): desafío de scope insuficiente. MCP exige
 /// `error="insufficient_scope"` y `scope=...` con TODOS los scopes necesarios
 /// en un único desafío (no una respuesta por scope).
-pub fn insufficient_scope_challenge(oauth: &OAuthState, scopes: &[&str]) -> String {
+pub fn insufficient_scope_challenge(
+    oauth: &OAuthState,
+    headers: &HeaderMap,
+    scopes: &[&str],
+) -> String {
     format!(
         "Bearer error=\"insufficient_scope\", scope=\"{}\", resource_metadata=\"{}/.well-known/oauth-protected-resource\"",
         scopes.join(" "),
-        oauth.canonical_resource()
+        crate::transport::http::oauth::request_origin(oauth, headers)
     )
 }
 
@@ -385,7 +395,7 @@ pub async fn operator_gate_middleware(
                 StatusCode::FORBIDDEN,
                 [(
                     WWW_AUTHENTICATE,
-                    insufficient_scope_challenge(&state.oauth, &[SCOPE_OPERATOR]),
+                    insufficient_scope_challenge(&state.oauth, request.headers(), &[SCOPE_OPERATOR]),
                 )],
                 Json(serde_json::json!({
                     "error": "insufficient_scope",
@@ -519,7 +529,7 @@ pub async fn bearer_auth_middleware(
         warn!("🚫 Unauthorized request to {}", request.uri());
         return (
             StatusCode::UNAUTHORIZED,
-            [(WWW_AUTHENTICATE, bearer_challenge(&state.oauth))],
+            [(WWW_AUTHENTICATE, bearer_challenge(&state.oauth, request.headers()))],
             Json(serde_json::json!({
                 "error": "unauthorized",
                 "message": "Valid Bearer token required. Check your .tylluan-token file."
@@ -1128,14 +1138,42 @@ mod fase3_scope_tests {
     #[test]
     fn bearer_challenge_points_to_protected_resource_metadata() {
         assert_eq!(
-            bearer_challenge(&oauth()),
+            bearer_challenge(&oauth(), &HeaderMap::new()),
             "Bearer resource_metadata=\"http://localhost:3030/.well-known/oauth-protected-resource\", scope=\"mcp\""
         );
     }
 
+    /// Un cliente que entró por 127.0.0.1 debe recibir un `resource_metadata` en
+    /// 127.0.0.1 (no en localhost, que en Windows va primero a ::1 y el kernel
+    /// solo escucha en IPv4); un `Host` hostil no cambia lo anunciado.
+    #[test]
+    fn challenge_reflects_loopback_alias_but_ignores_hostile_host() {
+        use axum::http::header::HOST;
+        let mut loopback = HeaderMap::new();
+        loopback.insert(HOST, "127.0.0.1:3030".parse().unwrap());
+        assert!(
+            bearer_challenge(&oauth(), &loopback)
+                .contains("resource_metadata=\"http://127.0.0.1:3030/.well-known/oauth-protected-resource\""),
+            "{}",
+            bearer_challenge(&oauth(), &loopback)
+        );
+        assert!(
+            insufficient_scope_challenge(&oauth(), &loopback, &[SCOPE_OPERATOR])
+                .contains("resource_metadata=\"http://127.0.0.1:3030/")
+        );
+        for host in ["evil.example", "evil.example:3030", "127.0.0.1:9999", "localhost.evil.com:3030"] {
+            let mut h = HeaderMap::new();
+            h.insert(HOST, host.parse().unwrap());
+            assert!(
+                bearer_challenge(&oauth(), &h).contains("http://localhost:3030/.well-known/"),
+                "Host: {host}"
+            );
+        }
+    }
+
     #[test]
     fn insufficient_scope_challenge_names_error_and_scope() {
-        let c = insufficient_scope_challenge(&oauth(), &[SCOPE_OPERATOR]);
+        let c = insufficient_scope_challenge(&oauth(), &HeaderMap::new(), &[SCOPE_OPERATOR]);
         assert!(c.starts_with("Bearer error=\"insufficient_scope\""), "{c}");
         assert!(c.contains("scope=\"operator\""), "{c}");
         assert!(
@@ -1148,7 +1186,7 @@ mod fase3_scope_tests {
     /// respuesta por scope.
     #[test]
     fn insufficient_scope_challenge_lists_every_scope_in_one_header() {
-        let c = insufficient_scope_challenge(&oauth(), &[SCOPE_OPERATOR, "federation:admin"]);
+        let c = insufficient_scope_challenge(&oauth(), &HeaderMap::new(), &[SCOPE_OPERATOR, "federation:admin"]);
         assert!(c.contains("scope=\"operator federation:admin\""), "{c}");
         assert_eq!(c.matches("resource_metadata=").count(), 1, "{c}");
     }
