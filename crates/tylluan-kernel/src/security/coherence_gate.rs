@@ -1450,7 +1450,9 @@ mod judge_concurrency_tests {
     #[test]
     fn one_slot_matches_the_server_started_without_parallel() {
         assert_eq!(judge_max_concurrency(), 1, "llama-server sin --parallel = 1 ranura");
-        assert_eq!(judge_semaphore().available_permits(), JUDGE_MAX_CONCURRENCY);
+        // No se lee `available_permits()` del semaforo global: otro test en
+        // paralelo puede estar sosteniendo el permiso (flaky en push 75).
+        const _: () = assert!(JUDGE_MAX_CONCURRENCY == 1);
     }
 
     #[tokio::test(flavor = "multi_thread")]
