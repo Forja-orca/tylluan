@@ -9,7 +9,7 @@ import type {
   Interoception, AgentProfile
 } from '../lib/nexus-bridge';
 
-export interface MemoryStats { document_count: number; disk_usage_bytes: number; node_count?: number; edge_count?: number; ivf_ready?: boolean; n_centroids?: number; last_build?: number | null; }
+export interface MemoryStats { document_count?: number; disk_usage_bytes?: number; node_count?: number; edge_count?: number; ivf_ready?: boolean; n_centroids?: number; last_build?: number | null; [key: string]: unknown; }
 
 interface NexusContextType {
   online: boolean;
@@ -88,7 +88,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         bridgeRef.current.getSloSummary(),
         bridgeRef.current.getSessions(),
         bridgeRef.current.getAgentProfiles(),
-        bridgeRef.current.getDashboardSummary()
+        bridgeRef.current.getDashboardSummary(),
+        bridgeRef.current.getMemoryStats(),
       ]);
       const g = results[0].status === 'fulfilled' ? results[0].value : [];
       const s = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -97,10 +98,16 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const mr = results[4].status === 'fulfilled' ? results[4].value : null;
       const slo = results[5].status === 'fulfilled' ? results[5].value : null;
       const sess = results[6].status === 'fulfilled' ? results[6].value : [];
-      const profiles = results[7].status === 'fulfilled' ? results[7].value : [];
+      const rawProfiles = results[7].status === 'fulfilled' ? results[7].value : [];
+      const profiles = Array.isArray(rawProfiles)
+        ? rawProfiles
+        : ((rawProfiles as any)?.profiles && Array.isArray((rawProfiles as any).profiles)
+          ? (rawProfiles as any).profiles
+          : []);
       const summary = results[8].status === 'fulfilled' ? results[8].value : null;
+      const directMem = results[9]?.status === 'fulfilled' ? results[9].value : null;
 
-      const m = summary ? summary.silva_stats : null;
+      const m = (summary?.silva_stats || directMem) as MemoryStats | null;
       const gs = summary ? summary.golden_signals : null;
       const intero = summary ? summary.interoception : null;
       const sysStat = summary ? summary.system_status : null;

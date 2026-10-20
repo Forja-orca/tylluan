@@ -26,12 +26,12 @@ interface CodeArtifact {
 
 function extractCodeBlocks(messages: ColoquioMessage[]): CodeArtifact[] {
   const artifacts: CodeArtifact[] = [];
-  const fence = /```(\w*)\n([\s\S]*?)```/g;
+  const fence = /```([^\r\n]*)\r?\n([\s\S]*?)```/g;
   for (const msg of messages) {
     let match: RegExpExecArray | null;
     fence.lastIndex = 0;
     while ((match = fence.exec(msg.content)) !== null) {
-      const lang = match[1] || 'text';
+      const lang = match[1]?.trim() || 'text';
       const code = match[2].trim();
       if (!code) continue;
       artifacts.push({
@@ -388,13 +388,13 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
 
   const BASE = '/api/v1/coloquio/documents';
 
-  const loadDocs = async () => {
+  const loadDocs = useCallback(async () => {
     if (!bridge) return;
     try {
       const d = await bridge.fetchRaw(BASE);
       setDocs(d.documents ?? []);
     } catch { /* network error, ignore */ }
-  };
+  }, [bridge]);
 
   const deleteDoc = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"? This action cannot be undone.`)) return;
@@ -404,7 +404,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
     if (selectedDocId === id) { setSelectedDocId(null); setContent(''); setTitle(''); }
   };
 
-  const loadDoc = async (id: string, force = false) => {
+  const loadDoc = useCallback(async (id: string, force = false) => {
     if (!bridge) return;
     try {
       const d: CollabDoc = (await bridge.fetchRaw(`${BASE}/${id}`)).document;
@@ -422,7 +422,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
         }
       }
     } catch { /* ignore */ }
-  };
+  }, [bridge, remoteVersion]);
 
   const saveDoc = async (id: string, newTitle: string, newContent: string) => {
     if (!bridge) return;
@@ -518,7 +518,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
   };
 
   // Initial load
-  useEffect(() => { loadDocs(); }, []);
+  useEffect(() => { loadDocs(); }, [loadDocs]);
 
   // Select first doc when list loads
   useEffect(() => {
@@ -526,7 +526,7 @@ function DocsTab({ authorId = 'jose' }: { authorId?: string }) {
       setSelectedDocId(docs[0].doc_id);
       loadDoc(docs[0].doc_id, true);
     }
-  }, [docs]);
+  }, [docs, selectedDocId, loadDoc]);
 
   // Poll for remote changes every 3s (via coordinator instead of raw setInterval)
   usePolling('canvas-doc-poll', () => {

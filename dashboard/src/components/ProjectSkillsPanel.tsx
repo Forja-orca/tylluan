@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   FileCode, 
   ServerOff, 
@@ -34,7 +34,7 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
 
 
 
-  const loadSkills = async () => {
+  const loadSkills = useCallback(async () => {
     if (!bridge) return;
     setLoading(true);
     setError(null);
@@ -48,11 +48,11 @@ export default function ProjectSkillsPanel({ bridge, notify }: ProjectSkillsPane
     } finally {
       setLoading(false);
     }
-  };
+  }, [bridge]);
 
   useEffect(() => {
     loadSkills();
-  }, []);
+  }, [loadSkills]);
 
   const handleSave = async () => {
     const nameToSave = isCreating ? newName.trim() : editingSkill?.name;
