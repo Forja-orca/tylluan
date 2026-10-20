@@ -13,6 +13,8 @@
 #![allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 
 pub mod config;
+pub mod logging;
+pub mod recall_telemetry;
 pub mod consensus;
 pub mod security;
 pub mod transport;

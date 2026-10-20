@@ -12,7 +12,7 @@
 use axum::{
     Form, Json,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode, header::HOST},
     response::{IntoResponse, Redirect, Response},
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -24,6 +24,12 @@ use std::sync::{Arc, Mutex};
 use tracing::info;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Fase 2 (D-3): scopes mínimos (DESIGN §68). Un JWT de cliente MCP lleva
+/// `scope="mcp"`; `operator` es la clase que solo podrá conceder el
+/// consentimiento del operador (pendiente: `PLAN_oauth_f2_consentimiento_*.md`).
+pub const SCOPE_MCP: &str = "mcp";
+pub const SCOPE_OPERATOR: &str = "operator";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +53,9 @@ struct PendingCode {
     code_challenge: String,
     redirect_uri: String,
     expires_at: i64,
+    /// Fase 2 (D-2, RFC 8707): recurso declarado por el cliente en
+    /// `/oauth/authorize`, si lo hubo. Se vuelve a validar en el canje.
+    resource: Option<String>,
 }
 
 impl OAuthState {
@@ -73,16 +82,36 @@ impl OAuthState {
         self.dev_mode
     }
 
+    /// URI canónica del servidor MCP: el identificador con el que este servidor
+    /// se declara como recurso protegido (RFC 9728, `/.well-known/oauth-protected-resource`)
+    /// y la audiencia (`aud`) de sus propios tokens (RFC 8707).
+    pub fn canonical_resource(&self) -> String {
+        self.base_url.trim_end_matches('/').to_string()
+    }
+
     pub fn sign_jwt(&self, jti: &str, ttl_secs: i64) -> String {
         let now = chrono::Utc::now().timestamp();
+        // Fase 2 (D-2, RFC 8707): el token va ligado a ESTE recurso. El
+        // servidor MCP "MUST only accept tokens specifically intended for
+        // itself"; sin `aud`, cualquier token de otro servicio valdría.
+        self.sign_jwt_claims(serde_json::json!({
+            "sub": "mcp",
+            "iat": now,
+            "exp": now + ttl_secs,
+            "jti": jti,
+            "aud": self.canonical_resource(),
+            // Fase 2 (D-3): cualquier token emitido por este flujo es de clase
+            // MCP. `operator` no se emite todavía: no hay consentimiento.
+            "scope": SCOPE_MCP,
+        }))
+    }
+
+    /// Firma un payload de claims ya construido. Separado de `sign_jwt` para
+    /// poder ejercitar en tests tokens legados (sin `aud`) y con audiencia
+    /// ajena sin duplicar la lógica HMAC.
+    fn sign_jwt_claims(&self, claims: serde_json::Value) -> String {
         let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"HS256","typ":"JWT"}"#);
-        let claims = format!(
-            r#"{{"sub":"mcp","iat":{},"exp":{},"jti":"{}"}}"#,
-            now,
-            now + ttl_secs,
-            jti
-        );
-        let payload = URL_SAFE_NO_PAD.encode(claims.as_bytes());
+        let payload = URL_SAFE_NO_PAD.encode(claims.to_string().as_bytes());
         let signing_input = format!("{header}.{payload}");
         let mut mac = HmacSha256::new_from_slice(&self.inner.secret).expect("valid HMAC key");
         mac.update(signing_input.as_bytes());
@@ -114,6 +143,20 @@ impl OAuthState {
                         && revoked.contains(jti) {
                             return false;
                         }
+                    // Fase 2 (D-2, RFC 8707): audiencia. Un token cuyo `aud` no
+                    // es el nuestro se rechaza SIEMPRE (fue emitido para otro
+                    // servicio). Un token SIN `aud` es anterior a D-2 o de un
+                    // cliente que no manda `resource`: con dev_mode=false se
+                    // rechaza — no hay prueba de que fuera emitido para este
+                    // servidor; con dev_mode=true se acepta para no romper el
+                    // flujo local ya existente.
+                    let audience_ok = match v.get("aud") {
+                        Some(aud) => audience_matches(aud, &self.canonical_resource()),
+                        None => self.dev_mode,
+                    };
+                    if !audience_ok {
+                        return false;
+                    }
                     return true;
                 }
         false
@@ -128,6 +171,9 @@ pub struct AuthorizeQuery {
     pub code_challenge: String,
     pub code_challenge_method: Option<String>,
     pub state: Option<String>,
+    /// Fase 2 (D-2, RFC 8707): recurso al que el cliente quiere acceder. Se
+    /// valida contra la URI canónica de este servidor.
+    pub resource: Option<String>,
     // response_type, client_id accepted but not validated (public client)
 }
 
@@ -137,6 +183,9 @@ pub struct TokenForm {
     pub code: String,
     pub redirect_uri: String,
     pub code_verifier: String,
+    /// Fase 2 (D-2, RFC 8707): si la autorización declaró un `resource`, el
+    /// canje puede repetirlo; si lo declara, tiene que ser el mismo recurso.
+    pub resource: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -154,8 +203,11 @@ struct TokenResponse {
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// GET /.well-known/oauth-authorization-server
-pub async fn metadata_handler(State(oauth): State<Arc<OAuthState>>) -> impl IntoResponse {
-    let base = &oauth.base_url;
+pub async fn metadata_handler(
+    State(oauth): State<Arc<OAuthState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let base = &request_origin(&oauth, &headers);
     Json(serde_json::json!({
         "issuer": base,
         "authorization_endpoint": format!("{}/oauth/authorize", base),
@@ -164,8 +216,102 @@ pub async fn metadata_handler(State(oauth): State<Arc<OAuthState>>) -> impl Into
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
-        "token_endpoint_auth_methods_supported": ["none"]
+        "token_endpoint_auth_methods_supported": ["none"],
+        // Fase 2 (D-2, RFC 9207): el authorize incluye `iss` en la respuesta.
+        "authorization_response_iss_parameter_supported": true
     }))
+}
+
+/// GET /.well-known/oauth-protected-resource (RFC 9728). El servidor MCP
+/// "MUST implement OAuth 2.0 Protected Resource Metadata": es por aquí por
+/// donde un cliente que cumple la spec descubre de quién es el recurso y qué
+/// servidor de autorización lo emite (aquí, este mismo proceso).
+///
+/// `scopes_supported` se omite a propósito: todavía no hay scopes declarados
+/// (llegan con los desafíos de scope de la fase B).
+pub async fn protected_resource_handler(
+    State(oauth): State<Arc<OAuthState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = request_origin(&oauth, &headers);
+    Json(serde_json::json!({
+        "resource": canonical,
+        "authorization_servers": [canonical],
+        // F1 ya rechaza tokens por query (el JWT por query nunca autentica);
+        // el único método de portador válido es la cabecera.
+        "bearer_methods_supported": ["header"]
+    }))
+}
+
+/// D-2b: ¿es `host` un alias de loopback? `localhost`, cualquier 127.0.0.0/8 y
+/// `::1` son la misma máquina; el kernel normaliza su URI canónica a
+/// `localhost` y los clientes escriben `127.0.0.1` (CLAUDE.md) o `[::1]`.
+fn is_loopback_host(host: &str) -> bool {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    bare.eq_ignore_ascii_case("localhost")
+        || bare.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
+}
+
+/// D-2b: ¿`a` y `b` designan el mismo origen (esquema + host + puerto)? Los
+/// alias de loopback cuentan como el mismo host; cualquier otro host se
+/// compara estrictamente (sin sufijos: `localhost.evil.com` no es loopback).
+fn same_origin_with_loopback_alias(a: &str, b: &str) -> bool {
+    let (Ok(a), Ok(b)) = (reqwest::Url::parse(a), reqwest::Url::parse(b)) else {
+        return false;
+    };
+    if a.scheme() != b.scheme() || a.port_or_known_default() != b.port_or_known_default() {
+        return false;
+    }
+    match (a.host_str(), b.host_str()) {
+        (Some(ha), Some(hb)) => {
+            ha.eq_ignore_ascii_case(hb) || (is_loopback_host(ha) && is_loopback_host(hb))
+        }
+        _ => false,
+    }
+}
+
+/// Fase 2 (D-2, RFC 8707): ¿el `resource` declarado por el cliente apunta a
+/// este servidor? Mismo origen que la URI canónica (alias de loopback
+/// incluidos, D-2b) y cualquier path/query (`/mcp`, ...). Un host o puerto
+/// distinto, o un sufijo de host (`localhost.evil.com`), no coincide.
+fn resource_matches_canonical(resource: &str, canonical: &str) -> bool {
+    same_origin_with_loopback_alias(resource, canonical)
+}
+
+/// Fase 2 (D-2): `aud` puede ser una cadena (lo que emitimos) o un array
+/// (JWT lo permite); en ambos casos tiene que contener la URI canónica
+/// (o su alias de loopback, D-2b).
+fn audience_matches(aud: &serde_json::Value, canonical: &str) -> bool {
+    match aud {
+        serde_json::Value::String(s) => same_origin_with_loopback_alias(s, canonical),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .filter_map(|i| i.as_str())
+            .any(|i| same_origin_with_loopback_alias(i, canonical)),
+        _ => false,
+    }
+}
+
+/// D-2b: origen con el que mostrar los metadatos y el `iss`. Si la petición
+/// llegó por un alias de loopback del mismo puerto (`Host: 127.0.0.1:<puerto>`)
+/// se devuelve ese origen, para que el cliente vea un `resource`/`issuer`
+/// idéntico a la URL que usó (RFC 9728/8414 lo exigen). Cualquier otro `Host`
+/// (no loopback, otro puerto, ausente) se ignora y vale la URI canónica: un
+/// `Host` hostil no puede hacer que el servidor se anuncie como otro.
+fn request_origin(oauth: &OAuthState, headers: &HeaderMap) -> String {
+    let canonical = oauth.canonical_resource();
+    let Some(host) = headers.get(HOST).and_then(|v| v.to_str().ok()) else {
+        return canonical;
+    };
+    let scheme = reqwest::Url::parse(&canonical)
+        .map(|u| u.scheme().to_string())
+        .unwrap_or_else(|_| "http".to_string());
+    let candidate = format!("{scheme}://{host}");
+    if same_origin_with_loopback_alias(&candidate, &canonical) {
+        candidate
+    } else {
+        canonical
+    }
 }
 
 /// Fase 1-c: loopback-only redirect_uri (RFC 8252). Deliberately a strict
@@ -192,6 +338,7 @@ fn is_loopback_redirect_uri(uri: &str) -> bool {
 /// GET /oauth/authorize  — auto-approves (dev_mode only), redirects with auth code
 pub async fn authorize_handler(
     State(oauth): State<Arc<OAuthState>>,
+    headers: HeaderMap,
     Query(params): Query<AuthorizeQuery>,
 ) -> Response {
     // Fase 1-a: auto-approval is dev_mode-only. With dev_mode=false this is
@@ -231,6 +378,26 @@ pub async fn authorize_handler(
             .into_response();
     }
 
+    // Fase 2 (D-2, RFC 8707): el cliente declara para qué recurso pide el
+    // token. Este servidor solo emite para sí mismo; un `resource` ajeno se
+    // rechaza con `invalid_target` en vez de emitir un token que después
+    // rechazaríamos nosotros mismos al validarlo (audiencia).
+    if let Some(resource) = params.resource.as_deref()
+        && !resource_matches_canonical(resource, &oauth.canonical_resource())
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "invalid_target",
+                "error_description": format!(
+                    "resource must be this server ({})",
+                    oauth.canonical_resource()
+                )
+            })),
+        )
+            .into_response();
+    }
+
     info!("[OAuth] Authorize request: client_id={}, redirect_uri={}, state={:?}", 
         params.redirect_uri, // temporary placeholder for logging
         params.redirect_uri, 
@@ -247,6 +414,7 @@ pub async fn authorize_handler(
                 code_challenge: params.code_challenge.clone(),
                 redirect_uri: params.redirect_uri.clone(),
                 expires_at: chrono::Utc::now().timestamp() + 60,
+                resource: params.resource.clone(),
             },
         );
     }
@@ -257,13 +425,21 @@ pub async fn authorize_handler(
         .map(|s| format!("&state={}", urlencoding::encode(s)))
         .unwrap_or_default();
 
+    // Fase 2 (D-2, RFC 9207): `iss` identifica al emisor en la propia
+    // respuesta de autorización (defensa contra mix-up).
+    let iss_part = format!(
+        "&iss={}",
+        urlencoding::encode(&request_origin(&oauth, &headers))
+    );
+
     let separator = if params.redirect_uri.contains('?') { "&" } else { "?" };
     let location = format!(
-        "{}{}code={}{}",
+        "{}{}code={}{}{}",
         params.redirect_uri,
         separator,
         urlencoding::encode(&code),
-        state_part
+        state_part,
+        iss_part
     );
 
     info!("[OAuth] Authorize OK -> {}", params.redirect_uri);
@@ -295,6 +471,24 @@ pub async fn token_handler(
         )
             .into_response();
     };
+
+    // Fase 2 (D-2, RFC 8707): el recurso del canje manda si viene; si no,
+    // vale el declarado en la autorización. Si es otro, `invalid_target`.
+    if let Some(resource) = form.resource.as_deref().or(pending.resource.as_deref())
+        && !resource_matches_canonical(resource, &oauth.canonical_resource())
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "invalid_target",
+                "error_description": format!(
+                    "resource must be this server ({})",
+                    oauth.canonical_resource()
+                )
+            })),
+        )
+            .into_response();
+    }
 
     if chrono::Utc::now().timestamp() > pending.expires_at {
         return (
@@ -366,6 +560,7 @@ mod fase1_tests {
             code_challenge: "abc".to_string(),
             code_challenge_method: Some("S256".to_string()),
             state: None,
+            resource: None,
         }
     }
 
@@ -374,7 +569,7 @@ mod fase1_tests {
     async fn r13_authorize_refuses_when_dev_mode_false() {
         let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()));
         assert!(!st.dev_mode(), "fail-closed default");
-        let resp = authorize_handler(State(st), Query(q("http://127.0.0.1:9999/cb"))).await;
+        let resp = authorize_handler(State(st), HeaderMap::new(), Query(q("http://127.0.0.1:9999/cb"))).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 
@@ -382,9 +577,9 @@ mod fase1_tests {
     #[tokio::test]
     async fn r15_redirect_must_be_loopback() {
         let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(true));
-        let bad = authorize_handler(State(st.clone()), Query(q("http://evil.example/cb"))).await;
+        let bad = authorize_handler(State(st.clone()), HeaderMap::new(), Query(q("http://evil.example/cb"))).await;
         assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
-        let sneaky = authorize_handler(State(st), Query(q("http://127.0.0.1.evil.example/cb"))).await;
+        let sneaky = authorize_handler(State(st), HeaderMap::new(), Query(q("http://127.0.0.1.evil.example/cb"))).await;
         assert_eq!(sneaky.status(), StatusCode::BAD_REQUEST, "prefix lookalike must not pass");
     }
 
@@ -392,7 +587,7 @@ mod fase1_tests {
     #[tokio::test]
     async fn r12_dev_mode_approves_loopback_and_redirects() {
         let st = Arc::new(OAuthState::new("http://localhost:3030".to_string()).with_dev_mode(true));
-        let resp = authorize_handler(State(st), Query(q("http://127.0.0.1:9999/cb"))).await;
+        let resp = authorize_handler(State(st), HeaderMap::new(), Query(q("http://127.0.0.1:9999/cb"))).await;
         assert!(resp.status().is_redirection(), "got {}", resp.status());
         let loc = resp
             .headers()
@@ -410,5 +605,322 @@ mod fase1_tests {
         assert!(!is_loopback_redirect_uri("http://127.0.0.1.evil.com/cb"));
         assert!(!is_loopback_redirect_uri("https://example.com/cb"));
         assert!(!is_loopback_redirect_uri("ftp://127.0.0.1/cb"));
+    }
+}
+
+/// ADR-019 OAuth Fase 2, fase A (D-2): descubrimiento (RFC 9728), audiencia
+/// (RFC 8707) y `iss` en la respuesta de autorización (RFC 9207).
+#[cfg(test)]
+mod fase2_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::http::header::LOCATION;
+
+    const BASE: &str = "http://localhost:3030";
+
+    fn state(dev_mode: bool) -> Arc<OAuthState> {
+        Arc::new(OAuthState::new(BASE.to_string()).with_dev_mode(dev_mode))
+    }
+
+    fn q(redirect: &str, resource: Option<&str>) -> AuthorizeQuery {
+        AuthorizeQuery {
+            redirect_uri: redirect.to_string(),
+            code_challenge: "abc".to_string(),
+            code_challenge_method: Some("S256".to_string()),
+            state: None,
+            resource: resource.map(str::to_string),
+        }
+    }
+
+    fn s256(verifier: &str) -> String {
+        URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+    }
+
+    fn claims(token: &str) -> serde_json::Value {
+        let payload = token.split('.').nth(1).expect("jwt payload");
+        let bytes = URL_SAFE_NO_PAD.decode(payload).expect("b64 payload");
+        serde_json::from_slice(&bytes).expect("json claims")
+    }
+
+    async fn body_json(resp: Response) -> serde_json::Value {
+        let bytes = to_bytes(resp.into_body(), 64 * 1024).await.expect("body");
+        serde_json::from_slice(&bytes).expect("json body")
+    }
+
+    /// D-2.1 (RFC 9728): el recurso protegido se declara a sí mismo y a su AS.
+    #[tokio::test]
+    async fn protected_resource_metadata_declares_resource_and_as() {
+        let v =
+            body_json(protected_resource_handler(State(state(false)), HeaderMap::new()).await.into_response()).await;
+        assert_eq!(v["resource"], BASE);
+        assert_eq!(v["authorization_servers"][0], BASE);
+        assert_eq!(v["bearer_methods_supported"][0], "header");
+    }
+
+    /// D-2.3 (RFC 9207): los metadatos anuncian el parámetro `iss`.
+    #[tokio::test]
+    async fn metadata_advertises_iss_parameter_supported() {
+        let v = body_json(metadata_handler(State(state(false)), HeaderMap::new()).await.into_response()).await;
+        assert!(v["authorization_response_iss_parameter_supported"]
+            .as_bool()
+            .unwrap_or(false));
+        assert_eq!(v["code_challenge_methods_supported"][0], "S256");
+    }
+
+    /// D-2.3: el redirect de authorize lleva `iss` = URI canónica.
+    #[tokio::test]
+    async fn authorize_response_carries_iss() {
+        let resp =
+            authorize_handler(State(state(true)), HeaderMap::new(), Query(q("http://127.0.0.1:9999/cb", None))).await;
+        assert!(resp.status().is_redirection());
+        let loc = resp
+            .headers()
+            .get(LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(loc.contains("code="), "location: {loc}");
+        assert!(
+            loc.contains("iss=http%3A%2F%2Flocalhost%3A3030"),
+            "location: {loc}"
+        );
+    }
+
+    /// D-2.2: el JWT emitido lleva `aud` = URI canónica.
+    #[test]
+    fn signed_jwt_carries_canonical_audience() {
+        let c = claims(&state(false).sign_jwt("jti-d2", 60));
+        assert_eq!(c["aud"], BASE);
+    }
+
+    /// D-3: todo token de este flujo es de clase `mcp`; `operator` no se emite
+    /// (no hay consentimiento todavía).
+    #[test]
+    fn signed_jwt_carries_mcp_scope_only() {
+        let c = claims(&state(false).sign_jwt("jti-d3", 60));
+        assert_eq!(c["scope"], SCOPE_MCP);
+    }
+
+    /// D-2.2: con dev_mode=false un token sin `aud` (legado) se rechaza.
+    #[test]
+    fn legacy_token_without_audience_rejected_in_prod() {
+        let st = state(false);
+        let now = chrono::Utc::now().timestamp();
+        let legacy = st.sign_jwt_claims(serde_json::json!({
+            "sub": "mcp", "iat": now, "exp": now + 60, "jti": "legacy"
+        }));
+        assert!(!st.validate_bearer(&legacy));
+    }
+
+    /// D-2.2: con dev_mode=true se acepta el token legado (motivo escrito en
+    /// `validate_bearer`: no romper el flujo local ya existente).
+    #[test]
+    fn legacy_token_without_audience_accepted_in_dev_mode() {
+        let st = state(true);
+        let now = chrono::Utc::now().timestamp();
+        let legacy = st.sign_jwt_claims(serde_json::json!({
+            "sub": "mcp", "iat": now, "exp": now + 60, "jti": "legacy-dev"
+        }));
+        assert!(st.validate_bearer(&legacy));
+    }
+
+    /// D-2.2: un token con audiencia ajena se rechaza en ambos modos.
+    #[test]
+    fn foreign_audience_rejected_in_both_modes() {
+        for dev in [true, false] {
+            let st = state(dev);
+            let now = chrono::Utc::now().timestamp();
+            let foreign = st.sign_jwt_claims(serde_json::json!({
+                "sub": "mcp", "iat": now, "exp": now + 60, "jti": "foreign",
+                "aud": "http://other.example:1234"
+            }));
+            assert!(!st.validate_bearer(&foreign), "dev={dev}");
+        }
+    }
+
+    /// D-2.2: el token propio se valida sin dev_mode (producción).
+    #[test]
+    fn own_token_validates_in_prod_mode() {
+        let st = state(false);
+        assert!(st.validate_bearer(&st.sign_jwt("jti-prod", 60)));
+    }
+
+    /// D-2.2: `resource` propio (con o sin path) se acepta; otro host/puerto no.
+    #[test]
+    fn resource_must_point_to_this_server() {
+        let canonical = "http://localhost:3030";
+        assert!(resource_matches_canonical("http://localhost:3030", canonical));
+        assert!(resource_matches_canonical("http://localhost:3030/", canonical));
+        assert!(resource_matches_canonical("http://localhost:3030/mcp", canonical));
+        assert!(!resource_matches_canonical("http://localhost:3030.evil.com", canonical));
+        assert!(!resource_matches_canonical("http://localhost:3031", canonical));
+        assert!(!resource_matches_canonical("https://localhost:3030", canonical));
+    }
+
+    /// D-2.2: authorize rechaza un `resource` ajeno con `invalid_target`.
+    #[tokio::test]
+    async fn authorize_rejects_foreign_resource() {
+        let resp = authorize_handler(
+            State(state(true)),
+            HeaderMap::new(),
+            Query(q("http://127.0.0.1:9999/cb", Some("http://evil.example:9999"))),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let v = body_json(resp).await;
+        assert_eq!(v["error"], "invalid_target");
+    }
+
+    /// D-2.2 end-to-end: authorize con `resource` propio → canje → `aud`.
+    #[tokio::test]
+    async fn authorized_token_carries_audience_end_to_end() {
+        let st = state(true);
+        let verifier = "f2-d2-verifier-0123456789abcdefghijklmnopqrstuv";
+        let redirect = "http://127.0.0.1:9999/cb";
+        let resp = authorize_handler(
+            State(st.clone()),
+            HeaderMap::new(),
+            Query(AuthorizeQuery {
+                redirect_uri: redirect.to_string(),
+                code_challenge: s256(verifier),
+                code_challenge_method: Some("S256".to_string()),
+                state: None,
+                resource: Some(format!("{BASE}/mcp")),
+            }),
+        )
+        .await;
+        assert!(resp.status().is_redirection());
+        let loc = resp
+            .headers()
+            .get(LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let code = loc
+            .split("code=")
+            .nth(1)
+            .unwrap_or("")
+            .split('&')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        assert!(!code.is_empty(), "location: {loc}");
+
+        let token_resp = token_handler(
+            State(st.clone()),
+            Form(TokenForm {
+                grant_type: "authorization_code".to_string(),
+                code,
+                redirect_uri: redirect.to_string(),
+                code_verifier: verifier.to_string(),
+                resource: Some(format!("{BASE}/mcp")),
+            }),
+        )
+        .await;
+        assert_eq!(token_resp.status(), StatusCode::OK);
+        let v = body_json(token_resp).await;
+        let token = v["access_token"].as_str().expect("access_token");
+        assert_eq!(claims(token)["aud"], BASE);
+        assert!(st.validate_bearer(token), "the freshly issued token must validate");
+    }
+
+    fn host_headers(host: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(HOST, host.parse().expect("host header"));
+        h
+    }
+
+    /// D-2b: un cliente que usa 127.0.0.1 o [::1] (CLAUDE.md manda 127.0.0.1)
+    /// declara un `resource` del mismo servidor; no debe recibir invalid_target.
+    #[test]
+    fn resource_accepts_loopback_aliases_of_this_server() {
+        let canonical = "http://localhost:3030";
+        for r in [
+            "http://127.0.0.1:3030",
+            "http://127.0.0.1:3030/mcp",
+            "http://[::1]:3030/",
+            "http://LOCALHOST:3030",
+            "http://127.0.0.2:3030",
+        ] {
+            assert!(resource_matches_canonical(r, canonical), "must accept {r}");
+        }
+    }
+
+    /// D-2b: los alias NO abren la puerta a otro host, puerto o esquema.
+    #[test]
+    fn resource_alias_does_not_widen_to_other_hosts() {
+        let canonical = "http://localhost:3030";
+        for r in [
+            "http://127.0.0.1.evil.com:3030",
+            "http://localhost.evil.com:3030",
+            "http://127.0.0.1:3031",
+            "https://127.0.0.1:3030",
+            "http://127.0.0.1:3030@evil.com",
+            "http://192.168.1.5:3030",
+            "not a url",
+        ] {
+            assert!(!resource_matches_canonical(r, canonical), "must reject {r}");
+        }
+    }
+
+    /// D-2b: la audiencia con alias de loopback se acepta; la ajena, no.
+    #[test]
+    fn audience_accepts_loopback_alias_and_rejects_foreign() {
+        let canonical = "http://localhost:3030";
+        assert!(audience_matches(&serde_json::json!("http://127.0.0.1:3030"), canonical));
+        assert!(audience_matches(
+            &serde_json::json!(["http://other.example", "http://[::1]:3030"]),
+            canonical
+        ));
+        assert!(!audience_matches(&serde_json::json!("http://127.0.0.1:9999"), canonical));
+        assert!(!audience_matches(&serde_json::json!("http://other.example:3030"), canonical));
+    }
+
+    /// D-2b: los metadatos reflejan el origen con el que se pidieron si es un
+    /// alias de loopback del mismo puerto (RFC 9728: `resource` idéntico a la URL).
+    #[tokio::test]
+    async fn protected_resource_reflects_loopback_alias_host() {
+        let v = body_json(
+            protected_resource_handler(State(state(false)), host_headers("127.0.0.1:3030"))
+                .await
+                .into_response(),
+        )
+        .await;
+        assert_eq!(v["resource"], "http://127.0.0.1:3030");
+        assert_eq!(v["authorization_servers"][0], "http://127.0.0.1:3030");
+    }
+
+    /// D-2b: un `Host` hostil (otro host, otro puerto) no cambia lo que el
+    /// servidor anuncia: sigue valiendo la URI canónica.
+    #[tokio::test]
+    async fn hostile_host_header_cannot_change_advertised_origin() {
+        for host in ["evil.example", "evil.example:3030", "127.0.0.1:9999", "localhost.evil.com:3030"] {
+            let v = body_json(
+                protected_resource_handler(State(state(false)), host_headers(host))
+                    .await
+                    .into_response(),
+            )
+            .await;
+            assert_eq!(v["resource"], BASE, "Host: {host}");
+            let m = body_json(
+                metadata_handler(State(state(false)), host_headers(host)).await.into_response(),
+            )
+            .await;
+            assert_eq!(m["issuer"], BASE, "Host: {host}");
+        }
+    }
+
+    /// D-2b: authorize con `resource` en 127.0.0.1 se acepta y el `iss` de la
+    /// redirección usa el mismo origen que vio el cliente.
+    #[tokio::test]
+    async fn authorize_with_loopback_alias_resource_and_matching_iss() {
+        let resp = authorize_handler(
+            State(state(true)),
+            host_headers("127.0.0.1:3030"),
+            Query(q("http://127.0.0.1:9999/cb", Some("http://127.0.0.1:3030/mcp"))),
+        )
+        .await;
+        assert!(resp.status().is_redirection(), "status {}", resp.status());
+        let loc = resp.headers().get(LOCATION).and_then(|v| v.to_str().ok()).unwrap_or("");
+        assert!(loc.contains("iss=http%3A%2F%2F127.0.0.1%3A3030"), "location: {loc}");
     }
 }

@@ -37,24 +37,38 @@ fn init_logging(args: &[String]) -> bool {
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
     // Always initialize logging - keep stderr clean for human readability
-    let _ = std::fs::create_dir_all("./logs");
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("./logs/kernel.log")
-        .unwrap_or_else(|_| {
-            let fallback = format!("./kernel_{}.log", std::process::id());
-            std::fs::File::create(&fallback).unwrap_or_else(|e| {
-                eprintln!("FATAL: cannot create log file '{fallback}': {e}");
-                std::process::exit(1);
-            })
-        });
+    // D-4: rotación por tamaño. `kernel.log` había llegado a 1,3 GB sin límite.
+    // La configuración se lee best-effort aquí (init_logging corre antes de la
+    // carga principal): sin fichero o con error, se usan los defaults seguros.
+    let logging = tylluan_kernel::config::TylluanConfig::load()
+        .map(|c| c.logging)
+        .unwrap_or_default();
+    let log_writer = tylluan_kernel::logging::RotatingFileWriter::open(
+        std::path::Path::new("./logs"),
+        "kernel.log",
+        logging.max_file_size_bytes(),
+        logging.max_files,
+    )
+    .or_else(|first_err| {
+        let fallback = format!("kernel_{}.log", std::process::id());
+        eprintln!("WARN: cannot open ./logs/kernel.log ({first_err}); falling back to ./{fallback}");
+        tylluan_kernel::logging::RotatingFileWriter::open(
+            std::path::Path::new("."),
+            &fallback,
+            logging.max_file_size_bytes(),
+            logging.max_files,
+        )
+    })
+    .unwrap_or_else(|e| {
+        eprintln!("FATAL: cannot create any log file: {e}");
+        std::process::exit(1);
+    });
 
     // Final Fix for ANSI/JSON-RPC corruption.
     // In stdio mode, we MUST redirect all logs to stderr so stdout remains pure JSON.
     let is_stdio = args.contains(&"--stdio".to_string());
     let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(log_file)
+        .with_writer(std::sync::Mutex::new(log_writer))
         .with_ansi(false);
 
     if is_stdio {

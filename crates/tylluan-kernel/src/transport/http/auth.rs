@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Request, State},
-    http::{StatusCode, HeaderMap},
+    http::{StatusCode, HeaderMap, header::WWW_AUTHENTICATE},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use crate::transport::http::HttpState;
+use crate::transport::http::oauth::{OAuthState, SCOPE_MCP, SCOPE_OPERATOR};
 use crate::security::guard::ExecutionGuard;
 use crate::config::AclConfig;
 
@@ -333,9 +334,34 @@ pub fn operator_gate_allows(kind: Option<AclAuthKind>) -> bool {
     )
 }
 
+/// Fase 2 (D-3): desafío de un 401 (RFC 6750 + RFC 9728). Apunta al documento
+/// del recurso protegido para que el cliente descubra el AS sin configuración
+/// previa, y pide el único scope que un cliente MCP necesita.
+pub fn bearer_challenge(oauth: &OAuthState) -> String {
+    format!(
+        "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource\", scope=\"{SCOPE_MCP}\"",
+        oauth.canonical_resource()
+    )
+}
+
+/// Fase 2 (D-3): desafío de scope insuficiente. MCP exige
+/// `error="insufficient_scope"` y `scope=...` con TODOS los scopes necesarios
+/// en un único desafío (no una respuesta por scope).
+pub fn insufficient_scope_challenge(oauth: &OAuthState, scopes: &[&str]) -> String {
+    format!(
+        "Bearer error=\"insufficient_scope\", scope=\"{}\", resource_metadata=\"{}/.well-known/oauth-protected-resource\"",
+        scopes.join(" "),
+        oauth.canonical_resource()
+    )
+}
+
 /// Layer applied INSIDE the bearer middleware (which installs ACL_AUTH_KIND):
 /// refuses non-master auth on operator-class paths with 403.
-pub async fn operator_gate_middleware(request: Request, next: Next) -> Response {
+pub async fn operator_gate_middleware(
+    State(state): State<Arc<HttpState>>,
+    request: Request,
+    next: Next,
+) -> Response {
     let method = request.method().to_string();
     let path = request.uri().path().to_string();
     if operator_class_required(&method, &path) && !operator_gate_allows(current_auth_kind()) {
@@ -345,6 +371,25 @@ pub async fn operator_gate_middleware(request: Request, next: Next) -> Response 
             method,
             path
         );
+        // Fase 2 (D-3): un JWT OAuth válido pero de clase `mcp` recibe el
+        // desafío de scope (MCP: 403 + WWW-Authenticate insufficient_scope).
+        // Otros medios (token por query-string, ausencia) no se arreglan
+        // pidiendo un scope, así que conservan el 403 genérico.
+        if matches!(current_auth_kind(), Some(AclAuthKind::OAuthJwt)) {
+            return (
+                StatusCode::FORBIDDEN,
+                [(
+                    WWW_AUTHENTICATE,
+                    insufficient_scope_challenge(&state.oauth, &[SCOPE_OPERATOR]),
+                )],
+                Json(serde_json::json!({
+                    "error": "insufficient_scope",
+                    "scope": SCOPE_OPERATOR,
+                    "message": "This endpoint requires the operator class. The OAuth token presented has scope=mcp only."
+                })),
+            )
+                .into_response();
+        }
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({
@@ -469,6 +514,7 @@ pub async fn bearer_auth_middleware(
         warn!("🚫 Unauthorized request to {}", request.uri());
         return (
             StatusCode::UNAUTHORIZED,
+            [(WWW_AUTHENTICATE, bearer_challenge(&state.oauth))],
             Json(serde_json::json!({
                 "error": "unauthorized",
                 "message": "Valid Bearer token required. Check your .tylluan-token file."
@@ -1050,5 +1096,45 @@ mod fase1_operator_tests {
             operator_total >= 50,
             "operator-class surfaces sanity (split too small): {operator_total} of {mutating_total}"
         );
+    }
+}
+
+/// Fase 2 (D-3): desafios `WWW-Authenticate`. Funciones puras; la respuesta
+/// HTTP completa (401/403 sobre el router real) vive en
+/// `tests/oauth_f2_scope_challenges.rs`.
+#[cfg(test)]
+mod fase3_scope_tests {
+    use super::*;
+
+    fn oauth() -> OAuthState {
+        OAuthState::new("http://localhost:3030/".to_string())
+    }
+
+    #[test]
+    fn bearer_challenge_points_to_protected_resource_metadata() {
+        assert_eq!(
+            bearer_challenge(&oauth()),
+            "Bearer resource_metadata=\"http://localhost:3030/.well-known/oauth-protected-resource\", scope=\"mcp\""
+        );
+    }
+
+    #[test]
+    fn insufficient_scope_challenge_names_error_and_scope() {
+        let c = insufficient_scope_challenge(&oauth(), &[SCOPE_OPERATOR]);
+        assert!(c.starts_with("Bearer error=\"insufficient_scope\""), "{c}");
+        assert!(c.contains("scope=\"operator\""), "{c}");
+        assert!(
+            c.contains("resource_metadata=\"http://localhost:3030/.well-known/oauth-protected-resource\""),
+            "{c}"
+        );
+    }
+
+    /// MCP exige TODOS los scopes necesarios en un unico desafio, no una
+    /// respuesta por scope.
+    #[test]
+    fn insufficient_scope_challenge_lists_every_scope_in_one_header() {
+        let c = insufficient_scope_challenge(&oauth(), &[SCOPE_OPERATOR, "federation:admin"]);
+        assert!(c.contains("scope=\"operator federation:admin\""), "{c}");
+        assert_eq!(c.matches("resource_metadata=").count(), 1, "{c}");
     }
 }

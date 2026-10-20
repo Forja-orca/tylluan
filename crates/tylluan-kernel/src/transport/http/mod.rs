@@ -1169,6 +1169,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
     let oauth_state = state.oauth.clone();
     let oauth_routes = Router::new()
         .route("/.well-known/oauth-authorization-server", get(oauth::metadata_handler))
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth::protected_resource_handler),
+        )
         .route("/oauth/authorize", get(oauth::authorize_handler))
         .route("/oauth/token", post(oauth::token_handler))
         .route("/oauth/revoke", post(oauth::revoke_handler))
@@ -1194,7 +1198,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         // ADR-019/OAuth Fase 1(b): the operator-class gate runs INSIDE bearer
         // auth (bearer installs ACL_AUTH_KIND first — the last layer added is
         // the outermost). It refuses OAuth-JWT/peer auth on management paths.
-        .layer(middleware::from_fn(auth::operator_gate_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::operator_gate_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::bearer_auth_middleware,
@@ -1412,6 +1419,9 @@ async fn health_handler(
                     "ok": sovereign_tool_count == 6,
                     "count": sovereign_tool_count,
                 },
+                // D-5: uso real del recall (llamadas, vacías, latencia). En
+                // memoria del proceso: se reinicia con el kernel, por diseño.
+                "recall": crate::recall_telemetry::recall_telemetry().to_json(),
                 // WS5: canonical identity of this running system — every
                 // benchmark/audit result can cite this instead of prose.
                 "system_snapshot": crate::router::system_snapshot::global_json()

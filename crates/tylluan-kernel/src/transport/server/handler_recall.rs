@@ -125,7 +125,32 @@ async fn apply_memory_isolation(scored: &mut Vec<(GraphNode, f32)>, agent_id: &O
     }
 }
 
+/// Texto canónico de "sin resultados". La telemetría D-5 lo compara para contar
+/// llamadas vacías sin tener que parsear el JSON de la respuesta.
+pub const NO_MEMORIES_FOUND: &str = "No memories found for that query.";
+
+/// D-5: envuelve la implementación solo para medir. Mide el handler completo
+/// (incluida la ruta de caché) y cuenta como vacía únicamente la respuesta
+/// canónica sin memorias: los errores no se registran como llamada, para que la
+/// media de latencia no mezcle fallos con búsquedas.
 pub async fn handle_tylluan_recall(
+    server: &TylluanServer,
+    arguments: Option<serde_json::Map<String, serde_json::Value>>,
+) -> Result<CallToolResult, McpError> {
+    let started = std::time::Instant::now();
+    let result = handle_tylluan_recall_inner(server, arguments).await;
+    if let Ok(ref r) = result {
+        let empty = r.content.iter().any(|c| {
+            c.as_text()
+                .map(|t| t.text.trim() == NO_MEMORIES_FOUND)
+                .unwrap_or(false)
+        });
+        crate::recall_telemetry::recall_telemetry().observe(started.elapsed(), empty);
+    }
+    result
+}
+
+async fn handle_tylluan_recall_inner(
     server: &TylluanServer,
     arguments: Option<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<CallToolResult, McpError> {
@@ -793,7 +818,7 @@ if let Some(cached) = cached_docs {
 
     match docs {
         Ok(docs) if docs.is_empty() => Ok(CallToolResult {
-            content: vec![Content::text("No memories found for that query.")],
+            content: vec![Content::text(NO_MEMORIES_FOUND)],
             is_error: Some(false),
         }),
         Ok(docs) => {
@@ -1283,6 +1308,30 @@ mod tests {
         assert!(!result.is_error.unwrap_or(false), "no results is not an error");
         let text = result.content[0].as_text().unwrap();
         assert!(text.text.contains("No memories found"), "must say no memories found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn recall_telemetry_counts_calls_and_empties() {
+        // D-5: contadores de proceso. Se comparan con `>` (nunca `+1`) porque
+        // otros tests del mismo binario pueden incrementarlos en paralelo: el
+        // invariante que se comprueba es que la llamada cuenta, no la cuota.
+        let server = test_server().await;
+        let telemetry = crate::recall_telemetry::recall_telemetry();
+        let calls_before = telemetry.calls();
+        let empty_before = telemetry.empty_calls();
+
+        let mut args = serde_json::Map::new();
+        args.insert(
+            "query".to_string(),
+            serde_json::Value::String("xyznonexistent_telemetry_42".to_string()),
+        );
+        let _ = handle_tylluan_recall(&server, Some(args)).await.unwrap();
+
+        assert!(telemetry.calls() > calls_before, "la llamada debe quedar registrada");
+        assert!(
+            telemetry.empty_calls() > empty_before,
+            "una query sin memorias debe contar como llamada vacía"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
