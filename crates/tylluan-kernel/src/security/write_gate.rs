@@ -111,12 +111,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn judge_token_budget_fits_the_longest_verdict() {
-        // "SUSPICIOUS" is 10 characters; any tokenizer needs fewer tokens than
-        // characters, but never fewer than 3 (the old, broken budget).
-        assert!(crate::security::coherence_gate::JUDGE_MAX_TOKENS >= 10);
-    }
+    // "SUSPICIOUS" is 10 characters; any tokenizer needs fewer tokens than
+    // characters, but never fewer than 3 (the old, broken budget). Checked at
+    // compile time so a regression cannot even build.
+    const _: () = assert!(crate::security::coherence_gate::JUDGE_MAX_TOKENS >= 10);
 
     #[test]
     fn write_gate_prompt_truncates_reference_stays_under_limit() {
