@@ -131,6 +131,14 @@ pub(crate) fn resolve_self_auth_token() -> Option<String> {
     std::fs::read_to_string(".tylluan-token").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
+/// Token budget for a grammar-constrained judge verdict. It was 3, which cut the
+/// one-word verdict "SUSPICIOUS" to "SUSPIC" and made the ASI06 write-gate
+/// quarantine unreachable (B-4, 2026-10-20: 0 quarantines in 69 judged writes;
+/// A/B with the same prompt: 3 tokens -> "SUSPIC", 16 -> "SUSPICIOUS"). The
+/// grammar already bounds the output to a single word, so the larger budget
+/// costs nothing.
+pub(crate) const JUDGE_MAX_TOKENS: u32 = 16;
+
 /// Call llama_backend with grammar-constrained output for hybrid classification.
 /// `pub(crate)`: reused by ASI06's write-path judge (`security::write_gate`) so
 /// it doesn't duplicate the self-auth-token HTTP-call plumbing and risk
@@ -143,7 +151,7 @@ pub(crate) async fn call_reasoning_backend_with_grammar(prompt: &str, grammar: &
     let body = serde_json::json!({
         "intent": "query_model",
         "prompt": prompt,
-        "max_tokens": 3,
+        "max_tokens": JUDGE_MAX_TOKENS,
         "temperature": 0.0,
         "grammar": grammar,
     });
