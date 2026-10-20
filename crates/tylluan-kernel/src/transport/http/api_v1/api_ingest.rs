@@ -14,37 +14,84 @@ use uuid;
 
 /// Validate a URL for SSRF safety: must be http/https, must not resolve to
 /// a private/loopback/link-local IP. Returns Ok(()) if safe.
-fn validate_url_for_ssrf(url_str: &str) -> Result<(), String> {
+/// True for any address an ingest fetch must never reach: loopback,
+/// unspecified, private (RFC 1918), link-local (incl. cloud metadata), IPv6
+/// unique-local (fc00::/7) and link-local (fe80::/10). IPv4-mapped IPv6 is
+/// judged by the embedded IPv4 address.
+fn ip_is_blocked(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64) // 100.64/10 CGNAT (+ Alibaba metadata)
+                || (v4.octets()[0] == 192 && v4.octets()[1] == 0 && v4.octets()[2] == 0) // 192.0.0.0/24
+                || (v4.octets()[0] == 198 && (v4.octets()[1] & 0xfe) == 18) // 198.18/15 benchmarking
+                || v4.octets()[0] >= 240 // 240/4 reserved
+        }
+        IpAddr::V6(v6) => {
+            // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d)
+            if v6.is_loopback() || v6.is_unspecified() {
+                return true;
+            }
+            if let Some(v4) = v6.to_ipv4() {
+                return ip_is_blocked(IpAddr::V4(v4));
+            }
+            let seg = v6.segments();
+            let first = seg[0];
+            // NAT64 64:ff9b::/96 and 6to4 2002::/16 embed an IPv4 address.
+            if seg[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+                let o = v6.octets();
+                return ip_is_blocked(IpAddr::V4(std::net::Ipv4Addr::new(o[12], o[13], o[14], o[15])));
+            }
+            if first == 0x2002 {
+                let o = v6.octets();
+                return ip_is_blocked(IpAddr::V4(std::net::Ipv4Addr::new(o[2], o[3], o[4], o[5])));
+            }
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || (first & 0xfe00) == 0xfc00 // fc00::/7 unique-local
+                || (first & 0xffc0) == 0xfe80 // fe80::/10 link-local
+        }
+    }
+}
+
+/// Validate a URL for SSRF safety: must be http/https and must not resolve to
+/// a blocked address. Fails closed: a hostname that cannot be resolved is
+/// rejected, because the later fetch could resolve it differently. Redirects
+/// are disabled on the fetch client, so only this URL is ever contacted.
+///
+/// For a domain host it returns `(name, vetted_ip)` so the caller can pin the
+/// connection to the exact address that was checked (no second DNS lookup, so
+/// no rebinding window). IP-literal hosts need no pinning and return `None`.
+fn validate_url_for_ssrf(url_str: &str) -> Result<Option<(String, IpAddr)>, String> {
     let parsed = reqwest::Url::parse(url_str).map_err(|e| format!("Invalid URL: {e}"))?;
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(format!("Blocked scheme '{scheme}': only http and https allowed"));
     }
     let host = parsed.host_str().ok_or_else(|| "URL has no host".to_string())?;
-    // Resolve hostname to IPs
-    if let Ok(addrs) = std::net::ToSocketAddrs::to_socket_addrs(&(host, 0)) {
-        for addr in addrs {
-            match addr.ip() {
-                IpAddr::V4(ip) => {
-                    // RFC 1918 private: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-                    if ip.is_private()
-                        // Link-local: 169.254.0.0/16
-                        || (ip.octets()[0] == 169 && ip.octets()[1] == 254)
-                        // Loopback: 127.0.0.0/8
-                        || ip.is_loopback()
-                    {
-                        return Err(format!("Blocked private IP: {ip}"));
-                    }
-                }
-                IpAddr::V6(ip) => {
-                    if ip.is_loopback() {
-                        return Err(format!("Blocked loopback IPv6: {ip}"));
-                    }
-                }
-            }
-        }
+    // `host_str` keeps the brackets of an IPv6 literal; strip them to parse it.
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    let ips: Vec<IpAddr> = match bare.parse::<IpAddr>() {
+        Ok(ip) => vec![ip],
+        Err(_) => std::net::ToSocketAddrs::to_socket_addrs(&(bare, 0))
+            .map_err(|e| format!("Cannot resolve host '{bare}': {e}"))?
+            .map(|a| a.ip())
+            .collect(),
+    };
+    if ips.is_empty() {
+        return Err("Host resolved to no addresses".to_string());
     }
-    Ok(())
+    if let Some(ip) = ips.iter().find(|ip| ip_is_blocked(**ip)) {
+        return Err(format!("Blocked private IP: {ip}"));
+    }
+    if bare.parse::<IpAddr>().is_ok() {
+        return Ok(None);
+    }
+    Ok(Some((bare.to_string(), ips[0])))
 }
 
 #[derive(serde::Deserialize)]
@@ -198,11 +245,20 @@ pub async fn ingest_handler(
         };
 
         if let Some(url_str) = json_val.get("url").and_then(|v| v.as_str()) {
-            if let Err(e) = validate_url_for_ssrf(url_str) {
-                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response();
-            }
-            let client = reqwest::Client::builder()
+            let pinned = match validate_url_for_ssrf(url_str) {
+                Ok(p) => p,
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+            };
+            // No redirects: validate_url_for_ssrf only vetted the original URL, so
+            // following a 302 would let a remote server aim the fetch inward.
+            let mut builder = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
+                .redirect(reqwest::redirect::Policy::none());
+            if let Some((name, ip)) = pinned {
+                // Connect to the address we vetted instead of resolving again.
+                builder = builder.resolve(&name, std::net::SocketAddr::new(ip, 0));
+            }
+            let client = builder
                 .build()
                 .unwrap_or_default();
             match client.get(url_str).send().await {
@@ -449,11 +505,57 @@ mod tests {
     }
 
     #[test]
+    fn test_ssrf_blocks_ipv6_private_ranges() {
+        for u in [
+            "http://[::1]/",
+            "http://[fd00::1]/",        // unique-local fc00::/7
+            "http://[fe80::1]/",        // link-local fe80::/10
+            "http://[::ffff:169.254.169.254]/", // IPv4-mapped metadata
+            "http://[::ffff:10.0.0.1]/",
+            "http://0.0.0.0/",
+        ] {
+            assert!(validate_url_for_ssrf(u).is_err(), "must block {u}");
+        }
+    }
+
+    #[test]
+    fn test_ssrf_blocks_reserved_and_embedded_ipv4_ranges() {
+        for u in [
+            "http://100.100.100.200/",      // CGNAT / Alibaba metadata
+            "http://198.18.0.1/",
+            "http://192.0.0.8/",
+            "http://240.0.0.1/",
+            "http://[64:ff9b::a9fe:a9fe]/", // NAT64 -> 169.254.169.254
+            "http://[2002:a9fe:a9fe::1]/",  // 6to4 -> 169.254.169.254
+            "http://[::7f00:1]/",           // IPv4-compatible 127.0.0.1
+            "http://2130706433/",           // decimal form of 127.0.0.1
+            "http://0x7f.1/",
+        ] {
+            assert!(validate_url_for_ssrf(u).is_err(), "must block {u}");
+        }
+    }
+
+    #[test]
+    fn test_ssrf_ip_literal_needs_no_pin() {
+        assert!(matches!(validate_url_for_ssrf("https://93.184.216.34/"), Ok(None)));
+    }
+
+    #[test]
+    fn test_ssrf_fails_closed_when_host_does_not_resolve() {
+        // `.invalid` is reserved (RFC 2606) and never resolves.
+        assert!(validate_url_for_ssrf("http://no-such-host.invalid/").is_err());
+    }
+
+    #[test]
+    fn test_ip_is_blocked_leaves_public_addresses_alone() {
+        assert!(!ip_is_blocked("93.184.216.34".parse().unwrap()));
+        assert!(!ip_is_blocked("100.63.255.255".parse().unwrap()));
+        assert!(!ip_is_blocked("2606:2800:220:1:248:1893:25c8:1946".parse().unwrap()));
+    }
+
+    #[test]
     fn test_ssrf_allows_public_https() {
-        // github.com resolves to a public IP -- should pass scheme+IP checks.
-        // (Network-dependent: if this fails in an offline CI sandbox with no
-        // DNS, that's a test-environment limitation, not a logic bug --
-        // the function only rejects on a successful private-IP resolution.)
-        assert!(validate_url_for_ssrf("https://github.com/").is_ok());
+        // A public IP literal: no DNS needed, so the test is hermetic.
+        assert!(validate_url_for_ssrf("https://93.184.216.34/").is_ok());
     }
 }
